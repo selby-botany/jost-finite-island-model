@@ -28,7 +28,10 @@ paper's own numbers turned up a discrepancy from the printed text.
   - [Part IX — Misconceptions the paper is correcting](#part-ix--misconceptions-the-paper-is-correcting)
   - [Part X — Using these measures outside population genetics](#part-x--using-these-measures-outside-population-genetics)
   - [Appendix A: notation and formula sheet](#appendix-a-notation-and-formula-sheet)
-  - [Appendix B: a note on the source text](#appendix-b-a-note-on-the-source-text)
+  - [Appendix B: errata and ambiguities in the accepted-article text](#appendix-b-errata-and-ambiguities-in-the-accepted-article-text)
+  - [Appendix C: where this paper sits in Jost's larger program](#appendix-c-where-this-paper-sits-in-josts-larger-program)
+  - [Appendix D: works cited](#appendix-d-works-cited)
+  - [Appendix E: the differentiation debate, 2008–2011](#appendix-e-the-differentiation-debate-2008-2011)
   - [Further reading](#further-reading)
   - [Metadata](#metadata)
 
@@ -1461,69 +1464,330 @@ G_{ST} \leq 1 - H_S
 
 ---
 
-## Appendix B: a note on the source text
+## Appendix B: errata and ambiguities in the accepted-article text
 
-The accepted-article version of the paper is explicitly marked as
-preceding copyediting and proofreading. Recomputing its own numbers from
-its own definitions turned up two small discrepancies, neither of which
-affects any argument, and either may already be corrected in the final
-published version of record.
+The accepted-article version is explicitly marked as preceding copyediting and
+proofreading. Recomputing its own numbers from its own definitions turned up
+several small discrepancies. None affects the central argument; all are minor
+editorial or typographical issues, and some may already have been corrected in the
+final published version of record.
 
-**The middle scenario in the "ten fixed demes" example.** The paper's text
-reports $D$ values of "0.2, 0.5, and 1.0" for the three scenarios in
-Part IV above. The first and third are exact; the middle one (five demes
-fixed for one allele, five for another) computes to $D = 0.5556$, not
-$0.5$ — confirmed independently by the pairwise-differentiation
-derivation the paper itself offers, which gives $25/45 = 0.5556$. The
-printed $0.5$ appears to be a rounding or transcription slip. Nothing in
-the argument depends on the exact figure — the point being made is only
-that $D$ differs across the three scenarios while $G_{ST}$ does not.
+**1. Figure 2, middle scenario: $D = 0.5$ should be $0.5556$.**
 
-**A length term dropped from a per-base-pair formula.** The paper gives a
-refinement of the $D$ equilibrium formula for sets of loci with a
-roughly constant per-base-pair mutation rate $\mu_b$ and locus length
-$L$ (harmonic mean, in base pairs):
+The text reports $D$ values of "0.2, 0.5, and 1.0" for the three ten-deme
+scenarios. The first and third are exact. The middle case (five demes fixed for
+one allele and five fixed for another) computes as:
 
 ```math
-D \approx \frac{1}{1 + m/[(d-1)\cdot\mu_b\cdot L]}
+H_S = 0, \qquad H_T = 0.5, \qquad D = (0.5/1)\cdot(10/9) = 0.5556.
 ```
 
-As printed in the accepted article, the $L$ term is missing from the
-denominator, even though the sentence immediately following the equation
-defines $L$. The form above, with $L$ restored, is the one this
-document uses, and is what the surrounding text clearly intends: the
-practical reading is that **longer loci show higher $D$**, because a
-longer stretch of sequence has more opportunity to mutate and therefore
-accumulates private variants faster.
+The pairwise derivation the paper itself offers agrees: $25$ differing pairs out
+of $45$ gives $25/45 = 0.5556$. The printed $0.5$ appears to be a rounding or
+transcription slip. Nothing in the argument depends on the exact figure — the
+point is only that $D$ differs across the three scenarios while $G_{ST}$ does
+not.
+
+**2. Equation 5 omits $L$.** The paper gives a refinement of the $D$
+equilibrium formula for sets of loci with a roughly constant per-base-pair
+mutation rate $\mu_b$ and locus length $L$ (harmonic mean, in base pairs):
+
+```math
+D \approx \frac{1}{1 + m/[(d-1)\cdot\mu_b\cdot L]}.
+```
+
+As printed in the accepted article, the $L$ term is missing from the denominator,
+even though the sentence immediately following the equation defines $L$.
+Substituting $\mu \approx \mu_b\cdot L$ into Eq. 4 gives the intended form above,
+which is the version used in this document and is clearly the intended reading of
+the surrounding text.
+
+**3. The discussion of "low $G_{ST}$ and high $m$" is a wording problem rather
+than a mathematical one.** In the source sentence, "high $m$" must mean "high
+inferred migration rate" rather than an actual high migration value in the
+scenario being described, because the populations in question are explicitly
+stipulated to be isolated. The point is that the inference is wrong, not that the
+migration rate is truly high.
+
+**4. Cross-reference slip in the SNP discussion.** In the bi-allelic SNP
+section, the nine-plus-one configuration is compared to "Species A in Figure 2".
+Figure 2's scenarios are unlabeled, while the species labels A/B/C belong to
+Figure 3, where species A is the "all alleles shared" case ($D=0$). The intended
+referent is the leftmost scenario of Figure 2, where $D=0.20$, which matches the
+quoted value.
+
+**5. Reference-list inconsistencies.** The bibliography contains a few mix-ups:
+
+- `Gregorius and Roberds (1986)` is cited in text as `Gregorius et al. 1986`.
+- Hedrick (2005) appears in the reference list and Figure 4 legend but is not
+  cited in the body text.
+- `Gilner et al. 2001` is almost certainly `Gliner et al. 2001`.
+- The `Chao et al. (2015)` entry spells `Hseih` instead of `Hsieh`.
+
+These are editorial inconsistencies, not substantive scientific errors, but they
+are real and can confuse citation matching.
+
+**6. Author-name inconsistency.** The author list gives "Frederick Archer"
+while the corresponding contact address is `eric.archer@noaa.gov`. This is not a
+mathematical issue, but it is a genuine name mismatch and could confuse readers
+trying to reconcile the paper with the author metadata.
+
+**7. Table S1 rounding.** The text gives $H_T = 0.97$ and $H_S = 0.95$ but
+reports effective numbers $38.8$ and $20.4$, which correspond to the more precise
+values $H_T = 0.9742$ and $H_S = 0.9510$. Using the rounded two-decimal figures
+gives $1/(1 - 0.97) = 33.3$, not $38.8$. Part IV.3 back-solves from the
+effective numbers, which are the relevant precise figures.
 
 ---
 
-## Further reading
+## Appendix C: where this paper sits in Jost's larger program
 
-- Jost L (2008). $G_{ST}$ and its relatives do not measure
-  differentiation. *Molecular Ecology* 17(18):4015–4026. DOI:
-  [10.1111/j.1365-294X.2008.03887.x](https://doi.org/10.1111/j.1365-294X.2008.03887.x).
-  The polemic this paper's synthesis grew out of.
-- Jost L (2006). Entropy and diversity. *Oikos* 113(2):363–375. Establishes
-  that true diversity is the exponential of entropy — the foundation for
-  Part II above.
+This paper is one late node in a research program that has run since 2006 and
+asks a single question: **how should biological diversity be measured?** The
+program's answer, and its consequences, arrive in a recognisable order.
+
+**The foundation (2006).** *Entropy and diversity* establishes that entropy
+measures are not diversities — they are the *logarithms* of diversities. True
+diversity is the exponential of entropy, an "effective number" of equally common
+types. Part II of this document is that result applied to alleles.
+
+**The partitioning machinery (2007).** *Partitioning diversity into independent
+alpha and beta components* derives the correct decomposition of diversity into
+within- and between-group parts, and shows the classical additive partition of
+non-additive indices is invalid. This is where $D$ itself is born, and it
+supplies Part V.2 directly.
+
+**The genetics polemic (2008–2009).** *$G_{ST}$ and its relatives do not measure
+differentiation* carries the argument into population genetics and provoked a
+sustained exchange (Heller & Siegismund 2009, Ryman & Leimar 2009, Meirmans &
+Hedrick 2011, Whitlock 2011), to which Jost (2009) is the reply.
+
+**The similarity framework (2011).** *Compositional similarity and beta
+diversity* generalises the machinery into a parametric family of similarity
+measures indexed by $q$; its Eq. 6.12 is the direct parent of this paper's
+Eq. 6, and hence of $D$, $E_{ST}$, and $K_{ST}$ together.
+
+**The synthesis (2018).** The paper summarized here, alongside its companion
+Gaggiotti et al. (2018) in the same special issue of *Evolutionary
+Applications*, is the constructive successor to the 2008 polemic. Where the
+2008 paper argued that $G_{ST}$ does not measure differentiation, this one grants
+$G_{ST}$ a legitimate job — nearness to fixation — and argues that the two
+families are complementary rather than rivals. The tone has shifted from
+correction to synthesis, and the six-author list reflects a working group rather
+than a lone critic.
+
+**The through-line** is the **replication principle** (V.3): a measure that will
+be compared as a ratio must double when you pool two equally diverse, completely
+distinct groups. Nearly every specific error the program identifies — in
+ecology, genetics, and phylogenetics alike — is a violation of that one axiom.
+
+---
+
+## Appendix D: works cited
+
+Bibliographic details as given in the paper's reference list. DOIs are supplied
+only where verifiable from the source text itself; the remaining entries are
+listed with full citation details for lookup.
+
+**The paper summarized here**
+
+- Jost L, Archer F, Flanagan S, Gaggiotti O, Hoban S, Latch E (2018).
+  Differentiation measures for conservation genetics. *Evolutionary
+  Applications* 11(7):1139–1148.
+  DOI: [10.1111/eva.12590](https://doi.org/10.1111/eva.12590)
+
+**Jost and collaborators**
+
+- Jost L (2006). Entropy and diversity. *Oikos* 113(2):363–375.
 - Jost L (2007). Partitioning diversity into independent alpha and beta
-  components. *Ecology* 88(10):2427–2439. Where $D$ itself is derived —
-  see Part V above.
+  components. *Ecology* 88(10):2427–2439.
+- Jost L (2008). $G_{ST}$ and its relatives do not measure differentiation.
+  *Molecular Ecology* 17(18):4015–4026.
+  DOI: [10.1111/j.1365-294X.2008.03887.x](https://doi.org/10.1111/j.1365-294X.2008.03887.x)
+- Jost L (2009). $D$ vs. $G_{ST}$: response to Heller and Siegismund (2009) and
+  Ryman and Leimar (2009). *Molecular Ecology* 18:2088–2091.
+- Jost L (2010). The relation between evenness and diversity. *Diversity*
+  2(2):207–232.
+  DOI: [10.3390/d2020207](https://doi.org/10.3390/d2020207)
+- Jost L, DeVries PJ, Walla T, Greeney H, Chao A, Ricotta C (2010).
+  Partitioning diversity for conservation analyses. *Diversity and
+  Distributions* 16:65–76.
 - Jost L, Chao A, Chazdon RL (2011). Compositional similarity and beta
-  diversity. In Magurran AE, McGill BJ (eds), *Biological Diversity:
-  Frontiers in Measurement and Assessment*, pp. 66–84. Oxford University
-  Press. Source of the general formula in Part III above.
-- Whitlock MC (2011). $G'_{ST}$ and $D$ do not replace $F_{ST}$.
-  *Molecular Ecology* 20(6):1083–1091. DOI:
-  [10.1111/j.1365-294X.2010.04996.x](https://doi.org/10.1111/j.1365-294X.2010.04996.x).
-  The most substantive reply in the debate this paper is downstream of.
-- Weir BS, Cockerham CC (1984). Estimating $F$-statistics for the
-  analysis of population structure. *Evolution* 38(6):1358–1370. The
-  standard $\theta$ estimator referenced throughout Part III.
-- [Fixation index](https://en.wikipedia.org/wiki/Fixation_index) on
-  Wikipedia — independent, general-audience background on $F_{ST}$ and
-  its known limitations.
+  diversity. Pages 66–84 in Magurran AE, McGill BJ (eds), *Biological
+  Diversity: Frontiers in Measurement and Assessment*. Oxford University Press.
+- Chao A, Chiu CH, Jost L (2010). Phylogenetic diversity measures based on Hill
+  numbers. *Philosophical Transactions of the Royal Society B* 365:3599–3609.
+- Chao A, Jost L, Hsieh TC, Ma KH, Sherwin B, Rollins LA (2015). Expected
+  Shannon entropy and Shannon differentiation between subpopulations for neutral
+  genes under the finite island model. *PLoS ONE*.
+  DOI: [10.1371/journal.pone.0125471](https://doi.org/10.1371/journal.pone.0125471)
+- Gaggiotti OE, Chao A, Peres-Neto P, Chiu C-H, Edwards C, Fortin M-J, Jost L,
+  Richards CM, Selkoe KA (2018). Diversity from genes to ecosystems: a unifying
+  framework to study variation across biological metrics and scales.
+  *Evolutionary Applications*.
+
+**Classical sources for the fixation family**
+
+- Wright S (1943). Isolation by distance. *Genetics* 28(2):114.
+- Wright S (1965). The interpretation of population structure by $F$-statistics
+  with special regard to systems of mating. *Evolution* 19(3):395–420.
+- Wright S (1978). *Evolution and the Genetics of Populations, vol. 4:
+  Variability Within and Among Populations.* (Source of the p. 84 quotation.)
+- Crow JF, Kimura M (1970). *An Introduction to Population Genetics Theory.*
+  Harper and Row, New York.
+- Kimura M, Crow JF (1964). The number of alleles that can be maintained in a
+  finite population. *Genetics* 49:725–738.
+- Nei M (1972). Genetic distance between populations. *American Naturalist*
+  106(949):283–292.
+- Nei M (1973). Analysis of gene diversity in subdivided populations.
+  *Proceedings of the National Academy of Sciences* 70(12):3321–3323.
+- Weir BS, Cockerham CC (1984). Estimating $F$-statistics for the analysis of
+  population structure. *Evolution* 38(6):1358–1370.
+
+**The surrounding debate**
+
+- Gerlach G, Jueterbock A, Kraemer P, Deppermann J, Harmand P (2010).
+  Calculations of population differentiation based on $G_{ST}$ and $D$: forget
+  $G_{ST}$ but not all of statistics! *Molecular Ecology* 19(18):3845–3852.
+- Gregorius HR, Roberds JH (1986). Measurement of genetical differentiation
+  among subpopulations. *Theoretical and Applied Genetics* 71:826–834.
+- Gregorius HR (2010). Linking diversity and differentiation. *Diversity*
+  2:370–394.
+- Hedrick PW (2005). A standardized genetic differentiation measure.
+  *Evolution* 59(8):1633–1638.
+- Heller R, Siegismund HR (2009). Relationship between three measures of genetic
+  differentiation $G_{ST}$, $D_{EST}$ and $G'_{ST}$: how wrong have we been?
+  *Molecular Ecology* 18(10):2080–2083.
+- Meirmans PG, Hedrick PW (2011). Assessing population structure: $F_{ST}$ and
+  related measures. *Molecular Ecology Resources* 11(1):5–18.
+- Wang J (2012). On the measurements of genetic differentiation among
+  populations. *Genetics Research* 94:275–289.
+- Whitlock MC (2011). $G'_{ST}$ and $D$ do not replace $F_{ST}$. *Molecular
+  Ecology* 20(6):1083–1091.
+- Whitlock MC, McCauley DE (1999). Indirect measures of gene flow and migration:
+  $F_{ST} \neq 1/(4Nm+1)$. *Heredity* 82:117–125.
+  DOI: [10.1046/j.1365-2540.1999.00496.x](https://doi.org/10.1046/j.1365-2540.1999.00496.x)
+
+**Other works cited in the argument**
+
+- Caballero A, Garcia-Dorado A (2013). Allelic diversity and its implications
+  for the rate of adaptation. *Genetics* 195:1373–1384.
+- Flanagan SP, Forester B, Latch EK, Aitken S, Hoban S (2017). Guidelines for
+  using genomic assessment and monitoring of adaptive variation to inform species
+  conservation. *Evolutionary Applications.*
+- Funk WC, McKay JK, Hohenlohe PA, Allendorf FW (2012). Harnessing genomics for
+  delineating conservation units. *Trends in Ecology & Evolution*
+  27(9):489–496.
+- Gliner JA, Morgan GA, Leech NL, Harmon RJ (2001). Problems with null
+  hypothesis significance testing. *Journal of the American Academy of Child and
+  Adolescent Psychiatry* 40(2):250–252. (Cited in the paper as "Gilner".)
+- Leng L, Zhang DX (2013). Time matters: some interesting properties of the
+  population differentiation measures $G_{ST}$ and $D$ overlooked in the
+  equilibrium perspective. *Journal of Systematics and Evolution* 51(1):44–60.
+- Sherwin W (2010). Entropy and information approaches to genetic diversity and
+  its expression: genomic geography. *Entropy* 12(7):1765–1798.
+- Strand TM, Segelbacher G, Quintela M, Xiao L, Axelsson T, Höglund J (2012).
+  Can balancing selection on MHC loci counteract genetic drift in small
+  fragmented populations of black grouse? *Ecology and Evolution* 2(2):341–353.
+- Vilas A, Pérez-Figueroa A, Quesada H, Caballero A (2015). Allelic diversity
+  for neutral markers retains a higher adaptive potential for quantitative
+  traits than expected heterozygosity. *Molecular Ecology* 24:4419–4432.
+
+---
+
+## Appendix E: the differentiation debate, 2008–2011
+
+The 2008–2011 exchange over $G_{ST}$ and $D$ is best read not as a contest over
+which formula is numerically larger on a given dataset, but as a dispute over which
+question the field was actually asking. Is the relevant question “how close are
+these demes to fixation?” or “how different are the alleles they actually carry?”
+The classical family and the Jost family answer different questions, and the
+debate is one of the clearest instances in population genetics where a naming
+collision produced a long-running misunderstanding.
+
+**Jost's position.** In the 2008 polemic, Jost's argument was that the
+classical $G_{ST}$ family, and by extension many uses of $F_{ST}$ and $\theta$,
+was being interpreted as if it measured absolute genetic differentiation when it
+in fact measured the opposite: the degree to which a population has moved toward
+fixation within the pooled array. The formal point was not trivial. The
+classical family normalizes by $H_T$, while the allelic family normalizes by
+$1-H_S$. Those are different denominators, and therefore different concepts. Once
+this is acknowledged, the apparent paradoxes in the paper's worked examples are
+no longer paradoxes at all: a population can be nearly fixed within demes and yet
+retain almost no common allele content across demes, producing a very low
+$G_{ST}$ and a very high $D$.
+
+**The counter-argument.** The critics were not simply defending a formula; they
+were defending a working interpretation that had become standard in a large body
+of empirical work. In that interpretive regime, $F_{ST}$-type statistics were used
+as catch-all summaries of population structure, and they were often read as if
+they told a manager, “how different are these demes?” The practical objection to
+Jost was that, in many real settings, the difference between fixation-based and
+allelic differentiation measures might be less consequential than the raw
+heterozygosity levels and the sampling regime suggested. In other words, critics
+argued that the classical measures were still useful working summaries, even if
+they were not the right measure for every biological question.
+
+**The key issue was not “which index is better” in the abstract.** It was the
+question of domain: a statistic can be excellent for estimating demography and
+near-fixation under drift–migration models while being unhelpful for conservation
+decisions about retaining unique alleles or protecting demes with distinct
+allele pools. The debate therefore looked like a fight over formulas, but it was
+really a fight over the proper use of those formulas.
+
+**Why the debate matter.** The 2008–2011 exchange helped define the terms on
+which the field now operates. The modern view is narrower and more precise than
+the original polemic: the classical family remains central to demographic
+inference, particularly questions about effective migration, drift, and the
+relative importance of population size and migration rate. The Jost family remains
+central to allelic differentiation, total turnover, and conservation decisions
+about which demes hold unique genetic material. Neither family is a drop-in
+replacement for the other.
+
+This is why the current paper is written in a synthetic tone rather than a
+combative one. It does not say that $G_{ST}$ is useless. It says it is the wrong
+index for a distinct question. The value of the debate is that it made that
+separation explicit. The field has not simply chosen one side and discarded the
+other; instead, it has largely accepted the more careful distinction: report the
+measurement family by what it represents, and do not read a nearness-to-fixation
+statistic as if it were a measure of absolute allelic dissimilarity.
+
+**Where the controversy remains.** The disagreement persists in application, not
+in the basic algebra. The debate is still alive when researchers ask which
+measure to lead with in a particular study, or whether a high $G_{ST}$ can be
+interpreted as meaningful differentiation in a management context. The paper's
+position is that such interpretations are valid only when the correct question is
+being asked. If the goal is estimating demography, $G_{ST}$ and $F_{ST}$ remain
+highly informative. If the goal is protecting allelic diversity, the Jost family
+is the more relevant object. The contemporary field largely treats these as
+complementary quantities rather than rival replacements.
+
+**Real-world impact.** The largest impact of the work has been methodological,
+not regulatory: it changed the way conservation biologists frame management
+questions. Programs concerned with preserving genetic diversity, identifying
+management units, or prioritizing populations for restoration are explicitly
+advised to distinguish fixation-based statistics from measures of allelic
+turnover and unique diversity (Jost et al. 2010; Funk et al. 2012; Gaggiotti et
+al. 2018; Flanagan et al. 2017). In other words, the practical consequence is
+not that classical population-genetic tools were abandoned, but that they are now
+read more carefully: a low $G_{ST}$ or a low $F_{ST}$ does not by itself imply
+that demes are equivalent in the sense that matters for preserving unique
+alleles. That distinction matters in real conservation decisions about habitat
+fragmentation, translocation, and the prioritization of populations with
+non-overlapping genetic repertoires.
+
+The same point appears in the more recent literature on genomic monitoring and
+adaptive variation, where authors emphasize that conservation decisions should
+consider allelic richness and functional diversity, not just drift-based
+summaries (Flanagan et al. 2017; Funk et al. 2012). Jost's work therefore had
+its clearest applied effect in the conceptual and analytical language of
+conservation genetics: it pushed the field toward reporting multiple measures, and
+away from treating a single fixation statistic as a stand-in for all forms of
+“differentiation.”
+
+The real legacy of the 2008–2011 polemic is therefore not that one statistic
+won and the other lost. It is that the field became much more explicit about the
+fact that “differentiation” is not a single thing.
 
 ---
 
@@ -1534,6 +1798,6 @@ generator-name: Claude Code
 generator-version: Claude Sonnet 5
 generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
-generation-date: 2026-08-10
+generation-date: 2026-08-11
 generator-responsibility: other
 ```
