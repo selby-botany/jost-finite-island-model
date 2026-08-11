@@ -130,6 +130,58 @@ only on the *frequencies* of the labels, never on any similarity between
 them. That assumption is also the main limit on reusing these measures on
 non-genetic data — see Part X.
 
+### Distance between alleles is a different model
+
+This is the point that most often trips people up when they first meet the
+paper: a genotype or allele label can indeed be given a metric in a different
+model, and then mutation becomes something like a transition in a space of
+sequence states. That is a perfectly sensible model for **sequence
+divergence** or **evolutionary distance**, but it is not the model used here.
+
+The paper is not asking, "How far apart are these allele labels in a
+sequence or mutational metric?" It is asking, "How different are the
+frequency distributions of the labels across demes, and how much of the
+variation is unique to one deme rather than shared across them?" The metric
+space model and the categorical-label model answer different questions.
+
+For a sequence-space model, one typically needs additional structure:
+
+- a way to compare allele labels to each other,
+- a mutation model that says how one label turns into another,
+- and usually a distance or similarity matrix that depends on the biology of
+ the locus.
+
+With that extra structure, one can define actual genetic distance, pairwise
+sequence divergence, or a diffusion-like mutation process in a continuous or
+discrete state space. In that setting, mutation really is a transition in a
+state-space, and distance can matter very much.
+
+This paper deliberately does not choose that structure. It keeps only the
+coarsest information the conservation question needs: the frequency of each
+label in each deme, and whether the labels are shared or unique across demes.
+The formulas in Parts II–V then depend on **overlap, frequency weights, and
+partitioning of diversity**, not on any assumed distance between alleles.
+
+That is why a sequence-distance model can be useful in some applications and
+yet leave no trace in the formulas here: it is a different model with a
+different inferential target. In the Jost family, a mutation is not defined as
+"a rotation in allele space"; it is simply a change in the frequency vector
+that can create or destroy new labels. The paper's statistics are built to
+track that population-level effect without introducing a metric that may not
+exist, or may not be biologically stable, for the marker being used.
+
+A useful way to phrase the distinction is this: in a full mutation model, the
+allele itself is a state with internal structure, and one must model how that
+state changes over time or how it relates to other states. In the Jost model,
+by contrast, the allele is treated as a category label, and the entire state
+for a locus is the list of category frequencies in a deme. The model says
+nothing about how similar or distant those labels are; it is built only from
+whether they are the same label, how often they appear, and how much of the
+category distribution is shared versus unique to each deme. That choice is
+not a simplification for convenience alone: it is what keeps the statistics
+portable across markers whose underlying mutation processes and sequence
+spaces are themselves very different.
+
 **Where does the locus's length go?** It vanishes the moment alleles are
 named, and returns in exactly one place. Once the interval is fixed, each
 distinct sequence across it becomes a single categorical label, and every
