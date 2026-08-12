@@ -439,15 +439,27 @@ depends on a weighted combination of some set of other islands' states,
 plus a random local update — resembles what physicists call a Markov
 random field. A natural question, for anyone arriving from a
 statistical-mechanics background: is it, more specifically, a Markov random
-field whose local variable lives in the **U(1)** group — the same
-structure as the $XY$/planar-rotor model, with allele frequency playing
-the role of a continuous phase angle? And, separately: what actually *is*
-the symmetry group of the finite island model?
+field whose local variable lives in some continuous rotation group —
+$SO(n)$ for some $n$ — with allele frequency playing the role of a
+continuous angular/positional variable, the way a spin lives on a circle
+or sphere in an $O(n)$-symmetric physics model? And, separately: what
+actually *is* the symmetry group of the finite island model, given that
+some kind of discrete transform seems to be involved?
 
-The coupling-structure analogy holds up well, but the **U(1)** part does
-not. It helps to separate two different questions: the *graph structure* of
-who is coupled to whom, versus the *symmetry group* of the state space at
-each individual node.
+*(This restates the question as originally intended: an earlier version
+of this exchange named the group $U(1)$ specifically, but the group
+actually being recalled — a rotation group $SO(n)$ acting on some
+$n$-dimensional space, connected to a discrete transform of the model — is
+the more precise target. The analysis below addresses that corrected
+question directly; the conclusion is unchanged.)*
+
+The coupling-structure analogy holds up well, but no continuous rotation
+group survives as an exact symmetry of the model itself. It helps to
+separate three different questions: the *graph structure* of who is
+coupled to whom; the *ambient continuous symmetry* that appears when the
+model is transformed into a more convenient coordinate system; and the
+*actual symmetry group* of the physically constrained state space, once
+that continuous symmetry is broken by a hard boundary.
 
 **Coupling structure.** Symmetric all-to-all migration, where every island
 exchanges with the population-wide average frequency, is exactly a
@@ -459,53 +471,88 @@ neighbors, is the finite-range or lattice analogue. So "island model ≈
 mean-field random field, stepping-stone model ≈ local/lattice random
 field" is a genuine and useful correspondence.
 
-**Symmetry of the local state: not **U(1)**.** A **U(1)** symmetry
-requires a continuous, unbroken rotational symmetry — every point on a
-circle physically equivalent to every other, with no privileged location.
-Allele-frequency space does not have that property:
+**Where an $SO(n)$ really does appear: the multi-allele sphere embedding.**
+This is the legitimate half of the corrected intuition, and it is worth
+taking seriously rather than dismissing. For a two-allele marker
+(frequency $p \in [0, 1]$), Wright's 1945 arcsine square-root transform,
+$\theta = \arcsin(\sqrt{p})$ — used extensively by Kimura in solving the
+Wright–Fisher diffusion equation — turns the state-dependent diffusion
+coefficient $p(1-p)$ into a *constant* coefficient on $\theta \in
+[0, \pi/2]$, so the drift process looks like Brownian motion confined to
+a quarter-circle arc. This has a direct, well-known generalization to a
+marker with $k$ alleles (covered in standard mathematical population
+genetics references, e.g. Warren Ewens's *Mathematical Population
+Genetics*): writing $z_i = \sqrt{p_i}$ for each allele's frequency, the
+constraint $\sum_i p_i = 1$ becomes $\sum_i z_i^2 = 1$ — that is, the
+vector $z = (z_1, \ldots, z_k)$ lives on the unit sphere $S^{k-1}$ sitting
+inside $\mathbb{R}^k$. Under this transform, the Wright–Fisher diffusion
+generator becomes (proportional to) the **Laplace–Beltrami operator on
+that sphere** — literally the same differential operator that governs
+heat diffusion on a curved surface, with eigenfunctions given by spherical
+harmonics. The natural continuous symmetry group of a round sphere in
+$\mathbb{R}^k$ is exactly $SO(k)$ (or $O(k)$, including reflections) — an
+$n$-dimensional rotation group with $n = k$, the number of alleles. So:
+yes, there is a real $SO(n)$ here, with $n$ tied to the number of alleles
+at the locus (not, on current evidence, to $4L$ or any other function of
+the number of loci $L$ specifically — see the note below on why that part
+of the original recollection does not carry through cleanly).
 
-- For a two-allele marker (frequency $p \in [0, 1]$), the endpoints
-  $p = 0$ and $p = 1$ are **absorbing fixation states** — physically
-  distinguished points where drift stops (absent mutation) and diversity
-  is permanently lost. A true **U(1)** symmetry has no distinguished
-  points of any kind. The one genuinely continuous-looking feature of the
-  model — the drift-variance term $p(1-p)$ in the diffusion
-  approximation to this process — is symmetric only under the discrete
-  reflection $p \leftrightarrow 1-p$ (swapping which allele is labeled
-  "A" versus "a"), which is the two-element group $\mathbb{Z}_2$, not
-  **U(1)**.
-- For a marker with $k$ alleles, the natural symmetry is permuting the
-  **k** allele labels — the symmetric group **S<sub>k</sub>**, a finite, discrete
-  group. This maps the finite island model onto a mean-field **Potts
-  model** analogy (**q** discrete, unordered, mutually exchangeable
-  states), not the continuous **XY O(2)$ / U(1)** model.
+**Why that $SO(k)$ does not survive as a symmetry of the actual model.**
+The catch is the same one that sank $U(1)$: the physically meaningful
+region is not the *whole* sphere, only the positive orthant of it, since
+each $z_i = \sqrt{p_i} \geq 0$ by definition — an allele frequency cannot
+be negative. That positive-orthant patch covers only $1/2^k$ of the
+sphere's surface, and its boundary faces (where some $z_i = 0$, i.e. some
+allele has gone extinct on that island) are exactly the absorbing
+fixation states already identified in the two-allele case. A generic
+rotation in $SO(k)$ does not map this patch to itself — it would rotate
+some coordinates negative, which is not a physically meaningful
+allele-frequency state at all. The only elements of $O(k)$ that *do* map
+the positive orthant back to itself are **permutations of the $k$
+coordinates** (relabeling which allele is called "1," "2," and so on) —
+which is exactly the discrete transform the corrected question pointed
+toward. In other words: the model genuinely lives on (a patch of) a
+sphere with an ambient continuous $SO(k)$ symmetry, but the physical
+boundary — genetic drift's absorbing fixation states — breaks that
+continuous symmetry down to the finite subgroup of coordinate
+permutations, $S_k$, the same discrete label-permutation group identified
+in the two-allele analysis (there, the k = 2 case: $S_2 \cong
+\mathbb{Z}_2$).
 
-The likely source of the **U(1)** intuition is the arcsine square-root
-transform, $\theta = \arcsin(\sqrt{p})$ (Wright, 1945; used extensively
-by Kimura to solve the underlying diffusion equation), which turns the
-state-dependent diffusion coefficient $p(1-p)$ into a *constant*
-coefficient on $\theta \in [0, \pi/2]$. This does make the process look
-like Brownian motion confined to an arc, solved by machinery that
-resembles spherical-harmonic problems on a circle or sphere — but it is a
-*coordinate change used to solve a differential equation*, not a physical
-symmetry: the interval still has hard reflecting/absorbing boundaries at
-both ends, so there is no free continuous rotation available, unlike a
-true **U(1)**/circle variable.
+**On the multi-locus case and "$n = 4L$."** If several independent,
+unlinked loci are tracked simultaneously (as real analyses do), the full
+state space becomes a product of one such sphere per locus — an ambient
+symmetry of $SO(k_1) \times SO(k_2) \times \cdots \times SO(k_L)$ (or
+$SO(k)^L$ if every locus has the same number of alleles $k$), possibly
+with an extra factor of $S_L$ if the loci themselves are statistically
+exchangeable. This product structure is a legitimate and probably closer
+match to what "$n$ related to $L$" was reaching for than any single fixed
+formula — but no derivation here produces literally $n = 4L$, and forcing
+that specific number would be fabricating precision that the model does
+not actually have. Recorded here as an honest "no clean match found"
+rather than papered over.
 
 | Symmetry | Group | Present in the model? |
 |---|---|---|
-| Relabeling the **k** alleles | **S<sub>k</sub>** | Yes, absent mutation bias or selection |
+| Relabeling the **k** alleles at one locus | **S<sub>k</sub>** | Yes, absent mutation bias or selection |
 | Relabeling the **D** islands | **S<sub>d</sub>** | Yes, if all island sizes and migration rates are equal |
-| Allele-frequency reflection (two-allele case) | $\mathbb{Z}_2$ | Yes |
-| Continuous phase rotation | — | No — broken by the absorbing fixation states |
+| Allele-frequency reflection (two-allele case, $k=2$) | $\mathbb{Z}_2 \cong S_2$ | Yes — the $k=2$ special case of the row above |
+| Ambient rotation of the $k$-allele sphere embedding | $SO(k)$ | Only before the positive-orthant constraint is applied — broken by absorbing fixation states |
+| Continuous phase rotation ($U(1)$, the original framing) | — | No — not the right ambient group in the first place; also broken by absorbing states even where it would apply |
 
-**Bottom line:** the finite island model is best described as a mean-field
-(or, under stepping-stone migration, lattice) Markov random field with a
-discrete label-permutation symmetry group, $S_k \times S_d$ — a
-mean-field Potts-model analogy — rather than a continuous **U(1)**/$XY$
-symmetry. The absorbing boundaries created by genetic drift are exactly
-what break the continuous symmetry the **U(1)** framing would otherwise
-require.
+**Bottom line (unchanged by this correction):** the finite island model is
+best described as a mean-field (or, under stepping-stone migration,
+lattice) Markov random field with a discrete label-permutation symmetry
+group, $S_k \times S_d$ — a mean-field Potts-model analogy. What the
+correction adds is *why* a rotation group shows up in the first place: the
+multi-allele generalization of Wright's arcsine transform genuinely
+embeds the model on a sphere with ambient continuous symmetry $SO(k)$,
+not $U(1)$ — but the requirement that allele frequencies stay
+non-negative restricts the model to one small patch of that sphere, and
+the absorbing boundary of that patch (fixation) breaks $SO(k)$ down to
+the same finite permutation group, $S_k$, identified all along. The
+discrete transform the corrected question pointed to is precisely this
+boundary-induced symmetry breaking, not a separate phenomenon.
 
 ---
 
