@@ -24,14 +24,31 @@
   - [10. Validation and test strategy](#10-validation-and-test-strategy)
   - [11. Open questions requiring a decision](#11-open-questions-requiring-a-decision)
   - [12. Out of scope for this pass](#12-out-of-scope-for-this-pass)
+  - [13. Illustrated walkthrough (mocked)](#13-illustrated-walkthrough-mocked)
+    - [Installing it (mocked)](#installing-it-mocked)
+    - [Using it from the command line (mocked)](#using-it-from-the-command-line-mocked)
+    - [Using it from a GUI (mocked)](#using-it-from-a-gui-mocked)
   - [Metadata](#metadata)
 
 ## Who this document is for
 
-Written for whoever implements the simulator: comfortable with software
-architecture, arrays, and basic probability; no population-genetics
-background assumed beyond what is restated inline. The two companion
-documents in this directory —
+Primarily written for whoever implements the simulator: comfortable with
+software architecture, arrays, and basic probability; no population-
+genetics background assumed beyond what is restated inline. But this is
+also the design record for a piece of software the botanist himself asked
+for, so it is written to be readable by him too — not every section
+needs it, and the table below says which.
+
+| If you are... | Read | Treat as optional |
+|---|---|---|
+| The botanist, checking this matches what you asked for | §1, §2 (do these read back what you meant?), §4.5 (how you'll install and run it), §13 (a plain walkthrough — start here if you want the short version) | §3, §5, §6, §7, §9, §10 — internal architecture, informative but not required |
+| The botanist, curious about a specific design choice | Also skim §8 (what the plots actually show and why) and §11 (what's still undecided — your input would help) | §5, §6, §9, §10 — module-level detail |
+| Whoever implements the simulator | Everything, in order | — |
+
+Sections written for the implementer are marked as such at their start;
+skipping them costs nothing needed to follow §13's walkthrough, which is
+the closest thing in this document to "here is what using the software
+actually feels like." The two companion documents in this directory —
 [the finite island model introduction](20260810-claude-sonnet-5-finite-island-model-introduction.md)
 and
 [the Jost differentiation-measures guide](20260810-claude-sonnet-5-jost-differentiation-measures.md)
@@ -117,6 +134,9 @@ silently resolving:
   operational.
 
 ## 3. The formal model
+
+*Implementer detail — optional for the botanist; §13 shows what this
+adds up to in practice.*
 
 ### 3.1 Signature and state
 
@@ -272,6 +292,10 @@ to exactly zero), not as a separate code path.
 ## 4. System architecture
 
 ### 4.1 Component overview
+
+*§4.1–§4.4 are implementer detail — optional for the botanist; skip
+ahead to §4.5 for what this means for installing and running the
+software.*
 
 ```mermaid
 flowchart TB
@@ -471,6 +495,8 @@ itself would reach the researcher's machine.
 
 ## 5. Module-level implementation plan
 
+*Implementer detail — optional for the botanist.*
+
 Proposed package layout:
 
 ```text
@@ -614,6 +640,8 @@ report, and canonical scatter to an output directory.
 
 ## 6. Persistence design
 
+*Implementer detail — optional for the botanist.*
+
 Every generation is persisted (requirement 5) as it is produced — not
 batched in memory and flushed at the end, since a botanist's own future
 "what if" is likely to include "run it for a lot longer" long before it
@@ -666,6 +694,9 @@ collaborator and have them reproduce the identical trajectory.
 
 ## 7. Statistics module
 
+*Implementer detail — optional for the botanist; the numbers it produces
+are what §13's mocked results screen shows.*
+
 Implements, from the differentiation-measures guide's Appendix A formula
 sheet, exactly:
 
@@ -692,6 +723,11 @@ scalar report (requirement 6a) and the final per-deme frequency table
 module's output at `t = T`, formatted.
 
 ## 8. Visualization module
+
+*Written for the implementer, but describes the botanist-facing output
+directly — worth reading in full if you're curious why the plot looks
+the way it does; §13 shows a mock of the result itself, no implementation
+language required.*
 
 **Canonical view (requirement 6, "scatter plot of frequency in
 `d`-dimensional space"):** one point per `(locus, allele)`, plotted with
@@ -776,6 +812,10 @@ already read fluently).
 
 ## 9. Extensibility: where the next "what if" lands
 
+*Implementer detail — optional for the botanist, though the table itself
+may be worth skimming: it is a fairly direct list of which future
+requests are cheap.*
+
 Every companion document ends with some version of "it would be
 interesting to see what happens if you could change X." The architecture
 above is built so each of the changes already on record in this
@@ -796,6 +836,8 @@ than requiring a redesign:
 | …a study needed run outputs at a scale JSONL doesn't suit well? | a second `TrajectoryStore` implementation (e.g. Parquet-backed) | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
 
 ## 10. Validation and test strategy
+
+*Implementer detail — optional for the botanist.*
 
 **Golden worked examples.** The differentiation-measures guide's Part IV
 provides several fully worked, hand-checked scenarios with exact expected
@@ -863,6 +905,9 @@ correctly and report the right reason. `TrajectoryStore` round-trips
 (write then read back, exact match) independent of any simulation run.
 
 ## 11. Open questions requiring a decision
+
+*Worth the botanist's attention, selectively: the "Still open" list below
+is exactly where his input would actually change the design.*
 
 ### Resolved
 
@@ -939,6 +984,144 @@ microsatellites); stepping-stone or other non-all-to-all migration
 topologies; per-locus allele length; unequal deme sizes; a general
 migration matrix. Every one of these has a specific landing spot already
 identified (§9) — they are deferred, not precluded.
+
+## 13. Illustrated walkthrough (mocked)
+
+*For the botanist as much as the implementer — this is the plain-language
+payoff of everything above. Nothing in this section is built yet, and
+none of it is a commitment to a particular look: §4.5 and §11 leave the
+actual front end (a config file and a command line, a GUI, or both) as an
+open decision. What follows is illustrative of what **using** the
+software would feel like either way, so the design above has a concrete
+shape to react to instead of staying abstract. The CLI and the GUI mocked
+below are two windows onto the exact same engine (§4's architecture) —
+neither is more "real" than the other at this stage.*
+
+### Installing it (mocked)
+
+Per §4.5's packaging constraint — a Windows laptop, no separate Python or
+package-manager install, no admin rights beyond running a downloaded
+file:
+
+1. Download `fim-windows-x64.exe` from the project's release page.
+2. Double-click it. Windows SmartScreen will likely warn that the file is
+   from an unrecognized publisher (it is a small, unsigned research tool,
+   not commercial software) — click **More info**, then **Run anyway**.
+3. On first run, `fim` creates `Documents\FIM Runs\` and drops a starter
+   config file (`example-run.yaml`) there, pre-filled with the
+   development defaults from §4.3.
+4. Run it again — either by double-clicking (opens the GUI, below) or
+   from a terminal (the CLI, below). Both read and write the same
+   `Documents\FIM Runs\` folder.
+
+No install step touches anything outside that one folder; uninstalling is
+deleting the `.exe` and, if wanted, that folder.
+
+### Using it from the command line (mocked)
+
+A config file (`myrun.yaml`) — every key here is one of §4.3's `𝖯`-bag
+entries, plus the four named arguments:
+
+```yaml
+# myrun.yaml
+N: 450                    # gene copies per deme (§3.1: ploidy-neutral)
+d: 20                     # demes
+m: 0.001                  # migration rate
+mu: 0.00003               # mutation rate
+seed: 20260814
+loci:
+  - length: 200
+initial_allele_count: 2
+initial_concentration: 1.0
+deme_weighting: size
+convergence_statistic: D
+convergence_window: 50
+convergence_tolerance: 0.01
+max_generations: 10000
+```
+
+Running it:
+
+```console
+$ fim run myrun.yaml
+Loading myrun.yaml ... ok  (N=450, d=20, m=0.001, μ=0.00003, seed=20260814)
+Generating initial state (random, Dirichlet α=1.0) ... ok
+Generation      1 ...
+Generation    100 ...   D=0.31
+Generation    500 ...   D=0.44
+Generation   1000 ...   D=0.46
+Generation   1500 ...   D=0.46
+Converged: D stable within 0.01 over the last 50 generations
+  → generation 1518, D=0.462, G_ST=0.058
+
+Writing trajectory  → Documents\FIM Runs\run-20260814-142207\trajectory.jsonl
+Writing manifest    → Documents\FIM Runs\run-20260814-142207\manifest.json
+Writing report      → Documents\FIM Runs\run-20260814-142207\report.json
+Writing scatter     → Documents\FIM Runs\run-20260814-142207\scatter.png
+Done in 1518 generations (4.2s).
+```
+
+`report.json`, in full — this is requirement 6a, the final scalar report:
+
+```json
+{
+  "run_id": "run-20260814-142207",
+  "generation": 1518,
+  "converged": true,
+  "converged_on": "D",
+  "G_ST": 0.058,
+  "D": 0.462,
+  "E_ST": 0.401,
+  "K_ST": 0.312,
+  "H_S": 0.71,
+  "H_T": 0.753
+}
+```
+
+`trajectory.jsonl` — one line per `(generation, deme, locus, allele)` row,
+exactly §6's schema, openable in a text editor, Excel, R, or pandas
+without any custom parser:
+
+```jsonl
+{"run_id":"run-20260814-142207","generation":0,"deme":1,"locus_id":1,"allele_id":0,"frequency":0.52}
+{"run_id":"run-20260814-142207","generation":0,"deme":1,"locus_id":1,"allele_id":1,"frequency":0.48}
+{"run_id":"run-20260814-142207","generation":0,"deme":2,"locus_id":1,"allele_id":0,"frequency":0.52}
+```
+
+### Using it from a GUI (mocked)
+
+The same run, as a desktop/web GUI instead of a config file. Three
+screens — mocked as static images below, clearly labeled as mockups, and
+built from a small illustrative simulation (details in each caption) so
+what they show is at least an honest picture of real dynamics, not
+placeholder art.
+
+**Screen 1 — model input.** The four named arguments and the `𝖯`-bag
+entries from §4.3, as a form instead of a YAML file:
+
+![Mocked model-input screen: labeled fields for N, d, m, μ, seed, convergence statistic, initial condition, and loci, with a "Run simulation" button](img/20260814-fim-simulator-design/screen1-model-input.png)
+
+**Screen 2 — results.** Requirement 6 in one view: the run summary
+(scalars, requirement 6a) beside the canonical scatter (per-deme allele
+frequencies, requirement 6b), for a small illustrative run — *not* the
+`N=450, d=20` run configured on screen 1, which has too many demes to
+plot as a single two-axis scatter (§8's `d > 3` fallback would apply
+instead). This one is deliberately a tiny `d=2` toy scenario, run small
+and fast enough that its whole trajectory fits on one screen: each point
+is one allele, axes are the two demes' frequencies for it, and the
+caption in the image spells out exactly what was simulated.
+
+![Mocked results screen: a run-summary sidebar (converged, generation 50, D=0.65, G_ST=0.34) beside a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most of them well off the diagonal](img/20260814-fim-simulator-design/screen2-results.png)
+
+**Screen 3 — bonus: watching it converge.** The same toy scenario,
+animated across the same generations shown in the static screen above —
+migration and drift pulling the four alleles' points away from the
+diagonal (shared frequency in both demes) as the demes differentiate.
+This is the "migrating scatterplot" a botanist would actually want to
+watch: §8 notes that every generation is already persisted, so this view
+is close to free once the static one exists.
+
+![Animated mock: the same four-allele scatter plot stepping through generations 0, 5, 10, … 50, with points starting near the diagonal and drifting apart as the demes differentiate](img/20260814-fim-simulator-design/screen3-animated.gif)
 
 ## Metadata
 
