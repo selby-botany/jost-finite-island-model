@@ -40,10 +40,17 @@ not re-derived here; this document is architecture and implementation
 planning built on top of them, not a third exposition of the model itself.
 The primary-source PDFs in `../../lou-jost-papers/` (the papers the two
 companion documents themselves cite and quote) were also checked directly
-for this pass; none contains simulator-architecture or convergence-
-methodology guidance beyond what the companion documents already extract
-— they are diversity- and differentiation-statistic papers, not simulation
-methodology papers — so no additional citation was warranted here.
+for this pass. Most are diversity- and differentiation-statistic papers
+with no simulator-architecture content beyond what the companion documents
+already extract — but one, `Dear-NolanMarch17Final.{pages,pdf}`, is
+exactly on point: an unpublished open letter from Jost to Nolan Kane
+(undated beyond the filename; internal references to Whitlock (2011) place
+it in or after 2011), written specifically to rebut a blog post with two
+worked finite-island-model simulations, run by Jost's colleagues Anne Chao
+and T. C. Hsieh, complete with parameters, expected/observed statistic
+values, and the actual scatter plots. §4.3, §8, and §10 below draw on it
+directly and cite it as what it is — primary correspondence from the
+model's own author, not a peer-reviewed publication.
 
 ## 1. Purpose and scope
 
@@ -132,9 +139,27 @@ p_{k,t,l} : \text{Allele} \to [0, 1],
 present at locus `l` in deme `k` at generation `t` — not over the whole
 infinite allele universe. This is the load-bearing representational choice
 (§3.2): the universe is unbounded, but the *support* of `p_{k,t,l}` is
-never larger than `2N` (there are only `2N` gene copies to be one allele
-or another), so the state is finite and small at every instant even though
-the label space it draws from is not.
+never larger than `N` (there are only `N` gene copies at that locus in
+that deme to be one allele or another — see the ploidy note directly
+below), so the state is finite and small at every instant even though the
+label space it draws from is not.
+
+**`N` is a gene-copy count, not an individual count — deliberately
+ploidy-neutral.** The companion introduction document frames `N` as
+"diploid individuals per deme," i.e. `2N` gene copies, which is the
+standard convention for autosomal nuclear markers and is what most of that
+document's exposition assumes. Jost's own worked examples (the "Dear
+Nolan" letter — §4.3, §8) are explicitly **haploid**: `N` there already
+*is* the gene-copy count. Rather than bake in a ploidy assumption and
+special-case haploid markers later, `fim`'s `N` is defined here as the
+gene-copy count directly, and `drift` (§3.4, §5) draws `N` copies, not
+`2N`. A caller modeling diploid autosomal individuals passes `N = 2 ×
+(census individuals)`; a caller modeling a haploid marker (mitochondrial
+DNA, a Y-chromosome locus, an organelle genome) passes census individuals
+directly, unchanged. This is strictly more general — it covers both cases
+with one parameter and no ploidy flag — and it is what makes Jost's own
+example parameters (`N = 100`, `N = 2000`) usable as §4.3's development
+defaults without a conversion.
 
 ### 3.2 Alleles, loci, and identity
 
@@ -215,7 +240,7 @@ p_{t+1} = \mathrm{Drift}\bigl(\mathrm{Mutate}_\mu\bigl(\mathrm{Migrate}_m(p_t)\b
 flowchart LR
     A["ψ_k,t\n(current state)"] --> B["Migrate(m)\nweighted blend with\nmigrant pool"]
     B --> C["Mutate(μ)\nintroduce novel alleles\n(infinite-alleles model)"]
-    C --> D["Drift(N)\nmultinomial resample,\n2N draws per deme"]
+    C --> D["Drift(N)\nmultinomial resample,\nN gene copies per deme"]
     D --> E["ψ_k,t+1\n(next state)"]
 ```
 
@@ -344,36 +369,49 @@ for `convergence_window` and `convergence_tolerance`, any value adequate
 for exercising the code during development is sufficient — the values
 above (`50` generations, `0.01`) are exactly that: a development starting
 point, not a claim about what a real study needs. For `N`, `m`, `μ`, and
-`d` themselves, two published finite-island-model figures (captions
-transcribed below; the source paper for these captions is not yet pinned
-down precisely enough to cite formally — see
-[§11](#11-open-questions-requiring-a-decision)) give a concrete, real
-sense of the parameter ranges this model is actually run at in practice,
-and are a better source for development defaults than an arbitrary guess:
+`d` themselves, Jost's own "Dear Nolan" letter (identified above; see
+[§8](#8-visualization-module) and [§10](#10-validation-and-test-strategy)
+for how it is used there) gives two concrete, real worked scenarios —
+run by his colleagues Anne Chao and T. C. Hsieh specifically to test the
+finite island model at equilibrium — which are a far better source for
+development defaults than an arbitrary guess:
 
 | Scenario | `N` | `d` | `m` | `μ` | `Nm` | expected `G_ST` | expected `D` |
 |---|---|---|---|---|---|---|---|
 | Low migration, low mutation | `100` | `5` | `0.0001` | `0.000001` | `0.01` | `0.97` | `0.04` |
 | Higher migration, higher mutation | `2000` | `100` | `0.01` | `0.001` | `20` | `0.02` | `0.91` |
 
-These two published points sit at opposite ends of the interesting range
-— one nearly fully fixed (`G_ST` near its ceiling, `D` near zero — the
-demes agree because everything has drifted to one shared allele), the
-other strongly allelically differentiated (`D` near one) while barely
-departing from fixation-neutrality (`G_ST` near zero) — which is itself
-the paper's whole point (companion guide, Part IV) rendered as a parameter
-sweep rather than a static table. A geometric-mean-ish midpoint of the
-two — roughly `N ≈ 450`, `d ≈ 20`, `m ≈ 0.001`, `μ ≈ 0.00003` — is a
-reasonable single default scenario for exercising the simulator end to end
-during development, sitting between the two regimes rather than at either
-extreme. One notational caution: the source captions also give a value
-described only as `L`, apparently a per-figure replicate-run count (`200`
-and `50` respectively), which is **not** the same `L` as `LocusSpec.length`
-(§3.2) despite the shared letter — a coincidence of the source paper's own
-notation, not a hint about locus length defaults. See
-[§11](#11-open-questions-requiring-a-decision) for the follow-up needed
-before these two scenarios are promoted from "development defaults" to
-cited validation fixtures (§10).
+Both scenarios are explicitly **haploid** in the letter ("`N=100` haploid
+reproductive individuals," "`100` demes of `2000` haploid reproductive
+individuals") — i.e. `N` there already is the gene-copy count, which is
+exactly the ploidy-neutral convention §3.1 adopts for `fim`'s own `N`, so
+these two scenarios plug in directly with no conversion. (Mean *observed*
+values from the letter's own simulations agree closely with the expected
+values shown above — `0.04` observed vs. `0.04` expected `D` for the
+first scenario, `0.90` observed vs. `0.91` expected `D` for the second —
+which is itself a small piece of corroborating evidence that the letter's
+worked examples are internally consistent.)
+
+These two points sit at opposite ends of the interesting range — one
+nearly fully fixed (`G_ST` near its ceiling, `D` near zero — the demes
+agree because everything has drifted to one shared allele), the other
+strongly allelically differentiated (`D` near one) while barely departing
+from fixation-neutrality (`G_ST` near zero) — which is exactly the point
+the letter itself is making (Nm does not control allelic differentiation;
+`m/[μ(d-1)]` does), rendered as a parameter sweep rather than a static
+table. A geometric-mean-ish midpoint of the two — roughly `N ≈ 450`,
+`d ≈ 20`, `m ≈ 0.001`, `μ ≈ 0.00003` — is a reasonable single default
+scenario for exercising the simulator end to end during development,
+sitting between the two regimes rather than at either extreme.
+
+One notational caution, confirmed directly from the letter's own figures
+(both plot titles read the parameters back verbatim, e.g. `"L=200 N=100
+d=5 m=0.0001 u=0.000001"`): `L` there is the number of independent
+**replicate simulation runs** plotted together (`200` and `50`
+respectively) — confirmed, not merely suspected — and is **not** the same
+`L` as this document's `LocusSpec.length` (§3.2) despite the shared
+letter; a coincidence of the letter's own notation (which also writes the
+mutation rate as `u`, not `μ`), not a hint about locus-length defaults.
 
 ### 4.4 Language and library choice
 
@@ -518,11 +556,12 @@ ModelState`, matching §3.4 exactly:
   model proper"; the stepping-stone alternative is a documented but
   unimplemented pool-selection strategy for this pass — see §9).
 - `mutate(state, mu, registry) -> ModelState` — infinite-alleles model:
-  each of the `2N` gene copies independently mutates with probability
-  `μ`; a mutating copy's label is replaced by a fresh ID from `registry`.
-- `drift(state, N) -> ModelState` — multinomial resample of `2N` gene
-  copies from the post-migration/mutation frequency vector, per deme, per
-  locus.
+  each of the `N` gene copies independently mutates with probability `μ`;
+  a mutating copy's label is replaced by a fresh ID from `registry`.
+- `drift(state, N) -> ModelState` — multinomial resample of `N` gene
+  copies (§3.1's ploidy-neutral convention: `N` is already a gene-copy
+  count, not an individual count) from the post-migration/mutation
+  frequency vector, per deme, per locus.
 
 **`convergence/criteria.py`.** `ConvergenceCriterion` protocol:
 `is_stable(history: Sequence[float], window: int, tolerance: float) ->
@@ -677,28 +716,54 @@ the same underlying point set:
   labeled as a projection, never presented as equivalent to the direct
   plot.
 
-This design is consistent with how this literature actually plots this
-kind of data: the two published figures cited in §4.3's development-
-defaults table are themselves 2-D scatters even at `d = 100` demes — "the
-most common alleles… are clustered along the x- and y-axes," per the
-caption — which is exactly a single pairwise panel of the projection
-described above, not a genuinely 100-dimensional plot. That is corroborating
-evidence for the pairwise-matrix fallback, not proof of it: the caption
-alone does not settle *which* pair of axes those published figures use
-(two specific demes, one deme against the pooled rest, or — since the same
-caption discusses "the same allele fixed in both loci" — possibly two
-*loci* rather than two demes at all). Confirming that against the actual
-source figure, rather than a paraphrased caption, is recorded as an open
-item in [§11](#11-open-questions-requiring-a-decision); it would not change
-the deme-axes design decided here (the requirement is explicit that the
-axes are the `d` demes), only which fallback projection this module should
-treat as most valuable to render well first.
+**This fallback is now directly confirmed by precedent, not just
+plausible.** The "Dear Nolan" letter's own two figures (§4.3) are, in the
+letter's own words, built by "plot\[ting\] the frequency of each allele in
+Deme 1 versus its frequency in Deme 2" — always exactly **two named
+demes** on the two axes, with a `y = x` reference line drawn in and a
+title stating the run's `N`, `m`, `μ`, `d` directly on the figure, even
+at `d = 100` demes (Fig. 2). That is a single panel of exactly the
+pairwise-matrix fallback described above, confirming both that the
+fallback's shape is right and that titling a plot with its own generating
+parameters is worth adopting as a house style for every scatter this
+module produces, not just this one.
 
-Because every generation is already persisted (§6), the same scatter
-function trivially generalizes to an animation or small-multiples view
-across generations — not a requirement of this pass, but effectively free
-given the persistence design, and a natural answer to a future "what does
-this look like *building up* over time" request.
+One real difference is worth being precise about, because it changes what
+gets built, not just how it looks: the letter's plots are **not** a single
+run's per-locus, per-allele scatter (this document's own primary design,
+above) — they aggregate one point per allele **per independent replicate
+run**, many replicate runs overlaid on the same axes, all drawn from
+demes assumed to already be at equilibrium. Where many points coincide
+(common in that regime — Fig. 1 has `189` of `200` replicate points
+landing on exactly `(1, 1)`), the letter's rendering scales the marker and
+annotates the count rather than letting the points silently overplot; Fig.
+2 additionally colors points by whether they represent a common or a rare
+allele in their run. Both are good, cheap techniques worth adopting
+directly in `viz/scatter.py` regardless of which mode is rendering.
+
+**Both views belong in this module, as two distinct, non-competing
+modes:**
+
+- The **single-run, full-`d`-dimensional view** (this section's opening
+  paragraph) is what requirement 6 literally asks for — the per-deme
+  allele-frequency distribution of *the* converged run being reported —
+  and stays the primary, always-available output.
+- A **replicate-aggregate, two-deme view**, modeled directly on the
+  letter's own convention, is a natural second mode once `n_replicates`
+  batching exists (§9): pick two demes (or sweep every pair, `d choose 2`
+  panels), run many replicates to equilibrium, and overlay one point per
+  allele per replicate with the letter's own coincidence-count and
+  common/rare-color conventions. This is exactly the view a botanist
+  needs to sanity-check a *distribution* of outcomes against a single
+  reported run, and it costs nothing new architecturally — it consumes
+  the same `TrajectoryStore` rows and the same per-pair projection
+  `viz/scatter.py` already needs for `d > 3`.
+
+Because every generation is already persisted (§6), the primary scatter
+function also trivially generalizes to an animation or small-multiples
+view of one run across generations — not a requirement of this pass, but
+effectively free given the persistence design, and a natural answer to a
+future "what does this look like *building up* over time" request.
 
 **Supporting diagnostic views**, useful for trusting the primary output
 rather than botanist-facing deliverables in their own right: a time
@@ -719,7 +784,7 @@ than requiring a redesign:
 
 | "What if…" | Landing spot | Why it's small |
 |---|---|---|
-| …island sizes differed (`N_i`)? | `N` accepts a length-`d` array | `drift()` already receives `N` as a parameter; per-deme `2N_i` is a broadcast, not new logic |
+| …island sizes differed (`N_i`)? | `N` accepts a length-`d` array | `drift()` already receives `N` as a parameter; per-deme `N_i` gene copies is a broadcast, not new logic |
 | …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
 | …migration were spatial (stepping-stone)? | a sparse/neighbor-restricted `m` matrix, or a `MigrantPoolStrategy` interface | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
 | …locus length varied? | `LocusSpec.length` per locus | already a first-class field (§3.2), unused only because the initial pass sets every locus equal |
@@ -759,12 +824,12 @@ frequency tables rather than single fixed inputs:
 
 **Statistical/asymptotic property tests** against the model itself, not
 just the statistics module: the drift operator's per-generation variance
-should match the theoretical `p(1-p)/(2N)` (this project's own prior
-research doc flags this exact check as the thing to validate before
-trusting anything built on top of it), and many-replicate runs at fixed
-`N, m, μ, d` should have their sample-mean `G_ST` and `D` approach the
-equilibrium formulas (differentiation-measures guide, Part VI, Eq. 2 and
-Eq. 4) within a pre-derived confidence bound. These are inherently
+should match the theoretical `p(1-p)/N` (§3.1's gene-copy-count `N`; this
+project's own prior research doc flags this exact check as the thing to
+validate before trusting anything built on top of it), and many-replicate
+runs at fixed `N, m, μ, d` should have their sample-mean `G_ST` and `D`
+approach the equilibrium formulas (differentiation-measures guide, Part
+VI, Eq. 2 and Eq. 4) within a pre-derived confidence bound. These are inherently
 stochastic checks; they must still be **deterministic given the commit** —
 fix the seed(s) used, and derive the tolerance band analytically in
 advance from the sample size chosen, rather than picking a seed after the
@@ -773,16 +838,23 @@ re-run with the code unchanged is a defect in the test, not an acceptable
 property of a stochastic simulator.
 
 **Published-scenario fixtures.** The two scenarios in §4.3's development-
-defaults table are candidates for exactly this kind of test — real
-`(N, m, μ, d)` tuples with a published expected `G_ST` and expected/
-observed `D` to compare a many-replicate simulated run against, in
-addition to the two equilibrium formulas themselves. They are listed here
-as a candidate, not yet as a committed fixture: the source paper for
-those two captions needs to be pinned down and the transcribed numbers
-checked against it directly (§11) before they are hard-coded as a test
-oracle — the same standard this repository already holds its own citations
-to elsewhere (every DOI in the companion documents was checked against a
-public source before being relied on).
+defaults table — from Jost's "Dear Nolan" letter, source and citation
+confirmed above ("Who this document is for") — are strong candidates for
+exactly this kind of test: real `(N, m, μ, d)` tuples with a stated
+expected `G_ST` and both expected *and* mean-observed `D`, letting a test
+compare a many-replicate simulated run against a real prior result in
+addition to the two equilibrium formulas from the differentiation-measures
+guide's Part VI. One caveat still applies before promoting them from
+"development defaults" to a hard-coded pass/fail oracle: they are
+themselves simulation output from a colleague's independent tool (Anne
+Chao and T. C. Hsieh's, per the letter), not an analytically exact value,
+and the letter is correspondence rather than a peer-reviewed publication
+— appropriate for a tolerance-banded statistical check (consistent with
+how this section already treats every other stochastic test), not for an
+exact-equality assertion. The letter's own closed-form approximations for
+`H_S` and `H_T` (stated in terms of `N`, `m`, `μ`, `d` directly) are an
+additional, independent analytic cross-check beyond the differentiation-
+measures guide's Eq. 2 and Eq. 4, usable the same way.
 
 **Interface-level tests.** `ConvergenceMonitor` against synthetic
 statistic sequences (constant, slowly converging, oscillating-forever) to
@@ -823,32 +895,37 @@ edited away:
 6. **Locus length as an allele property vs. a locus property.** Confirmed
    as a locus property, per §2 and §3.2.
 7. **Language/library commitment.** Confirmed: Python 3 + NumPy (§4.4).
+8. **What `N` counts — individuals or gene copies.** Confirmed
+   ploidy-neutral: `N` is the gene-copy count directly (§3.1); a diploid
+   caller passes `2 × individuals`, a haploid caller passes individuals
+   unchanged. Surfaced by, and resolved directly from, Jost's own worked
+   examples being explicitly haploid (§4.3) — not an item the first draft
+   had identified as open at all, recorded here rather than silently
+   folded into the original text.
+9. **Exact source and citation for the two worked scenarios.** Confirmed:
+   Jost's unpublished open letter to Nolan Kane,
+   `Dear-NolanMarch17Final.{pages,pdf}` in `lou-jost-papers/` — primary
+   correspondence from the model's own author (simulations run by Anne
+   Chao and T. C. Hsieh), not a peer-reviewed publication, referencing
+   Whitlock (2011) and so written in or after 2011. §4.3 and §10 now cite
+   it directly on that basis.
+10. **What those published scatter plots' axes actually are.** Confirmed
+    from the letter's own text: exactly two named demes ("Deme 1" vs.
+    "Deme 2"), never a genuinely `d`-dimensional plot even at `d = 100`,
+    and never loci — one point per allele **per independent replicate
+    run**, many replicates overlaid (§8). This is a different axis
+    convention from this document's own single-run primary design, not a
+    contradiction of it; §8 now designs for both as separate view modes.
 
 ### Still open
 
-1. **Exact source and citation for the two figure-caption scenarios**
-   used as development defaults (§4.3) and candidate validation fixtures
-   (§10). The parameter values and expected `G_ST`/`D` were transcribed
-   from a caption without a confirmed title, author, journal, or DOI —
-   good enough to set realistic development defaults, not yet good enough
-   to cite formally or to hard-code as a strict test oracle. Needs the
-   actual source paper identified and the transcribed numbers checked
-   against it directly, in keeping with this project's own standard of
-   verifying every citation against a public source before relying on it.
-2. **What those published scatter plots' axes actually are** (§8) — two
-   specific demes, one deme against the pooled rest, or (per the same
-   caption's discussion of alleles "fixed in both loci") two *loci*
-   rather than demes at all. Does not affect the deme-axes design
-   decided here, only which fallback projection is worth polishing first
-   once item 1 above is resolved and the source figure can be inspected
-   directly.
-3. **Researcher-facing front-end shape** (§4.5) — a plain config file
+1. **Researcher-facing front-end shape** (§4.5) — a plain config file
    plus a command-line executable, versus a minimal local GUI, for a
    non-technical-setup Windows researcher. Both are compatible with
    every other decision in this document (the front end sits entirely
    outside `engine.py` and the modules it calls); this is purely about
    which is friendlier to actually use.
-4. **Update/distribution mechanism** (§4.5) — how a revised build of the
+2. **Update/distribution mechanism** (§4.5) — how a revised build of the
    packaged executable reaches the researcher's machine (a versioned
    download, a simple installer with an update check, or fully manual
    replacement). Not architecturally significant to the simulator itself,
