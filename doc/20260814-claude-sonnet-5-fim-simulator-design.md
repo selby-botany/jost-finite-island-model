@@ -15,6 +15,7 @@
     - [4.2 Data flow](#42-data-flow)
     - [4.3 The parameter bag (P)](#43-the-parameter-bag-p)
     - [4.4 Language and library choice](#44-language-and-library-choice)
+    - [4.5 Packaging and distribution](#45-packaging-and-distribution)
   - [5. Module-level implementation plan](#5-module-level-implementation-plan)
   - [6. Persistence design](#6-persistence-design)
   - [7. Statistics module](#7-statistics-module)
@@ -99,8 +100,8 @@ silently resolving:
   of the **locus** (the interval), not the allele (the value found there):
   `μ ≈ μ_b · L` for a per-base-pair rate `μ_b`. §3.2 below follows that
   document rather than the literal item-3 wording, and treats `L` as a
-  `LocusSpec` field. Flagged in [§11](#11-open-questions-requiring-a-decision)
-  for confirmation.
+  `LocusSpec` field. **Confirmed** as the intended reading — no longer
+  open.
 - **"Converges" applied to a stochastic process that has no fixed point**
   (item 1, item 4). Under the finite island model with `μ > 0`, no state
   is absorbing — allele frequencies keep moving forever, and the system
@@ -186,6 +187,18 @@ or needs to prove — it is inherited as a modeling assumption from the
 theory the companion documents describe. The simulator's job is purely
 operational: detect, empirically, when a chosen statistic has stopped
 moving (§3.5).
+
+One labeling detail worth being deliberate about: the founding allele set
+at `t = 0` for each locus is assigned small, **locus-relative** IDs (`0,
+1, …` up to `initial_allele_count - 1`) rather than draws from the same
+global `AlleleRegistry` counter used for mutations. This is what keeps a
+question like "did locus 1 and locus 2 fix on the same starting allele"
+well-defined and cheap to answer — it reduces to comparing two small
+integers — while every allele *born from a mutation event* still gets a
+globally unique ID from the registry, so it can never be mistaken for one
+of the founding alleles or for a mutant at another locus. Founding IDs and
+minted IDs share one namespace (both are just `AlleleId` integers) but are
+allocated from disjoint ranges so the two can never collide.
 
 ### 3.4 The generation-update pipeline
 
@@ -302,7 +315,7 @@ exhaustive) schema for the initial pass:
 | `locus_lengths` | `LocusSpec.length` per locus | one shared constant |
 | `initial_allele_count` | starting allele count per locus | `2` (biallelic/SNP-like) |
 | `initial_concentration` | Dirichlet concentration for random start | `1.0` (uniform) |
-| `deme_weighting` | `"equal"` or `"size"` — used by `E_ST` and by the convergence statistic if size-sensitive | `"equal"` |
+| `deme_weighting` | `"equal"` or `"size"` — used by `E_ST` and by the convergence statistic if size-sensitive | `"size"` |
 | `convergence_statistic` | which statistic(s) the monitor watches | `"D"` |
 | `convergence_window` | trailing-window length, generations | `50` |
 | `convergence_tolerance` | stability tolerance on that window | `0.01` |
@@ -314,12 +327,59 @@ migration matrix) from the start — see §9. Extending to unequal demes or
 asymmetric migration is then "pass a richer value for an existing
 argument," not a new code path threaded through the operators.
 
+**Deme weighting defaults to `"size"`, not `"equal"`.** `"size"` is the
+more general case — it is well-defined and correct whether or not deme
+sizes actually differ — while `"equal"` is only correct in the special
+case they don't. The initial pass keeps every deme's `N_i` fixed at one
+constant `N` (§1's "symmetric initial-pass core"), which makes the two
+weighting choices numerically identical for this pass's own runs; the
+default is chosen for where the code is headed (§9's unequal-`N_i`
+extension), not because it changes anything yet. `D` remains defined with
+equal deme weighting by construction regardless of this setting (§7) — the
+`deme_weighting` key governs `E_ST` and, if configured, the convergence
+statistic, never `D` itself.
+
+**Suggested development defaults.** Absent a botanically-derived default
+for `convergence_window` and `convergence_tolerance`, any value adequate
+for exercising the code during development is sufficient — the values
+above (`50` generations, `0.01`) are exactly that: a development starting
+point, not a claim about what a real study needs. For `N`, `m`, `μ`, and
+`d` themselves, two published finite-island-model figures (captions
+transcribed below; the source paper for these captions is not yet pinned
+down precisely enough to cite formally — see
+[§11](#11-open-questions-requiring-a-decision)) give a concrete, real
+sense of the parameter ranges this model is actually run at in practice,
+and are a better source for development defaults than an arbitrary guess:
+
+| Scenario | `N` | `d` | `m` | `μ` | `Nm` | expected `G_ST` | expected `D` |
+|---|---|---|---|---|---|---|---|
+| Low migration, low mutation | `100` | `5` | `0.0001` | `0.000001` | `0.01` | `0.97` | `0.04` |
+| Higher migration, higher mutation | `2000` | `100` | `0.01` | `0.001` | `20` | `0.02` | `0.91` |
+
+These two published points sit at opposite ends of the interesting range
+— one nearly fully fixed (`G_ST` near its ceiling, `D` near zero — the
+demes agree because everything has drifted to one shared allele), the
+other strongly allelically differentiated (`D` near one) while barely
+departing from fixation-neutrality (`G_ST` near zero) — which is itself
+the paper's whole point (companion guide, Part IV) rendered as a parameter
+sweep rather than a static table. A geometric-mean-ish midpoint of the
+two — roughly `N ≈ 450`, `d ≈ 20`, `m ≈ 0.001`, `μ ≈ 0.00003` — is a
+reasonable single default scenario for exercising the simulator end to end
+during development, sitting between the two regimes rather than at either
+extreme. One notational caution: the source captions also give a value
+described only as `L`, apparently a per-figure replicate-run count (`200`
+and `50` respectively), which is **not** the same `L` as `LocusSpec.length`
+(§3.2) despite the shared letter — a coincidence of the source paper's own
+notation, not a hint about locus length defaults. See
+[§11](#11-open-questions-requiring-a-decision) for the follow-up needed
+before these two scenarios are promoted from "development defaults" to
+cited validation fixtures (§10).
+
 ### 4.4 Language and library choice
 
-No language is yet committed in this repository (documentation-only to
-date). Recommendation: **Python 3, with NumPy as the array backend**,
-matching two things already visible in this codebase's neighborhood: the
-sibling Selby repositories use a Python-first toolchain (Docker-wrapped
+**Confirmed: Python 3, with NumPy as the array backend.** This matches
+two things already visible in this codebase's neighborhood: the sibling
+Selby repositories use a Python-first toolchain (Docker-wrapped
 `python3`, per `belize-orchid-genera-key`), and this project's own prior
 research doc (`.attic/20260808-…-01.md`, §6) already recommends
 NumPy-vectorized batched binomial/multinomial sampling across loci and
@@ -327,10 +387,49 @@ replicate runs as the natural fit for the drift step's workload — that
 recommendation is adopted directly rather than re-derived. Output formats
 (§6) are chosen to be equally easy to load from R, since the origin of
 this whole project was a researcher wanting per-generation frequencies he
-could load into his own analysis tooling.
+could load into his own analysis tooling. §4.5 below records the
+packaging consequence of this choice.
 
-This is a recommendation, not a foregone conclusion — flagged again in
-[§11](#11-open-questions-requiring-a-decision).
+### 4.5 Packaging and distribution
+
+A firm, non-tunable constraint, not one of the "what if" knobs elsewhere
+in this document: the tool must be easy for a researcher to install and
+run on a **Windows laptop**, with minimal demands on that researcher to
+set up their own system — no expectation that they separately install
+Python, a package manager, or a compiler toolchain, and no admin-rights
+installer step beyond what "download and run" already requires.
+
+This constrains, rather than reopens, several choices already made
+above:
+
+- **Single self-contained executable.** Package the CLI (§5's `cli.py`)
+  as a one-file Windows executable (e.g. via PyInstaller), bundling the
+  Python interpreter and every dependency. The researcher's own machine
+  needs nothing pre-installed.
+- **Dependency footprint stays deliberately small,** and every dependency
+  is chosen for having solid, well-maintained prebuilt Windows wheels —
+  NumPy and a plotting library (e.g. Matplotlib) both qualify — so the
+  bundling step itself stays simple and reproducible. Anything that would
+  need a local compiler to install from source on a researcher's machine
+  is disqualified by this constraint alone, independent of its other
+  merits.
+- **Plain-text configuration and output** reinforce the same goal from a
+  different angle: a `SimulationParams` config file the researcher edits
+  directly (§4.3) and a persistence backend (§6) that is human-readable
+  and needs no separate database engine or server process to inspect —
+  which is also, independently, why JSONL (§6) is the right default
+  persistence backend rather than a compiled/columnar format that would
+  need extra tooling to open.
+- **No network dependency at run time.** The tool must run entirely
+  offline once installed — nothing in the update pipeline, statistics, or
+  visualization modules should require reaching out to any remote
+  service.
+
+What this section does *not* yet settle — recorded as open questions in
+[§11](#11-open-questions-requiring-a-decision) — is the exact shape of the
+researcher-facing front end (a config file plus a command-line
+executable, versus a minimal local GUI) and how updates to the tool
+itself would reach the researcher's machine.
 
 ## 5. Module-level implementation plan
 
@@ -355,7 +454,8 @@ jost-finite-island-model/
 │       ├── statistics/
 │       │   └── differentiation.py # H, H_S, H_T, G_ST, D, E_ST, K_ST, Hill numbers
 │       ├── persistence/
-│       │   ├── trajectory_store.py
+│       │   ├── store.py           # TrajectoryStore protocol (backend-agnostic)
+│       │   ├── jsonl_store.py     # JSONLTrajectoryStore — the v1 backend
 │       │   └── manifest.py
 │       ├── viz/
 │       │   ├── scatter.py         # canonical d-dimensional frequency scatter
@@ -432,8 +532,11 @@ difference is within `tolerance`) and a fixed-`max_generations` fallback
 that always eventually fires regardless of statistical behavior — the
 safety valve named in §3.5, since stochastic-equilibrium detection is not
 guaranteed to trigger quickly, or at all, for a badly chosen tolerance.
-Criteria compose (default: convergence on *all* watched statistics in
-`convergence_statistic`, ANY/ALL combinator configurable).
+The initial pass watches a **single** statistic (`𝖯["convergence_statistic"]`,
+default `"D"`); the interface still accepts a list and a combinator
+(ANY/ALL) so that watching several statistics together is a config change
+rather than a rewrite, but only the single-statistic path is exercised
+until that need actually arises (§9).
 
 **`convergence/monitor.py`.** `ConvergenceMonitor` wraps one or more
 criteria plus the running history of the watched statistic(s); the engine
@@ -455,7 +558,8 @@ can sweep `q` directly rather than being limited to the three named
 measures. Usable standalone against any persisted trajectory, current run
 or historical.
 
-**`persistence/trajectory_store.py`** and **`manifest.py`** — see §6.
+**`persistence/store.py`**, **`jsonl_store.py`**, and **`manifest.py`** —
+see §6.
 
 **`viz/scatter.py`** and **`viz/diagnostics.py`** — see §8.
 
@@ -491,12 +595,28 @@ alleles):
 Long-format, tidy, one value per row — directly loadable into R or Python
 without a custom parser, matching this project's founding motivation
 (giving a researcher per-generation frequencies he can load into his own
-analysis, not a black box). Backend format is an implementation choice
-independent of the schema above (candidates: Parquet for run sizes large
-enough that columnar compression matters, plain CSV/JSONL for small runs
-and maximum tool-agnostic portability); flagged in
-[§11](#11-open-questions-requiring-a-decision) since the right answer
-depends on typical run sizes the botanist actually needs, not yet known.
+analysis, not a black box).
+
+**Backend is swappable behind a `TrajectoryStore` protocol** (`persistence/
+store.py`); the row schema above is the store's public contract, not any
+one file format's. `write_generation(run_id, generation, rows)` and
+`read(run_id) -> Iterator[row]` are the whole interface the rest of the
+system depends on — `engine.py`, the statistics module, and the
+visualization module all talk to a `TrajectoryStore`, never to a file
+format directly.
+
+**`JSONLTrajectoryStore` (`persistence/jsonl_store.py`) is the v1
+implementation**: one JSON object per line, one line per row, appended as
+each generation is produced. JSONL is chosen as the *starting* backend
+for reasons that hold specifically for this pass — human-readable with no
+extra tooling to open (reinforcing §4.5's packaging constraint), trivial
+to append to incrementally without rewriting the file, and zero-dependency
+to read from R or Python — while remaining an explicit non-final choice:
+run sizes large enough for JSONL's lack of compression or columnar
+structure to matter should get a second backend (Parquet is the obvious
+candidate) implementing the same protocol, selected by configuration, not
+by changing any caller. Nothing downstream of `TrajectoryStore` needs to
+know which backend is in use.
 
 A **run manifest** is written alongside the trajectory: the full
 `SimulationParams` (including seed — this is what makes a run exactly
@@ -557,6 +677,23 @@ the same underlying point set:
   labeled as a projection, never presented as equivalent to the direct
   plot.
 
+This design is consistent with how this literature actually plots this
+kind of data: the two published figures cited in §4.3's development-
+defaults table are themselves 2-D scatters even at `d = 100` demes — "the
+most common alleles… are clustered along the x- and y-axes," per the
+caption — which is exactly a single pairwise panel of the projection
+described above, not a genuinely 100-dimensional plot. That is corroborating
+evidence for the pairwise-matrix fallback, not proof of it: the caption
+alone does not settle *which* pair of axes those published figures use
+(two specific demes, one deme against the pooled rest, or — since the same
+caption discusses "the same allele fixed in both loci" — possibly two
+*loci* rather than two demes at all). Confirming that against the actual
+source figure, rather than a paraphrased caption, is recorded as an open
+item in [§11](#11-open-questions-requiring-a-decision); it would not change
+the deme-axes design decided here (the requirement is explicit that the
+axes are the `d` demes), only which fallback projection this module should
+treat as most valuable to render well first.
+
 Because every generation is already persisted (§6), the same scatter
 function trivially generalizes to an animation or small-multiples view
 across generations — not a requirement of this pass, but effectively free
@@ -590,7 +727,8 @@ than requiring a redesign:
 | …the mutation model weren't infinite-alleles (e.g., stepwise mutation for microsatellites)? | swap the strategy behind `mutate()` | `AlleleRegistry` is already the sole minting point for new IDs; a different model changes what gets minted, not who mints it |
 | …many replicate runs were needed for a confidence interval? | `engine.py` batches `n_replicates` as a vectorized array dimension | the attic research doc's own recommendation (§6.4 there): loci and replicates are i.i.d. under fixed parameters, an embarrassingly parallel array problem |
 | …a different statistic should drive convergence? | `ConvergenceCriterion` is a pluggable protocol | the monitor never hardcodes which statistic it watches |
-| …deme weighting should default to size instead of equal? | `𝖯["deme_weighting"]` | already a named, read-at-point-of-use parameter, never a literal in the statistics module |
+| …several statistics needed to agree before stopping? | `ConvergenceCriterion`'s ANY/ALL combinator over `𝖯["convergence_statistic"]` as a list | the single-statistic v1 path (§5) is that combinator's one-element special case, not a different code path |
+| …a study needed run outputs at a scale JSONL doesn't suit well? | a second `TrajectoryStore` implementation (e.g. Parquet-backed) | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
 
 ## 10. Validation and test strategy
 
@@ -634,6 +772,18 @@ fact because it happens to pass. A test whose outcome can change on a
 re-run with the code unchanged is a defect in the test, not an acceptable
 property of a stochastic simulator.
 
+**Published-scenario fixtures.** The two scenarios in §4.3's development-
+defaults table are candidates for exactly this kind of test — real
+`(N, m, μ, d)` tuples with a published expected `G_ST` and expected/
+observed `D` to compare a many-replicate simulated run against, in
+addition to the two equilibrium formulas themselves. They are listed here
+as a candidate, not yet as a committed fixture: the source paper for
+those two captions needs to be pinned down and the transcribed numbers
+checked against it directly (§11) before they are hard-coded as a test
+oracle — the same standard this repository already holds its own citations
+to elsewhere (every DOI in the companion documents was checked against a
+public source before being relied on).
+
 **Interface-level tests.** `ConvergenceMonitor` against synthetic
 statistic sequences (constant, slowly converging, oscillating-forever) to
 confirm both the stability criterion and the hard-cap fallback fire
@@ -642,39 +792,67 @@ correctly and report the right reason. `TrajectoryStore` round-trips
 
 ## 11. Open questions requiring a decision
 
-These are choices the design deliberately leaves open rather than
-guesses, because getting them wrong is expensive to unwind and the right
-answer depends on how the tool will actually be used:
+### Resolved
 
-1. **Default convergence statistic, window, and tolerance.** `D` is
-   proposed as the default (§4.3) because it is the botanist's own
-   headline statistic, but the right window length and tolerance depend
-   on typical `N`, `m`, `d` values in real use and are not derivable from
-   the model alone.
-2. **Single statistic vs. a required set.** Should the monitor require
-   *all* of a configured set of statistics to stabilize before stopping
-   (e.g., `D` and `G_ST` together), or is one sufficient? Affects how
-   conservative a "converged" label actually is.
-3. **Deme-weighting default** (`equal` vs. `size`) when deme sizes are
-   allowed to differ (§9) — affects both `E_ST` and, potentially, the
-   convergence statistic itself.
-4. **Persistence backend** (§6) — Parquet, CSV/JSONL, or something else —
-   depends on expected run sizes (generations × demes × loci × alleles)
-   and who consumes the output downstream.
-5. **Whether the initial pass should exercise mutation at all**, or start
-   `μ = 0` and add it in a second pass. The formal signature names `μ` as
-   a required top-level argument, which argues for including it from the
-   start; but mutation is also the single largest driver of complexity in
-   the state representation (§3.1's unbounded allele universe) and in the
-   convergence question (§3.5's degenerate-case discussion). Worth an
-   explicit decision rather than an implicit one.
-6. **Locus length as an allele property vs. a locus property** (§2) —
-   this document follows the differentiation-measures guide and treats it
-   as a locus property; confirm that matches what was actually meant by
-   requirement item 3.
-7. **Language/library commitment** (§4.4) — Python + NumPy is a
-   recommendation with a stated rationale, not yet a decision made by
-   this repository.
+The following were open in the first draft of this document and have
+since been decided; recorded here for traceability rather than silently
+edited away:
+
+1. **Default convergence statistic, window, and tolerance.** `D` is the
+   default statistic (the botanist's own headline measure); window and
+   tolerance have no botanically-derived default yet and none is needed
+   — any value adequate for exercising the code during development is
+   sufficient for now (§4.3's `50` generations / `0.01` are exactly that).
+2. **Single statistic vs. a required set.** Single statistic for the
+   initial pass; a required set is future work, already accounted for in
+   the `ConvergenceCriterion` interface (§5) so it is additive later.
+3. **Deme-weighting default.** `"size"` (§4.3) — the more general case,
+   correct whether or not deme sizes differ — with `N_i` held constant
+   across demes in this pass, so the choice has no numerical effect yet
+   and only matters once §9's unequal-`N_i` extension lands.
+4. **Persistence backend.** Not a single choice but a swappable interface
+   (§6): `TrajectoryStore` is the contract, `JSONLTrajectoryStore` is the
+   v1 implementation, chosen for readability and zero extra tooling
+   (reinforcing §4.5's packaging constraint), with a compiled/columnar
+   backend implementing the same protocol available later purely as a
+   configuration change.
+5. **Whether the initial pass should exercise mutation at all.** Yes —
+   mutation is central enough to the questions this tool exists to answer
+   that deferring it would undercut the project's own purpose; it is
+   architecturally present from §3 onward, not bolted on later.
+6. **Locus length as an allele property vs. a locus property.** Confirmed
+   as a locus property, per §2 and §3.2.
+7. **Language/library commitment.** Confirmed: Python 3 + NumPy (§4.4).
+
+### Still open
+
+1. **Exact source and citation for the two figure-caption scenarios**
+   used as development defaults (§4.3) and candidate validation fixtures
+   (§10). The parameter values and expected `G_ST`/`D` were transcribed
+   from a caption without a confirmed title, author, journal, or DOI —
+   good enough to set realistic development defaults, not yet good enough
+   to cite formally or to hard-code as a strict test oracle. Needs the
+   actual source paper identified and the transcribed numbers checked
+   against it directly, in keeping with this project's own standard of
+   verifying every citation against a public source before relying on it.
+2. **What those published scatter plots' axes actually are** (§8) — two
+   specific demes, one deme against the pooled rest, or (per the same
+   caption's discussion of alleles "fixed in both loci") two *loci*
+   rather than demes at all. Does not affect the deme-axes design
+   decided here, only which fallback projection is worth polishing first
+   once item 1 above is resolved and the source figure can be inspected
+   directly.
+3. **Researcher-facing front-end shape** (§4.5) — a plain config file
+   plus a command-line executable, versus a minimal local GUI, for a
+   non-technical-setup Windows researcher. Both are compatible with
+   every other decision in this document (the front end sits entirely
+   outside `engine.py` and the modules it calls); this is purely about
+   which is friendlier to actually use.
+4. **Update/distribution mechanism** (§4.5) — how a revised build of the
+   packaged executable reaches the researcher's machine (a versioned
+   download, a simple installer with an update check, or fully manual
+   replacement). Not architecturally significant to the simulator itself,
+   but needed before "easy to install and use" is actually delivered.
 
 ## 12. Out of scope for this pass
 
