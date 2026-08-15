@@ -1,0 +1,549 @@
+"""Validated, replayable simulation configuration."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any, Final, Literal
+
+from fim.model.allele import AlleleId
+from fim.model.locus import LocusSpec
+
+PopulationSize = int | tuple[int, ...]
+Migration = float | tuple[tuple[float, ...], ...]
+DemeWeighting = Literal["equal", "size"]
+InitialFrequencies = tuple[tuple[Mapping[AlleleId, float], ...], ...]
+
+DEFAULT_LOCUS_LENGTH: Final = 200
+PARAMETER_DEFAULTS: Final[dict[str, object]] = {
+    "n_loci": 1,
+    "locus_lengths": DEFAULT_LOCUS_LENGTH,
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "deme_weighting": "size",
+    "convergence_statistic": "D",
+    "convergence_window": 50,
+    "convergence_tolerance": 0.01,
+    "max_generations": 10_000,
+    "n_replicates": 1,
+}
+
+_CONFIG_KEYS: Final = frozenset(
+    {
+        "N",
+        "d",
+        "m",
+        "mu",
+        "seed",
+        "loci",
+        "n_loci",
+        "locus_lengths",
+        "initial_allele_count",
+        "initial_concentration",
+        "deme_weighting",
+        "convergence_statistic",
+        "convergence_window",
+        "convergence_tolerance",
+        "max_generations",
+        "n_replicates",
+        "p_0",
+    }
+)
+
+_CONVERGENCE_STATISTICS: Final = frozenset({"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"})
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationParams:
+    """Store all values needed to reproduce a finite-island-model run.
+
+    Args:
+        N: Gene-copy count shared by all demes, or one count per deme.
+        m: Symmetric migration rate, or a row-stochastic migration matrix.
+        mu: Per-copy mutation probability per generation.
+        d: Number of demes.
+        seed: Required PCG64 seed.
+        loci: Nonempty ordered locus descriptions.
+        initial_allele_count: Founding allele count per locus.
+        initial_concentration: Symmetric Dirichlet concentration.
+        deme_weighting: Weighting used by statistics that support it.
+        convergence_statistic: Statistic watched by the convergence monitor.
+        convergence_window: Trailing stability-window length.
+        convergence_tolerance: Maximum half-window mean difference.
+        max_generations: Hard generation safety cap.
+        n_replicates: Number of independently seeded runs.
+        initial_frequencies: Optional explicit deme/locus frequency table.
+    """
+
+    N: PopulationSize
+    m: Migration
+    mu: float
+    d: int
+    seed: int
+    loci: tuple[LocusSpec, ...] = field(
+        default_factory=lambda: (LocusSpec(1, DEFAULT_LOCUS_LENGTH),)
+    )
+    initial_allele_count: int = 2
+    initial_concentration: float = 1.0
+    deme_weighting: DemeWeighting = "size"
+    convergence_statistic: str = "D"
+    convergence_window: int = 50
+    convergence_tolerance: float = 0.01
+    max_generations: int = 10_000
+    n_replicates: int = 1
+    initial_frequencies: InitialFrequencies | None = None
+
+    def __post_init__(self) -> None:
+        """Normalize sequence inputs and validate every parameter."""
+        _require_integer("d", self.d, minimum=2)
+        _require_integer("seed", self.seed)
+        _require_probability("mu", self.mu)
+
+        population_sizes = _normalize_population_sizes(self.N, self.d)
+        migration = _normalize_migration(self.m, self.d)
+        loci = tuple(self.loci)
+        if not loci:
+            raise ValueError("loci must not be empty")
+        if len({locus.locus_id for locus in loci}) != len(loci):
+            raise ValueError("locus IDs must be unique")
+
+        _require_integer(
+            "initial_allele_count",
+            self.initial_allele_count,
+            minimum=1,
+        )
+        if self.initial_allele_count > min(population_sizes):
+            raise ValueError("initial_allele_count cannot exceed the smallest deme N")
+        if (
+            not math.isfinite(self.initial_concentration)
+            or self.initial_concentration <= 0.0
+        ):
+            raise ValueError("initial_concentration must be greater than 0")
+        if self.deme_weighting not in {"equal", "size"}:
+            raise ValueError("deme_weighting must be 'equal' or 'size'")
+        if self.convergence_statistic not in _CONVERGENCE_STATISTICS:
+            allowed = ", ".join(sorted(_CONVERGENCE_STATISTICS))
+            raise ValueError(f"convergence_statistic must be one of: {allowed}")
+        _require_integer(
+            "convergence_window",
+            self.convergence_window,
+            minimum=2,
+        )
+        if (
+            not math.isfinite(self.convergence_tolerance)
+            or self.convergence_tolerance < 0.0
+        ):
+            raise ValueError("convergence_tolerance must be non-negative")
+        _require_integer(
+            "max_generations",
+            self.max_generations,
+            minimum=1,
+        )
+        _require_integer("n_replicates", self.n_replicates, minimum=1)
+
+        initial_frequencies = _normalize_initial_frequencies(
+            self.initial_frequencies,
+            d=self.d,
+            loci=loci,
+            population_sizes=population_sizes,
+        )
+
+        object.__setattr__(
+            self,
+            "N",
+            population_sizes[0]
+            if len(set(population_sizes)) == 1
+            else population_sizes,
+        )
+        object.__setattr__(self, "m", migration)
+        object.__setattr__(self, "mu", float(self.mu))
+        object.__setattr__(self, "loci", loci)
+        object.__setattr__(self, "initial_frequencies", initial_frequencies)
+
+    @property
+    def population_sizes(self) -> tuple[int, ...]:
+        """Return one gene-copy count per deme."""
+        if isinstance(self.N, int):
+            return (self.N,) * self.d
+        return self.N
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON/YAML-serializable, lossless configuration mapping."""
+        serialized_n: int | list[int] = (
+            self.N if isinstance(self.N, int) else list(self.N)
+        )
+
+        serialized_m: float | list[list[float]]
+        if isinstance(self.m, float):
+            serialized_m = self.m
+        else:
+            serialized_m = [list(row) for row in self.m]
+
+        result: dict[str, object] = {
+            "N": serialized_n,
+            "d": self.d,
+            "m": serialized_m,
+            "mu": self.mu,
+            "seed": self.seed,
+            "loci": [
+                {"locus_id": locus.locus_id, "length": locus.length}
+                for locus in self.loci
+            ],
+            "initial_allele_count": self.initial_allele_count,
+            "initial_concentration": self.initial_concentration,
+            "deme_weighting": self.deme_weighting,
+            "convergence_statistic": self.convergence_statistic,
+            "convergence_window": self.convergence_window,
+            "convergence_tolerance": self.convergence_tolerance,
+            "max_generations": self.max_generations,
+            "n_replicates": self.n_replicates,
+        }
+        if self.initial_frequencies is not None:
+            result["p_0"] = [
+                [
+                    {str(int(allele)): frequency for allele, frequency in locus.items()}
+                    for locus in deme
+                ]
+                for deme in self.initial_frequencies
+            ]
+        return result
+
+    @classmethod
+    def from_mapping(cls, config: Mapping[str, Any]) -> SimulationParams:
+        """Validate a config-file mapping and construct simulation parameters.
+
+        Args:
+            config: Parsed YAML or JSON object.
+
+        Returns:
+            A validated immutable parameter object.
+
+        Raises:
+            ValueError: If a key is unknown, required, malformed, or conflicting.
+        """
+        unknown = set(config) - _CONFIG_KEYS
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise ValueError(f"unknown configuration key(s): {names}")
+        missing = {"N", "d", "m", "mu", "seed"} - set(config)
+        if missing:
+            names = ", ".join(sorted(missing))
+            raise ValueError(f"missing required configuration key(s): {names}")
+
+        loci = _loci_from_config(config)
+        return cls(
+            N=_parse_population_size(config["N"]),
+            d=_parse_int("d", config["d"]),
+            m=_parse_migration(config["m"]),
+            mu=_parse_float("mu", config["mu"]),
+            seed=_parse_int("seed", config["seed"]),
+            loci=loci,
+            initial_allele_count=_parse_int(
+                "initial_allele_count",
+                config.get(
+                    "initial_allele_count",
+                    PARAMETER_DEFAULTS["initial_allele_count"],
+                ),
+            ),
+            initial_concentration=_parse_float(
+                "initial_concentration",
+                config.get(
+                    "initial_concentration",
+                    PARAMETER_DEFAULTS["initial_concentration"],
+                ),
+            ),
+            deme_weighting=_parse_deme_weighting(
+                config.get(
+                    "deme_weighting",
+                    PARAMETER_DEFAULTS["deme_weighting"],
+                )
+            ),
+            convergence_statistic=_parse_string(
+                "convergence_statistic",
+                config.get(
+                    "convergence_statistic",
+                    PARAMETER_DEFAULTS["convergence_statistic"],
+                ),
+            ),
+            convergence_window=_parse_int(
+                "convergence_window",
+                config.get(
+                    "convergence_window",
+                    PARAMETER_DEFAULTS["convergence_window"],
+                ),
+            ),
+            convergence_tolerance=_parse_float(
+                "convergence_tolerance",
+                config.get(
+                    "convergence_tolerance",
+                    PARAMETER_DEFAULTS["convergence_tolerance"],
+                ),
+            ),
+            max_generations=_parse_int(
+                "max_generations",
+                config.get(
+                    "max_generations",
+                    PARAMETER_DEFAULTS["max_generations"],
+                ),
+            ),
+            n_replicates=_parse_int(
+                "n_replicates",
+                config.get(
+                    "n_replicates",
+                    PARAMETER_DEFAULTS["n_replicates"],
+                ),
+            ),
+            initial_frequencies=_parse_initial_frequencies(config.get("p_0")),
+        )
+
+
+def _loci_from_config(config: Mapping[str, Any]) -> tuple[LocusSpec, ...]:
+    """Build locus specifications from either supported config shape."""
+    if "loci" in config:
+        conflicts = {"n_loci", "locus_lengths"} & set(config)
+        if conflicts:
+            names = ", ".join(sorted(conflicts))
+            raise ValueError(f"loci cannot be combined with {names}")
+        raw_loci = config["loci"]
+        if not isinstance(raw_loci, Sequence) or isinstance(raw_loci, str):
+            raise ValueError("loci must be a list of mappings")
+        loci: list[LocusSpec] = []
+        for index, raw_locus in enumerate(raw_loci, start=1):
+            if not isinstance(raw_locus, Mapping):
+                raise ValueError(f"loci[{index - 1}] must be a mapping")
+            unknown = set(raw_locus) - {"locus_id", "length"}
+            if unknown:
+                names = ", ".join(sorted(str(key) for key in unknown))
+                raise ValueError(f"unknown loci[{index - 1}] key(s): {names}")
+            if "length" not in raw_locus:
+                raise ValueError(f"loci[{index - 1}] is missing 'length'")
+            locus_id = _parse_int(
+                f"loci[{index - 1}].locus_id",
+                raw_locus.get("locus_id", index),
+            )
+            length = _parse_int(
+                f"loci[{index - 1}].length",
+                raw_locus["length"],
+            )
+            loci.append(LocusSpec(locus_id, length))
+        return tuple(loci)
+
+    n_loci = _parse_int(
+        "n_loci",
+        config.get("n_loci", PARAMETER_DEFAULTS["n_loci"]),
+    )
+    lengths_value = config.get(
+        "locus_lengths",
+        PARAMETER_DEFAULTS["locus_lengths"],
+    )
+    if isinstance(lengths_value, Sequence) and not isinstance(lengths_value, str):
+        lengths = tuple(
+            _parse_int(f"locus_lengths[{index}]", value)
+            for index, value in enumerate(lengths_value)
+        )
+        if len(lengths) != n_loci:
+            raise ValueError("locus_lengths must contain exactly n_loci values")
+    else:
+        length = _parse_int("locus_lengths", lengths_value)
+        lengths = (length,) * n_loci
+    return tuple(
+        LocusSpec(index, length) for index, length in enumerate(lengths, start=1)
+    )
+
+
+def _normalize_initial_frequencies(
+    value: InitialFrequencies | None,
+    *,
+    d: int,
+    loci: tuple[LocusSpec, ...],
+    population_sizes: tuple[int, ...],
+) -> InitialFrequencies | None:
+    """Validate and make explicit initial frequencies immutable."""
+    if value is None:
+        return None
+    if len(value) != d:
+        raise ValueError("p_0 must contain exactly d demes")
+    normalized_demes: list[tuple[Mapping[AlleleId, float], ...]] = []
+    for deme_index, (deme, size) in enumerate(
+        zip(value, population_sizes, strict=True),
+        start=1,
+    ):
+        if len(deme) != len(loci):
+            raise ValueError(
+                f"p_0 deme {deme_index} must contain exactly {len(loci)} loci"
+            )
+        normalized_loci: list[Mapping[AlleleId, float]] = []
+        for locus, frequency_map in zip(loci, deme, strict=True):
+            if len(frequency_map) > size:
+                raise ValueError(
+                    f"p_0 deme {deme_index}, locus {locus.locus_id} support "
+                    f"exceeds N={size}"
+                )
+            normalized: dict[AlleleId, float] = {}
+            for allele_id, frequency in frequency_map.items():
+                numeric_frequency = float(frequency)
+                if not math.isfinite(numeric_frequency) or numeric_frequency < 0.0:
+                    raise ValueError("p_0 frequencies must be finite and non-negative")
+                if numeric_frequency > 0.0:
+                    normalized[AlleleId(int(allele_id))] = numeric_frequency
+            if not normalized or not math.isclose(
+                math.fsum(normalized.values()),
+                1.0,
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            ):
+                raise ValueError(
+                    f"p_0 deme {deme_index}, locus {locus.locus_id} "
+                    "frequencies must sum to 1"
+                )
+            normalized_loci.append(MappingProxyType(normalized))
+        normalized_demes.append(tuple(normalized_loci))
+    return tuple(normalized_demes)
+
+
+def _normalize_migration(value: Migration, d: int) -> Migration:
+    """Validate scalar or matrix migration and normalize numeric values."""
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        _require_probability("m", float(value))
+        return float(value)
+    rows = tuple(tuple(float(item) for item in row) for row in value)
+    if len(rows) != d or any(len(row) != d for row in rows):
+        raise ValueError("migration matrix m must have shape d x d")
+    for index, row in enumerate(rows):
+        for item in row:
+            _require_probability(f"m[{index}]", item)
+        if not math.isclose(
+            math.fsum(row),
+            1.0,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError(f"migration matrix row {index} must sum to 1")
+    return rows
+
+
+def _normalize_population_sizes(
+    value: PopulationSize,
+    d: int,
+) -> tuple[int, ...]:
+    """Validate scalar or per-deme gene-copy counts."""
+    if isinstance(value, int):
+        if isinstance(value, bool):
+            raise ValueError("N must be an integer")
+        _require_integer("N", value, minimum=1)
+        return (value,) * d
+    values = tuple(value)
+    if len(values) != d:
+        raise ValueError("N must contain exactly d values")
+    for index, item in enumerate(values):
+        _require_integer(f"N[{index}]", item, minimum=1)
+    return values
+
+
+def _parse_deme_weighting(value: Any) -> DemeWeighting:
+    """Parse the two supported deme-weighting values."""
+    parsed = _parse_string("deme_weighting", value)
+    if parsed == "equal":
+        return "equal"
+    if parsed == "size":
+        return "size"
+    raise ValueError("deme_weighting must be 'equal' or 'size'")
+
+
+def _parse_float(name: str, value: Any) -> float:
+    """Parse a finite config float without accepting booleans."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"{name} must be a number")
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
+    return parsed
+
+
+def _parse_initial_frequencies(value: Any) -> InitialFrequencies | None:
+    """Parse the nested ``p_0`` config structure."""
+    if value is None:
+        return None
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        raise ValueError("p_0 must be a list of demes")
+    demes: list[tuple[Mapping[AlleleId, float], ...]] = []
+    for deme_index, raw_deme in enumerate(value):
+        if not isinstance(raw_deme, Sequence) or isinstance(raw_deme, str):
+            raise ValueError(f"p_0[{deme_index}] must be a list of loci")
+        loci: list[Mapping[AlleleId, float]] = []
+        for locus_index, raw_locus in enumerate(raw_deme):
+            if not isinstance(raw_locus, Mapping):
+                raise ValueError(f"p_0[{deme_index}][{locus_index}] must be a mapping")
+            frequencies: dict[AlleleId, float] = {}
+            for raw_allele, raw_frequency in raw_locus.items():
+                try:
+                    allele_id = AlleleId(int(raw_allele))
+                except (TypeError, ValueError) as error:
+                    raise ValueError(
+                        f"p_0 allele ID {raw_allele!r} must be an integer"
+                    ) from error
+                frequencies[allele_id] = _parse_float(
+                    (f"p_0[{deme_index}][{locus_index}]" f"[{raw_allele!r}]"),
+                    raw_frequency,
+                )
+            loci.append(frequencies)
+        demes.append(tuple(loci))
+    return tuple(demes)
+
+
+def _parse_int(name: str, value: Any) -> int:
+    """Parse a config integer without coercing floats or booleans."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be an integer")
+    return int(value)
+
+
+def _parse_migration(value: Any) -> Migration:
+    """Parse scalar or nested-list migration configuration."""
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return _parse_float("m", value)
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        raise ValueError("m must be a number or a d x d matrix")
+    rows: list[tuple[float, ...]] = []
+    for row_index, raw_row in enumerate(value):
+        if not isinstance(raw_row, Sequence) or isinstance(raw_row, str):
+            raise ValueError(f"m[{row_index}] must be a list")
+        rows.append(
+            tuple(
+                _parse_float(f"m[{row_index}][{column_index}]", item)
+                for column_index, item in enumerate(raw_row)
+            )
+        )
+    return tuple(rows)
+
+
+def _parse_population_size(value: Any) -> PopulationSize:
+    """Parse scalar or per-deme gene-copy counts."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        raise ValueError("N must be an integer or a list of integers")
+    return tuple(_parse_int(f"N[{index}]", item) for index, item in enumerate(value))
+
+
+def _parse_string(name: str, value: Any) -> str:
+    """Parse a nonempty config string."""
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{name} must be a nonempty string")
+    return value
+
+
+def _require_integer(name: str, value: int, minimum: int | None = None) -> None:
+    """Validate an integer parameter."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be an integer")
+    if minimum is not None and value < minimum:
+        raise ValueError(f"{name} must be at least {minimum}")
+
+
+def _require_probability(name: str, value: float) -> None:
+    """Validate a finite probability."""
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise ValueError(f"{name} must be between 0 and 1")
