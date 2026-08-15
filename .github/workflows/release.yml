@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - shell: pwsh
+        run: |
+          $expectedVersion = "fim $($env:GITHUB_REF_NAME.TrimStart('v'))"
+          $actualVersion = .\dist\fim.exe --version
+          if ($actualVersion -ne $expectedVersion) {
+            throw "Executable version '$actualVersion' is not '$expectedVersion'"
+          }
+          .\dist\fim.exe --help
+          .\dist\fim.exe init --output tiny.yaml
+          (Get-Content tiny.yaml) `
+            -replace 'N: 450', 'N: 20' `
+            -replace 'd: 20', 'd: 2' `
+            -replace 'convergence_window: 50', 'convergence_window: 4' `
+            -replace 'convergence_tolerance: 0.01', 'convergence_tolerance: 1.0' `
+            -replace 'max_generations: 10000', 'max_generations: 10' `
+            | Set-Content tiny.yaml
+          .\dist\fim.exe run tiny.yaml --output smoke --quiet
+          $expectedArtifacts = @(
+            "manifest.json",
+            "report.json",
+            "scatter.png",
+            "trajectory.jsonl"
+          )
+          $actualArtifacts = @(
+            Get-ChildItem .\smoke -File |
+              ForEach-Object { $_.Name } |
+              Sort-Object
+          )
+          if (Compare-Object $expectedArtifacts $actualArtifacts) {
+            throw "Executable smoke run did not produce exactly four artifacts"
+          }
+          foreach ($artifact in $expectedArtifacts) {
+            if ((Get-Item ".\smoke\$artifact").Length -eq 0) {
+              throw "Executable smoke artifact '$artifact' is empty"
+            }
+          }
+          Rename-Item .\dist\fim.exe fim-windows-x64.exe
+          $hash = (Get-FileHash .\dist\fim-windows-x64.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  fim-windows-x64.exe" | Set-Content .\dist\fim-windows-x64.exe.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/fim-windows-x64.exe
+            dist/fim-windows-x64.exe.sha256
+
+  publish:
+    needs: windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build==1.2.*
+      - name: Verify tag and version
+        run: test "${GITHUB_REF_NAME#v}" = "$(cat version.txt)"
+      - run: python -m build
+      - name: Extract changelog release notes
+        run: dev/bin/extract-release-notes "$GITHUB_REF_NAME" > release-notes.md
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: dist
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --notes-file release-notes.md
