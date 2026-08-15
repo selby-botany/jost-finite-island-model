@@ -111,7 +111,7 @@ def _command_init(arguments: argparse.Namespace) -> int:
 
 
 def _command_run(arguments: argparse.Namespace) -> int:
-    """Execute one validated configuration."""
+    """Execute one config and write the four documented artifacts."""
     params = load_config(arguments.config)
     if params.n_replicates != 1:
         raise ValueError(
