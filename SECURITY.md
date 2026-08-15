@@ -14,6 +14,13 @@ The only network operation is the explicit `fim update --check` command. It
 performs one HTTPS request to the public GitHub Releases API, reports the
 latest release page, and never downloads or modifies the executable.
 
+## Local data handling
+
+Treat configurations and trajectories from unknown sources as untrusted data.
+`fim` never executes their contents, but a deliberately large input can consume
+substantial memory, processor time, or disk space. Run unfamiliar inputs with
+normal user permissions and explicit resource limits appropriate to the host.
+
 ## Windows executable
 
 The release executable is an unsigned research tool, so Windows SmartScreen
