@@ -1,8 +1,149 @@
-# Jost's Finite Island Model
+# Jost's finite island model simulator
 
+`fim` simulates migration, infinite-alleles mutation, and genetic drift across
+a finite set of demes. It preserves every generation's allele frequencies and
+reports differentiation statistics against that known history.
+
+## Contents
+
+- [Quick start](#quick-start)
+- [Outputs](#outputs)
+- [Model contract](#model-contract)
+- [Documentation](#documentation)
+- [Development](#development)
+- [License](#license)
+
+## Quick start
+
+### Windows release
+
+1. Download `fim-windows-x64.exe` and its `.sha256` file from the project's
+   GitHub Releases page.
+2. Open PowerShell in the download folder and verify the checksum:
+
+   ```powershell
+   Get-FileHash .\fim-windows-x64.exe -Algorithm SHA256
+   ```
+
+3. Create a starter configuration:
+
+   ```powershell
+   .\fim-windows-x64.exe init
+   ```
+
+4. Edit `Documents\FIM Runs\example-run.yaml`, then run:
+
+   ```powershell
+   .\fim-windows-x64.exe run `
+       "Documents\FIM Runs\example-run.yaml"
+   ```
+
+The executable is self-contained. A simulation does not use the network.
+Windows SmartScreen may identify this unsigned research executable as an
+unrecognized application; verify the checksum before selecting **Run anyway**.
+
+### Python installation
+
+Python 3.12 or newer is required:
+
+```console
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install .
+fim init --output example-run.yaml
+fim run example-run.yaml --output fim-runs/example
+```
+
+See [installation alternatives](install/README.md) and the
+[complete command reference](doc/usage.md).
+
+## Outputs
+
+Each scalar CLI run writes exactly four artifacts:
+
+| File | Purpose |
+|---|---|
+| `trajectory.jsonl` | Every nonzero `(generation, deme, locus, allele)` frequency |
+| `manifest.json` | Replayable parameters, seed, version, timestamps, and stop outcome |
+| `report.json` | Final `H_S`, `H_T`, `G_ST`, Jost's `D`, `E_ST`, and `K_ST` |
+| `scatter.png` | Canonical allele-frequency scatter or labeled projection |
+
+The trajectory is long-format JSON Lines and can be loaded without a custom
+database. See [output schemas](doc/usage.md#output-schemas).
+
+## Model contract
+
+- `N` is the **gene-copy count per deme**, not an individual count. For a
+  diploid autosomal locus, pass twice the census number of individuals.
+- Every run uses one explicitly seeded NumPy `PCG64` generator.
+- A generation applies migration, mutation, then drift.
+- Convergence means that a selected statistic's trailing-window half means are
+  within a configured tolerance. Reaching the hard cap is a valid,
+  non-converged result.
+- Founding alleles use locus-relative IDs. Every mutation receives a globally
+  unique ID under the infinite-alleles model.
+
+The [simulator design](doc/20260814-claude-sonnet-5-fim-simulator-design.md)
+defines the complete scientific and architectural contract.
+
+## Documentation
+
+### Using the application
+
+- [Command, workflow, and output reference](doc/usage.md)
+- [Configuration reference](doc/configuration.md)
+- [Installation alternatives](install/README.md)
+- [Security model](SECURITY.md)
+- [Release history](CHANGELOG.md)
+
+### Understanding the science
+
+- [Finite island model introduction](doc/20260810-claude-sonnet-5-finite-island-model-introduction.md)
+- [Jost differentiation measures](doc/20260810-claude-sonnet-5-jost-differentiation-measures.md)
+- [Simulator design](doc/20260814-claude-sonnet-5-fim-simulator-design.md)
+
+### Maintaining or extending the application
+
+- [Developer and extension guide](doc/developer.md)
+- [Detailed implementation design](doc/20260814-claude-opus-4-8-fim-simulator-detailed-design.md)
+- [Test plan](doc/20260814-claude-opus-4-8-fim-simulator-test-plan.md)
+- [Source-tree orientation](src/README.md)
+- [Generated API reference](src/fim/API.md)
+- [Maintainer runbook](CONTRIBUTING.md)
+- [Repository-managed hooks](dev/git-hooks/README.md)
+
+## Development
+
+The supported build environment is a Unix-like system with Bash, Git, and
+Python 3.12 or newer. The scripts avoid modern-only Bash features; the Bash
+3.2 bundled with macOS is sufficient. Docker is required only for the complete
+repository-file and Homebrew validation commands. Native Windows development
+is not supported; the Windows executable is built and tested by the release
+workflow.
+
+```console
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e ".[dev]"
+bash dev/git-hooks/install
+./build
+```
+
+Run `./build --ci` for the same static, test, documentation, and package gates
+used by continuous integration. See [CONTRIBUTING.md](CONTRIBUTING.md) before
+cutting a release.
+
+Optional repository-file checks are also self-contained. With Docker
+available, activate the local wrappers and run them without sourcing files
+from another repository:
+
+```console
+. include/dot-bashrc
+dev/bin/validate-repository
+```
 
 ## License
 
-© 2026 Marie Selby Botanical Gardens
+Copyright 2026 Marie Selby Botanical Gardens.
 
-AGPL-3.0-or-later — see [LICENSE.md](LICENSE.md).
+AGPL-3.0-or-later; see [LICENSE.md](LICENSE.md).
