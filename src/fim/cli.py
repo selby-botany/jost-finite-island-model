@@ -174,7 +174,7 @@ def _command_run(arguments: argparse.Namespace) -> int:
 
 
 def _command_stats(arguments: argparse.Namespace) -> int:
-    """Handle a persisted trajectory."""
+    """Recompute statistics from a persisted generation."""
     trajectory_path = Path(arguments.trajectory)
     manifest_path = (
         Path(arguments.manifest)
