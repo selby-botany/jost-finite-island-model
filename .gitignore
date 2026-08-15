@@ -19,4 +19,28 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-*/
 venv/
+.coverage
+.coverage.*
+.hypothesis/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+coverage.xml
+htmlcov/
+
+# Packaging
+*.egg-info/
+dist/
+wheelhouse/
+
+# PyInstaller
+.pyinstaller-build/
+packaging/build/
+packaging/dist/
+
+# Simulator output
+FIM Runs/
+fim-runs/
+run-*/
