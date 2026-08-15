@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(git rev-parse --show-toplevel)
+cd -- "${root}"
+
+if [[ ! -f pyproject.toml ]]; then
+    printf 'pre-push: pyproject.toml absent; gates skipped\n'
+    exit 0
+fi
+
+if [[ "${PRE_PUSH_SKIP_LINT:-false}" != true ]]; then
+    if command -v ruff >/dev/null 2>&1; then
+        ruff check src test
+    else
+        printf 'pre-push: ruff absent; lint skipped\n'
+    fi
+fi
+if [[ "${PRE_PUSH_SKIP_TYPE:-false}" != true ]]; then
+    if command -v mypy >/dev/null 2>&1; then
+        mypy --strict src
+    else
+        printf 'pre-push: mypy absent; types skipped\n'
+    fi
+fi
+if [[ "${PRE_PUSH_SKIP_TEST:-false}" != true ]]; then
+    if command -v pytest >/dev/null 2>&1; then
+        pytest -m 'not statistical and not slow and not packaging'
+    else
+        printf 'pre-push: pytest absent; tests skipped\n'
+    fi
+fi
+
+# Verify generated documentation and always remove its temporary output.
+if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
+    if [[ -x dev/bin/generate-api-docs ]] \
+        && command -v pydoc-markdown >/dev/null 2>&1
+    then
+        temporary=$(mktemp "${TMPDIR:-/tmp}/fim-api.XXXXXX")
+        trap 'rm -f -- "${temporary}"' EXIT
+        dev/bin/generate-api-docs "${temporary}"
+        diff -u -- src/fim/API.md "${temporary}"
+        rm -f -- "${temporary}"
+        trap - EXIT
+    else
+        printf 'pre-push: API generator unavailable; docs skipped\n'
+    fi
+fi

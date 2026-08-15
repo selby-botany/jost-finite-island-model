@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+message_file=${1:?commit message file is required}
+subject=$(grep -v '^[[:space:]]*#' "${message_file}" | head -n 1 || true)
+
+if [[ "${subject}" =~ ^(Merge|Revert)[[:space:]] ]]; then
+    exit 0
+fi
+if [[ "${subject}" =~ ^(fixup!\ |squash!\ ) ]]; then
+    subject=${subject#*! }
+fi
+if [[ "${subject}" =~ ^[a-z]+(\([a-z0-9._/-]+\))?!?:[[:space:]][^[:space:]].*$ ]]; then
+    exit 0
+fi
+
+printf 'Invalid Conventional Commit subject: %s\n' "${subject}" >&2
+printf 'Expected: type(scope): summary\n' >&2
+exit 1

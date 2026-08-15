@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(git rev-parse --show-toplevel)
+cd -- "${root}"
+
+if [[ ! -f pyproject.toml ]]; then
+    printf 'pre-commit: pyproject.toml absent; Python gates skipped\n'
+    exit 0
+fi
+
+# Collect staged Python paths without losing whitespace or special characters.
+python_files=()
+while IFS= read -r -d '' path; do
+    [[ "${path}" == *.py ]] && python_files[${#python_files[@]}]="${path}"
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+# Normalize staged Python and refresh its generated API documentation.
+if ((${#python_files[@]})); then
+    if command -v ruff >/dev/null 2>&1; then
+        ruff format -- "${python_files[@]}"
+        ruff check --fix -- "${python_files[@]}"
+        git add -- "${python_files[@]}"
+    else
+        printf 'pre-commit: ruff absent; formatting skipped\n'
+    fi
+
+    if [[ -x dev/bin/generate-api-docs ]] \
+        && command -v pydoc-markdown >/dev/null 2>&1; then
+        dev/bin/generate-api-docs
+        git add -- src/fim/API.md
+    else
+        printf 'pre-commit: API generator unavailable; refresh skipped\n'
+    fi
+fi
+
+# Reject newly added filenames that are not portable across supported systems.
+ascii_check='import sys; data = sys.stdin.buffer.read().split(b"\0"); raise SystemExit(any(name and not name.isascii() for name in data))'
+if ! git diff --cached --name-only --diff-filter=A -z \
+    | python3 -c "${ascii_check}"
+then
+    printf 'pre-commit: newly added filenames must be ASCII\n' >&2
+    exit 1
+fi
