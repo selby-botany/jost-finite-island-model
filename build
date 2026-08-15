@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+cd -- "${root}"
+
+ci=false
+coverage=false
+dry_run=false
+run_docs=true
+run_lint=true
+run_package=true
+run_test=true
+run_type=true
+
+# Print command usage.
+# Args:
+#   None
+# Returns:
+#   0 after writing help
+usage() {
+    cat <<'EOF'
+Usage: build [--ci] [--coverage] [--dry-run]
+             [--no-lint] [--no-type] [--no-test] [--no-docs] [--no-package]
+             [--help]
+EOF
+}
+
+# Print and run one command, or only print it in dry-run mode.
+# Args:
+#   Command and arguments
+# Returns:
+#   The command's status, or 0 in dry-run mode
+run() {
+    printf '+'
+    printf ' %q' "$@"
+    printf '\n'
+    "${dry_run}" && return 0
+    "$@"
+}
+
+while (($#)); do
+    case "$1" in
+        --ci)
+            ci=true
+            coverage=true
+            ;;
+        --coverage) coverage=true ;;
+        --dry-run) dry_run=true ;;
+        --no-docs) run_docs=false ;;
+        --no-lint) run_lint=false ;;
+        --no-package) run_package=false ;;
+        --no-test) run_test=false ;;
+        --no-type) run_type=false ;;
+        --help)
+            usage
+            exit 0
+            ;;
+        *)
+            printf 'Unknown option: %s\n' "$1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+    shift
+done
+
+if "${ci}" && {
+    ! "${run_docs}" || ! "${run_lint}" || ! "${run_package}" \
+        || ! "${run_test}" || ! "${run_type}"
+}; then
+    printf '%s\n' '--ci cannot be combined with a --no-* option' >&2
+    exit 2
+fi
+
+python=${PYTHON:-python3}
+
+# Make console scripts from an explicitly selected virtual environment available.
+if [[ "${python}" == */* ]]; then
+    PATH="$(dirname -- "${python}"):${PATH}"
+    export PATH
+fi
+
+if "${run_lint}"; then
+    run "${python}" -m ruff check src test \
+        dev/bin/check-doc-links dev/bin/extract-release-notes
+    run "${python}" -m ruff format --check src test \
+        dev/bin/check-doc-links dev/bin/extract-release-notes
+fi
+
+"${run_type}" && run "${python}" -m mypy --strict src
+
+if "${run_test}"; then
+    if "${coverage}"; then
+        test_markers='not slow and not packaging'
+        "${ci}" && test_markers='not packaging'
+        run "${python}" -m pytest -o addopts= --strict-config \
+            --strict-markers -m "${test_markers}" \
+            --cov=fim --cov-branch --cov-report=term-missing \
+            --cov-fail-under=90
+    else
+        run "${python}" -m pytest
+    fi
+fi
+
+if "${run_docs}"; then
+    if "${ci}"; then
+        api_temporary=$(mktemp "${TMPDIR:-/tmp}/fim-api.XXXXXX")
+        trap 'rm -f -- "${api_temporary}"' EXIT
+        run dev/bin/generate-api-docs "${api_temporary}"
+        run diff -u -- src/fim/API.md "${api_temporary}"
+        rm -f -- "${api_temporary}"
+        trap - EXIT
+    else
+        run dev/bin/generate-api-docs
+    fi
+    run dev/bin/check-doc-links
+fi
+
+if "${run_package}"; then
+    run "${python}" -m build
+    if ! "${dry_run}"; then
+        smoke_venv=$(mktemp -d "${TMPDIR:-/tmp}/fim-smoke.XXXXXX")
+        trap 'rm -rf -- "${smoke_venv}"' EXIT
+        run "${python}" -m venv "${smoke_venv}"
+        version=$(<version.txt)
+        wheel="dist/fim-${version}-py3-none-any.whl"
+        if [[ ! -f "${wheel}" ]]; then
+            printf 'Built wheel not found: %s\n' "${wheel}" >&2
+            exit 1
+        fi
+        run "${smoke_venv}/bin/python" -m pip install "${wheel}"
+        (
+            cd -- "${smoke_venv}"
+            run "${smoke_venv}/bin/fim" --version
+            run "${smoke_venv}/bin/fim" --help
+        )
+    fi
+fi
