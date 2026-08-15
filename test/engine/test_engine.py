@@ -1,0 +1,256 @@
+"""End-to-end tests for the deterministic library engine."""
+
+from datetime import UTC, datetime
+
+import pytest
+
+from fim.engine import RunResult, fim, report_for_state
+from fim.model.allele import MINTED_ID_START, AlleleId
+from fim.model.locus import LocusSpec
+from fim.model.params import SimulationParams
+from fim.model.state import ModelState
+from fim.persistence.store import InMemoryTrajectoryStore
+
+
+def _clock() -> datetime:
+    """Return a fixed manifest timestamp."""
+    return datetime(2026, 8, 14, 20, 0, tzinfo=UTC)
+
+
+def _run(params: SimulationParams) -> RunResult:
+    """Run one scalar configuration and narrow the output type."""
+    result = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        clock=_clock,
+    )
+    assert isinstance(result, RunResult)
+    return result
+
+
+def test_seeded_run_is_bit_reproducible(tiny_params: SimulationParams) -> None:
+    """Two runs persist exactly the same rows and final report."""
+    first = _run(tiny_params)
+    second = _run(tiny_params)
+
+    assert list(first.store.read(first.run_id)) == list(
+        second.store.read(second.run_id)
+    )
+    assert first.report == second.report
+    assert first.final_state == second.final_state
+
+
+def test_live_and_recomputed_reports_match(
+    tiny_params: SimulationParams,
+) -> None:
+    """Statistics remain independent of the engine run loop."""
+    result = _run(tiny_params)
+
+    recomputed = report_for_state(
+        result.final_state,
+        tiny_params,
+        run_id=result.run_id,
+        converged=result.report["converged"],
+        reason=result.report["reason"],
+    )
+
+    assert recomputed == result.report
+
+
+def test_cap_is_a_valid_nonconverged_result(
+    tiny_params: SimulationParams,
+) -> None:
+    """An intentionally impossible short window reports the hard cap."""
+    params = SimulationParams.from_mapping(
+        {
+            **tiny_params.to_dict(),
+            "convergence_window": 10,
+            "convergence_tolerance": 0.0,
+            "max_generations": 2,
+        }
+    )
+
+    result = _run(params)
+
+    assert not result.report["converged"]
+    assert result.report["reason"] == "hit the cap"
+    assert result.report["generation"] == 2
+
+
+def test_replicates_are_independently_reproducible(
+    tiny_params: SimulationParams,
+) -> None:
+    """Batching derives stable per-replicate seeds without changing scalar runs."""
+    scalar = _run(tiny_params)
+    batched_params = SimulationParams.from_mapping(
+        {**tiny_params.to_dict(), "n_replicates": 2}
+    )
+    store = InMemoryTrajectoryStore()
+
+    output = fim(
+        batched_params.N,
+        batched_params.m,
+        batched_params.mu,
+        batched_params.d,
+        params=batched_params,
+        store=store,
+        clock=_clock,
+    )
+
+    assert isinstance(output, tuple)
+    assert len(output) == 2
+    assert output[0].final_state == scalar.final_state
+    assert output[0].params.seed == tiny_params.seed
+    assert output[1].params.seed == tiny_params.seed + 1
+
+
+def test_public_signature_mismatches_are_reported(
+    tiny_params: SimulationParams,
+) -> None:
+    """The legacy positional arguments must agree with the parameter bag."""
+    cases = (
+        (21, tiny_params.m, tiny_params.mu, tiny_params.d, "N"),
+        (tiny_params.N, 0.2, tiny_params.mu, tiny_params.d, "m"),
+        (tiny_params.N, tiny_params.m, 0.2, tiny_params.d, "mu"),
+        (tiny_params.N, tiny_params.m, tiny_params.mu, 3, "d"),
+    )
+    for population_size, migration, mutation, demes, message in cases:
+        with pytest.raises(ValueError, match=message):
+            fim(
+                population_size,
+                migration,
+                mutation,
+                demes,
+                params=tiny_params,
+                clock=_clock,
+            )
+
+
+def test_batch_run_uses_explicit_run_id_suffixes(
+    tiny_params: SimulationParams,
+) -> None:
+    """Caller-provided batch IDs receive deterministic one-based suffixes."""
+    params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 2})
+    output = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        run_id="batch",
+        clock=_clock,
+    )
+    assert isinstance(output, tuple)
+    assert [result.run_id for result in output] == ["batch-r001", "batch-r002"]
+
+
+def test_naive_manifest_clock_is_rejected(tiny_params: SimulationParams) -> None:
+    """Manifest timestamps require an explicit timezone."""
+    with pytest.raises(ValueError, match="timezone-aware"):
+        fim(
+            tiny_params.N,
+            tiny_params.m,
+            tiny_params.mu,
+            tiny_params.d,
+            params=tiny_params,
+            clock=lambda: _clock().replace(tzinfo=None),
+        )
+
+
+def test_g_st_convergence_handles_shared_fixation() -> None:
+    """Undefined G_ST at total fixation is treated as zero for convergence."""
+    params = SimulationParams(
+        N=10,
+        m=0.0,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=(LocusSpec(1, 100),),
+        convergence_statistic="G_ST",
+        convergence_window=2,
+        convergence_tolerance=0.0,
+        max_generations=2,
+        initial_frequencies=(
+            ({AlleleId(0): 1.0},),
+            ({AlleleId(0): 1.0},),
+        ),
+    )
+    result = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        clock=_clock,
+    )
+    assert isinstance(result, RunResult)
+    assert result.report["converged"]
+    assert result.report["G_ST"] is None
+
+
+def test_mutation_ids_follow_high_explicit_initial_id() -> None:
+    """Mutations cannot collide with labels supplied through explicit p_0."""
+    params = SimulationParams(
+        N=1,
+        m=0.0,
+        mu=1.0,
+        d=2,
+        seed=7,
+        loci=(LocusSpec(1, 100),),
+        initial_allele_count=1,
+        convergence_window=2,
+        max_generations=1,
+        initial_frequencies=(
+            ({AlleleId(MINTED_ID_START): 1.0},),
+            ({AlleleId(MINTED_ID_START): 1.0},),
+        ),
+    )
+
+    result = _run(params)
+
+    final_ids = {
+        int(allele_id)
+        for deme in result.final_state.frequencies
+        for locus in deme
+        for allele_id in locus
+    }
+    assert final_ids == {MINTED_ID_START + 1, MINTED_ID_START + 2}
+
+
+def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None:
+    """Independent per-locus reports are averaged under equal deme weighting."""
+    loci = (LocusSpec(1, 100), LocusSpec(2, 100))
+    state = ModelState(
+        loci=loci,
+        frequencies=(
+            (
+                {AlleleId(0): 1.0},
+                {AlleleId(0): 0.5, AlleleId(1): 0.5},
+            ),
+            (
+                {AlleleId(1): 1.0},
+                {AlleleId(0): 0.5, AlleleId(1): 0.5},
+            ),
+        ),
+    )
+    params = SimulationParams(
+        N=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=loci,
+        deme_weighting="equal",
+    )
+    report = report_for_state(
+        state,
+        params,
+        run_id="run-a",
+        converged=False,
+        reason="test",
+    )
+    assert report["run_id"] == "run-a"
+    assert report["G_ST"] is not None
