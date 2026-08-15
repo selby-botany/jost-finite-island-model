@@ -96,7 +96,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _command_init(arguments: argparse.Namespace) -> int:
-    """Write a starter configuration."""
+    """Write the documented starter configuration."""
     output = (
         Path(arguments.output)
         if arguments.output is not None
