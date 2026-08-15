@@ -6,4 +6,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/selby-botany/jost-finite-island-model/compare/HEAD
+## [1.0.0] - 2026-08-14
+
+### Added
+
+- Deterministic finite island model simulation with migration, infinite-alleles
+  mutation, genetic drift, and configurable convergence monitoring.
+- Incremental JSON Lines persistence for every generation, replayable manifests,
+  final differentiation reports, and headless visualizations.
+- Command-line workflows for initialization, simulation, persisted-trajectory
+  analysis, version reporting, and opt-in update checks.
+- Python library API, deterministic tests, local quality gates, release
+  packaging, and user and maintainer documentation.
+
+[Unreleased]: https://github.com/selby-botany/jost-finite-island-model/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/selby-botany/jost-finite-island-model/releases/tag/v1.0.0
