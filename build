@@ -123,6 +123,7 @@ fi
 if "${run_package}"; then
     run "${python}" -m build
     if ! "${dry_run}"; then
+        # Run outside the checkout so local source cannot mask wheel defects.
         smoke_venv=$(mktemp -d "${TMPDIR:-/tmp}/fim-smoke.XXXXXX")
         trap 'rm -rf -- "${smoke_venv}"' EXIT
         run "${python}" -m venv "${smoke_venv}"
