@@ -6,6 +6,8 @@ set -o pipefail
 
 root=$(git rev-parse --show-toplevel)
 cd -- "${root}"
+PATH="${root}/bin:${PATH}"
+export PATH
 
 if [[ ! -f pyproject.toml ]]; then
     printf 'pre-push: pyproject.toml absent; gates skipped\n'

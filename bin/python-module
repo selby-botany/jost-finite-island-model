@@ -5,5 +5,7 @@ set -o nounset
 set -o pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-export PYTHONPATH="${root}/src${PYTHONPATH:+:${PYTHONPATH}}"
-exec "${root}/bin/python3" -m fim.cli "$@"
+module=${1:?Usage: python-module MODULE [ARGUMENT ...]}
+shift
+
+exec "${root}/bin/python3" -m "${module}" "$@"

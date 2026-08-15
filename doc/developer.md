@@ -51,6 +51,13 @@ The root `build` script and Git hooks assume Unix paths. They use Bash arrays,
 they avoid modern-only Bash features and work with the Bash 3.2 bundled with
 macOS. The Python build itself does not need Docker.
 
+Create `.venv` with Python 3.12 or newer and install `.[dev]`. Shell activation
+is optional: `build`, the Git hooks, and the commands in `bin/` automatically
+select `.venv/bin/python`. A versioned `.venv-*` is accepted as a fallback.
+`PYTHON=/path/to/python` overrides build selection, while
+`FIM_PYTHON=/path/to/python` overrides the local command wrappers. Source
+`include/dot-bashrc` to make those wrappers available as direct commands.
+
 Docker Engine is required for the complete repository-file checks. It runs the
 pinned ShellCheck, yamllint, markdownlint, gitleaks, and Homebrew validation
 images. Source the local environment file before invoking those wrappers:

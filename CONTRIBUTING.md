@@ -21,10 +21,13 @@ is built and tested on the release workflow's Windows runner.
 
 ```console
 python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e ".[dev]"
+.venv/bin/python -m pip install -e ".[dev]"
+. include/dot-bashrc
 bash dev/git-hooks/install
 ```
+
+Shell activation is optional. Repository-local wrappers automatically select a
+Python 3.12+ `.venv` interpreter when you run the commands below.
 
 Confirm the environment with `bash --version`, `docker version`,
 `git --version`, and `python --version` before interpreting tool errors.

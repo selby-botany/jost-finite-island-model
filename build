@@ -6,6 +6,8 @@ set -o pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 cd -- "${root}"
+PATH="${root}/bin:${PATH}"
+export PATH
 
 ci=false
 coverage=false
@@ -82,6 +84,46 @@ python=${PYTHON:-python3}
 if [[ "${python}" == */* ]]; then
     PATH="$(dirname -- "${python}"):${PATH}"
     export PATH
+fi
+
+# Report all unavailable development modules before starting a partial build.
+if ! "${dry_run}"; then
+    required_modules=()
+    "${run_lint}" && required_modules[${#required_modules[@]}]=ruff
+    "${run_type}" && required_modules[${#required_modules[@]}]=mypy
+    if "${run_test}"; then
+        required_modules[${#required_modules[@]}]=pytest
+        "${coverage}" \
+            && required_modules[${#required_modules[@]}]=pytest_cov
+    fi
+    "${run_docs}" && required_modules[${#required_modules[@]}]=pydoc_markdown
+    "${run_package}" && required_modules[${#required_modules[@]}]=build
+
+    if ! missing_modules=$(
+        "${python}" - "${required_modules[@]}" <<'PY'
+import importlib.util
+import sys
+
+print(
+    " ".join(
+        module
+        for module in sys.argv[1:]
+        if importlib.util.find_spec(module) is None
+    )
+)
+PY
+    ); then
+        printf '%s\n' \
+            'Unable to run the selected Python 3.12+ interpreter' >&2
+        exit 1
+    fi
+    if [[ -n "${missing_modules}" ]]; then
+        printf 'Missing Python development modules: %s\n' \
+            "${missing_modules}" >&2
+        printf '%s\n' \
+            'Install them with: python -m pip install -e ".[dev]"' >&2
+        exit 1
+    fi
 fi
 
 if "${run_lint}"; then

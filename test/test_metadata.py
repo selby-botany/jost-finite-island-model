@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
@@ -9,6 +10,24 @@ from pathlib import Path
 import pytest
 
 import fim
+
+
+def test_matplotlib_import_has_no_dependency_deprecations() -> None:
+    """Supported runtime dependencies import without deprecation warnings."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-W",
+            "error::DeprecationWarning",
+            "-c",
+            "import matplotlib.pyplot",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_version_loader_does_not_read_working_directory(

@@ -6,12 +6,21 @@ set -o pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 cd -- "${root}"
+PATH="${root}/bin:${PATH}"
+export PATH
 
 shellcheck \
     build \
     bin/fim \
     bin/gitleaks \
     bin/markdownlint \
+    bin/mypy \
+    bin/pydoc-markdown \
+    bin/pyinstaller \
+    bin/pytest \
+    bin/python-module \
+    bin/python3 \
+    bin/ruff \
     bin/shellcheck \
     bin/yamllint \
     dev/bin/validate-repository \

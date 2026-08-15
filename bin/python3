@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+minimum_version='import sys; raise SystemExit(sys.version_info < (3, 12))'
+
+if [[ -n "${FIM_PYTHON:-}" ]]; then
+    if [[ ! -x "${FIM_PYTHON}" ]] \
+        || ! "${FIM_PYTHON}" -c "${minimum_version}" >/dev/null 2>&1
+    then
+        printf 'fim python3: FIM_PYTHON must name Python 3.12 or newer: %s\n' \
+            "${FIM_PYTHON}" >&2
+        exit 1
+    fi
+    exec "${FIM_PYTHON}" "$@"
+fi
+
+# Prefer repository-managed environments without requiring shell activation.
+for candidate in \
+    "${root}/.venv/bin/python" \
+    "${root}"/.venv-*/bin/python
+do
+    [[ -x "${candidate}" ]] || continue
+    if "${candidate}" -c "${minimum_version}" >/dev/null 2>&1; then
+        exec "${candidate}" "$@"
+    fi
+done
+
+# Fall back to an already active or system Python, excluding this wrapper.
+old_ifs=${IFS}
+IFS=:
+for directory in ${PATH}; do
+    IFS=${old_ifs}
+    [[ -n "${directory}" ]] || directory=.
+    candidate="${directory}/python3"
+    [[ -x "${candidate}" ]] || {
+        IFS=:
+        continue
+    }
+    [[ "${candidate}" -ef "${BASH_SOURCE[0]}" ]] && {
+        IFS=:
+        continue
+    }
+    if "${candidate}" -c "${minimum_version}" >/dev/null 2>&1; then
+        exec "${candidate}" "$@"
+    fi
+    IFS=:
+done
+IFS=${old_ifs}
+
+printf '%s\n' \
+    'fim python3: Python 3.12 or newer was not found' \
+    'Create .venv with Python 3.12+ and install: python -m pip install -e ".[dev]"' \
+    >&2
+exit 1

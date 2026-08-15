@@ -6,6 +6,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Added repository-local Python, Ruff, mypy, pytest, API-documentation, and
+  PyInstaller wrappers so `./build --ci` works without activating a virtual
+  environment.
+- Made the Git-hook installer portable to native macOS utilities.
+- Constrained Pyparsing to the warning-free line supported by Matplotlib 3.9.
+
 ## [1.0.0] - 2026-08-14
 
 ### Added

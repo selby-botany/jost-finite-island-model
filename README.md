@@ -123,11 +123,17 @@ workflow.
 
 ```console
 python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e ".[dev]"
+.venv/bin/python -m pip install -e ".[dev]"
+. include/dot-bashrc
 bash dev/git-hooks/install
 ./build
 ```
+
+The build and hook scripts prepend the repository's `bin/` directory and
+automatically use a Python 3.12+ interpreter from `.venv` (or a versioned
+`.venv-*` fallback). Activating the environment is optional. Thin local
+wrappers provide `python3`, `ruff`, `mypy`, `pytest`, `pydoc-markdown`, and
+`pyinstaller` consistently.
 
 Run `./build --ci` for the same static, test, documentation, and package gates
 used by continuous integration. See [CONTRIBUTING.md](CONTRIBUTING.md) before

@@ -8,10 +8,10 @@ root=$(git rev-parse --show-toplevel)
 hook_source="${root}/dev/git-hooks"
 hook_target="${root}/.git/hooks"
 
-mkdir -p -- "${hook_target}"
+mkdir -p "${hook_target}"
 for hook in commit-msg pre-commit pre-push; do
-    chmod +x -- "${hook_source}/${hook}"
-    ln -sfn -- "../../dev/git-hooks/${hook}" "${hook_target}/${hook}"
+    chmod +x "${hook_source}/${hook}"
+    ln -sfn "../../dev/git-hooks/${hook}" "${hook_target}/${hook}"
 done
 
 printf 'Installed commit-msg, pre-commit, and pre-push hooks\n'
