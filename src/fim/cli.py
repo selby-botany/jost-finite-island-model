@@ -223,7 +223,7 @@ def _command_update(
     arguments: argparse.Namespace,
     parser: argparse.ArgumentParser,
 ) -> int:
-    """Handle a release check."""
+    """Perform the explicit, opt-in release check."""
     if not arguments.check:
         parser.error("fim update requires --check")
     latest_tag, release_url = _latest_release()
