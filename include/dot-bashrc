@@ -1,0 +1,14 @@
+# shellcheck shell=bash
+# Activate repository-local developer commands.
+
+fim_root=$(
+    cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &&
+        pwd
+)
+
+case ":${PATH}:" in
+    *":${fim_root}/bin:"*) ;;
+    *) PATH="${fim_root}/bin:${PATH}" ;;
+esac
+export PATH
+unset fim_root

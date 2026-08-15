@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+cd -- "${root}"
+
+shellcheck \
+    build \
+    bin/fim \
+    bin/gitleaks \
+    bin/markdownlint \
+    bin/shellcheck \
+    bin/yamllint \
+    dev/bin/validate-repository \
+    dev/bin/generate-api-docs \
+    dev/git-hooks/commit-msg \
+    dev/git-hooks/install \
+    dev/git-hooks/pre-commit \
+    dev/git-hooks/pre-push \
+    include/dot-bashrc \
+    install/homebrew/test-formula
+yamllint \
+    .github/workflows/ci.yml \
+    .github/workflows/gitleaks-ci.yml \
+    .github/workflows/release.yml
+markdownlint \
+    "**/*.md" \
+    "#.attic/**" \
+    "#.mypy_cache/**" \
+    "#.pytest_cache/**" \
+    "#.ruff_cache/**" \
+    "#.venv*/**" \
+    "#LICENSE.md" \
+    "#build/**" \
+    "#dist/**" \
+    "#htmlcov/**" \
+    "#site/**" \
+    "#src/fim/API.md"
+gitleaks dir . --no-banner --redact

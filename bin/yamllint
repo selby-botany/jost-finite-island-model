@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+image=${YAMLLINT_IMAGE:-cytopia/yamllint}
+digest=${YAMLLINT_IMAGE_DIGEST:-sha256:3e9eb827ab2b12a5ea5f49d4257bb3aca94bba9f1ba427c8bc7f2456385a5204}
+
+exec docker run --rm \
+    --volume "${root}:/workspace" \
+    --workdir /workspace \
+    "${image}@${digest}" "$@"

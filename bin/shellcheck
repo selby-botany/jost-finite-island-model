@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+image=${SHELLCHECK_IMAGE:-koalaman/shellcheck}
+default_digest=sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
+digest=${SHELLCHECK_IMAGE_DIGEST:-${default_digest}}
+
+exec docker run --rm \
+    --volume "${root}:/workspace" \
+    --workdir /workspace \
+    "${image}@${digest}" "$@"
