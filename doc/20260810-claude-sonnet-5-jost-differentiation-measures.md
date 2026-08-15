@@ -31,8 +31,7 @@ paper's own numbers turned up a discrepancy from the printed text.
   - [Appendix B: errata and ambiguities in the accepted-article text](#appendix-b-errata-and-ambiguities-in-the-accepted-article-text)
   - [Appendix C: where this paper sits in Jost's larger program](#appendix-c-where-this-paper-sits-in-josts-larger-program)
   - [Appendix D: works cited](#appendix-d-works-cited)
-  - [Appendix E: the differentiation debate, 2008–2011](#appendix-e-the-differentiation-debate-2008-2011)
-  - [Further reading](#further-reading)
+  - [Appendix E: the differentiation debate, 2008–2011](#appendix-e-the-differentiation-debate-20082011)
   - [Metadata](#metadata)
 
 ---
@@ -1437,7 +1436,7 @@ changes results — make it explicitly and record it.
 
 ## Appendix A: notation and formula sheet
 
-**Symbols**
+### Symbols
 
 | Symbol | Meaning |
 |---|---|
@@ -1457,7 +1456,7 @@ changes results — make it explicitly and record it.
 | $q$ | Order of a diversity measure (rare-allele weighting) |
 | $\mathrm{NGD}$ | Nei's genetic distance |
 
-**Within one deme**
+### Within one deme
 
 ```math
 H = 1 - \sum_i p_i^2 \qquad J = \sum_i p_i^2 = 1 - H \qquad {}^{H}D = \frac{1}{1-H} = \frac{1}{J}
@@ -1467,7 +1466,7 @@ H = 1 - \sum_i p_i^2 \qquad J = \sum_i p_i^2 = 1 - H \qquad {}^{H}D = \frac{1}{1
 {}^{q}D = \left(\sum_i p_i^q\right)^{1/(1-q)}\ (q \neq 1), \qquad {}^{1}D = \exp\left(-\sum_i p_i \ln p_i\right)
 ```
 
-**Across demes**
+### Across demes
 
 ```math
 G_{ST} = \frac{H_T - H_S}{H_T} = 1 - \frac{H_S}{H_T}
@@ -1500,7 +1499,7 @@ E_{ST} = \frac{E_T - E_S}{E_w} \qquad (E_w = \ln d \text{ for equal deme sizes})
 K_{ST} = 1 - \frac{K_T/K_S - d}{1 - d}
 ```
 
-**Useful identities**
+### Useful identities
 
 ```math
 H_T = H_S + H_{ST} - H_S\cdot H_{ST}, \qquad H_{ST} = \frac{H_T-H_S}{1-H_S}
@@ -1641,14 +1640,14 @@ Bibliographic details as given in the paper's reference list. DOIs are supplied
 only where verifiable from the source text itself; the remaining entries are
 listed with full citation details for lookup.
 
-**The paper summarized here**
+### The paper summarized here
 
 - Jost L, Archer F, Flanagan S, Gaggiotti O, Hoban S, Latch E (2018).
   Differentiation measures for conservation genetics. *Evolutionary
   Applications* 11(7):1139–1148.
   DOI: [10.1111/eva.12590](https://doi.org/10.1111/eva.12590)
 
-**Jost and collaborators**
+### Jost and collaborators
 
 - Jost L (2006). Entropy and diversity. *Oikos* 113(2):363–375.
 - Jost L (2007). Partitioning diversity into independent alpha and beta
@@ -1678,7 +1677,7 @@ listed with full citation details for lookup.
   framework to study variation across biological metrics and scales.
   *Evolutionary Applications*.
 
-**Classical sources for the fixation family**
+### Classical sources for the fixation family
 
 - Wright S (1943). Isolation by distance. *Genetics* 28(2):114.
 - Wright S (1965). The interpretation of population structure by $F$-statistics
@@ -1696,7 +1695,7 @@ listed with full citation details for lookup.
 - Weir BS, Cockerham CC (1984). Estimating $F$-statistics for the analysis of
   population structure. *Evolution* 38(6):1358–1370.
 
-**The surrounding debate**
+### The surrounding debate
 
 - Gerlach G, Jueterbock A, Kraemer P, Deppermann J, Harmand P (2010).
   Calculations of population differentiation based on $G_{ST}$ and $D$: forget
@@ -1720,7 +1719,7 @@ listed with full citation details for lookup.
   $F_{ST} \neq 1/(4Nm+1)$. *Heredity* 82:117–125.
   DOI: [10.1046/j.1365-2540.1999.00496.x](https://doi.org/10.1046/j.1365-2540.1999.00496.x)
 
-**Other works cited in the argument**
+### Other works cited in the argument
 
 - Caballero A, Garcia-Dorado A (2013). Allelic diversity and its implications
   for the rate of adaptation. *Genetics* 195:1373–1384.
