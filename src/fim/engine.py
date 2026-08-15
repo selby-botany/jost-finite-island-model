@@ -101,6 +101,8 @@ def fim(
             run_clock,
         )
 
+    # Replicate i is an independent scalar run with seed + i, preserving the
+    # scalar trajectory for the first result and deterministic batch ordering.
     results: list[RunResult] = []
     for replicate_index in range(params.n_replicates):
         replicate_params = replace(
