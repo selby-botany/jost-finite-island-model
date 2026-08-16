@@ -100,7 +100,7 @@ def _command_init(arguments: argparse.Namespace) -> int:
     output = (
         Path(arguments.output)
         if arguments.output is not None
-        else _default_runs_directory() / "example-run.yaml"
+        else _results_directory() / "example-run.yaml"
     )
     if output.exists() and not arguments.force:
         raise ValueError(f"starter config already exists: {output}")
@@ -248,12 +248,20 @@ def _compare_versions(current: str, latest: str) -> int:
 def _default_output_directory() -> Path:
     """Return a timestamped output folder without affecting run data."""
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    return _default_runs_directory() / f"run-{stamp}"
+    return _results_directory() / f"run-{stamp}"
 
 
-def _default_runs_directory() -> Path:
-    """Return the researcher-facing Documents run folder."""
-    return Path.home() / "Documents" / "FIM Runs"
+def _project_root() -> Path:
+    """Return the source checkout root, falling back to the working directory."""
+    source_root = Path(__file__).resolve().parents[2]
+    if (source_root / "pyproject.toml").is_file():
+        return source_root
+    return Path.cwd()
+
+
+def _results_directory() -> Path:
+    """Return the project-local results directory."""
+    return _project_root() / "results"
 
 
 def _differentiation_q_for_state(state: ModelState, order: float) -> float:
@@ -333,7 +341,7 @@ def _parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--output",
         metavar="PATH",
-        help="config path (default: Documents/FIM Runs/example-run.yaml)",
+        help="config path (default: project-root/results/example-run.yaml)",
     )
     init_parser.add_argument(
         "--force",
@@ -350,7 +358,7 @@ def _parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         metavar="DIRECTORY",
-        help="artifact directory",
+        help="artifact directory (default: project-root/results/run-TIMESTAMP)",
     )
     run_parser.add_argument(
         "--quiet",

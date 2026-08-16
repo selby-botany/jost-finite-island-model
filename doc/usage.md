@@ -22,7 +22,7 @@ fim init [--output PATH] [--force]
 ```
 
 `fim init` writes the documented development scenario. Without `--output`, the
-path is `Documents/FIM Runs/example-run.yaml`. Existing files are protected
+path is `project-root/results/example-run.yaml`. Existing files are protected
 unless `--force` is present.
 
 ## Run a simulation
@@ -33,7 +33,7 @@ fim run CONFIG [-o DIRECTORY | --output DIRECTORY] [--quiet]
 
 `CONFIG` is a YAML file described in
 [configuration.md](configuration.md). Without `--output`, a timestamped
-directory is created under `Documents/FIM Runs/`. The timestamp affects only
+directory is created under `project-root/results/`. The timestamp affects only
 the folder name and manifest metadata; it never affects the trajectory,
 statistics, convergence decision, or deterministic `run_id`.
 

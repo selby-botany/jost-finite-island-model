@@ -31,11 +31,11 @@ reports differentiation statistics against that known history.
    .\fim-windows-x64.exe init
    ```
 
-4. Edit `Documents\FIM Runs\example-run.yaml`, then run:
+4. Edit `results\example-run.yaml`, then run:
 
    ```powershell
    .\fim-windows-x64.exe run `
-       "Documents\FIM Runs\example-run.yaml"
+       "results\example-run.yaml"
    ```
 
 The executable is self-contained. A simulation does not use the network.
@@ -51,7 +51,7 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install .
 fim init --output example-run.yaml
-fim run example-run.yaml --output fim-runs/example
+fim run example-run.yaml --output results/example
 ```
 
 See [installation alternatives](install/README.md) and the

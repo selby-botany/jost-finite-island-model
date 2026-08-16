@@ -41,6 +41,5 @@ packaging/build/
 packaging/dist/
 
 # Simulator output
-FIM Runs/
-fim-runs/
+results/
 run-*/

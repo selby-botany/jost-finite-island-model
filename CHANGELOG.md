@@ -8,6 +8,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Moved default starter configurations and run artifacts from the user
+  `Documents` directory to the portable, space-free `project-root/results/`
+  directory.
 - Added repository-local Python, Ruff, mypy, pytest, API-documentation, and
   PyInstaller wrappers so `./build --ci` works without activating a virtual
   environment.

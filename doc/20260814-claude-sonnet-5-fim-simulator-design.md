@@ -1007,12 +1007,12 @@ file:
 2. Double-click it. Windows SmartScreen will likely warn that the file is
    from an unrecognized publisher (it is a small, unsigned research tool,
    not commercial software) — click **More info**, then **Run anyway**.
-3. On first run, `fim` creates `Documents\FIM Runs\` and drops a starter
+3. On first run, `fim` creates `project-root\results\` and drops a starter
    config file (`example-run.yaml`) there, pre-filled with the
    development defaults from §4.3.
 4. Run it again — either by double-clicking (opens the GUI, below) or
    from a terminal (the CLI, below). Both read and write the same
-   `Documents\FIM Runs\` folder.
+   `project-root\results\` folder.
 
 No install step touches anything outside that one folder; uninstalling is
 deleting the `.exe` and, if wanted, that folder.
@@ -1054,10 +1054,10 @@ Generation   1500 ...   D=0.46
 Converged: D stable within 0.01 over the last 50 generations
   → generation 1518, D=0.462, G_ST=0.058
 
-Writing trajectory  → Documents\FIM Runs\run-20260814-142207\trajectory.jsonl
-Writing manifest    → Documents\FIM Runs\run-20260814-142207\manifest.json
-Writing report      → Documents\FIM Runs\run-20260814-142207\report.json
-Writing scatter     → Documents\FIM Runs\run-20260814-142207\scatter.png
+Writing trajectory  → project-root\results\run-20260814-142207\trajectory.jsonl
+Writing manifest    → project-root\results\run-20260814-142207\manifest.json
+Writing report      → project-root\results\run-20260814-142207\report.json
+Writing scatter     → project-root\results\run-20260814-142207\scatter.png
 Done in 1518 generations (4.2s).
 ```
 

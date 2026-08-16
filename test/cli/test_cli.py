@@ -128,6 +128,36 @@ def test_init_writes_parseable_starter_config(tmp_path: Path) -> None:
     assert params.N == 450
 
 
+def test_default_paths_use_project_results(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default configuration and run outputs stay under project-root/results."""
+    monkeypatch.setattr(cli, "_project_root", lambda: tmp_path)
+
+    assert cli._results_directory() == tmp_path / "results"
+    assert cli.main(["init"]) == 0
+    assert (tmp_path / "results" / "example-run.yaml").is_file()
+    assert cli._default_output_directory().parent == tmp_path / "results"
+
+
+def test_project_root_falls_back_to_working_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Installed and frozen applications never write inside their package."""
+    working_directory = tmp_path / "working"
+    working_directory.mkdir()
+    monkeypatch.chdir(working_directory)
+    monkeypatch.setattr(
+        cli,
+        "__file__",
+        str(tmp_path / "installed" / "site-packages" / "fim" / "cli.py"),
+    )
+
+    assert cli._project_root() == working_directory
+
+
 @pytest.mark.parametrize(
     ("tag", "expected"),
     [
