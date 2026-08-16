@@ -29,6 +29,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   environment.
 - Made the Git-hook installer portable to native macOS utilities.
 - Constrained Pyparsing to the warning-free line supported by Matplotlib 3.9.
+- Made API generation enumerate every source module explicitly so Linux and
+  macOS editable installs produce identical documentation.
+
 
 [Unreleased]: https://github.com/selby-botany/jost-finite-island-model/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/selby-botany/jost-finite-island-model/releases/tag/v1.0.0

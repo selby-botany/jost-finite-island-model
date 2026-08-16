@@ -7,25 +7,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 # Table of Contents
 
 * [fim](#fim)
-* [fim.statistics](#fim.statistics)
-* [fim.statistics.differentiation](#fim.statistics.differentiation)
-  * [DifferentiationReport](#fim.statistics.differentiation.DifferentiationReport)
-  * [heterozygosity](#fim.statistics.differentiation.heterozygosity)
-  * [identity](#fim.statistics.differentiation.identity)
-  * [hill\_number](#fim.statistics.differentiation.hill_number)
-  * [h\_s](#fim.statistics.differentiation.h_s)
-  * [h\_t](#fim.statistics.differentiation.h_t)
-  * [h\_st](#fim.statistics.differentiation.h_st)
-  * [total\_hill\_number](#fim.statistics.differentiation.total_hill_number)
-  * [within\_hill\_number](#fim.statistics.differentiation.within_hill_number)
-  * [g\_st](#fim.statistics.differentiation.g_st)
-  * [jost\_d](#fim.statistics.differentiation.jost_d)
-  * [e\_st](#fim.statistics.differentiation.e_st)
-  * [k\_st](#fim.statistics.differentiation.k_st)
-  * [differentiation\_q](#fim.statistics.differentiation.differentiation_q)
-  * [equilibrium\_d](#fim.statistics.differentiation.equilibrium_d)
-  * [equilibrium\_g\_st](#fim.statistics.differentiation.equilibrium_g_st)
-  * [statistics\_report](#fim.statistics.differentiation.statistics_report)
+* [fim.cli](#fim.cli)
+  * [load\_config](#fim.cli.load_config)
+  * [main](#fim.cli.main)
+* [fim.convergence](#fim.convergence)
 * [fim.convergence.criteria](#fim.convergence.criteria)
   * [ConvergenceCriterion](#fim.convergence.criteria.ConvergenceCriterion)
     * [is\_stable](#fim.convergence.criteria.ConvergenceCriterion.is_stable)
@@ -50,53 +35,18 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [reason](#fim.convergence.monitor.ConvergenceMonitor.reason)
     * [record](#fim.convergence.monitor.ConvergenceMonitor.record)
     * [should\_stop](#fim.convergence.monitor.ConvergenceMonitor.should_stop)
-* [fim.convergence](#fim.convergence)
 * [fim.engine](#fim.engine)
   * [FinalReport](#fim.engine.FinalReport)
   * [RunResult](#fim.engine.RunResult)
   * [fim](#fim.engine.fim)
   * [deterministic\_run\_id](#fim.engine.deterministic_run_id)
   * [report\_for\_state](#fim.engine.report_for_state)
-* [fim.viz.diagnostics](#fim.viz.diagnostics)
-  * [plot\_convergence\_trace](#fim.viz.diagnostics.plot_convergence_trace)
-  * [plot\_frequency\_bars](#fim.viz.diagnostics.plot_frequency_bars)
-* [fim.viz](#fim.viz)
-* [fim.viz.scatter](#fim.viz.scatter)
-  * [plot\_frequency\_scatter](#fim.viz.scatter.plot_frequency_scatter)
-* [fim.cli](#fim.cli)
-  * [load\_config](#fim.cli.load_config)
-  * [main](#fim.cli.main)
-* [fim.persistence.store](#fim.persistence.store)
-  * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
-  * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
-    * [write\_generation](#fim.persistence.store.TrajectoryStore.write_generation)
-    * [read](#fim.persistence.store.TrajectoryStore.read)
-  * [InMemoryTrajectoryStore](#fim.persistence.store.InMemoryTrajectoryStore)
-    * [\_\_init\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__init__)
-    * [write\_generation](#fim.persistence.store.InMemoryTrajectoryStore.write_generation)
-    * [read](#fim.persistence.store.InMemoryTrajectoryStore.read)
-  * [normalize\_row](#fim.persistence.store.normalize_row)
-* [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
-  * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
-    * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
-    * [write\_generation](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation)
-    * [read](#fim.persistence.jsonl_store.JSONLTrajectoryStore.read)
-* [fim.persistence.manifest](#fim.persistence.manifest)
-  * [RunManifest](#fim.persistence.manifest.RunManifest)
-    * [\_\_post\_init\_\_](#fim.persistence.manifest.RunManifest.__post_init__)
-    * [params](#fim.persistence.manifest.RunManifest.params)
-    * [to\_dict](#fim.persistence.manifest.RunManifest.to_dict)
-    * [from\_dict](#fim.persistence.manifest.RunManifest.from_dict)
-  * [read\_manifest](#fim.persistence.manifest.read_manifest)
-  * [write\_manifest](#fim.persistence.manifest.write_manifest)
-* [fim.persistence](#fim.persistence)
-* [fim.model.params](#fim.model.params)
-  * [SimulationParams](#fim.model.params.SimulationParams)
-    * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
-    * [population\_sizes](#fim.model.params.SimulationParams.population_sizes)
-    * [to\_dict](#fim.model.params.SimulationParams.to_dict)
-    * [from\_mapping](#fim.model.params.SimulationParams.from_mapping)
 * [fim.model](#fim.model)
+* [fim.model.allele](#fim.model.allele)
+  * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
+  * [AlleleRegistry](#fim.model.allele.AlleleRegistry)
+    * [\_\_init\_\_](#fim.model.allele.AlleleRegistry.__init__)
+    * [next\_id](#fim.model.allele.AlleleRegistry.next_id)
 * [fim.model.initial](#fim.model.initial)
   * [InitialConditionGenerator](#fim.model.initial.InitialConditionGenerator)
     * [generate](#fim.model.initial.InitialConditionGenerator.generate)
@@ -113,11 +63,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [migrate](#fim.model.operators.migrate)
   * [mutate](#fim.model.operators.mutate)
   * [step](#fim.model.operators.step)
-* [fim.model.allele](#fim.model.allele)
-  * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
-  * [AlleleRegistry](#fim.model.allele.AlleleRegistry)
-    * [\_\_init\_\_](#fim.model.allele.AlleleRegistry.__init__)
-    * [next\_id](#fim.model.allele.AlleleRegistry.next_id)
+* [fim.model.params](#fim.model.params)
+  * [SimulationParams](#fim.model.params.SimulationParams)
+    * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
+    * [population\_sizes](#fim.model.params.SimulationParams.population_sizes)
+    * [to\_dict](#fim.model.params.SimulationParams.to_dict)
+    * [from\_mapping](#fim.model.params.SimulationParams.from_mapping)
 * [fim.model.state](#fim.model.state)
   * [ModelState](#fim.model.state.ModelState)
     * [\_\_post\_init\_\_](#fim.model.state.ModelState.__post_init__)
@@ -129,6 +80,55 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [total\_frequency](#fim.model.state.ModelState.total_frequency)
     * [validate\_support](#fim.model.state.ModelState.validate_support)
     * [from\_rows](#fim.model.state.ModelState.from_rows)
+* [fim.persistence](#fim.persistence)
+* [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
+  * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
+    * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
+    * [write\_generation](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation)
+    * [read](#fim.persistence.jsonl_store.JSONLTrajectoryStore.read)
+* [fim.persistence.manifest](#fim.persistence.manifest)
+  * [RunManifest](#fim.persistence.manifest.RunManifest)
+    * [\_\_post\_init\_\_](#fim.persistence.manifest.RunManifest.__post_init__)
+    * [params](#fim.persistence.manifest.RunManifest.params)
+    * [to\_dict](#fim.persistence.manifest.RunManifest.to_dict)
+    * [from\_dict](#fim.persistence.manifest.RunManifest.from_dict)
+  * [read\_manifest](#fim.persistence.manifest.read_manifest)
+  * [write\_manifest](#fim.persistence.manifest.write_manifest)
+* [fim.persistence.store](#fim.persistence.store)
+  * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
+  * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
+    * [write\_generation](#fim.persistence.store.TrajectoryStore.write_generation)
+    * [read](#fim.persistence.store.TrajectoryStore.read)
+  * [InMemoryTrajectoryStore](#fim.persistence.store.InMemoryTrajectoryStore)
+    * [\_\_init\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__init__)
+    * [write\_generation](#fim.persistence.store.InMemoryTrajectoryStore.write_generation)
+    * [read](#fim.persistence.store.InMemoryTrajectoryStore.read)
+  * [normalize\_row](#fim.persistence.store.normalize_row)
+* [fim.statistics](#fim.statistics)
+* [fim.statistics.differentiation](#fim.statistics.differentiation)
+  * [DifferentiationReport](#fim.statistics.differentiation.DifferentiationReport)
+  * [heterozygosity](#fim.statistics.differentiation.heterozygosity)
+  * [identity](#fim.statistics.differentiation.identity)
+  * [hill\_number](#fim.statistics.differentiation.hill_number)
+  * [h\_s](#fim.statistics.differentiation.h_s)
+  * [h\_t](#fim.statistics.differentiation.h_t)
+  * [h\_st](#fim.statistics.differentiation.h_st)
+  * [total\_hill\_number](#fim.statistics.differentiation.total_hill_number)
+  * [within\_hill\_number](#fim.statistics.differentiation.within_hill_number)
+  * [g\_st](#fim.statistics.differentiation.g_st)
+  * [jost\_d](#fim.statistics.differentiation.jost_d)
+  * [e\_st](#fim.statistics.differentiation.e_st)
+  * [k\_st](#fim.statistics.differentiation.k_st)
+  * [differentiation\_q](#fim.statistics.differentiation.differentiation_q)
+  * [equilibrium\_d](#fim.statistics.differentiation.equilibrium_d)
+  * [equilibrium\_g\_st](#fim.statistics.differentiation.equilibrium_g_st)
+  * [statistics\_report](#fim.statistics.differentiation.statistics_report)
+* [fim.viz](#fim.viz)
+* [fim.viz.diagnostics](#fim.viz.diagnostics)
+  * [plot\_convergence\_trace](#fim.viz.diagnostics.plot_convergence_trace)
+  * [plot\_frequency\_bars](#fim.viz.diagnostics.plot_frequency_bars)
+* [fim.viz.scatter](#fim.viz.scatter)
+  * [plot\_frequency\_scatter](#fim.viz.scatter.plot_frequency_scatter)
 
 <a id="fim"></a>
 
@@ -136,238 +136,55 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 
 Public package metadata for the finite island model simulator.
 
-<a id="fim.statistics"></a>
+<a id="fim.cli"></a>
 
-# fim.statistics
+# fim.cli
 
-Pure diversity and differentiation statistics for finite-island models.
+Researcher-facing command-line interface for the simulator.
 
-<a id="fim.statistics.differentiation"></a>
+<a id="fim.cli.load_config"></a>
 
-# fim.statistics.differentiation
-
-Allele-frequency diversity and differentiation statistics.
-
-All functions operate on normalized allele-frequency tables and are
-independent of model state, persistence, and the engine. Allele identifiers
-must be integer-like; a table contains one mapping per deme.
-
-<a id="fim.statistics.differentiation.DifferentiationReport"></a>
-
-## DifferentiationReport Objects
+#### load\_config
 
 ```python
-class DifferentiationReport(TypedDict)
+def load_config(path: Path | str) -> SimulationParams
 ```
 
-Scalar statistics computed from a frequency table.
-
-<a id="fim.statistics.differentiation.heterozygosity"></a>
-
-#### heterozygosity
-
-```python
-def heterozygosity(frequencies: Mapping[Any, Any]) -> float
-```
-
-Return expected heterozygosity ``H = 1 - sum(p_i ** 2)`` for one deme.
-
-<a id="fim.statistics.differentiation.identity"></a>
-
-#### identity
-
-```python
-def identity(frequencies: Mapping[Any, Any]) -> float
-```
-
-Return Nei gene identity ``J = sum(p_i ** 2)`` for one deme.
-
-<a id="fim.statistics.differentiation.hill_number"></a>
-
-#### hill\_number
-
-```python
-def hill_number(frequencies: Mapping[Any, Any], order: float | int) -> float
-```
-
-Return the Hill number of the requested non-negative order for one deme.
-
-<a id="fim.statistics.differentiation.h_s"></a>
-
-#### h\_s
-
-```python
-def h_s(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
-```
-
-Return weighted mean within-deme expected heterozygosity ``H_S``.
-
-<a id="fim.statistics.differentiation.h_t"></a>
-
-#### h\_t
-
-```python
-def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
-```
-
-Return expected heterozygosity ``H_T`` of the weighted pooled table.
-
-<a id="fim.statistics.differentiation.h_st"></a>
-
-#### h\_st
-
-```python
-def h_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
-```
-
-Return correctly partitioned between-deme heterozygosity ``H_ST``.
-
-<a id="fim.statistics.differentiation.total_hill_number"></a>
-
-#### total\_hill\_number
-
-```python
-def total_hill_number(table: FrequencyTable,
-                      order: float | int,
-                      deme_weights: DemeWeights = None) -> float
-```
-
-Return pooled Hill diversity ``^q D_T`` with optional deme weights.
-
-<a id="fim.statistics.differentiation.within_hill_number"></a>
-
-#### within\_hill\_number
-
-```python
-def within_hill_number(table: FrequencyTable,
-                       order: float | int,
-                       deme_weights: DemeWeights = None) -> float
-```
-
-Return alpha Hill diversity ``^q D_S`` with optional deme weights.
-
-<a id="fim.statistics.differentiation.g_st"></a>
-
-#### g\_st
-
-```python
-def g_st(table: FrequencyTable,
-         deme_weights: DemeWeights = None) -> float | None
-```
-
-Return ``G_ST`` or ``None`` when total heterozygosity is zero.
-
-<a id="fim.statistics.differentiation.jost_d"></a>
-
-#### jost\_d
-
-```python
-def jost_d(table: FrequencyTable) -> float
-```
-
-Return Jost's ``D`` using the required equal weighting of demes.
-
-<a id="fim.statistics.differentiation.e_st"></a>
-
-#### e\_st
-
-```python
-def e_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
-```
-
-Return entropy differentiation ``E_ST`` with optional size weights.
-
-<a id="fim.statistics.differentiation.k_st"></a>
-
-#### k\_st
-
-```python
-def k_st(table: FrequencyTable) -> float
-```
-
-Return allele-number differentiation ``K_ST`` with equal deme weights.
-
-<a id="fim.statistics.differentiation.differentiation_q"></a>
-
-#### differentiation\_q
-
-```python
-def differentiation_q(table: FrequencyTable,
-                      order: float | int,
-                      deme_weights: DemeWeights = None) -> float
-```
-
-Return the normalized general differentiation family at order ``q``.
-
-Equal weighting is required for every order except ``q = 1``. At
-``q = 1`` optional weights represent relative deme sizes and produce
-``E_ST``. The endpoints ``q = 0`` and ``q = 2`` equal ``K_ST`` and
-Jost's ``D`` respectively.
-
-<a id="fim.statistics.differentiation.equilibrium_d"></a>
-
-#### equilibrium\_d
-
-```python
-def equilibrium_d(m: float, mu: float, d: int) -> float
-```
-
-Return the finite-island equilibrium approximation for Jost's D.
+Load one YAML config file into validated simulation parameters.
 
 **Arguments**:
 
-- `m` - Symmetric per-generation migration rate.
-- `mu` - Infinite-alleles mutation rate.
-- `d` - Number of equal demes.
+- `path` - YAML file path.
 
 
 **Returns**:
 
-  ``1 / (1 + m / (mu * (d - 1)))``.
+  Validated immutable parameters.
 
-<a id="fim.statistics.differentiation.equilibrium_g_st"></a>
+<a id="fim.cli.main"></a>
 
-#### equilibrium\_g\_st
+#### main
 
 ```python
-def equilibrium_g_st(population_size: int, m: float, mu: float,
-                     d: int) -> float
+def main(argv: Sequence[str] | None = None) -> int
 ```
 
-Return the equilibrium G_ST approximation for gene-copy ``N``.
-
-The source formula uses ``4 * N_individuals`` for diploids. This
-application defines ``N`` as the number of gene copies directly, so both
-terms use ``2 * N``.
+Parse command-line arguments and dispatch one operation.
 
 **Arguments**:
 
-- `population_size` - Gene-copy count in each equal deme.
-- `m` - Symmetric per-generation migration rate.
-- `mu` - Infinite-alleles mutation rate.
-- `d` - Number of equal demes.
+- `argv` - Arguments excluding the program name, or ``None`` for ``sys.argv``.
 
 
 **Returns**:
 
-  The finite-island equilibrium approximation.
+  Process-style exit status.
 
-<a id="fim.statistics.differentiation.statistics_report"></a>
+<a id="fim.convergence"></a>
 
-#### statistics\_report
+# fim.convergence
 
-```python
-def statistics_report(
-        table: FrequencyTable,
-        deme_weights: DemeWeights = None) -> DifferentiationReport
-```
-
-Return the scalar statistics block consumed by an engine report.
-
-``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, and ``K_ST`` use equal
-deme weighting as specified by their definitions. ``deme_weights`` is
-applied only to ``E_ST``; pass relative deme sizes to request its native
-size-weighted form.
+Convergence criteria and run-loop monitoring.
 
 <a id="fim.convergence.criteria"></a>
 
@@ -634,12 +451,6 @@ def should_stop() -> bool
 
 Return whether statistical convergence or the hard cap fired.
 
-<a id="fim.convergence"></a>
-
-# fim.convergence
-
-Convergence criteria and run-loop monitoring.
-
 <a id="fim.engine"></a>
 
 # fim.engine
@@ -740,490 +551,80 @@ Compute the final report independently of the run loop.
 
   Run metadata plus named scalar statistics averaged across loci.
 
-<a id="fim.viz.diagnostics"></a>
-
-# fim.viz.diagnostics
-
-Convergence and per-deme frequency diagnostic plots.
-
-<a id="fim.viz.diagnostics.plot_convergence_trace"></a>
-
-#### plot\_convergence\_trace
-
-```python
-def plot_convergence_trace(generations: Sequence[int],
-                           values: Sequence[float],
-                           statistic: str,
-                           path: Path | str | None = None) -> Figure
-```
-
-Plot one convergence-statistic value per recorded generation.
-
-**Arguments**:
-
-- `generations` - Ordered generation numbers.
-- `values` - Statistic values aligned with ``generations``.
-- `statistic` - Display name for the watched statistic.
-- `path` - Optional PNG output path.
-
-
-**Returns**:
-
-  The created figure.
-
-<a id="fim.viz.diagnostics.plot_frequency_bars"></a>
-
-#### plot\_frequency\_bars
-
-```python
-def plot_frequency_bars(state: ModelState,
-                        path: Path | str | None = None,
-                        *,
-                        locus_index: int = 0) -> Figure
-```
-
-Plot a STRUCTURE-style stacked frequency bar for every deme.
-
-**Arguments**:
-
-- `state` - State containing the requested locus.
-- `path` - Optional PNG output path.
-- `locus_index` - Zero-based locus index to plot.
-
-
-**Returns**:
-
-  The created figure.
-
-<a id="fim.viz"></a>
-
-# fim.viz
-
-Headless visualizations for simulation results and diagnostics.
-
-<a id="fim.viz.scatter"></a>
-
-# fim.viz.scatter
-
-Canonical deme-coordinate allele-frequency scatter plots.
-
-<a id="fim.viz.scatter.plot_frequency_scatter"></a>
-
-#### plot\_frequency\_scatter
-
-```python
-def plot_frequency_scatter(
-        state: ModelState,
-        params: SimulationParams,
-        path: Path | str | None = None,
-        *,
-        pairwise_max_demes: int = PAIRWISE_MAX_DEMES) -> Figure
-```
-
-Plot one point per locus/allele in deme-frequency coordinate space.
-
-**Arguments**:
-
-- `state` - State to visualize.
-- `params` - Parameters used for title metadata.
-- `path` - Optional PNG output path.
-- `pairwise_max_demes` - Largest ``d`` rendered as a pairwise matrix.
-
-
-**Returns**:
-
-  The created Matplotlib figure.
-
-<a id="fim.cli"></a>
-
-# fim.cli
-
-Researcher-facing command-line interface for the simulator.
-
-<a id="fim.cli.load_config"></a>
-
-#### load\_config
-
-```python
-def load_config(path: Path | str) -> SimulationParams
-```
-
-Load one YAML config file into validated simulation parameters.
-
-**Arguments**:
-
-- `path` - YAML file path.
-
-
-**Returns**:
-
-  Validated immutable parameters.
-
-<a id="fim.cli.main"></a>
-
-#### main
-
-```python
-def main(argv: Sequence[str] | None = None) -> int
-```
-
-Parse command-line arguments and dispatch one operation.
-
-**Arguments**:
-
-- `argv` - Arguments excluding the program name, or ``None`` for ``sys.argv``.
-
-
-**Returns**:
-
-  Process-style exit status.
-
-<a id="fim.persistence.store"></a>
-
-# fim.persistence.store
-
-Backend-independent trajectory row schema and store protocol.
-
-<a id="fim.persistence.store.TrajectoryRow"></a>
-
-## TrajectoryRow Objects
-
-```python
-class TrajectoryRow(TypedDict)
-```
-
-One nonzero allele-frequency observation.
-
-<a id="fim.persistence.store.TrajectoryStore"></a>
-
-## TrajectoryStore Objects
-
-```python
-class TrajectoryStore(Protocol)
-```
-
-Incrementally persist and iterate long-form trajectory rows.
-
-<a id="fim.persistence.store.TrajectoryStore.write_generation"></a>
-
-#### write\_generation
-
-```python
-def write_generation(run_id: str, generation: int,
-                     rows: Iterable[Mapping[str, Any]]) -> None
-```
-
-Persist all rows for one generation.
-
-<a id="fim.persistence.store.TrajectoryStore.read"></a>
-
-#### read
-
-```python
-def read(run_id: str) -> Iterator[TrajectoryRow]
-```
-
-Yield rows for one run in stored order.
-
-<a id="fim.persistence.store.InMemoryTrajectoryStore"></a>
-
-## InMemoryTrajectoryStore Objects
-
-```python
-class InMemoryTrajectoryStore()
-```
-
-Store trajectories in memory for library calls and focused tests.
-
-<a id="fim.persistence.store.InMemoryTrajectoryStore.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__() -> None
-```
-
-Initialize an empty store.
-
-<a id="fim.persistence.store.InMemoryTrajectoryStore.write_generation"></a>
-
-#### write\_generation
-
-```python
-def write_generation(run_id: str, generation: int,
-                     rows: Iterable[Mapping[str, Any]]) -> None
-```
-
-Append one validated generation.
-
-<a id="fim.persistence.store.InMemoryTrajectoryStore.read"></a>
-
-#### read
-
-```python
-def read(run_id: str) -> Iterator[TrajectoryRow]
-```
-
-Yield rows matching ``run_id`` in insertion order.
-
-<a id="fim.persistence.store.normalize_row"></a>
-
-#### normalize\_row
-
-```python
-def normalize_row(row: Mapping[str, Any],
-                  *,
-                  run_id: str | None = None,
-                  generation: int | None = None) -> TrajectoryRow
-```
-
-Validate and normalize one public-schema trajectory row.
-
-**Arguments**:
-
-- `row` - Mapping containing all six schema fields.
-- `run_id` - Optional required run identity.
-- `generation` - Optional required generation.
-
-
-**Returns**:
-
-  A typed row with primitive values.
-
-<a id="fim.persistence.jsonl_store"></a>
-
-# fim.persistence.jsonl\_store
-
-Human-readable incremental JSON Lines trajectory storage.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore"></a>
-
-## JSONLTrajectoryStore Objects
-
-```python
-class JSONLTrajectoryStore()
-```
-
-Append and read validated trajectory rows in JSON Lines format.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(path: Path | str) -> None
-```
-
-Bind the store to one trajectory file.
-
-**Arguments**:
-
-- `path` - JSON Lines file path. Its parent is created on first write.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation"></a>
-
-#### write\_generation
-
-```python
-def write_generation(run_id: str, generation: int,
-                     rows: Iterable[Mapping[str, Any]]) -> None
-```
-
-Append and flush all rows for one generation.
-
-<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.read"></a>
-
-#### read
-
-```python
-def read(run_id: str) -> Iterator[TrajectoryRow]
-```
-
-Yield complete rows matching ``run_id``.
-
-A final partial line from an interrupted append is ignored. Any malformed
-complete line is reported as corruption.
-
-<a id="fim.persistence.manifest"></a>
-
-# fim.persistence.manifest
-
-Replayable run-manifest representation and JSON I/O.
-
-<a id="fim.persistence.manifest.RunManifest"></a>
-
-## RunManifest Objects
-
-```python
-@dataclass(frozen=True, slots=True)
-class RunManifest()
-```
-
-Capture everything needed to identify and replay a run.
-
-<a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
-
-#### \_\_post\_init\_\_
-
-```python
-def __post_init__() -> None
-```
-
-Validate required manifest identity and terminal fields.
-
-<a id="fim.persistence.manifest.RunManifest.params"></a>
-
-#### params
-
-```python
-def params() -> SimulationParams
-```
-
-Reconstruct the exact validated simulation parameters.
-
-<a id="fim.persistence.manifest.RunManifest.to_dict"></a>
-
-#### to\_dict
-
-```python
-def to_dict() -> dict[str, object]
-```
-
-Return a JSON-serializable manifest mapping.
-
-<a id="fim.persistence.manifest.RunManifest.from_dict"></a>
-
-#### from\_dict
-
-```python
-@classmethod
-def from_dict(cls, value: Mapping[str, Any]) -> RunManifest
-```
-
-Validate and reconstruct a manifest mapping.
-
-<a id="fim.persistence.manifest.read_manifest"></a>
-
-#### read\_manifest
-
-```python
-def read_manifest(path: Path | str) -> RunManifest
-```
-
-Read and validate one manifest JSON file.
-
-<a id="fim.persistence.manifest.write_manifest"></a>
-
-#### write\_manifest
-
-```python
-def write_manifest(path: Path | str, manifest: RunManifest) -> None
-```
-
-Write a manifest deterministically, replacing any prior file.
-
-<a id="fim.persistence"></a>
-
-# fim.persistence
-
-Incremental trajectory and manifest persistence.
-
-<a id="fim.model.params"></a>
-
-# fim.model.params
-
-Validated, replayable simulation configuration.
-
-<a id="fim.model.params.SimulationParams"></a>
-
-## SimulationParams Objects
-
-```python
-@dataclass(frozen=True, slots=True)
-class SimulationParams()
-```
-
-Store all values needed to reproduce a finite-island-model run.
-
-**Arguments**:
-
-- `N` - Gene-copy count shared by all demes, or one count per deme.
-- `m` - Symmetric migration rate, or a row-stochastic migration matrix.
-- `mu` - Per-copy mutation probability per generation.
-- `d` - Number of demes.
-- `seed` - Required PCG64 seed.
-- `loci` - Nonempty ordered locus descriptions.
-- `initial_allele_count` - Founding allele count per locus.
-- `initial_concentration` - Symmetric Dirichlet concentration.
-- `deme_weighting` - Weighting used by statistics that support it.
-- `convergence_statistic` - Statistic watched by the convergence monitor.
-- `convergence_window` - Trailing stability-window length.
-- `convergence_tolerance` - Maximum half-window mean difference.
-- `max_generations` - Hard generation safety cap.
-- `n_replicates` - Number of independently seeded runs.
-- `initial_frequencies` - Optional explicit deme/locus frequency table.
-
-<a id="fim.model.params.SimulationParams.__post_init__"></a>
-
-#### \_\_post\_init\_\_
-
-```python
-def __post_init__() -> None
-```
-
-Normalize sequence inputs and validate every parameter.
-
-<a id="fim.model.params.SimulationParams.population_sizes"></a>
-
-#### population\_sizes
-
-```python
-@property
-def population_sizes() -> tuple[int, ...]
-```
-
-Return one gene-copy count per deme.
-
-<a id="fim.model.params.SimulationParams.to_dict"></a>
-
-#### to\_dict
-
-```python
-def to_dict() -> dict[str, object]
-```
-
-Return a JSON/YAML-serializable, lossless configuration mapping.
-
-<a id="fim.model.params.SimulationParams.from_mapping"></a>
-
-#### from\_mapping
-
-```python
-@classmethod
-def from_mapping(cls, config: Mapping[str, Any]) -> SimulationParams
-```
-
-Validate a config-file mapping and construct simulation parameters.
-
-**Arguments**:
-
-- `config` - Parsed YAML or JSON object.
-
-
-**Returns**:
-
-  A validated immutable parameter object.
-
-
-**Raises**:
-
-- `ValueError` - If a key is unknown, required, malformed, or conflicting.
-
 <a id="fim.model"></a>
 
 # fim.model
 
 Value objects and update operators for the finite island model.
+
+<a id="fim.model.allele"></a>
+
+# fim.model.allele
+
+Opaque allele identities and globally unique mutant-allele allocation.
+
+<a id="fim.model.allele.founding_allele_ids"></a>
+
+#### founding\_allele\_ids
+
+```python
+def founding_allele_ids(count: int) -> tuple[AlleleId, ...]
+```
+
+Return the locus-relative founding allele identifiers.
+
+**Arguments**:
+
+- `count` - Number of founding alleles at a locus.
+
+
+**Returns**:
+
+  The identifiers ``0`` through ``count - 1``.
+
+
+**Raises**:
+
+- `ValueError` - If ``count`` is less than one or reaches the mutant range.
+
+<a id="fim.model.allele.AlleleRegistry"></a>
+
+## AlleleRegistry Objects
+
+```python
+class AlleleRegistry()
+```
+
+Allocate globally unique identities for alleles created by mutation.
+
+<a id="fim.model.allele.AlleleRegistry.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(start: int = MINTED_ID_START) -> None
+```
+
+Initialize a registry at the first mutant-only identifier.
+
+**Arguments**:
+
+- `start` - First integer that may be minted.
+
+
+**Raises**:
+
+- `ValueError` - If ``start`` overlaps the founding-allele range.
+
+<a id="fim.model.allele.AlleleRegistry.next_id"></a>
+
+#### next\_id
+
+```python
+def next_id() -> AlleleId
+```
+
+Return a new allele identity that has never been returned before.
 
 <a id="fim.model.initial"></a>
 
@@ -1473,74 +874,96 @@ Advance one generation in migration, mutation, then drift order.
 
   The next generation.
 
-<a id="fim.model.allele"></a>
+<a id="fim.model.params"></a>
 
-# fim.model.allele
+# fim.model.params
 
-Opaque allele identities and globally unique mutant-allele allocation.
+Validated, replayable simulation configuration.
 
-<a id="fim.model.allele.founding_allele_ids"></a>
+<a id="fim.model.params.SimulationParams"></a>
 
-#### founding\_allele\_ids
+## SimulationParams Objects
 
 ```python
-def founding_allele_ids(count: int) -> tuple[AlleleId, ...]
+@dataclass(frozen=True, slots=True)
+class SimulationParams()
 ```
 
-Return the locus-relative founding allele identifiers.
+Store all values needed to reproduce a finite-island-model run.
 
 **Arguments**:
 
-- `count` - Number of founding alleles at a locus.
+- `N` - Gene-copy count shared by all demes, or one count per deme.
+- `m` - Symmetric migration rate, or a row-stochastic migration matrix.
+- `mu` - Per-copy mutation probability per generation.
+- `d` - Number of demes.
+- `seed` - Required PCG64 seed.
+- `loci` - Nonempty ordered locus descriptions.
+- `initial_allele_count` - Founding allele count per locus.
+- `initial_concentration` - Symmetric Dirichlet concentration.
+- `deme_weighting` - Weighting used by statistics that support it.
+- `convergence_statistic` - Statistic watched by the convergence monitor.
+- `convergence_window` - Trailing stability-window length.
+- `convergence_tolerance` - Maximum half-window mean difference.
+- `max_generations` - Hard generation safety cap.
+- `n_replicates` - Number of independently seeded runs.
+- `initial_frequencies` - Optional explicit deme/locus frequency table.
+
+<a id="fim.model.params.SimulationParams.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Normalize sequence inputs and validate every parameter.
+
+<a id="fim.model.params.SimulationParams.population_sizes"></a>
+
+#### population\_sizes
+
+```python
+@property
+def population_sizes() -> tuple[int, ...]
+```
+
+Return one gene-copy count per deme.
+
+<a id="fim.model.params.SimulationParams.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return a JSON/YAML-serializable, lossless configuration mapping.
+
+<a id="fim.model.params.SimulationParams.from_mapping"></a>
+
+#### from\_mapping
+
+```python
+@classmethod
+def from_mapping(cls, config: Mapping[str, Any]) -> SimulationParams
+```
+
+Validate a config-file mapping and construct simulation parameters.
+
+**Arguments**:
+
+- `config` - Parsed YAML or JSON object.
 
 
 **Returns**:
 
-  The identifiers ``0`` through ``count - 1``.
+  A validated immutable parameter object.
 
 
 **Raises**:
 
-- `ValueError` - If ``count`` is less than one or reaches the mutant range.
-
-<a id="fim.model.allele.AlleleRegistry"></a>
-
-## AlleleRegistry Objects
-
-```python
-class AlleleRegistry()
-```
-
-Allocate globally unique identities for alleles created by mutation.
-
-<a id="fim.model.allele.AlleleRegistry.__init__"></a>
-
-#### \_\_init\_\_
-
-```python
-def __init__(start: int = MINTED_ID_START) -> None
-```
-
-Initialize a registry at the first mutant-only identifier.
-
-**Arguments**:
-
-- `start` - First integer that may be minted.
-
-
-**Raises**:
-
-- `ValueError` - If ``start`` overlaps the founding-allele range.
-
-<a id="fim.model.allele.AlleleRegistry.next_id"></a>
-
-#### next\_id
-
-```python
-def next_id() -> AlleleId
-```
-
-Return a new allele identity that has never been returned before.
+- `ValueError` - If a key is unknown, required, malformed, or conflicting.
 
 <a id="fim.model.state"></a>
 
@@ -1701,4 +1124,581 @@ Reconstruct one generation from long-form trajectory rows.
 **Raises**:
 
 - `ValueError` - If rows are empty, inconsistent, duplicated, or malformed.
+
+<a id="fim.persistence"></a>
+
+# fim.persistence
+
+Incremental trajectory and manifest persistence.
+
+<a id="fim.persistence.jsonl_store"></a>
+
+# fim.persistence.jsonl\_store
+
+Human-readable incremental JSON Lines trajectory storage.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore"></a>
+
+## JSONLTrajectoryStore Objects
+
+```python
+class JSONLTrajectoryStore()
+```
+
+Append and read validated trajectory rows in JSON Lines format.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(path: Path | str) -> None
+```
+
+Bind the store to one trajectory file.
+
+**Arguments**:
+
+- `path` - JSON Lines file path. Its parent is created on first write.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(run_id: str, generation: int,
+                     rows: Iterable[Mapping[str, Any]]) -> None
+```
+
+Append and flush all rows for one generation.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> Iterator[TrajectoryRow]
+```
+
+Yield complete rows matching ``run_id``.
+
+A final partial line from an interrupted append is ignored. Any malformed
+complete line is reported as corruption.
+
+<a id="fim.persistence.manifest"></a>
+
+# fim.persistence.manifest
+
+Replayable run-manifest representation and JSON I/O.
+
+<a id="fim.persistence.manifest.RunManifest"></a>
+
+## RunManifest Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class RunManifest()
+```
+
+Capture everything needed to identify and replay a run.
+
+<a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Validate required manifest identity and terminal fields.
+
+<a id="fim.persistence.manifest.RunManifest.params"></a>
+
+#### params
+
+```python
+def params() -> SimulationParams
+```
+
+Reconstruct the exact validated simulation parameters.
+
+<a id="fim.persistence.manifest.RunManifest.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return a JSON-serializable manifest mapping.
+
+<a id="fim.persistence.manifest.RunManifest.from_dict"></a>
+
+#### from\_dict
+
+```python
+@classmethod
+def from_dict(cls, value: Mapping[str, Any]) -> RunManifest
+```
+
+Validate and reconstruct a manifest mapping.
+
+<a id="fim.persistence.manifest.read_manifest"></a>
+
+#### read\_manifest
+
+```python
+def read_manifest(path: Path | str) -> RunManifest
+```
+
+Read and validate one manifest JSON file.
+
+<a id="fim.persistence.manifest.write_manifest"></a>
+
+#### write\_manifest
+
+```python
+def write_manifest(path: Path | str, manifest: RunManifest) -> None
+```
+
+Write a manifest deterministically, replacing any prior file.
+
+<a id="fim.persistence.store"></a>
+
+# fim.persistence.store
+
+Backend-independent trajectory row schema and store protocol.
+
+<a id="fim.persistence.store.TrajectoryRow"></a>
+
+## TrajectoryRow Objects
+
+```python
+class TrajectoryRow(TypedDict)
+```
+
+One nonzero allele-frequency observation.
+
+<a id="fim.persistence.store.TrajectoryStore"></a>
+
+## TrajectoryStore Objects
+
+```python
+class TrajectoryStore(Protocol)
+```
+
+Incrementally persist and iterate long-form trajectory rows.
+
+<a id="fim.persistence.store.TrajectoryStore.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(run_id: str, generation: int,
+                     rows: Iterable[Mapping[str, Any]]) -> None
+```
+
+Persist all rows for one generation.
+
+<a id="fim.persistence.store.TrajectoryStore.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> Iterator[TrajectoryRow]
+```
+
+Yield rows for one run in stored order.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore"></a>
+
+## InMemoryTrajectoryStore Objects
+
+```python
+class InMemoryTrajectoryStore()
+```
+
+Store trajectories in memory for library calls and focused tests.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__() -> None
+```
+
+Initialize an empty store.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(run_id: str, generation: int,
+                     rows: Iterable[Mapping[str, Any]]) -> None
+```
+
+Append one validated generation.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> Iterator[TrajectoryRow]
+```
+
+Yield rows matching ``run_id`` in insertion order.
+
+<a id="fim.persistence.store.normalize_row"></a>
+
+#### normalize\_row
+
+```python
+def normalize_row(row: Mapping[str, Any],
+                  *,
+                  run_id: str | None = None,
+                  generation: int | None = None) -> TrajectoryRow
+```
+
+Validate and normalize one public-schema trajectory row.
+
+**Arguments**:
+
+- `row` - Mapping containing all six schema fields.
+- `run_id` - Optional required run identity.
+- `generation` - Optional required generation.
+
+
+**Returns**:
+
+  A typed row with primitive values.
+
+<a id="fim.statistics"></a>
+
+# fim.statistics
+
+Pure diversity and differentiation statistics for finite-island models.
+
+<a id="fim.statistics.differentiation"></a>
+
+# fim.statistics.differentiation
+
+Allele-frequency diversity and differentiation statistics.
+
+All functions operate on normalized allele-frequency tables and are
+independent of model state, persistence, and the engine. Allele identifiers
+must be integer-like; a table contains one mapping per deme.
+
+<a id="fim.statistics.differentiation.DifferentiationReport"></a>
+
+## DifferentiationReport Objects
+
+```python
+class DifferentiationReport(TypedDict)
+```
+
+Scalar statistics computed from a frequency table.
+
+<a id="fim.statistics.differentiation.heterozygosity"></a>
+
+#### heterozygosity
+
+```python
+def heterozygosity(frequencies: Mapping[Any, Any]) -> float
+```
+
+Return expected heterozygosity ``H = 1 - sum(p_i ** 2)`` for one deme.
+
+<a id="fim.statistics.differentiation.identity"></a>
+
+#### identity
+
+```python
+def identity(frequencies: Mapping[Any, Any]) -> float
+```
+
+Return Nei gene identity ``J = sum(p_i ** 2)`` for one deme.
+
+<a id="fim.statistics.differentiation.hill_number"></a>
+
+#### hill\_number
+
+```python
+def hill_number(frequencies: Mapping[Any, Any], order: float | int) -> float
+```
+
+Return the Hill number of the requested non-negative order for one deme.
+
+<a id="fim.statistics.differentiation.h_s"></a>
+
+#### h\_s
+
+```python
+def h_s(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+```
+
+Return weighted mean within-deme expected heterozygosity ``H_S``.
+
+<a id="fim.statistics.differentiation.h_t"></a>
+
+#### h\_t
+
+```python
+def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+```
+
+Return expected heterozygosity ``H_T`` of the weighted pooled table.
+
+<a id="fim.statistics.differentiation.h_st"></a>
+
+#### h\_st
+
+```python
+def h_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+```
+
+Return correctly partitioned between-deme heterozygosity ``H_ST``.
+
+<a id="fim.statistics.differentiation.total_hill_number"></a>
+
+#### total\_hill\_number
+
+```python
+def total_hill_number(table: FrequencyTable,
+                      order: float | int,
+                      deme_weights: DemeWeights = None) -> float
+```
+
+Return pooled Hill diversity ``^q D_T`` with optional deme weights.
+
+<a id="fim.statistics.differentiation.within_hill_number"></a>
+
+#### within\_hill\_number
+
+```python
+def within_hill_number(table: FrequencyTable,
+                       order: float | int,
+                       deme_weights: DemeWeights = None) -> float
+```
+
+Return alpha Hill diversity ``^q D_S`` with optional deme weights.
+
+<a id="fim.statistics.differentiation.g_st"></a>
+
+#### g\_st
+
+```python
+def g_st(table: FrequencyTable,
+         deme_weights: DemeWeights = None) -> float | None
+```
+
+Return ``G_ST`` or ``None`` when total heterozygosity is zero.
+
+<a id="fim.statistics.differentiation.jost_d"></a>
+
+#### jost\_d
+
+```python
+def jost_d(table: FrequencyTable) -> float
+```
+
+Return Jost's ``D`` using the required equal weighting of demes.
+
+<a id="fim.statistics.differentiation.e_st"></a>
+
+#### e\_st
+
+```python
+def e_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+```
+
+Return entropy differentiation ``E_ST`` with optional size weights.
+
+<a id="fim.statistics.differentiation.k_st"></a>
+
+#### k\_st
+
+```python
+def k_st(table: FrequencyTable) -> float
+```
+
+Return allele-number differentiation ``K_ST`` with equal deme weights.
+
+<a id="fim.statistics.differentiation.differentiation_q"></a>
+
+#### differentiation\_q
+
+```python
+def differentiation_q(table: FrequencyTable,
+                      order: float | int,
+                      deme_weights: DemeWeights = None) -> float
+```
+
+Return the normalized general differentiation family at order ``q``.
+
+Equal weighting is required for every order except ``q = 1``. At
+``q = 1`` optional weights represent relative deme sizes and produce
+``E_ST``. The endpoints ``q = 0`` and ``q = 2`` equal ``K_ST`` and
+Jost's ``D`` respectively.
+
+<a id="fim.statistics.differentiation.equilibrium_d"></a>
+
+#### equilibrium\_d
+
+```python
+def equilibrium_d(m: float, mu: float, d: int) -> float
+```
+
+Return the finite-island equilibrium approximation for Jost's D.
+
+**Arguments**:
+
+- `m` - Symmetric per-generation migration rate.
+- `mu` - Infinite-alleles mutation rate.
+- `d` - Number of equal demes.
+
+
+**Returns**:
+
+  ``1 / (1 + m / (mu * (d - 1)))``.
+
+<a id="fim.statistics.differentiation.equilibrium_g_st"></a>
+
+#### equilibrium\_g\_st
+
+```python
+def equilibrium_g_st(population_size: int, m: float, mu: float,
+                     d: int) -> float
+```
+
+Return the equilibrium G_ST approximation for gene-copy ``N``.
+
+The source formula uses ``4 * N_individuals`` for diploids. This
+application defines ``N`` as the number of gene copies directly, so both
+terms use ``2 * N``.
+
+**Arguments**:
+
+- `population_size` - Gene-copy count in each equal deme.
+- `m` - Symmetric per-generation migration rate.
+- `mu` - Infinite-alleles mutation rate.
+- `d` - Number of equal demes.
+
+
+**Returns**:
+
+  The finite-island equilibrium approximation.
+
+<a id="fim.statistics.differentiation.statistics_report"></a>
+
+#### statistics\_report
+
+```python
+def statistics_report(
+        table: FrequencyTable,
+        deme_weights: DemeWeights = None) -> DifferentiationReport
+```
+
+Return the scalar statistics block consumed by an engine report.
+
+``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, and ``K_ST`` use equal
+deme weighting as specified by their definitions. ``deme_weights`` is
+applied only to ``E_ST``; pass relative deme sizes to request its native
+size-weighted form.
+
+<a id="fim.viz"></a>
+
+# fim.viz
+
+Headless visualizations for simulation results and diagnostics.
+
+<a id="fim.viz.diagnostics"></a>
+
+# fim.viz.diagnostics
+
+Convergence and per-deme frequency diagnostic plots.
+
+<a id="fim.viz.diagnostics.plot_convergence_trace"></a>
+
+#### plot\_convergence\_trace
+
+```python
+def plot_convergence_trace(generations: Sequence[int],
+                           values: Sequence[float],
+                           statistic: str,
+                           path: Path | str | None = None) -> Figure
+```
+
+Plot one convergence-statistic value per recorded generation.
+
+**Arguments**:
+
+- `generations` - Ordered generation numbers.
+- `values` - Statistic values aligned with ``generations``.
+- `statistic` - Display name for the watched statistic.
+- `path` - Optional PNG output path.
+
+
+**Returns**:
+
+  The created figure.
+
+<a id="fim.viz.diagnostics.plot_frequency_bars"></a>
+
+#### plot\_frequency\_bars
+
+```python
+def plot_frequency_bars(state: ModelState,
+                        path: Path | str | None = None,
+                        *,
+                        locus_index: int = 0) -> Figure
+```
+
+Plot a STRUCTURE-style stacked frequency bar for every deme.
+
+**Arguments**:
+
+- `state` - State containing the requested locus.
+- `path` - Optional PNG output path.
+- `locus_index` - Zero-based locus index to plot.
+
+
+**Returns**:
+
+  The created figure.
+
+<a id="fim.viz.scatter"></a>
+
+# fim.viz.scatter
+
+Canonical deme-coordinate allele-frequency scatter plots.
+
+<a id="fim.viz.scatter.plot_frequency_scatter"></a>
+
+#### plot\_frequency\_scatter
+
+```python
+def plot_frequency_scatter(
+        state: ModelState,
+        params: SimulationParams,
+        path: Path | str | None = None,
+        *,
+        pairwise_max_demes: int = PAIRWISE_MAX_DEMES) -> Figure
+```
+
+Plot one point per locus/allele in deme-frequency coordinate space.
+
+**Arguments**:
+
+- `state` - State to visualize.
+- `params` - Parameters used for title metadata.
+- `path` - Optional PNG output path.
+- `pairwise_max_demes` - Largest ``d`` rendered as a pairwise matrix.
+
+
+**Returns**:
+
+  The created Matplotlib figure.
 

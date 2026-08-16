@@ -9,6 +9,18 @@ PATH="${root}/bin:${PATH}"
 export PATH
 output=${1:-"${root}/src/fim/API.md"}
 temporary=$(mktemp "${TMPDIR:-/tmp}/fim-api.XXXXXX")
+module_args=()
+
+# Build an explicit, stable module list instead of relying on recursive package
+# discovery, which differs between editable installs on macOS and Linux.
+while IFS= read -r path; do
+    module=${path#"${root}/src/"}
+    module=${module%.py}
+    module=${module//\//.}
+    module=${module%.__init__}
+    module_args[${#module_args[@]}]=-m
+    module_args[${#module_args[@]}]="${module}"
+done < <(find "${root}/src/fim" -type f -name '*.py' -print | LC_ALL=C sort)
 
 # Remove the temporary file on every exit.
 # Args:
@@ -26,7 +38,7 @@ trap cleanup EXIT
     printf 'Return to the [source-tree orientation](../README.md) or the '
     printf '[developer guide](../../doc/developer.md).\n\n'
     cd -- "${root}"
-    pydoc-markdown -q -I src -p fim --render-toc \
+    pydoc-markdown -q -I src "${module_args[@]}" --render-toc \
         | sed 's/[[:blank:]]*$//'
 } >"${temporary}"
 
