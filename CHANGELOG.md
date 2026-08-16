@@ -6,18 +6,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed
-
-- Moved default starter configurations and run artifacts from the user
-  `Documents` directory to the portable, space-free `project-root/results/`
-  directory.
-- Added repository-local Python, Ruff, mypy, pytest, API-documentation, and
-  PyInstaller wrappers so `./build --ci` works without activating a virtual
-  environment.
-- Made the Git-hook installer portable to native macOS utilities.
-- Constrained Pyparsing to the warning-free line supported by Matplotlib 3.9.
-
-## [1.0.0] - 2026-08-14
+## [1.0.0] - 2026-08-16
 
 ### Added
 
@@ -29,6 +18,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   analysis, version reporting, and opt-in update checks.
 - Python library API, deterministic tests, local quality gates, release
   packaging, and user and maintainer documentation.
+
+### Fixed
+
+- Moved default starter configurations and run artifacts from the user
+  `Documents` directory to the portable, space-free `project-root/results/`
+  directory.
+- Added repository-local Python, Ruff, mypy, pytest, API-documentation, and
+  PyInstaller wrappers so `./build --ci` works without activating a virtual
+  environment.
+- Made the Git-hook installer portable to native macOS utilities.
+- Constrained Pyparsing to the warning-free line supported by Matplotlib 3.9.
 
 [Unreleased]: https://github.com/selby-botany/jost-finite-island-model/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/selby-botany/jost-finite-island-model/releases/tag/v1.0.0
