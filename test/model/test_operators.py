@@ -417,3 +417,42 @@ def test_drift_variance_matches_binomial_theory(
         expected_variance,
         abs=5.0 * variance_standard_error,
     )
+
+
+@pytest.mark.statistical
+def test_drift_variance_matches_binomial_theory_per_deme_when_n_is_unequal(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Each deme resamples at its own N, not a shared or averaged value."""
+    sizes = (50, 400)
+    probability = 0.3
+    replicates = 10_000
+    state = ModelState(
+        loci=(LocusSpec(1, 100),),
+        frequencies=(
+            ({AlleleId(0): probability, AlleleId(1): 1.0 - probability},),
+            ({AlleleId(0): probability, AlleleId(1): 1.0 - probability},),
+        ),
+    )
+    generator = rng(20260814)
+    observed = np.asarray(
+        [
+            [
+                drift(state, sizes, generator)
+                .frequency_map(deme, 0)
+                .get(
+                    AlleleId(0),
+                    0.0,
+                )
+                for deme in range(len(sizes))
+            ]
+            for _ in range(replicates)
+        ]
+    )
+    for deme, size in enumerate(sizes):
+        expected_variance = probability * (1.0 - probability) / size
+        variance_standard_error = expected_variance * np.sqrt(2.0 / (replicates - 1))
+        assert np.var(observed[:, deme], ddof=1) == pytest.approx(
+            expected_variance,
+            abs=5.0 * variance_standard_error,
+        )

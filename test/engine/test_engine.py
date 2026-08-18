@@ -220,6 +220,86 @@ def test_mutation_ids_follow_high_explicit_initial_id() -> None:
     assert final_ids == {MINTED_ID_START + 1, MINTED_ID_START + 2}
 
 
+def test_unequal_deme_sizes_run_is_reproducible_and_bounds_support() -> None:
+    """A full run with per-deme N stays reproducible and honors each N_i."""
+    sizes = (6, 30)
+    params = SimulationParams(
+        N=sizes,
+        m=0.2,
+        mu=0.05,
+        d=2,
+        seed=20260817,
+        loci=(LocusSpec(1, 100),),
+        convergence_window=4,
+        convergence_tolerance=1.0,
+        max_generations=8,
+    )
+
+    first = _run(params)
+    second = _run(params)
+
+    first_rows = list(first.store.read(first.run_id))
+    assert first_rows == list(second.store.read(second.run_id))
+    assert first.report == second.report
+
+    support: dict[tuple[int, int], set[int]] = {}
+    for row in first_rows:
+        key = (int(row["generation"]), int(row["deme"]))
+        support.setdefault(key, set()).add(int(row["allele_id"]))
+    for (_generation, deme), alleles in support.items():
+        assert len(alleles) <= sizes[deme - 1]
+
+
+def test_report_size_weighting_reflects_actual_per_deme_sizes() -> None:
+    """Engine-level reports thread each deme's own N through, not an equal split."""
+    loci = (LocusSpec(1, 100),)
+    state = ModelState(
+        loci=loci,
+        frequencies=(
+            ({AlleleId(0): 1.0},),
+            ({AlleleId(0): 0.2, AlleleId(1): 0.8},),
+        ),
+    )
+    sized_params = SimulationParams(
+        N=(10, 10_000),
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=loci,
+        deme_weighting="size",
+    )
+    equal_params = SimulationParams(
+        N=(10, 10_000),
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=loci,
+        deme_weighting="equal",
+    )
+
+    sized_report = report_for_state(
+        state,
+        sized_params,
+        run_id="run-a",
+        converged=False,
+        reason="test",
+    )
+    equal_report = report_for_state(
+        state,
+        equal_params,
+        run_id="run-a",
+        converged=False,
+        reason="test",
+    )
+
+    # The 10,000-copy deme dominates the size-weighted pool, pulling E_ST
+    # toward that deme's own diversity rather than the 50/50 equal split.
+    assert sized_report["E_ST"] == pytest.approx(0.20326126045322912)
+    assert equal_report["E_ST"] == pytest.approx(0.6099865470109876)
+
+
 def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None:
     """Independent per-locus reports are averaged under equal deme weighting."""
     loci = (LocusSpec(1, 100), LocusSpec(2, 100))

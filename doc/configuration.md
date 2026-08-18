@@ -45,8 +45,19 @@ n_replicates: 1
 
 `N` is deliberately ploidy-neutral. Pass `2 * individuals` for a diploid
 autosomal locus and pass census individuals unchanged for a haploid locus.
-Per-deme lists are accepted for future unequal-size studies; version 1.0.0
-uses them for drift and migrant-pool weighting.
+Per-deme lists model unequal island sizes and are fully supported in
+version 1.0.0: every stage of the update pipeline (`migrate`, `mutate`,
+`drift`), the founding-allele-count bound (checked against the smallest
+`N_i`), and `deme_weighting: size` all use each deme's own configured
+gene-copy count.
+
+```yaml
+N: [120, 450, 60]   # three demes, unequal gene-copy counts
+d: 3
+```
+
+A scalar `N` and a list of `d` equal values are numerically identical;
+prefer the scalar form when every deme is the same size.
 
 ### `d`
 

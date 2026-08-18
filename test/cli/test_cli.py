@@ -64,6 +64,20 @@ def test_run_writes_exactly_four_documented_artifacts(tmp_path: Path) -> None:
     }
 
 
+def test_run_accepts_per_deme_population_sizes(tmp_path: Path) -> None:
+    """A config with a per-deme N list runs end to end through the CLI."""
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config, N=[12, 30])
+
+    status = cli.main(["run", str(config), "--output", str(output), "--quiet"])
+
+    assert status == 0
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["parameters"]["N"] == [12, 30]
+    assert (output / "scatter.png").exists()
+
+
 def test_two_runs_have_identical_trajectory_and_report(tmp_path: Path) -> None:
     """Wall-clock output naming never enters persisted scientific values."""
     config = tmp_path / "run.yaml"

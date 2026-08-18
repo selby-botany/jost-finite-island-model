@@ -6,6 +6,24 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Dedicated test coverage for per-deme island sizes (`N` as a length-`d`
+  array): a per-deme drift-variance statistical test, an end-to-end engine
+  run that bounds every generation's per-deme support by its own `N_i`,
+  an engine-level check that `deme_weighting: size` uses actual per-deme
+  sizes rather than an equal split, a params test bounding
+  `initial_allele_count` by the smallest configured `N_i`, and a CLI test
+  running a config with `N` as a list.
+
+### Changed
+
+- Updated the simulator design document (§9, §12) to record that unequal
+  deme sizes shipped in the very first `SimulationParams` implementation
+  rather than remaining deferred, and to point at the new tests and
+  `doc/configuration.md` as the supporting evidence and user-facing
+  contract.
+
 ## [1.0.0] - 2026-08-16
 
 ### Added
@@ -31,7 +49,6 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Constrained Pyparsing to the warning-free line supported by Matplotlib 3.9.
 - Made API generation enumerate every source module explicitly so Linux and
   macOS editable installs produce identical documentation.
-
 
 [Unreleased]: https://github.com/selby-botany/jost-finite-island-model/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/selby-botany/jost-finite-island-model/releases/tag/v1.0.0

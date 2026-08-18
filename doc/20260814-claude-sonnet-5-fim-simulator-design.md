@@ -824,7 +824,7 @@ than requiring a redesign:
 
 | "What if…" | Landing spot | Why it's small |
 |---|---|---|
-| …island sizes differed (`N_i`)? | `N` accepts a length-`d` array | `drift()` already receives `N` as a parameter; per-deme `N_i` gene copies is a broadcast, not new logic |
+| …island sizes differed (`N_i`)? | `N` accepts a length-`d` array **(shipped, v1.0.0 — see note below)** | `drift()` already receives `N` as a parameter; per-deme `N_i` gene copies is a broadcast, not new logic |
 | …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
 | …migration were spatial (stepping-stone)? | a sparse/neighbor-restricted `m` matrix, or a `MigrantPoolStrategy` interface | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
 | …locus length varied? | `LocusSpec.length` per locus | already a first-class field (§3.2), unused only because the initial pass sets every locus equal |
@@ -834,6 +834,26 @@ than requiring a redesign:
 | …a different statistic should drive convergence? | `ConvergenceCriterion` is a pluggable protocol | the monitor never hardcodes which statistic it watches |
 | …several statistics needed to agree before stopping? | `ConvergenceCriterion`'s ANY/ALL combinator over `𝖯["convergence_statistic"]` as a list | the single-statistic v1 path (§5) is that combinator's one-element special case, not a different code path |
 | …a study needed run outputs at a scale JSONL doesn't suit well? | a second `TrajectoryStore` implementation (e.g. Parquet-backed) | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
+
+**Note on the first row — per-deme island sizes shipped in v1.0.0, not
+deferred.** `SimulationParams.N` accepted a length-`d` array from this
+project's very first `params.py` commit, ahead of a dedicated
+implementation pass for this "what if": every stage that reads `N` —
+`migrate()`'s size-weighted migrant pool, `mutate()`'s per-copy event
+count, `drift()`'s multinomial resample, `ModelState.validate_support()`,
+and the statistics module's `deme_weighting: size` path — already threads
+a per-deme array through instead of a single scalar (§4.3 already
+documents `deme_weighting` defaulting to `"size"` for exactly this
+reason). What this pass adds is verification and documentation that the
+mechanism landed here anticipated: dedicated tests exercising a full run
+with unequal `N_i` end to end (per-deme drift variance against binomial
+theory at each deme's own `N_i`, a reproducible engine run bounding
+per-generation support by each deme's configured size, and an
+engine-level check that `deme_weighting: size` actually uses the
+configured sizes rather than an equal split), plus a CLI test running a
+config with `N` as a list. See [`doc/configuration.md`](configuration.md#n)
+for the user-facing contract. Accordingly, §12 below no longer lists
+unequal deme sizes as out of scope.
 
 ## 10. Validation and test strategy
 
@@ -981,9 +1001,17 @@ edited away:
 Named explicitly so a first implementation is not held up chasing them:
 selection; non-infinite-alleles mutation models (stepwise mutation for
 microsatellites); stepping-stone or other non-all-to-all migration
-topologies; per-locus allele length; unequal deme sizes; a general
-migration matrix. Every one of these has a specific landing spot already
-identified (§9) — they are deferred, not precluded.
+topologies; per-locus allele length; a general migration matrix. Every one
+of these has a specific landing spot already identified (§9) — they are
+deferred, not precluded.
+
+**Unequal deme sizes is removed from this list, not merely deferred** — it
+shipped in v1.0.0, ahead of the rest of this list, because `N` was built
+as a scalar-or-array value from the first `SimulationParams` commit rather
+than added later. See §9's note on its first table row for what shipped
+and what this pass added on top of it (tests and this documentation
+update); the original first-draft wording naming it out of scope is
+recorded here, struck from the list, rather than silently dropped.
 
 ## 13. Illustrated walkthrough (mocked)
 

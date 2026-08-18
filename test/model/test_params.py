@@ -78,6 +78,17 @@ def test_array_n_and_matrix_m_are_shape_validated() -> None:
     assert params.population_sizes == (10, 20)
 
 
+def test_initial_allele_count_is_bounded_by_the_smallest_deme_n() -> None:
+    """Unequal per-deme N constrains founding alleles by the smallest deme."""
+    config = {**_valid_config(), "N": [5, 50], "initial_allele_count": 6}
+
+    with pytest.raises(ValueError, match="cannot exceed the smallest deme N"):
+        SimulationParams.from_mapping(config)
+
+    accepted = SimulationParams.from_mapping({**config, "initial_allele_count": 5})
+    assert accepted.population_sizes == (5, 50)
+
+
 def test_mapping_round_trip_is_lossless() -> None:
     """Manifest serialization reconstructs equal parameters."""
     original = SimulationParams.from_mapping(
