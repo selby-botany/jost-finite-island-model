@@ -121,6 +121,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added `doc/configuration.md`'s sparse-map and topology-sugar `m`
   subsection, with worked examples of both compact forms and the
   validation rules each enforces.
+- Corrected §9's several-convergence-statistics note, mislabeled "Note on
+  the seventh row" when it documents the table's ninth row, and reordered
+  all five "shipped" notes to match the table's own row order (they had
+  drifted to 1st, 2nd, 4th, 9th, 3rd as each was added across separate
+  passes).
+- Corrected two rows of §9's extensibility table that had drifted from
+  what the code actually does: `n_replicates` batches sequentially
+  (`engine.py`'s own run loop), not as a vectorized NumPy array dimension
+  as the row previously claimed; and "a different statistic should drive
+  convergence" is retitled to be about swapping the convergence *rule*
+  (`ConvergenceCriterion`, still unexposed via config — only
+  `TrailingWindowCriterion` exists and `engine.py` hardcodes it) rather
+  than about choosing which statistic to watch, which has always been
+  free via `convergence_statistic` and predates every row in this table.
 
 ## [1.0.0] - 2026-08-16
 

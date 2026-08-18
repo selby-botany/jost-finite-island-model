@@ -846,8 +846,8 @@ than requiring a redesign:
 | …locus length varied? | `LocusSpec.length` per locus **(shipped, v1.0.0 — see note below)** | already a first-class field (§3.2), unused only because the initial pass sets every locus equal |
 | …selection were added? | a new `select()` operator inserted before `drift()` | the pipeline (§3.4) is already a composition of independent stages; adding one is additive |
 | …the mutation model weren't infinite-alleles (e.g., stepwise mutation for microsatellites)? | swap the strategy behind `mutate()` | `AlleleRegistry` is already the sole minting point for new IDs; a different model changes what gets minted, not who mints it |
-| …many replicate runs were needed for a confidence interval? | `engine.py` batches `n_replicates` as a vectorized array dimension | the attic research doc's own recommendation (§6.4 there): loci and replicates are i.i.d. under fixed parameters, an embarrassingly parallel array problem |
-| …a different statistic should drive convergence? | `ConvergenceCriterion` is a pluggable protocol | the monitor never hardcodes which statistic it watches |
+| …many replicate runs were needed for a confidence interval? | `engine.py` already batches `n_replicates` as independently seeded, sequential scalar runs (§5) | fully functional and tested today; the attic research doc's NumPy array-vectorization recommendation (§6.4 there) remains a performance follow-up, not yet realized — loci and replicates being i.i.d. under fixed parameters is what makes that optimization valid whenever it's worth doing, not a description of what `engine.py` does now |
+| …a different convergence *rule* were needed, not just a different statistic to watch (already free via `convergence_statistic`, §4.3, unrelated to this row)? | `ConvergenceCriterion` is a pluggable protocol | `ConvergenceMonitor` already accepts any object implementing it; only `TrailingWindowCriterion` exists today, and `engine.py` constructs it directly, so nothing beyond that one implementation is actually selectable from config yet |
 | …several statistics needed to agree before stopping? | `𝖯["convergence_statistic"]` as a list plus `𝖯["convergence_combinator"]` (`"all"`/`"any"`) **(shipped — see note below)** | the single-statistic v1 path (§5) is that combinator's one-element special case, not a different code path |
 | …a study needed run outputs at a scale JSONL doesn't suit well? | a second `TrajectoryStore` implementation (e.g. Parquet-backed) | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
 
@@ -896,6 +896,40 @@ asymmetric matrix, and a CLI test running a config with `m` as a matrix.
 Accordingly, §12 below no longer lists a general migration matrix as out
 of scope either.
 
+**Note on the third row — 1D stepping-stone (ring and linear) shipped;
+2D lattice and the `MigrantPoolStrategy` interface did not.** Unlike the
+first two rows, `migrate()` needed no change here — it already accepts
+any row-stochastic `d × d` matrix, sparse ones included. What was
+missing, and what makes a hand-built sparse matrix impractical at real
+scale, was a way to *author* one without writing `d²` mostly-zero
+entries by hand. A new `fim.model.topology` module closes that gap two
+ways: `dense_matrix_from_neighbors` turns a one-based sparse map
+(`{deme: {neighbor: weight, ...}, ...}`, self-retention implied as the
+complement of each deme's listed weights — the same convention the
+scalar and full-matrix forms of `m` already use) into a fully validated
+dense matrix, and `stepping_stone_neighbors` generates that same sparse
+map for the two classic 1D topologies (`ring`, wrapping; `linear`,
+bounded). Both are exposed as compact `m` config forms — a hand-written
+sparse map directly, or `{topology, rate}` sugar — expanding to the
+ordinary dense matrix at config-load time, exactly like the compact
+`n_loci`/`locus_lengths` locus form already does; neither exists as a
+`SimulationParams` constructor argument, only through `from_mapping`.
+Test coverage: exact hand-derived matrices for both topologies; every
+row-stochastic for a range of deme counts; every validation rule
+(non-positive `d`, a ring below 3 demes, an out-of-range or self-
+referencing neighbor, weights exceeding 1); and, load-bearing, an
+operator-level test proving migration through a ring/linear matrix is
+*actually* local — an allele private to one deme reaches only its direct
+neighbors after a single generation and is completely absent everywhere
+else, with the ring's wraparound neighbor and the linear chain's lack of
+one as the one distinguishing data point between the two. What remains
+unbuilt, and is still exactly what the "Landing spot" column names: a 2D
+lattice topology, and a `MigrantPoolStrategy` interface for
+neighbor-selection logic that isn't reducible to a precomputed matrix
+(e.g., migration that itself changes over the course of a run). See
+[`doc/configuration.md`](configuration.md#m) for the user-facing
+contract.
+
 **Note on the fourth row — per-locus length has always been settable, but
 was never actually exercised as varying.** `LocusSpec(locus_id, length)`
 never enforced equal lengths across a run's `loci` tuple, and
@@ -921,7 +955,7 @@ config with unequal per-locus lengths. See
 contract. Accordingly, §12 below no longer lists per-locus allele length
 as out of scope.
 
-**Note on the seventh row — several convergence statistics, unlike the
+**Note on the ninth row — several convergence statistics, unlike the
 rows above, needed real implementation, not just tests and documentation
 for a mechanism that was already wired.** §5's `ConvergenceCriterion`
 protocol and `AnyCriterion`/`AllCriterion` combinators existed from early
@@ -959,40 +993,6 @@ statistics and a combinator; and manifest round-trip and malformed-input
 tests for the widened `statistic` field. See
 [`doc/configuration.md`](configuration.md#convergence_statistic) for the
 user-facing contract.
-
-**Note on the third row — 1D stepping-stone (ring and linear) shipped;
-2D lattice and the `MigrantPoolStrategy` interface did not.** Unlike the
-first two rows, `migrate()` needed no change here — it already accepts
-any row-stochastic `d × d` matrix, sparse ones included. What was
-missing, and what makes a hand-built sparse matrix impractical at real
-scale, was a way to *author* one without writing `d²` mostly-zero
-entries by hand. A new `fim.model.topology` module closes that gap two
-ways: `dense_matrix_from_neighbors` turns a one-based sparse map
-(`{deme: {neighbor: weight, ...}, ...}`, self-retention implied as the
-complement of each deme's listed weights — the same convention the
-scalar and full-matrix forms of `m` already use) into a fully validated
-dense matrix, and `stepping_stone_neighbors` generates that same sparse
-map for the two classic 1D topologies (`ring`, wrapping; `linear`,
-bounded). Both are exposed as compact `m` config forms — a hand-written
-sparse map directly, or `{topology, rate}` sugar — expanding to the
-ordinary dense matrix at config-load time, exactly like the compact
-`n_loci`/`locus_lengths` locus form already does; neither exists as a
-`SimulationParams` constructor argument, only through `from_mapping`.
-Test coverage: exact hand-derived matrices for both topologies; every
-row-stochastic for a range of deme counts; every validation rule
-(non-positive `d`, a ring below 3 demes, an out-of-range or self-
-referencing neighbor, weights exceeding 1); and, load-bearing, an
-operator-level test proving migration through a ring/linear matrix is
-*actually* local — an allele private to one deme reaches only its direct
-neighbors after a single generation and is completely absent everywhere
-else, with the ring's wraparound neighbor and the linear chain's lack of
-one as the one distinguishing data point between the two. What remains
-unbuilt, and is still exactly what the "Landing spot" column names: a 2D
-lattice topology, and a `MigrantPoolStrategy` interface for
-neighbor-selection logic that isn't reducible to a precomputed matrix
-(e.g., migration that itself changes over the course of a run). See
-[`doc/configuration.md`](configuration.md#m) for the user-facing
-contract.
 
 ## 10. Validation and test strategy
 
