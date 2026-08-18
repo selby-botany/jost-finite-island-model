@@ -825,7 +825,7 @@ than requiring a redesign:
 | "What if…" | Landing spot | Why it's small |
 |---|---|---|
 | …island sizes differed (`N_i`)? | `N` accepts a length-`d` array **(shipped, v1.0.0 — see note below)** | `drift()` already receives `N` as a parameter; per-deme `N_i` gene copies is a broadcast, not new logic |
-| …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
+| …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix **(shipped, v1.0.0 — see note below)** | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
 | …migration were spatial (stepping-stone)? | a sparse/neighbor-restricted `m` matrix, or a `MigrantPoolStrategy` interface | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
 | …locus length varied? | `LocusSpec.length` per locus | already a first-class field (§3.2), unused only because the initial pass sets every locus equal |
 | …selection were added? | a new `select()` operator inserted before `drift()` | the pipeline (§3.4) is already a composition of independent stages; adding one is additive |
@@ -854,6 +854,31 @@ configured sizes rather than an equal split), plus a CLI test running a
 config with `N` as a list. See [`doc/configuration.md`](configuration.md#n)
 for the user-facing contract. Accordingly, §12 below no longer lists
 unequal deme sizes as out of scope.
+
+**Note on the second row — a full migration matrix also shipped in
+v1.0.0, on the same schedule as per-deme `N`.** `SimulationParams.m`
+accepted a `d × d` row-stochastic matrix from the same first commit as
+array `N` (`_normalize_migration` validates shape, per-entry range, and
+that every row sums to 1); `migrate()`'s `_migrate_matrix` branch has
+applied it as a per-destination weighted blend since `operators.py`
+existed. Two behaviors worth being explicit about, because both are easy
+to assume incorrectly by analogy with the scalar path: a matrix's rows
+are the *authoritative* weights and are never rescaled by `N` (the scalar
+path derives its migrant pool from `population_size`; the matrix path
+ignores `population_size` entirely, by design — see
+[`doc/configuration.md`](configuration.md#m)), and the scalar rate is
+exactly that matrix's symmetric, equal-size special case (`1 - m` on the
+diagonal, `m / (d - 1)` off it), not merely an approximation of it. What
+this pass adds is the coverage that had not existed for either behavior:
+an operator-level test with a genuinely asymmetric matrix (distinct,
+directional per-row weights, not a symmetric matrix that merely happens
+to be square), a test proving the matrix path ignores `population_size`
+even when deme sizes differ by three orders of magnitude, a test proving
+the scalar-equals-symmetric-matrix identity exactly rather than
+approximately, an end-to-end reproducible engine run over a three-deme
+asymmetric matrix, and a CLI test running a config with `m` as a matrix.
+Accordingly, §12 below no longer lists a general migration matrix as out
+of scope either.
 
 ## 10. Validation and test strategy
 
@@ -1001,17 +1026,20 @@ edited away:
 Named explicitly so a first implementation is not held up chasing them:
 selection; non-infinite-alleles mutation models (stepwise mutation for
 microsatellites); stepping-stone or other non-all-to-all migration
-topologies; per-locus allele length; a general migration matrix. Every one
+topologies (a dedicated `MigrantPoolStrategy`/neighbor-matrix-construction
+interface — a raw, hand-built sparse matrix already runs today via the
+general matrix support noted below); per-locus allele length. Every one
 of these has a specific landing spot already identified (§9) — they are
 deferred, not precluded.
 
-**Unequal deme sizes is removed from this list, not merely deferred** — it
-shipped in v1.0.0, ahead of the rest of this list, because `N` was built
-as a scalar-or-array value from the first `SimulationParams` commit rather
-than added later. See §9's note on its first table row for what shipped
-and what this pass added on top of it (tests and this documentation
-update); the original first-draft wording naming it out of scope is
-recorded here, struck from the list, rather than silently dropped.
+**Unequal deme sizes and a general migration matrix are removed from this
+list, not merely deferred** — both shipped in v1.0.0, ahead of the rest of
+this list, because `N` and `m` were each built as scalar-or-richer values
+from the first `SimulationParams` commit rather than added later. See
+§9's notes on the table's first two rows for what shipped and what this
+pass added on top of each (tests and this documentation update); the
+original first-draft wording naming both out of scope is recorded here,
+struck from the list, rather than silently dropped.
 
 ## 13. Illustrated walkthrough (mocked)
 

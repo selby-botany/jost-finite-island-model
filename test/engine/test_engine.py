@@ -300,6 +300,35 @@ def test_report_size_weighting_reflects_actual_per_deme_sizes() -> None:
     assert equal_report["E_ST"] == pytest.approx(0.6099865470109876)
 
 
+def test_asymmetric_migration_matrix_run_is_reproducible() -> None:
+    """A full run with a genuinely asymmetric d x d matrix stays reproducible."""
+    matrix = (
+        (0.9, 0.05, 0.05),
+        (0.1, 0.8, 0.1),
+        (0.0, 0.2, 0.8),
+    )
+    params = SimulationParams(
+        N=20,
+        m=matrix,
+        mu=0.05,
+        d=3,
+        seed=20260817,
+        loci=(LocusSpec(1, 100),),
+        convergence_window=4,
+        convergence_tolerance=1.0,
+        max_generations=8,
+    )
+
+    first = _run(params)
+    second = _run(params)
+
+    assert list(first.store.read(first.run_id)) == list(
+        second.store.read(second.run_id)
+    )
+    assert first.report == second.report
+    assert first.final_state.deme_count == 3
+
+
 def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None:
     """Independent per-locus reports are averaged under equal deme weighting."""
     loci = (LocusSpec(1, 100), LocusSpec(2, 100))

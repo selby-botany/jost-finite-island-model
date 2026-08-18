@@ -75,6 +75,36 @@ A scalar uses the symmetric finite island model: each deme retains `1 - m` of
 its frequency vector and receives `m` from the size-weighted average of all
 other demes. Matrix rows must each sum to 1.
 
+A full matrix models asymmetric migration — row `k` gives destination deme
+`k`'s exact source weights, and row `k`'s weights need not equal row `j`'s.
+This is fully supported in version 1.0.0: every row is independently
+configurable, including rows that are not symmetric with any other row.
+
+```yaml
+m:
+  - [0.90, 0.05, 0.05]   # deme 1 retains most of its own frequency
+  - [0.10, 0.80, 0.10]   # deme 2 blends evenly with both neighbors
+  - [0.00, 0.20, 0.80]   # deme 3 exchanges only with deme 2
+d: 3
+```
+
+Two things worth being precise about, because both differ from the scalar
+case:
+
+- **A matrix's rows are the authoritative weights — they are not scaled by
+  `N`.** The scalar path automatically derives a size-weighted migrant pool
+  from each deme's own gene-copy count; a matrix already states each
+  destination's exact source mix, so `N` (scalar or per-deme) has nothing
+  left to contribute to migration and does not change the result. If unequal
+  deme sizes should also drive migration weighting, build that weighting into
+  the matrix itself.
+- **The scalar form is the matrix's symmetric special case, not a different
+  mechanism.** For equal-size demes, a scalar rate `m` is numerically
+  identical to the full matrix with `1 - m` on the diagonal and `m / (d - 1)`
+  on every off-diagonal entry — prefer the scalar form when migration truly
+  is symmetric and every deme is the same size; reach for a matrix only when
+  it is not.
+
 ### `mu`
 
 - **Type:** number in `[0, 1]`

@@ -338,6 +338,81 @@ def test_matrix_migration_applies_source_weights() -> None:
     assert migrated.frequency_map(1, 0)[AlleleId(0)] == pytest.approx(0.35)
 
 
+def _three_deme_state() -> ModelState:
+    """Return a three-deme biallelic state with distinct frequencies."""
+    return ModelState(
+        loci=(LocusSpec(1, 100),),
+        frequencies=(
+            ({AlleleId(0): 0.8, AlleleId(1): 0.2},),
+            ({AlleleId(0): 0.2, AlleleId(1): 0.8},),
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+        ),
+    )
+
+
+def test_asymmetric_migration_matrix_applies_per_row_directional_weights() -> None:
+    """Rows need not agree: each deme's inflow mix is independently configurable.
+
+    Deme 0 retains almost all of its own frequency and takes a small pull from
+    deme 2; deme 1 blends evenly with deme 0; deme 2 does not migrate at all.
+    A symmetric matrix (equal off-diagonal entries, as in the row-by-row test
+    above) could never produce this — the whole point of a general matrix
+    (design §9's "asymmetric migration" row) is a source mix that differs by
+    destination.
+    """
+    matrix = ((0.95, 0.0, 0.05), (0.5, 0.5, 0.0), (0.0, 0.0, 1.0))
+
+    migrated = migrate(_three_deme_state(), matrix)
+
+    assert migrated.frequency_map(0, 0)[AlleleId(0)] == pytest.approx(0.785)
+    assert migrated.frequency_map(1, 0)[AlleleId(0)] == pytest.approx(0.5)
+    assert migrated.frequency_map(2, 0)[AlleleId(0)] == pytest.approx(0.5)
+
+
+def test_matrix_migration_ignores_population_size() -> None:
+    """A full matrix's rows are the authoritative weights, not N-derived ones.
+
+    Unlike the scalar path, which auto-computes a size-weighted migrant pool
+    from ``population_size``, a full matrix already states each destination's
+    exact source weights — ``population_size`` has nothing left to contribute
+    and must not silently change the result.
+    """
+    matrix = ((0.95, 0.0, 0.05), (0.5, 0.5, 0.0), (0.0, 0.0, 1.0))
+    state = _three_deme_state()
+
+    without_sizes = migrate(state, matrix)
+    with_wildly_unequal_sizes = migrate(state, matrix, (5, 5_000, 20))
+
+    assert without_sizes == with_wildly_unequal_sizes
+
+
+def test_symmetric_scalar_migration_is_the_matrix_special_case() -> None:
+    """Scalar migration for equal-size demes equals its explicit matrix form.
+
+    Confirms design §9's claim directly: at equal deme size, the scalar
+    all-other-demes formula and a fully written-out symmetric matrix
+    (``1 - m`` on the diagonal, ``m / (d - 1)`` off it) are the same
+    operator, not merely similar ones.
+    """
+    state = _three_deme_state()
+    rate = 0.3
+    equal_sizes = (10, 10, 10)
+    equivalent_matrix = tuple(
+        tuple(1.0 - rate if row == column else rate / 2.0 for column in range(3))
+        for row in range(3)
+    )
+
+    via_scalar = migrate(state, rate, equal_sizes)
+    via_matrix = migrate(state, equivalent_matrix)
+
+    for deme in range(3):
+        scalar_map = via_scalar.frequency_map(deme, 0)
+        matrix_map = via_matrix.frequency_map(deme, 0)
+        assert set(scalar_map) == set(matrix_map)
+        for allele_id, value in scalar_map.items():
+            assert matrix_map[allele_id] == pytest.approx(value)
+
+
 def test_symmetric_migration_uses_population_size_weights() -> None:
     """Unequal demes contribute migrants in proportion to their copy counts."""
     state = ModelState(

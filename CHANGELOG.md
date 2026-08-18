@@ -15,14 +15,26 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sizes rather than an equal split, a params test bounding
   `initial_allele_count` by the smallest configured `N_i`, and a CLI test
   running a config with `N` as a list.
+- Dedicated test coverage for a full asymmetric migration matrix (`m` as a
+  `d` by `d` matrix): an operator test with genuinely directional, per-row
+  weights (not merely a symmetric square matrix), a test proving the
+  matrix path ignores `population_size` even when deme sizes differ by
+  three orders of magnitude, a test proving the scalar rate is exactly the
+  matrix's equal-size symmetric special case, a reproducible three-deme
+  engine run over an asymmetric matrix, and a CLI test running a config
+  with `m` as a matrix.
 
 ### Changed
 
 - Updated the simulator design document (§9, §12) to record that unequal
-  deme sizes shipped in the very first `SimulationParams` implementation
-  rather than remaining deferred, and to point at the new tests and
-  `doc/configuration.md` as the supporting evidence and user-facing
-  contract.
+  deme sizes and a full migration matrix both shipped in the very first
+  `SimulationParams` implementation rather than remaining deferred, and to
+  point at the new tests and `doc/configuration.md` as the supporting
+  evidence and user-facing contract.
+- Expanded `doc/configuration.md`'s `m` section with a worked asymmetric
+  matrix example and two explicit behavioral notes: a matrix's rows are
+  authoritative and are never rescaled by `N`, and the scalar rate is the
+  matrix's equal-size symmetric special case.
 
 ## [1.0.0] - 2026-08-16
 

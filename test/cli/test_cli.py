@@ -78,6 +78,25 @@ def test_run_accepts_per_deme_population_sizes(tmp_path: Path) -> None:
     assert (output / "scatter.png").exists()
 
 
+def test_run_accepts_an_asymmetric_migration_matrix(tmp_path: Path) -> None:
+    """A config with a full d x d migration matrix runs end to end through the CLI."""
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    matrix = [
+        [0.9, 0.05, 0.05],
+        [0.1, 0.8, 0.1],
+        [0.0, 0.2, 0.8],
+    ]
+    _write_config(config, d=3, m=matrix)
+
+    status = cli.main(["run", str(config), "--output", str(output), "--quiet"])
+
+    assert status == 0
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["parameters"]["m"] == matrix
+    assert (output / "scatter.png").exists()
+
+
 def test_two_runs_have_identical_trajectory_and_report(tmp_path: Path) -> None:
     """Wall-clock output naming never enters persisted scientific values."""
     config = tmp_path / "run.yaml"
