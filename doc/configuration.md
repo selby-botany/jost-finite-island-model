@@ -138,6 +138,27 @@ As an alternative to `loci`, use:
 Do not combine the two forms. Length is retained as locus data for future
 per-base-pair mutation models; differentiation statistics do not read it.
 
+Per-locus length varies freely in version 1.0.0 — nothing requires every
+locus to share one value, and no current code path derives behavior from
+it, so setting different lengths has no effect on drift, migration, or
+statistics until a future mutation model reads it (§9 of the design
+document).
+
+```yaml
+loci:
+  - locus_id: 1
+    length: 50      # a short marker
+  - locus_id: 2
+    length: 8000    # a much longer one
+```
+
+The equivalent compact form:
+
+```yaml
+n_loci: 2
+locus_lengths: [50, 8000]
+```
+
 ## Initial conditions
 
 ### `initial_allele_count`

@@ -189,6 +189,37 @@ def test_locus_lengths_scalar_expands_and_explicit_ids_round_trip() -> None:
     assert explicit.loci == (LocusSpec(9, 400),)
 
 
+def test_locus_lengths_accept_a_genuinely_distinct_value_per_locus() -> None:
+    """Per-locus length varies freely; nothing forces loci to share one value."""
+    via_locus_lengths = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "n_loci": 3,
+            "locus_lengths": [80, 4_000, 15],
+        }
+    )
+    assert via_locus_lengths.loci == (
+        LocusSpec(1, 80),
+        LocusSpec(2, 4_000),
+        LocusSpec(3, 15),
+    )
+
+    via_loci = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "loci": [
+                {"locus_id": 1, "length": 80},
+                {"locus_id": 2, "length": 4_000},
+            ],
+        }
+    )
+    assert via_loci.loci == (LocusSpec(1, 80), LocusSpec(2, 4_000))
+    assert via_loci.to_dict()["loci"] == [
+        {"locus_id": 1, "length": 80},
+        {"locus_id": 2, "length": 4_000},
+    ]
+
+
 @pytest.mark.parametrize(
     ("key", "value", "message"),
     [

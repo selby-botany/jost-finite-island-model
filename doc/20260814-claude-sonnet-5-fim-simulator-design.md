@@ -827,7 +827,7 @@ than requiring a redesign:
 | …island sizes differed (`N_i`)? | `N` accepts a length-`d` array **(shipped, v1.0.0 — see note below)** | `drift()` already receives `N` as a parameter; per-deme `N_i` gene copies is a broadcast, not new logic |
 | …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix **(shipped, v1.0.0 — see note below)** | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
 | …migration were spatial (stepping-stone)? | a sparse/neighbor-restricted `m` matrix, or a `MigrantPoolStrategy` interface | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
-| …locus length varied? | `LocusSpec.length` per locus | already a first-class field (§3.2), unused only because the initial pass sets every locus equal |
+| …locus length varied? | `LocusSpec.length` per locus **(shipped, v1.0.0 — see note below)** | already a first-class field (§3.2), unused only because the initial pass sets every locus equal |
 | …selection were added? | a new `select()` operator inserted before `drift()` | the pipeline (§3.4) is already a composition of independent stages; adding one is additive |
 | …the mutation model weren't infinite-alleles (e.g., stepwise mutation for microsatellites)? | swap the strategy behind `mutate()` | `AlleleRegistry` is already the sole minting point for new IDs; a different model changes what gets minted, not who mints it |
 | …many replicate runs were needed for a confidence interval? | `engine.py` batches `n_replicates` as a vectorized array dimension | the attic research doc's own recommendation (§6.4 there): loci and replicates are i.i.d. under fixed parameters, an embarrassingly parallel array problem |
@@ -879,6 +879,31 @@ approximately, an end-to-end reproducible engine run over a three-deme
 asymmetric matrix, and a CLI test running a config with `m` as a matrix.
 Accordingly, §12 below no longer lists a general migration matrix as out
 of scope either.
+
+**Note on the fourth row — per-locus length has always been settable, but
+was never actually exercised as varying.** `LocusSpec(locus_id, length)`
+never enforced equal lengths across a run's `loci` tuple, and
+`SimulationParams.from_mapping` has always accepted either a `loci` list
+with a distinct `length` per entry or a `locus_lengths` list of `n_loci`
+values — nothing here was blocked pending an implementation pass. What
+this row's "unused" phrasing describes is real, though: no operator,
+statistic, or persisted row currently reads `length` at all (confirmed
+directly — `grep -rn length src/fim` outside `locus.py` and `params.py`
+turns up nothing), so it has no effect on drift, migration, mutation, or
+any differentiation statistic until a future per-base-pair mutation model
+(§9's next row but one) reads it. Because "no effect" is exactly the kind
+of claim that silently rots if nothing ever tests it, this pass adds
+direct proof rather than taking the claim on faith: a params test with
+genuinely distinct per-locus lengths (not the uniform-scalar-expansion
+case the existing test already covered), an engine-level test holding a
+fixed multi-locus state's frequencies constant and asserting the report
+is bit-identical whether the loci carry equal lengths, or two different
+lengths, or those two lengths swapped, an end-to-end reproducible run
+over loci with genuinely different lengths, and a CLI test running a
+config with unequal per-locus lengths. See
+[`doc/configuration.md`](configuration.md#loci) for the user-facing
+contract. Accordingly, §12 below no longer lists per-locus allele length
+as out of scope.
 
 ## 10. Validation and test strategy
 
@@ -1028,18 +1053,19 @@ selection; non-infinite-alleles mutation models (stepwise mutation for
 microsatellites); stepping-stone or other non-all-to-all migration
 topologies (a dedicated `MigrantPoolStrategy`/neighbor-matrix-construction
 interface — a raw, hand-built sparse matrix already runs today via the
-general matrix support noted below); per-locus allele length. Every one
-of these has a specific landing spot already identified (§9) — they are
-deferred, not precluded.
+general matrix support noted below). Every one of these has a specific
+landing spot already identified (§9) — they are deferred, not precluded.
 
-**Unequal deme sizes and a general migration matrix are removed from this
-list, not merely deferred** — both shipped in v1.0.0, ahead of the rest of
-this list, because `N` and `m` were each built as scalar-or-richer values
-from the first `SimulationParams` commit rather than added later. See
-§9's notes on the table's first two rows for what shipped and what this
-pass added on top of each (tests and this documentation update); the
-original first-draft wording naming both out of scope is recorded here,
-struck from the list, rather than silently dropped.
+**Unequal deme sizes, a general migration matrix, and per-locus allele
+length are removed from this list, not merely deferred** — all three
+shipped in v1.0.0, ahead of the rest of this list, because `N`, `m`, and
+`LocusSpec.length` were each built as scalar-or-richer, per-entry values
+from the first `SimulationParams`/`locus.py` commits rather than added
+later. See §9's notes on the table's first, second, and fourth rows for
+what shipped and what this pass added on top of each (tests and this
+documentation update); the original first-draft wording naming all three
+out of scope is recorded here, struck from the list, rather than silently
+dropped.
 
 ## 13. Illustrated walkthrough (mocked)
 

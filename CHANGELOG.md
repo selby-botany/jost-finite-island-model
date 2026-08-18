@@ -23,18 +23,29 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   matrix's equal-size symmetric special case, a reproducible three-deme
   engine run over an asymmetric matrix, and a CLI test running a config
   with `m` as a matrix.
+- Dedicated test coverage for per-locus length (`LocusSpec.length`
+  varying across a run's `loci`): a params test with genuinely distinct
+  lengths per locus rather than one shared value, an engine-level test
+  proving the report is bit-identical regardless of which locus carries
+  which length (length is inert data — it drives no statistic), a
+  reproducible end-to-end run over loci with very different lengths, and
+  a CLI test running a config with unequal per-locus lengths.
 
 ### Changed
 
 - Updated the simulator design document (§9, §12) to record that unequal
-  deme sizes and a full migration matrix both shipped in the very first
-  `SimulationParams` implementation rather than remaining deferred, and to
-  point at the new tests and `doc/configuration.md` as the supporting
-  evidence and user-facing contract.
+  deme sizes, a full migration matrix, and per-locus length all shipped
+  in the very first `SimulationParams`/`locus.py` implementation rather
+  than remaining deferred, and to point at the new tests and
+  `doc/configuration.md` as the supporting evidence and user-facing
+  contract.
 - Expanded `doc/configuration.md`'s `m` section with a worked asymmetric
   matrix example and two explicit behavioral notes: a matrix's rows are
   authoritative and are never rescaled by `N`, and the scalar rate is the
   matrix's equal-size symmetric special case.
+- Expanded `doc/configuration.md`'s `loci` section with a worked example
+  of two loci with different lengths and a note that length currently has
+  no effect on simulation behavior.
 
 ## [1.0.0] - 2026-08-16
 

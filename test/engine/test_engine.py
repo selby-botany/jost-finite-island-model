@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from fim.engine import RunResult, fim, report_for_state
+from fim.engine import FinalReport, RunResult, fim, report_for_state
 from fim.model.allele import MINTED_ID_START, AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
@@ -363,3 +363,65 @@ def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None:
     )
     assert report["run_id"] == "run-a"
     assert report["G_ST"] is not None
+
+
+def test_locus_length_does_not_affect_the_report() -> None:
+    """Locus length is inert data — only the frequency vectors drive statistics.
+
+    Design §3.2: length matters only through the mutation rate, which this
+    project configures directly via ``mu`` rather than deriving from
+    ``LocusSpec.length``; it plays no role in any statistic. Holding every
+    frequency fixed and only swapping which locus carries which length must
+    leave the report bit-for-bit unchanged.
+    """
+    frequencies = (
+        (
+            {AlleleId(0): 0.7, AlleleId(1): 0.3},
+            {AlleleId(0): 0.7, AlleleId(1): 0.3},
+        ),
+        (
+            {AlleleId(0): 0.2, AlleleId(1): 0.8},
+            {AlleleId(0): 0.2, AlleleId(1): 0.8},
+        ),
+    )
+
+    def _report(loci: tuple[LocusSpec, ...]) -> FinalReport:
+        params = SimulationParams(N=20, m=0.1, mu=0.0, d=2, seed=7, loci=loci)
+        state = ModelState(loci=loci, frequencies=frequencies)
+        return report_for_state(
+            state,
+            params,
+            run_id="run-a",
+            converged=False,
+            reason="test",
+        )
+
+    short_first = _report((LocusSpec(1, 50), LocusSpec(2, 5_000)))
+    long_first = _report((LocusSpec(1, 5_000), LocusSpec(2, 50)))
+    equal_lengths = _report((LocusSpec(1, 200), LocusSpec(2, 200)))
+
+    assert short_first == long_first == equal_lengths
+
+
+def test_multi_locus_run_with_unequal_lengths_is_reproducible() -> None:
+    """A full run over loci with genuinely different lengths stays reproducible."""
+    params = SimulationParams(
+        N=20,
+        m=0.1,
+        mu=0.02,
+        d=2,
+        seed=20260818,
+        loci=(LocusSpec(1, 50), LocusSpec(2, 8_000)),
+        convergence_window=4,
+        convergence_tolerance=1.0,
+        max_generations=8,
+    )
+
+    first = _run(params)
+    second = _run(params)
+
+    assert list(first.store.read(first.run_id)) == list(
+        second.store.read(second.run_id)
+    )
+    assert first.report == second.report
+    assert first.final_state.locus_count == 2
