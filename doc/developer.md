@@ -32,10 +32,10 @@ analyze a frequency table without running a simulation, and persisted rows can
 be re-analyzed through the CLI.
 
 The scientific rationale is in the
-[simulator design](20260814-claude-sonnet-5-fim-simulator-design.md). The
-[detailed design](20260814-claude-opus-4-8-fim-simulator-detailed-design.md)
+[simulator design](fim-simulator-design.md). The
+[detailed design](fim-simulator-detailed-design.md)
 records implementation and release choices, and the
-[test plan](20260814-claude-opus-4-8-fim-simulator-test-plan.md) maps each
+[test plan](fim-simulator-test-plan.md) maps each
 requirement to evidence.
 
 ## Build environment

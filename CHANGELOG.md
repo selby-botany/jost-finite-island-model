@@ -135,6 +135,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `TrailingWindowCriterion` exists and `engine.py` hardcodes it) rather
   than about choosing which statistic to watch, which has always been
   free via `convergence_statistic` and predates every row in this table.
+- Renamed the five pre-production, dated/model-tagged design documents to
+  clean, user-facing names: `finite-island-model-introduction.md`,
+  `jost-differentiation-measures.md`, `fim-simulator-design.md`,
+  `fim-simulator-detailed-design.md`, and `fim-simulator-test-plan.md`
+  (each previously prefixed with its generation date and model, e.g.
+  `20260814-claude-sonnet-5-fim-simulator-design.md`). Also renamed
+  `doc/img/20260814-fim-simulator-design/` to
+  `doc/img/fim-simulator-design/` to match, and updated every internal
+  and external cross-reference (`README.md`, `CONTRIBUTING.md`,
+  `doc/developer.md`, and the five documents' own links to each other).
 
 ## [1.0.0] - 2026-08-16
 

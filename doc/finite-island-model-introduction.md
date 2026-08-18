@@ -63,7 +63,7 @@ Answering it quantitatively takes two separate pieces of machinery:
    much differentiation exists. This is where Lou Jost's own contribution —
    a measure he calls **D** — enters, as a proposed replacement for the
    older **F<sub>ST</sub>** and **G<sub>ST</sub>** family of statistics. (A companion document,
-   [the differentiation-measures guide](20260810-claude-sonnet-5-jost-differentiation-measures.md),
+   [the differentiation-measures guide](jost-differentiation-measures.md),
    covers that half in detail.)
 
 The island model is the *generative* half of the pair: it is what gets
@@ -368,7 +368,7 @@ journal, year, and DOI.
   **F<sub>ST</sub>** can have an arbitrarily low upper bound"). Jost proposes
   **D**, defined to isolate the "true" differentiation component
   independent of within-population diversity — a companion document,
-  [the differentiation-measures guide](20260810-claude-sonnet-5-jost-differentiation-measures.md),
+  [the differentiation-measures guide](jost-differentiation-measures.md),
   walks through exactly how.
 - **The reply/rebuttal exchange** that followed in the same journal,
   confirmed via PubMed's "Comment in/on" links on the 2008 paper:
@@ -400,7 +400,7 @@ journal, year, and DOI.
   It is written for a conservation-genetics audience deciding which number
   to report, which makes it the best single paper to hand a newcomer. See
   the companion document,
-  [the differentiation-measures guide](20260810-claude-sonnet-5-jost-differentiation-measures.md),
+  [the differentiation-measures guide](jost-differentiation-measures.md),
   for a full plain-language walkthrough of this paper.
 
 The throughline across all of them: **every one of these arguments is made

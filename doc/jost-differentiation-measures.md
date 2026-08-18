@@ -87,7 +87,7 @@ this substitution produces exactly backwards conservation advice — and it
 overturns a widely repeated rule of thumb along the way: under the finite
 island model (a standard model of migration between subpopulations,
 covered in a
-[companion document](20260810-claude-sonnet-5-finite-island-model-introduction.md)),
+[companion document](finite-island-model-introduction.md)),
 the absolute number of migrants per generation, $Nm$, controls nearness
 to fixation, **not** allelic differentiation, which instead is controlled
 by $m / (\mu(d-1))$, where $\mu$ is the mutation rate and $d$ is the
@@ -1036,7 +1036,7 @@ to demography.
 ### The finite island model, briefly
 
 The setting for both formulas below (fully covered in a
-[companion document](20260810-claude-sonnet-5-finite-island-model-introduction.md)):
+[companion document](finite-island-model-introduction.md)):
 **d** demes of **N** diploid individuals each; discrete, non-overlapping
 generations; each generation, a fraction **m** of each deme's gene pool is
 replaced by migrants drawn from the other demes; mutation creates novel

@@ -37,15 +37,15 @@
 
 Written for whoever implements or maintains the simulator's tests. It is
 the companion to the
-[detailed design](20260814-claude-opus-4-8-fim-simulator-detailed-design.md)
+[detailed design](fim-simulator-detailed-design.md)
 (which plans the code commit by commit) and the
-[design document](20260814-claude-sonnet-5-fim-simulator-design.md) (which
+[design document](fim-simulator-design.md) (which
 settles the model, statistics, and architecture). Every formula, golden
 value, and equilibrium relation cited here is sourced from the design
 document and its two companions — the
-[finite island model introduction](20260810-claude-sonnet-5-finite-island-model-introduction.md)
+[finite island model introduction](finite-island-model-introduction.md)
 and the
-[Jost differentiation-measures guide](20260810-claude-sonnet-5-jost-differentiation-measures.md)
+[Jost differentiation-measures guide](jost-differentiation-measures.md)
 — and is not re-derived.
 
 "Design §N" points into the design document; "detailed design §N" points

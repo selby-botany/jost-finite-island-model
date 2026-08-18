@@ -49,7 +49,7 @@
 ## Who this document is for
 
 Written for whoever implements the simulator. The companion
-[design document](20260814-claude-sonnet-5-fim-simulator-design.md) answers
+[design document](fim-simulator-design.md) answers
 *what* is being built and *why*; every architectural decision, formula, and
 biological claim used below is settled there and is not re-derived here.
 This document answers the next three questions the design document
@@ -60,7 +60,7 @@ sequence of small, individually green, individually reviewable steps rather
 than one large drop.
 
 Test detail is delegated in full to the companion
-[test plan](20260814-claude-opus-4-8-fim-simulator-test-plan.md); §10 here is
+[test plan](fim-simulator-test-plan.md); §10 here is
 only a summary and a pointer. Section references of the form "design §N"
 point into the design document; bare "§N" references point within this
 document.
@@ -222,9 +222,9 @@ jost-finite-island-model/
 ├── doc/                           # present; design docs + user/developer guides
 │   ├── 20260810-…-introduction.md         # present (companion)
 │   ├── 20260810-…-differentiation.md      # present (companion)
-│   ├── 20260814-claude-sonnet-5-fim-simulator-design.md      # present (design)
-│   ├── 20260814-claude-opus-4-8-fim-simulator-detailed-design.md  # this doc
-│   ├── 20260814-claude-opus-4-8-fim-simulator-test-plan.md   # companion test plan
+│   ├── fim-simulator-design.md      # present (design)
+│   ├── fim-simulator-detailed-design.md  # this doc
+│   ├── fim-simulator-test-plan.md   # companion test plan
 │   ├── usage.md                   # user-facing command + config reference
 │   ├── configuration.md           # the P-bag schema, every key, every default
 │   ├── developer.md               # architecture-for-maintainers + how to extend
@@ -901,7 +901,7 @@ with zero unresolved links or anchors, and `v1.0.0` is published.
 ## 10. Test strategy summary
 
 Full detail is in the
-[test plan](20260814-claude-opus-4-8-fim-simulator-test-plan.md); this is
+[test plan](fim-simulator-test-plan.md); this is
 the shape only. Seven test layers, mapped to where they live:
 
 - **Unit** (`test/<module>/`) — every value object and pure function,

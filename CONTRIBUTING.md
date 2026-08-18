@@ -80,7 +80,7 @@ The release workflow rejects a tag that differs from `version.txt`.
 ## Related documents
 
 - [Developer architecture](doc/developer.md)
-- [Detailed design](doc/20260814-claude-opus-4-8-fim-simulator-detailed-design.md)
-- [Test plan](doc/20260814-claude-opus-4-8-fim-simulator-test-plan.md)
+- [Detailed design](doc/fim-simulator-detailed-design.md)
+- [Test plan](doc/fim-simulator-test-plan.md)
 - [Git hooks](dev/git-hooks/README.md)
 - [Project overview](README.md)

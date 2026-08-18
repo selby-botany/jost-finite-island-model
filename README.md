@@ -83,7 +83,7 @@ database. See [output schemas](doc/usage.md#output-schemas).
 - Founding alleles use locus-relative IDs. Every mutation receives a globally
   unique ID under the infinite-alleles model.
 
-The [simulator design](doc/20260814-claude-sonnet-5-fim-simulator-design.md)
+The [simulator design](doc/fim-simulator-design.md)
 defines the complete scientific and architectural contract.
 
 ## Documentation
@@ -98,15 +98,15 @@ defines the complete scientific and architectural contract.
 
 ### Understanding the science
 
-- [Finite island model introduction](doc/20260810-claude-sonnet-5-finite-island-model-introduction.md)
-- [Jost differentiation measures](doc/20260810-claude-sonnet-5-jost-differentiation-measures.md)
-- [Simulator design](doc/20260814-claude-sonnet-5-fim-simulator-design.md)
+- [Finite island model introduction](doc/finite-island-model-introduction.md)
+- [Jost differentiation measures](doc/jost-differentiation-measures.md)
+- [Simulator design](doc/fim-simulator-design.md)
 
 ### Maintaining or extending the application
 
 - [Developer and extension guide](doc/developer.md)
-- [Detailed implementation design](doc/20260814-claude-opus-4-8-fim-simulator-detailed-design.md)
-- [Test plan](doc/20260814-claude-opus-4-8-fim-simulator-test-plan.md)
+- [Detailed implementation design](doc/fim-simulator-detailed-design.md)
+- [Test plan](doc/fim-simulator-test-plan.md)
 - [Source-tree orientation](src/README.md)
 - [Generated API reference](src/fim/API.md)
 - [Maintainer runbook](CONTRIBUTING.md)

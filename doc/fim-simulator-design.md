@@ -49,9 +49,9 @@ Sections written for the implementer are marked as such at their start;
 skipping them costs nothing needed to follow §13's walkthrough, which is
 the closest thing in this document to "here is what using the software
 actually feels like." The two companion documents in this directory —
-[the finite island model introduction](20260810-claude-sonnet-5-finite-island-model-introduction.md)
+[the finite island model introduction](finite-island-model-introduction.md)
 and
-[the Jost differentiation-measures guide](20260810-claude-sonnet-5-jost-differentiation-measures.md)
+[the Jost differentiation-measures guide](jost-differentiation-measures.md)
 — are the source of every formula and biological claim used below and are
 not re-derived here; this document is architecture and implementation
 planning built on top of them, not a third exposition of the model itself.
@@ -1274,7 +1274,7 @@ placeholder art.
 **Screen 1 — model input.** The four named arguments and the `𝖯`-bag
 entries from §4.3, as a form instead of a YAML file:
 
-![Mocked model-input screen: labeled fields for N, d, m, μ, seed, convergence statistic, initial condition, and loci, with a "Run simulation" button](img/20260814-fim-simulator-design/screen1-model-input.png)
+![Mocked model-input screen: labeled fields for N, d, m, μ, seed, convergence statistic, initial condition, and loci, with a "Run simulation" button](img/fim-simulator-design/screen1-model-input.png)
 
 **Screen 2 — results.** Requirement 6 in one view: the run summary
 (scalars, requirement 6a) beside the canonical scatter (per-deme allele
@@ -1286,7 +1286,7 @@ and fast enough that its whole trajectory fits on one screen: each point
 is one allele, axes are the two demes' frequencies for it, and the
 caption in the image spells out exactly what was simulated.
 
-![Mocked results screen: a run-summary sidebar (converged, generation 50, D=0.65, G_ST=0.34) beside a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most of them well off the diagonal](img/20260814-fim-simulator-design/screen2-results.png)
+![Mocked results screen: a run-summary sidebar (converged, generation 50, D=0.65, G_ST=0.34) beside a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most of them well off the diagonal](img/fim-simulator-design/screen2-results.png)
 
 **Screen 3 — bonus: watching it converge.** The same toy scenario,
 animated across the same generations shown in the static screen above —
@@ -1296,7 +1296,7 @@ This is the "migrating scatterplot" a botanist would actually want to
 watch: §8 notes that every generation is already persisted, so this view
 is close to free once the static one exists.
 
-![Animated mock: the same four-allele scatter plot stepping through generations 0, 5, 10, … 50, with points starting near the diagonal and drifting apart as the demes differentiate](img/20260814-fim-simulator-design/screen3-animated.gif)
+![Animated mock: the same four-allele scatter plot stepping through generations 0, 5, 10, … 50, with points starting near the diagonal and drifting apart as the demes differentiate](img/fim-simulator-design/screen3-animated.gif)
 
 ## Metadata
 
