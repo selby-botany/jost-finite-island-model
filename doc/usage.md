@@ -1,8 +1,10 @@
 # Using `fim`
 
-This guide covers every version 1.0.0 command and output. For parameter types
-and defaults, use the [configuration reference](configuration.md). Return to
-the [project overview](../README.md) for installation and documentation links.
+This guide covers every version 1.0.0 command and output, not what the
+simulator models or why — see [what this simulates](../README.md#what-this-simulates)
+for that first. For parameter types and defaults, use the
+[configuration reference](configuration.md). Return to the
+[project overview](../README.md) for installation and documentation links.
 
 ## Contents
 

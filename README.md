@@ -6,12 +6,38 @@ reports differentiation statistics against that known history.
 
 ## Contents
 
+- [What this simulates](#what-this-simulates)
 - [Quick start](#quick-start)
 - [Outputs](#outputs)
 - [Model contract](#model-contract)
 - [Documentation](#documentation)
 - [Development](#development)
 - [License](#license)
+
+## What this simulates
+
+`fim` implements the **finite island model**, not the classic infinite-source
+version of Wright's original island model. The distinction answers the two
+questions a first-time reader usually has:
+
+- **Where do migrants come from?** From the *other islands themselves* —
+  their actual, currently drifting allele frequencies — not from a fixed,
+  infinite external reservoir with a composition that never changes. That is
+  what "finite" refers to: the whole set of islands is a closed system, with
+  no outside population to draw on.
+- **Is migration a random draw of individuals?** No. Migration blends each
+  island's frequencies with a weighted average of the other islands' current
+  frequencies, a deterministic step given that generation's frequencies. The
+  randomness is downstream, in drift: each island's next generation is formed
+  by resampling its gene copies at random from its own post-migration
+  frequencies. An optional third step, mutation, can also replace a small,
+  randomly sampled number of gene copies with genuinely novel alleles.
+
+The [finite island model introduction](doc/finite-island-model-introduction.md)
+is the full plain-language walkthrough — no genetics, statistics, or
+programming background assumed — including how this differs from the
+stepping-stone (spatial) variant and how it connects to Jost's
+differentiation statistics.
 
 ## Quick start
 
