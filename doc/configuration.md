@@ -29,6 +29,7 @@ initial_allele_count: 2
 initial_concentration: 1.0
 deme_weighting: size
 convergence_statistic: D
+convergence_combinator: all
 convergence_window: 50
 convergence_tolerance: 0.01
 max_generations: 10000
@@ -199,8 +200,30 @@ p_0:
 
 ### `convergence_statistic`
 
-- **Type:** one of `D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`
+- **Type:** one of `D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, or a list of
+  several of them
 - **Default:** `D`
+
+A list watches several statistics at once — each keeps its own independent
+trailing-window history against the same `convergence_window` and
+`convergence_tolerance` — combined by `convergence_combinator`. A name may
+not repeat. Fully supported in version 1.0.0.
+
+```yaml
+convergence_statistic: [D, G_ST]
+convergence_combinator: any   # stop once either statistic settles
+```
+
+### `convergence_combinator`
+
+- **Type:** `all` or `any`
+- **Default:** `all`
+
+Only meaningful when `convergence_statistic` is a list: `all` requires every
+watched statistic to be simultaneously stable before stopping (a strict
+reading of "several statistics need to agree"); `any` stops as soon as one
+of them is. With a single statistic — the default — the two are the same
+value by construction, so this key has no effect and needs no attention.
 
 ### `convergence_window`
 
@@ -257,3 +280,4 @@ directory retains the four-file scalar-run contract.
 | frequency vector not summing to 1 | rejected |
 | unknown key | rejected by name |
 | matrix/list shape not matching `d` | rejected |
+| unrecognized or repeated `convergence_statistic` entry | rejected |

@@ -14,6 +14,8 @@ from fim.model.locus import LocusSpec
 PopulationSize = int | tuple[int, ...]
 Migration = float | tuple[tuple[float, ...], ...]
 DemeWeighting = Literal["equal", "size"]
+ConvergenceStatistic = str | tuple[str, ...]
+ConvergenceCombinator = Literal["any", "all"]
 InitialFrequencies = tuple[tuple[Mapping[AlleleId, float], ...], ...]
 
 DEFAULT_LOCUS_LENGTH: Final = 200
@@ -24,6 +26,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "initial_concentration": 1.0,
     "deme_weighting": "size",
     "convergence_statistic": "D",
+    "convergence_combinator": "all",
     "convergence_window": 50,
     "convergence_tolerance": 0.01,
     "max_generations": 10_000,
@@ -44,6 +47,7 @@ _CONFIG_KEYS: Final = frozenset(
         "initial_concentration",
         "deme_weighting",
         "convergence_statistic",
+        "convergence_combinator",
         "convergence_window",
         "convergence_tolerance",
         "max_generations",
@@ -69,7 +73,11 @@ class SimulationParams:
         initial_allele_count: Founding allele count per locus.
         initial_concentration: Symmetric Dirichlet concentration.
         deme_weighting: Weighting used by statistics that support it.
-        convergence_statistic: Statistic watched by the convergence monitor.
+        convergence_statistic: One statistic, or several, watched by the
+            convergence monitor.
+        convergence_combinator: How several watched statistics combine —
+            "all" (every one stable) or "any" (at least one stable).
+            A single statistic makes this a no-op special case.
         convergence_window: Trailing stability-window length.
         convergence_tolerance: Maximum half-window mean difference.
         max_generations: Hard generation safety cap.
@@ -88,7 +96,8 @@ class SimulationParams:
     initial_allele_count: int = 2
     initial_concentration: float = 1.0
     deme_weighting: DemeWeighting = "size"
-    convergence_statistic: str = "D"
+    convergence_statistic: ConvergenceStatistic = "D"
+    convergence_combinator: ConvergenceCombinator = "all"
     convergence_window: int = 50
     convergence_tolerance: float = 0.01
     max_generations: int = 10_000
@@ -123,9 +132,11 @@ class SimulationParams:
             raise ValueError("initial_concentration must be greater than 0")
         if self.deme_weighting not in {"equal", "size"}:
             raise ValueError("deme_weighting must be 'equal' or 'size'")
-        if self.convergence_statistic not in _CONVERGENCE_STATISTICS:
-            allowed = ", ".join(sorted(_CONVERGENCE_STATISTICS))
-            raise ValueError(f"convergence_statistic must be one of: {allowed}")
+        convergence_statistics = _normalize_convergence_statistic(
+            self.convergence_statistic
+        )
+        if self.convergence_combinator not in {"any", "all"}:
+            raise ValueError("convergence_combinator must be 'any' or 'all'")
         _require_integer(
             "convergence_window",
             self.convergence_window,
@@ -161,6 +172,20 @@ class SimulationParams:
         object.__setattr__(self, "mu", float(self.mu))
         object.__setattr__(self, "loci", loci)
         object.__setattr__(self, "initial_frequencies", initial_frequencies)
+        object.__setattr__(
+            self,
+            "convergence_statistic",
+            convergence_statistics[0]
+            if len(convergence_statistics) == 1
+            else convergence_statistics,
+        )
+
+    @property
+    def convergence_statistics(self) -> tuple[str, ...]:
+        """Return every statistic watched by the convergence monitor."""
+        if isinstance(self.convergence_statistic, str):
+            return (self.convergence_statistic,)
+        return self.convergence_statistic
 
     @property
     def population_sizes(self) -> tuple[int, ...]:
@@ -194,7 +219,12 @@ class SimulationParams:
             "initial_allele_count": self.initial_allele_count,
             "initial_concentration": self.initial_concentration,
             "deme_weighting": self.deme_weighting,
-            "convergence_statistic": self.convergence_statistic,
+            "convergence_statistic": (
+                self.convergence_statistic
+                if isinstance(self.convergence_statistic, str)
+                else list(self.convergence_statistic)
+            ),
+            "convergence_combinator": self.convergence_combinator,
             "convergence_window": self.convergence_window,
             "convergence_tolerance": self.convergence_tolerance,
             "max_generations": self.max_generations,
@@ -260,11 +290,16 @@ class SimulationParams:
                     PARAMETER_DEFAULTS["deme_weighting"],
                 )
             ),
-            convergence_statistic=_parse_string(
-                "convergence_statistic",
+            convergence_statistic=_parse_convergence_statistic(
                 config.get(
                     "convergence_statistic",
                     PARAMETER_DEFAULTS["convergence_statistic"],
+                ),
+            ),
+            convergence_combinator=_parse_convergence_combinator(
+                config.get(
+                    "convergence_combinator",
+                    PARAMETER_DEFAULTS["convergence_combinator"],
                 ),
             ),
             convergence_window=_parse_int(
@@ -351,6 +386,29 @@ def _loci_from_config(config: Mapping[str, Any]) -> tuple[LocusSpec, ...]:
     return tuple(
         LocusSpec(index, length) for index, length in enumerate(lengths, start=1)
     )
+
+
+def _normalize_convergence_statistic(
+    value: ConvergenceStatistic,
+) -> tuple[str, ...]:
+    """Validate one or several convergence statistics and return them as a tuple.
+
+    A list is accepted for the "several statistics needed to agree before
+    stopping" extension (design §9): every name must be a recognized
+    statistic, and no name may repeat. A single statistic — the default —
+    is the resulting tuple's one-element case; nothing downstream needs to
+    special-case it.
+    """
+    candidates: tuple[str, ...] = (value,) if isinstance(value, str) else tuple(value)
+    if not candidates:
+        raise ValueError("convergence_statistic must not be empty")
+    for statistic in candidates:
+        if statistic not in _CONVERGENCE_STATISTICS:
+            allowed = ", ".join(sorted(_CONVERGENCE_STATISTICS))
+            raise ValueError(f"convergence_statistic must be one of: {allowed}")
+    if len(set(candidates)) != len(candidates):
+        raise ValueError("convergence_statistic must not repeat a statistic")
+    return candidates
 
 
 def _normalize_initial_frequencies(
@@ -440,6 +498,28 @@ def _normalize_population_sizes(
     for index, item in enumerate(values):
         _require_integer(f"N[{index}]", item, minimum=1)
     return values
+
+
+def _parse_convergence_combinator(value: Any) -> ConvergenceCombinator:
+    """Parse the two supported convergence-combinator values."""
+    parsed = _parse_string("convergence_combinator", value)
+    if parsed == "any":
+        return "any"
+    if parsed == "all":
+        return "all"
+    raise ValueError("convergence_combinator must be 'any' or 'all'")
+
+
+def _parse_convergence_statistic(value: Any) -> ConvergenceStatistic:
+    """Parse a scalar or list convergence-statistic configuration value."""
+    if isinstance(value, str):
+        return _parse_string("convergence_statistic", value)
+    if not isinstance(value, Sequence):
+        raise ValueError("convergence_statistic must be a string or a list of strings")
+    return tuple(
+        _parse_string(f"convergence_statistic[{index}]", item)
+        for index, item in enumerate(value)
+    )
 
 
 def _parse_deme_weighting(value: Any) -> DemeWeighting:

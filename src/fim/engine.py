@@ -33,7 +33,7 @@ class FinalReport(TypedDict):
     run_id: str
     generation: int
     converged: bool
-    converged_on: str
+    converged_on: str | list[str]
     reason: str
     G_ST: float | None
     D: float
@@ -54,6 +54,7 @@ class RunResult:
     report: FinalReport
     convergence_generations: tuple[int, ...]
     convergence_history: tuple[float, ...]
+    convergence_histories: Mapping[str, tuple[float, ...]]
     manifest: RunManifest
     store: TrajectoryStore
 
@@ -165,7 +166,11 @@ def report_for_state(
         "run_id": run_id,
         "generation": state.generation,
         "converged": converged,
-        "converged_on": params.convergence_statistic,
+        "converged_on": (
+            params.convergence_statistic
+            if isinstance(params.convergence_statistic, str)
+            else list(params.convergence_statistic)
+        ),
         "reason": reason,
         "G_ST": _mean_optional(tuple(report["G_ST"] for report in locus_reports)),
         "D": _mean(tuple(report["D"] for report in locus_reports)),
@@ -192,6 +197,8 @@ def _run_one(
             params.convergence_tolerance,
         ),
         max_generations=params.max_generations,
+        statistics=params.convergence_statistics,
+        combinator=params.convergence_combinator,
     )
 
     state = generate_initial_state(params, rng)
@@ -208,14 +215,14 @@ def _run_one(
     store.write_generation(run_id, state.generation, state.to_rows(run_id))
     monitor.record(
         state.generation,
-        _convergence_value(state, params),
+        _convergence_values(state, params),
     )
     while not monitor.should_stop():
         state = step(state, params, registry, rng)
         store.write_generation(run_id, state.generation, state.to_rows(run_id))
         monitor.record(
             state.generation,
-            _convergence_value(state, params),
+            _convergence_values(state, params),
         )
 
     outcome = monitor.outcome()
@@ -247,25 +254,50 @@ def _run_one(
         report=report,
         convergence_generations=monitor.generations,
         convergence_history=monitor.history,
+        convergence_histories=monitor.histories,
         manifest=manifest,
         store=store,
     )
 
 
-def _convergence_value(state: ModelState, params: SimulationParams) -> float:
-    """Return the configured statistic averaged across loci."""
+def _convergence_values(
+    state: ModelState,
+    params: SimulationParams,
+) -> dict[str, float]:
+    """Return every watched statistic's value, each averaged across loci.
+
+    Computes each locus's full differentiation report exactly once and reads
+    every watched statistic from that same cached set of reports, rather than
+    recomputing per-locus statistics once per watched name — the several-
+    statistic case (design §9) costs one extra dictionary lookup per
+    statistic per locus, not another pass over the state.
+    """
+    locus_reports = tuple(
+        _statistics_for_locus(state, params, locus_index)
+        for locus_index in range(state.locus_count)
+    )
+    return {
+        statistic: _mean_statistic_across_loci(
+            locus_reports, statistic, state.generation
+        )
+        for statistic in params.convergence_statistics
+    }
+
+
+def _mean_statistic_across_loci(
+    locus_reports: Sequence[DifferentiationReport],
+    statistic: str,
+    generation: int,
+) -> float:
+    """Return one statistic's per-locus reports averaged into a single value."""
     values: list[float] = []
-    for locus_index in range(state.locus_count):
-        report = _statistics_for_locus(state, params, locus_index)
-        value = _report_statistic(report, params.convergence_statistic)
+    for report in locus_reports:
+        value = _report_statistic(report, statistic)
         if value is None:
-            if params.convergence_statistic == "G_ST" and report["H_T"] == 0.0:
+            if statistic == "G_ST" and report["H_T"] == 0.0:
                 value = 0.0
             else:
-                raise ValueError(
-                    f"{params.convergence_statistic} is undefined at "
-                    f"generation {state.generation}"
-                )
+                raise ValueError(f"{statistic} is undefined at generation {generation}")
         values.append(value)
     return _mean(tuple(values))
 

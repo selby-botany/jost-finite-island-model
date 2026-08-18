@@ -8,6 +8,29 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Support for watching several convergence statistics at once:
+  `convergence_statistic` accepts a list of statistic names (in addition
+  to the existing single-statistic default) and a new
+  `convergence_combinator` (`"all"`, the default, or `"any"`) decides
+  whether every watched statistic must be simultaneously stable before a
+  run stops, or just one of them. `ConvergenceMonitor` now tracks an
+  independent trailing-window history per watched statistic; a single
+  statistic remains that mechanism's one-element special case, with no
+  change to its existing behavior, report shape, or manifest format.
+  `RunResult` gained `convergence_histories`, exposing every watched
+  statistic's recorded trajectory, not only the primary one.
+- Dedicated test coverage for the several-statistic feature: monitor-level
+  tests for the `"all"`/`"any"` combinator semantics and the mapping
+  contract `record()` requires once more than one statistic is watched; a
+  params test for list acceptance, duplicate/unknown rejection, and
+  round-tripping; an engine-level test proving the ordinary
+  single-statistic report shape is unchanged; a reproducible
+  several-statistic engine run reporting every statistic's history; a
+  deterministic, seed-pinned test proving `"any"` stops a real run earlier
+  than `"all"` (generation 5 vs. 15 for the same seed and parameters); a
+  CLI test running a config with several statistics and a combinator; and
+  manifest round-trip and malformed-input tests for the widened
+  `statistic` field.
 - Dedicated test coverage for per-deme island sizes (`N` as a length-`d`
   array): a per-deme drift-variance statistical test, an end-to-end engine
   run that bounds every generation's per-deme support by its own `N_i`,
@@ -46,6 +69,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Expanded `doc/configuration.md`'s `loci` section with a worked example
   of two loci with different lengths and a note that length currently has
   no effect on simulation behavior.
+- Updated the simulator design document (§5, §9) and `doc/developer.md`'s
+  "Adding a new what-if" table to record that watching several convergence
+  statistics is implemented, and to distinguish it from the pre-existing
+  `AnyCriterion`/`AllCriterion` combinators (which combine several
+  *criteria* over one shared history — a different axis from combining
+  several *statistics*, each with their own history).
+- Added `doc/configuration.md`'s `convergence_combinator` key and expanded
+  `convergence_statistic` to document the list form.
 
 ## [1.0.0] - 2026-08-16
 

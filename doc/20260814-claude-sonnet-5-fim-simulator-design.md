@@ -597,20 +597,36 @@ difference is within `tolerance`) and a fixed-`max_generations` fallback
 that always eventually fires regardless of statistical behavior — the
 safety valve named in §3.5, since stochastic-equilibrium detection is not
 guaranteed to trigger quickly, or at all, for a badly chosen tolerance.
-The initial pass watches a **single** statistic (`𝖯["convergence_statistic"]`,
-default `"D"`); the interface still accepts a list and a combinator
-(ANY/ALL) so that watching several statistics together is a config change
-rather than a rewrite, but only the single-statistic path is exercised
-until that need actually arises (§9).
+The **default** run watches a single statistic (`𝖯["convergence_statistic"]`,
+default `"D"`) — the common case, and still the cheapest path through the
+code, exercising exactly one history and one criterion evaluation per
+generation. `𝖯["convergence_statistic"]` also accepts a list of several
+statistics, combined by `𝖯["convergence_combinator"]` (`"all"`, the
+default — every watched statistic must be simultaneously stable — or
+`"any"` — stopping as soon as one is), landing as §9's "several statistics
+needed to agree before stopping." This is implemented, not merely
+accepted-and-unused: `AnyCriterion`/`AllCriterion` here compose several
+*criteria* over one shared history (useful for stacking different
+stability rules on the same statistic); the several-*statistic* case is a
+distinct axis, handled directly by `ConvergenceMonitor` itself (below)
+rather than by these two classes, since each watched statistic needs its
+own independent history, not a shared one.
 
-**`convergence/monitor.py`.** `ConvergenceMonitor` wraps one or more
-criteria plus the running history of the watched statistic(s); the engine
-calls `monitor.record(t, state)` once per generation and checks
-`monitor.should_stop()`. On stop, it reports *why* (statistic converged,
-vs. hard cap reached) — a run that hit the cap without converging is
-still a valid, inspectable result, not an error (a botanist probing an
-edge case where the model genuinely does not settle is itself useful
-information, and the run should say so plainly rather than raise).
+**`convergence/monitor.py`.** `ConvergenceMonitor` wraps one criterion,
+applied independently to one history per watched statistic, plus a
+combinator over their per-statistic stability results when there is more
+than one; the engine calls `monitor.record(t, values)` once per
+generation and checks `monitor.should_stop()`. A single watched statistic
+— the default — is exactly this general mechanism's one-element case: the
+combinator has nothing to combine, `record()` accepts a bare float instead
+of a per-statistic mapping for convenience, and every behavior matches
+what a dedicated single-statistic implementation would have done, because
+none of that behavior changed when several-statistic support was added.
+On stop, the monitor reports *why* (statistic converged, vs. hard cap
+reached) — a run that hit the cap without converging is still a valid,
+inspectable result, not an error (a botanist probing an edge case where
+the model genuinely does not settle is itself useful information, and the
+run should say so plainly rather than raise).
 
 **`statistics/differentiation.py`.** Pure functions of a frequency table
 — entirely independent of the simulator, consistent with this project's
@@ -832,7 +848,7 @@ than requiring a redesign:
 | …the mutation model weren't infinite-alleles (e.g., stepwise mutation for microsatellites)? | swap the strategy behind `mutate()` | `AlleleRegistry` is already the sole minting point for new IDs; a different model changes what gets minted, not who mints it |
 | …many replicate runs were needed for a confidence interval? | `engine.py` batches `n_replicates` as a vectorized array dimension | the attic research doc's own recommendation (§6.4 there): loci and replicates are i.i.d. under fixed parameters, an embarrassingly parallel array problem |
 | …a different statistic should drive convergence? | `ConvergenceCriterion` is a pluggable protocol | the monitor never hardcodes which statistic it watches |
-| …several statistics needed to agree before stopping? | `ConvergenceCriterion`'s ANY/ALL combinator over `𝖯["convergence_statistic"]` as a list | the single-statistic v1 path (§5) is that combinator's one-element special case, not a different code path |
+| …several statistics needed to agree before stopping? | `𝖯["convergence_statistic"]` as a list plus `𝖯["convergence_combinator"]` (`"all"`/`"any"`) **(shipped — see note below)** | the single-statistic v1 path (§5) is that combinator's one-element special case, not a different code path |
 | …a study needed run outputs at a scale JSONL doesn't suit well? | a second `TrajectoryStore` implementation (e.g. Parquet-backed) | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
 
 **Note on the first row — per-deme island sizes shipped in v1.0.0, not
@@ -904,6 +920,45 @@ config with unequal per-locus lengths. See
 [`doc/configuration.md`](configuration.md#loci) for the user-facing
 contract. Accordingly, §12 below no longer lists per-locus allele length
 as out of scope.
+
+**Note on the seventh row — several convergence statistics, unlike the
+rows above, needed real implementation, not just tests and documentation
+for a mechanism that was already wired.** §5's `ConvergenceCriterion`
+protocol and `AnyCriterion`/`AllCriterion` combinators existed from early
+in the build, but they combine several *criteria* over one *shared*
+history — a different axis from watching several *statistics*, each with
+its *own* history, which is what this row and §5's original "the interface
+still accepts a list and a combinator" description actually promised.
+That promise was aspirational until this pass: `SimulationParams` gained
+`convergence_statistic` as a scalar-or-list value (mirroring `N` and `m`'s
+existing scalar-or-richer pattern) plus a new `convergence_combinator`
+(`"all"`/`"any"`, default `"all"`); `ConvergenceMonitor` gained an
+independent history per watched statistic and now applies the configured
+criterion to each one separately before combining their stability results;
+`engine.py`'s per-generation convergence computation now returns every
+watched statistic's value, computing each locus's differentiation report
+once and reading every watched name from that same cached set rather than
+recomputing per statistic; and `RunManifest`/`FinalReport` both widened
+`convergence_statistic`/`converged_on` to echo back whatever shape was
+configured. Every one of these changes is additive: a single statistic —
+still the default — takes the exact same code path it always did, is
+still reported as a bare string rather than a one-element list, and every
+pre-existing test continues to pass unmodified. Test coverage added
+alongside the implementation: monitor-level tests proving the "all"
+combinator waits for every statistic while "any" stops on the first one
+stable, and that `record()` requires a covering mapping once more than one
+statistic is watched; a params test for list acceptance, duplicate/unknown
+rejection, and round-tripping; an engine-level test proving the
+single-statistic report shape is unchanged; an engine-level test proving a
+several-statistic run is reproducible and reports every statistic's
+history; a deterministic, seed-pinned engine test proving `"any"` actually
+stops a real run earlier than `"all"` does (generation 5 vs. 15 for the
+same seed and parameters) rather than only exercising the combinator
+Boolean logic in isolation; a CLI test running a config with several
+statistics and a combinator; and manifest round-trip and malformed-input
+tests for the widened `statistic` field. See
+[`doc/configuration.md`](configuration.md#convergence_statistic) for the
+user-facing contract.
 
 ## 10. Validation and test strategy
 

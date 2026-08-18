@@ -120,6 +120,28 @@ def test_run_accepts_loci_with_unequal_lengths(tmp_path: Path) -> None:
     assert (output / "scatter.png").exists()
 
 
+def test_run_accepts_several_convergence_statistics(tmp_path: Path) -> None:
+    """A config watching several statistics with a combinator runs end to end."""
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(
+        config,
+        convergence_statistic=["D", "G_ST"],
+        convergence_combinator="any",
+    )
+
+    status = cli.main(["run", str(config), "--output", str(output), "--quiet"])
+
+    assert status == 0
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["parameters"]["convergence_statistic"] == ["D", "G_ST"]
+    assert manifest["parameters"]["convergence_combinator"] == "any"
+    assert manifest["convergence"]["statistic"] == ["D", "G_ST"]
+    report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    assert report["converged_on"] == ["D", "G_ST"]
+    assert (output / "scatter.png").exists()
+
+
 def test_two_runs_have_identical_trajectory_and_report(tmp_path: Path) -> None:
     """Wall-clock output naming never enters persisted scientific values."""
     config = tmp_path / "run.yaml"

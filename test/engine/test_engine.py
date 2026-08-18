@@ -7,7 +7,7 @@ import pytest
 from fim.engine import FinalReport, RunResult, fim, report_for_state
 from fim.model.allele import MINTED_ID_START, AlleleId
 from fim.model.locus import LocusSpec
-from fim.model.params import SimulationParams
+from fim.model.params import ConvergenceCombinator, SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.store import InMemoryTrajectoryStore
 
@@ -189,6 +189,90 @@ def test_g_st_convergence_handles_shared_fixation() -> None:
     assert isinstance(result, RunResult)
     assert result.report["converged"]
     assert result.report["G_ST"] is None
+
+
+def test_single_statistic_report_shape_is_the_multi_statistic_special_case(
+    tiny_params: SimulationParams,
+) -> None:
+    """Watching one statistic still reports a bare string, not a one-item list.
+
+    Design §9: the ordinary single-statistic run is the several-statistic
+    combinator's one-element special case, not a differently shaped result.
+    """
+    result = _run(tiny_params)
+
+    assert result.report["converged_on"] == "D"
+    assert isinstance(result.report["converged_on"], str)
+    assert set(result.convergence_histories) == {"D"}
+    assert result.convergence_histories["D"] == result.convergence_history
+
+
+def test_multi_statistic_run_watches_and_reports_every_statistic() -> None:
+    """Watching several statistics is reproducible and reports every history."""
+    params = SimulationParams(
+        N=25,
+        m=0.15,
+        mu=0.03,
+        d=3,
+        seed=20260800,
+        loci=(LocusSpec(1, 100),),
+        convergence_statistic=("D", "G_ST"),
+        convergence_combinator="all",
+        convergence_window=6,
+        convergence_tolerance=0.02,
+        max_generations=60,
+    )
+
+    first = _run(params)
+    second = _run(params)
+
+    assert list(first.store.read(first.run_id)) == list(
+        second.store.read(second.run_id)
+    )
+    assert first.report == second.report
+    assert first.report["converged_on"] == ["D", "G_ST"]
+    assert set(first.convergence_histories) == {"D", "G_ST"}
+    assert (
+        len(first.convergence_histories["D"])
+        == len(first.convergence_histories["G_ST"])
+        == len(first.convergence_generations)
+    )
+
+
+def test_any_combinator_can_stop_earlier_than_all() -> None:
+    """The any combinator stops as soon as one statistic settles; all waits for both.
+
+    Same seed and parameters, differing only in ``convergence_combinator`` —
+    an exact, deterministic demonstration that the combinator changes when a
+    real run stops, not just an isolated monitor unit's Boolean logic.
+    """
+
+    def _params(combinator: ConvergenceCombinator) -> SimulationParams:
+        return SimulationParams(
+            N=25,
+            m=0.15,
+            mu=0.03,
+            d=3,
+            seed=20260800,
+            loci=(LocusSpec(1, 100),),
+            convergence_statistic=("D", "G_ST"),
+            convergence_combinator=combinator,
+            convergence_window=6,
+            convergence_tolerance=0.02,
+            max_generations=60,
+        )
+
+    any_params = _params("any")
+    all_params = _params("all")
+
+    any_result = _run(any_params)
+    all_result = _run(all_params)
+
+    assert any_result.report["converged"]
+    assert all_result.report["converged"]
+    assert any_result.report["generation"] == 5
+    assert all_result.report["generation"] == 15
+    assert any_result.report["generation"] < all_result.report["generation"]
 
 
 def test_mutation_ids_follow_high_explicit_initial_id() -> None:

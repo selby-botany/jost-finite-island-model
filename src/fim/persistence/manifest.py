@@ -20,7 +20,7 @@ class RunManifest:
     started_at: str
     ended_at: str
     converged: bool
-    convergence_statistic: str
+    convergence_statistic: str | tuple[str, ...]
     stop_reason: str
     generation: int
     software_version: str
@@ -49,7 +49,11 @@ class RunManifest:
             "ended_at": self.ended_at,
             "convergence": {
                 "converged": self.converged,
-                "statistic": self.convergence_statistic,
+                "statistic": (
+                    self.convergence_statistic
+                    if isinstance(self.convergence_statistic, str)
+                    else list(self.convergence_statistic)
+                ),
                 "reason": self.stop_reason,
                 "generation": self.generation,
             },
@@ -83,7 +87,7 @@ class RunManifest:
             started_at=_required_string(value, "started_at"),
             ended_at=_required_string(value, "ended_at"),
             converged=_required_bool(convergence, "converged"),
-            convergence_statistic=_required_string(convergence, "statistic"),
+            convergence_statistic=_required_string_or_strings(convergence, "statistic"),
             stop_reason=_required_string(convergence, "reason"),
             generation=_required_int(convergence, "generation"),
             software_version=_required_string(value, "software_version"),
@@ -139,3 +143,22 @@ def _required_string(value: Mapping[str, Any], key: str) -> str:
     if not isinstance(raw_value, str) or not raw_value:
         raise ValueError(f"manifest field {key!r} must be a nonempty string")
     return raw_value
+
+
+def _required_string_or_strings(
+    value: Mapping[str, Any],
+    key: str,
+) -> str | tuple[str, ...]:
+    """Read one required field as a nonempty string or a nonempty list of them."""
+    raw_value = value.get(key)
+    if isinstance(raw_value, str):
+        if not raw_value:
+            raise ValueError(f"manifest field {key!r} must be a nonempty string")
+        return raw_value
+    if isinstance(raw_value, list) and raw_value:
+        strings = tuple(raw_value)
+        if all(isinstance(item, str) and item for item in strings):
+            return strings
+    raise ValueError(
+        f"manifest field {key!r} must be a nonempty string or list of strings"
+    )

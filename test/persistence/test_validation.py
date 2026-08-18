@@ -167,6 +167,9 @@ def test_manifest_nested_fields_have_strict_types(tmp_path: Path) -> None:
     for field, bad, message in (
         ("converged", 1, "Boolean"),
         ("statistic", "", "nonempty"),
+        ("statistic", [], "nonempty string or list"),
+        ("statistic", [1, 2], "nonempty string or list"),
+        ("statistic", ["D", ""], "nonempty string or list"),
         ("reason", 1, "nonempty"),
         ("generation", -1, "non-negative"),
     ):

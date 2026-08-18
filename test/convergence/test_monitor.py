@@ -52,3 +52,85 @@ def test_monitor_distinguishes_convergence_from_cap() -> None:
     assert capped.reason() is StopReason.MAX_GENERATIONS
     assert converged.outcome().converged
     assert not capped.outcome().converged
+
+
+def test_multi_statistic_monitor_requires_a_covering_mapping() -> None:
+    """Watching several statistics rejects a bare float and a partial mapping."""
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(2, 0.0),
+        max_generations=10,
+        statistics=("D", "G_ST"),
+    )
+
+    with pytest.raises(ValueError, match="requires a mapping"):
+        monitor.record(0, 0.5)
+    with pytest.raises(ValueError, match="must cover exactly"):
+        monitor.record(0, {"D": 0.5})
+    with pytest.raises(ValueError, match="must cover exactly"):
+        monitor.record(0, {"D": 0.5, "G_ST": 0.5, "E_ST": 0.5})
+
+
+def test_all_combinator_requires_every_statistic_stable() -> None:
+    """The all combinator stops only once every statistic's history is stable."""
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(2, 0.0),
+        max_generations=10,
+        statistics=("D", "G_ST"),
+        combinator="all",
+    )
+
+    # D is immediately stable at a constant 0.5; G_ST keeps drifting for two
+    # more generations, so the combined monitor must not stop until it does.
+    monitor.record(0, {"D": 0.5, "G_ST": 0.0})
+    monitor.record(1, {"D": 0.5, "G_ST": 0.1})
+    assert not monitor.should_stop()
+    monitor.record(2, {"D": 0.5, "G_ST": 0.2})
+    assert not monitor.should_stop()
+    monitor.record(3, {"D": 0.5, "G_ST": 0.2})
+
+    assert monitor.should_stop()
+    assert monitor.outcome().converged
+    assert monitor.histories == {
+        "D": (0.5, 0.5, 0.5, 0.5),
+        "G_ST": (0.0, 0.1, 0.2, 0.2),
+    }
+
+
+def test_any_combinator_stops_as_soon_as_one_statistic_is_stable() -> None:
+    """The any combinator stops as soon as one statistic's history is stable."""
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(2, 0.0),
+        max_generations=10,
+        statistics=("D", "G_ST"),
+        combinator="any",
+    )
+
+    # D is immediately stable; G_ST is still moving. "any" must stop on D
+    # alone rather than waiting for G_ST, unlike the "all" case above.
+    monitor.record(0, {"D": 0.5, "G_ST": 0.0})
+    monitor.record(1, {"D": 0.5, "G_ST": 0.1})
+
+    assert monitor.should_stop()
+    assert monitor.outcome().converged
+    assert monitor.history == (0.5, 0.5)
+    assert monitor.histories == {"D": (0.5, 0.5), "G_ST": (0.0, 0.1)}
+
+
+def test_monitor_constructor_validates_statistics_and_combinator() -> None:
+    """Statistic names and the combinator are validated at construction."""
+    with pytest.raises(ValueError, match="statistics must not be empty"):
+        ConvergenceMonitor(
+            TrailingWindowCriterion(2, 0.0), max_generations=10, statistics=()
+        )
+    with pytest.raises(ValueError, match="must not repeat a name"):
+        ConvergenceMonitor(
+            TrailingWindowCriterion(2, 0.0),
+            max_generations=10,
+            statistics=("D", "D"),
+        )
+    with pytest.raises(ValueError, match="combinator must be"):
+        ConvergenceMonitor(
+            TrailingWindowCriterion(2, 0.0),
+            max_generations=10,
+            combinator="either",  # type: ignore[arg-type]
+        )

@@ -31,6 +31,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.convergence.monitor.ConvergenceMonitor.__init__)
     * [generations](#fim.convergence.monitor.ConvergenceMonitor.generations)
     * [history](#fim.convergence.monitor.ConvergenceMonitor.history)
+    * [histories](#fim.convergence.monitor.ConvergenceMonitor.histories)
     * [outcome](#fim.convergence.monitor.ConvergenceMonitor.outcome)
     * [reason](#fim.convergence.monitor.ConvergenceMonitor.reason)
     * [record](#fim.convergence.monitor.ConvergenceMonitor.record)
@@ -66,6 +67,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.model.params](#fim.model.params)
   * [SimulationParams](#fim.model.params.SimulationParams)
     * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
+    * [convergence\_statistics](#fim.model.params.SimulationParams.convergence_statistics)
     * [population\_sizes](#fim.model.params.SimulationParams.population_sizes)
     * [to\_dict](#fim.model.params.SimulationParams.to_dict)
     * [from\_mapping](#fim.model.params.SimulationParams.from_mapping)
@@ -362,22 +364,48 @@ Describe a monitor's terminal decision.
 class ConvergenceMonitor()
 ```
 
-Record one watched statistic and report why a run should stop.
+Record one or more watched statistics and report why a run should stop.
+
+A single statistic (the default) is this class's ordinary mode: every
+method behaves exactly as it did before several-statistic support
+existed. Passing more than one name in ``statistics`` is additive —
+each statistic keeps its own independent history, the same criterion is
+applied to each one separately, and ``combinator`` decides whether
+stopping requires every statistic to be simultaneously stable
+(``"all"``, design §9's "several statistics needed to agree") or just
+one of them (``"any"``). With exactly one statistic, ``all`` and
+``any`` of a single Boolean are the same value, so the combinator is a
+genuine no-op in that case rather than a separately tested path.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.__init__"></a>
 
 #### \_\_init\_\_
 
 ```python
-def __init__(criterion: ConvergenceCriterion, *, max_generations: int) -> None
+def __init__(criterion: ConvergenceCriterion,
+             *,
+             max_generations: int,
+             statistics: Sequence[str] = ("value", ),
+             combinator: Combinator = "all") -> None
 ```
 
 Initialize an empty monitor.
 
 **Arguments**:
 
-- `criterion` - Statistical stability rule.
+- `criterion` - Statistical stability rule, applied independently to
+  each watched statistic's own history.
 - `max_generations` - Hard generation safety cap.
+- `statistics` - Names of the statistic(s) to watch. Defaults to one
+  unnamed statistic, matching ``record()``'s bare-float form.
+- `combinator` - ``"all"`` requires every statistic to be stable
+  before stopping; ``"any"`` requires only one.
+
+
+**Raises**:
+
+- `ValueError` - If ``max_generations``, ``statistics``, or
+  ``combinator`` is invalid.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.generations"></a>
 
@@ -399,7 +427,22 @@ Return recorded generations in order.
 def history() -> tuple[float, ...]
 ```
 
-Return recorded statistic values in order.
+Return the primary (first-configured) statistic's recorded values.
+
+With one watched statistic — the ordinary case — this is that
+statistic's complete history. With several, it is only the first
+one named in ``statistics``; use ``histories`` for every statistic.
+
+<a id="fim.convergence.monitor.ConvergenceMonitor.histories"></a>
+
+#### histories
+
+```python
+@property
+def histories() -> Mapping[str, tuple[float, ...]]
+```
+
+Return every watched statistic's recorded values, by name.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.outcome"></a>
 
@@ -426,7 +469,8 @@ Return the terminal reason, or ``None`` while running.
 #### record
 
 ```python
-def record(generation: int, value: float) -> ConvergenceOutcome
+def record(generation: int,
+           value: float | Mapping[str, float]) -> ConvergenceOutcome
 ```
 
 Record one ordered observation and update the stop decision.
@@ -434,12 +478,20 @@ Record one ordered observation and update the stop decision.
 **Arguments**:
 
 - `generation` - Non-negative generation number.
-- `value` - Finite value of the watched statistic.
+- `value` - The watched statistic's finite value. A bare float is
+  only accepted while watching exactly one statistic; with
+  several, pass a mapping covering every configured name.
 
 
 **Returns**:
 
   The updated outcome.
+
+
+**Raises**:
+
+- `RuntimeError` - If called after the monitor already stopped.
+- `ValueError` - If ``generation`` or ``value`` is invalid.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.should_stop"></a>
 
@@ -902,7 +954,11 @@ Store all values needed to reproduce a finite-island-model run.
 - `initial_allele_count` - Founding allele count per locus.
 - `initial_concentration` - Symmetric Dirichlet concentration.
 - `deme_weighting` - Weighting used by statistics that support it.
-- `convergence_statistic` - Statistic watched by the convergence monitor.
+- `convergence_statistic` - One statistic, or several, watched by the
+  convergence monitor.
+- `convergence_combinator` - How several watched statistics combine —
+  "all" (every one stable) or "any" (at least one stable).
+  A single statistic makes this a no-op special case.
 - `convergence_window` - Trailing stability-window length.
 - `convergence_tolerance` - Maximum half-window mean difference.
 - `max_generations` - Hard generation safety cap.
@@ -918,6 +974,17 @@ def __post_init__() -> None
 ```
 
 Normalize sequence inputs and validate every parameter.
+
+<a id="fim.model.params.SimulationParams.convergence_statistics"></a>
+
+#### convergence\_statistics
+
+```python
+@property
+def convergence_statistics() -> tuple[str, ...]
+```
+
+Return every statistic watched by the convergence monitor.
 
 <a id="fim.model.params.SimulationParams.population_sizes"></a>
 

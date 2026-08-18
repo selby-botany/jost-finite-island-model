@@ -79,3 +79,38 @@ def test_manifest_round_trip_reconstructs_parameters(tmp_path: Path) -> None:
 
     assert restored == manifest
     assert restored.params() == params
+
+
+def test_manifest_round_trip_reconstructs_several_convergence_statistics(
+    tmp_path: Path,
+) -> None:
+    """A manifest watching several statistics is a lossless replay too."""
+    params = SimulationParams(
+        N=20,
+        m=0.1,
+        mu=0.001,
+        d=2,
+        seed=7,
+        loci=(LocusSpec(1, 200),),
+        convergence_statistic=("D", "G_ST"),
+        convergence_combinator="any",
+    )
+    manifest = RunManifest(
+        run_id="run-a",
+        parameters=params.to_dict(),
+        started_at="2026-08-14T20:00:00Z",
+        ended_at="2026-08-14T20:00:01Z",
+        converged=True,
+        convergence_statistic=("D", "G_ST"),
+        stop_reason="statistic converged",
+        generation=4,
+        software_version="1.0.0",
+    )
+    path = tmp_path / "manifest.json"
+
+    write_manifest(path, manifest)
+    restored = read_manifest(path)
+
+    assert restored == manifest
+    assert restored.convergence_statistic == ("D", "G_ST")
+    assert restored.params() == params

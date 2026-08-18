@@ -124,7 +124,7 @@ adding engine state.
 | Per-locus mutation from length | Derive rates from `LocusSpec.length` in a mutation strategy |
 | Selection | Add a pure `select` operator before drift |
 | Stepwise mutation | Add a strategy behind mutation identity assignment |
-| Several convergence statistics | Add monitor composition over separate histories |
+| Several convergence statistics | Pass a list for `convergence_statistic` plus `convergence_combinator`; `ConvergenceMonitor` already supports it |
 | Large trajectories | Implement another `TrajectoryStore` |
 | GUI | Call `fim.engine.fim`; do not duplicate model logic |
 

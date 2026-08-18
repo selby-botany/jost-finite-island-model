@@ -25,6 +25,8 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     assert params.initial_concentration == PARAMETER_DEFAULTS["initial_concentration"]
     assert params.deme_weighting == PARAMETER_DEFAULTS["deme_weighting"]
     assert params.convergence_statistic == PARAMETER_DEFAULTS["convergence_statistic"]
+    assert params.convergence_statistics == ("D",)
+    assert params.convergence_combinator == PARAMETER_DEFAULTS["convergence_combinator"]
     assert params.convergence_window == PARAMETER_DEFAULTS["convergence_window"]
     assert params.convergence_tolerance == PARAMETER_DEFAULTS["convergence_tolerance"]
     assert params.max_generations == PARAMETER_DEFAULTS["max_generations"]
@@ -102,6 +104,35 @@ def test_mapping_round_trip_is_lossless() -> None:
     assert SimulationParams.from_mapping(original.to_dict()) == original
 
 
+def test_convergence_statistic_accepts_several_names_and_round_trips() -> None:
+    """Several statistics normalize to a tuple, round-trip, and stay ordered.
+
+    Design §9: "several statistics needed to agree before stopping" lands as
+    a list here; a single statistic is that list's one-element special case
+    and keeps producing the same bare string as before this extension.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "convergence_statistic": ["G_ST", "D"],
+            "convergence_combinator": "any",
+        }
+    )
+
+    assert params.convergence_statistic == ("G_ST", "D")
+    assert params.convergence_statistics == ("G_ST", "D")
+    assert params.convergence_combinator == "any"
+    assert params.to_dict()["convergence_statistic"] == ["G_ST", "D"]
+    assert params.to_dict()["convergence_combinator"] == "any"
+    assert SimulationParams.from_mapping(params.to_dict()) == params
+
+    single = SimulationParams.from_mapping(
+        {**_valid_config(), "convergence_statistic": ["D"]}
+    )
+    assert single.convergence_statistic == "D"
+    assert single.convergence_statistics == ("D",)
+
+
 @pytest.mark.parametrize(
     ("updates", "message"),
     [
@@ -114,6 +145,10 @@ def test_mapping_round_trip_is_lossless() -> None:
         ({"initial_concentration": 0.0}, "greater than 0"),
         ({"initial_concentration": float("inf")}, "finite"),
         ({"convergence_statistic": "unknown"}, "must be one of"),
+        ({"convergence_statistic": []}, "must not be empty"),
+        ({"convergence_statistic": ["D", "unknown"]}, "must be one of"),
+        ({"convergence_statistic": ["D", "D"]}, "must not repeat"),
+        ({"convergence_combinator": "either"}, "convergence_combinator"),
         ({"convergence_tolerance": -1.0}, "non-negative"),
         ({"convergence_tolerance": float("nan")}, "finite"),
         ({"max_generations": 0}, "max_generations"),
@@ -280,7 +315,7 @@ def test_migration_parser_is_strict(value: object, message: str) -> None:
         ("deme_weighting", "bad", "deme_weighting must be"),
         ("deme_weighting", False, "nonempty"),
         ("convergence_statistic", "", "nonempty"),
-        ("convergence_statistic", 1, "nonempty"),
+        ("convergence_statistic", 1, "string or a list of strings"),
         ("convergence_window", 1.5, "must be an integer"),
         ("max_generations", True, "must be an integer"),
     ],
