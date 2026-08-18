@@ -186,22 +186,33 @@ Implementation consequence: an allele is represented as an opaque integer
 ID, nothing more — never a string, never a structured value that invites
 comparison by anything other than equality.
 
-New alleles are minted by mutation under the infinite-alleles assumption
-(every mutation event produces a label never seen before — a good
+New alleles are minted by mutation under the infinite-alleles assumption by
+default (every mutation event produces a label never seen before — a good
 approximation once a locus spans "many base pairs," per the
 differentiation-measures guide). A single global `AlleleRegistry` hands out
 the next unused integer on every mutation event across the whole run,
 guaranteeing `same()` is exactly integer equality with no risk of two
 independent mutations colliding on the same label.
 
+An opt-in finite-alleles (K-allele) model — **implemented**, §9 — relaxes
+that assumption for loci short enough that it stops holding: each locus
+gets a bounded state space of `4 ** L` possible states, and a mutation
+event can *recur* to a state already present elsewhere in the run rather
+than always minting fresh. This still imposes no ordering or metric on
+alleles — a K-allele target is chosen uniformly among the other `K - 1`
+states, with no notion of one being "closer" to another — so it stays
+inside the same distance-free identity model as the paragraph above, only
+with a ceiling.
+
 A locus is a separate concept from an allele: it names *where* to look,
-carrying its own identity `l ∈ 𝗭+` and length `L ∈ 𝗭+`. `L` matters only
+carrying its own identity `l ∈ 𝗭+` and length `L ∈ 𝗭+`. `L` matters
 through the mutation rate (`μ ≈ μ_b · L`, per the differentiation-measures
-guide) — it plays no role in any statistic computed from a frequency
-vector. Represented as a `LocusSpec(locus_id, length)` value object, with
-every run configuration providing one `LocusSpec` per tracked locus —
-`length` may be equal across loci (the common case) or vary per locus
-(§9); either way it is a data change, never a schema change.
+guide) and, under the finite-alleles model only, through that state-space
+ceiling — either way it plays no role in any statistic computed from a
+frequency vector. Represented as a `LocusSpec(locus_id, length)` value
+object, with every run configuration providing one `LocusSpec` per tracked
+locus — `length` may be equal across loci (the common case) or vary per
+locus (§9); either way it is a data change, never a schema change.
 
 ### 3.3 Initial conditions
 
@@ -526,11 +537,17 @@ jost-finite-island-model/
 `int`-backed enum-like wrapper if the language's type system rewards it) —
 carries no payload beyond its identity. `AlleleRegistry.next_id()` hands
 out a fresh globally-unique ID; the registry is the *only* place a new
-`AlleleId` value is ever created, so the infinite-alleles guarantee (every
-mutation event is novel) reduces to "call this one function."
+`AlleleId` value is ever created under the default infinite-alleles model,
+so its guarantee (every mutation event is novel) reduces to "call this one
+function." The opt-in finite-alleles model's `FiniteAlleleSpace` (one per
+locus, holding a bounded state and the identities minted into it so far)
+and `FiniteAlleleRegistry` (dispatches to the right locus's space) live
+alongside it — see §9.
 
 **`model/locus.py`.** `LocusSpec(locus_id, length)`, immutable. A run's
 `loci: tuple[LocusSpec, ...]` is part of `SimulationParams`.
+`finite_allele_capacity(length) -> 4 ** length` is the finite-alleles
+model's only other consumer of `length`.
 
 **`model/state.py`.** `ModelState` holds, per deme and per locus, a
 sparse mapping `AlleleId → frequency` (§3.1's `p_{k,t,l}`) — not a dense
@@ -570,7 +587,9 @@ ModelState`, matching §3.4 exactly:
   `model/topology.py` below.
 - `mutate(state, mu, registry) -> ModelState` — infinite-alleles model:
   each of the `N` gene copies independently mutates with probability `μ`;
-  a mutating copy's label is replaced by a fresh ID from `registry`.
+  a mutating copy's label is replaced by a fresh ID from `registry`. An
+  optional `finite_alleles` registry switches to the K-allele model
+  instead — see §9 and `model/allele.py` above.
 - `drift(state, N) -> ModelState` — multinomial resample of `N` gene
   copies (§3.1's ploidy-neutral convention: `N` is already a gene-copy
   count, not an individual count) from the post-migration/mutation
@@ -832,9 +851,10 @@ than requiring a redesign. Several are already implemented:
 | …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix — **implemented**; a matrix's rows are the authoritative weights and are never rescaled by `N` (see [`doc/configuration.md`](configuration.md#m)) | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
 | …migration were spatial (stepping-stone)? | `m` accepts a sparse/neighbor-restricted matrix — **1D ring and linear implemented** (`fim.model.topology`, [`doc/configuration.md`](configuration.md#m)); a 2D lattice and a `MigrantPoolStrategy` interface for migration that itself changes over a run are not | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
 | …migration counted individuals rather than blending an idealized continuous fraction? | `𝖯["migrant_sampling"] = "stochastic"` — **implemented, opt-in** (default `"continuous"`, unchanged); each deme's migrant count is drawn from `Binomial(N_i, rate)` instead of applied exactly, while migrant composition stays the deterministic pool average, so `drift()` remains the pipeline's only operator that resamples every gene copy | `migrate()`'s existing rate/pool split (row above) already separates "how much moves" from "what it's made of"; only the first half needed to become random |
-| …locus length varied? | `LocusSpec.length` per locus — **implemented**; inert until a future per-base-pair mutation model reads it | already a first-class field (§3.2) |
+| …locus length varied? | `LocusSpec.length` per locus — **implemented**; drives the finite-alleles model's per-locus capacity (below) when that model is active, otherwise still inert | already a first-class field (§3.2) |
 | …selection were added? | a new `select()` operator inserted before `drift()` | the pipeline (§3.4) is already a composition of independent stages; adding one is additive |
-| …the mutation model weren't infinite-alleles (e.g., stepwise mutation for microsatellites)? | swap the strategy behind `mutate()` | `AlleleRegistry` is already the sole minting point for new IDs; a different model changes what gets minted, not who mints it |
+| …the mutation model weren't infinite-alleles, to remove artifacts the infinite-length assumption can cause at short loci? | `𝖯["mutation_model"] = "finite_alleles"` — **implemented, opt-in** (default `"infinite_alleles"`, unchanged); each locus gets a bounded state space of `4 ** length` (`finite_allele_capacity`), and a mutation can recur to a state already present elsewhere in the run rather than always minting fresh, without imposing any ordering or distance between alleles | `AlleleRegistry` was already the sole minting point for new IDs; `FiniteAlleleSpace`/`FiniteAlleleRegistry` are a bounded, per-locus alternative slotted in behind the same `mutate()` call, decided by which registry `step()` threads through |
+| …the mutation model needed genuine spatial structure (stepwise mutation for microsatellites, where "how far" one allele is from another matters)? | swap the strategy behind `mutate()` again | remains out of scope (§11) — this is a different, distance-based model from the row above, deliberately not the direction taken (§3.2) |
 | …many replicate runs were needed for a confidence interval? | `engine.py` batches `n_replicates` as independently seeded, sequential scalar runs — **implemented** | vectorizing that loop as a NumPy array dimension remains a possible performance follow-up, not a capability gap |
 | …a different convergence *rule* were needed, not just a different statistic to watch (already free via `convergence_statistic`, §4.3, unrelated to this row)? | `ConvergenceCriterion` is a pluggable protocol | `ConvergenceMonitor` accepts any object implementing it; only `TrailingWindowCriterion` exists today, and `engine.py` constructs it directly, so nothing beyond that one implementation is selectable from config yet |
 | …several statistics needed to agree before stopping? | `𝖯["convergence_statistic"]` as a list plus `𝖯["convergence_combinator"]` (`"all"`/`"any"`) — **implemented** | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
@@ -909,13 +929,15 @@ correctly and report the right reason. `TrajectoryStore` round-trips
 
 ## 11. Out of scope
 
-Not currently implemented: selection; non-infinite-alleles mutation
-models (stepwise mutation for microsatellites); a 2D lattice migration
-topology; and a `MigrantPoolStrategy` interface for neighbor-selection
-logic that is not reducible to a precomputed matrix (1D stepping-stone
-and arbitrary irregular topologies, by contrast, are implemented — §9).
-Every one of these has a specific landing spot already identified (§9) —
-they are deferred, not precluded.
+Not currently implemented: selection; a distance-based, spatial mutation
+model such as stepwise mutation for microsatellites (the finite-alleles
+model, by contrast, is implemented — §9 — but deliberately stays
+distance-free, per §3.2); a 2D lattice migration topology; and a
+`MigrantPoolStrategy` interface for neighbor-selection logic that is not
+reducible to a precomputed matrix (1D stepping-stone and arbitrary
+irregular topologies, by contrast, are implemented — §9). Every one of
+these has a specific landing spot already identified (§9) — they are
+deferred, not precluded.
 
 ## 12. Illustrated walkthrough
 

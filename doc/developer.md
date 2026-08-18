@@ -77,8 +77,10 @@ and smoke-tested by the tag-driven GitHub Actions release workflow.
 
 1. **Migration:** deterministic all-other-deme blending, or a supplied
    row-stochastic matrix.
-2. **Mutation:** a binomial number of distinct gene copies receive globally
-   novel IDs.
+2. **Mutation:** a binomial number of gene copies mutate. By default
+   (`mutation_model: infinite_alleles`) each receives a globally novel ID;
+   under the opt-in `finite_alleles` model, a mutating copy's target is
+   drawn from its own locus's bounded state space and can recur.
 3. **Drift:** each deme/locus is multinomially resampled to exactly `N` gene
    copies.
 
@@ -124,8 +126,9 @@ adding engine state.
 | Spatial migration beyond 1D or a fixed matrix | 2D lattice topology, or a `MigrantPoolStrategy` interface — neither built yet |
 | Random, rather than fixed, migrant counts | `migrant_sampling: stochastic`; `migrate()` accepts `rng` and draws `Binomial(N_i, rate)` |
 | Per-locus mutation from length | Derive rates from `LocusSpec.length` in a mutation strategy |
+| Finite-length alleles (remove infinite-length artifacts) | `mutation_model: finite_alleles`; `LocusSpec.length` bounds each locus to `4 ** length` states, and mutation can recur |
 | Selection | Add a pure `select` operator before drift |
-| Stepwise mutation | Add a strategy behind mutation identity assignment |
+| Stepwise (distance-based) mutation, e.g. for microsatellites | Add a strategy behind mutation identity assignment — a different, still-unbuilt model from the row above (§3.2 of the design doc explains why) |
 | Several convergence statistics | Pass a list for `convergence_statistic` plus `convergence_combinator` |
 | Large trajectories | Implement another `TrajectoryStore` |
 | GUI | Call `fim.engine.fim`; do not duplicate model logic |

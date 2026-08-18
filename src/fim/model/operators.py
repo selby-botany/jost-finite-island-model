@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from fim.model.allele import AlleleId, AlleleRegistry
+from fim.model.allele import AlleleId, AlleleRegistry, FiniteAlleleRegistry
 from fim.model.params import Migration, PopulationSize, SimulationParams
 from fim.model.state import FrequencyMap, ModelState
 
@@ -118,19 +118,31 @@ def mutate(
     population_size: PopulationSize,
     registry: AlleleRegistry,
     rng: np.random.Generator,
+    *,
+    finite_alleles: FiniteAlleleRegistry | None = None,
 ) -> ModelState:
-    """Replace a binomially sampled number of copies with novel alleles.
+    """Replace a binomially sampled number of copies with new alleles.
 
     Existing allele mass is reduced proportionally, avoiding an extra drift
-    sample in the mutation stage. Every mutation event receives a fresh global
-    identity and contributes exactly ``1 / N`` frequency.
+    sample in the mutation stage.
 
     Args:
         state: Post-migration state.
         mu: Per-copy mutation probability.
         population_size: Shared or per-deme gene-copy count.
-        registry: Global mutant-allele allocator for the run.
+        registry: Global mutant-allele allocator for the run — used under
+            the default infinite-alleles model, where every mutation event
+            receives a fresh global identity.
         rng: The run's explicitly threaded random generator.
+        finite_alleles: Optional per-locus finite-allele-space registry
+            selecting the opt-in finite-alleles (K-allele) model instead
+            (`SimulationParams.mutation_model == "finite_alleles"`). A
+            mutation event's target then depends on its *source* allele —
+            never itself, but possibly a state already present elsewhere
+            in the run — so mutating copies are first attributed back to
+            the existing allele each one came from, sampled proportionally
+            to that allele's current share, exactly like the proportional
+            mass reduction below already assumes.
 
     Returns:
         A post-mutation state at the same generation.
@@ -141,7 +153,7 @@ def mutate(
     demes: list[tuple[Mapping[AlleleId, float], ...]] = []
     for deme, size in zip(state.frequencies, sizes, strict=True):
         locus_maps: list[Mapping[AlleleId, float]] = []
-        for frequency_map in deme:
+        for frequency_map, locus in zip(deme, state.loci, strict=True):
             event_count = int(rng.binomial(size, mu))
             if event_count == 0:
                 locus_maps.append(dict(frequency_map))
@@ -151,15 +163,43 @@ def mutate(
             # rounded onto the 1 / N grid. Rounding here would deterministically
             # erase sub-grid migrant mass and undo migration, biasing the run
             # toward spurious differentiation; drift is the sole operator that
-            # realizes N discrete gene copies.
+            # realizes N discrete gene copies. Valid under either mutation
+            # model: which existing copies mutate doesn't change how much
+            # mass leaves the surviving distribution, only where it goes.
             retained_mass = 1.0 - event_count / size
             mutated: dict[AlleleId, float] = {
                 allele_id: frequency * retained_mass
                 for allele_id, frequency in frequency_map.items()
             }
             event_frequency = 1.0 / size
-            for _event in range(event_count):
-                mutated[registry.next_id()] = event_frequency
+            if finite_alleles is None:
+                for _event in range(event_count):
+                    mutated[registry.next_id()] = event_frequency
+            else:
+                # Attribute the event_count mutating copies back to the
+                # existing alleles they actually came from, proportionally
+                # to current share — needed here, unlike above, because a
+                # K-allele target excludes its own source, so the source's
+                # identity is no longer irrelevant to the outcome. A target
+                # can coincide with another event's target, or with mass
+                # already retained above, so contributions accumulate
+                # rather than overwrite.
+                allele_ids = tuple(frequency_map)
+                probabilities = np.fromiter(
+                    frequency_map.values(),
+                    dtype=np.float64,
+                    count=len(allele_ids),
+                )
+                probabilities /= probabilities.sum()
+                source_counts = rng.multinomial(event_count, probabilities)
+                for source_id, source_count in zip(
+                    allele_ids, source_counts, strict=True
+                ):
+                    for _event in range(int(source_count)):
+                        target = finite_alleles.mutate_target(
+                            locus.locus_id, source_id, rng
+                        )
+                        mutated[target] = mutated.get(target, 0.0) + event_frequency
             locus_maps.append(_normalize(mutated))
         demes.append(tuple(locus_maps))
     return ModelState(
@@ -174,6 +214,8 @@ def step(
     params: SimulationParams,
     registry: AlleleRegistry,
     rng: np.random.Generator,
+    *,
+    finite_alleles: FiniteAlleleRegistry | None = None,
 ) -> ModelState:
     """Advance one generation in migration, mutation, then drift order.
 
@@ -182,6 +224,11 @@ def step(
         params: Validated run parameters.
         registry: Global mutant-allele allocator.
         rng: The run's explicitly threaded random generator.
+        finite_alleles: Optional per-locus finite-allele-space registry,
+            built once per run by the caller and threaded through every
+            generation — required when
+            ``params.mutation_model == "finite_alleles"``, unused
+            otherwise.
 
     Returns:
         The next generation.
@@ -192,7 +239,9 @@ def step(
     # unaffected by this feature's existence.
     migration_rng = rng if params.migrant_sampling == "stochastic" else None
     migrated = migrate(state, params.m, params.N, rng=migration_rng)
-    mutated = mutate(migrated, params.mu, params.N, registry, rng)
+    mutated = mutate(
+        migrated, params.mu, params.N, registry, rng, finite_alleles=finite_alleles
+    )
     return drift(mutated, params.N, rng)
 
 

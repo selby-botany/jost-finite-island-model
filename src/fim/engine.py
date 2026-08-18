@@ -15,8 +15,14 @@ import numpy as np
 from fim import __version__
 from fim.convergence.criteria import TrailingWindowCriterion
 from fim.convergence.monitor import ConvergenceMonitor
-from fim.model.allele import MINTED_ID_START, AlleleRegistry
+from fim.model.allele import (
+    MINTED_ID_START,
+    AlleleRegistry,
+    FiniteAlleleRegistry,
+    FiniteAlleleSpace,
+)
 from fim.model.initial import generate_initial_state
+from fim.model.locus import finite_allele_capacity
 from fim.model.operators import step
 from fim.model.params import Migration, PopulationSize, SimulationParams
 from fim.model.state import ModelState
@@ -182,6 +188,32 @@ def report_for_state(
     }
 
 
+def _build_finite_allele_spaces(
+    state: ModelState,
+    params: SimulationParams,
+) -> dict[int, FiniteAlleleSpace]:
+    """Construct one finite-allele state space per locus, seeded from generation zero.
+
+    Args:
+        state: The run's generated generation-zero state.
+        params: Validated run parameters.
+
+    Returns:
+        One `FiniteAlleleSpace` per locus, keyed by `LocusSpec.locus_id`.
+    """
+    return {
+        locus.locus_id: FiniteAlleleSpace(
+            finite_allele_capacity(locus.length),
+            (
+                allele_id
+                for deme in state.frequencies
+                for allele_id in deme[locus_index]
+            ),
+        )
+        for locus_index, locus in enumerate(params.loci)
+    }
+
+
 def _run_one(
     params: SimulationParams,
     store: TrajectoryStore,
@@ -212,13 +244,18 @@ def _run_one(
         default=MINTED_ID_START - 1,
     )
     registry = AlleleRegistry(start=max(MINTED_ID_START, highest_initial_id + 1))
+    finite_alleles = (
+        FiniteAlleleRegistry(_build_finite_allele_spaces(state, params))
+        if params.mutation_model == "finite_alleles"
+        else None
+    )
     store.write_generation(run_id, state.generation, state.to_rows(run_id))
     monitor.record(
         state.generation,
         _convergence_values(state, params),
     )
     while not monitor.should_stop():
-        state = step(state, params, registry, rng)
+        state = step(state, params, registry, rng, finite_alleles=finite_alleles)
         store.write_generation(run_id, state.generation, state.to_rows(run_id))
         monitor.record(
             state.generation,

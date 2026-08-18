@@ -183,6 +183,40 @@ def test_run_accepts_stochastic_migrant_sampling(tmp_path: Path) -> None:
     assert (first_output / "scatter.png").exists()
 
 
+def test_run_accepts_finite_alleles_mutation_model(tmp_path: Path) -> None:
+    """A config opting in to a bounded allele state space runs end to end."""
+    config = tmp_path / "run.yaml"
+    first_output = tmp_path / "first"
+    second_output = tmp_path / "second"
+    _write_config(
+        config,
+        mu=0.1,
+        loci=[{"locus_id": 1, "length": 1}],
+        mutation_model="finite_alleles",
+    )
+
+    first_status = cli.main(
+        ["run", str(config), "--output", str(first_output), "--quiet"]
+    )
+    second_status = cli.main(
+        ["run", str(config), "--output", str(second_output), "--quiet"]
+    )
+
+    assert first_status == 0
+    assert second_status == 0
+    manifest = json.loads((first_output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["parameters"]["mutation_model"] == "finite_alleles"
+    first_report = (first_output / "report.json").read_text(encoding="utf-8")
+    second_report = (second_output / "report.json").read_text(encoding="utf-8")
+    assert first_report == second_report
+    trajectory = (first_output / "trajectory.jsonl").read_text(encoding="utf-8")
+    allele_ids = {
+        json.loads(line)["allele_id"] for line in trajectory.splitlines() if line
+    }
+    assert allele_ids <= set(range(4))
+    assert (first_output / "scatter.png").exists()
+
+
 def test_two_runs_have_identical_trajectory_and_report(tmp_path: Path) -> None:
     """Wall-clock output naming never enters persisted scientific values."""
     config = tmp_path / "run.yaml"

@@ -117,6 +117,49 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   round-trip; two engine-level reproducible-run tests (one exercising
   `"stochastic"` directly, one proving a config that omits the key is
   byte-identical to one that spells out `"continuous"`); and a CLI test.
+- An opt-in finite-alleles (K-allele) mutation model. A new
+  `mutation_model` config key (`"infinite_alleles"`, the default and the
+  only behavior in every prior release, or `"finite_alleles"`) controls
+  whether a mutation event always mints a globally novel allele identity,
+  or instead targets one of a bounded `4 ** length` states per locus
+  (`fim.model.locus.finite_allele_capacity`), landing uniformly on any
+  state other than its own current one — including, unlike the
+  infinite-alleles model, a state that already exists elsewhere in the
+  run (a *recurrence*). This removes an artifact of the infinite-alleles
+  assumption at short loci, where treating every mutation as novel
+  stops being a good approximation. The new `FiniteAlleleSpace` (one
+  bounded state space per locus) and `FiniteAlleleRegistry` (dispatches
+  to the right locus's space) never materialize the full state space,
+  even when astronomically large: a target is decided as "a specific
+  already-minted state" or "any not-yet-minted state" via one float
+  probability that underflows cleanly toward `0.0` as capacity grows,
+  recovering the infinite-alleles model in that limit without ever
+  overflowing a fixed-width integer type. `mutate()` gained an optional
+  `finite_alleles` parameter; the default `"infinite_alleles"` path never
+  passes one, so `mutate()`'s existing arithmetic, iteration order, and
+  every existing exact-value test are unchanged, and no run that omits
+  the new key is affected in any way. `SimulationParams` also validates,
+  per locus, that every starting allele ID (the founding range, or an
+  explicit `p_0`'s specific IDs) fits inside that locus's own capacity.
+- Dedicated test coverage for the finite-alleles model: `FiniteAlleleSpace`
+  construction-validation tests; a deterministic property test proving a
+  small state space's targets never equal their own source and never
+  exceed capacity; an exhausted-capacity edge case where every draw must
+  be a recurrence; an astronomically large capacity case proving
+  recurrence becomes exactly impossible, not merely rare; a
+  `@pytest.mark.statistical` test confirming the sampled recurrence rate
+  matches theory within a pre-derived five-sigma band; a
+  `FiniteAlleleRegistry` dispatch test proving two loci keep independent
+  state spaces; `mutate()`-level tests covering per-locus capacity
+  enforcement, mass accumulation (rather than overwriting) when two
+  mutation events land on the same target, the opt-in contract (omitting
+  `finite_alleles` matches passing `None` explicitly), and an end-to-end
+  statistical recurrence-rate check through `mutate()`'s own
+  source-attribution logic; two engine-level reproducible-run tests (one
+  exercising `finite_alleles` directly and confirming the global capacity
+  bound holds across an entire run, one proving a config that omits
+  `mutation_model` is byte-identical to one that spells out
+  `"infinite_alleles"`); and a CLI test.
 
 ### Changed
 

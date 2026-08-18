@@ -603,3 +603,68 @@ def test_default_migrant_sampling_is_unaffected_by_the_stochastic_option() -> No
         explicit_run.store.read(explicit_run.run_id)
     )
     assert implicit_run.report == explicit_run.report
+
+
+def test_finite_alleles_run_is_reproducible_and_bounds_capacity() -> None:
+    """Opting in to a bounded allele-state space stays fully reproducible.
+
+    ``length: 1`` gives capacity ``4`` — small enough that recurrence is
+    all but guaranteed within a handful of generations, so a real run also
+    directly proves the global capacity bound holds end to end, not just
+    within `FiniteAlleleSpace`'s own unit tests.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            "N": 40,
+            "d": 3,
+            "m": 0.2,
+            "mu": 0.1,
+            "seed": 20260821,
+            "loci": [{"locus_id": 1, "length": 1}],
+            "mutation_model": "finite_alleles",
+            "convergence_window": 4,
+            "convergence_tolerance": 1.0,
+            "max_generations": 10,
+        }
+    )
+
+    first = _run(params)
+    second = _run(params)
+
+    first_rows = list(first.store.read(first.run_id))
+    assert first_rows == list(second.store.read(second.run_id))
+    assert first.report == second.report
+    assert {int(row["allele_id"]) for row in first_rows} <= set(range(4))
+
+
+def test_default_mutation_model_is_unaffected_by_the_finite_alleles_option() -> None:
+    """Leaving `mutation_model` unset stays byte-identical to before it existed.
+
+    The opt-in contract this feature must hold: a config with no opinion on
+    `mutation_model` produces exactly the same run whether or not the
+    "finite_alleles" option exists in the codebase, because `mutate()` is
+    never handed a `finite_alleles` registry unless a config explicitly
+    asks for it.
+    """
+    base_config = {
+        "N": 40,
+        "d": 3,
+        "m": 0.2,
+        "mu": 0.02,
+        "seed": 20260821,
+        "convergence_window": 4,
+        "convergence_tolerance": 1.0,
+        "max_generations": 8,
+    }
+    implicit = SimulationParams.from_mapping(base_config)
+    explicit = SimulationParams.from_mapping(
+        {**base_config, "mutation_model": "infinite_alleles"}
+    )
+
+    implicit_run = _run(implicit)
+    explicit_run = _run(explicit)
+
+    assert list(implicit_run.store.read(implicit_run.run_id)) == list(
+        explicit_run.store.read(explicit_run.run_id)
+    )
+    assert implicit_run.report == explicit_run.report

@@ -1,8 +1,18 @@
-"""Opaque allele identities and globally unique mutant-allele allocation."""
+"""Opaque allele identities and mutant-allele allocation.
+
+Two mutation-model allocators live here: `AlleleRegistry`, a bare counter
+for the infinite-alleles model (every mutation event is globally novel),
+and `FiniteAlleleSpace`/`FiniteAlleleRegistry`, a bounded, per-locus
+alternative for the finite-alleles (K-allele) model, where a mutation event
+can land on a state that already exists elsewhere in the run.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from typing import NewType
+
+import numpy as np
 
 AlleleId = NewType("AlleleId", int)
 
@@ -51,3 +61,115 @@ class AlleleRegistry:
         allele_id = AlleleId(self._next)
         self._next += 1
         return allele_id
+
+
+class FiniteAlleleSpace:
+    """One locus's bounded allele-state space under the K-allele model.
+
+    Implements the standard finite-alleles mutation kernel: every mutation
+    event lands uniformly on one of the ``capacity - 1`` states other than
+    its source — never the source itself, whether or not that other state
+    has already arisen elsewhere in the run. Unlike the infinite-alleles
+    model, a target can be a *recurrence* (a state that already exists
+    somewhere in the population) rather than always a fresh label.
+
+    The full state space is never materialized, even when astronomically
+    large: a target is decided as "one specific already-minted state" or
+    "any not-yet-minted state" via a single float probability, computed as
+    plain Python division rather than a fixed-width integer draw, so it
+    never overflows regardless of ``capacity``. For a large enough
+    ``capacity`` relative to how many states have actually been minted so
+    far, that probability underflows all the way to an exact ``0.0`` and
+    every mutation mints fresh, indistinguishable from the infinite-alleles
+    model — recovering it in the limit, as the differentiation-measures
+    guide's own approximation argument predicts. At the more moderate
+    capacities where this model actually changes anything, the same
+    computation instead gives a real, honestly nonzero recurrence
+    probability.
+    """
+
+    def __init__(self, capacity: int, initial_ids: Iterable[AlleleId]) -> None:
+        """Seed one locus's finite state space from its generation-zero alleles.
+
+        Args:
+            capacity: Number of possible states, ``K``, at this locus.
+            initial_ids: Every allele identity present anywhere (any deme)
+                in generation zero at this locus.
+
+        Raises:
+            ValueError: If ``capacity`` is too small to hold every initial
+                ID, or an initial ID falls outside ``0 .. capacity - 1``.
+        """
+        minted = sorted({int(allele_id) for allele_id in initial_ids})
+        if len(minted) > capacity or any(
+            identity < 0 or identity >= capacity for identity in minted
+        ):
+            raise ValueError(
+                "finite allele capacity is too small for the initial allele "
+                "IDs present at this locus"
+            )
+        self._capacity = capacity
+        self._minted: list[AlleleId] = [AlleleId(identity) for identity in minted]
+        self._next_unminted = (minted[-1] + 1) if minted else 0
+
+    def mutate_target(
+        self,
+        current: AlleleId,
+        rng: np.random.Generator,
+    ) -> AlleleId:
+        """Return one state other than ``current``, uniformly at random.
+
+        Args:
+            current: The mutating gene copy's existing allele identity.
+            rng: The run's explicitly threaded random generator.
+
+        Returns:
+            A state drawn uniformly from the ``capacity - 1`` others: an
+            already-minted one (a recurrence), chosen uniformly among the
+            tracked minted set excluding ``current``, or the next not-yet-
+            minted one, with probability proportional to how many of each
+            kind remain.
+        """
+        minted_count = len(self._minted)
+        recurrence_probability = (minted_count - 1) / (self._capacity - 1)
+        if recurrence_probability > 0.0 and rng.random() < recurrence_probability:
+            others = [allele_id for allele_id in self._minted if allele_id != current]
+            return others[int(rng.integers(0, len(others)))]
+        target = AlleleId(self._next_unminted)
+        self._next_unminted += 1
+        self._minted.append(target)
+        return target
+
+
+class FiniteAlleleRegistry:
+    """Every tracked locus's `FiniteAlleleSpace` for one run.
+
+    A thin, locus-keyed wrapper so `fim.model.operators.mutate` can look up
+    the right space without knowing how many loci a run tracks.
+    """
+
+    def __init__(self, spaces: Mapping[int, FiniteAlleleSpace]) -> None:
+        """Store one finite-allele space per locus, keyed by `LocusSpec.locus_id`.
+
+        Args:
+            spaces: One `FiniteAlleleSpace` per tracked locus.
+        """
+        self._spaces = dict(spaces)
+
+    def mutate_target(
+        self,
+        locus_id: int,
+        current: AlleleId,
+        rng: np.random.Generator,
+    ) -> AlleleId:
+        """Return a mutation target for ``locus_id`` under the K-allele model.
+
+        Args:
+            locus_id: The mutating gene copy's locus.
+            current: The mutating gene copy's existing allele identity.
+            rng: The run's explicitly threaded random generator.
+
+        Returns:
+            One state other than ``current``, drawn uniformly at random.
+        """
+        return self._spaces[locus_id].mutate_target(current, rng)

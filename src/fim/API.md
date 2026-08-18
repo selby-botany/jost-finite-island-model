@@ -48,6 +48,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [AlleleRegistry](#fim.model.allele.AlleleRegistry)
     * [\_\_init\_\_](#fim.model.allele.AlleleRegistry.__init__)
     * [next\_id](#fim.model.allele.AlleleRegistry.next_id)
+  * [FiniteAlleleSpace](#fim.model.allele.FiniteAlleleSpace)
+    * [\_\_init\_\_](#fim.model.allele.FiniteAlleleSpace.__init__)
+    * [mutate\_target](#fim.model.allele.FiniteAlleleSpace.mutate_target)
+  * [FiniteAlleleRegistry](#fim.model.allele.FiniteAlleleRegistry)
+    * [\_\_init\_\_](#fim.model.allele.FiniteAlleleRegistry.__init__)
+    * [mutate\_target](#fim.model.allele.FiniteAlleleRegistry.mutate_target)
 * [fim.model.initial](#fim.model.initial)
   * [InitialConditionGenerator](#fim.model.initial.InitialConditionGenerator)
     * [generate](#fim.model.initial.InitialConditionGenerator.generate)
@@ -59,6 +65,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.model.locus](#fim.model.locus)
   * [LocusSpec](#fim.model.locus.LocusSpec)
     * [\_\_post\_init\_\_](#fim.model.locus.LocusSpec.__post_init__)
+  * [finite\_allele\_capacity](#fim.model.locus.finite_allele_capacity)
 * [fim.model.operators](#fim.model.operators)
   * [drift](#fim.model.operators.drift)
   * [migrate](#fim.model.operators.migrate)
@@ -616,7 +623,13 @@ Value objects and update operators for the finite island model.
 
 # fim.model.allele
 
-Opaque allele identities and globally unique mutant-allele allocation.
+Opaque allele identities and mutant-allele allocation.
+
+Two mutation-model allocators live here: `AlleleRegistry`, a bare counter
+for the infinite-alleles model (every mutation event is globally novel),
+and `FiniteAlleleSpace`/`FiniteAlleleRegistry`, a bounded, per-locus
+alternative for the finite-alleles (K-allele) model, where a mutation event
+can land on a state that already exists elsewhere in the run.
 
 <a id="fim.model.allele.founding_allele_ids"></a>
 
@@ -680,6 +693,132 @@ def next_id() -> AlleleId
 ```
 
 Return a new allele identity that has never been returned before.
+
+<a id="fim.model.allele.FiniteAlleleSpace"></a>
+
+## FiniteAlleleSpace Objects
+
+```python
+class FiniteAlleleSpace()
+```
+
+One locus's bounded allele-state space under the K-allele model.
+
+Implements the standard finite-alleles mutation kernel: every mutation
+event lands uniformly on one of the ``capacity - 1`` states other than
+its source — never the source itself, whether or not that other state
+has already arisen elsewhere in the run. Unlike the infinite-alleles
+model, a target can be a *recurrence* (a state that already exists
+somewhere in the population) rather than always a fresh label.
+
+The full state space is never materialized, even when astronomically
+large: a target is decided as "one specific already-minted state" or
+"any not-yet-minted state" via a single float probability, computed as
+plain Python division rather than a fixed-width integer draw, so it
+never overflows regardless of ``capacity``. For a large enough
+``capacity`` relative to how many states have actually been minted so
+far, that probability underflows all the way to an exact ``0.0`` and
+every mutation mints fresh, indistinguishable from the infinite-alleles
+model — recovering it in the limit, as the differentiation-measures
+guide's own approximation argument predicts. At the more moderate
+capacities where this model actually changes anything, the same
+computation instead gives a real, honestly nonzero recurrence
+probability.
+
+<a id="fim.model.allele.FiniteAlleleSpace.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(capacity: int, initial_ids: Iterable[AlleleId]) -> None
+```
+
+Seed one locus's finite state space from its generation-zero alleles.
+
+**Arguments**:
+
+- `capacity` - Number of possible states, ``K``, at this locus.
+- `initial_ids` - Every allele identity present anywhere (any deme)
+  in generation zero at this locus.
+
+
+**Raises**:
+
+- `ValueError` - If ``capacity`` is too small to hold every initial
+  ID, or an initial ID falls outside ``0 .. capacity - 1``.
+
+<a id="fim.model.allele.FiniteAlleleSpace.mutate_target"></a>
+
+#### mutate\_target
+
+```python
+def mutate_target(current: AlleleId, rng: np.random.Generator) -> AlleleId
+```
+
+Return one state other than ``current``, uniformly at random.
+
+**Arguments**:
+
+- `current` - The mutating gene copy's existing allele identity.
+- `rng` - The run's explicitly threaded random generator.
+
+
+**Returns**:
+
+  A state drawn uniformly from the ``capacity - 1`` others: an
+  already-minted one (a recurrence), chosen uniformly among the
+  tracked minted set excluding ``current``, or the next not-yet-
+  minted one, with probability proportional to how many of each
+  kind remain.
+
+<a id="fim.model.allele.FiniteAlleleRegistry"></a>
+
+## FiniteAlleleRegistry Objects
+
+```python
+class FiniteAlleleRegistry()
+```
+
+Every tracked locus's `FiniteAlleleSpace` for one run.
+
+A thin, locus-keyed wrapper so `fim.model.operators.mutate` can look up
+the right space without knowing how many loci a run tracks.
+
+<a id="fim.model.allele.FiniteAlleleRegistry.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(spaces: Mapping[int, FiniteAlleleSpace]) -> None
+```
+
+Store one finite-allele space per locus, keyed by `LocusSpec.locus_id`.
+
+**Arguments**:
+
+- `spaces` - One `FiniteAlleleSpace` per tracked locus.
+
+<a id="fim.model.allele.FiniteAlleleRegistry.mutate_target"></a>
+
+#### mutate\_target
+
+```python
+def mutate_target(locus_id: int, current: AlleleId,
+                  rng: np.random.Generator) -> AlleleId
+```
+
+Return a mutation target for ``locus_id`` under the K-allele model.
+
+**Arguments**:
+
+- `locus_id` - The mutating gene copy's locus.
+- `current` - The mutating gene copy's existing allele identity.
+- `rng` - The run's explicitly threaded random generator.
+
+
+**Returns**:
+
+  One state other than ``current``, drawn uniformly at random.
 
 <a id="fim.model.initial"></a>
 
@@ -827,6 +966,31 @@ def __post_init__() -> None
 
 Validate the immutable locus description.
 
+<a id="fim.model.locus.finite_allele_capacity"></a>
+
+#### finite\_allele\_capacity
+
+```python
+def finite_allele_capacity(length: int) -> int
+```
+
+Return the finite-alleles model's state-space size at a locus.
+
+**Arguments**:
+
+- `length` - A locus's length in base pairs (`LocusSpec.length`).
+
+
+**Returns**:
+
+  ``4 ** length`` — the number of distinct fixed-length nucleotide
+  sequences a locus of this length admits. Matches the
+  differentiation-measures guide's own worked reasoning ("a
+  single-character locus admits at most four alleles"): this is the
+  ceiling the infinite-alleles model's "every mutation is novel"
+  assumption approximates, exactly, once it stops being astronomically
+  larger than any realistic count of mutation events.
+
 <a id="fim.model.operators"></a>
 
 # fim.model.operators
@@ -900,23 +1064,38 @@ Blend each deme with the current all-other-deme migrant pool.
 #### mutate
 
 ```python
-def mutate(state: ModelState, mu: float, population_size: PopulationSize,
-           registry: AlleleRegistry, rng: np.random.Generator) -> ModelState
+def mutate(state: ModelState,
+           mu: float,
+           population_size: PopulationSize,
+           registry: AlleleRegistry,
+           rng: np.random.Generator,
+           *,
+           finite_alleles: FiniteAlleleRegistry | None = None) -> ModelState
 ```
 
-Replace a binomially sampled number of copies with novel alleles.
+Replace a binomially sampled number of copies with new alleles.
 
 Existing allele mass is reduced proportionally, avoiding an extra drift
-sample in the mutation stage. Every mutation event receives a fresh global
-identity and contributes exactly ``1 / N`` frequency.
+sample in the mutation stage.
 
 **Arguments**:
 
 - `state` - Post-migration state.
 - `mu` - Per-copy mutation probability.
 - `population_size` - Shared or per-deme gene-copy count.
-- `registry` - Global mutant-allele allocator for the run.
+- `registry` - Global mutant-allele allocator for the run — used under
+  the default infinite-alleles model, where every mutation event
+  receives a fresh global identity.
 - `rng` - The run's explicitly threaded random generator.
+- `finite_alleles` - Optional per-locus finite-allele-space registry
+  selecting the opt-in finite-alleles (K-allele) model instead
+  (`SimulationParams.mutation_model == "finite_alleles"`). A
+  mutation event's target then depends on its *source* allele —
+  never itself, but possibly a state already present elsewhere
+  in the run — so mutating copies are first attributed back to
+  the existing allele each one came from, sampled proportionally
+  to that allele's current share, exactly like the proportional
+  mass reduction below already assumes.
 
 
 **Returns**:
@@ -928,8 +1107,12 @@ identity and contributes exactly ``1 / N`` frequency.
 #### step
 
 ```python
-def step(state: ModelState, params: SimulationParams, registry: AlleleRegistry,
-         rng: np.random.Generator) -> ModelState
+def step(state: ModelState,
+         params: SimulationParams,
+         registry: AlleleRegistry,
+         rng: np.random.Generator,
+         *,
+         finite_alleles: FiniteAlleleRegistry | None = None) -> ModelState
 ```
 
 Advance one generation in migration, mutation, then drift order.
@@ -940,6 +1123,11 @@ Advance one generation in migration, mutation, then drift order.
 - `params` - Validated run parameters.
 - `registry` - Global mutant-allele allocator.
 - `rng` - The run's explicitly threaded random generator.
+- `finite_alleles` - Optional per-locus finite-allele-space registry,
+  built once per run by the caller and threaded through every
+  generation — required when
+  ``params.mutation_model == "finite_alleles"``, unused
+  otherwise.
 
 
 **Returns**:
@@ -989,6 +1177,12 @@ Store all values needed to reproduce a finite-island-model run.
   ``Binomial(N, rate)`` migrant count instead. Migrant
   composition is unaffected either way; see
   ``fim.model.operators.migrate``.
+- `mutation_model` - How a mutation event picks its target — either
+  "infinite_alleles" (default), where every mutation is
+  globally novel, or "finite_alleles", where each locus has a
+  bounded state space (`fim.model.locus.finite_allele_capacity`)
+  and a mutation can recur to a state already present elsewhere
+  in the run. See `fim.model.allele.FiniteAlleleSpace`.
 - `initial_frequencies` - Optional explicit deme/locus frequency table.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>
