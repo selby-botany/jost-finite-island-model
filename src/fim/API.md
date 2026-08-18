@@ -82,6 +82,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [total\_frequency](#fim.model.state.ModelState.total_frequency)
     * [validate\_support](#fim.model.state.ModelState.validate_support)
     * [from\_rows](#fim.model.state.ModelState.from_rows)
+* [fim.model.topology](#fim.model.topology)
+  * [stepping\_stone\_neighbors](#fim.model.topology.stepping_stone_neighbors)
+  * [dense\_matrix\_from\_neighbors](#fim.model.topology.dense_matrix_from_neighbors)
 * [fim.persistence](#fim.persistence)
 * [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
@@ -1191,6 +1194,97 @@ Reconstruct one generation from long-form trajectory rows.
 **Raises**:
 
 - `ValueError` - If rows are empty, inconsistent, duplicated, or malformed.
+
+<a id="fim.model.topology"></a>
+
+# fim.model.topology
+
+Sparse migration-topology construction and densification.
+
+A migration matrix for a spatial (stepping-stone) topology is mostly
+zero — every deme migrates with a handful of neighbors, not with the
+whole population — so writing it out as a full ``d`` by ``d`` matrix by
+hand stops being practical once ``d`` grows past a handful of demes. This
+module works in the more natural sparse shape instead: a one-based map
+from each deme to the neighbors it exchanges migrants with and at what
+weight, with each deme's self-retention left implicit (the complement of
+its listed weights, exactly as the symmetric island model already treats
+`m`). ``dense_matrix_from_neighbors`` is the one place that turns such a
+map, from any source, into the fully validated dense matrix
+``fim.model.operators.migrate`` already knows how to use — the rest of
+the simulator never needs to know a sparse map was ever involved.
+
+<a id="fim.model.topology.stepping_stone_neighbors"></a>
+
+#### stepping\_stone\_neighbors
+
+```python
+def stepping_stone_neighbors(d: int, *, topology: Topology,
+                             rate: float) -> dict[int, dict[int, float]]
+```
+
+Build a sparse nearest-neighbor migration map.
+
+**Arguments**:
+
+- `d` - Number of demes, numbered ``1`` through ``d`` along the line
+  or ring.
+- `topology` - ``"ring"`` wraps deme ``d``'s next neighbor back to
+  deme ``1``; ``"linear"`` is a bounded chain where the two end
+  demes have only one neighbor instead of two.
+- `rate` - Every deme's total outgoing migration fraction, split evenly
+  among its actual neighbors — the same meaning ``m`` already
+  has in the symmetric island model (§4.3), applied locally
+  instead of globally. Each deme keeps ``1 - rate`` of its own
+  frequency; that self-retention is implicit, matching the
+  general sparse map's own off-diagonal-only convention.
+
+
+**Returns**:
+
+  A one-based sparse map: ``{deme: {neighbor: weight, ...}, ...}``.
+  A deme with no neighbors in this topology is simply absent.
+
+
+**Raises**:
+
+- `ValueError` - If ``d``, ``topology``, or ``rate`` is invalid.
+
+<a id="fim.model.topology.dense_matrix_from_neighbors"></a>
+
+#### dense\_matrix\_from\_neighbors
+
+```python
+def dense_matrix_from_neighbors(neighbors: Mapping[int, Mapping[int, float]],
+                                d: int) -> tuple[tuple[float, ...], ...]
+```
+
+Densify a one-based sparse off-diagonal map into a full matrix.
+
+Every deme's self-retention is derived, not read from the map: a
+deme's diagonal entry is ``1`` minus the sum of its listed neighbor
+weights, exactly how the scalar and topology-generated forms of ``m``
+already define self-retention. A deme absent from ``neighbors``
+migrates with nobody — its row is the identity row.
+
+**Arguments**:
+
+- `neighbors` - A one-based sparse map, as returned by
+  ``stepping_stone_neighbors`` or written out by hand.
+- `d` - Number of demes; every key and neighbor id must fall in
+  ``1..d``.
+
+
+**Returns**:
+
+  A ``d`` by ``d`` row-stochastic matrix suitable for ``m``.
+
+
+**Raises**:
+
+- `ValueError` - If a deme or neighbor id is outside ``1..d``, a deme
+  lists itself as its own neighbor, a weight is outside
+  ``[0, 1]``, or one deme's weights sum to more than ``1``.
 
 <a id="fim.persistence"></a>
 

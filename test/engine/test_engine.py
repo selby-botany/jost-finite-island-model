@@ -509,3 +509,34 @@ def test_multi_locus_run_with_unequal_lengths_is_reproducible() -> None:
     )
     assert first.report == second.report
     assert first.final_state.locus_count == 2
+
+
+def test_stepping_stone_topology_run_is_reproducible() -> None:
+    """A full run configured via the ring topology-sugar `m` stays reproducible.
+
+    The compact ``{topology, rate}`` form only exists at the config-parsing
+    layer (matching how the compact ``n_loci``/``locus_lengths`` locus form
+    also only exists there), so this run is built via ``from_mapping``
+    rather than the ``SimulationParams`` constructor directly.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            "N": 20,
+            "d": 8,
+            "m": {"topology": "ring", "rate": 0.2},
+            "mu": 0.02,
+            "seed": 20260821,
+            "convergence_window": 4,
+            "convergence_tolerance": 1.0,
+            "max_generations": 8,
+        }
+    )
+
+    first = _run(params)
+    second = _run(params)
+
+    assert list(first.store.read(first.run_id)) == list(
+        second.store.read(second.run_id)
+    )
+    assert first.report == second.report
+    assert first.final_state.deme_count == 8

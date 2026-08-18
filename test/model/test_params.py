@@ -309,6 +309,89 @@ def test_migration_parser_is_strict(value: object, message: str) -> None:
         SimulationParams.from_mapping({**_valid_config(), "m": value})
 
 
+def test_migration_accepts_ring_and_linear_topology_sugar() -> None:
+    """A compact {topology, rate} mapping expands to the full dense matrix."""
+    ring = SimulationParams.from_mapping(
+        {**_valid_config(), "d": 6, "m": {"topology": "ring", "rate": 0.3}}
+    )
+    linear = SimulationParams.from_mapping(
+        {**_valid_config(), "d": 6, "m": {"topology": "linear", "rate": 0.3}}
+    )
+
+    assert ring.m == (
+        (0.7, 0.15, 0.0, 0.0, 0.0, 0.15),
+        (0.15, 0.7, 0.15, 0.0, 0.0, 0.0),
+        (0.0, 0.15, 0.7, 0.15, 0.0, 0.0),
+        (0.0, 0.0, 0.15, 0.7, 0.15, 0.0),
+        (0.0, 0.0, 0.0, 0.15, 0.7, 0.15),
+        (0.15, 0.0, 0.0, 0.0, 0.15, 0.7),
+    )
+    assert linear.m == (
+        (0.7, 0.3, 0.0, 0.0, 0.0, 0.0),
+        (0.15, 0.7, 0.15, 0.0, 0.0, 0.0),
+        (0.0, 0.15, 0.7, 0.15, 0.0, 0.0),
+        (0.0, 0.0, 0.15, 0.7, 0.15, 0.0),
+        (0.0, 0.0, 0.0, 0.15, 0.7, 0.15),
+        (0.0, 0.0, 0.0, 0.0, 0.3, 0.7),
+    )
+    assert SimulationParams.from_mapping(ring.to_dict()) == ring
+
+
+def test_migration_accepts_a_hand_authored_sparse_neighbor_map() -> None:
+    """A sparse {deme: {neighbor: weight}} map expands the same way by hand.
+
+    JSON object keys are always strings, so numeric-string keys must parse
+    identically to native integer keys (mirroring how ``p_0``'s allele keys
+    are already coerced).
+    """
+    via_int_keys = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "d": 3,
+            "m": {1: {2: 0.2}, 2: {1: 0.2, 3: 0.2}, 3: {2: 0.2}},
+        }
+    )
+    via_string_keys = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "d": 3,
+            "m": {"1": {"2": 0.2}, "2": {"1": 0.2, "3": 0.2}, "3": {"2": 0.2}},
+        }
+    )
+
+    expected = (
+        (0.8, 0.2, 0.0),
+        (0.2, 0.6, 0.2),
+        (0.0, 0.2, 0.8),
+    )
+    assert via_int_keys.m == expected
+    assert via_string_keys.m == expected
+
+
+@pytest.mark.parametrize(
+    ("m", "message"),
+    [
+        ({"topology": "ring"}, "is missing rate"),
+        ({"rate": 0.1}, "is missing topology"),
+        ({"topology": "square", "rate": 0.1}, "must be 'ring' or 'linear'"),
+        ({"topology": "ring", "rate": 0.1, "extra": 1}, "unknown m topology"),
+        ({1: {2: 0.6, 3: 0.6}}, "sum to more than 1"),
+        ({1: {1: 0.1}}, "cannot list itself"),
+        ({1: {9: 0.1}}, "outside 1"),
+        ({9: {1: 0.1}}, "outside 1"),
+        ({1: "not-a-mapping"}, "must be a mapping of neighbor to weight"),
+        ({"not-a-number": {2: 0.1}}, "deme identifiers must be integers"),
+    ],
+)
+def test_migration_topology_and_sparse_map_are_validated(
+    m: dict[object, object],
+    message: str,
+) -> None:
+    """Every documented sparse-map and topology-sugar rule is enforced."""
+    with pytest.raises(ValueError, match=message):
+        SimulationParams.from_mapping({**_valid_config(), "d": 3, "m": m})
+
+
 @pytest.mark.parametrize(
     ("key", "value", "message"),
     [

@@ -6,10 +6,15 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, cast
 
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
+from fim.model.topology import (
+    Topology,
+    dense_matrix_from_neighbors,
+    stepping_stone_neighbors,
+)
 
 PopulationSize = int | tuple[int, ...]
 Migration = float | tuple[tuple[float, ...], ...]
@@ -263,10 +268,11 @@ class SimulationParams:
             raise ValueError(f"missing required configuration key(s): {names}")
 
         loci = _loci_from_config(config)
+        d = _parse_int("d", config["d"])
         return cls(
             N=_parse_population_size(config["N"]),
-            d=_parse_int("d", config["d"]),
-            m=_parse_migration(config["m"]),
+            d=d,
+            m=_parse_migration(config["m"], d),
             mu=_parse_float("mu", config["mu"]),
             seed=_parse_int("seed", config["seed"]),
             loci=loci,
@@ -386,6 +392,46 @@ def _loci_from_config(config: Mapping[str, Any]) -> tuple[LocusSpec, ...]:
     return tuple(
         LocusSpec(index, length) for index, length in enumerate(lengths, start=1)
     )
+
+
+def _migration_from_sparse_map(value: Mapping[Any, Any], d: int) -> Migration:
+    """Parse a one-based sparse neighbor map into a full matrix.
+
+    Config shape: ``{deme: {neighbor: weight, ...}, ...}``, one-based, with
+    every deme's self-retention left implicit as the complement of its
+    listed weights — the same convention ``stepping_stone_neighbors``
+    already returns. A deme absent from the map migrates with nobody.
+    """
+    parsed: dict[int, dict[int, float]] = {}
+    for raw_deme, raw_row in value.items():
+        deme = _parse_deme_key("m", raw_deme, d)
+        if not isinstance(raw_row, Mapping):
+            raise ValueError(f"m[{raw_deme}] must be a mapping of neighbor to weight")
+        row: dict[int, float] = {}
+        for raw_neighbor, raw_weight in raw_row.items():
+            neighbor = _parse_deme_key(f"m[{raw_deme}]", raw_neighbor, d)
+            row[neighbor] = _parse_float(f"m[{raw_deme}][{raw_neighbor}]", raw_weight)
+        parsed[deme] = row
+    return dense_matrix_from_neighbors(parsed, d)
+
+
+def _migration_from_topology(value: Mapping[str, Any], d: int) -> Migration:
+    """Expand a compact ``{topology, rate}`` mapping into a full matrix."""
+    unknown = set(value) - {"topology", "rate"}
+    if unknown:
+        names = ", ".join(sorted(str(key) for key in unknown))
+        raise ValueError(f"unknown m topology key(s): {names}")
+    missing = {"topology", "rate"} - set(value)
+    if missing:
+        names = ", ".join(sorted(missing))
+        raise ValueError(f"m topology mapping is missing {names}")
+    topology = _parse_string("m.topology", value["topology"])
+    rate = _parse_float("m.rate", value["rate"])
+    if topology not in {"ring", "linear"}:
+        raise ValueError("m.topology must be 'ring' or 'linear'")
+    validated_topology = cast(Topology, topology)
+    neighbors = stepping_stone_neighbors(d, topology=validated_topology, rate=rate)
+    return dense_matrix_from_neighbors(neighbors, d)
 
 
 def _normalize_convergence_statistic(
@@ -522,6 +568,24 @@ def _parse_convergence_statistic(value: Any) -> ConvergenceStatistic:
     )
 
 
+def _parse_deme_key(context: str, raw_key: Any, d: int) -> int:
+    """Parse one 1-based deme identifier from a sparse migration-map key.
+
+    Accepts either a native integer (the common YAML case) or a numeric
+    string (JSON object keys are always strings), matching how ``p_0``'s
+    allele keys are already coerced.
+    """
+    if isinstance(raw_key, bool):
+        raise ValueError(f"{context} deme identifiers must be integers")
+    try:
+        deme = int(raw_key)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{context} deme identifiers must be integers") from error
+    if not 1 <= deme <= d:
+        raise ValueError(f"{context} deme {deme} is outside 1..{d}")
+    return deme
+
+
 def _parse_deme_weighting(value: Any) -> DemeWeighting:
     """Parse the two supported deme-weighting values."""
     parsed = _parse_string("deme_weighting", value)
@@ -580,12 +644,25 @@ def _parse_int(name: str, value: Any) -> int:
     return int(value)
 
 
-def _parse_migration(value: Any) -> Migration:
-    """Parse scalar or nested-list migration configuration."""
+def _parse_migration(value: Any, d: int) -> Migration:
+    """Parse scalar, dense-matrix, sparse-map, or topology-sugar migration config."""
     if isinstance(value, int | float) and not isinstance(value, bool):
         return _parse_float("m", value)
+    if isinstance(value, Mapping):
+        # A deme identifier is always integer-like, so a bare "topology" or
+        # "rate" key can never be a legitimate sparse-map deme — route a
+        # mapping using either to the topology-sugar parser even if one of
+        # the two required keys was left out, so a config that meant
+        # {topology, rate} but mistyped it gets that mistake's own clear
+        # error instead of a confusing "deme identifiers must be integers".
+        if "topology" in value or "rate" in value:
+            return _migration_from_topology(value, d)
+        return _migration_from_sparse_map(value, d)
     if not isinstance(value, Sequence) or isinstance(value, str):
-        raise ValueError("m must be a number or a d x d matrix")
+        raise ValueError(
+            "m must be a number, a d x d matrix, a sparse neighbor map, "
+            "or a {topology, rate} mapping"
+        )
     rows: list[tuple[float, ...]] = []
     for row_index, raw_row in enumerate(value):
         if not isinstance(raw_row, Sequence) or isinstance(raw_row, str):

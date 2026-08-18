@@ -10,6 +10,7 @@ from fim.model.locus import LocusSpec
 from fim.model.operators import drift, migrate, mutate, step
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
+from fim.model.topology import dense_matrix_from_neighbors, stepping_stone_neighbors
 
 
 def _state() -> ModelState:
@@ -411,6 +412,57 @@ def test_symmetric_scalar_migration_is_the_matrix_special_case() -> None:
         assert set(scalar_map) == set(matrix_map)
         for allele_id, value in scalar_map.items():
             assert matrix_map[allele_id] == pytest.approx(value)
+
+
+def _single_private_allele_state(d: int) -> ModelState:
+    """Return a state where deme 0 alone is fixed for a private allele."""
+    frequencies: list[tuple[dict[AlleleId, float]]] = [({AlleleId(99): 1.0},)]
+    frequencies.extend(({AlleleId(0): 1.0},) for _ in range(d - 1))
+    return ModelState(loci=(LocusSpec(1, 100),), frequencies=tuple(frequencies))
+
+
+def test_ring_stepping_stone_migration_reaches_only_direct_neighbors() -> None:
+    """A ring topology is genuinely spatial: one hop reaches only neighbors.
+
+    Proves the actual claim behind "stepping-stone" — not merely that the
+    generated matrix looks sparse, but that migrating through it leaves an
+    allele private to deme 0 completely absent from every non-neighboring
+    deme after a single generation, while both ring neighbors (including
+    the wraparound one) pick up exactly the expected trace of it.
+    """
+    d = 6
+    matrix = dense_matrix_from_neighbors(
+        stepping_stone_neighbors(d, topology="ring", rate=0.3), d
+    )
+
+    migrated = migrate(_single_private_allele_state(d), matrix)
+
+    assert migrated.frequency_map(0, 0)[AlleleId(99)] == pytest.approx(0.7)
+    assert migrated.frequency_map(1, 0)[AlleleId(99)] == pytest.approx(0.15)
+    assert migrated.frequency_map(5, 0)[AlleleId(99)] == pytest.approx(0.15)
+    for deme in (2, 3, 4):
+        assert AlleleId(99) not in migrated.frequency_map(deme, 0)
+
+
+def test_linear_stepping_stone_migration_does_not_wrap_around() -> None:
+    """A linear chain is the ring's non-wrapping special case, not a variant math.
+
+    Identical setup and rate to the ring test above; the only difference is
+    that deme 5 — the ring's wraparound neighbor of deme 0 — picks up
+    nothing at all here, because a bounded chain has no edge connecting the
+    two ends.
+    """
+    d = 6
+    matrix = dense_matrix_from_neighbors(
+        stepping_stone_neighbors(d, topology="linear", rate=0.3), d
+    )
+
+    migrated = migrate(_single_private_allele_state(d), matrix)
+
+    assert migrated.frequency_map(0, 0)[AlleleId(99)] == pytest.approx(0.7)
+    assert migrated.frequency_map(1, 0)[AlleleId(99)] == pytest.approx(0.15)
+    for deme in (2, 3, 4, 5):
+        assert AlleleId(99) not in migrated.frequency_map(deme, 0)
 
 
 def test_symmetric_migration_uses_population_size_weights() -> None:

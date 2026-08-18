@@ -66,6 +66,28 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   which length (length is inert data — it drives no statistic), a
   reproducible end-to-end run over loci with very different lengths, and
   a CLI test running a config with unequal per-locus lengths.
+- Sparse, 1D stepping-stone migration topologies. `m` accepts two new
+  compact config forms, both expanding to the existing dense matrix at
+  load time: a one-based sparse neighbor map (`{deme: {neighbor: weight,
+  ...}, ...}`, self-retention implied) covering any irregular topology
+  by hand, and `{topology: ring|linear, rate}` sugar for the two classic
+  1D stepping-stone cases. New module `fim.model.topology` provides
+  `stepping_stone_neighbors` (generates the sparse map) and
+  `dense_matrix_from_neighbors` (validates and densifies any sparse map,
+  hand-written or generated) for direct use from Python.
+- Dedicated test coverage for stepping-stone migration: exact hand-
+  derived matrices for both topologies; confirming every row is
+  row-stochastic across a range of deme counts; every documented
+  validation rule (non-positive `d`, a ring below 3 demes, an
+  out-of-range or self-referencing neighbor, weights summing past 1); a
+  params test covering both the sparse-map and topology-sugar config
+  forms, including JSON's string-keyed variant and round-tripping; an
+  operator-level test proving migration through a ring/linear matrix is
+  actually local — an allele
+  private to one deme reaches only its direct neighbors after one
+  generation, completely absent everywhere else, with the ring's
+  wraparound neighbor as the one distinguishing data point from the
+  linear chain; a reproducible end-to-end engine run; and a CLI test.
 
 ### Changed
 
@@ -90,6 +112,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   several *statistics*, each with their own history).
 - Added `doc/configuration.md`'s `convergence_combinator` key and expanded
   `convergence_statistic` to document the list form.
+- Updated the simulator design document (§9, §12) and `doc/developer.md`'s
+  "Adding a new what-if" table to record that 1D stepping-stone migration
+  shipped, narrowing the design document's stepping-stone out-of-scope
+  entry to what is genuinely still unbuilt (a 2D lattice topology and a
+  `MigrantPoolStrategy` interface for neighbor-selection logic that is
+  not reducible to a precomputed matrix).
+- Added `doc/configuration.md`'s sparse-map and topology-sugar `m`
+  subsection, with worked examples of both compact forms and the
+  validation rules each enforces.
 
 ## [1.0.0] - 2026-08-16
 

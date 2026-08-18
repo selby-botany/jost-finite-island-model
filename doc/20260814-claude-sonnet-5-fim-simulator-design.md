@@ -842,7 +842,7 @@ than requiring a redesign:
 |---|---|---|
 | …island sizes differed (`N_i`)? | `N` accepts a length-`d` array **(shipped, v1.0.0 — see note below)** | `drift()` already receives `N` as a parameter; per-deme `N_i` gene copies is a broadcast, not new logic |
 | …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix **(shipped, v1.0.0 — see note below)** | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
-| …migration were spatial (stepping-stone)? | a sparse/neighbor-restricted `m` matrix, or a `MigrantPoolStrategy` interface | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
+| …migration were spatial (stepping-stone)? | a sparse/neighbor-restricted `m` matrix **(1D ring/linear shipped — see note below)**, or a `MigrantPoolStrategy` interface | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
 | …locus length varied? | `LocusSpec.length` per locus **(shipped, v1.0.0 — see note below)** | already a first-class field (§3.2), unused only because the initial pass sets every locus equal |
 | …selection were added? | a new `select()` operator inserted before `drift()` | the pipeline (§3.4) is already a composition of independent stages; adding one is additive |
 | …the mutation model weren't infinite-alleles (e.g., stepwise mutation for microsatellites)? | swap the strategy behind `mutate()` | `AlleleRegistry` is already the sole minting point for new IDs; a different model changes what gets minted, not who mints it |
@@ -959,6 +959,40 @@ statistics and a combinator; and manifest round-trip and malformed-input
 tests for the widened `statistic` field. See
 [`doc/configuration.md`](configuration.md#convergence_statistic) for the
 user-facing contract.
+
+**Note on the third row — 1D stepping-stone (ring and linear) shipped;
+2D lattice and the `MigrantPoolStrategy` interface did not.** Unlike the
+first two rows, `migrate()` needed no change here — it already accepts
+any row-stochastic `d × d` matrix, sparse ones included. What was
+missing, and what makes a hand-built sparse matrix impractical at real
+scale, was a way to *author* one without writing `d²` mostly-zero
+entries by hand. A new `fim.model.topology` module closes that gap two
+ways: `dense_matrix_from_neighbors` turns a one-based sparse map
+(`{deme: {neighbor: weight, ...}, ...}`, self-retention implied as the
+complement of each deme's listed weights — the same convention the
+scalar and full-matrix forms of `m` already use) into a fully validated
+dense matrix, and `stepping_stone_neighbors` generates that same sparse
+map for the two classic 1D topologies (`ring`, wrapping; `linear`,
+bounded). Both are exposed as compact `m` config forms — a hand-written
+sparse map directly, or `{topology, rate}` sugar — expanding to the
+ordinary dense matrix at config-load time, exactly like the compact
+`n_loci`/`locus_lengths` locus form already does; neither exists as a
+`SimulationParams` constructor argument, only through `from_mapping`.
+Test coverage: exact hand-derived matrices for both topologies; every
+row-stochastic for a range of deme counts; every validation rule
+(non-positive `d`, a ring below 3 demes, an out-of-range or self-
+referencing neighbor, weights exceeding 1); and, load-bearing, an
+operator-level test proving migration through a ring/linear matrix is
+*actually* local — an allele private to one deme reaches only its direct
+neighbors after a single generation and is completely absent everywhere
+else, with the ring's wraparound neighbor and the linear chain's lack of
+one as the one distinguishing data point between the two. What remains
+unbuilt, and is still exactly what the "Landing spot" column names: a 2D
+lattice topology, and a `MigrantPoolStrategy` interface for
+neighbor-selection logic that isn't reducible to a precomputed matrix
+(e.g., migration that itself changes over the course of a run). See
+[`doc/configuration.md`](configuration.md#m) for the user-facing
+contract.
 
 ## 10. Validation and test strategy
 
@@ -1105,22 +1139,26 @@ edited away:
 
 Named explicitly so a first implementation is not held up chasing them:
 selection; non-infinite-alleles mutation models (stepwise mutation for
-microsatellites); stepping-stone or other non-all-to-all migration
-topologies (a dedicated `MigrantPoolStrategy`/neighbor-matrix-construction
-interface — a raw, hand-built sparse matrix already runs today via the
-general matrix support noted below). Every one of these has a specific
-landing spot already identified (§9) — they are deferred, not precluded.
+microsatellites); a 2D lattice migration topology and a dedicated
+`MigrantPoolStrategy` interface for neighbor-selection logic that is not
+reducible to a precomputed matrix (1D stepping-stone and arbitrary
+irregular topologies, by contrast, are in scope — see §9's note on the
+third row). Every one of these has a specific landing spot already
+identified (§9) — they are deferred, not precluded.
 
-**Unequal deme sizes, a general migration matrix, and per-locus allele
-length are removed from this list, not merely deferred** — all three
-shipped in v1.0.0, ahead of the rest of this list, because `N`, `m`, and
-`LocusSpec.length` were each built as scalar-or-richer, per-entry values
-from the first `SimulationParams`/`locus.py` commits rather than added
-later. See §9's notes on the table's first, second, and fourth rows for
-what shipped and what this pass added on top of each (tests and this
-documentation update); the original first-draft wording naming all three
-out of scope is recorded here, struck from the list, rather than silently
-dropped.
+**Unequal deme sizes, a general migration matrix, per-locus allele
+length, and 1D stepping-stone migration are removed from this list, not
+merely deferred** — all four shipped in v1.0.0. The first three shipped
+ahead of the rest of this list because `N`, `m`, and `LocusSpec.length`
+were each built as scalar-or-richer, per-entry values from the first
+`SimulationParams`/`locus.py` commits rather than added later; 1D
+stepping-stone shipped this pass, on top of the already-general `m`
+matrix support, as `fim.model.topology`'s sparse-map and
+`{topology, rate}` config forms. See §9's notes on the table's first,
+second, third, and fourth rows for what shipped and what each pass added
+(tests and this documentation update); the original first-draft wording
+naming all four out of scope is recorded here, struck from the list,
+rather than silently dropped.
 
 ## 13. Illustrated walkthrough (mocked)
 

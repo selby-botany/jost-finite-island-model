@@ -120,7 +120,8 @@ adding engine state.
 |---|---|
 | Unequal deme size | Pass per-deme `N`; operators and `E_ST` already support it |
 | Asymmetric migration | Pass a validated `d` by `d` matrix |
-| Stepping-stone topology | Build a sparse neighbor matrix before calling the operator |
+| Stepping-stone topology (1D) | `fim.model.topology`: `m: {topology: ring\|linear, rate}` or a hand-written sparse map, both already supported |
+| Spatial migration beyond 1D or a fixed matrix | 2D lattice topology, or a `MigrantPoolStrategy` interface — neither built yet |
 | Per-locus mutation from length | Derive rates from `LocusSpec.length` in a mutation strategy |
 | Selection | Add a pure `select` operator before drift |
 | Stepwise mutation | Add a strategy behind mutation identity assignment |

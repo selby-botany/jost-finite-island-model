@@ -106,6 +106,65 @@ case:
   is symmetric and every deme is the same size; reach for a matrix only when
   it is not.
 
+#### Sparse and spatial (stepping-stone) migration
+
+Writing out a `d` by `d` matrix by hand stops being realistic once `d` grows
+past a handful of demes, and it is actively the wrong shape for a spatial
+topology, where almost every entry is `0` — each deme migrates only with a
+couple of neighbors, not the whole population. Two compact alternatives to
+the dense matrix cover this:
+
+**A sparse neighbor map.** Give only the nonzero off-diagonal weights, keyed
+by deme (one-based) and neighbor (one-based); each deme's self-retention is
+implied as `1` minus its listed weights, exactly like the scalar case. A
+deme absent from the map migrates with nobody.
+
+```yaml
+m:
+  1: {2: 0.01}
+  2: {1: 0.01, 3: 0.01}
+  3: {2: 0.01, 4: 0.01}
+  4: {3: 0.01}
+d: 4
+```
+
+This is fully general — weights need not be symmetric, and this is the
+right form for any irregular adjacency (real geography, an arbitrary graph),
+not only the two named topologies below.
+
+**Named topology sugar**, for the common stepping-stone case: a compact
+`{topology, rate}` mapping that expands to the sparse form above.
+`rate` is every deme's total outgoing migration fraction, split evenly among
+its actual neighbors — the same meaning `m` already has as a scalar, applied
+locally instead of globally.
+
+```yaml
+m:
+  topology: ring     # or: linear
+  rate: 0.01
+d: 100
+```
+
+- `ring` — a circular chain; deme `d`'s next neighbor wraps back to deme
+  `1`. Every deme has exactly two neighbors. Requires `d` at least `3`.
+- `linear` — a bounded chain, no wraparound. The two end demes have one
+  neighbor instead of two, so an end deme's entire `rate` goes to its
+  single neighbor rather than being split.
+
+Both the sparse map and the topology sugar are config-file conveniences:
+they expand to the ordinary dense matrix at load time (visible as such in
+`report.json`/`manifest.json` and in `to_dict()`), so nothing downstream —
+`migrate()`, statistics, persistence — needs to know a sparse form was ever
+involved. Building a `SimulationParams` directly in Python (bypassing
+`from_mapping`) still needs an already-dense matrix; call
+`fim.model.topology.stepping_stone_neighbors` and
+`fim.model.topology.dense_matrix_from_neighbors` yourself to get one.
+
+A dedicated `MigrantPoolStrategy` interface — pluggable neighbor-selection
+logic beyond a precomputed matrix — remains unimplemented; so does a 2D
+lattice topology. Both are documented, deferred landing spots (design
+document §9, §12), not silently missing.
+
 ### `mu`
 
 - **Type:** number in `[0, 1]`
@@ -281,3 +340,6 @@ directory retains the four-file scalar-run contract.
 | unknown key | rejected by name |
 | matrix/list shape not matching `d` | rejected |
 | unrecognized or repeated `convergence_statistic` entry | rejected |
+| `m` sparse-map deme/neighbor id outside `1..d`, a self-loop, or weights summing past `1` | rejected |
+| `m` topology mapping missing `topology`/`rate`, an unknown key, or an unrecognized topology name | rejected |
+| `m` ring topology with `d < 3` | rejected |
