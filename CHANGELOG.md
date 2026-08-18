@@ -6,6 +6,19 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `dev/bin/check-doc-links` stripped every underscore and asterisk from a
+  heading's anchor, including ones inside a `` `code span` `` where they
+  are literal identifier characters, not markdown emphasis syntax — so a
+  heading like `` ### `convergence_statistic` `` anchored at
+  `#convergencestatistic` instead of GitHub's actual
+  `#convergence_statistic`, and any link to it was rejected as broken.
+  No heading anchor with an underscore had ever been linked to before, so
+  the defect was latent rather than previously caught. Code-span content
+  is now unwrapped to its literal text before anchor slugging, instead of
+  going through markup stripping a second time.
+
 ### Added
 
 - Support for watching several convergence statistics at once:

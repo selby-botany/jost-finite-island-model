@@ -62,6 +62,30 @@ def test_checker_accepts_valid_links_and_github_dash_slugs(
     )
 
 
+def test_checker_accepts_a_code_span_heading_with_an_underscore(
+    tmp_path: Path,
+) -> None:
+    """A code-span heading's underscore is literal identifier text, not markup.
+
+    GitHub's own slugger does not treat an underscore inside `` `code` ``
+    as emphasis syntax; a heading like `` ### `convergence_statistic` ``
+    anchors at ``#convergence_statistic``, underscore intact.
+    """
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "README.md").write_text(
+        "# Project\n\n[Key](doc/reference.md#convergence_statistic)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "reference.md").write_text(
+        "# Reference\n\n### `convergence_statistic`\n",
+        encoding="utf-8",
+    )
+
+    result = _run_checker(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_checker_rejects_missing_file(tmp_path: Path) -> None:
     """A local link to an absent file fails with the source path."""
     (tmp_path / "README.md").write_text(
