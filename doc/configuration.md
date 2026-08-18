@@ -46,11 +46,10 @@ n_replicates: 1
 
 `N` is deliberately ploidy-neutral. Pass `2 * individuals` for a diploid
 autosomal locus and pass census individuals unchanged for a haploid locus.
-Per-deme lists model unequal island sizes and are fully supported in
-version 1.0.0: every stage of the update pipeline (`migrate`, `mutate`,
-`drift`), the founding-allele-count bound (checked against the smallest
-`N_i`), and `deme_weighting: size` all use each deme's own configured
-gene-copy count.
+Per-deme lists model unequal island sizes: every stage of the update
+pipeline (`migrate`, `mutate`, `drift`), the founding-allele-count bound
+(checked against the smallest `N_i`), and `deme_weighting: size` all use
+each deme's own configured gene-copy count.
 
 ```yaml
 N: [120, 450, 60]   # three demes, unequal gene-copy counts
@@ -78,8 +77,8 @@ other demes. Matrix rows must each sum to 1.
 
 A full matrix models asymmetric migration — row `k` gives destination deme
 `k`'s exact source weights, and row `k`'s weights need not equal row `j`'s.
-This is fully supported in version 1.0.0: every row is independently
-configurable, including rows that are not symmetric with any other row.
+Every row is independently configurable, including rows that are not
+symmetric with any other row.
 
 ```yaml
 m:
@@ -198,11 +197,10 @@ As an alternative to `loci`, use:
 Do not combine the two forms. Length is retained as locus data for future
 per-base-pair mutation models; differentiation statistics do not read it.
 
-Per-locus length varies freely in version 1.0.0 — nothing requires every
-locus to share one value, and no current code path derives behavior from
-it, so setting different lengths has no effect on drift, migration, or
-statistics until a future mutation model reads it (§9 of the design
-document).
+Per-locus length varies freely — nothing requires every locus to share
+one value. No code path derives behavior from it yet, so setting
+different lengths has no effect on drift, migration, or statistics until
+a future mutation model reads it (§9 of the design document).
 
 ```yaml
 loci:
@@ -266,7 +264,7 @@ p_0:
 A list watches several statistics at once — each keeps its own independent
 trailing-window history against the same `convergence_window` and
 `convergence_tolerance` — combined by `convergence_combinator`. A name may
-not repeat. Fully supported in version 1.0.0.
+not repeat.
 
 ```yaml
 convergence_statistic: [D, G_ST]

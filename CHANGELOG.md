@@ -145,6 +145,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `doc/img/fim-simulator-design/` to match, and updated every internal
   and external cross-reference (`README.md`, `CONTRIBUTING.md`,
   `doc/developer.md`, and the five documents' own links to each other).
+- Removed development-history narration from `doc/fim-simulator-design.md`,
+  `doc/fim-simulator-detailed-design.md`, `doc/fim-simulator-test-plan.md`,
+  `doc/configuration.md`, and `doc/developer.md`, now that every "what if"
+  extension the design document originally deferred (per-deme island
+  sizes, an asymmetric migration matrix, per-locus length, several
+  convergence statistics, 1D stepping-stone topology) has shipped and is
+  documented as current behavior elsewhere in the same document set.
+  Deleted `fim-simulator-design.md`'s "Open questions requiring a
+  decision" section (a resolved drafting-history log) and
+  `fim-simulator-detailed-design.md`'s commit-by-commit milestone plan and
+  "definition of done" section (both describing work that is complete);
+  folded the milestone plan's still-relevant documentation-navigation
+  content into a new engineering-reference subsection instead of
+  discarding it. Stripped "ships with commit N.N" cross-references
+  throughout the test plan, "(mocked)"/"initial pass"/"this pass" framing
+  from the design document, and "fully supported in version 1.0.0"
+  defensive phrasing from the configuration reference, keeping only the
+  one genuinely version-scoped limitation (`n_replicates` on the CLI).
+  Replaced the design document's fabricated walkthrough transcript with
+  real, reproducible `fim run` console output, `report.json`, and
+  `trajectory.jsonl` captured from an actual run of the document's own
+  example scenario. Renumbered sections and fixed every resulting
+  in-document and cross-document section reference; `usage.md`,
+  `finite-island-model-introduction.md`, and
+  `jost-differentiation-measures.md` needed no changes.
 
 ## [1.0.0] - 2026-08-16
 

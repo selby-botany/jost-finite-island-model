@@ -118,14 +118,14 @@ adding engine state.
 
 | Requested change | Extension point |
 |---|---|
-| Unequal deme size | Pass per-deme `N`; operators and `E_ST` already support it |
+| Unequal deme size | Pass per-deme `N`; operators and `E_ST` support it |
 | Asymmetric migration | Pass a validated `d` by `d` matrix |
-| Stepping-stone topology (1D) | `fim.model.topology`: `m: {topology: ring\|linear, rate}` or a hand-written sparse map, both already supported |
+| Stepping-stone topology (1D) | `fim.model.topology`: `m: {topology: ring\|linear, rate}` or a hand-written sparse map |
 | Spatial migration beyond 1D or a fixed matrix | 2D lattice topology, or a `MigrantPoolStrategy` interface — neither built yet |
 | Per-locus mutation from length | Derive rates from `LocusSpec.length` in a mutation strategy |
 | Selection | Add a pure `select` operator before drift |
 | Stepwise mutation | Add a strategy behind mutation identity assignment |
-| Several convergence statistics | Pass a list for `convergence_statistic` plus `convergence_combinator`; `ConvergenceMonitor` already supports it |
+| Several convergence statistics | Pass a list for `convergence_statistic` plus `convergence_combinator` |
 | Large trajectories | Implement another `TrajectoryStore` |
 | GUI | Call `fim.engine.fim`; do not duplicate model logic |
 

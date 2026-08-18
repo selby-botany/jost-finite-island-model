@@ -35,10 +35,11 @@
 
 ## Who this document is for
 
-Written for whoever implements or maintains the simulator's tests. It is
-the companion to the
+Written for whoever maintains or extends the simulator's tests. It is the
+companion to the
 [detailed design](fim-simulator-detailed-design.md)
-(which plans the code commit by commit) and the
+(which covers the repository's engineering, toolchain, and release
+process) and the
 [design document](fim-simulator-design.md) (which
 settles the model, statistics, and architecture). Every formula, golden
 value, and equilibrium relation cited here is sourced from the design
@@ -49,9 +50,8 @@ and the
 — and is not re-derived.
 
 "Design §N" points into the design document; "detailed design §N" points
-into the implementation plan; "Part N" points into the differentiation-
-measures guide. Each test group below names the milestone/commit in the
-detailed design that ships it, so tests and code land together.
+into the engineering reference; "Part N" points into the
+differentiation-measures guide.
 
 ## 1. The determinism contract for tests
 
@@ -141,8 +141,6 @@ every save. `build --ci` runs everything.
 
 ### 4.1 `model/allele.py`
 
-Ships with detailed-design commit 1.1.
-
 - `AlleleRegistry.next_id()` returns strictly increasing, never-repeating
   IDs across the whole run — the infinite-alleles guarantee reduces to this
   (design §3.2).
@@ -155,14 +153,12 @@ Ships with detailed-design commit 1.1.
 
 ### 4.2 `model/locus.py`
 
-Ships with commit 1.2. `LocusSpec` is immutable and hashable; `length`
-participates only as data (no statistic reads it — design §3.2), asserted by
-constructing two specs differing only in `length` and confirming identical
-statistical output downstream.
+`LocusSpec` is immutable and hashable; `length` participates only as data
+(no statistic reads it — design §3.2), asserted by constructing two specs
+differing only in `length` and confirming identical statistical output
+downstream.
 
 ### 4.3 `model/state.py`
-
-Ships with commits 1.3–1.4.
 
 - `total_frequency()` returns `1.0` within tolerance for every
   (deme, locus); a state that violates this is rejected/flagged.
@@ -173,8 +169,6 @@ Ships with commits 1.3–1.4.
 - Equality is value equality, independent of internal dict ordering.
 
 ### 4.4 `model/params.py`
-
-Ships with commit 1.5.
 
 - Valid scalar `(N, m, μ, d)` construct; `seed` is required (no default —
   design §4.3).
@@ -190,8 +184,6 @@ Ships with commit 1.5.
 
 ### 4.5 `model/initial.py`
 
-Ships with commit 1.6.
-
 - Default Dirichlet generator: same seed ⇒ identical initial state; each
   (deme, locus) sums to 1; `initial_concentration` visibly changes evenness
   (a low-`α` draw is more skewed than a high-`α` draw, asserted via a
@@ -202,8 +194,8 @@ Ships with commit 1.6.
 
 ### 4.6 `model/operators.py`
 
-Ships with commits 2.1–2.5. Each operator is `ModelState → ModelState` and
-tested against its closed form.
+Each operator is `ModelState → ModelState` and tested against its closed
+form.
 
 - **migrate**: expectation-preserving — the migrant-pool blend conserves the
   total allele frequency across demes; `m=0` is identity; `m=1` fully
@@ -222,8 +214,6 @@ tested against its closed form.
 
 ### 4.7 `convergence/`
 
-Ships with commits 4.1–4.3.
-
 - Trailing-window criterion: a constant sequence is stable immediately once
   the window fills; a linearly drifting sequence is *not* stable; an
   oscillating sequence within tolerance *is* stable, one exceeding it is not.
@@ -236,8 +226,6 @@ Ships with commits 4.1–4.3.
   special case (design §3.5), not a separate path.
 
 ### 4.8 `persistence/`
-
-Ships with commits 5.1–5.4.
 
 - `TrajectoryStore` round-trip: `write_generation` then `read` returns rows
   byte-faithful to the schema, for a multi-generation, multi-deme,
@@ -252,21 +240,19 @@ Ships with commits 5.1–5.4.
 
 ### 4.9 `engine.py`
 
-Ships with commits 6.1–6.3 and 9.3.
-
 - A tiny seeded `fim(...)` run is bit-reproducible across two invocations.
 - Converged and capped runs both return a valid `RunResult` with the correct
   `reason`.
 - The report computed live at `t=T` equals the report re-computed from the
   persisted trajectory (design §4.1 — statistics never depend on the
   engine).
-- Replicate batching (commit 9.3): `n_replicates` runs are independent and
-  each individually reproducible from the run seed; the scalar (`n=1`) case
-  is unchanged.
+- Replicate batching: `n_replicates` runs are independent and each
+  individually reproducible from the run seed; the scalar (`n=1`) case is
+  unchanged.
 
 ### 4.10 `cli.py`
 
-Ships with commits 8.1–8.6 (functional detail in §8).
+Functional detail in §8.
 
 - Config parsing maps every YAML key to the right `SimulationParams` field
   and rejects unknown keys with a message naming the key.
@@ -277,9 +263,9 @@ Ships with commits 8.1–8.6 (functional detail in §8).
 
 ## 5. Property-based invariants for the statistics module
 
-Ships with commit 3.4. Checked with Hypothesis over `freq_tables`
-(derandomized in CI). These are the differentiation-measures guide's Part V
-identities, asserted as properties rather than point cases:
+Checked with Hypothesis over `freq_tables` (derandomized in CI). These are
+the differentiation-measures guide's Part V identities, asserted as
+properties rather than point cases:
 
 - `H_T ≥ H_S` for every table.
 - `G_ST ≤ 1 − H_S` — the ceiling identity (Part V).
@@ -296,9 +282,9 @@ identities, asserted as properties rather than point cases:
 
 ## 6. Golden worked examples
 
-Ships with commit 3.4; fixtures in `test/data/`. Asserted to **exact**
-values (these were independently recomputed from first principles in the
-differentiation guide's Part IV, not copied from the paper):
+Fixtures live in `test/data/`. Asserted to **exact** values (these were
+independently recomputed from first principles in the differentiation
+guide's Part IV, not copied from the paper):
 
 | Fixture family | Configuration | Expected | Note |
 |---|---|---|---|
@@ -314,9 +300,9 @@ stored value within floating-point tolerance (exact for the rationals).
 
 ## 7. Statistical and asymptotic tests
 
-Ships with commits 2.5, 9.1, 9.2. Marked `@pytest.mark.statistical`. These
-exercise the *model*, not just the statistics module, and are the tests the
-determinism contract (§1) most directly governs.
+Marked `@pytest.mark.statistical`. These exercise the *model*, not just the
+statistics module, and are the tests the determinism contract (§1) most
+directly governs.
 
 ### 7.1 Deriving a tolerance band before choosing a seed
 
@@ -373,14 +359,14 @@ replicate count and the letter's own expected/observed spread.
 
 ## 8. Functional and end-to-end tests
 
-Ships with commits 6.3, 8.6. Home: `test/cli/`, `test/engine/`. These
-exercise the product as a researcher uses it (design §13), on `tiny_params`
-scenarios small enough to finish in well under a second.
+Home: `test/cli/`, `test/engine/`. These exercise the product as a
+researcher uses it (design §12), on `tiny_params` scenarios small enough
+to finish in well under a second.
 
 - **`fim run` produces exactly the documented artifacts**: given a small
   YAML config and a fixed seed, the output directory contains
   `trajectory.jsonl`, `manifest.json`, `report.json`, and `scatter.png`,
-  and `report.json` carries every scalar in design §13's example shape
+  and `report.json` carries every scalar in design §12's example shape
   (requirement 6a). Two runs at the same seed produce identical
   `trajectory.jsonl` and `report.json`.
 - **Config validation**: malformed configs fail with a message naming the
@@ -394,14 +380,14 @@ scenarios small enough to finish in well under a second.
   tolerance returns a capped-but-valid result whose `report.json` says so
   plainly (design §5), not an error.
 - **`fim init`**: first run drops the starter config into the run folder
-  (design §13).
+  (design §12).
 - **`fim update --check`**: fully mocked HTTP; asserts the newer/equal/older
   messaging; never performs a live request.
 
 ## 9. Visualization tests
 
-Ships with commit 7.4. Home: `test/viz/`. Rendered with the non-interactive
-`Agg` backend so they are headless and reproducible.
+Home: `test/viz/`. Rendered with the non-interactive `Agg` backend so they
+are headless and reproducible.
 
 - Plots are asserted by **structure, not pixels**: the figure exists, has
   the expected number of axes/panels, the axis labels name the demes, and
@@ -419,9 +405,8 @@ Ships with commit 7.4. Home: `test/viz/`. Rendered with the non-interactive
 
 ## 10. Packaging smoke tests
 
-Ships with commits 10.1–10.3. Marked `@pytest.mark.packaging`; run in the CI
-package and release jobs (detailed design §5.2/§5.4), not in the default
-`pytest`.
+Marked `@pytest.mark.packaging`; run in the CI package and release jobs
+(detailed design §5.2/§5.4), not in the default `pytest`.
 
 - **Wheel entry point**: after `pip install` of the built wheel into a
   throwaway venv, `fim --version` prints `version.txt` and `fim --help`
@@ -436,12 +421,10 @@ package and release jobs (detailed design §5.2/§5.4), not in the default
 
 ### 10.1 Git-hook and doc-freshness checks
 
-Ships with detailed-design commits 0.8–0.9. The repository-managed git
-hooks (detailed design §8.2) and the generated-API-doc freshness gate
-(§8.1) are themselves tested, mirroring the reference project's
-`test/bin/*-hook` coverage. These are fast, Docker-free shell/pytest checks
-that obey the determinism contract (§1): no network, no wall-clock, fully
-reproducible.
+The repository-managed git hooks (detailed design §8.2) and the
+generated-API-doc freshness gate (§8.1) are themselves tested. These are
+fast, Docker-free shell/pytest checks that obey the determinism contract
+(§1): no network, no wall-clock, fully reproducible.
 
 - **`commit-msg`**: accepts valid Conventional Commit subjects (including
   `merge`, `revert`, `fixup!`, and `squash!` forms) and rejects malformed
@@ -457,15 +440,16 @@ reproducible.
   the direct proof that a stale API reference cannot reach `main` (§8.1).
 - **Graceful degradation**: each hook is run in a fixture repository with
   the relevant tool (or `pyproject.toml`) absent and asserted to no-op with
-  an informational message rather than error — the property that lets the
-  hooks install at Milestone 0 before `src/` exists (detailed design §8.2).
+  an informational message rather than error, so a fresh clone that has
+  not yet installed the `dev` group is never blocked (detailed design
+  §8.2).
 - **Doc-navigation checker** (`dev/bin/check-doc-links`, detailed design
-  §9.14 commit 11.5): a fixture set of small Markdown files exercises the
-  pass and fail paths — a valid relative link and in-page anchor pass; a
-  link to a missing file, an anchor with no matching heading, and an
-  orphan document each fail with a message naming the offending target.
-  The checker is offline and deterministic (§1); it never resolves external
-  `http(s)` URLs, so its result is a pure function of the tree.
+  §8.3): a fixture set of small Markdown files exercises the pass and fail
+  paths — a valid relative link and in-page anchor pass; a link to a
+  missing file, an anchor with no matching heading, and an orphan document
+  each fail with a message naming the offending target. The checker is
+  offline and deterministic (§1); it never resolves external `http(s)`
+  URLs, so its result is a pure function of the tree.
 
 ## 11. Coverage targets and CI gating
 
