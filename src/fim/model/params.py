@@ -9,7 +9,7 @@ from types import MappingProxyType
 from typing import Any, Final, Literal, cast
 
 from fim.model.allele import AlleleId
-from fim.model.locus import LocusSpec
+from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.topology import (
     Topology,
     dense_matrix_from_neighbors,
@@ -21,6 +21,7 @@ Migration = float | tuple[tuple[float, ...], ...]
 DemeWeighting = Literal["equal", "size"]
 ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
+MutationModel = Literal["infinite_alleles", "finite_alleles"]
 InitialFrequencies = tuple[tuple[Mapping[AlleleId, float], ...], ...]
 
 DEFAULT_LOCUS_LENGTH: Final = 200
@@ -36,6 +37,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "convergence_tolerance": 0.01,
     "max_generations": 10_000,
     "n_replicates": 1,
+    "mutation_model": "infinite_alleles",
 }
 
 _CONFIG_KEYS: Final = frozenset(
@@ -57,6 +59,7 @@ _CONFIG_KEYS: Final = frozenset(
         "convergence_tolerance",
         "max_generations",
         "n_replicates",
+        "mutation_model",
         "p_0",
     }
 )
@@ -87,6 +90,12 @@ class SimulationParams:
         convergence_tolerance: Maximum half-window mean difference.
         max_generations: Hard generation safety cap.
         n_replicates: Number of independently seeded runs.
+        mutation_model: How a mutation event picks its target — either
+            "infinite_alleles" (default), where every mutation is
+            globally novel, or "finite_alleles", where each locus has a
+            bounded state space (`fim.model.locus.finite_allele_capacity`)
+            and a mutation can recur to a state already present elsewhere
+            in the run. See `fim.model.allele.FiniteAlleleSpace`.
         initial_frequencies: Optional explicit deme/locus frequency table.
     """
 
@@ -107,6 +116,7 @@ class SimulationParams:
     convergence_tolerance: float = 0.01
     max_generations: int = 10_000
     n_replicates: int = 1
+    mutation_model: MutationModel = "infinite_alleles"
     initial_frequencies: InitialFrequencies | None = None
 
     def __post_init__(self) -> None:
@@ -158,6 +168,10 @@ class SimulationParams:
             minimum=1,
         )
         _require_integer("n_replicates", self.n_replicates, minimum=1)
+        if self.mutation_model not in {"infinite_alleles", "finite_alleles"}:
+            raise ValueError(
+                "mutation_model must be 'infinite_alleles' or 'finite_alleles'"
+            )
 
         initial_frequencies = _normalize_initial_frequencies(
             self.initial_frequencies,
@@ -165,6 +179,10 @@ class SimulationParams:
             loci=loci,
             population_sizes=population_sizes,
         )
+        if self.mutation_model == "finite_alleles":
+            _validate_finite_allele_capacity(
+                loci, self.initial_allele_count, initial_frequencies
+            )
 
         object.__setattr__(
             self,
@@ -234,6 +252,7 @@ class SimulationParams:
             "convergence_tolerance": self.convergence_tolerance,
             "max_generations": self.max_generations,
             "n_replicates": self.n_replicates,
+            "mutation_model": self.mutation_model,
         }
         if self.initial_frequencies is not None:
             result["p_0"] = [
@@ -334,6 +353,12 @@ class SimulationParams:
                 config.get(
                     "n_replicates",
                     PARAMETER_DEFAULTS["n_replicates"],
+                ),
+            ),
+            mutation_model=_parse_mutation_model(
+                config.get(
+                    "mutation_model",
+                    PARAMETER_DEFAULTS["mutation_model"],
                 ),
             ),
             initial_frequencies=_parse_initial_frequencies(config.get("p_0")),
@@ -676,6 +701,16 @@ def _parse_migration(value: Any, d: int) -> Migration:
     return tuple(rows)
 
 
+def _parse_mutation_model(value: Any) -> MutationModel:
+    """Parse the two supported mutation-model values."""
+    parsed = _parse_string("mutation_model", value)
+    if parsed == "infinite_alleles":
+        return "infinite_alleles"
+    if parsed == "finite_alleles":
+        return "finite_alleles"
+    raise ValueError("mutation_model must be 'infinite_alleles' or 'finite_alleles'")
+
+
 def _parse_population_size(value: Any) -> PopulationSize:
     """Parse scalar or per-deme gene-copy counts."""
     if isinstance(value, int) and not isinstance(value, bool):
@@ -704,3 +739,37 @@ def _require_probability(name: str, value: float) -> None:
     """Validate a finite probability."""
     if not math.isfinite(value) or not 0.0 <= value <= 1.0:
         raise ValueError(f"{name} must be between 0 and 1")
+
+
+def _validate_finite_allele_capacity(
+    loci: tuple[LocusSpec, ...],
+    initial_allele_count: int,
+    initial_frequencies: InitialFrequencies | None,
+) -> None:
+    """Reject a finite-alleles configuration too small for its initial state.
+
+    Every locus's finite state space (`finite_allele_capacity`) must hold
+    whichever allele IDs generation zero actually uses there — the founding
+    range ``0 .. initial_allele_count - 1``, or, when an explicit ``p_0`` is
+    given, whatever specific IDs it names.
+    """
+    for locus_index, locus in enumerate(loci):
+        capacity = finite_allele_capacity(locus.length)
+        if initial_frequencies is not None:
+            observed_ids = {
+                int(allele_id)
+                for deme in initial_frequencies
+                for allele_id in deme[locus_index]
+            }
+            if any(allele_id >= capacity for allele_id in observed_ids):
+                raise ValueError(
+                    f"locus {locus.locus_id}: an initial allele ID exceeds "
+                    f"the finite_alleles capacity ({capacity}) for length "
+                    f"{locus.length}"
+                )
+        elif initial_allele_count > capacity:
+            raise ValueError(
+                f"locus {locus.locus_id}: initial_allele_count exceeds the "
+                f"finite_alleles capacity ({capacity}) for length "
+                f"{locus.length}"
+            )

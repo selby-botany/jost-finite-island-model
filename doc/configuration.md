@@ -9,6 +9,7 @@ the [project overview](../README.md) for installation.
 - [Complete example](#complete-example)
 - [Required model keys](#required-model-keys)
 - [Loci](#loci)
+- [Mutation model](#mutation-model)
 - [Initial conditions](#initial-conditions)
 - [Convergence](#convergence)
 - [Analysis and execution](#analysis-and-execution)
@@ -168,9 +169,11 @@ document §9, §12), not silently missing.
 
 - **Type:** number in `[0, 1]`
 - **Required:** yes
-- **Meaning:** per-gene-copy mutation probability per generation
+- **Meaning:** per-gene-copy mutation probability per generation, applied
+  identically at every locus regardless of `length`
 
-Every mutation produces a globally novel allele identity.
+By default, every mutation produces a globally novel allele identity; see
+[mutation_model](#mutation_model) below for the opt-in alternative.
 
 ### `seed`
 
@@ -194,13 +197,11 @@ As an alternative to `loci`, use:
 - `locus_lengths` — one positive integer shared by all loci, or exactly
   `n_loci` integers, default `200`.
 
-Do not combine the two forms. Length is retained as locus data for future
-per-base-pair mutation models; differentiation statistics do not read it.
+Do not combine the two forms. Differentiation statistics never read
+`length` directly; it acts only through the mutation model, below.
 
 Per-locus length varies freely — nothing requires every locus to share
-one value. No code path derives behavior from it yet, so setting
-different lengths has no effect on drift, migration, or statistics until
-a future mutation model reads it (§9 of the design document).
+one value.
 
 ```yaml
 loci:
@@ -216,6 +217,51 @@ The equivalent compact form:
 n_loci: 2
 locus_lengths: [50, 8000]
 ```
+
+## Mutation model
+
+### `mutation_model`
+
+- **Type:** `infinite_alleles` or `finite_alleles`
+- **Default:** `infinite_alleles`
+
+Controls what a mutation event turns an allele *into*, independently of
+`mu` (which controls how *often* one happens).
+
+- `infinite_alleles` (the default, and the only behavior in every release
+  before this option existed): every mutation event produces a label
+  never seen before, anywhere, ever. A good approximation once a locus
+  spans many base pairs — see
+  [the differentiation-measures guide](jost-differentiation-measures.md#distance-between-alleles-is-a-different-model) —
+  but increasingly unrealistic for a short locus, where the same state
+  can plausibly arise more than once by chance (a *recurrence*).
+- `finite_alleles`: each locus gets a bounded state space of exactly
+  `4 ** length` possible states (the differentiation-measures guide's own
+  worked reasoning: "a single-character locus admits at most four
+  alleles"). A mutation event's target is drawn uniformly from the other
+  `capacity - 1` states — never its own current state, but possibly one
+  already present elsewhere in the run. This still imposes no ordering or
+  distance between alleles; it only gives the label space a ceiling. See
+  [the simulator design, §3.2 and §9](fim-simulator-design.md#32-alleles-loci-and-identity)
+  for the full reasoning, including why this is a *different*, and
+  deliberately not chosen, direction from a stepwise (microsatellite)
+  mutation model.
+
+```yaml
+mutation_model: finite_alleles
+loci:
+  - locus_id: 1
+    length: 1     # capacity 4 — recurrence becomes likely quickly
+```
+
+`finite_alleles` interacts with `length`, `initial_allele_count`, and
+`p_0`: every locus's starting allele IDs — the founding range
+`0 .. initial_allele_count - 1`, or an explicit `p_0`'s specific IDs —
+must fit inside that locus's own `4 ** length` capacity, checked
+independently per locus. A locus this short with the library default
+`initial_allele_count: 2` always fits (capacity is at least 4); it is
+easiest to violate by combining a short `length` with an explicit `p_0`
+using IDs that were only ever meant for a longer locus.
 
 ## Initial conditions
 
@@ -341,3 +387,5 @@ directory retains the four-file scalar-run contract.
 | `m` sparse-map deme/neighbor id outside `1..d`, a self-loop, or weights summing past `1` | rejected |
 | `m` topology mapping missing `topology`/`rate`, an unknown key, or an unrecognized topology name | rejected |
 | `m` ring topology with `d < 3` | rejected |
+| `mutation_model` not `infinite_alleles` or `finite_alleles` | rejected |
+| `finite_alleles` with a locus's starting allele IDs exceeding its `4 ** length` capacity | rejected |

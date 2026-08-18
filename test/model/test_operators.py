@@ -5,7 +5,13 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 
-from fim.model.allele import MINTED_ID_START, AlleleId, AlleleRegistry
+from fim.model.allele import (
+    MINTED_ID_START,
+    AlleleId,
+    AlleleRegistry,
+    FiniteAlleleRegistry,
+    FiniteAlleleSpace,
+)
 from fim.model.locus import LocusSpec
 from fim.model.operators import drift, migrate, mutate, step
 from fim.model.params import SimulationParams
@@ -285,6 +291,151 @@ def test_mutation_scales_existing_mass_and_preserves_sub_grid_allele(
     # Events still mint fresh identities and total mass stays normalized.
     assert any(int(allele_id) >= MINTED_ID_START for allele_id in result)
     assert sum(result.values()) == pytest.approx(1.0)
+
+
+def test_mutation_finite_alleles_respects_locus_specific_capacity(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Each locus's mutation targets stay within that locus's own capacity.
+
+    Two loci share one state but have different capacities (4 and 4**10);
+    every observed target must respect its own locus's bound, not the
+    other's — proving `mutate()` looks up the registry by `locus_id`
+    rather than sharing one space across loci.
+    """
+    population_size = 200
+    state = ModelState(
+        loci=(LocusSpec(1, 1), LocusSpec(2, 10)),
+        frequencies=(
+            (
+                {AlleleId(0): 1.0},
+                {AlleleId(0): 1.0},
+            ),
+        ),
+    )
+    finite_alleles = FiniteAlleleRegistry(
+        {
+            1: FiniteAlleleSpace(4, [AlleleId(0)]),
+            2: FiniteAlleleSpace(4**10, [AlleleId(0)]),
+        }
+    )
+
+    mutated = mutate(
+        state,
+        0.3,
+        population_size,
+        AlleleRegistry(),
+        rng(20260821),
+        finite_alleles=finite_alleles,
+    )
+
+    assert all(int(a) < 4 for a in mutated.frequency_map(0, 0))
+    assert all(int(a) < 4**10 for a in mutated.frequency_map(0, 1))
+    assert any(int(a) >= 4 for a in mutated.frequency_map(0, 1))
+
+
+def test_mutation_finite_alleles_accumulates_recurrent_targets() -> None:
+    """Two events landing on the same target sum mass instead of overwriting.
+
+    Capacity 2 leaves exactly one possible target for any mutating copy —
+    deterministic in shape, so no statistical tolerance is needed: only
+    alleles 0 and 1 can ever exist, and their mass must still sum to 1
+    afterward. A flat assignment instead of accumulation would silently
+    drop earlier events' contributions and this would fail.
+    """
+    population_size = 100
+    state = ModelState(
+        loci=(LocusSpec(1, 1),),
+        frequencies=(({AlleleId(0): 0.5, AlleleId(1): 0.5},),),
+    )
+    finite_alleles = FiniteAlleleRegistry(
+        {1: FiniteAlleleSpace(2, [AlleleId(0), AlleleId(1)])}
+    )
+
+    mutated = mutate(
+        state,
+        0.3,
+        population_size,
+        AlleleRegistry(),
+        np.random.default_rng(5),
+        finite_alleles=finite_alleles,
+    )
+    result = mutated.frequency_map(0, 0)
+
+    assert set(result) == {AlleleId(0), AlleleId(1)}
+    assert sum(result.values()) == pytest.approx(1.0)
+
+
+def test_mutation_finite_alleles_none_matches_infinite_alleles_default(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Omitting `finite_alleles` is identical to passing `None` explicitly.
+
+    The opt-in contract: every call written before this feature existed
+    (including every other test in this file) keeps meaning exactly what
+    it always meant.
+    """
+    state = _state()
+
+    omitted = mutate(state, 0.1, 100, AlleleRegistry(), rng(17))
+    explicit_none = mutate(
+        state, 0.1, 100, AlleleRegistry(), rng(17), finite_alleles=None
+    )
+
+    assert omitted == explicit_none
+
+
+@pytest.mark.statistical
+def test_mutation_finite_alleles_recurrence_rate_matches_theory(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """A fixed-seed sample recurrence rate through `mutate()` matches theory.
+
+    End-to-end version of `FiniteAlleleSpace`'s own recurrence-rate test:
+    drives the same probability through `mutate()`'s source-attribution and
+    accumulation logic, not just the space's `mutate_target` in isolation.
+    ``population_size=1, mu=1.0`` makes each call exactly one mutation
+    event with a certain, deterministic source — the only randomness left
+    is that one event's target — so each trial is one clean Bernoulli
+    observation, exactly like the space-level test.
+    """
+    capacity = 100
+    minted_count = 50
+    trials = 20_000
+    expected_probability = (minted_count - 1) / (capacity - 1)
+    generator = rng(20260821)
+    state = ModelState(
+        loci=(LocusSpec(1, 1),),
+        frequencies=(({AlleleId(0): 1.0},),),
+    )
+
+    def one_target() -> AlleleId:
+        """Mutate the single gene copy once and return its new identity."""
+        finite_alleles = FiniteAlleleRegistry(
+            {
+                1: FiniteAlleleSpace(
+                    capacity,
+                    [AlleleId(identity) for identity in range(minted_count)],
+                )
+            }
+        )
+        mutated = mutate(
+            state, 1.0, 1, AlleleRegistry(), generator, finite_alleles=finite_alleles
+        )
+        (target,) = mutated.frequency_map(0, 0)
+        return target
+
+    outcomes = np.asarray(
+        [int(one_target()) < minted_count for _trial in range(trials)]
+    )
+    observed_rate = outcomes.mean()
+    standard_error = np.sqrt(
+        expected_probability * (1.0 - expected_probability) / trials
+    )
+
+    assert observed_rate == pytest.approx(
+        expected_probability, abs=5.0 * standard_error
+    )
 
 
 def test_drift_preserves_invariants_and_is_seeded(

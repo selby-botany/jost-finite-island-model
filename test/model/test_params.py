@@ -30,6 +30,8 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     assert params.convergence_window == PARAMETER_DEFAULTS["convergence_window"]
     assert params.convergence_tolerance == PARAMETER_DEFAULTS["convergence_tolerance"]
     assert params.max_generations == PARAMETER_DEFAULTS["max_generations"]
+    assert params.mutation_model == PARAMETER_DEFAULTS["mutation_model"]
+    assert params.mutation_model == "infinite_alleles"
 
 
 @pytest.mark.parametrize(
@@ -133,6 +135,62 @@ def test_convergence_statistic_accepts_several_names_and_round_trips() -> None:
     assert single.convergence_statistics == ("D",)
 
 
+def test_mutation_model_defaults_to_infinite_alleles_and_round_trips() -> None:
+    """The opt-in finite-alleles model stays off unless requested.
+
+    Omitting the key entirely and configuring it explicitly as
+    "infinite_alleles" must be indistinguishable — the whole point of an
+    opt-in feature is that a config written before it existed keeps
+    meaning exactly what it always meant.
+    """
+    default = SimulationParams.from_mapping(_valid_config())
+    explicit_infinite = SimulationParams.from_mapping(
+        {**_valid_config(), "mutation_model": "infinite_alleles"}
+    )
+    finite = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "mutation_model": "finite_alleles",
+            "loci": [{"locus_id": 1, "length": 1}],
+        }
+    )
+
+    assert default == explicit_infinite
+    assert default.mutation_model == "infinite_alleles"
+    assert finite.mutation_model == "finite_alleles"
+    assert default.to_dict()["mutation_model"] == "infinite_alleles"
+    assert finite.to_dict()["mutation_model"] == "finite_alleles"
+    assert SimulationParams.from_mapping(finite.to_dict()) == finite
+
+
+def test_finite_alleles_capacity_check_covers_every_locus_not_just_the_first() -> None:
+    """A violation on the second locus is caught, not just the first's.
+
+    Locus 1 (length 2, capacity 16) has ample headroom for
+    `initial_allele_count=5`; locus 2 (length 1, capacity 4) does not. A
+    validator that only checked `loci[0]` would miss this.
+    """
+    with pytest.raises(ValueError, match="locus 2.*exceeds the finite_alleles"):
+        SimulationParams.from_mapping(
+            {
+                **_valid_config(),
+                "mutation_model": "finite_alleles",
+                "loci": [{"locus_id": 1, "length": 2}, {"locus_id": 2, "length": 1}],
+                "initial_allele_count": 5,
+            }
+        )
+
+    valid = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "mutation_model": "finite_alleles",
+            "loci": [{"locus_id": 1, "length": 2}, {"locus_id": 2, "length": 1}],
+            "initial_allele_count": 4,
+        }
+    )
+    assert valid.mutation_model == "finite_alleles"
+
+
 @pytest.mark.parametrize(
     ("updates", "message"),
     [
@@ -153,6 +211,23 @@ def test_convergence_statistic_accepts_several_names_and_round_trips() -> None:
         ({"convergence_tolerance": float("nan")}, "finite"),
         ({"max_generations": 0}, "max_generations"),
         ({"n_replicates": 0}, "n_replicates"),
+        ({"mutation_model": "stepwise"}, "mutation_model"),
+        (
+            {
+                "mutation_model": "finite_alleles",
+                "loci": [{"locus_id": 1, "length": 1}],
+                "initial_allele_count": 5,
+            },
+            "exceeds the finite_alleles capacity",
+        ),
+        (
+            {
+                "mutation_model": "finite_alleles",
+                "loci": [{"locus_id": 1, "length": 1}],
+                "p_0": [[{"0": 0.5, "9": 0.5}], [{"0": 0.5, "9": 0.5}]],
+            },
+            "exceeds the finite_alleles capacity",
+        ),
     ],
 )
 def test_post_init_validation_covers_all_scalar_contracts(

@@ -1,8 +1,8 @@
 # Jost's finite island model simulator
 
-`fim` simulates migration, infinite-alleles mutation, and genetic drift across
-a finite set of demes. It preserves every generation's allele frequencies and
-reports differentiation statistics against that known history.
+`fim` simulates migration, mutation, and genetic drift across a finite set
+of demes. It preserves every generation's allele frequencies and reports
+differentiation statistics against that known history.
 
 ## Contents
 
@@ -106,8 +106,11 @@ database. See [output schemas](doc/usage.md#output-schemas).
 - Convergence means that a selected statistic's trailing-window half means are
   within a configured tolerance. Reaching the hard cap is a valid,
   non-converged result.
-- Founding alleles use locus-relative IDs. Every mutation receives a globally
-  unique ID under the infinite-alleles model.
+- Founding alleles use locus-relative IDs. By default (the infinite-alleles
+  model), every mutation receives a globally unique ID; the opt-in
+  finite-alleles model instead bounds each locus to `4 ** length` states
+  and allows a mutation to recur to one already present elsewhere in the
+  run.
 
 The [simulator design](doc/fim-simulator-design.md)
 defines the complete scientific and architectural contract.
