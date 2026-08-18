@@ -217,6 +217,42 @@ def test_run_accepts_finite_alleles_mutation_model(tmp_path: Path) -> None:
     assert (first_output / "scatter.png").exists()
 
 
+def test_run_accepts_a_per_base_mutation_rate(tmp_path: Path) -> None:
+    """A config using `mu_b` instead of `mu` runs end to end.
+
+    `mu_b` and `mu` are mutually exclusive, so this config is built
+    directly rather than through `_write_config`'s `mu`-including base.
+    """
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    config_body: dict[str, object] = {
+        "N": 20,
+        "d": 2,
+        "m": 0.1,
+        "mu_b": 0.0001,
+        "seed": 20260822,
+        "loci": [
+            {"locus_id": 1, "length": 5},
+            {"locus_id": 2, "length": 50},
+        ],
+        "convergence_window": 4,
+        "convergence_tolerance": 1.0,
+        "max_generations": 10,
+    }
+    config.write_text(yaml.safe_dump(config_body, sort_keys=False), encoding="utf-8")
+
+    status = cli.main(["run", str(config), "--output", str(output), "--quiet"])
+
+    assert status == 0
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    parameters_mu = manifest["parameters"]["mu"]
+    assert isinstance(parameters_mu, list)
+    assert len(parameters_mu) == 2
+    assert parameters_mu[0] != parameters_mu[1]
+    assert "mu_b" not in manifest["parameters"]
+    assert (output / "scatter.png").exists()
+
+
 def test_two_runs_have_identical_trajectory_and_report(tmp_path: Path) -> None:
     """Wall-clock output naming never enters persisted scientific values."""
     config = tmp_path / "run.yaml"

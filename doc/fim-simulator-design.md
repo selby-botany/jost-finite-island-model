@@ -587,9 +587,11 @@ ModelState`, matching §3.4 exactly:
   `model/topology.py` below.
 - `mutate(state, mu, registry) -> ModelState` — infinite-alleles model:
   each of the `N` gene copies independently mutates with probability `μ`;
-  a mutating copy's label is replaced by a fresh ID from `registry`. An
-  optional `finite_alleles` registry switches to the K-allele model
-  instead — see §9 and `model/allele.py` above.
+  a mutating copy's label is replaced by a fresh ID from `registry`. `μ`
+  accepts a scalar (shared by every locus) or a per-locus tuple — see §9
+  and `SimulationParams.from_mapping`'s `mu_b` for deriving the latter
+  from a per-base rate. An optional `finite_alleles` registry switches to
+  the K-allele model instead — see §9 and `model/allele.py` above.
 - `drift(state, N) -> ModelState` — multinomial resample of `N` gene
   copies (§3.1's ploidy-neutral convention: `N` is already a gene-copy
   count, not an individual count) from the post-migration/mutation
@@ -851,7 +853,8 @@ than requiring a redesign. Several are already implemented:
 | …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix — **implemented**; a matrix's rows are the authoritative weights and are never rescaled by `N` (see [`doc/configuration.md`](configuration.md#m)) | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
 | …migration were spatial (stepping-stone)? | `m` accepts a sparse/neighbor-restricted matrix — **1D ring and linear implemented** (`fim.model.topology`, [`doc/configuration.md`](configuration.md#m)); a 2D lattice and a `MigrantPoolStrategy` interface for migration that itself changes over a run are not | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
 | …migration counted individuals rather than blending an idealized continuous fraction? | `𝖯["migrant_sampling"] = "stochastic"` — **implemented, opt-in** (default `"continuous"`, unchanged); each deme's migrant count is drawn from `Binomial(N_i, rate)` instead of applied exactly, while migrant composition stays the deterministic pool average, so `drift()` remains the pipeline's only operator that resamples every gene copy | `migrate()`'s existing rate/pool split (row above) already separates "how much moves" from "what it's made of"; only the first half needed to become random |
-| …locus length varied? | `LocusSpec.length` per locus — **implemented**; drives the finite-alleles model's per-locus capacity (below) when that model is active, otherwise still inert | already a first-class field (§3.2) |
+| …locus length varied? | `LocusSpec.length` per locus — **implemented**; drives the finite-alleles model's per-locus capacity, and, independently, `mu_b`'s per-locus rate derivation (below) — otherwise still inert | already a first-class field (§3.2) |
+| …mutation rate were per base rather than per locus, so two loci of different lengths do not silently mutate at the same rate? | `𝖯["mu"]` accepts a per-locus tuple, not only a scalar — **implemented**; `𝖯["mu_b"]`, mutually exclusive with `mu`, derives it via the exact Eq. 5 relation `mu = 1 - (1 - mu_b) ** length` (differentiation-measures guide, Part VI) — **implemented, opt-in** (default: `mu` as a scalar, unchanged) | `mutate()` already loops per locus (row above, and the finite-alleles row below); reading a per-locus rate out of a tuple instead of a shared scalar is a broadcast, not new logic — `mu_b`'s derivation lives entirely in `SimulationParams.from_mapping`, expanding to the same per-locus `mu` a hand-written list would produce |
 | …selection were added? | a new `select()` operator inserted before `drift()` | the pipeline (§3.4) is already a composition of independent stages; adding one is additive |
 | …the mutation model weren't infinite-alleles, to remove artifacts the infinite-length assumption can cause at short loci? | `𝖯["mutation_model"] = "finite_alleles"` — **implemented, opt-in** (default `"infinite_alleles"`, unchanged); each locus gets a bounded state space of `4 ** length` (`finite_allele_capacity`), and a mutation can recur to a state already present elsewhere in the run rather than always minting fresh, without imposing any ordering or distance between alleles | `AlleleRegistry` was already the sole minting point for new IDs; `FiniteAlleleSpace`/`FiniteAlleleRegistry` are a bounded, per-locus alternative slotted in behind the same `mutate()` call, decided by which registry `step()` threads through |
 | …the mutation model needed genuine spatial structure (stepwise mutation for microsatellites, where "how far" one allele is from another matters)? | swap the strategy behind `mutate()` again | remains out of scope (§11) — this is a different, distance-based model from the row above, deliberately not the direction taken (§3.2) |

@@ -668,3 +668,70 @@ def test_default_mutation_model_is_unaffected_by_the_finite_alleles_option() -> 
         explicit_run.store.read(explicit_run.run_id)
     )
     assert implicit_run.report == explicit_run.report
+
+
+def test_mu_b_run_matches_the_equivalent_explicit_per_locus_mu() -> None:
+    """`mu_b` is genuine sugar: it must run identically to its expansion.
+
+    Builds the same scenario two ways — once via `mu_b`, once via the
+    exact per-locus `mu` list `mu_b` derives — and requires byte-identical
+    output, not just equal `mutation_rates`. This is the strongest form of
+    "sugar expands to canonical form" check: the derived config isn't just
+    inspected, it is run.
+    """
+    mu_b = 0.001
+    loci = [{"locus_id": 1, "length": 5}, {"locus_id": 2, "length": 50}]
+    base_config = {
+        "N": 40,
+        "d": 3,
+        "m": 0.2,
+        "seed": 20260822,
+        "loci": loci,
+        "convergence_window": 4,
+        "convergence_tolerance": 1.0,
+        "max_generations": 8,
+    }
+    via_mu_b = SimulationParams.from_mapping({**base_config, "mu_b": mu_b})
+    via_expanded_mu = SimulationParams.from_mapping(
+        {**base_config, "mu": list(via_mu_b.mutation_rates)}
+    )
+
+    mu_b_run = _run(via_mu_b)
+    expanded_run = _run(via_expanded_mu)
+
+    assert list(mu_b_run.store.read(mu_b_run.run_id)) == list(
+        expanded_run.store.read(expanded_run.run_id)
+    )
+    assert mu_b_run.report == expanded_run.report
+
+
+def test_mu_b_combines_with_finite_alleles() -> None:
+    """A per-base rate and a bounded allele space compose cleanly.
+
+    The two features are orthogonal by design (one derives the mutation
+    *rate* per locus, the other bounds the mutation *target* space per
+    locus) but were built in separate sessions — this is the one place
+    that actually exercises them together end to end.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            "N": 40,
+            "d": 3,
+            "m": 0.2,
+            "mu_b": 0.05,
+            "seed": 20260822,
+            "loci": [{"locus_id": 1, "length": 1}],
+            "mutation_model": "finite_alleles",
+            "convergence_window": 4,
+            "convergence_tolerance": 1.0,
+            "max_generations": 10,
+        }
+    )
+
+    first = _run(params)
+    second = _run(params)
+
+    first_rows = list(first.store.read(first.run_id))
+    assert first_rows == list(second.store.read(second.run_id))
+    assert first.report == second.report
+    assert {int(row["allele_id"]) for row in first_rows} <= set(range(4))

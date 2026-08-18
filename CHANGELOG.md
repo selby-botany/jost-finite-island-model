@@ -160,6 +160,37 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bound holds across an entire run, one proving a config that omits
   `mutation_model` is byte-identical to one that spells out
   `"infinite_alleles"`); and a CLI test.
+- Per-locus mutation rates. `mu` generalizes to accept either a scalar
+  (shared by every locus, unchanged from every prior release) or an
+  explicit list with exactly one rate per locus, mirroring `N`'s own
+  scalar-or-per-deme shape. A new `mu_b` config key, mutually exclusive
+  with `mu`, derives each locus's own rate from a single per-base-pair
+  probability and that locus's own `length`, via the differentiation-
+  measures guide's exact Eq. 5 relation `mu = 1 - (1 - mu_b) ** length`
+  (not its linear `mu_b * length` approximation). Previously, `mu` was a
+  single value applied identically to every locus regardless of length,
+  so two loci of very different lengths silently mutated at the same
+  rate — an artifact this closes. `mu_b` is config-file sugar, exactly
+  like the compact `n_loci`/`locus_lengths` locus form, the migration
+  sparse map, and the stepping-stone topology mapping: it always expands
+  to an explicit per-locus `mu` at load time, and `to_dict()`/
+  `manifest.json` record only the expanded form, never `mu_b` itself. A
+  per-locus list that happens to be uniform collapses back to a scalar
+  for storage, matching `N`'s own collapsing behavior. `mutate()`'s `mu`
+  parameter widens from `float` to accept either shape; every existing
+  call site (which always passes a plain scalar) is unaffected, since a
+  scalar broadcasts to every locus exactly as it always implicitly did.
+- Dedicated test coverage for per-locus mutation rates: params tests for
+  an explicit per-locus list, list-to-scalar collapsing when uniform, the
+  exact `mu_b` derivation formula, `mu_b`'s own probability validation,
+  and `mu`/`mu_b` mutual exclusivity (both given, or neither); `mutate()`
+  tests proving a per-locus rate tuple only mutates the locus it belongs
+  to and that a uniform tuple matches scalar-broadcast behavior exactly;
+  an engine-level test proving a `mu_b` run is byte-identical to the
+  equivalent hand-expanded per-locus `mu` list, not just equal in the
+  derived rates; an engine-level test proving `mu_b` composes correctly
+  with the (separately shipped) `finite_alleles` mutation model; and a
+  CLI test.
 
 ### Changed
 

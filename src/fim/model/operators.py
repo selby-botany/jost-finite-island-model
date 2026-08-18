@@ -8,7 +8,12 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 
 from fim.model.allele import AlleleId, AlleleRegistry, FiniteAlleleRegistry
-from fim.model.params import Migration, PopulationSize, SimulationParams
+from fim.model.params import (
+    Migration,
+    MutationRate,
+    PopulationSize,
+    SimulationParams,
+)
 from fim.model.state import FrequencyMap, ModelState
 
 
@@ -114,7 +119,7 @@ def migrate(
 
 def mutate(
     state: ModelState,
-    mu: float,
+    mu: MutationRate,
     population_size: PopulationSize,
     registry: AlleleRegistry,
     rng: np.random.Generator,
@@ -128,7 +133,10 @@ def mutate(
 
     Args:
         state: Post-migration state.
-        mu: Per-copy mutation probability.
+        mu: Per-copy mutation probability — shared by every locus, or one
+            rate per locus (`SimulationParams.mutation_rates`; typically
+            derived from a per-base rate and each locus's own length via
+            `SimulationParams.from_mapping`'s `mu_b`).
         population_size: Shared or per-deme gene-copy count.
         registry: Global mutant-allele allocator for the run — used under
             the default infinite-alleles model, where every mutation event
@@ -147,14 +155,17 @@ def mutate(
     Returns:
         A post-mutation state at the same generation.
     """
-    if mu == 0.0:
+    if isinstance(mu, float) and mu == 0.0:
         return state
+    mutation_rates = mu if isinstance(mu, tuple) else (mu,) * state.locus_count
     sizes = _population_sizes(population_size, state.deme_count)
     demes: list[tuple[Mapping[AlleleId, float], ...]] = []
     for deme, size in zip(state.frequencies, sizes, strict=True):
         locus_maps: list[Mapping[AlleleId, float]] = []
-        for frequency_map, locus in zip(deme, state.loci, strict=True):
-            event_count = int(rng.binomial(size, mu))
+        for frequency_map, locus, rate in zip(
+            deme, state.loci, mutation_rates, strict=True
+        ):
+            event_count = int(rng.binomial(size, rate))
             if event_count == 0:
                 locus_maps.append(dict(frequency_map))
                 continue

@@ -170,10 +170,56 @@ document §9, §12), not silently missing.
 
 ### `mu`
 
-- **Type:** number in `[0, 1]`
-- **Required:** yes
-- **Meaning:** per-gene-copy mutation probability per generation, applied
-  identically at every locus regardless of `length`
+- **Type:** number in `[0, 1]`, or a list of exactly one rate per locus
+- **Required:** yes, unless `mu_b` is given instead (the two are mutually
+  exclusive)
+- **Meaning:** per-gene-copy mutation probability per generation
+
+A scalar applies identically to every locus, regardless of `length` —
+this was the only form before per-locus rates existed, and is still the
+right choice whenever every locus should mutate at the same rate. A list
+gives each locus its own explicit rate, positionally matched to `loci`:
+
+```yaml
+mu: [0.001, 0.01]
+loci:
+  - locus_id: 1
+    length: 50
+  - locus_id: 2
+    length: 500
+```
+
+#### Deriving `mu` from a per-base rate
+
+Configuring `mu` directly means picking one number per locus by hand, with
+no built-in relationship to that locus's `length` — nothing stops two
+loci of very different lengths from sharing an identical `mu`, which
+contradicts the model's own reasoning for why longer loci should mutate
+more often (more sites for a copying error to land on).
+
+`mu_b` is the alternative: a single per-base-pair mutation probability,
+from which each locus's own rate is derived using its own `length`,
+following the differentiation-measures guide's Eq. 5 relation exactly
+(not its linear `mu_b * length` approximation):
+
+```math
+\mathit{mu} = 1 - (1 - \mathit{mu\_b})^{\mathit{length}}
+```
+
+```yaml
+mu_b: 0.00003
+loci:
+  - locus_id: 1
+    length: 10       # mu ≈ 0.0003 here
+  - locus_id: 2
+    length: 8000      # mu ≈ 0.216 here — the same mu_b, a much higher mu
+```
+
+`mu_b` is a config-file convenience, expanded to an explicit per-locus
+`mu` at load time — like every other shorthand in this reference (the
+compact `n_loci`/`locus_lengths` locus form, the migration sparse map,
+the stepping-stone topology mapping), `to_dict()`/`manifest.json` always
+record the expanded `mu`, never `mu_b` itself.
 
 By default, every mutation produces a globally novel allele identity; see
 [mutation_model](#mutation_model) below for the opt-in alternative.
@@ -426,3 +472,6 @@ for why the two don't compound.
 | `migrant_sampling` not `continuous` or `stochastic` | rejected |
 | `mutation_model` not `infinite_alleles` or `finite_alleles` | rejected |
 | `finite_alleles` with a locus's starting allele IDs exceeding its `4 ** length` capacity | rejected |
+| both `mu` and `mu_b` given, or neither | rejected |
+| `mu` list length not matching the locus count | rejected |
+| `mu_b` outside `[0, 1]` | rejected |

@@ -76,6 +76,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
     * [convergence\_statistics](#fim.model.params.SimulationParams.convergence_statistics)
     * [population\_sizes](#fim.model.params.SimulationParams.population_sizes)
+    * [mutation\_rates](#fim.model.params.SimulationParams.mutation_rates)
     * [to\_dict](#fim.model.params.SimulationParams.to_dict)
     * [from\_mapping](#fim.model.params.SimulationParams.from_mapping)
 * [fim.model.state](#fim.model.state)
@@ -547,7 +548,7 @@ Return the terminal state, report, convergence trace, and manifest.
 ```python
 def fim(N: PopulationSize,
         m: Migration,
-        mu: float,
+        mu: MutationRate,
         d: int,
         *,
         params: SimulationParams,
@@ -1065,7 +1066,7 @@ Blend each deme with the current all-other-deme migrant pool.
 
 ```python
 def mutate(state: ModelState,
-           mu: float,
+           mu: MutationRate,
            population_size: PopulationSize,
            registry: AlleleRegistry,
            rng: np.random.Generator,
@@ -1081,7 +1082,10 @@ sample in the mutation stage.
 **Arguments**:
 
 - `state` - Post-migration state.
-- `mu` - Per-copy mutation probability.
+- `mu` - Per-copy mutation probability — shared by every locus, or one
+  rate per locus (`SimulationParams.mutation_rates`; typically
+  derived from a per-base rate and each locus's own length via
+  `SimulationParams.from_mapping`'s `mu_b`).
 - `population_size` - Shared or per-deme gene-copy count.
 - `registry` - Global mutant-allele allocator for the run — used under
   the default infinite-alleles model, where every mutation event
@@ -1155,7 +1159,10 @@ Store all values needed to reproduce a finite-island-model run.
 
 - `N` - Gene-copy count shared by all demes, or one count per deme.
 - `m` - Symmetric migration rate, or a row-stochastic migration matrix.
-- `mu` - Per-copy mutation probability per generation.
+- `mu` - Per-copy mutation probability per generation — shared by every
+  locus, or one rate per locus. `SimulationParams.from_mapping`
+  can derive this from a single per-base rate instead (`mu_b`);
+  `mu` itself always holds the resolved per-locus probability.
 - `d` - Number of demes.
 - `seed` - Required PCG64 seed.
 - `loci` - Nonempty ordered locus descriptions.
@@ -1216,6 +1223,17 @@ def population_sizes() -> tuple[int, ...]
 ```
 
 Return one gene-copy count per deme.
+
+<a id="fim.model.params.SimulationParams.mutation_rates"></a>
+
+#### mutation\_rates
+
+```python
+@property
+def mutation_rates() -> tuple[float, ...]
+```
+
+Return one mutation-probability rate per locus.
 
 <a id="fim.model.params.SimulationParams.to_dict"></a>
 

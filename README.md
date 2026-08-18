@@ -115,6 +115,10 @@ database. See [output schemas](doc/usage.md#output-schemas).
   finite-alleles model instead bounds each locus to `4 ** length` states
   and allows a mutation to recur to one already present elsewhere in the
   run.
+- `mu` (the mutation probability) can be a shared scalar, an explicit
+  per-locus list, or derived per locus from a single per-base rate
+  (`mu_b`) and each locus's own `length`, so loci of different lengths
+  need not mutate at an identical, hand-picked rate.
 
 The [simulator design](doc/fim-simulator-design.md)
 defines the complete scientific and architectural contract.

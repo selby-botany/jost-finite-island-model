@@ -242,6 +242,55 @@ def test_mutation_zero_is_identity(
     assert mutate(state, 0.0, 100, AlleleRegistry(), rng(3)) is state
 
 
+def _two_locus_state() -> ModelState:
+    """Return a one-deme, two-locus state, each locus biallelic."""
+    return ModelState(
+        loci=(LocusSpec(1, 100), LocusSpec(2, 100)),
+        frequencies=(
+            (
+                {AlleleId(0): 0.8, AlleleId(1): 0.2},
+                {AlleleId(0): 0.8, AlleleId(1): 0.2},
+            ),
+        ),
+    )
+
+
+def test_mutation_per_locus_rate_only_mutates_the_configured_locus(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """A per-locus mutation-rate tuple applies each rate to its own locus.
+
+    Locus 1's rate is exactly 0; locus 2's is not. Only locus 2 may show a
+    mutant-range identity afterward — proving the rate is picked up by
+    locus, not shared or averaged across them.
+    """
+    mutated = mutate(
+        _two_locus_state(), (0.0, 0.3), 100, AlleleRegistry(), rng(20260822)
+    )
+
+    assert mutated.frequency_map(0, 0) == _two_locus_state().frequency_map(0, 0)
+    assert any(
+        int(allele_id) >= MINTED_ID_START for allele_id in mutated.frequency_map(0, 1)
+    )
+
+
+def test_mutation_uniform_per_locus_tuple_matches_scalar_broadcast(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """A per-locus tuple of equal rates behaves identically to the scalar.
+
+    `SimulationParams` already collapses a uniform list to a scalar for
+    storage, but `mutate()` itself must also treat the two forms as the
+    same rate applied per locus, independent of that collapsing.
+    """
+    state = _two_locus_state()
+
+    via_scalar = mutate(state, 0.3, 100, AlleleRegistry(), rng(11))
+    via_tuple = mutate(state, (0.3, 0.3), 100, AlleleRegistry(), rng(11))
+
+    assert via_scalar == via_tuple
+
+
 def test_mutation_events_receive_fresh_ids(
     rng: Callable[[int], np.random.Generator],
 ) -> None:

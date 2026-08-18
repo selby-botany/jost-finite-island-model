@@ -18,6 +18,7 @@ from fim.model.topology import (
 
 PopulationSize = int | tuple[int, ...]
 Migration = float | tuple[tuple[float, ...], ...]
+MutationRate = float | tuple[float, ...]
 DemeWeighting = Literal["equal", "size"]
 ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
@@ -48,6 +49,7 @@ _CONFIG_KEYS: Final = frozenset(
         "d",
         "m",
         "mu",
+        "mu_b",
         "seed",
         "loci",
         "n_loci",
@@ -77,7 +79,10 @@ class SimulationParams:
     Args:
         N: Gene-copy count shared by all demes, or one count per deme.
         m: Symmetric migration rate, or a row-stochastic migration matrix.
-        mu: Per-copy mutation probability per generation.
+        mu: Per-copy mutation probability per generation — shared by every
+            locus, or one rate per locus. `SimulationParams.from_mapping`
+            can derive this from a single per-base rate instead (`mu_b`);
+            `mu` itself always holds the resolved per-locus probability.
         d: Number of demes.
         seed: Required PCG64 seed.
         loci: Nonempty ordered locus descriptions.
@@ -110,7 +115,7 @@ class SimulationParams:
 
     N: PopulationSize
     m: Migration
-    mu: float
+    mu: MutationRate
     d: int
     seed: int
     loci: tuple[LocusSpec, ...] = field(
@@ -133,7 +138,6 @@ class SimulationParams:
         """Normalize sequence inputs and validate every parameter."""
         _require_integer("d", self.d, minimum=2)
         _require_integer("seed", self.seed)
-        _require_probability("mu", self.mu)
 
         population_sizes = _normalize_population_sizes(self.N, self.d)
         migration = _normalize_migration(self.m, self.d)
@@ -142,6 +146,7 @@ class SimulationParams:
             raise ValueError("loci must not be empty")
         if len({locus.locus_id for locus in loci}) != len(loci):
             raise ValueError("locus IDs must be unique")
+        mutation_rates = _normalize_mutation_rate(self.mu, len(loci))
 
         _require_integer(
             "initial_allele_count",
@@ -204,7 +209,11 @@ class SimulationParams:
             else population_sizes,
         )
         object.__setattr__(self, "m", migration)
-        object.__setattr__(self, "mu", float(self.mu))
+        object.__setattr__(
+            self,
+            "mu",
+            mutation_rates[0] if len(set(mutation_rates)) == 1 else mutation_rates,
+        )
         object.__setattr__(self, "loci", loci)
         object.__setattr__(self, "initial_frequencies", initial_frequencies)
         object.__setattr__(
@@ -229,6 +238,13 @@ class SimulationParams:
             return (self.N,) * self.d
         return self.N
 
+    @property
+    def mutation_rates(self) -> tuple[float, ...]:
+        """Return one mutation-probability rate per locus."""
+        if isinstance(self.mu, float):
+            return (self.mu,) * len(self.loci)
+        return self.mu
+
     def to_dict(self) -> dict[str, object]:
         """Return a JSON/YAML-serializable, lossless configuration mapping."""
         serialized_n: int | list[int] = (
@@ -241,11 +257,15 @@ class SimulationParams:
         else:
             serialized_m = [list(row) for row in self.m]
 
+        serialized_mu: float | list[float] = (
+            self.mu if isinstance(self.mu, float) else list(self.mu)
+        )
+
         result: dict[str, object] = {
             "N": serialized_n,
             "d": self.d,
             "m": serialized_m,
-            "mu": self.mu,
+            "mu": serialized_mu,
             "seed": self.seed,
             "loci": [
                 {"locus_id": locus.locus_id, "length": locus.length}
@@ -294,10 +314,14 @@ class SimulationParams:
         if unknown:
             names = ", ".join(sorted(unknown))
             raise ValueError(f"unknown configuration key(s): {names}")
-        missing = {"N", "d", "m", "mu", "seed"} - set(config)
+        if "mu" in config and "mu_b" in config:
+            raise ValueError("mu cannot be combined with mu_b")
+        missing = {"N", "d", "m", "seed"} - set(config)
         if missing:
             names = ", ".join(sorted(missing))
             raise ValueError(f"missing required configuration key(s): {names}")
+        if "mu" not in config and "mu_b" not in config:
+            raise ValueError("missing required configuration key(s): mu or mu_b")
 
         loci = _loci_from_config(config)
         d = _parse_int("d", config["d"])
@@ -305,7 +329,7 @@ class SimulationParams:
             N=_parse_population_size(config["N"]),
             d=d,
             m=_parse_migration(config["m"], d),
-            mu=_parse_float("mu", config["mu"]),
+            mu=_mutation_rate_from_config(config, loci),
             seed=_parse_int("seed", config["seed"]),
             loci=loci,
             initial_allele_count=_parse_int(
@@ -478,6 +502,26 @@ def _migration_from_topology(value: Mapping[str, Any], d: int) -> Migration:
     return dense_matrix_from_neighbors(neighbors, d)
 
 
+def _mutation_rate_from_config(
+    config: Mapping[str, Any],
+    loci: tuple[LocusSpec, ...],
+) -> MutationRate:
+    """Resolve ``mu`` or ``mu_b`` into the rate `SimulationParams` stores.
+
+    ``mu`` (a per-locus probability, scalar or one value per locus) and
+    ``mu_b`` (a single per-base-pair probability, from which each locus's
+    own rate is derived via its own ``length``, per
+    `fim.model.locus.finite_allele_capacity`'s companion Eq. 5 relation
+    ``mu = 1 - (1 - mu_b) ** length``) are mutually exclusive; the caller
+    has already confirmed exactly one is present.
+    """
+    if "mu" in config:
+        return _parse_mutation_rate(config["mu"])
+    mu_b = _parse_float("mu_b", config["mu_b"])
+    _require_probability("mu_b", mu_b)
+    return tuple(1.0 - (1.0 - mu_b) ** locus.length for locus in loci)
+
+
 def _normalize_convergence_statistic(
     value: ConvergenceStatistic,
 ) -> tuple[str, ...]:
@@ -570,6 +614,21 @@ def _normalize_migration(value: Migration, d: int) -> Migration:
         ):
             raise ValueError(f"migration matrix row {index} must sum to 1")
     return rows
+
+
+def _normalize_mutation_rate(value: MutationRate, n_loci: int) -> tuple[float, ...]:
+    """Validate and expand a scalar or per-locus mutation-rate probability."""
+    if isinstance(value, bool):
+        raise ValueError("mu must be a number or a list of numbers")
+    if isinstance(value, int | float):
+        _require_probability("mu", float(value))
+        return (float(value),) * n_loci
+    rates = tuple(float(item) for item in value)
+    if len(rates) != n_loci:
+        raise ValueError("mu must contain exactly one rate per locus")
+    for index, rate in enumerate(rates):
+        _require_probability(f"mu[{index}]", rate)
+    return rates
 
 
 def _normalize_population_sizes(
@@ -738,6 +797,22 @@ def _parse_mutation_model(value: Any) -> MutationModel:
     if parsed == "finite_alleles":
         return "finite_alleles"
     raise ValueError("mutation_model must be 'infinite_alleles' or 'finite_alleles'")
+
+
+def _parse_mutation_rate(value: Any) -> MutationRate:
+    """Parse a scalar or per-locus list of mutation-rate probabilities.
+
+    Length-against-locus-count validation happens later, in
+    `_normalize_mutation_rate`, matching `_parse_population_size`'s own
+    division of labor against `_normalize_population_sizes`.
+    """
+    if isinstance(value, bool):
+        raise ValueError("mu must be a number or a list of numbers")
+    if isinstance(value, int | float):
+        return _parse_float("mu", value)
+    if not isinstance(value, Sequence) or isinstance(value, str):
+        raise ValueError("mu must be a number or a list of numbers")
+    return tuple(_parse_float(f"mu[{index}]", item) for index, item in enumerate(value))
 
 
 def _parse_population_size(value: Any) -> PopulationSize:

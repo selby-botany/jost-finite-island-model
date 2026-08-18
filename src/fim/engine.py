@@ -24,7 +24,7 @@ from fim.model.allele import (
 from fim.model.initial import generate_initial_state
 from fim.model.locus import finite_allele_capacity
 from fim.model.operators import step
-from fim.model.params import Migration, PopulationSize, SimulationParams
+from fim.model.params import Migration, MutationRate, PopulationSize, SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.manifest import RunManifest
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
@@ -71,7 +71,7 @@ SimulationOutput: TypeAlias = RunResult | tuple[RunResult, ...]
 def fim(
     N: PopulationSize,
     m: Migration,
-    mu: float,
+    mu: MutationRate,
     d: int,
     *,
     params: SimulationParams,
@@ -410,7 +410,7 @@ def _utc_now() -> datetime:
 def _validate_public_signature(
     N: PopulationSize,
     m: Migration,
-    mu: float,
+    mu: MutationRate,
     d: int,
     params: SimulationParams,
 ) -> None:

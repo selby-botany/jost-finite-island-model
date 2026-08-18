@@ -17,6 +17,14 @@ def _valid_config() -> dict[str, object]:
     }
 
 
+def _valid_config_without_mu() -> dict[str, object]:
+    """Return the smallest complete config mapping, minus `mu`.
+
+    For tests exercising `mu_b`, mutually exclusive with `mu`.
+    """
+    return {key: value for key, value in _valid_config().items() if key != "mu"}
+
+
 def test_scalar_parameters_construct_with_documented_defaults() -> None:
     """The public P-bag defaults remain synchronized with the design."""
     params = SimulationParams.from_mapping(_valid_config())
@@ -217,6 +225,93 @@ def test_finite_alleles_capacity_check_covers_every_locus_not_just_the_first() -
     assert valid.mutation_model == "finite_alleles"
 
 
+def test_mu_accepts_an_explicit_per_locus_list() -> None:
+    """`mu` generalizes to a per-locus list, mirroring `N`'s per-deme form.
+
+    Two genuinely different rates, not a uniform list — proving each
+    locus keeps its own configured value, not a shared or averaged one.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "loci": [{"locus_id": 1, "length": 10}, {"locus_id": 2, "length": 20}],
+            "mu": [0.001, 0.01],
+        }
+    )
+
+    assert params.mu == (0.001, 0.01)
+    assert params.mutation_rates == (0.001, 0.01)
+    assert params.to_dict()["mu"] == [0.001, 0.01]
+    assert SimulationParams.from_mapping(params.to_dict()) == params
+
+
+def test_mu_list_of_equal_values_collapses_to_scalar() -> None:
+    """A per-locus list that happens to be uniform serializes as a scalar.
+
+    Mirrors `N`'s own collapse behavior: the extra generality costs
+    nothing in the common case where it is not actually being used.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "loci": [{"locus_id": 1, "length": 10}, {"locus_id": 2, "length": 20}],
+            "mu": [0.002, 0.002],
+        }
+    )
+
+    assert params.mu == 0.002
+    assert params.mutation_rates == (0.002, 0.002)
+    assert params.to_dict()["mu"] == 0.002
+
+
+def test_mu_b_derives_each_locus_own_rate_from_length() -> None:
+    """`mu_b` (per-base rate) expands to the exact per-locus Eq. 5 relation.
+
+    ``mu = 1 - (1 - mu_b) ** length`` — checked against the exact formula,
+    not the linear ``mu_b * length`` approximation the differentiation-
+    measures guide only uses for small ``mu_b * length``.
+    """
+    mu_b = 0.0001
+    lengths = (10, 1_000)
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config_without_mu(),
+            "loci": [
+                {"locus_id": 1, "length": lengths[0]},
+                {"locus_id": 2, "length": lengths[1]},
+            ],
+            "mu_b": mu_b,
+        }
+    )
+    expected = tuple(1.0 - (1.0 - mu_b) ** length for length in lengths)
+    assert params.mutation_rates == pytest.approx(expected)
+    # mu_b itself is sugar: to_dict() always emits the resolved per-locus
+    # mu, matching every other config-shorthand in this codebase (n_loci,
+    # the migration sparse map, the stepping-stone topology mapping).
+    assert "mu_b" not in params.to_dict()
+    assert SimulationParams.from_mapping(params.to_dict()) == params
+
+
+@pytest.mark.parametrize(
+    ("mu_b", "message"),
+    [(-0.1, "mu_b must be between"), (1.1, "mu_b must be between")],
+)
+def test_mu_b_is_validated_as_a_probability(mu_b: float, message: str) -> None:
+    """`mu_b` itself is bounds-checked, same as any other probability."""
+    with pytest.raises(ValueError, match=message):
+        SimulationParams.from_mapping({**_valid_config_without_mu(), "mu_b": mu_b})
+
+
+def test_mu_and_mu_b_are_mutually_exclusive_and_one_is_required() -> None:
+    """Exactly one of `mu`/`mu_b` must be given — never both, never neither."""
+    with pytest.raises(ValueError, match="mu cannot be combined with mu_b"):
+        SimulationParams.from_mapping(
+            {**_valid_config(), "mu_b": 0.0001}  # _valid_config() already has mu
+        )
+    with pytest.raises(ValueError, match="mu or mu_b"):
+        SimulationParams.from_mapping(_valid_config_without_mu())
+
+
 @pytest.mark.parametrize(
     ("updates", "message"),
     [
@@ -238,8 +333,22 @@ def test_finite_alleles_capacity_check_covers_every_locus_not_just_the_first() -
         ({"max_generations": 0}, "max_generations"),
         ({"n_replicates": 0}, "n_replicates"),
         ({"migrant_sampling": "binomial"}, "migrant_sampling"),
-        ({"migrant_sampling": "binomial"}, "migrant_sampling"),
         ({"mutation_model": "stepwise"}, "mutation_model"),
+        ({"mu": [0.001, 0.002]}, "one rate per locus"),
+        (
+            {
+                "loci": [{"locus_id": 1, "length": 10}, {"locus_id": 2, "length": 20}],
+                "mu": [0.001, 0.01, 0.1],
+            },
+            "one rate per locus",
+        ),
+        (
+            {
+                "loci": [{"locus_id": 1, "length": 10}, {"locus_id": 2, "length": 20}],
+                "mu": [1.1, 0.01],
+            },
+            r"mu\[0\] must be between",
+        ),
         (
             {
                 "mutation_model": "finite_alleles",
