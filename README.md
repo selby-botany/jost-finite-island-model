@@ -25,13 +25,17 @@ questions a first-time reader usually has:
   infinite external reservoir with a composition that never changes. That is
   what "finite" refers to: the whole set of islands is a closed system, with
   no outside population to draw on.
-- **Is migration a random draw of individuals?** No. Migration blends each
-  island's frequencies with a weighted average of the other islands' current
-  frequencies, a deterministic step given that generation's frequencies. The
-  randomness is downstream, in drift: each island's next generation is formed
-  by resampling its gene copies at random from its own post-migration
-  frequencies. An optional third step, mutation, can also replace a small,
-  randomly sampled number of gene copies with genuinely novel alleles.
+- **Is migration a random draw of individuals?** By default, no. Migration
+  blends each island's frequencies with a weighted average of the other
+  islands' current frequencies, a deterministic step given that generation's
+  frequencies. The randomness is downstream, in drift: each island's next
+  generation is formed by resampling its gene copies at random from its own
+  post-migration frequencies. An optional third step, mutation, can also
+  replace a small, randomly sampled number of gene copies with genuinely
+  novel alleles. An opt-in `migrant_sampling: stochastic` setting adds a
+  fourth random process — how many gene copies migrate, not just how many
+  drift or mutate — for studies that want that source of variation counted
+  explicitly; see the [configuration reference](doc/configuration.md#migrant_sampling).
 
 The [finite island model introduction](doc/finite-island-model-introduction.md)
 is the full plain-language walkthrough — no genetics, statistics, or

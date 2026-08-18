@@ -540,3 +540,66 @@ def test_stepping_stone_topology_run_is_reproducible() -> None:
     )
     assert first.report == second.report
     assert first.final_state.deme_count == 8
+
+
+def test_stochastic_migrant_sampling_run_is_reproducible() -> None:
+    """Opting in to random migrant counts stays fully seed-reproducible.
+
+    Randomizing *how many* gene copies migrate each generation does not
+    reintroduce the nondeterminism this project forbids (see the "tests
+    are a pure function of their commit" rule): the same seed must still
+    drive the new binomial draws identically on every run.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            "N": 40,
+            "d": 3,
+            "m": 0.2,
+            "mu": 0.02,
+            "seed": 20260818,
+            "migrant_sampling": "stochastic",
+            "convergence_window": 4,
+            "convergence_tolerance": 1.0,
+            "max_generations": 8,
+        }
+    )
+
+    first = _run(params)
+    second = _run(params)
+
+    assert list(first.store.read(first.run_id)) == list(
+        second.store.read(second.run_id)
+    )
+    assert first.report == second.report
+
+
+def test_default_migrant_sampling_is_unaffected_by_the_stochastic_option() -> None:
+    """Leaving `migrant_sampling` unset stays byte-identical to before it existed.
+
+    The opt-in contract this feature must hold: a config with no opinion on
+    `migrant_sampling` produces exactly the same run whether or not the
+    "stochastic" option exists in the codebase, because `migrate()` is
+    never handed an `rng` unless a config explicitly asks for it.
+    """
+    base_config = {
+        "N": 40,
+        "d": 3,
+        "m": 0.2,
+        "mu": 0.02,
+        "seed": 20260818,
+        "convergence_window": 4,
+        "convergence_tolerance": 1.0,
+        "max_generations": 8,
+    }
+    implicit = SimulationParams.from_mapping(base_config)
+    explicit = SimulationParams.from_mapping(
+        {**base_config, "migrant_sampling": "continuous"}
+    )
+
+    implicit_run = _run(implicit)
+    explicit_run = _run(explicit)
+
+    assert list(implicit_run.store.read(implicit_run.run_id)) == list(
+        explicit_run.store.read(explicit_run.run_id)
+    )
+    assert implicit_run.report == explicit_run.report

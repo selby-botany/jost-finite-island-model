@@ -97,7 +97,10 @@ case:
   destination's exact source mix, so `N` (scalar or per-deme) has nothing
   left to contribute to migration and does not change the result. If unequal
   deme sizes should also drive migration weighting, build that weighting into
-  the matrix itself.
+  the matrix itself. (This describes the default `migrant_sampling:
+  continuous` blend. Under the opt-in `migrant_sampling: stochastic`, below,
+  `N` re-enters the picture — not to change the mean, but to set how much a
+  given generation's actual migrant count can vary around it.)
 - **The scalar form is the matrix's symmetric special case, not a different
   mechanism.** For equal-size demes, a scalar rate `m` is numerically
   identical to the full matrix with `1 - m` on the diagonal and `m / (d - 1)`
@@ -326,6 +329,39 @@ The library API runs reproducible replicates with seeds `seed`,
 `seed + 1`, and so on. The CLI requires `1` in version 1.0.0 so each output
 directory retains the four-file scalar-run contract.
 
+### `migrant_sampling`
+
+- **Type:** `continuous` or `stochastic`
+- **Default:** `continuous`
+
+Controls how many gene copies migrate each generation, independently of
+which `m` shape is configured above.
+
+- `continuous` (the default, and the only behavior in every release before
+  this option existed): each deme's migrant count is exactly `N_i * rate`
+  (or, for a matrix row, `N_i` times that row's non-self weight) — a fixed
+  fraction, not a random draw.
+- `stochastic`: each deme's migrant count is instead drawn fresh every
+  generation from `Binomial(N_i, rate)` — mean `N_i * rate`, matching the
+  continuous case in expectation, but varying generation to generation.
+  Migrant *composition* is unaffected either way: migrants still carry
+  exactly the deterministic, weighted pool average. Requires a concrete
+  `N` (always true for a CLI run; a direct `fim.model.operators.migrate`
+  call needs `population_size`).
+
+```yaml
+migrant_sampling: stochastic
+```
+
+This is the finite island model variant described in
+[the finite island model introduction, §3.2](finite-island-model-introduction.md#32-one-generation-in-two-steps):
+sampling the actual migrant count instead of treating migration as an
+idealized continuous fraction. It adds one random process to the pipeline
+(how many migrate) without duplicating the one already there (`drift`
+still resamples every gene copy exactly once per generation) — see
+[the simulator design, §9](fim-simulator-design.md#9-extensibility-where-the-next-what-if-lands)
+for why the two don't compound.
+
 ## Validation summary
 
 | Condition | Result |
@@ -341,3 +377,4 @@ directory retains the four-file scalar-run contract.
 | `m` sparse-map deme/neighbor id outside `1..d`, a self-loop, or weights summing past `1` | rejected |
 | `m` topology mapping missing `topology`/`rate`, an unknown key, or an unrecognized topology name | rejected |
 | `m` ring topology with `d < 3` | rejected |
+| `migrant_sampling` not `continuous` or `stochastic` | rejected |

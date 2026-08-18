@@ -21,6 +21,7 @@ Migration = float | tuple[tuple[float, ...], ...]
 DemeWeighting = Literal["equal", "size"]
 ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
+MigrantSampling = Literal["continuous", "stochastic"]
 InitialFrequencies = tuple[tuple[Mapping[AlleleId, float], ...], ...]
 
 DEFAULT_LOCUS_LENGTH: Final = 200
@@ -36,6 +37,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "convergence_tolerance": 0.01,
     "max_generations": 10_000,
     "n_replicates": 1,
+    "migrant_sampling": "continuous",
 }
 
 _CONFIG_KEYS: Final = frozenset(
@@ -57,6 +59,7 @@ _CONFIG_KEYS: Final = frozenset(
         "convergence_tolerance",
         "max_generations",
         "n_replicates",
+        "migrant_sampling",
         "p_0",
     }
 )
@@ -87,6 +90,12 @@ class SimulationParams:
         convergence_tolerance: Maximum half-window mean difference.
         max_generations: Hard generation safety cap.
         n_replicates: Number of independently seeded runs.
+        migrant_sampling: How many gene copies migrate each generation —
+            "continuous" (default), the exact ``rate * N`` fraction used by
+            every prior release, or the opt-in "stochastic", which draws a
+            ``Binomial(N, rate)`` migrant count instead. Migrant
+            composition is unaffected either way; see
+            ``fim.model.operators.migrate``.
         initial_frequencies: Optional explicit deme/locus frequency table.
     """
 
@@ -107,6 +116,7 @@ class SimulationParams:
     convergence_tolerance: float = 0.01
     max_generations: int = 10_000
     n_replicates: int = 1
+    migrant_sampling: MigrantSampling = "continuous"
     initial_frequencies: InitialFrequencies | None = None
 
     def __post_init__(self) -> None:
@@ -158,6 +168,8 @@ class SimulationParams:
             minimum=1,
         )
         _require_integer("n_replicates", self.n_replicates, minimum=1)
+        if self.migrant_sampling not in {"continuous", "stochastic"}:
+            raise ValueError("migrant_sampling must be 'continuous' or 'stochastic'")
 
         initial_frequencies = _normalize_initial_frequencies(
             self.initial_frequencies,
@@ -234,6 +246,7 @@ class SimulationParams:
             "convergence_tolerance": self.convergence_tolerance,
             "max_generations": self.max_generations,
             "n_replicates": self.n_replicates,
+            "migrant_sampling": self.migrant_sampling,
         }
         if self.initial_frequencies is not None:
             result["p_0"] = [
@@ -334,6 +347,12 @@ class SimulationParams:
                 config.get(
                     "n_replicates",
                     PARAMETER_DEFAULTS["n_replicates"],
+                ),
+            ),
+            migrant_sampling=_parse_migrant_sampling(
+                config.get(
+                    "migrant_sampling",
+                    PARAMETER_DEFAULTS["migrant_sampling"],
                 ),
             ),
             initial_frequencies=_parse_initial_frequencies(config.get("p_0")),
@@ -642,6 +661,16 @@ def _parse_int(name: str, value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{name} must be an integer")
     return int(value)
+
+
+def _parse_migrant_sampling(value: Any) -> MigrantSampling:
+    """Parse the two supported migrant-sampling values."""
+    parsed = _parse_string("migrant_sampling", value)
+    if parsed == "continuous":
+        return "continuous"
+    if parsed == "stochastic":
+        return "stochastic"
+    raise ValueError("migrant_sampling must be 'continuous' or 'stochastic'")
 
 
 def _parse_migration(value: Any, d: int) -> Migration:

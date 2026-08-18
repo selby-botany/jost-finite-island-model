@@ -862,7 +862,9 @@ Resample ``N`` gene copies per deme and locus.
 ```python
 def migrate(state: ModelState,
             m: Migration,
-            population_size: PopulationSize | None = None) -> ModelState
+            population_size: PopulationSize | None = None,
+            *,
+            rng: np.random.Generator | None = None) -> ModelState
 ```
 
 Blend each deme with the current all-other-deme migrant pool.
@@ -872,11 +874,26 @@ Blend each deme with the current all-other-deme migrant pool.
 - `state` - Current generation.
 - `m` - Symmetric migration rate or a complete row-stochastic matrix.
 - `population_size` - Optional gene-copy counts used to size-weight pools.
+- `rng` - Optional random generator selecting the opt-in stochastic
+  migrant-count model (``SimulationParams.migrant_sampling ==
+  "stochastic"``). ``None`` (the default) applies the migration
+  rate as an exact fraction, unchanged from every prior release.
+  When given, each deme's migrant *count* is instead drawn from
+  ``Binomial(size, rate)`` each generation — mean ``size * rate``,
+  matching the deterministic case in expectation, but varying
+  generation to generation — while migrant *composition* stays
+  the existing deterministic, weighted pool average. Requires
+  ``population_size``.
 
 
 **Returns**:
 
   A state at the same generation containing post-migration frequencies.
+
+
+**Raises**:
+
+- `ValueError` - If ``rng`` is given without ``population_size``.
 
 <a id="fim.model.operators.mutate"></a>
 
@@ -966,6 +983,12 @@ Store all values needed to reproduce a finite-island-model run.
 - `convergence_tolerance` - Maximum half-window mean difference.
 - `max_generations` - Hard generation safety cap.
 - `n_replicates` - Number of independently seeded runs.
+- `migrant_sampling` - How many gene copies migrate each generation —
+  "continuous" (default), the exact ``rate * N`` fraction used by
+  every prior release, or the opt-in "stochastic", which draws a
+  ``Binomial(N, rate)`` migrant count instead. Migrant
+  composition is unaffected either way; see
+  ``fim.model.operators.migrate``.
 - `initial_frequencies` - Optional explicit deme/locus frequency table.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>

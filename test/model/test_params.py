@@ -30,6 +30,8 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     assert params.convergence_window == PARAMETER_DEFAULTS["convergence_window"]
     assert params.convergence_tolerance == PARAMETER_DEFAULTS["convergence_tolerance"]
     assert params.max_generations == PARAMETER_DEFAULTS["max_generations"]
+    assert params.migrant_sampling == PARAMETER_DEFAULTS["migrant_sampling"]
+    assert params.migrant_sampling == "continuous"
 
 
 @pytest.mark.parametrize(
@@ -133,6 +135,30 @@ def test_convergence_statistic_accepts_several_names_and_round_trips() -> None:
     assert single.convergence_statistics == ("D",)
 
 
+def test_migrant_sampling_defaults_to_continuous_and_round_trips() -> None:
+    """The opt-in stochastic migrant-count model stays off unless requested.
+
+    Omitting the key entirely and configuring it explicitly as
+    "continuous" must be indistinguishable — the whole point of an opt-in
+    feature is that a config written before it existed keeps meaning
+    exactly what it always meant.
+    """
+    default = SimulationParams.from_mapping(_valid_config())
+    explicit_continuous = SimulationParams.from_mapping(
+        {**_valid_config(), "migrant_sampling": "continuous"}
+    )
+    stochastic = SimulationParams.from_mapping(
+        {**_valid_config(), "migrant_sampling": "stochastic"}
+    )
+
+    assert default == explicit_continuous
+    assert default.migrant_sampling == "continuous"
+    assert stochastic.migrant_sampling == "stochastic"
+    assert default.to_dict()["migrant_sampling"] == "continuous"
+    assert stochastic.to_dict()["migrant_sampling"] == "stochastic"
+    assert SimulationParams.from_mapping(stochastic.to_dict()) == stochastic
+
+
 @pytest.mark.parametrize(
     ("updates", "message"),
     [
@@ -153,6 +179,7 @@ def test_convergence_statistic_accepts_several_names_and_round_trips() -> None:
         ({"convergence_tolerance": float("nan")}, "finite"),
         ({"max_generations": 0}, "max_generations"),
         ({"n_replicates": 0}, "n_replicates"),
+        ({"migrant_sampling": "binomial"}, "migrant_sampling"),
     ],
 )
 def test_post_init_validation_covers_all_scalar_contracts(

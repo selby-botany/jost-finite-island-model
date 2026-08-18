@@ -65,6 +65,8 @@ def migrate(
     state: ModelState,
     m: Migration,
     population_size: PopulationSize | None = None,
+    *,
+    rng: np.random.Generator | None = None,
 ) -> ModelState:
     """Blend each deme with the current all-other-deme migrant pool.
 
@@ -72,19 +74,37 @@ def migrate(
         state: Current generation.
         m: Symmetric migration rate or a complete row-stochastic matrix.
         population_size: Optional gene-copy counts used to size-weight pools.
+        rng: Optional random generator selecting the opt-in stochastic
+            migrant-count model (``SimulationParams.migrant_sampling ==
+            "stochastic"``). ``None`` (the default) applies the migration
+            rate as an exact fraction, unchanged from every prior release.
+            When given, each deme's migrant *count* is instead drawn from
+            ``Binomial(size, rate)`` each generation — mean ``size * rate``,
+            matching the deterministic case in expectation, but varying
+            generation to generation — while migrant *composition* stays
+            the existing deterministic, weighted pool average. Requires
+            ``population_size``.
 
     Returns:
         A state at the same generation containing post-migration frequencies.
+
+    Raises:
+        ValueError: If ``rng`` is given without ``population_size``.
     """
+    if rng is not None and population_size is None:
+        raise ValueError("migrate() requires population_size when rng is given")
+    matrix_sizes: tuple[int, ...] | None = (
+        _population_sizes(population_size, state.deme_count)
+        if population_size is not None
+        else None
+    )
     if isinstance(m, int | float):
-        sizes = (
-            _population_sizes(population_size, state.deme_count)
-            if population_size is not None
-            else (1,) * state.deme_count
+        symmetric_sizes = (
+            matrix_sizes if matrix_sizes is not None else (1,) * state.deme_count
         )
-        demes = _migrate_symmetric(state, float(m), sizes)
+        demes = _migrate_symmetric(state, float(m), symmetric_sizes, rng=rng)
     else:
-        demes = _migrate_matrix(state, m)
+        demes = _migrate_matrix(state, m, sizes=matrix_sizes, rng=rng)
     return ModelState(
         loci=state.loci,
         frequencies=demes,
@@ -166,7 +186,12 @@ def step(
     Returns:
         The next generation.
     """
-    migrated = migrate(state, params.m, params.N)
+    # Only the opt-in "stochastic" mode passes rng into migrate(); the
+    # default "continuous" mode passes None, so migrate() consumes zero
+    # rng draws and every existing reproducible run is bit-for-bit
+    # unaffected by this feature's existence.
+    migration_rng = rng if params.migrant_sampling == "stochastic" else None
+    migrated = migrate(state, params.m, params.N, rng=migration_rng)
     mutated = mutate(migrated, params.mu, params.N, registry, rng)
     return drift(mutated, params.N, rng)
 
@@ -180,28 +205,88 @@ def _allele_union(frequency_maps: Sequence[FrequencyMap]) -> tuple[AlleleId, ...
     return tuple(observed)
 
 
+def _blend(
+    local: Mapping[AlleleId, float],
+    pool: Mapping[AlleleId, float],
+    rate: float,
+    size: int,
+    rng: np.random.Generator,
+) -> Mapping[AlleleId, float]:
+    """Blend one deme/locus using a binomially sampled migrant count.
+
+    ``rate`` is applied as ``Binomial(size, rate) / size`` instead of
+    exactly, so the migrant *count* varies generation to generation with
+    mean ``size * rate`` while the migrant *composition* stays exactly
+    ``pool`` — the same deterministic weighted average the continuous path
+    always used. Drift, not this step, remains the pipeline's only operator
+    that resamples every gene copy; this only randomizes how many of a
+    deme's ``size`` gene copies are attributed to the migrant pool this
+    generation, versus how many stayed local.
+
+    Args:
+        local: This deme's own pre-migration frequency map.
+        pool: The deterministic migrant-pool frequency map.
+        rate: The scalar or per-row migration rate — the binomial draw's
+            success probability.
+        size: This deme's gene-copy count, ``N_i``.
+        rng: The run's explicitly threaded random generator.
+
+    Returns:
+        A normalized post-migration frequency map.
+    """
+    migrant_count = int(rng.binomial(size, rate))
+    migrant_fraction = migrant_count / size
+    blended = {
+        allele_id: (1.0 - migrant_fraction) * local.get(allele_id, 0.0)
+        + migrant_fraction * pool.get(allele_id, 0.0)
+        for allele_id in _allele_union((local, pool))
+    }
+    return _normalize(blended)
+
+
 def _migrate_matrix(
     state: ModelState,
     matrix: tuple[tuple[float, ...], ...],
+    *,
+    sizes: tuple[int, ...] | None = None,
+    rng: np.random.Generator | None = None,
 ) -> tuple[tuple[Mapping[AlleleId, float], ...], ...]:
     """Apply a complete source-weight matrix."""
     result: list[tuple[Mapping[AlleleId, float], ...]] = []
-    for weights in matrix:
+    for destination, weights in enumerate(matrix):
         locus_maps: list[Mapping[AlleleId, float]] = []
         for locus_index in range(state.locus_count):
             sources = tuple(
                 state.frequency_map(source, locus_index)
                 for source in range(state.deme_count)
             )
-            allele_ids = _allele_union(sources)
-            blended = {
-                allele_id: math.fsum(
-                    weight * source.get(allele_id, 0.0)
-                    for weight, source in zip(weights, sources, strict=True)
-                )
-                for allele_id in allele_ids
-            }
-            locus_maps.append(_normalize(blended))
+            if rng is None:
+                allele_ids = _allele_union(sources)
+                blended = {
+                    allele_id: math.fsum(
+                        weight * source.get(allele_id, 0.0)
+                        for weight, source in zip(weights, sources, strict=True)
+                    )
+                    for allele_id in allele_ids
+                }
+                locus_maps.append(_normalize(blended))
+                continue
+            # Stochastic path: the row's own diagonal entry is this
+            # destination's self-retention weight; everything else is the
+            # migrant pool, exactly as in the deterministic case above, but
+            # the count drawn from that pool this generation is now random
+            # rather than exactly ``migrant_weight * size``.
+            migrant_weight = 1.0 - weights[destination]
+            local = sources[destination]
+            if migrant_weight <= 0.0:
+                locus_maps.append(dict(local))
+                continue
+            if sizes is None:
+                raise ValueError("migrate() requires population_size when rng is given")
+            pool = _row_pool(weights, sources, destination, migrant_weight)
+            locus_maps.append(
+                _blend(local, pool, migrant_weight, sizes[destination], rng)
+            )
         result.append(tuple(locus_maps))
     return tuple(result)
 
@@ -210,6 +295,8 @@ def _migrate_symmetric(
     state: ModelState,
     rate: float,
     sizes: tuple[int, ...],
+    *,
+    rng: np.random.Generator | None = None,
 ) -> tuple[tuple[Mapping[AlleleId, float], ...], ...]:
     """Apply scalar all-other-deme migration in ``O(d * A)`` time.
 
@@ -220,6 +307,13 @@ def _migrate_symmetric(
     turns the naive ``O(d^2 * A)`` recomputation (each destination re-summing
     every other deme) into a single pass plus one subtraction per destination,
     which matters at large ``d`` such as the 100-deme Dear-Nolan scenario.
+
+    With ``rng is None`` (the default), ``rate`` is applied to every deme
+    as an exact fraction — the original, still-default behavior, computed
+    exactly as before. With an ``rng``, each destination's migrant count is
+    instead drawn from ``Binomial(size, rate)`` (see ``_blend``); the two
+    branches are kept fully separate below so the default path's
+    floating-point arithmetic is untouched by the new one.
     """
     if rate == 0.0:
         return tuple(
@@ -243,16 +337,24 @@ def _migrate_symmetric(
         locus_maps: list[Mapping[AlleleId, float]] = []
         for locus_index in range(state.locus_count):
             local = state.frequency_map(destination, locus_index)
-            blended: dict[AlleleId, float] = {}
-            for allele_id, total in global_mass[locus_index].items():
-                local_frequency = local.get(allele_id, 0.0)
-                pool_frequency = (
-                    total - destination_size * local_frequency
-                ) / other_weight
-                blended[allele_id] = (
-                    1.0 - rate
-                ) * local_frequency + rate * pool_frequency
-            locus_maps.append(_normalize(blended))
+            if rng is None:
+                blended: dict[AlleleId, float] = {}
+                for allele_id, total in global_mass[locus_index].items():
+                    local_frequency = local.get(allele_id, 0.0)
+                    pool_frequency = (
+                        total - destination_size * local_frequency
+                    ) / other_weight
+                    blended[allele_id] = (
+                        1.0 - rate
+                    ) * local_frequency + rate * pool_frequency
+                locus_maps.append(_normalize(blended))
+            else:
+                pool = {
+                    allele_id: (total - destination_size * local.get(allele_id, 0.0))
+                    / other_weight
+                    for allele_id, total in global_mass[locus_index].items()
+                }
+                locus_maps.append(_blend(local, pool, rate, destination_size, rng))
         result.append(tuple(locus_maps))
     return tuple(result)
 
@@ -283,3 +385,36 @@ def _population_sizes(
     if any(isinstance(size, bool) or size < 1 for size in sizes):
         raise ValueError("all N values must be positive integers")
     return sizes
+
+
+def _row_pool(
+    weights: tuple[float, ...],
+    sources: tuple[Mapping[AlleleId, float], ...],
+    destination: int,
+    migrant_weight: float,
+) -> Mapping[AlleleId, float]:
+    """Return one migration-matrix row's non-self weighted-average pool.
+
+    Args:
+        weights: The destination's full source-weight row.
+        sources: Every deme's current frequency map for one locus.
+        destination: The destination's index within ``weights``/``sources``.
+        migrant_weight: ``1 - weights[destination]``, the row's total
+            non-self weight, used to renormalize the excluded-self average.
+
+    Returns:
+        The migrant pool's frequency map; mass sums to 1.
+    """
+    others = tuple(
+        (weight, source)
+        for index, (weight, source) in enumerate(zip(weights, sources, strict=True))
+        if index != destination
+    )
+    allele_ids = _allele_union(tuple(source for _weight, source in others))
+    return {
+        allele_id: math.fsum(
+            weight * source.get(allele_id, 0.0) for weight, source in others
+        )
+        / migrant_weight
+        for allele_id in allele_ids
+    }

@@ -88,6 +88,35 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   generation, completely absent everywhere else, with the ring's
   wraparound neighbor as the one distinguishing data point from the
   linear chain; a reproducible end-to-end engine run; and a CLI test.
+- An opt-in stochastic migrant-count model. A new `migrant_sampling`
+  config key (`"continuous"`, the default and the only behavior in every
+  prior release, or `"stochastic"`) controls whether each deme's migrant
+  count is applied as the exact `rate * N` fraction it always was, or
+  drawn fresh every generation from `Binomial(N_i, rate)` — mean
+  `N_i * rate`, matching the continuous case in expectation but varying
+  generation to generation. Migrant composition is unaffected either
+  way: migrants still carry exactly the deterministic, weighted pool
+  average, so `drift()` remains the pipeline's only operator that
+  resamples every gene copy — the new option adds one random process
+  (how many migrate) without duplicating the one already there. Applies
+  uniformly to the scalar, matrix, and topology-derived `m` forms.
+  `migrate()` gained an optional `rng` parameter; the default
+  `"continuous"` path never passes one, so `migrate()`'s deterministic
+  arithmetic, iteration order, and every existing exact-value test are
+  unchanged, and no run that omits the new key is affected in any way.
+- Dedicated test coverage for stochastic migrant-count sampling: a
+  requires-`population_size` validation test; fixed-seed statistical
+  tests (mirroring `drift`'s own variance-check style) confirming the
+  sampled migrant fraction's mean and variance match `Binomial` theory
+  for both the scalar and matrix code paths independently; a
+  composition-preservation test proving two pool-only alleles always
+  arrive in the pool's exact ratio regardless of the random count drawn
+  that generation; a self-weight-of-1 edge case proving the stochastic
+  and continuous matrix paths agree exactly when there is nothing left
+  to sample; a params test for the new key's default, validation, and
+  round-trip; two engine-level reproducible-run tests (one exercising
+  `"stochastic"` directly, one proving a config that omits the key is
+  byte-identical to one that spells out `"continuous"`); and a CLI test.
 
 ### Changed
 

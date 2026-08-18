@@ -479,6 +479,152 @@ def test_symmetric_migration_uses_population_size_weights() -> None:
     assert migrated.frequency_map(1, 0) == {AlleleId(0): 1.0}
 
 
+def test_migrate_stochastic_requires_population_size(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """rng without population_size is rejected rather than silently ignored."""
+    with pytest.raises(ValueError, match="population_size"):
+        migrate(_state(), 0.3, rng=rng(1))
+
+
+@pytest.mark.statistical
+def test_migrate_stochastic_scalar_migrant_count_matches_binomial_theory(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """A fixed-seed sample mean and variance fall in pre-derived bands.
+
+    Deme 0 starts fixed for a private allele and deme 1 fixed for another;
+    with only two demes, deme 0's entire migrant pool is deme 1, so the
+    post-migration frequency of deme 1's allele in deme 0 *is* the random
+    migrant fraction ``K / size`` directly, with ``K ~ Binomial(size, rate)``
+    by construction.
+    """
+    size = 100
+    rate = 0.3
+    replicates = 10_000
+    state = ModelState(
+        loci=(LocusSpec(1, 100),),
+        frequencies=(
+            ({AlleleId(0): 1.0},),
+            ({AlleleId(1): 1.0},),
+        ),
+    )
+    generator = rng(20260818)
+    observed = np.asarray(
+        [
+            migrate(state, rate, size, rng=generator)
+            .frequency_map(0, 0)
+            .get(AlleleId(1), 0.0)
+            for _ in range(replicates)
+        ]
+    )
+    expected_mean = rate
+    expected_variance = rate * (1.0 - rate) / size
+    mean_standard_error = np.sqrt(expected_variance / replicates)
+    variance_standard_error = expected_variance * np.sqrt(2.0 / (replicates - 1))
+
+    assert np.mean(observed) == pytest.approx(
+        expected_mean, abs=5.0 * mean_standard_error
+    )
+    assert np.var(observed, ddof=1) == pytest.approx(
+        expected_variance, abs=5.0 * variance_standard_error
+    )
+
+
+def test_migrate_stochastic_preserves_pool_composition(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Randomizing the migrant count never changes migrant composition.
+
+    Deme 0 carries only allele 0; the migrant pool (demes 1 and 2, equal
+    size) carries only alleles 1 and 2, in an exact 0.5/0.5 split. Because
+    allele 0 never appears in the pool and alleles 1/2 never appear
+    locally, whatever count a stochastic draw lands on, alleles 1 and 2
+    must still arrive in that same 0.5/0.5 ratio — only the *total*
+    migrant mass is random here, never its internal mixture (`migrate`'s
+    docstring, `_blend`).
+    """
+    state = ModelState(
+        loci=(LocusSpec(1, 100),),
+        frequencies=(
+            ({AlleleId(0): 1.0},),
+            ({AlleleId(1): 0.6, AlleleId(2): 0.4},),
+            ({AlleleId(1): 0.4, AlleleId(2): 0.6},),
+        ),
+    )
+    rate = 0.4
+    sizes = (100, 100, 100)
+
+    migrated = migrate(state, rate, sizes, rng=rng(7))
+
+    migrant_one = migrated.frequency_map(0, 0).get(AlleleId(1), 0.0)
+    migrant_two = migrated.frequency_map(0, 0).get(AlleleId(2), 0.0)
+    assert migrant_one + migrant_two > 0.0
+    assert migrant_one / (migrant_one + migrant_two) == pytest.approx(0.5, abs=1e-9)
+
+
+@pytest.mark.statistical
+def test_migrate_stochastic_matrix_migrant_count_matches_binomial_theory(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The matrix path's stochastic branch obeys the same binomial theory.
+
+    Mirrors the scalar-path statistical test above, but through
+    ``_migrate_matrix``'s independent stochastic branch: deme 0's row gives
+    a 0.3 non-self weight entirely to deme 1, so the same direct
+    migrant-fraction argument applies.
+    """
+    size = 100
+    matrix = ((0.7, 0.3), (0.3, 0.7))
+    replicates = 10_000
+    state = ModelState(
+        loci=(LocusSpec(1, 100),),
+        frequencies=(
+            ({AlleleId(0): 1.0},),
+            ({AlleleId(1): 1.0},),
+        ),
+    )
+    generator = rng(20260818)
+    observed = np.asarray(
+        [
+            migrate(state, matrix, size, rng=generator)
+            .frequency_map(0, 0)
+            .get(AlleleId(1), 0.0)
+            for _ in range(replicates)
+        ]
+    )
+    expected_mean = 0.3
+    expected_variance = 0.3 * 0.7 / size
+    mean_standard_error = np.sqrt(expected_variance / replicates)
+    variance_standard_error = expected_variance * np.sqrt(2.0 / (replicates - 1))
+
+    assert np.mean(observed) == pytest.approx(
+        expected_mean, abs=5.0 * mean_standard_error
+    )
+    assert np.var(observed, ddof=1) == pytest.approx(
+        expected_variance, abs=5.0 * variance_standard_error
+    )
+
+
+def test_migrate_stochastic_matrix_self_weight_one_matches_continuous(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """A row with no outgoing weight never samples and never drifts from it.
+
+    Deme 2's row is ``(0.0, 0.0, 1.0)`` — full self-retention. The
+    stochastic and continuous paths must agree exactly for that deme,
+    since there is nothing random left to draw once the migrant weight
+    is zero.
+    """
+    matrix = ((0.95, 0.0, 0.05), (0.5, 0.5, 0.0), (0.0, 0.0, 1.0))
+    state = _three_deme_state()
+
+    continuous = migrate(state, matrix)
+    stochastic = migrate(state, matrix, (100, 100, 100), rng=rng(3))
+
+    assert stochastic.frequency_map(2, 0) == continuous.frequency_map(2, 0)
+
+
 def test_mutation_can_have_no_events_without_changing_maps(
     rng: Callable[[int], np.random.Generator],
 ) -> None:

@@ -159,6 +159,30 @@ def test_run_accepts_stepping_stone_topology_sugar_for_m(tmp_path: Path) -> None
     assert (output / "scatter.png").exists()
 
 
+def test_run_accepts_stochastic_migrant_sampling(tmp_path: Path) -> None:
+    """A config opting in to random migrant counts runs end to end and reproduces."""
+    config = tmp_path / "run.yaml"
+    first_output = tmp_path / "first"
+    second_output = tmp_path / "second"
+    _write_config(config, migrant_sampling="stochastic")
+
+    first_status = cli.main(
+        ["run", str(config), "--output", str(first_output), "--quiet"]
+    )
+    second_status = cli.main(
+        ["run", str(config), "--output", str(second_output), "--quiet"]
+    )
+
+    assert first_status == 0
+    assert second_status == 0
+    manifest = json.loads((first_output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["parameters"]["migrant_sampling"] == "stochastic"
+    first_report = (first_output / "report.json").read_text(encoding="utf-8")
+    second_report = (second_output / "report.json").read_text(encoding="utf-8")
+    assert first_report == second_report
+    assert (first_output / "scatter.png").exists()
+
+
 def test_two_runs_have_identical_trajectory_and_report(tmp_path: Path) -> None:
     """Wall-clock output naming never enters persisted scientific values."""
     config = tmp_path / "run.yaml"

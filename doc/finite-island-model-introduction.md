@@ -232,8 +232,10 @@ process is random from end to end, even though this one step, in
 isolation, involves no dice roll. Some more detailed simulators add an
 extra layer of randomness here too — sampling the actual number of
 migrating individuals, rather than treating migration as an idealized
-continuous fraction — which is worth knowing about even though the
-simplest version of the model skips it.
+continuous fraction. `fim` supports this as an opt-in
+`migrant_sampling: stochastic` configuration option (default:
+`continuous`, the idealized fraction above) — see
+[the configuration reference](configuration.md#m).
 
 **Step B — drift (the actual random step).**
 
