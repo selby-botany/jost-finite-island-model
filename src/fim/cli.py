@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import json
 import os
+import shutil
 import sys
-from collections.abc import Callable, Mapping, Sequence
+import tempfile
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypeAlias
@@ -28,7 +32,12 @@ from fim.engine import (
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
-from fim.persistence.manifest import read_manifest, write_manifest
+from fim.persistence.manifest import (
+    RunManifest,
+    hash_file,
+    read_manifest,
+    write_manifest,
+)
 from fim.statistics.differentiation import differentiation_q
 from fim.viz.scatter import plot_frequency_scatter
 
@@ -136,42 +145,47 @@ def _command_run_scalar(
     output_directory: Path,
     quiet: bool,
 ) -> int:
-    """Execute one scalar run and write the four documented artifacts."""
-    output_directory.mkdir(parents=True, exist_ok=True)
-    targets = _run_artifact_targets(output_directory)
-    existing = [path for path in targets.values() if path.exists()]
-    if existing:
-        names = ", ".join(path.name for path in existing)
-        raise ValueError(f"output directory already contains run artifacts: {names}")
+    """Execute one scalar run and write the four documented artifacts.
 
+    Every artifact is built inside a hidden temporary sibling directory
+    and published at `output_directory` with one atomic rename, only
+    once `trajectory.jsonl`, `report.json`, and `scatter.png` are all
+    fully durable and `manifest.json` — written last, and only then —
+    records each of their SHA-256 digests (`_write_run_artifacts`, and
+    see `_atomic_directory`). A run interrupted anywhere along the way
+    leaves no trace at `output_directory` at all, rather than a partial
+    directory silently indistinguishable from a complete one.
+    """
     run_id = deterministic_run_id(params)
-    store = JSONLTrajectoryStore(targets["trajectory"])
     if not quiet:
         print(
             f"Running {run_id} "
             f"(N={params.N}, d={params.d}, m={params.m}, "
             f"mu={params.mu}, seed={params.seed})"
         )
-    output = fim(
-        params.N,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
-        store=store,
-        run_id=run_id,
-    )
-    if not isinstance(output, RunResult):
-        raise RuntimeError("scalar CLI run unexpectedly returned a batch")
+    with _atomic_directory(output_directory) as working_directory:
+        targets = _run_artifact_targets(working_directory)
+        store = JSONLTrajectoryStore(targets["trajectory"])
+        output = fim(
+            params.N,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            store=store,
+            run_id=run_id,
+        )
+        if not isinstance(output, RunResult):
+            raise RuntimeError("scalar CLI run unexpectedly returned a batch")
+        _write_run_artifacts(output, working_directory)
 
-    _write_run_artifacts(output, output_directory)
     if not quiet:
         print(
             f"{output.report['reason'].capitalize()}: generation "
             f"{output.report['generation']}, D={output.report['D']:.6g}, "
             f"G_ST={_format_optional(output.report['G_ST'])}"
         )
-        for label, path in targets.items():
+        for label, path in _run_artifact_targets(output_directory).items():
             print(f"{label.capitalize():10} -> {path}")
     return 0
 
@@ -187,61 +201,63 @@ def _command_run_batch(
     scalar-run contract; a batch-level ``manifest.json`` and
     ``summary.json`` (each watched statistic's across-replicate
     confidence interval, from `fim.engine.replicate_summary`) sit
-    alongside them.
+    alongside them. The whole tree is built inside one hidden temporary
+    sibling directory and published at `output_directory` with a single
+    atomic rename (`_atomic_directory`), so a batch interrupted at any
+    replicate, or between the last replicate and the batch-level
+    summary/manifest, leaves no trace at `output_directory` at all.
     """
-    if output_directory.exists() and any(output_directory.iterdir()):
-        raise ValueError(f"output directory is not empty: {output_directory}")
-    output_directory.mkdir(parents=True, exist_ok=True)
-
     run_id = deterministic_run_id(params)
     max_workers = None if arguments.sequential else arguments.workers or _cpu_count()
     if not arguments.quiet:
         print(f"Running batch {run_id} {_batch_description(params, max_workers)}")
 
     started_at = _format_timestamp(_utc_now())
-    output = fim(
-        params.N,
-        params.m,
-        params.mu,
-        params.d,
-        params=params,
-        run_id=run_id,
-        max_workers=max_workers,
-        store_factory=functools.partial(
-            _replicate_store_factory, output_directory, run_id
-        ),
-    )
-    if not isinstance(output, tuple):
-        raise RuntimeError("batch CLI run unexpectedly returned a scalar result")
-    ended_at = _format_timestamp(_utc_now())
+    with _atomic_directory(output_directory) as working_directory:
+        output = fim(
+            params.N,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            run_id=run_id,
+            max_workers=max_workers,
+            store_factory=functools.partial(
+                _replicate_store_factory, working_directory, run_id
+            ),
+        )
+        if not isinstance(output, tuple):
+            raise RuntimeError("batch CLI run unexpectedly returned a scalar result")
+        ended_at = _format_timestamp(_utc_now())
 
-    replicate_directories = []
-    for result in output:
-        directory = _replicate_output_directory(output_directory, run_id, result.run_id)
-        _write_run_artifacts(result, directory)
-        replicate_directories.append(directory)
-    summary_path = output_directory / "summary.json"
-    manifest_path = output_directory / "manifest.json"
-    _write_json(summary_path, replicate_summary(output))
-    _write_json(
-        manifest_path,
-        {
-            "run_id": run_id,
-            "replicate_run_ids": [result.run_id for result in output],
-            "replicate_count": len(output),
-            "parameters": params.to_dict(),
-            "started_at": started_at,
-            "ended_at": ended_at,
-            "software_version": __version__,
-        },
-    )
+        for result in output:
+            directory = _replicate_output_directory(
+                working_directory, run_id, result.run_id
+            )
+            _write_run_artifacts(result, directory)
+        _write_json(working_directory / "summary.json", replicate_summary(output))
+        _write_json(
+            working_directory / "manifest.json",
+            {
+                "run_id": run_id,
+                "replicate_run_ids": [result.run_id for result in output],
+                "replicate_count": len(output),
+                "parameters": params.to_dict(),
+                "started_at": started_at,
+                "ended_at": ended_at,
+                "software_version": __version__,
+            },
+        )
 
     if not arguments.quiet:
         print(f"Completed {len(output)} replicate(s)")
-        for directory in replicate_directories:
+        for result in output:
+            directory = _replicate_output_directory(
+                output_directory, run_id, result.run_id
+            )
             print(f"Replicate  -> {directory}")
-        print(f"Summary    -> {summary_path}")
-        print(f"Manifest   -> {manifest_path}")
+        print(f"Summary    -> {output_directory / 'summary.json'}")
+        print(f"Manifest   -> {output_directory / 'manifest.json'}")
     return 0
 
 
@@ -254,10 +270,18 @@ def _command_stats(arguments: argparse.Namespace) -> int:
         else trajectory_path.with_name("manifest.json")
     )
     manifest = read_manifest(manifest_path)
+    _verify_trajectory_integrity(trajectory_path, manifest)
     params = manifest.params()
     rows = list(JSONLTrajectoryStore(trajectory_path).read(manifest.run_id))
     if not rows:
         raise ValueError(f"trajectory has no rows for {manifest.run_id}")
+    observed_generation_count = len({row["generation"] for row in rows})
+    if observed_generation_count != manifest.generation_count:
+        raise ValueError(
+            f"trajectory has {observed_generation_count} generation(s), "
+            f"manifest records {manifest.generation_count} — the file may "
+            "have been edited since the run completed"
+        )
     generation = (
         arguments.generation
         if arguments.generation is not None
@@ -315,6 +339,49 @@ def _compare_versions(current: str, latest: str) -> int:
     current_parts = _version_parts(current)
     latest_parts = _version_parts(latest)
     return (current_parts > latest_parts) - (current_parts < latest_parts)
+
+
+@contextlib.contextmanager
+def _atomic_directory(target: Path) -> Iterator[Path]:
+    """Build a directory's contents in a hidden temporary sibling, then
+    publish it at `target` with one atomic rename.
+
+    Regression fix for R7: an interrupted run used to leave a partial
+    output directory that was silently indistinguishable from a
+    complete one. Every write inside the `with` block happens in a
+    temporary sibling of `target` — on the same filesystem, since it is
+    always created directly inside `target.parent`, which guarantees the
+    final publish is a single atomic rename rather than a copy. If the
+    block raises anything, the temporary directory is discarded and
+    `target` is left completely untouched. `target` therefore either
+    does not exist yet or exists complete; there is no third, partial
+    state to observe from outside this function, no matter when a crash
+    happens (a hard kill or power loss skips the `except` cleanup too,
+    but still cannot leave anything at `target` itself — only an
+    orphaned temporary directory beside it).
+
+    Args:
+        target: The directory's final path. Must not already exist.
+
+    Yields:
+        The temporary directory to build the run's output inside.
+
+    Raises:
+        FileExistsError: If `target` already exists.
+    """
+    if target.exists():
+        raise FileExistsError(f"output directory already exists: {target}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    working_directory = Path(
+        tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent)
+    )
+    try:
+        yield working_directory
+    except BaseException:
+        shutil.rmtree(working_directory, ignore_errors=True)
+        raise
+    else:
+        working_directory.replace(target)
 
 
 def _batch_description(params: SimulationParams, max_workers: int | None) -> str:
@@ -397,20 +464,69 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) -> None:
+    """Refuse to analyze a trajectory that no longer matches its manifest.
+
+    Regression fix for R7: an edited or truncated trajectory used to
+    re-analyze silently under `fim stats`. `_write_run_artifacts` records
+    the trajectory's exact SHA-256 digest and byte count in
+    `manifest.json` at the moment the run finished writing it durably;
+    recomputing that digest now and comparing catches any edit,
+    truncation, or replacement since.
+
+    Args:
+        trajectory_path: The trajectory file about to be read.
+        manifest: Its companion manifest.
+
+    Raises:
+        ValueError: If the manifest has no recorded trajectory digest
+            (written before this check existed), or the file no longer
+            matches the digest it does have.
+    """
+    if manifest.artifacts is None or "trajectory" not in manifest.artifacts:
+        raise ValueError(
+            f"manifest for {manifest.run_id!r} has no recorded trajectory "
+            "digest to verify against (written by a version of fim "
+            "predating this integrity check)"
+        )
+    expected = manifest.artifacts["trajectory"]
+    actual = hash_file(trajectory_path)
+    if actual != expected:
+        raise ValueError(
+            f"trajectory does not match its manifest: expected sha256 "
+            f"{expected['sha256']} ({expected['bytes']} bytes), found "
+            f"{actual['sha256']} ({actual['bytes']} bytes) — the file may "
+            "have been edited, truncated, or replaced since the run "
+            "completed"
+        )
+
+
 def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
-    """Write one run's manifest, report, and scatter plot.
+    """Write one run's report, scatter plot, and — last — its verifiable manifest.
 
     ``trajectory.jsonl`` is not written here: it is streamed
     generation-by-generation by the `TrajectoryStore` already passed
-    into `fim`, so it exists before this function ever runs.
+    into `fim`, so it exists before this function ever runs. Every other
+    artifact is written and flushed first; ``manifest.json`` is written
+    only once every sibling artifact is durable, augmented with each
+    one's SHA-256 digest and byte count (`fim.persistence.manifest.
+    hash_file`) — the record `_verify_trajectory_integrity` later checks
+    against.
     """
     targets = _run_artifact_targets(directory)
-    write_manifest(targets["manifest"], result.manifest)
     _write_json(targets["report"], result.report)
     figure = plot_frequency_scatter(
         result.final_state, result.params, targets["scatter"]
     )
     plt.close(figure)
+    manifest = replace(
+        result.manifest,
+        artifacts={
+            name: hash_file(targets[name])
+            for name in ("trajectory", "report", "scatter")
+        },
+    )
+    write_manifest(targets["manifest"], manifest)
     return targets
 
 

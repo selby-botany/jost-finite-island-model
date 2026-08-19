@@ -62,6 +62,7 @@ def test_manifest_round_trip_reconstructs_parameters(tmp_path: Path) -> None:
         loci=(LocusSpec(1, 200),),
     )
     manifest = RunManifest(
+        schema_version=1,
         run_id="run-a",
         parameters=params.to_dict(),
         started_at="2026-08-14T20:00:00Z",
@@ -70,6 +71,7 @@ def test_manifest_round_trip_reconstructs_parameters(tmp_path: Path) -> None:
         convergence_statistic="D",
         stop_reason="statistic converged",
         generation=4,
+        generation_count=5,
         software_version="1.0.0",
     )
     path = tmp_path / "manifest.json"
@@ -96,6 +98,7 @@ def test_manifest_round_trip_reconstructs_several_convergence_statistics(
         convergence_combinator="any",
     )
     manifest = RunManifest(
+        schema_version=1,
         run_id="run-a",
         parameters=params.to_dict(),
         started_at="2026-08-14T20:00:00Z",
@@ -104,6 +107,7 @@ def test_manifest_round_trip_reconstructs_several_convergence_statistics(
         convergence_statistic=("D", "G_ST"),
         stop_reason="statistic converged",
         generation=4,
+        generation_count=5,
         software_version="1.0.0",
     )
     path = tmp_path / "manifest.json"

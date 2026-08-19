@@ -380,7 +380,29 @@ One JSON object is appended for every nonzero frequency:
 
 The manifest records the complete parameter mapping, seed, software version,
 UTC start/end timestamps, generation, watched statistic, and whether
-convergence or the hard cap ended the run.
+convergence or the hard cap ended the run. It also carries:
+
+- `schema_version`: the manifest's own shape version.
+- `convergence.generation_count`: how many distinct generations the run
+  actually wrote to `trajectory.jsonl` (`convergence.generation + 1` for
+  every run, since no generation is ever skipped — recorded explicitly
+  rather than left implicit).
+- `artifacts`: the SHA-256 digest and byte count of `trajectory.jsonl`,
+  `report.json`, and `scatter.png` as they existed at the moment the run
+  finished writing them durably. `fim stats` recomputes and checks the
+  trajectory's digest (and its generation count) before reading a single
+  row, so a trajectory edited, truncated, or replaced after the run
+  completed is refused with a clear error rather than re-analyzed
+  silently.
+
+`output_directory` (the whole four-file set for a scalar run, or the whole
+`replicate-NNN/` plus `summary.json`/`manifest.json` tree for a batch) is
+built in a hidden temporary location beside the target path and published
+with a single atomic rename only once every file in it is durable and
+`manifest.json` has been written last with its `artifacts` digests. An
+interrupted run — a crash, a killed process, a full disk — therefore never
+leaves a partial directory at the target path: it is either not there at
+all, or complete.
 
 ### `report.json`
 
@@ -458,8 +480,9 @@ Manifest timestamps may differ.
 
 - **Unknown key:** compare the named key with
   [configuration.md](configuration.md); typos are never ignored.
-- **Output already exists:** select a new output directory. Existing run
-  artifacts are never appended or overwritten.
+- **Output already exists:** select a new output directory. `fim` refuses
+  to publish into one that already exists at all, even if empty — never
+  appended, overwritten, or reused.
 - **Reached the cap:** inspect the trajectory and report, then increase
   `max_generations`, relax the tolerance, increase the window, or select
   another convergence statistic based on the study's needs.

@@ -30,7 +30,7 @@ from fim.model.locus import finite_allele_capacity
 from fim.model.operators import step
 from fim.model.params import Migration, MutationRate, PopulationSize, SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.manifest import RunManifest
+from fim.persistence.manifest import CURRENT_SCHEMA_VERSION, RunManifest
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
 from fim.statistics.differentiation import DifferentiationReport, statistics_report
 from fim.statistics.interval import ConfidenceInterval, confidence_interval
@@ -484,6 +484,7 @@ def _run_one(
     )
     ended_at = _format_timestamp(clock())
     manifest = RunManifest(
+        schema_version=CURRENT_SCHEMA_VERSION,
         run_id=run_id,
         parameters=params.to_dict(),
         started_at=started_at,
@@ -492,6 +493,7 @@ def _run_one(
         convergence_statistic=params.convergence_statistic,
         stop_reason=outcome.reason.value,
         generation=state.generation,
+        generation_count=len(monitor.generations),
         software_version=__version__,
     )
     return RunResult(

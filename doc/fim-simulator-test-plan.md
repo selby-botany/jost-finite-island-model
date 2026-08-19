@@ -408,6 +408,14 @@ without the engine:
   manifest and confirms it re-runs to an identical trajectory (the replay
   contract — design §6), including a manifest that names **several**
   convergence statistics (design §9), not only the single-statistic case.
+- **Artifact integrity** (design §6, R7 remediation): `schema_version` and
+  `generation_count` are required, positive-integer manifest fields;
+  `artifacts` — a per-file `{sha256, bytes}` digest, keyed by artifact
+  name — is `None` on a manifest as the engine constructs it (before any
+  file is written to disk) and round-trips losslessly once populated;
+  `hash_file` produces a digest matching an independent hash of the same
+  bytes; every malformed digest shape (missing/empty `sha256`, non-integer
+  or negative `bytes`) is rejected by name.
 - **Validation** (`test/persistence/test_validation.py`): row normalization
   rejects invalid values and reports missing/extra fields and context
   mismatches by name; stores reject empty generations and filter by
@@ -519,6 +527,23 @@ Functional detail in §8.
   batch refuses a non-empty output directory.
 - Default output paths use the project's `results` directory, falling
   back to the working directory when no project root is found.
+- **Atomic output publishing** (R7 remediation): a scalar or batch run's
+  entire output directory is built in a hidden temporary sibling and
+  published with one atomic rename (`_atomic_directory`), only once every
+  artifact is durable and `manifest.json` — written last — records each
+  sibling artifact's SHA-256 digest (`_write_run_artifacts`). `-o` now
+  refuses *any* pre-existing target directory, empty or not (stricter than
+  the prior any-artifact-file check). **Failure injection** at three
+  boundaries — mid-trajectory (the write itself), the report write, and
+  the plot render — each confirms the target directory does not exist
+  afterward, at both the scalar and (a replicate write, sequential batch)
+  batch layers.
+- **Trajectory integrity verification** (R7 remediation): `fim stats`
+  recomputes the trajectory's SHA-256 digest and distinct generation count
+  against the manifest's recorded values before reading a single row,
+  refusing an edited, truncated, or replaced trajectory with a named error
+  instead of silently re-analyzing it; a manifest predating this check
+  (no `artifacts` recorded) is refused with its own distinct message.
 
 ## 5. Property-based invariants for the statistics module
 

@@ -8,6 +8,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A run's output directory was neither atomic nor integrity-checked. A
+  scalar or batch run wrote its files directly at the final `-o` path as
+  it went, so an interrupted run (a crash, a killed process, a full
+  disk) left a partial directory with no way to tell it apart from a
+  complete one; nothing recorded whether `trajectory.jsonl` still
+  matched what the run actually wrote, so an edited or truncated
+  trajectory re-analyzed silently under `fim stats`. Every run's output
+  directory (the whole four-file set for a scalar run, or the whole
+  `replicate-NNN/` tree plus `summary.json`/`manifest.json` for a batch)
+  is now built in a hidden temporary sibling and published at the final
+  path with a single atomic rename, only once every artifact is durable
+  — see `_atomic_directory` in `fim.cli`. `manifest.json` is now written
+  *last*, augmented with each sibling artifact's SHA-256 digest and byte
+  count (`fim.persistence.manifest.hash_file`); `RunManifest` gained
+  `schema_version`, `generation_count`, and an optional `artifacts`
+  field recording those digests. `fim stats` now recomputes and checks
+  the trajectory's digest and generation count against the manifest
+  before reading a single row, refusing a tampered or mismatched file
+  with a named error instead of silently proceeding. `-o` now refuses
+  *any* pre-existing output directory, empty or not — stricter than the
+  prior any-artifact-file check, and necessary for the atomic rename to
+  be unambiguous. Added failure-injection tests at the trajectory-write,
+  report-write, and plot-render boundaries (both the scalar and batch
+  paths) confirming the target directory never exists after an
+  interruption at any of them.
 - The mypy type gate's configuration and its actual invocations disagreed
   with each other. `[tool.mypy]` set both `files = ["src", "test"]` and
   `packages = ["fim"]`, which mypy rejects together (it accepts at most

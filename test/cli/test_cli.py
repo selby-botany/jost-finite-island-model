@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from email.message import Message
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ import pytest
 import yaml
 
 from fim import __version__, cli
+from fim.persistence.jsonl_store import JSONLTrajectoryStore
 
 
 def _write_config(path: Path, **updates: object) -> None:
@@ -429,11 +431,19 @@ def test_init_refuses_existing_file_unless_forced(
     assert cli.main(["init", "--output", str(output), "--force"]) == 0
 
 
-def test_run_scalar_never_overwrites_existing_artifacts(
+def test_run_scalar_never_overwrites_an_existing_output_directory(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A scalar run never overwrites a directory already holding artifacts."""
+    """A scalar run refuses any pre-existing output directory outright.
+
+    `_atomic_directory` (R7) rejects `output_directory` if it already
+    exists at all — stricter than the prior contract, which only
+    rejected the four specific artifact filenames already being
+    present. Populating the directory with something else entirely is
+    still enough to trigger it, without depending on the exact
+    filenames the run would otherwise write.
+    """
     config = tmp_path / "run.yaml"
     _write_config(config)
     output = tmp_path / "output"
@@ -441,7 +451,118 @@ def test_run_scalar_never_overwrites_existing_artifacts(
     (output / "report.json").write_text("{}", encoding="utf-8")
 
     assert cli.main(["run", str(config), "-o", str(output)]) == 2
-    assert "already contains" in capsys.readouterr().err
+    assert "already exists" in capsys.readouterr().err
+
+
+def test_run_scalar_rejects_an_empty_pre_existing_output_directory(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An empty pre-existing directory is rejected too, not just a populated one.
+
+    Regression test for R7's stricter contract: before atomic
+    publishing, an empty `-o` directory the caller had already created
+    (e.g. via `mkdir -p`) was silently accepted and written into in
+    place. `_atomic_directory` now requires the final path to not exist
+    at all, so its single rename is unambiguous.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config)
+    output = tmp_path / "output"
+    output.mkdir()
+
+    assert cli.main(["run", str(config), "-o", str(output)]) == 2
+    assert "already exists" in capsys.readouterr().err
+    assert not any(output.iterdir())
+
+
+def test_run_scalar_leaves_no_trace_when_interrupted_mid_trajectory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failure while still writing generations leaves no output directory.
+
+    Failure-injection test for R7's write boundary: the third
+    `write_generation` call (well after the temporary directory has a
+    real, partial `trajectory.jsonl` on disk) raises, simulating an
+    interruption mid-run. `output_directory` must not exist afterward —
+    `_atomic_directory` never publishes a directory the `with` block
+    didn't finish populating, regardless of how far into it the failure
+    happened.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config, max_generations=10)
+    output = tmp_path / "output"
+    original_write_generation = JSONLTrajectoryStore.write_generation
+    calls = {"count": 0}
+
+    def flaky_write_generation(self: Any, *args: Any, **kwargs: Any) -> None:
+        calls["count"] += 1
+        if calls["count"] == 3:
+            raise RuntimeError("simulated write failure")
+        original_write_generation(self, *args, **kwargs)
+
+    monkeypatch.setattr(
+        JSONLTrajectoryStore, "write_generation", flaky_write_generation
+    )
+
+    assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 2
+    assert calls["count"] == 3
+    assert not output.exists()
+    assert not list(tmp_path.glob(".output.*"))
+
+
+def test_run_scalar_leaves_no_trace_when_the_report_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failure writing `report.json` leaves no output directory.
+
+    Failure-injection test for R7's report boundary: by this point the
+    temporary directory already has a real, complete `trajectory.jsonl`
+    on disk (the run itself finished), but the failure still means
+    `output_directory` must not exist afterward.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config)
+    output = tmp_path / "output"
+    original_write_json = cli._write_json
+
+    def flaky_write_json(path: Path, value: Mapping[str, object]) -> None:
+        if path.name == "report.json":
+            raise RuntimeError("simulated report write failure")
+        original_write_json(path, value)
+
+    monkeypatch.setattr(cli, "_write_json", flaky_write_json)
+
+    assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 2
+    assert not output.exists()
+    assert not list(tmp_path.glob(".output.*"))
+
+
+def test_run_scalar_leaves_no_trace_when_the_plot_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failure rendering `scatter.png` leaves no output directory.
+
+    Failure-injection test for R7's plot boundary: `trajectory.jsonl`
+    and `report.json` are both already real and complete in the
+    temporary directory when this fails, but the whole run still must
+    not appear at `output_directory`.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config)
+    output = tmp_path / "output"
+
+    def failing_plot(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("simulated plot failure")
+
+    monkeypatch.setattr(cli, "plot_frequency_scatter", failing_plot)
+
+    assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 2
+    assert not output.exists()
+    assert not list(tmp_path.glob(".output.*"))
 
 
 def test_run_batch_produces_replicate_and_summary_artifacts(
@@ -540,6 +661,42 @@ def test_run_batch_rejects_a_nonempty_output_directory(tmp_path: Path) -> None:
     assert status == 2
 
 
+def test_run_batch_leaves_no_trace_when_a_replicate_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A batch failure partway through replicates leaves no output directory.
+
+    Failure-injection test for R7's batch write boundary: the second
+    replicate's artifact write raises, after the first replicate's four
+    files are already real and complete in the temporary directory.
+    `output_directory` — including `summary.json`, `manifest.json`, and
+    every replicate subdirectory — must not exist afterward.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=3)
+    output = tmp_path / "output"
+    original_write_run_artifacts = cli._write_run_artifacts
+    calls = {"count": 0}
+
+    def flaky_write_run_artifacts(*args: Any, **kwargs: Any) -> dict[str, Path]:
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("simulated replicate write failure")
+        return original_write_run_artifacts(*args, **kwargs)
+
+    monkeypatch.setattr(cli, "_write_run_artifacts", flaky_write_run_artifacts)
+
+    status = cli.main(
+        ["run", str(config), "-o", str(output), "--sequential", "--quiet"]
+    )
+
+    assert status == 2
+    assert calls["count"] == 2
+    assert not output.exists()
+    assert not list(tmp_path.glob(".output.*"))
+
+
 def test_run_progress_output_describes_result(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -583,11 +740,20 @@ def test_stats_supports_explicit_generation_and_json_output(
     assert capsys.readouterr().out
 
 
-def test_stats_reports_empty_and_unknown_generations(
+def test_stats_reports_a_tampered_trajectory_and_unknown_generations(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Stats errors distinguish missing run rows from missing generations."""
+    """Stats errors distinguish a tampered trajectory from a missing generation.
+
+    Regression test for R7: editing the trajectory after the run
+    completed — even a content-preserving edit like retagging every
+    row's ``run_id`` — no longer "re-analyses silently" (the defect the
+    review named). It now fails the manifest's recorded SHA-256 digest
+    check before `_command_stats` ever gets to read a row, superseding
+    the weaker "no rows for this run_id" diagnosis a retag used to
+    produce.
+    """
     config = tmp_path / "run.yaml"
     output = tmp_path / "output"
     _write_config(config)
@@ -602,7 +768,7 @@ def test_stats_reports_empty_and_unknown_generations(
         encoding="utf-8",
     )
     assert cli.main(["stats", str(trajectory)]) == 2
-    assert "no rows" in capsys.readouterr().err
+    assert "does not match its manifest" in capsys.readouterr().err
 
     assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 2
     output = tmp_path / "second"

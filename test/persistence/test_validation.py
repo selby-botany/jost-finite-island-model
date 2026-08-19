@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
-from fim.persistence.manifest import RunManifest, read_manifest
+from fim.persistence.manifest import RunManifest, read_manifest, write_manifest
 from fim.persistence.store import InMemoryTrajectoryStore, normalize_row
 
 
@@ -101,6 +102,7 @@ def _manifest() -> RunManifest:
         "seed": 7,
     }
     return RunManifest(
+        schema_version=1,
         run_id="run-a",
         parameters=params,
         started_at="start",
@@ -109,6 +111,7 @@ def _manifest() -> RunManifest:
         convergence_statistic="D",
         stop_reason="statistic converged",
         generation=2,
+        generation_count=3,
         software_version="1.0.0",
     )
 
@@ -130,6 +133,7 @@ def test_manifest_constructor_validates_identity_fields(
     """Manifest identity and terminal metadata cannot be empty or negative."""
     manifest = _manifest()
     updates = {
+        "schema_version": manifest.schema_version,
         "run_id": manifest.run_id,
         "parameters": manifest.parameters,
         "started_at": manifest.started_at,
@@ -138,6 +142,7 @@ def test_manifest_constructor_validates_identity_fields(
         "convergence_statistic": manifest.convergence_statistic,
         "stop_reason": manifest.stop_reason,
         "generation": manifest.generation,
+        "generation_count": manifest.generation_count,
         "software_version": manifest.software_version,
     }
     updates[field] = value
@@ -148,7 +153,14 @@ def test_manifest_constructor_validates_identity_fields(
 def test_manifest_mapping_validation_reports_missing_and_wrong_nested_types() -> None:
     """Manifest JSON validation identifies missing and malformed structures."""
     value = _manifest().to_dict()
-    for field in ("run_id", "parameters", "started_at", "ended_at", "convergence"):
+    for field in (
+        "schema_version",
+        "run_id",
+        "parameters",
+        "started_at",
+        "ended_at",
+        "convergence",
+    ):
         missing = dict(value)
         del missing[field]
         with pytest.raises(ValueError, match=field):
@@ -171,7 +183,8 @@ def test_manifest_nested_fields_have_strict_types(tmp_path: Path) -> None:
         ("statistic", [1, 2], "nonempty string or list"),
         ("statistic", ["D", ""], "nonempty string or list"),
         ("reason", 1, "nonempty"),
-        ("generation", -1, "non-negative"),
+        ("generation", -1, "at least 0"),
+        ("generation_count", 0, "at least 1"),
     ):
         invalid = {**value, "convergence": {**convergence, field: bad}}
         with pytest.raises(ValueError, match=message):
@@ -181,3 +194,58 @@ def test_manifest_nested_fields_have_strict_types(tmp_path: Path) -> None:
     path.write_text("[]", encoding="utf-8")
     with pytest.raises(ValueError, match="root must be"):
         read_manifest(path)
+
+
+def test_manifest_schema_version_is_validated() -> None:
+    """`schema_version` rejects non-positive values from both construction paths."""
+    with pytest.raises(ValueError, match="schema_version"):
+        replace(_manifest(), schema_version=0)
+    value = _manifest().to_dict()
+    with pytest.raises(ValueError, match="schema_version"):
+        RunManifest.from_dict({**value, "schema_version": 0})
+
+
+def test_manifest_artifacts_default_to_none_and_round_trip_when_present(
+    tmp_path: Path,
+) -> None:
+    """`artifacts` is `None` unless a run actually recorded on-disk digests."""
+    manifest = _manifest()
+    assert manifest.artifacts is None
+
+    digested = replace(
+        manifest,
+        artifacts={
+            "trajectory": {"sha256": "a" * 64, "bytes": 123},
+            "report": {"sha256": "b" * 64, "bytes": 45},
+        },
+    )
+    path = tmp_path / "manifest.json"
+    write_manifest(path, digested)
+    restored = read_manifest(path)
+
+    assert restored == digested
+    assert restored.artifacts == {
+        "trajectory": {"sha256": "a" * 64, "bytes": 123},
+        "report": {"sha256": "b" * 64, "bytes": 45},
+    }
+
+
+@pytest.mark.parametrize(
+    ("digest", "message"),
+    [
+        ({"bytes": 1}, "sha256"),
+        ({"sha256": "", "bytes": 1}, "sha256"),
+        ({"sha256": "a" * 64}, "bytes"),
+        ({"sha256": "a" * 64, "bytes": "1"}, "bytes"),
+        ({"sha256": "a" * 64, "bytes": True}, "bytes"),
+        ({"sha256": "a" * 64, "bytes": -1}, "non-negative"),
+    ],
+)
+def test_manifest_artifact_digests_are_validated(
+    digest: dict[str, object],
+    message: str,
+) -> None:
+    """Every recorded artifact digest needs a real hash and a non-negative size."""
+    value = _manifest().to_dict()
+    with pytest.raises(ValueError, match=message):
+        RunManifest.from_dict({**value, "artifacts": {"trajectory": digest}})
