@@ -612,6 +612,8 @@ def test_migration_accepts_a_hand_authored_sparse_neighbor_map() -> None:
         ({9: {1: 0.1}}, "outside 1"),
         ({1: "not-a-mapping"}, "must be a mapping of neighbor to weight"),
         ({"not-a-number": {2: 0.1}}, "deme identifiers must be integers"),
+        ({2.9: {1: 0.1}}, "deme identifiers must be integers"),
+        ({1: {2.9: 0.1}}, "deme identifiers must be integers"),
     ],
 )
 def test_migration_topology_and_sparse_map_are_validated(
@@ -664,6 +666,8 @@ def test_explicit_initial_frequencies_are_normalized_and_serialized() -> None:
         (["bad", []], "p_0\\[0\\] must be a list"),
         ([[1], []], "p_0\\[0\\]\\[0\\] must be a mapping"),
         ([[{"bad": 1.0}], [{"0": 1.0}]], "allele ID"),
+        ([[{1.9: 0.5, 0: 0.5}], [{0: 1.0}]], "allele ID.*must be an integer"),
+        ([[{-3: 1.0}], [{0: 1.0}]], "allele ID.*must be a non-negative integer"),
         ([[{"0": -0.1}], [{"0": 1.0}]], "must be finite"),
         ([[{"0": True}], [{"0": 1.0}]], "must be a number"),
     ],

@@ -3,6 +3,7 @@
 from collections.abc import Callable
 
 import numpy as np
+import pytest
 
 from fim.model.allele import AlleleId
 from fim.model.initial import ExplicitInitialCondition, generate_initial_state
@@ -73,6 +74,30 @@ def test_explicit_p0_is_used_verbatim() -> None:
         AlleleId(0): 0.25,
         AlleleId(1): 0.75,
     }
+
+
+@pytest.mark.parametrize(
+    ("allele_id", "message"),
+    [(1.9, "must be an integer"), (-3, "must be a non-negative integer")],
+)
+def test_direct_construction_rejects_malformed_p0_allele_ids(
+    allele_id: object,
+    message: str,
+) -> None:
+    """Constructing `SimulationParams` directly (bypassing `from_mapping`)
+    still validates `p_0` allele identities: this path reaches
+    `_normalize_initial_frequencies` without ever going through
+    `_parse_initial_frequencies`, so it needs its own guard against a
+    truncated float or a negative ID sneaking through as a bare Python
+    key.
+    """
+    with pytest.raises(ValueError, match=message):
+        _params(
+            initial_frequencies=(
+                ({allele_id: 1.0},),
+                ({AlleleId(0): 1.0},),
+            )
+        )
 
 
 def test_explicit_strategy_requires_p0() -> None:

@@ -18,6 +18,9 @@ AlleleId = NewType("AlleleId", int)
 
 MINTED_ID_START = 1 << 32
 
+# A single-state space has no "other" state for a mutation to target.
+_MINIMUM_FINITE_ALLELE_CAPACITY = 2
+
 
 def founding_allele_ids(count: int) -> tuple[AlleleId, ...]:
     """Return the locus-relative founding allele identifiers.
@@ -102,8 +105,11 @@ class FiniteAlleleSpace:
                 to hold every initial ID, or an initial ID falls outside
                 ``0 .. capacity - 1``.
         """
-        if capacity < 2:
-            raise ValueError("finite allele capacity must be at least 2")
+        if capacity < _MINIMUM_FINITE_ALLELE_CAPACITY:
+            raise ValueError(
+                f"finite allele capacity must be at least "
+                f"{_MINIMUM_FINITE_ALLELE_CAPACITY}"
+            )
         minted = sorted({int(allele_id) for allele_id in initial_ids})
         if len(minted) > capacity or any(
             identity < 0 or identity >= capacity for identity in minted

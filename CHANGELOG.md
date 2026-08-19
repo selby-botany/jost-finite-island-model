@@ -20,6 +20,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   state at or beyond `capacity` now raises instead of succeeding
   silently. `FiniteAlleleSpace` also now rejects a `capacity` below 2 at
   construction, rather than dividing by zero on the first mutation.
+- `p_0` allele IDs and sparse `m` deme keys silently truncated a
+  non-integral float and accepted a negative identifier through a bare
+  `int(raw_value)` coercion. A truncated float (`1.9` parsed as `1`) ran
+  the wrong allele to completion with no error; a negative allele ID was
+  accepted at config-parse time and only failed much later inside
+  `store.write_generation`, with an error naming persistence rather than
+  the config. `SimulationParams.from_mapping` and direct
+  `SimulationParams(...)` construction both reach this coercion (the
+  latter only through `_normalize_initial_frequencies`, independently of
+  the former's own parsing), so both paths are now guarded by a shared
+  `_parse_integer_identifier` helper that accepts a native integer, an
+  integral float, or a numeric string, and rejects a non-integral float,
+  a boolean, or any other type outright. `p_0` allele IDs are further
+  rejected if negative.
 - `dev/bin/check-doc-links` stripped every underscore and asterisk from a
   heading's anchor, including ones inside a `` `code span` `` where they
   are literal identifier characters, not markdown emphasis syntax — so a
