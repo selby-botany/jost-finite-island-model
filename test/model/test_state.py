@@ -2,6 +2,8 @@
 
 import pickle
 
+import pytest
+
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
@@ -95,3 +97,65 @@ def test_support_cannot_exceed_population_size() -> None:
         assert "N is 1" in str(error)
     else:
         raise AssertionError("oversized support was accepted")
+
+
+@pytest.mark.parametrize(
+    ("allele_id", "message"),
+    [(1.9, "must be an integer"), (-3, "must be a non-negative integer")],
+)
+def test_direct_construction_rejects_malformed_allele_ids(
+    allele_id: object,
+    message: str,
+) -> None:
+    """`ModelState`'s own constructor validates allele identity the same
+    way the config parser's `p_0` handling does.
+
+    Regression test for S5: `_normalize_frequency_map` was a bare
+    ``AlleleId(int(raw_allele_id))``, silently truncating a non-integral
+    float (`1.9` to `1`) and accepting a negative allele ID — the
+    config parser (`fim.model.params._parse_initial_frequencies`) had
+    already been guarded against exactly this, but `ModelState`'s
+    public constructor, reachable by a downstream embedder directly and
+    not only through YAML config, retained the defect verbatim.
+    """
+    with pytest.raises(ValueError, match=message):
+        ModelState(
+            loci=(LocusSpec(1, 100),),
+            frequencies=(({allele_id: 1.0},),),  # type: ignore[dict-item]
+        )
+
+
+@pytest.mark.parametrize(
+    ("frequency", "message"),
+    [
+        (True, "must be in"),
+        ("1", "must be in"),
+        (0.0, "must be in"),
+        (1.5, "must be in"),
+        (float("nan"), "must be in"),
+    ],
+)
+def test_from_rows_rejects_boolean_string_and_out_of_bounds_frequencies(
+    frequency: object,
+    message: str,
+) -> None:
+    """`ModelState.from_rows` validates a row's frequency field the same
+    way `fim.persistence.store.normalize_row` does for the identical
+    row schema.
+
+    Regression test for S6: `_required_float` (now `_required_frequency`)
+    was a bare ``float(row[key])``, which coerces `True` to `1.0` and
+    the string `"1"` to `1.0` — both of which persistence's own
+    `_frequency_field` already rejected for the same field, plus its
+    `(0, 1]` bound, which `from_rows` did not enforce at all.
+    """
+    row = {
+        "run_id": "run-a",
+        "generation": 0,
+        "deme": 1,
+        "locus_id": 1,
+        "allele_id": 0,
+        "frequency": frequency,
+    }
+    with pytest.raises(ValueError, match=message):
+        ModelState.from_rows([row], (LocusSpec(1, 100),))

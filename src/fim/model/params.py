@@ -9,6 +9,7 @@ from types import MappingProxyType
 from typing import Any, Final, Literal, cast
 
 from fim.model.allele import AlleleId
+from fim.model.identifiers import parse_integer_identifier
 from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.topology import (
     Topology,
@@ -662,7 +663,7 @@ def _normalize_initial_frequencies(
                 )
             normalized: dict[AlleleId, float] = {}
             for allele_id, frequency in frequency_map.items():
-                identity = _parse_integer_identifier(
+                identity = parse_integer_identifier(
                     f"p_0 allele ID {allele_id!r} must be an integer", allele_id
                 )
                 if identity < 0:
@@ -772,7 +773,7 @@ def _parse_deme_key(context: str, raw_key: Any, d: int) -> int:
     string (JSON object keys are always strings), matching how ``p_0``'s
     allele keys are already coerced.
     """
-    deme = _parse_integer_identifier(
+    deme = parse_integer_identifier(
         f"{context} deme identifiers must be integers", raw_key
     )
     if not 1 <= deme <= d:
@@ -816,7 +817,7 @@ def _parse_initial_frequencies(value: Any) -> InitialFrequencies | None:
                 raise ValueError(f"p_0[{deme_index}][{locus_index}] must be a mapping")
             frequencies: dict[AlleleId, float] = {}
             for raw_allele, raw_frequency in raw_locus.items():
-                identity = _parse_integer_identifier(
+                identity = parse_integer_identifier(
                     f"p_0 allele ID {raw_allele!r} must be an integer", raw_allele
                 )
                 if identity < 0:
@@ -838,45 +839,6 @@ def _parse_int(name: str, value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{name} must be an integer")
     return int(value)
-
-
-def _parse_integer_identifier(message: str, raw_value: Any) -> int:
-    """Parse an allele or deme identifier without silently truncating it.
-
-    Unlike `_parse_int`, an identifier may arrive as a numeric string
-    (mapping keys are always strings under JSON, and often written that
-    way by hand in YAML too), so this accepts a native integer or a
-    numeric string in addition. It never falls through to plain ``int()``
-    coercion on a float, which truncates a non-integral value (``1.9`` to
-    ``1``) instead of rejecting it.
-
-    Args:
-        message: The exact error message to raise for any invalid input;
-            callers keep their own wording since the same identifier
-            shape is parsed in more than one config context.
-        raw_value: The raw mapping key or value to parse.
-
-    Returns:
-        The parsed identifier.
-
-    Raises:
-        ValueError: If ``raw_value`` is a boolean, a non-integral float, a
-            non-numeric string, or any other non-integer type.
-    """
-    if isinstance(raw_value, bool):
-        raise ValueError(message)
-    if isinstance(raw_value, int):
-        return raw_value
-    if isinstance(raw_value, float):
-        if not raw_value.is_integer():
-            raise ValueError(message)
-        return int(raw_value)
-    if isinstance(raw_value, str):
-        try:
-            return int(raw_value)
-        except ValueError as error:
-            raise ValueError(message) from error
-    raise ValueError(message)
 
 
 def _parse_migrant_sampling(value: Any) -> MigrantSampling:

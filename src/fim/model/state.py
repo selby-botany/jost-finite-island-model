@@ -10,6 +10,7 @@ from types import MappingProxyType
 from typing import Any
 
 from fim.model.allele import AlleleId
+from fim.model.identifiers import parse_bounded_frequency, parse_integer_identifier
 from fim.model.locus import LocusSpec
 
 FrequencyMap = Mapping[AlleleId, float]
@@ -239,7 +240,7 @@ class ModelState:
             except KeyError as error:
                 raise ValueError(f"unknown locus_id in row: {locus_id}") from error
             allele_id = AlleleId(_required_int(row, "allele_id"))
-            frequency = _required_float(row, "frequency")
+            frequency = _required_frequency(row, "frequency")
             target = mutable[deme - 1][locus_index]
             if allele_id in target:
                 raise ValueError(
@@ -260,10 +261,27 @@ def _normalize_frequency_map(
     *,
     context: str,
 ) -> MutableFrequencyMap:
-    """Copy and validate one sparse probability vector."""
+    """Copy and validate one sparse probability vector.
+
+    Allele identity uses the same `parse_integer_identifier` rule as
+    the config parser's own `p_0` handling — this is `ModelState`'s
+    public constructor path, reachable by a downstream embedder
+    directly (not only through YAML config), so it needs the identical
+    guard against a truncated float (`1.9` silently becoming `1`) or a
+    negative identifier sneaking through as a bare Python key (S5).
+    """
     normalized: MutableFrequencyMap = {}
     for raw_allele_id, raw_frequency in frequency_map.items():
-        allele_id = AlleleId(int(raw_allele_id))
+        identity = parse_integer_identifier(
+            f"{context}: allele ID {raw_allele_id!r} must be an integer",
+            raw_allele_id,
+        )
+        if identity < 0:
+            raise ValueError(
+                f"{context}: allele ID {raw_allele_id!r} must be a "
+                "non-negative integer"
+            )
+        allele_id = AlleleId(identity)
         frequency = float(raw_frequency)
         if not math.isfinite(frequency):
             raise ValueError(f"{context}: frequencies must be finite")
@@ -284,14 +302,21 @@ def _normalize_frequency_map(
     return normalized
 
 
-def _required_float(row: Mapping[str, Any], key: str) -> float:
-    """Read one required finite float from a serialized row."""
+def _required_frequency(row: Mapping[str, Any], key: str) -> float:
+    """Read one required row frequency, in ``(0, 1]`` and never a boolean.
+
+    Delegates to `parse_bounded_frequency`, the same rule
+    `fim.persistence.store.normalize_row` uses for the identical row
+    schema — before this fix, this was a bare ``float(row[key])`` that
+    accepted `True` (coerced to ``1.0``) and a numeric string like
+    ``"1"``, both of which persistence's own reader already rejected
+    for the same field (S6).
+    """
     if key not in row:
         raise ValueError(f"trajectory row is missing {key!r}")
-    value = float(row[key])
-    if not math.isfinite(value):
-        raise ValueError(f"trajectory row field {key!r} must be finite")
-    return value
+    return parse_bounded_frequency(
+        f"trajectory row field {key!r} must be in (0, 1]", row[key]
+    )
 
 
 def _required_int(row: Mapping[str, Any], key: str) -> int:

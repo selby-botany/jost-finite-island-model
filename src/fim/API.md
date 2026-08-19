@@ -58,6 +58,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [FiniteAlleleRegistry](#fim.model.allele.FiniteAlleleRegistry)
     * [\_\_init\_\_](#fim.model.allele.FiniteAlleleRegistry.__init__)
     * [mutate\_target](#fim.model.allele.FiniteAlleleRegistry.mutate_target)
+* [fim.model.identifiers](#fim.model.identifiers)
+  * [parse\_bounded\_frequency](#fim.model.identifiers.parse_bounded_frequency)
+  * [parse\_integer\_identifier](#fim.model.identifiers.parse_integer_identifier)
 * [fim.model.initial](#fim.model.initial)
   * [InitialConditionGenerator](#fim.model.initial.InitialConditionGenerator)
     * [generate](#fim.model.initial.InitialConditionGenerator.generate)
@@ -1001,6 +1004,95 @@ Return a mutation target for ``locus_id`` under the K-allele model.
 **Returns**:
 
   One state other than ``current``, drawn uniformly at random.
+
+<a id="fim.model.identifiers"></a>
+
+# fim.model.identifiers
+
+Shared identifier and frequency parsing for config, state, and row layers.
+
+Regression fix for S5/S6: three call sites parse the same two value
+shapes — an integer-like identifier (an allele or deme ID) and a
+trajectory-row-style probability — and used to do it with three
+independently maintained rules that had already drifted apart once
+(`fim.model.params`'s config parser rejected a truncated float or a
+negative identifier; `fim.model.state.ModelState`'s own constructor and
+`from_rows` did not). One shared rule, used everywhere the same value
+shape is parsed, cannot drift piecemeal the way three copies can.
+
+<a id="fim.model.identifiers.parse_bounded_frequency"></a>
+
+#### parse\_bounded\_frequency
+
+```python
+def parse_bounded_frequency(message: str, raw_value: Any) -> float
+```
+
+Parse one trajectory-row-style probability, strictly within ``(0, 1]``.
+
+This is the row-schema contract used by both `fim.model.state.
+ModelState.from_rows` and `fim.persistence.store.normalize_row`:
+every persisted row is a nonzero frequency (a zero-frequency allele
+is simply never written — see the sparse representation), so unlike
+a config's ``p_0``, which legitimately accepts an explicit ``0.0``
+that is then filtered out, a row's frequency has no zero case to
+accept in the first place.
+
+**Arguments**:
+
+- `message` - The exact error message to raise for any invalid input;
+  callers keep their own wording since the same value shape is
+  parsed in more than one context.
+- `raw_value` - The raw row value to parse.
+
+
+**Returns**:
+
+  The parsed frequency.
+
+
+**Raises**:
+
+- `ValueError` - If `raw_value` is a boolean, not numeric, non-finite,
+  or outside ``(0, 1]``.
+
+<a id="fim.model.identifiers.parse_integer_identifier"></a>
+
+#### parse\_integer\_identifier
+
+```python
+def parse_integer_identifier(message: str, raw_value: Any) -> int
+```
+
+Parse an allele or deme identifier without silently truncating it.
+
+Accepts a native integer or a numeric string (mapping keys are
+always strings under JSON, and often written that way by hand in
+YAML too), so this accepts a native integer or a numeric string in
+addition. It never falls through to plain ``int()`` coercion on a
+float, which truncates a non-integral value (``1.9`` to ``1``)
+instead of rejecting it. Callers that require the result to be
+non-negative (every current one does) check that separately, with
+their own message, since this function alone cannot tell an allele
+ID from a deme ID from the message text.
+
+**Arguments**:
+
+- `message` - The exact error message to raise for any invalid input;
+  callers keep their own wording since the same identifier
+  shape is parsed in more than one context.
+- `raw_value` - The raw mapping key or value to parse.
+
+
+**Returns**:
+
+  The parsed identifier.
+
+
+**Raises**:
+
+- `ValueError` - If ``raw_value`` is a boolean, a non-integral float, a
+  non-numeric string, or any other non-integer type.
 
 <a id="fim.model.initial"></a>
 

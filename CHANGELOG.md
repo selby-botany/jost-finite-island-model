@@ -8,6 +8,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `ModelState`'s own constructor and `ModelState.from_rows` validated
+  allele identity and row frequency more loosely than the config
+  parser and `fim.persistence.store.normalize_row` did for the
+  identical value shapes. `ModelState`'s frequency-map constructor
+  accepted a truncated float allele ID (`1.9` silently becoming `1`)
+  and a negative one; `from_rows` accepted `True` (coerced to `1.0`)
+  and the string `"1"` as a frequency, and enforced no `(0, 1]` bound
+  at all. Added `fim.model.identifiers` with
+  `parse_integer_identifier` (moved from the config parser, unchanged)
+  and `parse_bounded_frequency`, now the single rule used by the
+  config parser, `ModelState`'s constructor, `ModelState.from_rows`,
+  and `fim.persistence.store.normalize_row` — three call sites
+  reading the same two value shapes can no longer drift apart
+  piecemeal the way they already had once.
 - `fim stats --q 1` ignored the run's `deme_weighting`, so one JSON
   report document could state two different values for the same
   concept: its own `E_ST` and `Differentiation_q`'s `"1.0"` entry,

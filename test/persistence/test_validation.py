@@ -45,6 +45,8 @@ def _row(**updates: object) -> dict[str, object]:
         ({"frequency": 0.0}, "frequency must be"),
         ({"frequency": 1.1}, "frequency must be"),
         ({"frequency": float("nan")}, "frequency must be"),
+        ({"frequency": True}, "frequency must be"),
+        ({"frequency": "1"}, "frequency must be"),
     ],
 )
 def test_normalize_row_rejects_invalid_values(

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable, Iterator, Mapping
 from typing import Any, Protocol, TypedDict
+
+from fim.model.identifiers import parse_bounded_frequency
 
 
 class TrajectoryRow(TypedDict):
@@ -114,14 +115,17 @@ def normalize_row(
 
 
 def _frequency_field(row: Mapping[str, Any]) -> float:
-    """Read one positive finite row frequency."""
-    raw_value = row["frequency"]
-    if isinstance(raw_value, bool) or not isinstance(raw_value, int | float):
-        raise ValueError("trajectory row frequency must be numeric")
-    value = float(raw_value)
-    if not math.isfinite(value) or not 0.0 < value <= 1.0:
-        raise ValueError("trajectory row frequency must be in (0, 1]")
-    return value
+    """Read one positive finite row frequency.
+
+    Delegates to `fim.model.identifiers.parse_bounded_frequency`, the
+    same rule `fim.model.state.ModelState.from_rows` uses for the
+    identical row schema (S5/S6) — one shared validator for both
+    readers of one row schema, rather than two independently
+    maintained rules that can silently drift apart.
+    """
+    return parse_bounded_frequency(
+        "trajectory row frequency must be in (0, 1]", row["frequency"]
+    )
 
 
 def _int_field(

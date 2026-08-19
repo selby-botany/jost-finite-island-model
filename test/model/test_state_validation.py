@@ -106,8 +106,8 @@ def test_state_rows_reject_empty_and_incomplete_or_inconsistent_inputs() -> None
         ({"generation": "3"}, "generation.*integer"),
         ({"run_id": ""}, "run_id.*string"),
         ({"run_id": 1}, "run_id.*string"),
-        ({"frequency": math.inf}, "frequency.*finite"),
-        ({"frequency": -math.inf}, "frequency.*finite"),
+        ({"frequency": math.inf}, r"frequency.*must be in \(0, 1\]"),
+        ({"frequency": -math.inf}, r"frequency.*must be in \(0, 1\]"),
     ],
 )
 def test_state_rows_reject_wrong_required_field_types(
