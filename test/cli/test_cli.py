@@ -403,22 +403,115 @@ def test_init_refuses_existing_file_unless_forced(
     assert cli.main(["init", "--output", str(output), "--force"]) == 0
 
 
-def test_run_rejects_replicates_and_existing_artifacts(
+def test_run_scalar_never_overwrites_existing_artifacts(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """CLI runs remain scalar and never overwrite scientific artifacts."""
+    """A scalar run never overwrites a directory already holding artifacts."""
+    config = tmp_path / "run.yaml"
+    _write_config(config)
+    output = tmp_path / "output"
+    output.mkdir()
+    (output / "report.json").write_text("{}", encoding="utf-8")
+
+    assert cli.main(["run", str(config), "-o", str(output)]) == 2
+    assert "already contains" in capsys.readouterr().err
+
+
+def test_run_batch_produces_replicate_and_summary_artifacts(
+    tmp_path: Path,
+) -> None:
+    """`n_replicates > 1` writes one subdirectory per replicate plus a summary."""
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=3)
+    output = tmp_path / "output"
+
+    status = cli.main(
+        ["run", str(config), "-o", str(output), "--sequential", "--quiet"]
+    )
+
+    assert status == 0
+    assert {path.name for path in output.iterdir()} == {
+        "replicate-001",
+        "replicate-002",
+        "replicate-003",
+        "summary.json",
+        "manifest.json",
+    }
+    for replicate in ("replicate-001", "replicate-002", "replicate-003"):
+        assert {path.name for path in (output / replicate).iterdir()} == {
+            "trajectory.jsonl",
+            "manifest.json",
+            "report.json",
+            "scatter.png",
+        }
+    summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+    assert summary["D"]["sample_count"] == 3
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["replicate_count"] == 3
+    assert len(manifest["replicate_run_ids"]) == 3
+
+
+def test_run_batch_defaults_to_parallel_workers(tmp_path: Path) -> None:
+    """Omitting `--sequential`/`--workers` runs the batch through a real pool."""
     config = tmp_path / "run.yaml"
     _write_config(config, n_replicates=2)
     output = tmp_path / "output"
-    assert cli.main(["run", str(config), "-o", str(output)]) == 2
-    assert "n_replicates" in capsys.readouterr().err
 
-    _write_config(config)
+    status = cli.main(["run", str(config), "-o", str(output), "--quiet"])
+
+    assert status == 0
+    assert (output / "replicate-001" / "trajectory.jsonl").exists()
+    assert (output / "replicate-002" / "trajectory.jsonl").exists()
+
+
+def test_run_batch_respects_an_explicit_worker_count(tmp_path: Path) -> None:
+    """`--workers` overrides the default CPU-count worker pool size."""
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=2)
+    output = tmp_path / "output"
+
+    status = cli.main(
+        ["run", str(config), "-o", str(output), "--workers", "1", "--quiet"]
+    )
+
+    assert status == 0
+    assert (output / "replicate-002" / "report.json").exists()
+
+
+def test_run_batch_adaptive_tolerance_can_stop_before_n_replicates(
+    tmp_path: Path,
+) -> None:
+    """A generous `replicate_tolerance` writes fewer than `n_replicates` dirs."""
+    config = tmp_path / "run.yaml"
+    _write_config(
+        config,
+        n_replicates=10,
+        replicate_minimum=2,
+        replicate_tolerance=1000.0,
+    )
+    output = tmp_path / "output"
+
+    status = cli.main(
+        ["run", str(config), "-o", str(output), "--sequential", "--quiet"]
+    )
+
+    assert status == 0
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["replicate_count"] == 2
+
+
+def test_run_batch_rejects_a_nonempty_output_directory(tmp_path: Path) -> None:
+    """A batch run never writes into an already-populated directory."""
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=2)
+    output = tmp_path / "output"
     output.mkdir()
-    (output / "report.json").write_text("{}", encoding="utf-8")
-    assert cli.main(["run", str(config), "-o", str(output)]) == 2
-    assert "already contains" in capsys.readouterr().err
+    (output / "stray-file").write_text("", encoding="utf-8")
+
+    status = cli.main(["run", str(config), "-o", str(output), "--quiet"])
+
+    assert status == 2
 
 
 def test_run_progress_output_describes_result(

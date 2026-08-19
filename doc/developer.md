@@ -20,8 +20,8 @@ use the [generated API reference](../src/fim/API.md) for exact signatures.
 | Package | Responsibility |
 |---|---|
 | `fim.model` | Allele/locus/state values, parameter validation, initialization, update operators |
-| `fim.statistics` | Pure diversity and differentiation functions |
-| `fim.convergence` | Trailing-window criterion and hard-cap monitor |
+| `fim.statistics` | Pure diversity/differentiation functions, and across-replicate confidence intervals |
+| `fim.convergence` | Trailing-window and confidence-interval criteria, and the hard-cap monitor |
 | `fim.persistence` | Store protocol, JSON Lines backend, replayable manifest |
 | `fim.engine` | Public run loop and final report assembly |
 | `fim.viz` | Headless scatter and diagnostic plots |
@@ -99,6 +99,11 @@ deme/locus.
 - Preserve first-observed allele order; ordering has no biological meaning but
   stable iteration keeps byte output reproducible.
 - Keep timestamps in manifest metadata and default directory names only.
+- A replicate batch's `seed + i` derivation, and each replicate's own PCG64
+  generator, are unaffected by execution order or worker count: opt-in
+  parallel replicate execution (`fim`'s `max_workers`) runs each replicate
+  in its own worker process, computes exactly the same result as running it
+  alone, and only its own `RunResult`'s wall-clock timestamps can vary.
 
 Tests use a derandomized Hypothesis profile and literal PCG64 seeds. Statistical
 tolerances are derived from sample size before a seed is selected.
@@ -113,6 +118,14 @@ tolerances are derived from sample size before a seed is selected.
 Add a new backend under `fim.persistence` without changing the engine,
 statistics, or visualizations. The v1 JSON Lines backend flushes each
 generation so an interrupted file retains every complete line.
+
+A replicate batch needs one store *per replicate*, not one shared instance —
+mandatory once `max_workers` is set, since a single store object cannot
+cross a worker-process boundary. `fim`'s `store_factory` builds one given a
+replicate's `run_id`; it must itself be picklable under `max_workers` (a
+module-level function, or `functools.partial` over one — never a closure or
+lambda), which is exactly how the CLI wires each replicate to its own real
+`replicate-NNN/trajectory.jsonl`.
 
 Statistics are computed per locus, then arithmetic-mean aggregated in the final
 report. Keep locus-specific analysis in pure statistics functions rather than
@@ -132,6 +145,8 @@ adding engine state.
 | Selection | Add a pure `select` operator before drift |
 | Stepwise (distance-based) mutation, e.g. for microsatellites | Add a strategy behind mutation identity assignment — a different, still-unbuilt model from the row above (§3.2 of the design doc explains why) |
 | Several convergence statistics | Pass a list for `convergence_statistic` plus `convergence_combinator` |
+| How many replicate runs give a confidence interval | `replicate_tolerance` stops a batch once every watched statistic's across-replicate CI tightens to it, instead of a hand-guessed `n_replicates`; `fim.engine.replicate_summary` / the CLI's `summary.json` report the realized interval |
+| Faster replicate batches | `max_workers` (library) / `--workers`, `--sequential` (CLI): one worker process per replicate batch-slot, opt-in, changes nothing about what is computed |
 | Large trajectories | Implement another `TrajectoryStore` |
 | GUI | Call `fim.engine.fim`; do not duplicate model logic |
 

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from fim.engine import FinalReport, RunResult, fim, report_for_state
+from fim.engine import FinalReport, RunResult, fim, replicate_summary, report_for_state
 from fim.model.allele import MINTED_ID_START, AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import ConvergenceCombinator, SimulationParams
@@ -15,6 +15,26 @@ from fim.persistence.store import InMemoryTrajectoryStore
 def _clock() -> datetime:
     """Return a fixed manifest timestamp."""
     return datetime(2026, 8, 14, 20, 0, tzinfo=UTC)
+
+
+def _tiny_config() -> dict[str, object]:
+    """Return the `tiny_params` fixture's configuration as a plain mapping.
+
+    For tests that construct several batch variants and would otherwise
+    need to re-derive `tiny_params.to_dict()` from an injected fixture
+    argument they don't otherwise use.
+    """
+    return {
+        "N": 20,
+        "m": 0.1,
+        "mu": 0.01,
+        "d": 2,
+        "seed": 20260814,
+        "loci": [{"locus_id": 1, "length": 200}],
+        "convergence_window": 4,
+        "convergence_tolerance": 1.0,
+        "max_generations": 10,
+    }
 
 
 def _run(params: SimulationParams) -> RunResult:
@@ -145,6 +165,220 @@ def test_batch_run_uses_explicit_run_id_suffixes(
     )
     assert isinstance(output, tuple)
     assert [result.run_id for result in output] == ["batch-r001", "batch-r002"]
+
+
+def test_replicate_tolerance_unset_is_unaffected_by_the_adaptive_machinery(
+    tiny_params: SimulationParams,
+) -> None:
+    """Omitting `replicate_tolerance` keeps the fixed-count batch loop exact."""
+    params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 4})
+    assert params.replicate_tolerance is None
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+    assert len(output) == 4
+
+
+def test_replicate_tolerance_can_stop_before_the_cap() -> None:
+    """A generous tolerance stops as soon as `replicate_minimum` is reached."""
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 10,
+            "replicate_minimum": 3,
+            # Any statistic this project reports is bounded in [0, 1], so a
+            # tolerance this large is always satisfied once the minimum
+            # sample is available — the stop is deterministic, not lucky.
+            "replicate_tolerance": 1000.0,
+        }
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+    assert len(output) == 3
+
+
+def test_replicate_tolerance_falls_back_to_the_n_replicates_cap() -> None:
+    """An unreachable `replicate_minimum` always falls back to the hard cap."""
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 3,
+            "replicate_minimum": 100,
+            "replicate_tolerance": 0.0,
+        }
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+    assert len(output) == 3
+
+
+def test_replicate_tolerance_uses_the_generation_layer_g_st_substitution() -> None:
+    """Undefined `G_ST` is substituted for the stop decision, not the report."""
+    params = SimulationParams(
+        N=10,
+        m=0.0,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=(LocusSpec(1, 100),),
+        convergence_statistic="G_ST",
+        convergence_window=2,
+        convergence_tolerance=0.0,
+        max_generations=2,
+        n_replicates=5,
+        replicate_minimum=2,
+        replicate_tolerance=0.0,
+        initial_frequencies=(
+            ({AlleleId(0): 1.0},),
+            ({AlleleId(0): 1.0},),
+        ),
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+    assert len(output) == 2
+    assert all(result.report["G_ST"] is None for result in output)
+    assert "G_ST" not in replicate_summary(output)
+
+
+def test_replicate_summary_reports_a_confidence_interval_per_statistic(
+    tiny_params: SimulationParams,
+) -> None:
+    """The batch summary covers every statistic with at least two samples."""
+    params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+
+    summary = replicate_summary(output)
+
+    assert set(summary) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
+    assert summary["D"]["sample_count"] == 5
+    assert summary["D"]["low"] <= summary["D"]["mean"] <= summary["D"]["high"]
+    assert summary["D"]["confidence"] == 0.95
+
+
+def test_max_workers_produces_the_same_replicates_as_sequential_execution() -> None:
+    """Parallel batching changes nothing about the computed results."""
+    params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 4})
+
+    sequential = fim(params.N, params.m, params.mu, params.d, params=params)
+    parallel = fim(
+        params.N, params.m, params.mu, params.d, params=params, max_workers=2
+    )
+
+    assert isinstance(sequential, tuple)
+    assert isinstance(parallel, tuple)
+    assert len(sequential) == len(parallel) == 4
+    for sequential_result, parallel_result in zip(sequential, parallel, strict=True):
+        assert sequential_result.final_state == parallel_result.final_state
+        assert sequential_result.report == parallel_result.report
+        assert sequential_result.run_id == parallel_result.run_id
+
+
+def test_store_factory_gives_every_sequential_replicate_its_own_store() -> None:
+    """`store_factory` also works for the ordinary sequential batch loop."""
+    params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
+    output = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        store_factory=_in_memory_store_factory,
+    )
+    assert isinstance(output, tuple)
+    assert output[0].store is not output[1].store
+
+
+def test_store_and_store_factory_are_mutually_exclusive(
+    tiny_params: SimulationParams,
+) -> None:
+    """Only one trajectory-store strategy may be given at a time."""
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        fim(
+            tiny_params.N,
+            tiny_params.m,
+            tiny_params.mu,
+            tiny_params.d,
+            params=tiny_params,
+            store=InMemoryTrajectoryStore(),
+            store_factory=_in_memory_store_factory,
+        )
+
+
+def test_max_workers_rejects_a_shared_store() -> None:
+    """A single store instance cannot cross worker-process boundaries."""
+    params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
+    with pytest.raises(ValueError, match="max_workers requires store=None"):
+        fim(
+            params.N,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            store=InMemoryTrajectoryStore(),
+            max_workers=2,
+        )
+
+
+def test_max_workers_rejects_a_non_positive_count() -> None:
+    """`max_workers` must name at least one worker."""
+    params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
+    with pytest.raises(ValueError, match="max_workers must be at least 1"):
+        fim(params.N, params.m, params.mu, params.d, params=params, max_workers=0)
+
+
+def test_max_workers_respects_adaptive_stopping_in_batches() -> None:
+    """Batched parallel replicates still honor `replicate_tolerance`.
+
+    A batch can overshoot the exact minimal replicate count by at most
+    ``max_workers - 1``, since the stopping decision is only applied once
+    a whole concurrent batch has completed.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 10,
+            "replicate_minimum": 3,
+            "replicate_tolerance": 1000.0,
+        }
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, max_workers=2)
+    assert isinstance(output, tuple)
+    assert 3 <= len(output) <= 4
+
+
+def _in_memory_store_factory(run_id: str) -> InMemoryTrajectoryStore:
+    """Module-level `store_factory` — a worker process must be able to
+    pickle a reference to it, which a closure or lambda cannot survive."""
+    del run_id  # unused; signature-compatible with `fim`'s `store_factory`
+    return InMemoryTrajectoryStore()
+
+
+def test_max_workers_uses_store_factory_per_replicate() -> None:
+    """Each worker gets its own store, built by `store_factory` in-process."""
+    params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
+    output = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        max_workers=2,
+        store_factory=_in_memory_store_factory,
+    )
+    assert isinstance(output, tuple)
+    assert output[0].store is not output[1].store
+    assert list(output[0].store.read(output[0].run_id))
+    assert list(output[1].store.read(output[1].run_id))
+
+
+def test_replicate_summary_requires_at_least_two_results(
+    tiny_params: SimulationParams,
+) -> None:
+    """A single result has no interval to compute."""
+    with pytest.raises(ValueError, match="at least two"):
+        replicate_summary(())
+    with pytest.raises(ValueError, match="at least two"):
+        replicate_summary((_run(tiny_params),))
 
 
 def test_naive_manifest_clock_is_rejected(tiny_params: SimulationParams) -> None:

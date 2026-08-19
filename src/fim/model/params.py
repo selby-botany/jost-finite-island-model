@@ -39,6 +39,8 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "convergence_tolerance": 0.01,
     "max_generations": 10_000,
     "n_replicates": 1,
+    "replicate_minimum": 10,
+    "replicate_confidence": 0.95,
     "migrant_sampling": "continuous",
     "mutation_model": "infinite_alleles",
 }
@@ -63,6 +65,9 @@ _CONFIG_KEYS: Final = frozenset(
         "convergence_tolerance",
         "max_generations",
         "n_replicates",
+        "replicate_tolerance",
+        "replicate_minimum",
+        "replicate_confidence",
         "migrant_sampling",
         "mutation_model",
         "p_0",
@@ -97,7 +102,27 @@ class SimulationParams:
         convergence_window: Trailing stability-window length.
         convergence_tolerance: Maximum half-window mean difference.
         max_generations: Hard generation safety cap.
-        n_replicates: Number of independently seeded runs.
+        n_replicates: Number of independently seeded runs. With
+            `replicate_tolerance` unset (the default), exactly this many
+            run. With `replicate_tolerance` set, this is instead the hard
+            replicate-count cap — see `replicate_tolerance`.
+        replicate_tolerance: Opt-in early-stopping half-width, in the same
+            units as each watched `convergence_statistic`. ``None`` (the
+            default) preserves prior behavior exactly: `n_replicates`
+            always runs in full. Set to a number to stop once every
+            watched statistic's across-replicate Student's-t confidence
+            interval has tightened to at most this half-width (per
+            `convergence_combinator`, exactly like within-run
+            convergence), or `n_replicates` is reached, whichever comes
+            first.
+        replicate_minimum: Fewest replicates before tightness is even
+            checked, guarding against a lucky-early-tight fluke — the
+            replicate-layer analog of `convergence_window`. Only
+            meaningful when `replicate_tolerance` is set.
+        replicate_confidence: Two-tailed confidence level for
+            `replicate_tolerance`'s interval — ``0.90``, ``0.95`` (the
+            default), or ``0.99``. Only meaningful when
+            `replicate_tolerance` is set.
         migrant_sampling: How many gene copies migrate each generation —
             "continuous" (default), the exact ``rate * N`` fraction used by
             every prior release, or the opt-in "stochastic", which draws a
@@ -130,6 +155,9 @@ class SimulationParams:
     convergence_tolerance: float = 0.01
     max_generations: int = 10_000
     n_replicates: int = 1
+    replicate_tolerance: float | None = None
+    replicate_minimum: int = 10
+    replicate_confidence: float = 0.95
     migrant_sampling: MigrantSampling = "continuous"
     mutation_model: MutationModel = "infinite_alleles"
     initial_frequencies: InitialFrequencies | None = None
@@ -183,6 +211,14 @@ class SimulationParams:
             minimum=1,
         )
         _require_integer("n_replicates", self.n_replicates, minimum=1)
+        if self.replicate_tolerance is not None and (
+            not math.isfinite(self.replicate_tolerance)
+            or self.replicate_tolerance < 0.0
+        ):
+            raise ValueError("replicate_tolerance must be finite and non-negative")
+        _require_integer("replicate_minimum", self.replicate_minimum, minimum=2)
+        if self.replicate_confidence not in {0.90, 0.95, 0.99}:
+            raise ValueError("replicate_confidence must be 0.90, 0.95, or 0.99")
         if self.migrant_sampling not in {"continuous", "stochastic"}:
             raise ValueError("migrant_sampling must be 'continuous' or 'stochastic'")
         if self.mutation_model not in {"infinite_alleles", "finite_alleles"}:
@@ -284,9 +320,13 @@ class SimulationParams:
             "convergence_tolerance": self.convergence_tolerance,
             "max_generations": self.max_generations,
             "n_replicates": self.n_replicates,
+            "replicate_minimum": self.replicate_minimum,
+            "replicate_confidence": self.replicate_confidence,
             "migrant_sampling": self.migrant_sampling,
             "mutation_model": self.mutation_model,
         }
+        if self.replicate_tolerance is not None:
+            result["replicate_tolerance"] = self.replicate_tolerance
         if self.initial_frequencies is not None:
             result["p_0"] = [
                 [
@@ -390,6 +430,24 @@ class SimulationParams:
                 config.get(
                     "n_replicates",
                     PARAMETER_DEFAULTS["n_replicates"],
+                ),
+            ),
+            replicate_tolerance=_parse_optional_float(
+                "replicate_tolerance",
+                config.get("replicate_tolerance"),
+            ),
+            replicate_minimum=_parse_int(
+                "replicate_minimum",
+                config.get(
+                    "replicate_minimum",
+                    PARAMETER_DEFAULTS["replicate_minimum"],
+                ),
+            ),
+            replicate_confidence=_parse_float(
+                "replicate_confidence",
+                config.get(
+                    "replicate_confidence",
+                    PARAMETER_DEFAULTS["replicate_confidence"],
                 ),
             ),
             migrant_sampling=_parse_migrant_sampling(
@@ -813,6 +871,13 @@ def _parse_mutation_rate(value: Any) -> MutationRate:
     if not isinstance(value, Sequence) or isinstance(value, str):
         raise ValueError("mu must be a number or a list of numbers")
     return tuple(_parse_float(f"mu[{index}]", item) for index, item in enumerate(value))
+
+
+def _parse_optional_float(name: str, value: Any) -> float | None:
+    """Parse a finite config float, or ``None`` when the key is absent."""
+    if value is None:
+        return None
+    return _parse_float(name, value)
 
 
 def _parse_population_size(value: Any) -> PopulationSize:

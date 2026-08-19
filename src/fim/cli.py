@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
+import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -16,7 +18,13 @@ import yaml
 from matplotlib import pyplot as plt
 
 from fim import __version__
-from fim.engine import RunResult, deterministic_run_id, fim, report_for_state
+from fim.engine import (
+    RunResult,
+    deterministic_run_id,
+    fim,
+    replicate_summary,
+    report_for_state,
+)
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
@@ -111,24 +119,26 @@ def _command_init(arguments: argparse.Namespace) -> int:
 
 
 def _command_run(arguments: argparse.Namespace) -> int:
-    """Execute one config and write the four documented artifacts."""
+    """Execute one config and write its documented artifacts."""
     params = load_config(arguments.config)
-    if params.n_replicates != 1:
-        raise ValueError(
-            "CLI runs require n_replicates: 1; use fim.engine.fim for batches"
-        )
     output_directory = (
         Path(arguments.output)
         if arguments.output is not None
         else _default_output_directory()
     )
+    if params.n_replicates == 1:
+        return _command_run_scalar(params, output_directory, arguments.quiet)
+    return _command_run_batch(params, output_directory, arguments)
+
+
+def _command_run_scalar(
+    params: SimulationParams,
+    output_directory: Path,
+    quiet: bool,
+) -> int:
+    """Execute one scalar run and write the four documented artifacts."""
     output_directory.mkdir(parents=True, exist_ok=True)
-    targets = {
-        "trajectory": output_directory / "trajectory.jsonl",
-        "manifest": output_directory / "manifest.json",
-        "report": output_directory / "report.json",
-        "scatter": output_directory / "scatter.png",
-    }
+    targets = _run_artifact_targets(output_directory)
     existing = [path for path in targets.values() if path.exists()]
     if existing:
         names = ", ".join(path.name for path in existing)
@@ -136,7 +146,7 @@ def _command_run(arguments: argparse.Namespace) -> int:
 
     run_id = deterministic_run_id(params)
     store = JSONLTrajectoryStore(targets["trajectory"])
-    if not arguments.quiet:
+    if not quiet:
         print(
             f"Running {run_id} "
             f"(N={params.N}, d={params.d}, m={params.m}, "
@@ -154,15 +164,8 @@ def _command_run(arguments: argparse.Namespace) -> int:
     if not isinstance(output, RunResult):
         raise RuntimeError("scalar CLI run unexpectedly returned a batch")
 
-    write_manifest(targets["manifest"], output.manifest)
-    _write_json(targets["report"], output.report)
-    figure = plot_frequency_scatter(
-        output.final_state,
-        params,
-        targets["scatter"],
-    )
-    plt.close(figure)
-    if not arguments.quiet:
+    _write_run_artifacts(output, output_directory)
+    if not quiet:
         print(
             f"{output.report['reason'].capitalize()}: generation "
             f"{output.report['generation']}, D={output.report['D']:.6g}, "
@@ -170,6 +173,75 @@ def _command_run(arguments: argparse.Namespace) -> int:
         )
         for label, path in targets.items():
             print(f"{label.capitalize():10} -> {path}")
+    return 0
+
+
+def _command_run_batch(
+    params: SimulationParams,
+    output_directory: Path,
+    arguments: argparse.Namespace,
+) -> int:
+    """Execute a multi-replicate batch and write its documented artifacts.
+
+    Each replicate gets its own subdirectory keeping the exact four-file
+    scalar-run contract; a batch-level ``manifest.json`` and
+    ``summary.json`` (each watched statistic's across-replicate
+    confidence interval, from `fim.engine.replicate_summary`) sit
+    alongside them.
+    """
+    if output_directory.exists() and any(output_directory.iterdir()):
+        raise ValueError(f"output directory is not empty: {output_directory}")
+    output_directory.mkdir(parents=True, exist_ok=True)
+
+    run_id = deterministic_run_id(params)
+    max_workers = None if arguments.sequential else arguments.workers or _cpu_count()
+    if not arguments.quiet:
+        print(f"Running batch {run_id} {_batch_description(params, max_workers)}")
+
+    started_at = _format_timestamp(_utc_now())
+    output = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        run_id=run_id,
+        max_workers=max_workers,
+        store_factory=functools.partial(
+            _replicate_store_factory, output_directory, run_id
+        ),
+    )
+    if not isinstance(output, tuple):
+        raise RuntimeError("batch CLI run unexpectedly returned a scalar result")
+    ended_at = _format_timestamp(_utc_now())
+
+    replicate_directories = []
+    for result in output:
+        directory = _replicate_output_directory(output_directory, run_id, result.run_id)
+        _write_run_artifacts(result, directory)
+        replicate_directories.append(directory)
+    summary_path = output_directory / "summary.json"
+    manifest_path = output_directory / "manifest.json"
+    _write_json(summary_path, replicate_summary(output))
+    _write_json(
+        manifest_path,
+        {
+            "run_id": run_id,
+            "replicate_run_ids": [result.run_id for result in output],
+            "replicate_count": len(output),
+            "parameters": params.to_dict(),
+            "started_at": started_at,
+            "ended_at": ended_at,
+            "software_version": __version__,
+        },
+    )
+
+    if not arguments.quiet:
+        print(f"Completed {len(output)} replicate(s)")
+        for directory in replicate_directories:
+            print(f"Replicate  -> {directory}")
+        print(f"Summary    -> {summary_path}")
+        print(f"Manifest   -> {manifest_path}")
     return 0
 
 
@@ -245,10 +317,101 @@ def _compare_versions(current: str, latest: str) -> int:
     return (current_parts > latest_parts) - (current_parts < latest_parts)
 
 
+def _batch_description(params: SimulationParams, max_workers: int | None) -> str:
+    """Return the batch-run progress line's parameter summary."""
+    adaptive = (
+        f", replicate_tolerance={params.replicate_tolerance}"
+        if params.replicate_tolerance is not None
+        else ""
+    )
+    workers = "sequential" if max_workers is None else f"{max_workers} workers"
+    return (
+        f"(N={params.N}, d={params.d}, m={params.m}, mu={params.mu}, "
+        f"seed={params.seed}, n_replicates={params.n_replicates}{adaptive}) "
+        f"[{workers}]"
+    )
+
+
+def _cpu_count() -> int:
+    """Return the default parallel worker count for a CLI batch run."""
+    return os.cpu_count() or 1
+
+
 def _default_output_directory() -> Path:
     """Return a timestamped output folder without affecting run data."""
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return _results_directory() / f"run-{stamp}"
+
+
+def _format_timestamp(value: datetime) -> str:
+    """Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`."""
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _replicate_output_directory(
+    base: Path,
+    batch_run_id: str,
+    replicate_run_id: str,
+) -> Path:
+    """Return one replicate's own artifact subdirectory.
+
+    `replicate_run_id` is always exactly ``f"{batch_run_id}-r{index:03}"``
+    (`fim.engine.fim`'s own batch run-ID convention), so the zero-padded
+    index is recovered from it directly rather than threaded through as a
+    separate argument.
+    """
+    suffix = replicate_run_id.removeprefix(f"{batch_run_id}-r")
+    return base / f"replicate-{suffix}"
+
+
+def _replicate_store_factory(
+    output_directory: Path,
+    batch_run_id: str,
+    replicate_run_id: str,
+) -> JSONLTrajectoryStore:
+    """Build one replicate's real on-disk trajectory store.
+
+    Module-level, closed over only via `functools.partial` (never a
+    closure or lambda), so a parallel `max_workers` worker process can
+    pickle a reference to it.
+    """
+    directory = _replicate_output_directory(
+        output_directory, batch_run_id, replicate_run_id
+    )
+    directory.mkdir(parents=True, exist_ok=True)
+    return JSONLTrajectoryStore(directory / "trajectory.jsonl")
+
+
+def _run_artifact_targets(directory: Path) -> dict[str, Path]:
+    """Return the four documented scalar-run artifact paths in one directory."""
+    return {
+        "trajectory": directory / "trajectory.jsonl",
+        "manifest": directory / "manifest.json",
+        "report": directory / "report.json",
+        "scatter": directory / "scatter.png",
+    }
+
+
+def _utc_now() -> datetime:
+    """Return the current UTC time for batch-manifest timestamps only."""
+    return datetime.now(UTC)
+
+
+def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
+    """Write one run's manifest, report, and scatter plot.
+
+    ``trajectory.jsonl`` is not written here: it is streamed
+    generation-by-generation by the `TrajectoryStore` already passed
+    into `fim`, so it exists before this function ever runs.
+    """
+    targets = _run_artifact_targets(directory)
+    write_manifest(targets["manifest"], result.manifest)
+    _write_json(targets["report"], result.report)
+    figure = plot_frequency_scatter(
+        result.final_state, result.params, targets["scatter"]
+    )
+    plt.close(figure)
+    return targets
 
 
 def _project_root() -> Path:
@@ -364,6 +527,20 @@ def _parser() -> argparse.ArgumentParser:
         "--quiet",
         action="store_true",
         help="suppress progress and artifact messages",
+    )
+    run_parser.add_argument(
+        "--workers",
+        type=int,
+        metavar="N",
+        help=(
+            "batch (n_replicates > 1) worker-process count "
+            "(default: the CPU count; ignored for a scalar run)"
+        ),
+    )
+    run_parser.add_argument(
+        "--sequential",
+        action="store_true",
+        help="run a batch's replicates one at a time instead of in parallel",
     )
 
     stats_parser = subcommands.add_parser(

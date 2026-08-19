@@ -18,6 +18,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [TrailingWindowCriterion](#fim.convergence.criteria.TrailingWindowCriterion)
     * [\_\_post\_init\_\_](#fim.convergence.criteria.TrailingWindowCriterion.__post_init__)
     * [is\_stable](#fim.convergence.criteria.TrailingWindowCriterion.is_stable)
+  * [ConfidenceIntervalCriterion](#fim.convergence.criteria.ConfidenceIntervalCriterion)
+    * [\_\_post\_init\_\_](#fim.convergence.criteria.ConfidenceIntervalCriterion.__post_init__)
+    * [is\_stable](#fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable)
   * [AnyCriterion](#fim.convergence.criteria.AnyCriterion)
     * [\_\_post\_init\_\_](#fim.convergence.criteria.AnyCriterion.__post_init__)
     * [is\_stable](#fim.convergence.criteria.AnyCriterion.is_stable)
@@ -42,6 +45,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [fim](#fim.engine.fim)
   * [deterministic\_run\_id](#fim.engine.deterministic_run_id)
   * [report\_for\_state](#fim.engine.report_for_state)
+  * [replicate\_summary](#fim.engine.replicate_summary)
 * [fim.model](#fim.model)
 * [fim.model.allele](#fim.model.allele)
   * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
@@ -136,6 +140,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [equilibrium\_d](#fim.statistics.differentiation.equilibrium_d)
   * [equilibrium\_g\_st](#fim.statistics.differentiation.equilibrium_g_st)
   * [statistics\_report](#fim.statistics.differentiation.statistics_report)
+* [fim.statistics.interval](#fim.statistics.interval)
+  * [ConfidenceInterval](#fim.statistics.interval.ConfidenceInterval)
+  * [confidence\_interval](#fim.statistics.interval.confidence_interval)
+  * [student\_t\_critical\_value](#fim.statistics.interval.student_t_critical_value)
 * [fim.viz](#fim.viz)
 * [fim.viz.diagnostics](#fim.viz.diagnostics)
   * [plot\_convergence\_trace](#fim.viz.diagnostics.plot_convergence_trace)
@@ -277,6 +285,49 @@ def is_stable(history: Sequence[float]) -> bool
 ```
 
 Return whether the configured trailing window is stable.
+
+<a id="fim.convergence.criteria.ConfidenceIntervalCriterion"></a>
+
+## ConfidenceIntervalCriterion Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ConfidenceIntervalCriterion()
+```
+
+Detect a tight-enough confidence interval on a growing sample.
+
+Unlike `TrailingWindowCriterion`, which compares two halves of a
+trailing window of near-instantaneous values, this criterion treats
+the *entire* supplied history as one growing i.i.d. sample — each
+entry is one independently seeded replicate run's own final scalar
+outcome — and asks whether that sample's Student's-t confidence
+interval has tightened to at most `tolerance`, an absolute
+half-width in the same units as the watched statistic, exactly like
+`TrailingWindowCriterion.tolerance`. `minimum_count` guards against a
+lucky-early-tight fluke the same way `TrailingWindowCriterion.window`
+guards a single-generation coincidence: stability is never declared
+from fewer than `minimum_count` observations.
+
+<a id="fim.convergence.criteria.ConfidenceIntervalCriterion.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Validate criterion configuration on construction.
+
+<a id="fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable"></a>
+
+#### is\_stable
+
+```python
+def is_stable(history: Sequence[float]) -> bool
+```
+
+Return whether the sample's confidence interval is tight enough.
 
 <a id="fim.convergence.criteria.AnyCriterion"></a>
 
@@ -546,15 +597,19 @@ Return the terminal state, report, convergence trace, and manifest.
 #### fim
 
 ```python
-def fim(N: PopulationSize,
-        m: Migration,
-        mu: MutationRate,
-        d: int,
-        *,
-        params: SimulationParams,
-        store: TrajectoryStore | None = None,
-        run_id: str | None = None,
-        clock: Clock | None = None) -> SimulationOutput
+def fim(
+    N: PopulationSize,
+    m: Migration,
+    mu: MutationRate,
+    d: int,
+    *,
+    params: SimulationParams,
+    store: TrajectoryStore | None = None,
+    run_id: str | None = None,
+    clock: Clock | None = None,
+    max_workers: int | None = None,
+    store_factory: Callable[[str], TrajectoryStore] | None = None
+) -> SimulationOutput
 ```
 
 Run the finite island model until convergence or the hard cap.
@@ -566,19 +621,55 @@ Run the finite island model until convergence or the hard cap.
 - `mu` - Mutation probability, repeated from ``params``.
 - `d` - Deme count, repeated from ``params``.
 - `params` - Full validated run configuration and open parameter bag.
-- `store` - Optional trajectory backend. Memory storage is the library default.
+- `store` - Optional trajectory backend, shared by every replicate.
+  Memory storage is the library default. Mutually exclusive with
+  `store_factory`, and must be ``None`` whenever `max_workers`
+  is set — a single store instance cannot safely be shared
+  across worker processes; use `store_factory` instead.
 - `run_id` - Optional stable run identifier.
-- `clock` - Injectable UTC clock used only for manifest timestamps.
+- `clock` - Injectable UTC clock used only for manifest timestamps. Under
+  `max_workers`, it crosses a process boundary and so must be
+  picklable — a module-level function, not a closure or lambda.
+- `max_workers` - Opt-in replicate-batch parallelism. ``None`` (the
+  default) preserves the exact prior sequential loop. Set to run
+  replicates in batches of up to this many concurrent worker
+  processes — real OS processes, not threads, since this
+  project's per-generation state is Python-object sparse maps
+  that do not release the GIL. An adaptive `replicate_tolerance`
+  stop is still checked strictly in ascending replicate order
+  after each whole batch completes, so a batch can overshoot the
+  exact minimal replicate count by at most ``max_workers - 1``.
+- `store_factory` - Builds one fresh trajectory store per replicate,
+  given that replicate's `run_id`. Meaningful for any batch
+  (``n_replicates`` greater than one) — sequential or parallel
+  — wherever every replicate needs its own store rather than
+  one shared instance; required in practice under
+  `max_workers`, where a worker process cannot share the
+  parent's `store`. Must itself be picklable (a module-level
+  function, or `functools.partial` over one) whenever
+  `max_workers` is set. ``None`` (the default) falls back to
+  `store` (or a private `InMemoryTrajectoryStore` if that is
+  also unset).
 
 
 **Returns**:
 
-  One result, or one independently seeded result per configured replicate.
+  One result, or one independently seeded result per replicate.
+  With `SimulationParams.replicate_tolerance` unset (the default),
+  exactly `n_replicates` replicates run, exactly as in every prior
+  release. With it set, replicates stop accumulating as soon as
+  every watched statistic's across-replicate confidence interval
+  tightens to at most `replicate_tolerance` (see
+  `replicate_summary`), or `n_replicates` is reached, whichever
+  comes first — so the returned tuple can be shorter than
+  `n_replicates`.
 
 
 **Raises**:
 
-- `ValueError` - If the named arguments disagree with ``params``.
+- `ValueError` - If the named arguments disagree with ``params``,
+  `store` and `store_factory` are both given, or `max_workers`
+  is combined with a non-``None`` `store`.
 
 <a id="fim.engine.deterministic_run_id"></a>
 
@@ -613,6 +704,51 @@ Compute the final report independently of the run loop.
 **Returns**:
 
   Run metadata plus named scalar statistics averaged across loci.
+
+<a id="fim.engine.replicate_summary"></a>
+
+#### replicate\_summary
+
+```python
+def replicate_summary(
+        results: Sequence[RunResult],
+        *,
+        confidence: float = 0.95) -> dict[str, ConfidenceInterval]
+```
+
+Return each reported statistic's across-replicate confidence interval.
+
+Each replicate is an independent draw of its own final ``D``, ``G_ST``,
+and so on; this is a closed-form Student's-t interval on the sample
+mean of those draws (`fim.statistics.interval.confidence_interval`),
+not a resampling scheme — the replicates are already independent by
+construction, so nothing further is needed to treat them as a sample.
+
+**Arguments**:
+
+- `results` - Two or more independently seeded replicate results, as
+  returned by `fim` when `SimulationParams.n_replicates` is
+  greater than one.
+- `confidence` - Two-tailed confidence level; see
+  `fim.statistics.interval.confidence_interval`.
+
+
+**Returns**:
+
+  One `ConfidenceInterval` per statistic name in `FinalReport`
+  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``).
+  ``G_ST`` is undefined for a replicate whose locus is monomorphic
+  across every deme (``H_T == 0``); such replicates are dropped
+  from ``G_ST``'s own sample rather than papered over with a
+  substitute value, so its `ConfidenceInterval.sample_count` can be
+  smaller than the other statistics' — and a statistic left with
+  fewer than two defined replicates is omitted entirely rather
+  than raising, since a single point has no interval.
+
+
+**Raises**:
+
+- `ValueError` - If fewer than two results are supplied.
 
 <a id="fim.model"></a>
 
@@ -1177,7 +1313,27 @@ Store all values needed to reproduce a finite-island-model run.
 - `convergence_window` - Trailing stability-window length.
 - `convergence_tolerance` - Maximum half-window mean difference.
 - `max_generations` - Hard generation safety cap.
-- `n_replicates` - Number of independently seeded runs.
+- `n_replicates` - Number of independently seeded runs. With
+  `replicate_tolerance` unset (the default), exactly this many
+  run. With `replicate_tolerance` set, this is instead the hard
+  replicate-count cap — see `replicate_tolerance`.
+- `replicate_tolerance` - Opt-in early-stopping half-width, in the same
+  units as each watched `convergence_statistic`. ``None`` (the
+  default) preserves prior behavior exactly: `n_replicates`
+  always runs in full. Set to a number to stop once every
+  watched statistic's across-replicate Student's-t confidence
+  interval has tightened to at most this half-width (per
+  `convergence_combinator`, exactly like within-run
+  convergence), or `n_replicates` is reached, whichever comes
+  first.
+- `replicate_minimum` - Fewest replicates before tightness is even
+  checked, guarding against a lucky-early-tight fluke — the
+  replicate-layer analog of `convergence_window`. Only
+  meaningful when `replicate_tolerance` is set.
+- `replicate_confidence` - Two-tailed confidence level for
+  `replicate_tolerance`'s interval — ``0.90``, ``0.95`` (the
+  default), or ``0.99``. Only meaningful when
+  `replicate_tolerance` is set.
 - `migrant_sampling` - How many gene copies migrate each generation —
   "continuous" (default), the exact ``rate * N`` fraction used by
   every prior release, or the opt-in "stochastic", which draws a
@@ -2003,6 +2159,100 @@ Return the scalar statistics block consumed by an engine report.
 deme weighting as specified by their definitions. ``deme_weights`` is
 applied only to ``E_ST``; pass relative deme sizes to request its native
 size-weighted form.
+
+<a id="fim.statistics.interval"></a>
+
+# fim.statistics.interval
+
+Confidence intervals for across-replicate sample means.
+
+Each independently seeded replicate run contributes one scalar draw (its
+own final ``D``, ``G_ST``, and so on); the confidence interval of the mean
+of several such draws is a standard Student's-t interval on the sample
+mean, exactly as for any other independent, identically distributed
+sample — no bootstrap or other resampling scheme is needed on top of
+draws that are already independent by construction.
+
+The critical value comes from a standard published Student's-t table
+(linear interpolation in ``1/df`` between listed degrees of freedom, the
+conventional way to read an unlisted row off a printed table) rather than
+an inverse regularized-incomplete-beta computation: every tabled degrees
+of freedom below 120 matches a printed statistics table exactly, needs no
+dependency beyond the standard library, and avoids hand-rolling a
+numerically delicate special function in the one area of this project
+under direct outside statistical review. Above the table's tail, the
+exact standard-normal quantile is used (a t-distribution's
+``degrees_of_freedom -> infinity`` limit), computed by the standard
+library's `statistics.NormalDist`, not another approximate table row.
+
+<a id="fim.statistics.interval.ConfidenceInterval"></a>
+
+## ConfidenceInterval Objects
+
+```python
+class ConfidenceInterval(TypedDict)
+```
+
+A sample mean with a two-sided confidence interval.
+
+<a id="fim.statistics.interval.confidence_interval"></a>
+
+#### confidence\_interval
+
+```python
+def confidence_interval(values: Sequence[float],
+                        *,
+                        confidence: float = 0.95) -> ConfidenceInterval
+```
+
+Return a sample mean's Student's-t confidence interval.
+
+**Arguments**:
+
+- `values` - Independent, identically distributed observations (each
+  replicate's own scalar outcome). At least two are required.
+- `confidence` - Two-tailed confidence level; see
+  `student_t_critical_value` for supported values.
+
+
+**Returns**:
+
+  The sample mean and its confidence interval.
+
+
+**Raises**:
+
+- `ValueError` - If fewer than two values are supplied.
+
+<a id="fim.statistics.interval.student_t_critical_value"></a>
+
+#### student\_t\_critical\_value
+
+```python
+def student_t_critical_value(degrees_of_freedom: int,
+                             confidence: float) -> float
+```
+
+Return the two-tailed Student's-t critical value.
+
+**Arguments**:
+
+- `degrees_of_freedom` - Sample size minus one; must be at least 1.
+- `confidence` - One of the three supported two-tailed confidence
+  levels (``0.90``, ``0.95``, ``0.99``).
+
+
+**Returns**:
+
+  The critical value ``t`` such that a sample mean's interval
+  ``mean +/- t * standard_error`` covers ``confidence`` of the
+  sampling distribution under normality.
+
+
+**Raises**:
+
+- `ValueError` - If `degrees_of_freedom` is not a positive integer or
+  `confidence` is not a supported level.
 
 <a id="fim.viz"></a>
 

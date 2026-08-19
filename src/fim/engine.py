@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, TypeAlias, TypedDict
@@ -13,7 +14,10 @@ from typing import Any, TypeAlias, TypedDict
 import numpy as np
 
 from fim import __version__
-from fim.convergence.criteria import TrailingWindowCriterion
+from fim.convergence.criteria import (
+    ConfidenceIntervalCriterion,
+    TrailingWindowCriterion,
+)
 from fim.convergence.monitor import ConvergenceMonitor
 from fim.model.allele import (
     MINTED_ID_START,
@@ -29,8 +33,11 @@ from fim.model.state import ModelState
 from fim.persistence.manifest import RunManifest
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
 from fim.statistics.differentiation import DifferentiationReport, statistics_report
+from fim.statistics.interval import ConfidenceInterval, confidence_interval
 
 Clock: TypeAlias = Callable[[], datetime]
+
+_MINIMUM_REPLICATE_SUMMARY_COUNT = 2
 
 
 class FinalReport(TypedDict):
@@ -78,6 +85,8 @@ def fim(
     store: TrajectoryStore | None = None,
     run_id: str | None = None,
     clock: Clock | None = None,
+    max_workers: int | None = None,
+    store_factory: Callable[[str], TrajectoryStore] | None = None,
 ) -> SimulationOutput:
     """Run the finite island model until convergence or the hard cap.
 
@@ -87,20 +96,58 @@ def fim(
         mu: Mutation probability, repeated from ``params``.
         d: Deme count, repeated from ``params``.
         params: Full validated run configuration and open parameter bag.
-        store: Optional trajectory backend. Memory storage is the library default.
+        store: Optional trajectory backend, shared by every replicate.
+            Memory storage is the library default. Mutually exclusive with
+            `store_factory`, and must be ``None`` whenever `max_workers`
+            is set — a single store instance cannot safely be shared
+            across worker processes; use `store_factory` instead.
         run_id: Optional stable run identifier.
-        clock: Injectable UTC clock used only for manifest timestamps.
+        clock: Injectable UTC clock used only for manifest timestamps. Under
+            `max_workers`, it crosses a process boundary and so must be
+            picklable — a module-level function, not a closure or lambda.
+        max_workers: Opt-in replicate-batch parallelism. ``None`` (the
+            default) preserves the exact prior sequential loop. Set to run
+            replicates in batches of up to this many concurrent worker
+            processes — real OS processes, not threads, since this
+            project's per-generation state is Python-object sparse maps
+            that do not release the GIL. An adaptive `replicate_tolerance`
+            stop is still checked strictly in ascending replicate order
+            after each whole batch completes, so a batch can overshoot the
+            exact minimal replicate count by at most ``max_workers - 1``.
+        store_factory: Builds one fresh trajectory store per replicate,
+            given that replicate's `run_id`. Meaningful for any batch
+            (``n_replicates`` greater than one) — sequential or parallel
+            — wherever every replicate needs its own store rather than
+            one shared instance; required in practice under
+            `max_workers`, where a worker process cannot share the
+            parent's `store`. Must itself be picklable (a module-level
+            function, or `functools.partial` over one) whenever
+            `max_workers` is set. ``None`` (the default) falls back to
+            `store` (or a private `InMemoryTrajectoryStore` if that is
+            also unset).
 
     Returns:
-        One result, or one independently seeded result per configured replicate.
+        One result, or one independently seeded result per replicate.
+        With `SimulationParams.replicate_tolerance` unset (the default),
+        exactly `n_replicates` replicates run, exactly as in every prior
+        release. With it set, replicates stop accumulating as soon as
+        every watched statistic's across-replicate confidence interval
+        tightens to at most `replicate_tolerance` (see
+        `replicate_summary`), or `n_replicates` is reached, whichever
+        comes first — so the returned tuple can be shorter than
+        `n_replicates`.
 
     Raises:
-        ValueError: If the named arguments disagree with ``params``.
+        ValueError: If the named arguments disagree with ``params``,
+            `store` and `store_factory` are both given, or `max_workers`
+            is combined with a non-``None`` `store`.
     """
     _validate_public_signature(N, m, mu, d, params)
-    trajectory_store = store if store is not None else InMemoryTrajectoryStore()
+    if store is not None and store_factory is not None:
+        raise ValueError("store and store_factory are mutually exclusive")
     run_clock = clock if clock is not None else _utc_now
     if params.n_replicates == 1:
+        trajectory_store = store if store is not None else InMemoryTrajectoryStore()
         return _run_one(
             params,
             trajectory_store,
@@ -108,6 +155,26 @@ def fim(
             run_clock,
         )
 
+    monitor = _replicate_monitor(params)
+    if max_workers is not None:
+        if max_workers < 1:
+            raise ValueError("max_workers must be at least 1")
+        if store is not None:
+            raise ValueError(
+                "max_workers requires store=None; a single store instance "
+                "cannot be shared across worker processes — pass "
+                "store_factory instead"
+            )
+        return _run_batch_parallel(
+            params,
+            max_workers,
+            store_factory,
+            run_id,
+            run_clock,
+            monitor,
+        )
+
+    trajectory_store = store if store is not None else InMemoryTrajectoryStore()
     # Replicate i is an independent scalar run with seed + i, preserving the
     # scalar trajectory for the first result and deterministic batch ordering.
     results: list[RunResult] = []
@@ -122,14 +189,29 @@ def fim(
             if run_id is not None
             else deterministic_run_id(replicate_params)
         )
-        results.append(
-            _run_one(
-                replicate_params,
-                trajectory_store,
-                replicate_run_id,
-                run_clock,
-            )
+        # A supplied `store_factory` gives every replicate its own fresh
+        # store, exactly like the parallel path's workers; otherwise every
+        # replicate reuses the one shared `trajectory_store`, unchanged
+        # from every prior release.
+        replicate_store = (
+            store_factory(replicate_run_id)
+            if store_factory is not None
+            else trajectory_store
         )
+        result = _run_one(
+            replicate_params,
+            replicate_store,
+            replicate_run_id,
+            run_clock,
+        )
+        results.append(result)
+        if monitor is not None:
+            outcome = monitor.record(
+                replicate_index + 1,
+                _replicate_stopping_values(result, params.convergence_statistics),
+            )
+            if outcome.stopped:
+                break
     return tuple(results)
 
 
@@ -188,6 +270,55 @@ def report_for_state(
     }
 
 
+def replicate_summary(
+    results: Sequence[RunResult],
+    *,
+    confidence: float = 0.95,
+) -> dict[str, ConfidenceInterval]:
+    """Return each reported statistic's across-replicate confidence interval.
+
+    Each replicate is an independent draw of its own final ``D``, ``G_ST``,
+    and so on; this is a closed-form Student's-t interval on the sample
+    mean of those draws (`fim.statistics.interval.confidence_interval`),
+    not a resampling scheme — the replicates are already independent by
+    construction, so nothing further is needed to treat them as a sample.
+
+    Args:
+        results: Two or more independently seeded replicate results, as
+            returned by `fim` when `SimulationParams.n_replicates` is
+            greater than one.
+        confidence: Two-tailed confidence level; see
+            `fim.statistics.interval.confidence_interval`.
+
+    Returns:
+        One `ConfidenceInterval` per statistic name in `FinalReport`
+        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``).
+        ``G_ST`` is undefined for a replicate whose locus is monomorphic
+        across every deme (``H_T == 0``); such replicates are dropped
+        from ``G_ST``'s own sample rather than papered over with a
+        substitute value, so its `ConfidenceInterval.sample_count` can be
+        smaller than the other statistics' — and a statistic left with
+        fewer than two defined replicates is omitted entirely rather
+        than raising, since a single point has no interval.
+
+    Raises:
+        ValueError: If fewer than two results are supplied.
+    """
+    if len(results) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+        raise ValueError("replicate_summary requires at least two results")
+    summary: dict[str, ConfidenceInterval] = {}
+    for statistic in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"):
+        values = [
+            value
+            for result in results
+            if (value := _final_report_statistic(result.report, statistic)) is not None
+        ]
+        if len(values) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+            continue
+        summary[statistic] = confidence_interval(values, confidence=confidence)
+    return summary
+
+
 def _build_finite_allele_spaces(
     state: ModelState,
     params: SimulationParams,
@@ -212,6 +343,85 @@ def _build_finite_allele_spaces(
         )
         for locus_index, locus in enumerate(params.loci)
     }
+
+
+def _run_batch_parallel(
+    params: SimulationParams,
+    max_workers: int,
+    store_factory: Callable[[str], TrajectoryStore] | None,
+    run_id: str | None,
+    clock: Clock,
+    monitor: ConvergenceMonitor | None,
+) -> tuple[RunResult, ...]:
+    """Run replicates in parallel worker-process batches of `max_workers`.
+
+    Batches, rather than one unbounded pool submission, so an adaptive
+    `monitor` can still stop the whole run early: replicates within one
+    batch run concurrently, but the stopping decision is always applied
+    afterward, strictly in ascending replicate order — the same order
+    the sequential loop uses — so a batch can overshoot an exact minimal
+    replicate count by at most ``max_workers - 1``, never reorder which
+    replicate's values feed the decision.
+    """
+    results: list[RunResult] = []
+    replicate_index = 0
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        while replicate_index < params.n_replicates:
+            batch_end = min(replicate_index + max_workers, params.n_replicates)
+            futures = {}
+            for index in range(replicate_index, batch_end):
+                replicate_params = replace(
+                    params,
+                    seed=params.seed + index,
+                    n_replicates=1,
+                )
+                replicate_run_id = (
+                    f"{run_id}-r{index + 1:03}"
+                    if run_id is not None
+                    else deterministic_run_id(replicate_params)
+                )
+                futures[index] = executor.submit(
+                    _run_replicate_worker,
+                    replicate_params,
+                    replicate_run_id,
+                    store_factory,
+                    clock,
+                )
+            for index in range(replicate_index, batch_end):
+                result = futures[index].result()
+                results.append(result)
+                if monitor is not None:
+                    outcome = monitor.record(
+                        index + 1,
+                        _replicate_stopping_values(
+                            result, params.convergence_statistics
+                        ),
+                    )
+                    if outcome.stopped:
+                        return tuple(results)
+            replicate_index = batch_end
+    return tuple(results)
+
+
+def _run_replicate_worker(
+    params: SimulationParams,
+    run_id: str,
+    store_factory: Callable[[str], TrajectoryStore] | None,
+    clock: Clock,
+) -> RunResult:
+    """Run one replicate inside a worker process.
+
+    Module-level, not a closure, so `ProcessPoolExecutor` can pickle and
+    ship it to a worker process. `store_factory` must itself be
+    picklable for the same reason — a module-level function or
+    `functools.partial` over one, never a lambda or closure.
+    """
+    store = (
+        store_factory(run_id)
+        if store_factory is not None
+        else InMemoryTrajectoryStore()
+    )
+    return _run_one(params, store, run_id, clock)
 
 
 def _run_one(
@@ -321,6 +531,56 @@ def _convergence_values(
     }
 
 
+def _replicate_monitor(params: SimulationParams) -> ConvergenceMonitor | None:
+    """Return the adaptive replicate-batch monitor, or ``None`` when unused.
+
+    ``None`` whenever `SimulationParams.replicate_tolerance` is unset —
+    the opt-in sentinel that keeps every prior release's fixed-count
+    batch loop byte-identical when this feature is not configured.
+    """
+    if params.replicate_tolerance is None:
+        return None
+    criterion = ConfidenceIntervalCriterion(
+        minimum_count=params.replicate_minimum,
+        tolerance=params.replicate_tolerance,
+        confidence=params.replicate_confidence,
+    )
+    return ConvergenceMonitor(
+        criterion,
+        max_generations=params.n_replicates,
+        statistics=params.convergence_statistics,
+        combinator=params.convergence_combinator,
+    )
+
+
+def _replicate_stopping_values(
+    result: RunResult,
+    statistics: Sequence[str],
+) -> dict[str, float]:
+    """Return one value per watched statistic for the replicate-batch monitor.
+
+    Mirrors `_convergence_values`'s own ``G_ST`` substitution (``0.0``
+    when a locus's ``H_T`` is zero) so the internal stopping decision
+    never sees an undefined value. `replicate_summary` computes the
+    *published* interval separately, from only the replicates where a
+    statistic is actually defined, and never substitutes a fabricated
+    value into it — this function decides only when to stop, not what
+    gets reported.
+    """
+    values: dict[str, float] = {}
+    for statistic in statistics:
+        value = _final_report_statistic(result.report, statistic)
+        if value is None:
+            if statistic == "G_ST" and result.report["H_T"] == 0.0:
+                value = 0.0
+            else:
+                raise ValueError(
+                    f"{statistic} is undefined for replicate {result.run_id!r}"
+                )
+        values[statistic] = value
+    return values
+
+
 def _mean_statistic_across_loci(
     locus_reports: Sequence[DifferentiationReport],
     statistic: str,
@@ -337,6 +597,23 @@ def _mean_statistic_across_loci(
                 raise ValueError(f"{statistic} is undefined at generation {generation}")
         values.append(value)
     return _mean(tuple(values))
+
+
+def _final_report_statistic(report: FinalReport, statistic: str) -> float | None:
+    """Read one named field from a final run report."""
+    if statistic == "D":
+        return report["D"]
+    if statistic == "G_ST":
+        return report["G_ST"]
+    if statistic == "E_ST":
+        return report["E_ST"]
+    if statistic == "K_ST":
+        return report["K_ST"]
+    if statistic == "H_S":
+        return report["H_S"]
+    if statistic == "H_T":
+        return report["H_T"]
+    raise ValueError(f"unsupported statistic: {statistic}")
 
 
 def _format_timestamp(value: datetime) -> str:

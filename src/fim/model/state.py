@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import copyreg
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -15,6 +16,41 @@ FrequencyMap = Mapping[AlleleId, float]
 MutableFrequencyMap = dict[AlleleId, float]
 
 FREQUENCY_ABS_TOLERANCE = 1e-12
+
+
+def _construct_mapping_proxy(mapping: dict[Any, Any]) -> MappingProxyType[Any, Any]:
+    """Rebuild a `MappingProxyType` from its unpickled backing `dict`.
+
+    A module-level function, not `MappingProxyType` itself: pickle
+    resolves a reduced object's constructor by module and name, and the
+    built-in `mappingproxy` type reports its module as ``builtins``,
+    where that name does not actually exist — pickling a bare
+    `MappingProxyType` reference fails even with a reducer registered.
+    """
+    return MappingProxyType(mapping)
+
+
+_MappingProxyConstructor = Callable[[dict[Any, Any]], MappingProxyType[Any, Any]]
+_MappingProxyReduction = tuple[_MappingProxyConstructor, tuple[dict[Any, Any]]]
+
+
+def _reduce_mapping_proxy(proxy: MappingProxyType[Any, Any]) -> _MappingProxyReduction:
+    """Round-trip a `MappingProxyType` through `dict`, its only pickle gap."""
+    return (_construct_mapping_proxy, (dict(proxy),))
+
+
+# `ModelState.frequencies` wraps every deme/locus frequency map in a
+# `MappingProxyType` for enforced immutability, but the standard library's
+# `pickle` has no built-in support for that type (`TypeError: cannot
+# pickle 'mappingproxy' object`). `fim.engine`'s opt-in parallel replicate
+# execution (`max_workers`) sends whole `RunResult`s — which nest a
+# `ModelState`, and `SimulationParams.initial_frequencies`, which uses the
+# same wrapper — across a process boundary, so this process-wide
+# `copyreg` registration is required for that to work at all. It is a
+# property of the type, not of any one caller, so it is registered here
+# once at import time rather than duplicated wherever `MappingProxyType`
+# is used.
+copyreg.pickle(MappingProxyType, _reduce_mapping_proxy)
 
 
 @dataclass(frozen=True, slots=True)

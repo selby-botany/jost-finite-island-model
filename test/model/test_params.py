@@ -38,6 +38,9 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     assert params.convergence_window == PARAMETER_DEFAULTS["convergence_window"]
     assert params.convergence_tolerance == PARAMETER_DEFAULTS["convergence_tolerance"]
     assert params.max_generations == PARAMETER_DEFAULTS["max_generations"]
+    assert params.replicate_tolerance is None
+    assert params.replicate_minimum == PARAMETER_DEFAULTS["replicate_minimum"]
+    assert params.replicate_confidence == PARAMETER_DEFAULTS["replicate_confidence"]
     assert params.migrant_sampling == PARAMETER_DEFAULTS["migrant_sampling"]
     assert params.migrant_sampling == "continuous"
     assert params.mutation_model == PARAMETER_DEFAULTS["mutation_model"]
@@ -332,6 +335,10 @@ def test_mu_and_mu_b_are_mutually_exclusive_and_one_is_required() -> None:
         ({"convergence_tolerance": float("nan")}, "finite"),
         ({"max_generations": 0}, "max_generations"),
         ({"n_replicates": 0}, "n_replicates"),
+        ({"replicate_tolerance": -1.0}, "non-negative"),
+        ({"replicate_tolerance": float("nan")}, "finite"),
+        ({"replicate_minimum": 1}, "replicate_minimum"),
+        ({"replicate_confidence": 0.80}, "replicate_confidence"),
         ({"migrant_sampling": "binomial"}, "migrant_sampling"),
         ({"mutation_model": "stepwise"}, "mutation_model"),
         ({"mu": [0.001, 0.002]}, "one rate per locus"),
@@ -374,6 +381,18 @@ def test_post_init_validation_covers_all_scalar_contracts(
     """Every scalar validation rule rejects its documented invalid input."""
     with pytest.raises(ValueError, match=message):
         SimulationParams.from_mapping({**_valid_config(), **updates})
+
+
+def test_replicate_tolerance_round_trips_and_is_omitted_when_unset() -> None:
+    """`replicate_tolerance` only appears in `to_dict()` once configured."""
+    default_params = SimulationParams.from_mapping(_valid_config())
+    assert "replicate_tolerance" not in default_params.to_dict()
+
+    tightened = SimulationParams.from_mapping(
+        {**_valid_config(), "replicate_tolerance": 0.01}
+    )
+    assert tightened.replicate_tolerance == 0.01
+    assert tightened.to_dict()["replicate_tolerance"] == 0.01
 
 
 def test_required_and_conflicting_configuration_keys_are_named() -> None:

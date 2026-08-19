@@ -89,7 +89,8 @@ See [installation alternatives](install/README.md) and the
 
 ## Outputs
 
-Each scalar CLI run writes exactly four artifacts:
+Each scalar CLI run (`n_replicates: 1`, the default) writes exactly four
+artifacts:
 
 | File | Purpose |
 |---|---|
@@ -99,7 +100,10 @@ Each scalar CLI run writes exactly four artifacts:
 | `scatter.png` | Canonical allele-frequency scatter or labeled projection |
 
 The trajectory is long-format JSON Lines and can be loaded without a custom
-database. See [output schemas](doc/usage.md#output-schemas).
+database. `n_replicates` greater than one runs a batch instead: one of the
+above per replicate subdirectory, plus a batch-level `summary.json` — each
+reported statistic's mean and confidence interval across replicates — and
+its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).
 
 ## Model contract
 
@@ -119,6 +123,10 @@ database. See [output schemas](doc/usage.md#output-schemas).
   per-locus list, or derived per locus from a single per-base rate
   (`mu_b`) and each locus's own `length`, so loci of different lengths
   need not mutate at an identical, hand-picked rate.
+- `n_replicates` runs that many independently seeded replicates. With the
+  opt-in `replicate_tolerance` set, a batch stops as soon as every watched
+  statistic's across-replicate confidence interval is tight enough,
+  rather than requiring a hand-guessed replicate count in advance.
 
 The [simulator design](doc/fim-simulator-design.md)
 defines the complete scientific and architectural contract.

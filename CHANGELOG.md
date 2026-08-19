@@ -191,6 +191,52 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   derived rates; an engine-level test proving `mu_b` composes correctly
   with the (separately shipped) `finite_alleles` mutation model; and a
   CLI test.
+- Adaptive, confidence-interval-driven replicate batching, and CLI support
+  for replicate batches at all. A new opt-in `replicate_tolerance`
+  (default: unset, `n_replicates` runs in full exactly as before) stops a
+  batch early, once at least `replicate_minimum` replicates exist and
+  every statistic named in `convergence_statistic` has an across-replicate
+  Student's-t confidence interval (`fim.statistics.interval`, a
+  dependency-free table-based critical value with linear interpolation in
+  `1/df` and an exact normal-quantile tail) tightened to at most
+  `replicate_tolerance` — combined across several watched statistics by
+  the same `convergence_combinator` used within one run. `n_replicates`
+  becomes the hard cap rather than a fixed count; a new
+  `ConfidenceIntervalCriterion` implements the existing
+  `ConvergenceCriterion` protocol and plugs into the unmodified
+  `ConvergenceMonitor`, so nothing about the monitor itself changed. A new
+  `fim.engine.replicate_summary` computes each reported statistic's
+  across-replicate confidence interval from a batch of results; `G_ST` is
+  dropped from a replicate whose locus is monomorphic across every deme
+  (`H_T == 0`) rather than papered over with a substitute value, and a
+  statistic left with fewer than two defined replicates is omitted
+  entirely. `fim`'s batch loop also gained opt-in parallel execution
+  (`max_workers`, real worker processes, not threads, since per-generation
+  state is Python-object sparse maps that never release the GIL) and a
+  `store_factory` for giving each replicate its own trajectory store —
+  required across a process boundary, and available for the ordinary
+  sequential loop too. `fim run` no longer rejects `n_replicates` greater
+  than one: each replicate gets its own `replicate-NNN/` subdirectory
+  keeping the existing four-file scalar-run contract, plus a batch-level
+  `summary.json` and `manifest.json`; a new `--workers`/`--sequential`
+  flag pair controls execution (parallel, one worker per CPU, by default).
+- Dedicated test coverage for adaptive replicate batching: a table-based
+  Student's-t critical-value test against published values plus
+  interpolated and normal-quantile-tail cases; a confidence-interval test
+  against a hand-computed interval and a zero-width identical-sample case;
+  `ConfidenceIntervalCriterion` validation and monitor-composition tests;
+  params tests for every new field's validation and `to_dict()`
+  round-tripping (including that `replicate_tolerance` is omitted unless
+  configured); engine tests proving the unset default is unaffected, an
+  adaptive stop before the cap, a fallback to the cap when the minimum is
+  unreachable, and the `G_ST`-substitution/summary-omission split; a
+  parallel-versus-sequential equivalence test, worker-count and
+  shared-store-rejection validation tests, a `store_factory` test in both
+  execution modes, and a `MappingProxyType` pickle round-trip test (the
+  defect that first surfaced this need); and CLI tests for the batch
+  directory/summary/manifest contract, the default-parallel and
+  explicit-`--workers` paths, adaptive early stopping through the CLI, and
+  the non-empty-output-directory guard.
 
 ### Changed
 

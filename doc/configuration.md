@@ -417,9 +417,57 @@ setting.
 - **Type:** positive integer
 - **Default:** `1`
 
-The library API runs reproducible replicates with seeds `seed`,
-`seed + 1`, and so on. The CLI requires `1` in version 1.0.0 so each output
-directory retains the four-file scalar-run contract.
+`n_replicates` runs that many independently seeded scalar runs — seeds
+`seed`, `seed + 1`, and so on — through both the library API
+(`fim.engine.fim`, returning one `RunResult` per replicate) and the CLI
+(`fim run`, writing one `replicate-NNN/` subdirectory per replicate; see
+[Using `fim`](usage.md#run-a-simulation)). With `replicate_tolerance` unset
+(the default), exactly `n_replicates` run. With it set, `n_replicates`
+instead becomes the hard cap on an adaptive stop — see `replicate_tolerance`
+below.
+
+### `replicate_tolerance`
+
+- **Type:** non-negative finite number, or omitted
+- **Default:** unset (fixed-count batching; see `n_replicates`)
+
+Opt-in early stopping for a replicate batch (`n_replicates` greater than
+one): once at least `replicate_minimum` replicates have run, stop as soon
+as every statistic named in `convergence_statistic` has an across-replicate
+Student's-t confidence interval (mean of that statistic's own final value
+across replicates so far) with a half-width at most `replicate_tolerance`
+— combined across several watched statistics by `convergence_combinator`,
+exactly like within-run convergence. `n_replicates` is still the hard cap:
+reaching it without tightening ends the batch anyway, a valid,
+non-adaptively-stopped result. This is the mechanism that answers "how many
+replicate runs are needed for a confidence interval" without guessing a
+fixed count in advance — see each statistic's realized interval in
+`summary.json` (CLI) or `fim.engine.replicate_summary` (library).
+
+```yaml
+n_replicates: 200        # hard cap
+replicate_tolerance: 0.02  # stop once every watched statistic is this tight
+replicate_minimum: 20
+```
+
+### `replicate_minimum`
+
+- **Type:** integer at least 2
+- **Default:** `10`
+
+The fewest replicates before `replicate_tolerance` is even checked — the
+replicate-layer analog of `convergence_window`, guarding against a
+lucky-early-tight fluke from too small a sample. Only meaningful when
+`replicate_tolerance` is set.
+
+### `replicate_confidence`
+
+- **Type:** `0.90`, `0.95`, or `0.99`
+- **Default:** `0.95`
+
+The two-tailed confidence level used by `replicate_tolerance`'s interval,
+and by `summary.json`/`replicate_summary`'s reported intervals. Only
+meaningful when `replicate_tolerance` is set.
 
 ### `migrant_sampling`
 
@@ -475,3 +523,6 @@ for why the two don't compound.
 | both `mu` and `mu_b` given, or neither | rejected |
 | `mu` list length not matching the locus count | rejected |
 | `mu_b` outside `[0, 1]` | rejected |
+| `replicate_tolerance` negative or non-finite | rejected |
+| `replicate_minimum` less than 2 | rejected |
+| `replicate_confidence` not `0.90`, `0.95`, or `0.99` | rejected |

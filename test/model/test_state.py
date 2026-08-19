@@ -1,5 +1,7 @@
 """Tests for sparse model-state invariants and serialization."""
 
+import pickle
+
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
@@ -38,6 +40,20 @@ def test_rows_round_trip_exactly() -> None:
     original = _state()
 
     restored = ModelState.from_rows(original.to_rows("run-test"), original.loci)
+
+    assert restored == original
+
+
+def test_state_survives_a_pickle_round_trip() -> None:
+    """A `MappingProxyType`-backed state pickles like any other value.
+
+    A `RunResult` nests a `ModelState` and crosses a process boundary
+    under `fim.engine`'s opt-in parallel replicate execution
+    (`max_workers`); this is the property that makes that possible.
+    """
+    original = _state()
+
+    restored = pickle.loads(pickle.dumps(original))
 
     assert restored == original
 

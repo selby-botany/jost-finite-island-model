@@ -31,6 +31,7 @@ unless `--force` is present.
 
 ```console
 fim run CONFIG [-o DIRECTORY | --output DIRECTORY] [--quiet]
+    [--workers N] [--sequential]
 ```
 
 `CONFIG` is a YAML file described in
@@ -44,8 +45,31 @@ name the offending key or value and return status 2. A run that reaches
 `max_generations` also returns status 0 because it is a valid, inspectable
 non-converged result.
 
-CLI runs currently require `n_replicates: 1`. Library callers can request
-deterministic replicate batches through `fim.engine.fim`.
+### Batches (`n_replicates` greater than one)
+
+A config's `n_replicates` (see [configuration.md](configuration.md#n_replicates))
+controls whether one run or a whole batch executes:
+
+- **`n_replicates: 1`** (the default): the four-file scalar-run contract
+  below, directly in the output directory.
+- **`n_replicates` greater than one**: each replicate gets its own
+  `replicate-NNN/` subdirectory, keeping that same four-file contract, plus
+  a batch-level `manifest.json` and `summary.json` — see
+  [Output schemas](#output-schemas).
+
+Batch replicates run in parallel by default, using one worker process per
+CPU (real OS processes, not threads — the per-generation state is
+Python-object sparse maps that never release the GIL). `--workers N` sets
+an explicit worker count; `--sequential` runs replicates one at a time.
+Either way, every replicate's own trajectory, report, and statistics are
+identical to running it alone with the same seed — parallelism only
+changes how fast the batch completes, never what it computes.
+
+With `replicate_tolerance` unset in the config, exactly `n_replicates`
+replicates run. With it set, the batch can stop earlier, once every watched
+statistic's across-replicate confidence interval has tightened enough (see
+[configuration.md](configuration.md#replicate_tolerance)) — the number of
+`replicate-NNN/` subdirectories written can then be less than `n_replicates`.
 
 ## Re-analyze a trajectory
 
@@ -135,6 +159,40 @@ means. `D` and `K_ST` always use equal deme weighting. `deme_weighting` affects
 
 One point represents one `(locus, allele)` pair. Coincident points are enlarged
 and annotated.
+
+### Batch `summary.json` and `manifest.json`
+
+Written only for `n_replicates` greater than one, alongside the
+`replicate-NNN/` subdirectories, each of which holds the four scalar-run
+files above.
+
+`summary.json` maps each reported statistic name (`D`, `G_ST`, `E_ST`,
+`K_ST`, `H_S`, `H_T`) to its across-replicate confidence interval:
+
+```json
+{
+  "D": {
+    "mean": 0.643,
+    "half_width": 0.021,
+    "low": 0.622,
+    "high": 0.664,
+    "sample_count": 40,
+    "confidence": 0.95
+  }
+}
+```
+
+`G_ST` can have a smaller `sample_count` than the other statistics: a
+replicate whose locus is monomorphic across every deme reports `G_ST` as
+`null` in its own `report.json`, and that replicate is excluded from
+`G_ST`'s interval rather than papered over with a substitute value. A
+statistic left with fewer than two defined replicates is omitted from
+`summary.json` entirely.
+
+The batch's own `manifest.json` (distinct from each replicate's own) records
+the batch `run_id`, every `replicate_run_ids` entry, `replicate_count`, the
+shared `parameters`, batch start/end timestamps, and `software_version` —
+not a per-run convergence outcome, since each replicate has its own.
 
 ## Reproduce a run
 

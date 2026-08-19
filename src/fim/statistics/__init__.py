@@ -19,9 +19,12 @@ from .differentiation import (
     total_hill_number,
     within_hill_number,
 )
+from .interval import ConfidenceInterval, confidence_interval, student_t_critical_value
 
 __all__ = [
+    "ConfidenceInterval",
     "DifferentiationReport",
+    "confidence_interval",
     "differentiation_q",
     "e_st",
     "equilibrium_d",
@@ -36,6 +39,7 @@ __all__ = [
     "jost_d",
     "k_st",
     "statistics_report",
+    "student_t_critical_value",
     "total_hill_number",
     "within_hill_number",
 ]

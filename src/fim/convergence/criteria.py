@@ -7,7 +7,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from fim.statistics.interval import confidence_interval
+
 MINIMUM_WINDOW = 2
+MINIMUM_REPLICATE_COUNT = 2
 
 
 class ConvergenceCriterion(Protocol):
@@ -65,6 +68,44 @@ class TrailingWindowCriterion:
     def is_stable(self, history: Sequence[float]) -> bool:
         """Return whether the configured trailing window is stable."""
         return trailing_window_stable(history, self.window, self.tolerance)
+
+
+@dataclass(frozen=True, slots=True)
+class ConfidenceIntervalCriterion:
+    """Detect a tight-enough confidence interval on a growing sample.
+
+    Unlike `TrailingWindowCriterion`, which compares two halves of a
+    trailing window of near-instantaneous values, this criterion treats
+    the *entire* supplied history as one growing i.i.d. sample — each
+    entry is one independently seeded replicate run's own final scalar
+    outcome — and asks whether that sample's Student's-t confidence
+    interval has tightened to at most `tolerance`, an absolute
+    half-width in the same units as the watched statistic, exactly like
+    `TrailingWindowCriterion.tolerance`. `minimum_count` guards against a
+    lucky-early-tight fluke the same way `TrailingWindowCriterion.window`
+    guards a single-generation coincidence: stability is never declared
+    from fewer than `minimum_count` observations.
+    """
+
+    minimum_count: int
+    tolerance: float
+    confidence: float = 0.95
+
+    def __post_init__(self) -> None:
+        """Validate criterion configuration on construction."""
+        if self.minimum_count < MINIMUM_REPLICATE_COUNT:
+            raise ValueError("minimum_count must be at least 2")
+        if not math.isfinite(self.tolerance) or self.tolerance < 0.0:
+            raise ValueError("tolerance must be finite and non-negative")
+        if self.confidence not in (0.90, 0.95, 0.99):
+            raise ValueError("confidence must be 0.90, 0.95, or 0.99")
+
+    def is_stable(self, history: Sequence[float]) -> bool:
+        """Return whether the sample's confidence interval is tight enough."""
+        if len(history) < self.minimum_count:
+            return False
+        interval = confidence_interval(history, confidence=self.confidence)
+        return interval["half_width"] <= self.tolerance
 
 
 @dataclass(frozen=True, slots=True)
