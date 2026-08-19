@@ -45,6 +45,7 @@ markdownlint \
     "#LICENSE.md" \
     "#build/**" \
     "#dist/**" \
+    "#doc/dev/**" \
     "#htmlcov/**" \
     "#site/**" \
     "#src/fim/API.md"
