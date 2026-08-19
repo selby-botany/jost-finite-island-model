@@ -226,9 +226,12 @@ By default, every mutation produces a globally novel allele identity; see
 
 ### `seed`
 
-- **Type:** integer
+- **Type:** non-negative integer
 - **Required:** yes; there is no default
 - **Meaning:** seed for the run's NumPy `PCG64` generator
+
+A negative seed is rejected: `PCG64` has no equivalent upper bound to
+reject against in turn, so non-negativity is the entire legal range.
 
 ## Loci
 
@@ -382,7 +385,11 @@ value by construction, so this key has no effect and needs no attention.
 - **Default:** `50`
 
 The monitor compares the means of the first and second halves of the trailing
-window.
+window. Rejected if it exceeds `max_generations + 1` — generation 0 is
+always recorded before the run loop's first step, so a run watching
+`max_generations` records at most that many generations; a window
+larger than that could never fill before the hard cap stops the run,
+so convergence could never be detected.
 
 ### `convergence_tolerance`
 
@@ -457,7 +464,10 @@ replicate_minimum: 20
 The fewest replicates before `replicate_tolerance` is even checked — the
 replicate-layer analog of `convergence_window`, guarding against a
 lucky-early-tight fluke from too small a sample. Only meaningful when
-`replicate_tolerance` is set.
+`replicate_tolerance` is set. Whenever it is set together with
+`n_replicates` greater than one, `replicate_minimum` is rejected if it
+exceeds `n_replicates`: adaptive stopping could never be evaluated
+before the replicate cap ends the batch.
 
 ### `replicate_confidence`
 
@@ -507,7 +517,7 @@ for why the two don't compound.
 |---|---|
 | `N < 1`, `d < 2` | rejected |
 | `m` or `mu` outside `[0, 1]` | rejected |
-| missing `seed` | rejected |
+| missing `seed`, or `seed < 0` | rejected |
 | empty or duplicate loci | rejected |
 | frequency vector not summing to 1 | rejected |
 | unknown key | rejected by name |
@@ -524,4 +534,6 @@ for why the two don't compound.
 | `mu_b` outside `[0, 1]` | rejected |
 | `replicate_tolerance` negative or non-finite | rejected |
 | `replicate_minimum` less than 2 | rejected |
+| `convergence_window` greater than `max_generations + 1` | rejected |
+| `replicate_minimum` greater than `n_replicates` (with `replicate_tolerance` set and `n_replicates > 1`) | rejected |
 | `replicate_confidence` not `0.90`, `0.95`, or `0.99` | rejected |
