@@ -34,9 +34,13 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import (
+    CURRENT_BATCH_SCHEMA_VERSION,
+    ArtifactDigest,
+    BatchManifest,
     RunManifest,
     hash_file,
     read_manifest,
+    write_batch_manifest,
     write_manifest,
 )
 from fim.statistics.differentiation import differentiation_q
@@ -207,7 +211,8 @@ def _command_run_batch(
     """Execute a multi-replicate batch and write its documented artifacts.
 
     Each replicate gets its own subdirectory keeping the exact four-file
-    scalar-run contract; a batch-level ``manifest.json`` and
+    scalar-run contract; a batch-level ``manifest.json`` (schema-versioned
+    and digest-verified, like each replicate's own — `BatchManifest`) and
     ``summary.json`` (each watched statistic's across-replicate
     confidence interval, from `fim.engine.replicate_summary`) sit
     alongside them. The whole tree is built inside one hidden temporary
@@ -256,23 +261,27 @@ def _command_run_batch(
         _prune_orphan_replicate_directories(
             working_directory, run_id, published_run_ids
         )
+        artifact_digests: dict[str, ArtifactDigest] = {}
         for result in output:
             directory = _replicate_output_directory(
                 working_directory, run_id, result.run_id
             )
             _write_run_artifacts(result, directory)
+            artifact_digests[directory.name] = hash_file(directory / "manifest.json")
         _write_json(working_directory / "summary.json", replicate_summary(output))
-        _write_json(
+        artifact_digests["summary"] = hash_file(working_directory / "summary.json")
+        write_batch_manifest(
             working_directory / "manifest.json",
-            {
-                "run_id": run_id,
-                "replicate_run_ids": [result.run_id for result in output],
-                "replicate_count": len(output),
-                "parameters": params.to_dict(),
-                "started_at": started_at,
-                "ended_at": ended_at,
-                "software_version": __version__,
-            },
+            BatchManifest(
+                schema_version=CURRENT_BATCH_SCHEMA_VERSION,
+                run_id=run_id,
+                replicate_run_ids=tuple(result.run_id for result in output),
+                parameters=params.to_dict(),
+                started_at=started_at,
+                ended_at=ended_at,
+                software_version=__version__,
+                artifacts=artifact_digests,
+            ),
         )
 
     if not arguments.quiet:

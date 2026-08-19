@@ -16,6 +16,11 @@ from fim.model.params import SimulationParams
 # rather than guessing from which fields happen to be present.
 CURRENT_SCHEMA_VERSION = 1
 
+# Bumped whenever BatchManifest's on-disk shape changes incompatibly —
+# tracked independently of CURRENT_SCHEMA_VERSION, since a batch manifest
+# describes a whole replicate batch, a distinct document type from one run.
+CURRENT_BATCH_SCHEMA_VERSION = 1
+
 # Read in fixed-size chunks so hashing a large trajectory never requires
 # holding the whole file in memory at once.
 _HASH_CHUNK_BYTES = 1 << 20
@@ -191,6 +196,133 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None:
         handle.write("\n")
 
 
+@dataclass(frozen=True, slots=True)
+class BatchManifest:
+    """Capture everything needed to identify and verify a replicate batch.
+
+    Parallel to `RunManifest`, but describes a whole batch rather than
+    one replicate: `replicate_run_ids` names every published
+    `replicate-NNN/` subdirectory, and `artifacts` — populated the same
+    way as `RunManifest.artifacts`, only once every sibling artifact is
+    durable — digests `summary.json` and each replicate's own
+    `manifest.json`, so an edited, truncated, or replaced batch-level
+    artifact is detectable the same way a scalar run's is.
+    """
+
+    schema_version: int
+    run_id: str
+    replicate_run_ids: tuple[str, ...]
+    parameters: Mapping[str, object]
+    started_at: str
+    ended_at: str
+    software_version: str
+    artifacts: Mapping[str, ArtifactDigest] | None = None
+
+    def __post_init__(self) -> None:
+        """Validate required batch-manifest identity and digest fields."""
+        if self.schema_version < 1:
+            raise ValueError("batch manifest schema_version must be at least 1")
+        if not self.run_id:
+            raise ValueError("batch manifest run_id must not be empty")
+        if not self.replicate_run_ids:
+            raise ValueError("batch manifest replicate_run_ids must not be empty")
+        if not self.started_at or not self.ended_at:
+            raise ValueError("batch manifest timestamps must not be empty")
+        if not self.software_version:
+            raise ValueError("batch manifest software_version must not be empty")
+        if self.artifacts is not None:
+            for name, digest in self.artifacts.items():
+                _validate_artifact_digest(name, digest)
+
+    @property
+    def replicate_count(self) -> int:
+        """Return the number of published replicates."""
+        return len(self.replicate_run_ids)
+
+    def params(self) -> SimulationParams:
+        """Reconstruct the exact validated simulation parameters."""
+        return SimulationParams.from_mapping(self.parameters)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-serializable batch manifest mapping."""
+        return {
+            "schema_version": self.schema_version,
+            "run_id": self.run_id,
+            "replicate_run_ids": list(self.replicate_run_ids),
+            "replicate_count": self.replicate_count,
+            "parameters": dict(self.parameters),
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
+            "software_version": self.software_version,
+            "artifacts": (
+                {name: dict(digest) for name, digest in self.artifacts.items()}
+                if self.artifacts is not None
+                else None
+            ),
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> BatchManifest:
+        """Validate and reconstruct a batch manifest mapping."""
+        required = {
+            "schema_version",
+            "run_id",
+            "replicate_run_ids",
+            "parameters",
+            "started_at",
+            "ended_at",
+            "software_version",
+        }
+        missing = required - set(value)
+        if missing:
+            names = ", ".join(sorted(missing))
+            raise ValueError(f"batch manifest is missing: {names}")
+        parameters = value["parameters"]
+        if not isinstance(parameters, Mapping):
+            raise ValueError("batch manifest parameters must be an object")
+        replicate_run_ids = _required_replicate_run_ids(value)
+        raw_count = value.get("replicate_count")
+        if raw_count is not None and raw_count != len(replicate_run_ids):
+            raise ValueError(
+                "batch manifest replicate_count does not match replicate_run_ids"
+            )
+        return cls(
+            schema_version=_required_int(value, "schema_version", minimum=1),
+            run_id=_required_string(value, "run_id"),
+            replicate_run_ids=replicate_run_ids,
+            parameters=dict(parameters),
+            started_at=_required_string(value, "started_at"),
+            ended_at=_required_string(value, "ended_at"),
+            software_version=_required_string(value, "software_version"),
+            artifacts=_optional_artifacts(value.get("artifacts")),
+        )
+
+
+def read_batch_manifest(path: Path | str) -> BatchManifest:
+    """Read and validate one batch manifest JSON file."""
+    manifest_path = Path(path)
+    with manifest_path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError("batch manifest root must be an object")
+    return BatchManifest.from_dict(payload)
+
+
+def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None:
+    """Write a batch manifest deterministically, replacing any prior file."""
+    manifest_path = Path(path)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with manifest_path.open("w", encoding="utf-8", newline="\n") as handle:
+        json.dump(
+            manifest.to_dict(),
+            handle,
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        )
+        handle.write("\n")
+
+
 def _optional_artifacts(
     raw_value: Any,
 ) -> Mapping[str, ArtifactDigest] | None:
@@ -236,6 +368,21 @@ def _required_int(
     if raw_value < minimum:
         raise ValueError(f"manifest field {key!r} must be at least {minimum}")
     return raw_value
+
+
+def _required_replicate_run_ids(value: Mapping[str, Any]) -> tuple[str, ...]:
+    """Read the batch manifest's required nonempty list of replicate run IDs."""
+    raw_value = value.get("replicate_run_ids")
+    if not isinstance(raw_value, list) or not raw_value:
+        raise ValueError(
+            "batch manifest field 'replicate_run_ids' must be a nonempty list"
+        )
+    if not all(isinstance(item, str) and item for item in raw_value):
+        raise ValueError(
+            "batch manifest field 'replicate_run_ids' must contain only "
+            "nonempty strings"
+        )
+    return tuple(raw_value)
 
 
 def _required_string(value: Mapping[str, Any], key: str) -> str:

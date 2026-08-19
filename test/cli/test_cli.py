@@ -14,6 +14,7 @@ import yaml
 
 from fim import __version__, cli
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.manifest import hash_file, read_batch_manifest
 
 
 def _write_config(path: Path, **updates: object) -> None:
@@ -597,6 +598,41 @@ def test_run_batch_produces_replicate_and_summary_artifacts(
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["replicate_count"] == 3
     assert len(manifest["replicate_run_ids"]) == 3
+
+
+def test_run_batch_manifest_is_schema_versioned_and_digest_verified(
+    tmp_path: Path,
+) -> None:
+    """The batch `manifest.json` parses with `read_batch_manifest` and its
+    recorded digests match the real on-disk `summary.json` and each
+    replicate's own `manifest.json`.
+
+    Regression test for S10: the batch manifest used to be a raw,
+    unversioned dict with no artifact digests — `read_manifest` (and
+    now `read_batch_manifest`) rejected it outright, and nothing
+    detected an edited or truncated `summary.json` or child manifest
+    after the fact.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=3)
+    output = tmp_path / "output"
+
+    status = cli.main(
+        ["run", str(config), "-o", str(output), "--sequential", "--quiet"]
+    )
+
+    assert status == 0
+    manifest = read_batch_manifest(output / "manifest.json")
+    assert manifest.schema_version >= 1
+    assert manifest.artifacts is not None
+    assert manifest.artifacts["summary"] == hash_file(output / "summary.json")
+    for replicate_run_id in manifest.replicate_run_ids:
+        directory = cli._replicate_output_directory(
+            output, manifest.run_id, replicate_run_id
+        )
+        assert manifest.artifacts[directory.name] == hash_file(
+            directory / "manifest.json"
+        )
 
 
 def test_run_batch_defaults_to_parallel_workers(tmp_path: Path) -> None:

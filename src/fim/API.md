@@ -113,6 +113,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [from\_dict](#fim.persistence.manifest.RunManifest.from_dict)
   * [read\_manifest](#fim.persistence.manifest.read_manifest)
   * [write\_manifest](#fim.persistence.manifest.write_manifest)
+  * [BatchManifest](#fim.persistence.manifest.BatchManifest)
+    * [\_\_post\_init\_\_](#fim.persistence.manifest.BatchManifest.__post_init__)
+    * [replicate\_count](#fim.persistence.manifest.BatchManifest.replicate_count)
+    * [params](#fim.persistence.manifest.BatchManifest.params)
+    * [to\_dict](#fim.persistence.manifest.BatchManifest.to_dict)
+    * [from\_dict](#fim.persistence.manifest.BatchManifest.from_dict)
+  * [read\_batch\_manifest](#fim.persistence.manifest.read_batch_manifest)
+  * [write\_batch\_manifest](#fim.persistence.manifest.write_batch_manifest)
 * [fim.persistence.store](#fim.persistence.store)
   * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
@@ -1913,6 +1921,97 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None
 ```
 
 Write a manifest deterministically, replacing any prior file.
+
+<a id="fim.persistence.manifest.BatchManifest"></a>
+
+## BatchManifest Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class BatchManifest()
+```
+
+Capture everything needed to identify and verify a replicate batch.
+
+Parallel to `RunManifest`, but describes a whole batch rather than
+one replicate: `replicate_run_ids` names every published
+`replicate-NNN/` subdirectory, and `artifacts` — populated the same
+way as `RunManifest.artifacts`, only once every sibling artifact is
+durable — digests `summary.json` and each replicate's own
+`manifest.json`, so an edited, truncated, or replaced batch-level
+artifact is detectable the same way a scalar run's is.
+
+<a id="fim.persistence.manifest.BatchManifest.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Validate required batch-manifest identity and digest fields.
+
+<a id="fim.persistence.manifest.BatchManifest.replicate_count"></a>
+
+#### replicate\_count
+
+```python
+@property
+def replicate_count() -> int
+```
+
+Return the number of published replicates.
+
+<a id="fim.persistence.manifest.BatchManifest.params"></a>
+
+#### params
+
+```python
+def params() -> SimulationParams
+```
+
+Reconstruct the exact validated simulation parameters.
+
+<a id="fim.persistence.manifest.BatchManifest.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return a JSON-serializable batch manifest mapping.
+
+<a id="fim.persistence.manifest.BatchManifest.from_dict"></a>
+
+#### from\_dict
+
+```python
+@classmethod
+def from_dict(cls, value: Mapping[str, Any]) -> BatchManifest
+```
+
+Validate and reconstruct a batch manifest mapping.
+
+<a id="fim.persistence.manifest.read_batch_manifest"></a>
+
+#### read\_batch\_manifest
+
+```python
+def read_batch_manifest(path: Path | str) -> BatchManifest
+```
+
+Read and validate one batch manifest JSON file.
+
+<a id="fim.persistence.manifest.write_batch_manifest"></a>
+
+#### write\_batch\_manifest
+
+```python
+def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None
+```
+
+Write a batch manifest deterministically, replacing any prior file.
 
 <a id="fim.persistence.store"></a>
 
