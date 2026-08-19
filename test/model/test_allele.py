@@ -99,6 +99,36 @@ def test_finite_allele_space_never_targets_current_or_exceeds_capacity(
     assert seen == {0, 1, 2, 3}
 
 
+def test_finite_allele_space_fills_holes_left_by_noncontiguous_founders(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Non-contiguous founders never push minted IDs past ``capacity - 1``.
+
+    Regression test for a defect where ``_next_unminted`` was seeded from
+    ``max(initial_ids) + 1`` rather than the first actually-unused state:
+    founders ``{0, 3}`` at capacity 4 left states 1 and 2 permanently
+    unmintable and let later mutations target IDs 4 and 5, outside the
+    declared ``K``-allele range.
+    """
+    space = FiniteAlleleSpace(4, [AlleleId(0), AlleleId(3)])
+    generator = rng(20260819)
+    current = AlleleId(0)
+    seen = {0, 3}
+    for _ in range(100):
+        target = space.mutate_target(current, generator)
+        assert target != current
+        assert 0 <= int(target) < 4
+        seen.add(int(target))
+        current = target
+    assert seen == {0, 1, 2, 3}
+
+
+def test_finite_allele_space_rejects_capacity_below_two() -> None:
+    """A single-state space has no "other" state for mutation to target."""
+    with pytest.raises(ValueError, match="at least 2"):
+        FiniteAlleleSpace(1, [AlleleId(0)])
+
+
 def test_finite_allele_space_at_full_capacity_only_recurs(
     rng: Callable[[int], np.random.Generator],
 ) -> None:

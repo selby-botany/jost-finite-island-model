@@ -8,6 +8,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `FiniteAlleleSpace` (the finite-alleles/K-allele mutation model) minted
+  allele IDs outside `0 .. capacity - 1` whenever the generation-zero
+  founding IDs at a locus were non-contiguous (for example `{0, 3}` at
+  capacity 4). `_next_unminted` was seeded from `max(initial_ids) + 1`,
+  so the gap between founders (`1`, `2`) was never mintable and later
+  mutations walked past `capacity - 1` instead. A `finite_alleles` run
+  seeded from a sparse `p_0` therefore silently modeled more than `K`
+  alleles and never surfaced an error. New allele IDs are now allocated
+  from the smallest unminted state in `0 .. capacity - 1`, and minting a
+  state at or beyond `capacity` now raises instead of succeeding
+  silently. `FiniteAlleleSpace` also now rejects a `capacity` below 2 at
+  construction, rather than dividing by zero on the first mutation.
 - `dev/bin/check-doc-links` stripped every underscore and asterisk from a
   heading's anchor, including ones inside a `` `code span` `` where they
   are literal identifier characters, not markdown emphasis syntax — so a

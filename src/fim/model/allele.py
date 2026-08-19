@@ -97,9 +97,13 @@ class FiniteAlleleSpace:
                 in generation zero at this locus.
 
         Raises:
-            ValueError: If ``capacity`` is too small to hold every initial
-                ID, or an initial ID falls outside ``0 .. capacity - 1``.
+            ValueError: If ``capacity`` is fewer than two states (a single
+                state has no "other" for a mutation to target), too small
+                to hold every initial ID, or an initial ID falls outside
+                ``0 .. capacity - 1``.
         """
+        if capacity < 2:
+            raise ValueError("finite allele capacity must be at least 2")
         minted = sorted({int(allele_id) for allele_id in initial_ids})
         if len(minted) > capacity or any(
             identity < 0 or identity >= capacity for identity in minted
@@ -110,7 +114,8 @@ class FiniteAlleleSpace:
             )
         self._capacity = capacity
         self._minted: list[AlleleId] = [AlleleId(identity) for identity in minted]
-        self._next_unminted = (minted[-1] + 1) if minted else 0
+        self._minted_set: set[int] = set(minted)
+        self._next_unminted = 0
 
     def mutate_target(
         self,
@@ -129,15 +134,30 @@ class FiniteAlleleSpace:
             tracked minted set excluding ``current``, or the next not-yet-
             minted one, with probability proportional to how many of each
             kind remain.
+
+        Raises:
+            RuntimeError: If every state in ``0 .. capacity - 1`` is already
+                minted. Unreachable in practice: once ``minted_count ==
+                capacity``, ``recurrence_probability`` is exactly ``1.0``
+                and this branch is never taken; the guard exists so a
+                capacity overrun fails loudly instead of minting an
+                out-of-range ID.
         """
         minted_count = len(self._minted)
         recurrence_probability = (minted_count - 1) / (self._capacity - 1)
         if recurrence_probability > 0.0 and rng.random() < recurrence_probability:
             others = [allele_id for allele_id in self._minted if allele_id != current]
             return others[int(rng.integers(0, len(others)))]
+        while self._next_unminted in self._minted_set:
+            self._next_unminted += 1
+        if self._next_unminted >= self._capacity:
+            raise RuntimeError(
+                "finite allele space has no unminted state left to target"
+            )
         target = AlleleId(self._next_unminted)
         self._next_unminted += 1
         self._minted.append(target)
+        self._minted_set.add(int(target))
         return target
 
 
