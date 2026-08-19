@@ -1,0 +1,18 @@
+# Dependabot opens a PR for each update; nothing here merges automatically.
+# The `pip` group tracks the runtime/dev dependency ranges declared in
+# pyproject.toml; the `github-actions` group tracks the commit-SHA pins in
+# .github/workflows/*.yml (R11 remediation) so those pins get refreshed by
+# a reviewable PR instead of silently drifting or, worse, never moving.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10

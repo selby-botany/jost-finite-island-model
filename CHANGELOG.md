@@ -8,6 +8,36 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Release-workflow dependencies and permissions were not immutably
+  pinned or scoped, and `publish` had several rough edges. Every
+  `uses:` reference in `ci.yml` and `gitleaks-ci.yml` (`actions/
+  checkout`, `actions/setup-python`, `actions/upload-artifact`,
+  `actions/download-artifact`, `gitleaks/gitleaks-action`) now names a
+  full 40-character commit SHA instead of a mutable major-version tag
+  a repository owner could silently repoint. Added `.github/
+  dependabot.yml` tracking both `pip` and `github-actions` on a weekly
+  cadence, so those pins and version ranges move forward on a
+  reviewable schedule instead of drifting or never moving at all.
+  `publish` now generates one consolidated `SHA256SUMS` manifest
+  covering the wheel, sdist, and Windows executable (previously only
+  the executable had a checksum, via its own pre-existing sidecar,
+  kept as-is since `README.md` documents it specifically). Separately:
+  `contents: write` — previously workflow-wide in the old
+  `release.yml` — was already scoped to the `publish` job alone as a
+  side effect of folding the release jobs into `ci.yml` (R8); this pass
+  adds the regression test formalizing it. The Windows inter-job
+  artifact now has `retention-days: 1` (it exists only to hand the exe
+  from `windows` to `publish` within one run; its durable home is the
+  GitHub Release itself). `publish` now verifies the downloaded exe
+  against its own `.sha256` sidecar before shipping either, rather than
+  trusting the inter-job hand-off blindly. The tag/version check now
+  requires the tag to match `vX.Y.Z` before comparing it to
+  `version.txt`, rather than a bare string-equality check with no
+  shape guard. Deliberately deferred: a hash-locked pip constraints
+  file, which needs a lock-file tool (`pip-tools` or `uv`) this project
+  does not currently depend on and an ongoing regeneration process —
+  left as a follow-up rather than adopted silently as a side effect of
+  this pass.
 - The Windows executable was built with `upx=True` in
   `packaging/fim.spec`. UPX-compressed executables are a well-known
   antivirus/SmartScreen false-positive trigger — for a project whose

@@ -104,6 +104,30 @@ def test_release_workflow_uses_changelog_notes() -> None:
     assert "--generate-notes" not in workflow
 
 
+def test_publish_generates_a_checksum_manifest_before_release_create() -> None:
+    """A consolidated checksum manifest covers every released artifact.
+
+    Regression test for R11: only the Windows executable had a checksum
+    (its own `.sha256` sidecar, documented in `README.md` for a Windows
+    user's manual verification); the wheel and sdist `python -m build`
+    produces had none at all. `SHA256SUMS` must be generated, from
+    inside `dist/`, before `gh release create dist/*` runs (so it is
+    itself one of the uploaded artifacts).
+    """
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["publish"]["steps"]
+    step_texts = [step.get("run", "") for step in steps]
+    checksum_index = next(
+        index for index, text in enumerate(step_texts) if "SHA256SUMS" in text
+    )
+    release_index = next(
+        index for index, text in enumerate(step_texts) if "gh release create" in text
+    )
+
+    assert "sha256sum" in step_texts[checksum_index]
+    assert checksum_index < release_index
+
+
 def test_release_jobs_cannot_run_without_a_passing_build_and_valid_tag() -> None:
     """`windows`/`publish` structurally depend on `build` and `verify-tag`.
 
@@ -129,6 +153,25 @@ def test_release_jobs_cannot_run_without_a_passing_build_and_valid_tag() -> None
         assert jobs[job_name]["if"] == "startsWith(github.ref, 'refs/tags/v')"
 
 
+def test_contents_write_is_scoped_to_the_publish_job_only() -> None:
+    """Only `publish` carries the elevated `contents: write` permission.
+
+    Regression test for R13: `release.yml` set `contents: write` at the
+    workflow level, so every job in the file — including the ones that
+    only build and smoke-test, and never touch the repository or a
+    release — ran with write access to repository contents it never
+    needed. The workflow-level default is `contents: read`; `publish` is
+    the only job (it calls `gh release create`) that overrides it.
+    """
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+
+    assert workflow["permissions"] == {"contents": "read"}
+    assert jobs["publish"]["permissions"] == {"contents": "write"}
+    for job_name in ("build", "verify-tag", "windows"):
+        assert "permissions" not in jobs[job_name]
+
+
 def test_verify_tag_job_checks_annotation_and_main_ancestry() -> None:
     """`verify-tag` rejects a lightweight tag and one not reachable from main.
 
@@ -147,6 +190,71 @@ def test_verify_tag_job_checks_annotation_and_main_ancestry() -> None:
     assert checkout_step["with"]["fetch-depth"] == 0
     assert 'git rev-parse --verify --quiet "${GITHUB_REF_NAME}^{tag}"' in run_steps
     assert 'git merge-base --is-ancestor "${GITHUB_SHA}" origin/main' in run_steps
+
+
+def test_windows_artifact_has_a_short_retention() -> None:
+    """The inter-job handoff artifact does not linger past its purpose.
+
+    Regression test for R14: `actions/upload-artifact` defaults to the
+    repository's general retention setting (up to 90 days) with no
+    `retention-days` override. The `windows` artifact exists only to
+    hand the executable from `windows` to `publish` within the same
+    workflow run; its durable home is the GitHub Release `publish`
+    creates from it, not this transient artifact.
+    """
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    upload_step = next(
+        step
+        for step in workflow["jobs"]["windows"]["steps"]
+        if step.get("uses", "").startswith("actions/upload-artifact")
+    )
+
+    assert upload_step["with"]["retention-days"] == 1
+
+
+def test_publish_verifies_the_downloaded_checksum_before_shipping_it() -> None:
+    """`publish` verifies the exe against its own `.sha256` before release.
+
+    Regression test for R14: `publish` downloaded the Windows executable
+    and its `.sha256` sidecar and re-shipped both without ever actually
+    verifying they still matched each other — trusting the inter-job
+    artifact hand-off blindly rather than checking it.
+    """
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["publish"]["steps"]
+    step_texts = [step.get("run", "") for step in steps]
+    download_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("uses", "").startswith("actions/download-artifact")
+    )
+    verify_index = next(
+        index for index, text in enumerate(step_texts) if "sha256sum -c" in text
+    )
+    release_index = next(
+        index for index, text in enumerate(step_texts) if "gh release create" in text
+    )
+
+    assert "fim-windows-x64.exe.sha256" in step_texts[verify_index]
+    assert download_index < verify_index < release_index
+
+
+def test_publish_rejects_a_malformed_tag_before_comparing_to_version_txt() -> None:
+    """The tag/version check guards the tag's shape, not just its value.
+
+    Regression test for R14: comparing `${GITHUB_REF_NAME#v}` to
+    `version.txt` by bare string equality never confirmed the tag looked
+    like `vX.Y.Z` in the first place — only that whatever followed the
+    stripped `v` happened to equal the file's content.
+    """
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["publish"]["steps"]
+    verify_step = next(
+        step for step in steps if "run" in step and "version.txt" in step["run"]
+    )
+
+    assert r"^v[0-9]+\.[0-9]+\.[0-9]+$" in verify_step["run"]
+    assert 'test "${GITHUB_REF_NAME#v}" = "$(cat version.txt)"' in verify_step["run"]
 
 
 def test_ci_build_includes_slow_statistical_tests() -> None:

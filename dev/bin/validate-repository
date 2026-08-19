@@ -32,6 +32,7 @@ shellcheck \
     include/dot-bashrc \
     install/homebrew/test-formula
 yamllint \
+    .github/dependabot.yml \
     .github/workflows/ci.yml \
     .github/workflows/gitleaks-ci.yml
 markdownlint \

@@ -17,6 +17,7 @@
     - [5.2 The `ci` workflow](#52-the-ci-workflow)
     - [5.3 The `gitleaks` workflow](#53-the-gitleaks-workflow)
     - [5.4 The release jobs in `ci.yml`](#54-the-release-jobs-in-ciyml)
+    - [5.5 Supply-chain hardening](#55-supply-chain-hardening)
   - [6. Packaging and distribution](#6-packaging-and-distribution)
     - [6.1 `pyproject.toml` and the source layout](#61-pyprojecttoml-and-the-source-layout)
     - [6.2 The Windows one-file executable](#62-the-windows-one-file-executable)
@@ -377,9 +378,10 @@ script a maintainer runs identically offline (§7). Permissions are
 ### 5.3 The `gitleaks` workflow
 
 `.github/workflows/gitleaks-ci.yml` mirrors the sibling repositories: a
-full-history checkout (`fetch-depth: 0`) and `gitleaks/gitleaks-action@v2`.
-It is a separate workflow, not a step in `ci.yml`, so a secret-scan failure
-is legible on its own and does not mask a test failure or vice versa.
+full-history checkout (`fetch-depth: 0`) and `gitleaks/gitleaks-action`,
+both pinned to a commit SHA (§5.5). It is a separate workflow, not a step
+in `ci.yml`, so a secret-scan failure is legible on its own and does not
+mask a test failure or vice versa.
 
 ### 5.4 The release jobs in `ci.yml`
 
@@ -426,7 +428,39 @@ after every test the project runs has passed for that exact commit.
 
 Repository-level branch protection on `main` and tag protection on `v*`
 (who may push either) are configured directly in GitHub settings, not in
-a workflow file — see `install/README.md`'s release-readiness checklist.
+a workflow file — see `CONTRIBUTING.md`'s "Repository settings" checklist.
+
+### 5.5 Supply-chain hardening
+
+Every `uses:` reference in both workflow files (§5.2–§5.4) names a full
+40-character commit SHA, never a mutable tag like `@v4` — a tag owner can
+silently repoint it at different, unreviewed content at any time, the same
+risk this project's own `bin/` wrappers already avoid by pinning Docker
+images to a digest rather than a floating tag. A trailing `# vN` comment
+keeps the pin human-readable; `test/validation/test_workflow_pins.py`
+parses every workflow file and fails if any reference is not a full SHA.
+
+`.github/dependabot.yml` tracks both ecosystems that need to move forward
+on their own schedule now that they no longer drift on their own: `pip`
+(the ranges in `pyproject.toml`) and `github-actions` (the SHA pins
+above), each on a weekly cadence, each landing as an ordinary reviewable
+PR rather than an automatic merge.
+
+`publish` (§5.4) generates `SHA256SUMS` inside `dist/` — covering the
+wheel, the sdist, and the Windows executable — before `gh release create`
+runs, so every artifact a release actually ships has a checksum attached
+to it; previously only the executable did, via its own pre-existing
+`fim-windows-x64.exe.sha256` sidecar (kept, since `README.md` documents
+it specifically for a Windows user's manual verification).
+
+**Deliberately deferred:** a hash-locked constraints file (`pip install
+--require-hashes` against a lock file covering transitive dependencies,
+so even a version-range match cannot silently substitute compromised
+package content) needs a lock-file tool this project does not currently
+depend on (`pip-tools` or `uv`) and an ongoing regeneration process.
+Introducing that tool is a deliberate choice with its own maintenance
+cost, not a mechanical pin — left as a follow-up rather than adopted
+silently as a side effect of this pass.
 
 ## 6. Packaging and distribution
 
