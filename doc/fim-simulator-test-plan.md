@@ -765,6 +765,20 @@ are headless and reproducible.
   points coincide (design §8).
 - Diagnostics: the convergence-trace series has one point per recorded
   generation; the STRUCTURE-style bar chart has `d` stacked bars.
+- **Error paths and file writing** (R15 remediation): every documented
+  `ValueError` guard (mismatched deme count, an undersized
+  `pairwise_max_demes`, a length mismatch or empty history for a
+  convergence trace, an out-of-range `locus_index`) is asserted by
+  name; both diagnostic views are confirmed to actually write a
+  non-empty PNG when given a `path` (previously untested for either);
+  the pairwise matrix's unused-grid-cell hiding and the PCA
+  projection's single-point special case (skipping `numpy.linalg.svd`
+  entirely) are each exercised at the specific `d` that reaches them;
+  a locus with more alleles than `MAX_LEGEND_ALLELES` renders without
+  a legend. One guard in `_frequency_points` (an empty point matrix)
+  is unreachable through any validly constructed `ModelState` — marked
+  `# pragma: no cover` with the invariant it depends on stated inline,
+  rather than covered by a contrived, non-representative fixture.
 
 ## 10. Packaging smoke tests
 
@@ -831,10 +845,12 @@ no wall-clock, fully reproducible.
   `.github/workflows/ci.yml`, to source their GitHub release notes from
   the extractor rather than GitHub's own auto-generated notes, and to use
   a `pyinstaller` work path that does not collide with the build script's
-  own directories. A companion check confirms `build`'s CI-mode test
-  invocation excludes only `packaging`-marked tests — the authoritative
-  release gate still runs the `statistical` and `slow` layers (§2's
-  taxonomy), unlike the fast default `pytest` invocation (§3).
+  own directories. A companion check (R17 remediation) confirms
+  `build`'s CI-mode test invocation applies no marker exclusion at
+  all — the authoritative release gate runs every layer, including
+  `packaging`, `statistical`, and `slow` (§2's taxonomy), unlike the
+  fast default `pytest` invocation (§3), which excludes all three for
+  local iteration speed.
 - **Release gating** (`test_release_notes.py`, detailed design §5.4, R8
   remediation): `windows` and `publish` name `verify-tag` and/or `build`
   in their `needs:`, and `verify-tag` itself is checked to both `git
@@ -850,8 +866,10 @@ no wall-clock, fully reproducible.
 
 ## 11. Coverage targets and CI gating
 
-- Branch coverage gate: **90%** of `src/fim`, excluding only `viz/`
-  (smoke-tested by structure, not line-covered — §9). `cli.py`'s
+- Branch coverage gate: **90%** of `src/fim`, with every package
+  measured — `viz/` (structurally tested by §9, previously the one
+  coverage omit) now also carries real error-path and file-writing
+  coverage (R15 remediation) and sits at 100%. `cli.py`'s
   `update --check` network wrapper is *not* omitted: its `urlopen` call is
   monkeypatched at the boundary (§4.12), so the surrounding logic is
   exercised and counted normally, and the coverage gate itself never

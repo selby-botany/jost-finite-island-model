@@ -145,9 +145,6 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["fim"]
-omit = [
-    "src/fim/viz/*",
-]
 
 [tool.coverage.report]
 fail_under = 90

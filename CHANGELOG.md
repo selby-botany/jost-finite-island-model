@@ -8,6 +8,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `src/fim/viz/*` was entirely excluded from the coverage gate
+  (`omit = ["src/fim/viz/*"]`), and its own test file
+  (`test/viz/test_plots.py`) covered only happy paths — none of six
+  `ValueError` guards across `scatter.py`/`diagnostics.py`, the
+  pairwise-matrix grid-cell-hiding branch, the PCA single-point
+  special case (which skips `numpy.linalg.svd` entirely), the
+  legend-count cap, or either diagnostic view's file-writing branch
+  had a test. Removed the coverage omit and added ten tests covering
+  every reachable branch; `viz/` is now at 100% branch coverage (the
+  overall gate moved from 95.76% to 96.06%). One guard
+  (`_frequency_points`'s empty-point-matrix check) is unreachable
+  through any validly constructed `ModelState` — marked
+  `# pragma: no cover` with the specific invariant it depends on
+  stated inline, rather than forced to pass via a contrived fixture
+  that doesn't represent a real caller.
 - Nothing guarded the test suite's own Hypothesis configuration:
   `test/conftest.py` registers and loads a `derandomize=True` profile
   so every property-based test is a pure function of its seed, but a

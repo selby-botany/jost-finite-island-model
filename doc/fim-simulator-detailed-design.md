@@ -361,11 +361,12 @@ script a maintainer runs identically offline (§7). Permissions are
 1. `ruff check` and `ruff format --check` over `src`, `test`, and the
    Python programs under `dev/bin`.
 2. `mypy --strict src`.
-3. `pytest` with branch coverage, excluding only the `packaging` marker —
-   so the authoritative gate runs the `statistical` and `slow` layers that
-   the fast default invocation skips (test plan §3) — failing below the
-   coverage gate: **90%** of `src/fim`, excluding `viz/`, which is
-   smoke-tested by structure rather than line-covered.
+3. `pytest` with branch coverage and no marker exclusion at all — so the
+   authoritative gate runs every layer the fast default invocation skips
+   for local iteration speed (`statistical`, `slow`, and `packaging` —
+   test plan §3) — failing below the coverage gate: **90%** of
+   `src/fim`, with every package measured; `viz/` carries no coverage
+   omit and is currently at 100%.
 4. Regenerate `src/fim/API.md` to a scratch path and diff it against the
    committed copy (the doc-freshness gate, §8.1), then validate every
    Markdown link and in-page anchor with `dev/bin/check-doc-links` (§8.3).

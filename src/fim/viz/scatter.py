@@ -84,7 +84,13 @@ def _frequency_points(state: ModelState) -> FloatArray:
             for allele_id in state.frequency_map(deme_index, locus_index):
                 allele_ids.setdefault(allele_id, None)
         locus_allele_pairs.extend((locus_index, allele_id) for allele_id in allele_ids)
-    if not locus_allele_pairs:
+    if not locus_allele_pairs:  # pragma: no cover
+        # Unreachable through any validly constructed ModelState:
+        # `ModelState.__post_init__` already requires at least one locus,
+        # at least one deme, and every per-deme-locus frequency map to sum
+        # to 1 (so it cannot be empty) -- guarded defensively rather than
+        # asserted, so a future relaxation of that invariant fails loudly
+        # here instead of returning a meaningless empty plot.
         raise ValueError("state contains no allele-frequency points")
     point_rows = [
         [
