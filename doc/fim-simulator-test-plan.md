@@ -90,7 +90,11 @@ The contract, applied to every test in this plan:
 6. **Pinned toolchain.** pytest, Hypothesis, NumPy, and Matplotlib are
    version-pinned (detailed design §4) so the suite is a function of the
    commit, not of upstream's release schedule. Hypothesis runs with a fixed
-   `derandomize=True` profile in CI so property tests are reproducible.
+   `derandomize=True` profile in CI so property tests are reproducible —
+   `test/test_hypothesis_profile.py` asserts `settings.default.derandomize`
+   directly, so a future edit to `test/conftest.py`'s profile registration
+   fails loudly instead of only showing up as an intermittently flipping
+   property test months later.
 
 A test that cannot be made deterministic is redesigned (stub the stochastic
 dependency) rather than retried. Retry is reserved for cases where the

@@ -8,6 +8,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Nothing guarded the test suite's own Hypothesis configuration:
+  `test/conftest.py` registers and loads a `derandomize=True` profile
+  so every property-based test is a pure function of its seed, but a
+  silent future edit to that registration — or a competing
+  `load_profile` call sequenced after it — would only have shown up as
+  an intermittently flipping property test, not a named, immediate
+  failure. Added `test/test_hypothesis_profile.py`, asserting
+  `settings.default.derandomize` directly (the profile actually active
+  for whatever test runs next, not merely that a correctly configured
+  one exists somewhere unused).
 - `dev/bin/check-doc-links` scanned `doc/dev/` — scratch and review
   material declared out of scope by its own `doc/.gitignore` ("dev")
   — as if it were reviewable documentation, reporting broken links,
