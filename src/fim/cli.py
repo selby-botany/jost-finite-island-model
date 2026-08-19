@@ -208,7 +208,11 @@ def _command_run_batch(
     summary/manifest, leaves no trace at `output_directory` at all.
     """
     run_id = deterministic_run_id(params)
-    max_workers = None if arguments.sequential else arguments.workers or _cpu_count()
+    max_workers = (
+        None
+        if arguments.sequential
+        else (arguments.workers if arguments.workers is not None else _cpu_count())
+    )
     if not arguments.quiet:
         print(f"Running batch {run_id} {_batch_description(params, max_workers)}")
 

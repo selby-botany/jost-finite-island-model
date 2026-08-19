@@ -626,6 +626,30 @@ def test_run_batch_respects_an_explicit_worker_count(tmp_path: Path) -> None:
     assert (output / "replicate-002" / "report.json").exists()
 
 
+def test_run_batch_rejects_zero_workers(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--workers 0` must reach the engine's own validation, not become
+    the CPU-count default.
+
+    `0 or _cpu_count()` treated `0` as falsy and silently substituted the
+    default; only a genuinely unset `--workers` (`None`) should fall
+    back to `_cpu_count()`.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=2)
+    output = tmp_path / "output"
+
+    status = cli.main(
+        ["run", str(config), "-o", str(output), "--workers", "0", "--quiet"]
+    )
+
+    assert status == 2
+    assert "max_workers must be at least 1" in capsys.readouterr().err
+    assert not output.exists()
+
+
 def test_run_batch_adaptive_tolerance_can_stop_before_n_replicates(
     tmp_path: Path,
 ) -> None:
