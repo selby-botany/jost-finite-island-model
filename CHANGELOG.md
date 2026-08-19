@@ -8,6 +8,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `dev/bin/check-doc-links` scanned `doc/dev/` — scratch and review
+  material declared out of scope by its own `doc/.gitignore` ("dev")
+  — as if it were reviewable documentation, reporting broken links,
+  broken anchors, and orphan-document errors for content never meant
+  to be linked into the doc set at all. The checker now excludes the
+  `doc/dev/` subtree specifically (by path, not by directory name —
+  a bare `"dev"` exclusion would have incorrectly also skipped the
+  real, wanted `dev/git-hooks/README.md` at the repository root, which
+  happens to share the same bare directory name one level up). Added
+  `test_checker_skips_doc_dev_but_not_repository_root_dev` asserting
+  both halves of that distinction.
 - The `packaging` pytest marker (`"requires a built distribution"`) was
   declared in `pyproject.toml` but carried by zero tests, and `build`'s
   `--ci` invocation hard-coded `not packaging` even in CI mode — so

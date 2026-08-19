@@ -121,3 +121,39 @@ def test_checker_rejects_orphan_document(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert "orphan.md: orphan document" in result.stderr
+
+
+def test_checker_skips_doc_dev_but_not_repository_root_dev(
+    tmp_path: Path,
+) -> None:
+    """`doc/dev/` scratch content is out of scope; root `dev/` is not.
+
+    `doc/dev/` is declared out of scope by its own `doc/.gitignore`
+    ("dev") — orphaned, broken-link scratch/review material never meant
+    to ship. `dev/` at the repository root is a real, wanted directory
+    (`dev/git-hooks/`, `dev/bin/`) that happens to share the same bare
+    name one level down; excluding by name alone would incorrectly skip
+    it too.
+    """
+    (tmp_path / "README.md").write_text(
+        "# Project\n\n[Hooks](dev/git-hooks/README.md)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "dev" / "git-hooks").mkdir(parents=True)
+    (tmp_path / "dev" / "git-hooks" / "README.md").write_text(
+        "# Git hooks\n\n[Broken](does-not-exist.md)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "dev").mkdir(parents=True)
+    (tmp_path / "doc" / "dev" / "scratch.md").write_text(
+        "# Scratch\n\n[Broken](also-does-not-exist.md)\n",
+        encoding="utf-8",
+    )
+
+    result = _run_checker(tmp_path)
+
+    assert result.returncode == 1
+    assert "dev/git-hooks/README.md: missing target does-not-exist.md" in (
+        result.stderr
+    )
+    assert "scratch.md" not in result.stderr

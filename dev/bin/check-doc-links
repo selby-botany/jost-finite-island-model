@@ -73,12 +73,18 @@ def markdown_files() -> tuple[Path, ...]:
         "htmlcov",
         "site",
     }
+    # doc/dev/ is scratch/review material, declared out of scope by its own
+    # doc/.gitignore ("dev") rather than by name here — a bare "dev" entry
+    # in `ignored` above would incorrectly also exclude the real, wanted
+    # dev/git-hooks/README.md at the repository root.
+    doc_dev = ROOT / "doc" / "dev"
     return tuple(
         sorted(
             path
             for path in ROOT.rglob("*.md")
             if not any(part in ignored for part in path.parts)
             and not any(part.startswith(".venv") for part in path.parts)
+            and doc_dev not in path.parents
         )
     )
 
