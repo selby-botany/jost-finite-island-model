@@ -319,6 +319,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in-document and cross-document section reference; `usage.md`,
   `finite-island-model-introduction.md`, and
   `jost-differentiation-measures.md` needed no changes.
+- Reviewed the whole documentation set for completeness, currency,
+  language, and fit to its stated audience. The test plan gained the
+  coverage it had no entry for — `fim.statistics.interval`,
+  `ConfidenceIntervalCriterion`, the replicate-batch configuration keys,
+  adaptive stopping, parallel replicate execution, and the batch artifact
+  contract — and lost the stale claim that the CLI rejects a
+  multi-replicate configuration. The engineering reference now describes
+  `pre-push` as the working-tree gate it is rather than a check of the
+  pushed commits, records the repository-file checks as digest-pinned
+  Docker wrappers driven by `dev/bin/validate-repository` rather than a
+  nonexistent markdownlint GitHub action, lists `bin/`,
+  `include/dot-bashrc`, and the remaining `dev/bin` programs in its
+  repository layout, and documents the deliberate `pyparsing` pin. The
+  design document gained `statistics/interval.py` and the replicate-batch
+  layer, split its extensibility table into variations reachable from
+  configuration and landing spots for changes that are not built, moved
+  the graphical front-end sketches into an appendix, and had its
+  walkthrough transcript's run identity corrected against a re-run of the
+  documented scenario. Remaining version-anchored and
+  development-relative phrasing was removed from `doc/usage.md`,
+  `doc/configuration.md`, `doc/developer.md`, and `src/README.md`, along
+  with an implementation aside about worker processes and the interpreter
+  lock that did not belong in a user guide. Each design document now
+  records this review in a `Revisions` subsection beneath its original
+  generation metadata.
 
 ## [1.0.0] - 2026-08-16
 

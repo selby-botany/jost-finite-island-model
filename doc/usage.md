@@ -1,7 +1,7 @@
 # Using `fim`
 
-This guide covers every version 1.0.0 command and output, not what the
-simulator models or why — see [what this simulates](../README.md#what-this-simulates)
+This guide covers every `fim` command and output, not what the simulator
+models or why — see [what this simulates](../README.md#what-this-simulates)
 for that first. For parameter types and defaults, use the
 [configuration reference](configuration.md). Return to the
 [project overview](../README.md) for installation and documentation links.
@@ -58,13 +58,11 @@ controls whether one run or a whole batch executes:
   a batch-level `manifest.json` and `summary.json` — see
   [Output schemas](#output-schemas).
 
-Batch replicates run in parallel by default, using one worker process per
-CPU (real OS processes, not threads — the per-generation state is
-Python-object sparse maps that never release the GIL). `--workers N` sets
-an explicit worker count; `--sequential` runs replicates one at a time.
-Either way, every replicate's own trajectory, report, and statistics are
-identical to running it alone with the same seed — parallelism only
-changes how fast the batch completes, never what it computes.
+Batch replicates run in parallel by default, one worker per processor.
+`--workers N` sets an explicit worker count; `--sequential` runs replicates
+one at a time. Every replicate's trajectory, report, and statistics are
+identical to running it alone with the same seed, so the worker count
+affects only how long the batch takes.
 
 With `replicate_tolerance` unset in the config, exactly `n_replicates`
 replicates run. With it set, the batch can stop earlier, once every watched
@@ -74,15 +72,15 @@ statistic's across-replicate confidence interval has tightened enough (see
 
 ## Worked examples
 
-Each example below is a complete config and the exact command that runs
-it — save the YAML, run the command, and the result is reproducible: same
-seed, same parameters, same version gives the same `report.json` every
-time (see [Reproduce a run](#reproduce-a-run)). Every example uses a small
-`N`/`d`/`max_generations` so it finishes in a few seconds and a short seed
-distinct from [`fim init`](#create-a-configuration)'s starter config, so it
-never collides with it. Each one demonstrates one configuration option (or
-a natural pair) from [configuration.md](configuration.md); combine them
-freely in a real study.
+Each example below is a complete config and the command that runs it: save
+the YAML, run the command, and the reported values match those shown here,
+because the same seed, parameters, and version always give the same
+`report.json` (see [Reproduce a run](#reproduce-a-run)). Each example uses
+a small `N`, `d`, and `max_generations` so it finishes in seconds, and a
+seed distinct from [`fim init`](#create-a-configuration)'s starter config.
+Each demonstrates one option, or one natural pair of options, from the
+[configuration reference](configuration.md); a real study combines them
+freely.
 
 ### Unequal island sizes with a migration hub
 
@@ -282,11 +280,10 @@ stabilize first.
 
 ### An adaptive replicate batch with a confidence interval
 
-Rather than guessing how many replicate runs a confidence interval needs
-(the question this feature exists to answer — see
-[configuration.md](configuration.md#replicate_tolerance)), cap it well above
-what should be necessary and let `replicate_tolerance` decide when enough
-have run:
+Rather than guessing how many replicate runs a confidence interval needs,
+set `n_replicates` well above the plausible requirement and let
+[`replicate_tolerance`](configuration.md#replicate_tolerance) decide when
+enough have run:
 
 ```yaml
 N: 100

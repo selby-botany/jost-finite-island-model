@@ -116,7 +116,7 @@ tolerances are derived from sample size before a seed is selected.
 - `read(run_id)`
 
 Add a new backend under `fim.persistence` without changing the engine,
-statistics, or visualizations. The v1 JSON Lines backend flushes each
+statistics, or visualizations. The JSON Lines backend flushes each
 generation so an interrupted file retains every complete line.
 
 A replicate batch needs one store *per replicate*, not one shared instance —

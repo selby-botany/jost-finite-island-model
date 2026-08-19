@@ -21,22 +21,25 @@
   - [7. Statistics module](#7-statistics-module)
   - [8. Visualization module](#8-visualization-module)
   - [9. Extensibility: where the next "what if" lands](#9-extensibility-where-the-next-what-if-lands)
+    - [9.1 Variations reachable from configuration](#91-variations-reachable-from-configuration)
+    - [9.2 Landing spots for changes that are not built](#92-landing-spots-for-changes-that-are-not-built)
   - [10. Validation and test strategy](#10-validation-and-test-strategy)
   - [11. Out of scope](#11-out-of-scope)
   - [12. Illustrated walkthrough](#12-illustrated-walkthrough)
     - [Installing it](#installing-it)
     - [Using it from the command line](#using-it-from-the-command-line)
-    - [A GUI](#a-gui)
+  - [Appendix A. Graphical front-end sketches](#appendix-a-graphical-front-end-sketches)
   - [Metadata](#metadata)
+    - [Revisions](#revisions)
 
 ## Who this document is for
 
 Primarily written for whoever maintains or extends the simulator:
 comfortable with software architecture, arrays, and basic probability; no
 population-genetics background assumed beyond what is restated inline.
-This is also the model and architecture reference for a piece of software
-a botanist uses directly, so it is written to be readable by him too — not
-every section needs it, and the table below says which.
+It is also the model and architecture reference for software a botanist
+uses directly, so the prose stays readable for that reader as well. Not
+every section needs to be; the table below says which do.
 
 | If you are... | Read | Treat as optional |
 |---|---|---|
@@ -45,33 +48,33 @@ every section needs it, and the table below says which.
 | Whoever maintains or extends the simulator | Everything, in order | — |
 
 Sections written for the implementer are marked as such at their start;
-skipping them costs nothing needed to follow §12's walkthrough, which is
-the closest thing in this document to "here is what using the software
-actually feels like." The two companion documents in this directory —
+skipping them costs nothing needed to follow §12's walkthrough.
+
+Two companion documents in this directory —
 [the finite island model introduction](finite-island-model-introduction.md)
 and
 [the Jost differentiation-measures guide](jost-differentiation-measures.md)
 — are the source of every formula and biological claim used below and are
-not re-derived here; this document is architecture built on top of them,
-not a third exposition of the model itself. The primary-source PDFs in
-`../../lou-jost-papers/` (the papers the two companion documents
-themselves cite and quote) are mostly diversity- and
-differentiation-statistic papers with no simulator-architecture content
-beyond what the companion documents already extract — but one,
-`Dear-NolanMarch17Final.pdf`, is exactly on point: an unpublished
-open letter from Jost to Nolan Kane (undated beyond the filename; internal
-references to Whitlock (2011) place it in or after 2011), written
-specifically to rebut a blog post with two worked finite-island-model
-simulations, run by Jost's colleagues Anne Chao and T. C. Hsieh, complete
-with parameters, expected/observed statistic values, and the actual
-scatter plots. §4.3, §8, and §10 below draw on it directly and cite it as
-what it is — primary correspondence from the model's own author, not a
-peer-reviewed publication.
+not re-derived here. This document is the architecture built on top of
+them.
+
+Sections §4.3, §8, and §10 additionally cite one primary source directly:
+`Dear-NolanMarch17Final.pdf`, an unpublished open letter from Lou Jost to
+Nolan Kane, undated beyond its filename (internal references to Whitlock
+(2011) place it in or after 2011). It answers a blog post with two worked
+finite-island-model simulations, run by Anne Chao and T. C. Hsieh, and
+reports their parameters, expected and observed statistic values, and
+scatter plots. It is primary correspondence from the model's own author
+rather than a peer-reviewed publication, and the sections below treat it
+accordingly. The letter is not distributed with this repository; every
+value taken from it appears in §4.3's table below, so no reader needs the
+original to follow this document or the test plan that consumes the same
+values.
 
 ## 1. Purpose and scope
 
-A simulator for the finite island model (FIM) that a botanist (Lou Jost,
-or a collaborator working in his tradition) uses to generate
+A simulator for the finite island model (FIM) that a botanist — Lou Jost,
+or a collaborator working in that tradition — uses to generate
 known-ground-truth allele-frequency trajectories, then compute and inspect
 population-differentiation statistics against that known history. The
 motivating gap, per the companion introduction (§4 of that document): the
@@ -83,11 +86,13 @@ what this project exists to keep.
 The core is a single, symmetric-island model (`N`, `m`, `μ` shared across
 demes by default; one allele length `L` shared across loci by default)
 built so that further variations are extensions of the parameter set and
-the update pipeline rather than rewrites of it (§9 maps every "what if"
-this way). Several of those variations are already implemented — unequal
-deme sizes, a general or spatial migration matrix, per-locus length, and
-watching several convergence statistics at once — and are marked as such
-in §9's table.
+the update pipeline rather than rewrites of it. Section §9 maps every
+"what if" this way, and separates the variations the simulator already
+supports — unequal deme sizes, a general or spatial migration matrix,
+per-locus length and mutation rate, stochastic migrant counts, a
+finite-alleles mutation model, several simultaneous convergence
+statistics, and adaptive replicate batching — from the ones that remain
+deferred (§11).
 
 ## 2. Requirements
 
@@ -105,8 +110,8 @@ The simulator's functional requirements, restated for reference:
 4. Initial allele-frequency distributions per deme may be random; the
    model is asserted to converge analytically for any starting
    population.
-5. This pass persists every intermediate generation's state and reports
-   the converged final state.
+5. Every intermediate generation's state is persisted, and the converged
+   final state is reported.
 6. Botanist-facing output is (a) final population-differentiation metrics
    (scalars) and (b) per-deme allele-frequency distributions, with a
    canonical visual of a scatter plot of allele frequency in `d`-dimensional
@@ -194,11 +199,11 @@ the next unused integer on every mutation event across the whole run,
 guaranteeing `same()` is exactly integer equality with no risk of two
 independent mutations colliding on the same label.
 
-An opt-in finite-alleles (K-allele) model — **implemented**, §9 — relaxes
-that assumption for loci short enough that it stops holding: each locus
-gets a bounded state space of `4 ** L` possible states, and a mutation
-event can *recur* to a state already present elsewhere in the run rather
-than always minting fresh. This still imposes no ordering or metric on
+An opt-in finite-alleles (K-allele) model (§9) relaxes that assumption for
+loci short enough that it stops holding: each locus gets a bounded state
+space of `4 ** L` possible states, and a mutation event can *recur* to a
+state already present elsewhere in the run rather than always minting
+fresh. This still imposes no ordering or metric on
 alleles — a K-allele target is chosen uniformly among the other `K - 1`
 states, with no notion of one being "closer" to another — so it stays
 inside the same distance-free identity model as the paragraph above, only
@@ -208,11 +213,11 @@ A locus is a separate concept from an allele: it names *where* to look,
 carrying its own identity `l ∈ 𝗭+` and length `L ∈ 𝗭+`. `L` matters
 through the mutation rate (`μ ≈ μ_b · L`, per the differentiation-measures
 guide) and, under the finite-alleles model only, through that state-space
-ceiling — either way it plays no role in any statistic computed from a
-frequency vector. Represented as a `LocusSpec(locus_id, length)` value
-object, with every run configuration providing one `LocusSpec` per tracked
-locus — `length` may be equal across loci (the common case) or vary per
-locus (§9); either way it is a data change, never a schema change.
+ceiling; it plays no role in any statistic computed from a frequency
+vector. It is represented as a `LocusSpec(locus_id, length)` value object,
+with every run configuration providing one `LocusSpec` per tracked locus.
+`length` may be equal across loci (the common case) or vary per locus
+(§9); either way it is a data change, never a schema change.
 
 ### 3.3 Initial conditions
 
@@ -356,8 +361,12 @@ across every companion document is "the botanist will keep asking to vary
 one more thing." The design response: every value that varies by
 scenario — not just the four named arguments — is a named entry in `𝖯`,
 read at the point of use with an explicit default, and never a hardcoded
-literal inside an operator or the run loop. A partial, illustrative (not
-exhaustive) schema:
+literal inside an operator or the run loop.
+
+The table below is the architectural shape of `𝖯`, not its full key list;
+[`doc/configuration.md`](configuration.md) is the authoritative reference
+for every key, type, default, and validation rule, and is the one place
+that has to change when a key is added.
 
 | Key | Meaning | Default |
 |---|---|---|
@@ -394,8 +403,8 @@ real study needs; a real study should tune them. For `N`, `m`, `μ`, and
 `d` themselves, Jost's own "Dear Nolan" letter (identified above; see
 [§8](#8-visualization-module) and [§10](#10-validation-and-test-strategy)
 for how it is used there) gives two concrete, real worked scenarios —
-run by his colleagues Anne Chao and T. C. Hsieh specifically to test the
-finite island model at equilibrium — which are a far better source for a
+run by Jost's colleagues Anne Chao and T. C. Hsieh specifically to test
+the finite island model at equilibrium — which are a far better source for a
 starting scenario than an arbitrary guess:
 
 | Scenario | `N` | `d` | `m` | `μ` | `Nm` | expected `G_ST` | expected `D` |
@@ -421,10 +430,10 @@ strongly allelically differentiated (`D` near one) while barely departing
 from fixation-neutrality (`G_ST` near zero) — which is exactly the point
 the letter itself is making (Nm does not control allelic differentiation;
 `m/[μ(d-1)]` does), rendered as a parameter sweep rather than a static
-table. A geometric-mean-ish midpoint of the two — roughly `N ≈ 450`,
-`d ≈ 20`, `m ≈ 0.001`, `μ ≈ 0.00003` — is a reasonable single default
-scenario for exercising the simulator end to end, sitting between the two
-regimes rather than at either extreme.
+table. Approximately the geometric midpoint of the two — `N ≈ 450`, `d ≈ 20`,
+`m ≈ 0.001`, `μ ≈ 0.00003` — is the default scenario for exercising the
+simulator end to end, sitting between the two regimes rather than at
+either extreme.
 
 One notational caution, confirmed directly from the letter's own figures
 (both plot titles read the parameters back verbatim, e.g. `"L=200 N=100
@@ -440,9 +449,9 @@ mutation rate as `u`, not `μ`), not a hint about locus-length defaults.
 **Python 3, with NumPy as the array backend.** NumPy's `Generator` gives
 vectorized batched binomial/multinomial sampling across loci and replicate
 runs, the natural fit for the drift step's workload. Output formats (§6)
-are chosen to be equally easy to load from R, since the origin of this
-whole project was a researcher wanting per-generation frequencies he could
-load into his own analysis tooling. §4.5 below records the packaging
+are chosen to be equally easy to load from R, because the project exists
+to give a researcher per-generation frequencies loadable into their own
+analysis tooling. §4.5 below records the packaging
 consequence of this choice.
 
 ### 4.5 Packaging and distribution
@@ -510,10 +519,11 @@ jost-finite-island-model/
 │       │   ├── criteria.py        # ConvergenceCriterion protocol + built-ins
 │       │   └── monitor.py         # ConvergenceMonitor
 │       ├── statistics/
-│       │   └── differentiation.py # H, H_S, H_T, G_ST, D, E_ST, K_ST, Hill numbers
+│       │   ├── differentiation.py # H, H_S, H_T, G_ST, D, E_ST, K_ST, Hill numbers
+│       │   └── interval.py        # across-replicate confidence intervals
 │       ├── persistence/
 │       │   ├── store.py           # TrajectoryStore protocol (backend-agnostic)
-│       │   ├── jsonl_store.py     # JSONLTrajectoryStore — the v1 backend
+│       │   ├── jsonl_store.py     # JSONLTrajectoryStore — the only backend
 │       │   └── manifest.py
 │       ├── viz/
 │       │   ├── scatter.py         # canonical d-dimensional frequency scatter
@@ -609,10 +619,14 @@ sparse map was involved.
 `is_stable(history: Sequence[float], window: int, tolerance: float) ->
 bool`. Built-ins: a trailing-window stability check (compare the mean of
 the window's first half against its second half; stable when the
-difference is within `tolerance`) and a fixed-`max_generations` fallback
+difference is within `tolerance`), a fixed-`max_generations` fallback
 that always eventually fires regardless of statistical behavior — the
 safety valve named in §3.5, since stochastic-equilibrium detection is not
-guaranteed to trigger quickly, or at all, for a badly chosen tolerance.
+guaranteed to trigger quickly, or at all, for a badly chosen tolerance —
+and a confidence-interval criterion that reads a sequence of
+across-replicate values rather than a within-run trajectory (§9's adaptive
+replicate batching), stable once the interval's half-width is within
+`tolerance`.
 The **default** run watches a single statistic (`𝖯["convergence_statistic"]`,
 default `"D"`) — the common case, and still the cheapest path through the
 code, exercising exactly one history and one criterion evaluation per
@@ -652,6 +666,17 @@ can sweep `q` directly rather than being limited to the three named
 measures. Usable standalone against any persisted trajectory, current run
 or historical.
 
+**`statistics/interval.py`.** The across-replicate counterpart: a
+Student's-t confidence interval on the mean of one statistic's final
+value over several independent replicate runs. It reads a plain sequence
+of floats and knows nothing about the engine, matching
+`differentiation.py`'s own independence from it. The critical value comes
+from a published t-table (interpolated in `1/df`, with the exact normal
+quantile beyond the table's tail) rather than a hand-rolled special
+function, keeping the statistical surface under outside review small and
+the dependency footprint at the standard library. This is what
+`ConfidenceIntervalCriterion` and the batch summary (§9) both report.
+
 **`persistence/store.py`**, **`jsonl_store.py`**, and **`manifest.py`** —
 see §6.
 
@@ -660,12 +685,21 @@ see §6.
 **`engine.py`.** `fim(N, m, mu, d, *, params: SimulationParams) ->
 RunResult` — the public entry point matching the requirement's own
 signature. Owns the run loop described in §4.2 and nothing else; every
-step it takes is a call into one of the modules above.
+step it takes is a call into one of the modules above. With
+`n_replicates` above one it returns one `RunResult` per independently
+seeded replicate instead, optionally stopping the batch early on an
+across-replicate confidence interval and optionally distributing
+replicates over worker processes (§9); `replicate_summary` reports each
+statistic's realized interval. The batch layer orchestrates whole runs
+and changes nothing inside one.
 
 **`cli.py`** / **`bin/fim`.** Thin command-line wrapper: parse a config
 file or flags into `SimulationParams`, call `engine.fim()`, print a
 one-page summary of the final report, and write the persisted trajectory,
-report, and canonical scatter to an output directory.
+manifest, report, and canonical scatter to an output directory. A
+replicate batch writes that same set per replicate subdirectory, plus the
+batch's own manifest and its `summary.json` of realized confidence
+intervals; `doc/usage.md` is the artifact contract in full.
 
 ## 6. Persistence design
 
@@ -689,9 +723,9 @@ alleles):
 | `frequency` | float | `p_{k,t,l}(allele_id)` |
 
 Long-format, tidy, one value per row — directly loadable into R or Python
-without a custom parser, matching this project's founding motivation
-(giving a researcher per-generation frequencies he can load into his own
-analysis, not a black box).
+without a custom parser, matching this project's purpose:
+giving a researcher per-generation frequencies loadable into their own
+analysis, not a black box.
 
 **Backend is swappable behind a `TrajectoryStore` protocol** (`persistence/
 store.py`); the row schema above is the store's public contract, not any
@@ -752,9 +786,8 @@ module's output at `t = T`, formatted.
 ## 8. Visualization module
 
 *Written for the implementer, but describes the botanist-facing output
-directly — worth reading in full if you're curious why the plot looks
-the way it does; §12 shows the result itself, no implementation language
-required.*
+directly: this section explains why the plots take the form they do, and
+§12 shows the result itself.*
 
 **Canonical view (requirement 6, "scatter plot of frequency in
 `d`-dimensional space"):** one point per `(locus, allele)`, plotted with
@@ -838,31 +871,46 @@ already read fluently).
 
 ## 9. Extensibility: where the next "what if" lands
 
-*Implementer detail — optional for the botanist, though the table itself
-may be worth skimming: it is a fairly direct list of which future
-requests are cheap.*
+*Implementer detail — optional for the botanist, though the tables
+themselves may be worth skimming: they are a direct list of which changes
+are cheap.*
 
 Every companion document ends with some version of "it would be
 interesting to see what happens if you could change X." The architecture
 is built so each such change has a specific, small landing spot rather
-than requiring a redesign. Several are already implemented:
+than requiring a redesign.
+
+The first table is the answer for changes the simulator already covers:
+each is a configuration change, and
+[`doc/configuration.md`](configuration.md) documents its exact key, type,
+and default. The second table is the answer for changes that are not
+built (§11): each names the one place the change lands.
+
+### 9.1 Variations reachable from configuration
+
+| "What if…" | Where it lives | Why it stayed small |
+|---|---|---|
+| …island sizes differed (`N_i`)? | `N` accepts a length-`d` array | `drift()` receives `N` as a parameter, so per-deme `N_i` gene copies is a broadcast, not new logic |
+| …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix; its rows are the authoritative weights and are never rescaled by `N` ([`doc/configuration.md`](configuration.md#m)) | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
+| …migration were spatial (stepping-stone)? | `m` accepts a sparse, neighbor-restricted map, or `{topology, rate}` sugar for a 1D ring or bounded chain (`fim.model.topology`) | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
+| …migration counted gene copies rather than blending an idealized continuous fraction? | `𝖯["migrant_sampling"] = "stochastic"` draws each deme's migrant count from `Binomial(N_i, rate)`; migrant composition stays the deterministic pool average, so `drift()` remains the only operator that resamples every gene copy | `migrate()`'s rate/pool split already separates "how much moves" from "what it is made of"; only the first half becomes random |
+| …locus length varied? | `LocusSpec.length` per locus, driving the finite-alleles capacity and `mu_b`'s rate derivation | a first-class field of the locus (§3.2) |
+| …mutation rate were per base rather than per locus, so two loci of different lengths do not silently mutate at the same rate? | `𝖯["mu"]` accepts a per-locus tuple; `𝖯["mu_b"]`, mutually exclusive with it, derives one via the exact Eq. 5 relation `mu = 1 - (1 - mu_b) ** length` (differentiation-measures guide, Part VI) | `mutate()` loops per locus already, so reading a per-locus rate out of a tuple is a broadcast; `mu_b`'s derivation lives entirely in `SimulationParams.from_mapping` and expands to the per-locus `mu` a hand-written list would give |
+| …the mutation model weren't infinite-alleles, to remove artifacts the infinite-length assumption causes at short loci? | `𝖯["mutation_model"] = "finite_alleles"` bounds each locus to `4 ** length` states (`finite_allele_capacity`) and lets a mutation recur to a state already present elsewhere in the run, without imposing any ordering or distance between alleles | `AlleleRegistry` is the sole minting point for new IDs, so `FiniteAlleleSpace`/`FiniteAlleleRegistry` slot in behind the same `mutate()` call, selected by which registry `step()` threads through |
+| …several statistics had to agree before stopping? | `𝖯["convergence_statistic"]` as a list plus `𝖯["convergence_combinator"]` (`"all"`/`"any"`) | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
+| …many replicate runs were needed for a confidence interval, without hand-guessing the count? | `𝖯["replicate_tolerance"]`: once `replicate_minimum` replicates exist, the batch stops as soon as every watched statistic's across-replicate Student's-t interval (`fim.statistics.interval`) is that tight, combined by the same `convergence_combinator` used within a run, with `n_replicates` as the hard cap. `fim.engine.replicate_summary` and the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` and plugs into an unmodified `ConvergenceMonitor`, so the replicate batch loop gains a second stopping rule rather than a second loop |
+| …replicate batches ran faster? | `max_workers` (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs `_run_one` unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A `store_factory` gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
+
+### 9.2 Landing spots for changes that are not built
 
 | "What if…" | Landing spot | Why it's small |
 |---|---|---|
-| …island sizes differed (`N_i`)? | `N` accepts a length-`d` array — **implemented** | `drift()` already receives `N` as a parameter; per-deme `N_i` gene copies is a broadcast, not new logic |
-| …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix — **implemented**; a matrix's rows are the authoritative weights and are never rescaled by `N` (see [`doc/configuration.md`](configuration.md#m)) | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
-| …migration were spatial (stepping-stone)? | `m` accepts a sparse/neighbor-restricted matrix — **1D ring and linear implemented** (`fim.model.topology`, [`doc/configuration.md`](configuration.md#m)); a 2D lattice and a `MigrantPoolStrategy` interface for migration that itself changes over a run are not | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
-| …migration counted individuals rather than blending an idealized continuous fraction? | `𝖯["migrant_sampling"] = "stochastic"` — **implemented, opt-in** (default `"continuous"`, unchanged); each deme's migrant count is drawn from `Binomial(N_i, rate)` instead of applied exactly, while migrant composition stays the deterministic pool average, so `drift()` remains the pipeline's only operator that resamples every gene copy | `migrate()`'s existing rate/pool split (row above) already separates "how much moves" from "what it's made of"; only the first half needed to become random |
-| …locus length varied? | `LocusSpec.length` per locus — **implemented**; drives the finite-alleles model's per-locus capacity, and, independently, `mu_b`'s per-locus rate derivation (below) — otherwise still inert | already a first-class field (§3.2) |
-| …mutation rate were per base rather than per locus, so two loci of different lengths do not silently mutate at the same rate? | `𝖯["mu"]` accepts a per-locus tuple, not only a scalar — **implemented**; `𝖯["mu_b"]`, mutually exclusive with `mu`, derives it via the exact Eq. 5 relation `mu = 1 - (1 - mu_b) ** length` (differentiation-measures guide, Part VI) — **implemented, opt-in** (default: `mu` as a scalar, unchanged) | `mutate()` already loops per locus (row above, and the finite-alleles row below); reading a per-locus rate out of a tuple instead of a shared scalar is a broadcast, not new logic — `mu_b`'s derivation lives entirely in `SimulationParams.from_mapping`, expanding to the same per-locus `mu` a hand-written list would produce |
-| …selection were added? | a new `select()` operator inserted before `drift()` | the pipeline (§3.4) is already a composition of independent stages; adding one is additive |
-| …the mutation model weren't infinite-alleles, to remove artifacts the infinite-length assumption can cause at short loci? | `𝖯["mutation_model"] = "finite_alleles"` — **implemented, opt-in** (default `"infinite_alleles"`, unchanged); each locus gets a bounded state space of `4 ** length` (`finite_allele_capacity`), and a mutation can recur to a state already present elsewhere in the run rather than always minting fresh, without imposing any ordering or distance between alleles | `AlleleRegistry` was already the sole minting point for new IDs; `FiniteAlleleSpace`/`FiniteAlleleRegistry` are a bounded, per-locus alternative slotted in behind the same `mutate()` call, decided by which registry `step()` threads through |
-| …the mutation model needed genuine spatial structure (stepwise mutation for microsatellites, where "how far" one allele is from another matters)? | swap the strategy behind `mutate()` again | remains out of scope (§11) — this is a different, distance-based model from the row above, deliberately not the direction taken (§3.2) |
-| …many replicate runs were needed for a confidence interval, without hand-guessing the count? | `𝖯["replicate_tolerance"]` — **implemented, opt-in** (default: unset, `n_replicates` runs in full exactly as before); once `replicate_minimum` replicates exist, stop as soon as every watched statistic's across-replicate Student's-t confidence interval (`fim.statistics.interval`) tightens to `replicate_tolerance`, combined by the same `convergence_combinator` used within one run — `n_replicates` becomes the hard cap rather than a fixed count. `fim.engine.replicate_summary` / the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` (two rows below) and plugs into the unmodified `ConvergenceMonitor`; the replicate batch loop already existed (row was previously **implemented** for the fixed-count case), so this adds a second, opt-in stopping rule to it rather than a new loop |
-| …replicate batches ran faster? | `max_workers` (library) / `--workers`, `--sequential` (CLI) — **implemented, opt-in** (default: sequential in the library; the CLI defaults to one worker per CPU) | replicates are already fully independent (own seed, own registries, own convergence monitor); `ProcessPoolExecutor` runs `_run_one` unmodified in worker processes — real OS processes, not threads, since per-generation state is Python-object sparse maps that never release the GIL. A `store_factory` gives each replicate (in either execution mode) its own trajectory store, since a single shared store cannot cross a process boundary. Vectorizing the replicate loop as a NumPy array dimension instead remains a distinct, deeper, still-unbuilt direction — it would need every operator, the allele registries, and the convergence monitor to gain a replicate axis, not just the batch orchestration layer |
-| …a different convergence *rule* were needed, not just a different statistic to watch (already free via `convergence_statistic`, §4.3, unrelated to this row)? | `ConvergenceCriterion` is a pluggable protocol | `ConvergenceMonitor` accepts any object implementing it; only `TrailingWindowCriterion` exists today, and `engine.py` constructs it directly, so nothing beyond that one implementation is selectable from config yet |
-| …several statistics needed to agree before stopping? | `𝖯["convergence_statistic"]` as a list plus `𝖯["convergence_combinator"]` (`"all"`/`"any"`) — **implemented** | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
-| …a study needed run outputs at a scale JSONL doesn't suit well? | a second `TrajectoryStore` implementation (e.g. Parquet-backed) | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
+| …selection were added? | a new `select()` operator inserted before `drift()` | the pipeline (§3.4) is a composition of independent stages, so adding one is additive |
+| …migration were spatial beyond one dimension, or itself changed over a run? | a 2D lattice constructor beside `fim.model.topology`'s existing ones, or a `MigrantPoolStrategy` interface for neighbor selection that does not reduce to a precomputed matrix | anything expressible as a matrix needs only a new constructor; only genuinely dynamic migration needs the interface |
+| …the mutation model needed genuine spatial structure (stepwise mutation for microsatellites, where "how far" one allele is from another matters)? | swap the strategy behind `mutate()` again | a different, distance-based model from finite alleles, deliberately not the direction taken (§3.2) |
+| …a different convergence *rule* were needed, rather than a different statistic to watch? | `ConvergenceCriterion` is a pluggable protocol | `ConvergenceMonitor` accepts any object implementing it; `engine.py` constructs the built-in criteria directly, so selecting one from configuration is the only missing piece |
+| …a study needed run outputs at a scale JSONL does not suit? | a second `TrajectoryStore` implementation, Parquet-backed being the obvious candidate | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
+| …the replicate loop itself needed to vectorize, not just parallelize? | a replicate axis through every operator, both allele registries, and the convergence monitor | the deepest item here: unlike `max_workers`, it changes the shape of the model code rather than the orchestration around it |
 
 ## 10. Validation and test strategy
 
@@ -933,20 +981,22 @@ correctly and report the right reason. `TrajectoryStore` round-trips
 
 ## 11. Out of scope
 
-Not currently implemented: selection; a distance-based, spatial mutation
-model such as stepwise mutation for microsatellites (the finite-alleles
-model, by contrast, is implemented — §9 — but deliberately stays
-distance-free, per §3.2); a 2D lattice migration topology; and a
-`MigrantPoolStrategy` interface for neighbor-selection logic that is not
-reducible to a precomputed matrix (1D stepping-stone and arbitrary
-irregular topologies, by contrast, are implemented — §9). Every one of
-these has a specific landing spot already identified (§9) — they are
-deferred, not precluded.
+The simulator does not model selection. Its mutation models are
+distance-free by design (§3.2), so a stepwise model for microsatellites —
+where how *far* one allele is from another carries meaning — is outside
+it; the finite-alleles model is a bounded label space, not a metric one.
+Migration is any topology expressible as a fixed `d × d` matrix, which
+excludes a 2D lattice constructor and any neighbor-selection logic that
+changes over a run. A single graphical front end is likewise out of scope
+(§4.5); the command line is the only one.
+
+Each of these has a named landing spot in §9.2. They are deferred, not
+precluded, and none of them requires revisiting a decision made above.
 
 ## 12. Illustrated walkthrough
 
-*For the botanist as much as the implementer — this is the plain-language
-payoff of everything above: what using the software actually feels like.*
+*For the botanist as much as the implementer: installing the tool,
+running it, and reading what it produces.*
 
 ### Installing it
 
@@ -996,7 +1046,7 @@ Running it — a real, reproducible transcript, not a sketch:
 
 ```console
 $ fim run myrun.yaml -o results/example
-Running run-af721b90db9e2b04 (N=450, d=20, m=0.001, mu=3e-05, seed=20260814)
+Running run-cee6b47ea87691ee (N=450, d=20, m=0.001, mu=3e-05, seed=20260814)
 Statistic converged: generation 49, D=0.238373, G_ST=0.365507
 Trajectory -> results/example/trajectory.jsonl
 Manifest   -> results/example/manifest.json
@@ -1019,7 +1069,7 @@ Scatter    -> results/example/scatter.png
   "converged_on": "D",
   "generation": 49,
   "reason": "statistic converged",
-  "run_id": "run-af721b90db9e2b04"
+  "run_id": "run-cee6b47ea87691ee"
 }
 ```
 
@@ -1028,23 +1078,22 @@ exactly §6's schema, openable in a text editor, Excel, R, or pandas
 without any custom parser:
 
 ```jsonl
-{"allele_id":0,"deme":1,"frequency":0.9469332873780484,"generation":0,"locus_id":1,"run_id":"run-af721b90db9e2b04"}
-{"allele_id":1,"deme":1,"frequency":0.053066712621951555,"generation":0,"locus_id":1,"run_id":"run-af721b90db9e2b04"}
-{"allele_id":0,"deme":2,"frequency":0.9042452958446685,"generation":0,"locus_id":1,"run_id":"run-af721b90db9e2b04"}
+{"allele_id":0,"deme":1,"frequency":0.9469332873780484,"generation":0,"locus_id":1,"run_id":"run-cee6b47ea87691ee"}
+{"allele_id":1,"deme":1,"frequency":0.053066712621951555,"generation":0,"locus_id":1,"run_id":"run-cee6b47ea87691ee"}
+{"allele_id":0,"deme":2,"frequency":0.9042452958446685,"generation":0,"locus_id":1,"run_id":"run-cee6b47ea87691ee"}
 ```
 
 Given the same version, parameters, and seed, this transcript reproduces
 byte for byte — see [doc/usage.md](usage.md#reproduce-a-run).
 
-### A GUI
+## Appendix A. Graphical front-end sketches
 
-Not built, and not currently planned (§4.5, §2.2 of the engineering and
-release reference): the front end is the command line only. The three
-screens below are a design sketch from early in the project for what a
-GUI *could* look like — built from a small illustrative simulation, not
-the scenario above, and not a commitment to build it. They are kept here
-because the sketch is still a reasonable starting point if a GUI is ever
-wanted, not because one exists today.
+The front end is the command line only (§4.5, §2.2 of the engineering and
+release reference). The three screens below sketch what a graphical front
+end could look like, drawn from a small illustrative simulation rather
+than the run above. They are recorded here as a starting point should a
+graphical front end ever be commissioned; nothing in the simulator
+depends on them.
 
 **Screen 1 — model input.** The four named arguments and the `𝖯`-bag
 entries from §4.3, as a form instead of a YAML file:
@@ -1053,23 +1102,18 @@ entries from §4.3, as a form instead of a YAML file:
 
 **Screen 2 — results.** Requirement 6 in one view: the run summary
 (scalars, requirement 6a) beside the canonical scatter (per-deme allele
-frequencies, requirement 6b), for a small illustrative run — *not* the
-`N=450, d=20` run above, which has too many demes to plot as a single
-two-axis scatter (§8's `d > 3` fallback would apply instead). This one is
-deliberately a tiny `d=2` toy scenario, run small and fast enough that
-its whole trajectory fits on one screen: each point is one allele, axes
-are the two demes' frequencies for it, and the caption in the image
-spells out exactly what was simulated.
+frequencies, requirement 6b). The scenario is a deliberately tiny `d = 2`
+one, small enough that its whole trajectory fits on one screen, rather
+than §12's `N = 450, d = 20` run, which has too many demes for a single
+two-axis scatter (§8's `d > 3` fallback applies there instead). Each
+point is one allele; the axes are the two demes' frequencies for it.
 
 ![Sketch of a results screen: a run-summary sidebar (converged, generation 50, D=0.65, G_ST=0.34) beside a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most of them well off the diagonal](img/fim-simulator-design/screen2-results.png)
 
-**Screen 3 — bonus: watching it converge.** The same toy scenario,
-animated across the same generations shown in the static screen above —
-migration and drift pulling the four alleles' points away from the
-diagonal (shared frequency in both demes) as the demes differentiate.
-This is the "migrating scatterplot" a botanist would actually want to
-watch: §8 notes that every generation is already persisted, so this view
-would be close to free if a GUI were built.
+**Screen 3 — watching a run converge.** The same scenario animated across
+its generations: migration and drift pull the four alleles' points away
+from the diagonal as the demes differentiate. Because every generation is
+persisted (§6, §8), this view needs no data a run does not already write.
 
 ![Sketch of an animated view: the same four-allele scatter plot stepping through generations 0, 5, 10, … 50, with points starting near the diagonal and drifting apart as the demes differentiate](img/fim-simulator-design/screen3-animated.gif)
 
@@ -1082,4 +1126,22 @@ generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
 generation-date: 2026-08-14
 generator-responsibility: other
+```
+
+### Revisions
+
+Documentation review. Corrected §12's transcript identity against a
+re-run of the documented configuration, added `statistics/interval.py` and
+the replicate-batch layer to §5, split §9 into the variations reachable
+from configuration and the landing spots for changes that are not built,
+moved the graphical front-end sketches to Appendix A, and replaced the
+machine-local citation path in the source note with a self-contained one.
+
+```text
+generator-name: Claude Code
+generator-version: Claude Opus 5
+generator-model-token: claude-opus-5
+generator-provider: Anthropic
+generation-date: 2026-08-18
+generator-responsibility: revision
 ```

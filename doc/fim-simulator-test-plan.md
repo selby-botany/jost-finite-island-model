@@ -16,9 +16,10 @@
     - [4.6 `model/initial.py`](#46-modelinitialpy)
     - [4.7 `model/operators.py`](#47-modeloperatorspy)
     - [4.8 `convergence/`](#48-convergence)
-    - [4.9 `persistence/`](#49-persistence)
-    - [4.10 `engine.py`](#410-enginepy)
-    - [4.11 `cli.py`](#411-clipy)
+    - [4.9 `statistics/interval.py`](#49-statisticsintervalpy)
+    - [4.10 `persistence/`](#410-persistence)
+    - [4.11 `engine.py`](#411-enginepy)
+    - [4.12 `cli.py`](#412-clipy)
   - [5. Property-based invariants for the statistics module](#5-property-based-invariants-for-the-statistics-module)
   - [6. Golden worked examples and focused statistics checks](#6-golden-worked-examples-and-focused-statistics-checks)
   - [7. Statistical and asymptotic tests](#7-statistical-and-asymptotic-tests)
@@ -33,6 +34,7 @@
   - [11. Coverage targets and CI gating](#11-coverage-targets-and-ci-gating)
   - [12. Requirement traceability matrix](#12-requirement-traceability-matrix)
   - [Metadata](#metadata)
+    - [Revisions](#revisions)
 
 ## Who this document is for
 
@@ -274,6 +276,14 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   and a hand-authored one-based sparse neighbor map (`{deme: {neighbor:
   weight}}`) is accepted directly; both malformed-shape variants are
   validated with field-naming errors.
+- **Replicate-batch keys** (design §9): `n_replicates`,
+  `replicate_minimum`, and `replicate_confidence` each apply their
+  documented default, and a zero replicate count, a negative or
+  non-finite `replicate_tolerance`, a `replicate_minimum` below 2, and an
+  unsupported confidence level are each rejected by name.
+  `replicate_tolerance` round-trips when set and stays absent from
+  `to_dict()` when unset, so an adaptive batch is distinguishable from a
+  fixed-count one in a persisted manifest.
 - **Explicit initial frequencies (`p_0`)**: normalized and losslessly
   serialized; the parser names malformed inputs precisely; shape and
   probability-vector validation is exercised per deme/locus; support
@@ -351,13 +361,40 @@ form.
   `"all"` combinator requires every one stable before stopping, `"any"`
   stops as soon as one is; construction validates the statistic list and
   the combinator value together.
+- **The confidence-interval criterion** (`ConfidenceIntervalCriterion`,
+  the replicate-layer stopping rule — design §9): invalid configuration
+  (tolerance, minimum count, confidence level) is rejected by name; a
+  sample below the minimum count is never called stable regardless of its
+  spread; a tight sample is stable and a loose one is not, at the same
+  count; and the criterion composes with an unmodified
+  `ConvergenceMonitor`, which is what makes the replicate layer reuse the
+  within-run mechanism rather than duplicate it.
 - Constructor and criteria validation: invalid trailing-window
   configuration, an incomplete window, invalid combinator children, and
   `any`/`all` short-circuiting on child results are all covered directly,
   as are a monitor rejecting invalid records and rejecting further records
   once already converged.
 
-### 4.9 `persistence/`
+### 4.9 `statistics/interval.py`
+
+Home: `test/statistics/test_interval.py`. The across-replicate Student's-t
+interval (design §5, §9) is a self-contained numeric module, tested
+without the engine:
+
+- Every tabled degrees-of-freedom row matches published t-table values
+  exactly, at each supported confidence level.
+- An untabled degrees of freedom interpolates between its listed
+  neighbors, and the interpolation matches the documented `1/df` formula
+  rather than merely landing between them.
+- Beyond the table's tail, the critical value is the exact standard-normal
+  quantile, which is separately checked against well-known `z` values.
+- An interval on a fixed sample matches a hand-computed reference; an
+  all-identical sample gives a zero-width interval; and more replicates at
+  the same spread give a strictly tighter one.
+- The default confidence level is 0.95, and a sample of fewer than two
+  values is rejected rather than reported with an undefined spread.
+
+### 4.10 `persistence/`
 
 - `TrajectoryStore` round-trip: `write_generation` then `read` returns rows
   byte-faithful to the schema, for a multi-generation, multi-deme,
@@ -377,7 +414,7 @@ form.
   `run_id`; the manifest constructor and its mapping-based reconstruction
   both validate identity fields and nested-field types strictly.
 
-### 4.10 `engine.py`
+### 4.11 `engine.py`
 
 - A tiny seeded `fim(...)` run is bit-reproducible across two invocations.
 - Converged and capped runs both return a valid `RunResult` with the correct
@@ -386,9 +423,34 @@ form.
   persisted trajectory (design §4.1 — statistics never depend on the
   engine).
 - Replicate batching: `n_replicates` runs are independent and each
-  individually reproducible from the run seed; the scalar (`n=1`) case is
-  unchanged; an explicit caller-supplied `run_id` receives deterministic
-  one-based suffixes (`"batch-r001"`, `"batch-r002"`, …).
+  individually reproducible from the run seed; the scalar (`n=1`) case
+  returns a single `RunResult`, not a one-element batch; an explicit
+  caller-supplied `run_id` receives deterministic one-based suffixes
+  (`"batch-r001"`, `"batch-r002"`, …).
+- **Adaptive replicate batching** (`replicate_tolerance`, design §9): with
+  the key unset, exactly `n_replicates` replicates run; with a tolerance
+  no bounded statistic can miss, the batch stops at `replicate_minimum`
+  exactly — a deterministic stop, not a lucky one, since every reported
+  statistic lies in `[0, 1]`; with an unreachable `replicate_minimum`, the
+  `n_replicates` cap still ends the batch. A run whose `G_ST` is undefined
+  contributes the generation-layer substitution to the stop decision while
+  its report keeps `null`, and that statistic is then absent from the
+  summary rather than represented by a substituted value.
+- **`replicate_summary`**: reports an interval for every statistic with at
+  least two defined samples, each `low <= mean <= high` at the configured
+  confidence, and rejects a batch of fewer than two results outright.
+- **Parallel replicate execution** (`max_workers`, design §9): a batch run
+  across workers produces replicate-for-replicate identical `run_id`s,
+  final states, and reports to the same batch run sequentially — the
+  property that makes the worker count a performance knob only. Adaptive
+  stopping still applies under `max_workers`, overshooting the minimal
+  count by at most `max_workers - 1` because the decision is made once a
+  whole concurrent batch completes; the test asserts that bound rather
+  than an exact count. `max_workers` rejects a non-positive count and a
+  shared `store`, and `store`/`store_factory` are mutually exclusive.
+  `store_factory` gives every replicate its own store in either execution
+  mode, and the fixture factory is a module-level function precisely
+  because a worker process must be able to pickle it.
 - The legacy positional `(N, m, mu, d)` arguments are validated against the
   parameter bag they must agree with, each mismatch reported by name.
 - A manifest `clock` without an explicit timezone is rejected.
@@ -425,7 +487,7 @@ form.
   per-locus `mu` run bit-for-bit, and `mu_b` combines correctly with the
   finite-alleles model in the same run.
 
-### 4.11 `cli.py`
+### 4.12 `cli.py`
 
 Functional detail in §8.
 
@@ -443,6 +505,9 @@ Functional detail in §8.
   `--check` is rejected as an explicit-opt-in requirement.
 - `fim init` refuses to overwrite an existing starter config unless
   forced.
+- Batch invocation: `--sequential`, `--workers N`, and the default
+  worker pool each drive the same documented artifact set (§8), and a
+  batch refuses a non-empty output directory.
 - Default output paths use the project's `results` directory, falling
   back to the working directory when no project root is found.
 
@@ -468,7 +533,7 @@ the statistics module's own optional per-deme `weights` argument (`E_ST`
 accepts it, `D` never does — a focused check, §6), and the
 `SimulationParams.deme_weighting` config setting's effect on an actual
 engine report, where `"size"` vs. `"equal"` visibly changes `E_ST` for the
-same run while leaving `D` unaffected (§4.10).
+same run while leaving `D` unaffected (§4.11).
 
 ## 6. Golden worked examples and focused statistics checks
 
@@ -531,8 +596,9 @@ step starting from a known `p` has per-generation sampling variance
 of one step, the sample variance of the resulting frequency is asserted
 within its analytically derived band, checked both with a single shared
 `N` and per-deme when `N` differs across demes (design §9's per-deme
-population sizes). This is the "validate before trusting anything built
-on top of it" check the prior research doc flags (design §10).
+population sizes). Drift is the pipeline's only unconditional source of
+randomness, so this is the check everything statistical downstream rests
+on (design §10).
 
 ### 7.3 Equilibrium formulas
 
@@ -590,7 +656,7 @@ conversion — design §4.3). Each is checked at two levels:
 Home: `test/cli/`, `test/engine/`. These exercise the product as a
 researcher uses it (design §12), on `tiny_params`-scale scenarios small
 enough to finish in well under a second, driven through the CLI's own
-config parsing (§4.11) rather than by constructing `SimulationParams`
+config parsing (§4.12) rather than by constructing `SimulationParams`
 directly.
 
 - **`fim run` produces exactly the documented artifacts**: given a small
@@ -599,12 +665,25 @@ directly.
   and `report.json` carries every scalar in design §12's example shape
   (requirement 6a). Two runs at the same seed produce identical
   `trajectory.jsonl` and `report.json`; a run that would collide with an
-  existing output directory, or that asks for `n_replicates > 1` (the
-  CLI's single-run artifact contract, `doc/configuration.md`), is
-  rejected. Progress output describes the run's outcome.
+  existing output directory is rejected. Progress output describes the
+  run's outcome.
+- **A batch (`n_replicates` greater than one) produces exactly the
+  documented batch artifacts** (`doc/usage.md`): one `replicate-NNN/`
+  subdirectory per replicate, each holding that same four-file scalar
+  contract and nothing else, plus a batch `summary.json` whose
+  `sample_count` matches the replicate count and a batch `manifest.json`
+  carrying `replicate_count` and one `replicate_run_ids` entry per
+  replicate. The set of directory entries is asserted exactly, so a
+  stray or missing artifact fails rather than passing unnoticed. The
+  default worker pool, an explicit `--workers`, and `--sequential` each
+  produce that artifact set; a non-empty output directory is rejected
+  before anything is written; and a `replicate_tolerance` no bounded
+  statistic can miss writes exactly `replicate_minimum` replicates,
+  proving the adaptive stop reaches the artifacts a user sees rather than
+  only the library layer (§4.11).
 - **Every design-§9 configuration surface is reachable end-to-end through
   a YAML config**, not just through `SimulationParams` directly (§4.5,
-  §4.10): per-deme population sizes; an asymmetric migration matrix;
+  §4.11): per-deme population sizes; an asymmetric migration matrix;
   loci with unequal lengths; several convergence statistics; stepping-stone
   topology sugar for `m`; stochastic migrant sampling; the finite-alleles
   mutation model; and a per-base mutation rate (`mu_b`).
@@ -729,7 +808,7 @@ no wall-clock, fully reproducible.
 - Branch coverage gate: **90%** of `src/fim`, excluding only `viz/`
   (smoke-tested by structure, not line-covered — §9). `cli.py`'s
   `update --check` network wrapper is *not* omitted: its `urlopen` call is
-  monkeypatched at the boundary (§4.11), so the surrounding logic is
+  monkeypatched at the boundary (§4.12), so the surrounding logic is
   exercised and counted normally, and the coverage gate itself never
   performs a network request (§1).
 - The gate runs in `build --ci` and `ci.yml` identically (detailed design
@@ -745,27 +824,27 @@ it:
 
 | Requirement | Proven by |
 |---|---|
-| 1. `fim(N,m,μ,d;P)` yields per-generation state; ends on convergence | §4.10 engine reproducibility; §4.8 convergence; §8 end-to-end run |
+| 1. `fim(N,m,μ,d;P)` yields per-generation state; ends on convergence | §4.11 engine reproducibility; §4.8 convergence; §8 end-to-end run |
 | 2. Alleles are identity-only (`same` = integer equality) | §4.1 registry uniqueness + equality-only contract |
 | 3. Locus carries `length`; per-locus `L` is future-ready | §4.2 `LocusSpec`, `finite_allele_capacity`; §4.5 array-typed params |
 | 4. Random initial conditions; convergence is a modeling assumption | §4.6 initial conditions; §4.8 stochastic-equilibrium detection |
-| 5. Every generation persisted; converged final state reported | §4.9 persistence round-trip; §8 artifacts on disk |
+| 5. Every generation persisted; converged final state reported | §4.10 persistence round-trip; §8 artifacts on disk |
 | 6a. Final differentiation scalars | §6 golden values; §5 invariants; §8 `report.json` shape |
 | 6b. Per-deme allele-frequency distributions + canonical scatter | §8 report table; §9 scatter structure |
 
-Design §9's extensibility table also lists several "what if" extensions
-that have since moved from speculative to **implemented**; each has its
-own dedicated test coverage rather than riding along on the requirements
-above:
+Design §9.1's configuration-reachable variations each carry dedicated
+coverage rather than riding along on the requirements above:
 
-| Design §9 extension | Proven by |
+| Design §9.1 variation | Proven by |
 |---|---|
-| Per-deme population sizes (`N` as an array) | §4.5 shape validation; §4.7 per-deme drift variance; §4.10 unequal-`N` run |
-| Asymmetric/matrix migration, incl. stepping-stone topology sugar and a hand-authored sparse map | §4.3 `topology.py`; §4.5 config-sugar parsing; §4.7 operator-level checks; §4.10 engine run; §8 CLI config |
-| Stochastic migrant-count sampling | §4.5 `migrant_sampling`; §4.7 binomial-theory check; §4.10 engine run; §8 CLI config |
-| Per-locus mutation rate, incl. `mu_b` per-base derivation | §4.5 `mu`/`mu_b` parsing; §4.7 per-locus mutate; §4.10 engine run; §8 CLI config |
-| Finite-alleles (K-allele) mutation model | §4.1 `FiniteAlleleSpace`/`FiniteAlleleRegistry`; §4.5 capacity validation; §4.7 operator-level checks; §4.10 engine run; §8 CLI config |
-| Several convergence statistics with a combinator | §4.5 `convergence_statistic` parsing; §4.8 monitor combinator; §4.10 engine run |
+| Per-deme population sizes (`N` as an array) | §4.5 shape validation; §4.7 per-deme drift variance; §4.11 unequal-`N` run |
+| Asymmetric/matrix migration, incl. stepping-stone topology sugar and a hand-authored sparse map | §4.3 `topology.py`; §4.5 config-sugar parsing; §4.7 operator-level checks; §4.11 engine run; §8 CLI config |
+| Stochastic migrant-count sampling | §4.5 `migrant_sampling`; §4.7 binomial-theory check; §4.11 engine run; §8 CLI config |
+| Per-locus mutation rate, incl. `mu_b` per-base derivation | §4.5 `mu`/`mu_b` parsing; §4.7 per-locus mutate; §4.11 engine run; §8 CLI config |
+| Finite-alleles (K-allele) mutation model | §4.1 `FiniteAlleleSpace`/`FiniteAlleleRegistry`; §4.5 capacity validation; §4.7 operator-level checks; §4.11 engine run; §8 CLI config |
+| Several convergence statistics with a combinator | §4.5 `convergence_statistic` parsing; §4.8 monitor combinator; §4.11 engine run |
+| Adaptive replicate batching on a confidence interval | §4.5 `replicate_tolerance`/`replicate_minimum`/`replicate_confidence` validation; §4.8 `ConfidenceIntervalCriterion`; §4.9 the interval itself; §4.11 adaptive stop and `replicate_summary`; §8 batch artifacts |
+| Parallel replicate execution | §4.11 worker-count equivalence, argument validation, and per-replicate stores; §4.12 CLI flags; §8 batch artifacts under each execution mode |
 
 ## Metadata
 
@@ -776,4 +855,23 @@ generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
 generation-date: 2026-08-18
 generator-responsibility: primary
+```
+
+### Revisions
+
+Documentation review. Corrected the claim that the CLI rejects a
+multi-replicate configuration, and added the coverage that had no entry
+here: the confidence-interval module
+(§4.9), the confidence-interval criterion (§4.8), the replicate-batch
+parameter keys (§4.5), adaptive stopping and parallel execution (§4.11,
+§4.12), the batch artifact contract (§8), and two traceability rows
+(§12).
+
+```text
+generator-name: Claude Code
+generator-version: Claude Opus 5
+generator-model-token: claude-opus-5
+generator-provider: Anthropic
+generation-date: 2026-08-18
+generator-responsibility: revision
 ```

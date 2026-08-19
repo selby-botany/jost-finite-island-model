@@ -7,8 +7,10 @@ monitoring, headless plots, and a thin command-line boundary.
 ## Module map
 
 - `fim/model/` — validated model values, initialization, and operators
-- `fim/statistics/` — diversity and differentiation formulas
-- `fim/convergence/` — stability criterion and stop outcomes
+- `fim/statistics/` — diversity and differentiation formulas, and
+  across-replicate confidence intervals
+- `fim/convergence/` — stability and confidence-interval criteria, the
+  monitor, and stop outcomes
 - `fim/persistence/` — trajectory protocol, JSON Lines store, manifests
 - `fim/engine.py` — deterministic run loop
 - `fim/viz/` — botanist-facing and diagnostic plots

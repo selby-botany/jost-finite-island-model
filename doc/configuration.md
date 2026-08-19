@@ -163,10 +163,10 @@ involved. Building a `SimulationParams` directly in Python (bypassing
 `fim.model.topology.stepping_stone_neighbors` and
 `fim.model.topology.dense_matrix_from_neighbors` yourself to get one.
 
-A dedicated `MigrantPoolStrategy` interface — pluggable neighbor-selection
-logic beyond a precomputed matrix — remains unimplemented; so does a 2D
-lattice topology. Both are documented, deferred landing spots (design
-document §9, §12), not silently missing.
+Migration topologies that no fixed matrix can express — a 2D lattice, or
+neighbor selection that changes over a run — are outside the current
+configuration surface. Both have named landing spots in the design
+document (§9.2, §11); neither is silently missing.
 
 ### `mu`
 
@@ -175,10 +175,10 @@ document §9, §12), not silently missing.
   exclusive)
 - **Meaning:** per-gene-copy mutation probability per generation
 
-A scalar applies identically to every locus, regardless of `length` —
-this was the only form before per-locus rates existed, and is still the
-right choice whenever every locus should mutate at the same rate. A list
-gives each locus its own explicit rate, positionally matched to `loci`:
+A scalar applies identically to every locus, regardless of `length`, and
+is the right choice whenever every locus should mutate at the same rate.
+A list gives each locus its own explicit rate, positionally matched to
+`loci`:
 
 ```yaml
 mu: [0.001, 0.01]
@@ -277,8 +277,7 @@ locus_lengths: [50, 8000]
 Controls what a mutation event turns an allele *into*, independently of
 `mu` (which controls how *often* one happens).
 
-- `infinite_alleles` (the default, and the only behavior in every release
-  before this option existed): every mutation event produces a label
+- `infinite_alleles` (the default): every mutation event produces a label
   never seen before, anywhere, ever. A good approximation once a locus
   spans many base pairs — see
   [the differentiation-measures guide](jost-differentiation-measures.md#distance-between-alleles-is-a-different-model) —
@@ -409,8 +408,8 @@ non-converged outcome.
 - **Default:** `size`
 
 This setting controls `E_ST`. Jost's `D` and `K_ST` use equal deme weighting by
-definition. Equal-size v1 scenarios produce the same `E_ST` under either
-setting.
+definition. When every deme is the same size, both settings produce the same
+`E_ST`.
 
 ### `n_replicates`
 
@@ -477,8 +476,8 @@ meaningful when `replicate_tolerance` is set.
 Controls how many gene copies migrate each generation, independently of
 which `m` shape is configured above.
 
-- `continuous` (the default, and the only behavior in every release before
-  this option existed): each deme's migrant count is exactly `N_i * rate`
+- `continuous` (the default): each deme's migrant count is exactly
+  `N_i * rate`
   (or, for a matrix row, `N_i` times that row's non-self weight) — a fixed
   fraction, not a random draw.
 - `stochastic`: each deme's migrant count is instead drawn fresh every
