@@ -386,7 +386,11 @@ checks both steps stay present, correctly ordered, and budgeted.
 
 1. `ruff check` and `ruff format --check` over `src`, `test`, and the
    Python programs under `dev/bin`.
-2. `mypy --strict src`.
+2. `mypy` (bare — `[tool.mypy]`'s `strict = true` and
+   `files = ["src", "test"]` are the single source of truth for scope; an
+   explicit positional argument here would silently narrow it back to
+   `src` alone and drop `test` from the checked set — the exact
+   regression `test/test_mypy_scope.py` guards against).
 3. `pytest` with branch coverage and no marker exclusion at all — so the
    authoritative gate runs every layer the fast default invocation skips
    for local iteration speed (`statistical`, `slow`, and `packaging` —
@@ -558,7 +562,7 @@ build [--ci] [--coverage] [--dry-run]
       [--help]
 
   1. lint     ruff check + ruff format --check
-  2. type     mypy --strict src
+  2. type     mypy (bare; scope comes from [tool.mypy] in pyproject.toml)
   3. test     pytest (+ branch coverage with --coverage or --ci)
   4. docs     regenerate src/fim/API.md from docstrings; with --ci, verify
               it matches the committed copy and fail if stale (§8.1); run
@@ -659,7 +663,7 @@ Three hooks:
   Staged-only keeps it fast enough to run on every commit without
   tempting a bypass.
 - **`pre-push` — the whole tree, not just what one commit touched.** Runs
-  `ruff check src test`, `mypy --strict src`, the `pytest` subset excluding
+  `ruff check src test`, bare `mypy`, the `pytest` subset excluding
   the `statistical`, `slow`, and `packaging` markers, and the API-doc
   freshness check (§8.1). Each gate is bypassable in a genuine emergency
   through `PRE_PUSH_SKIP_LINT`, `PRE_PUSH_SKIP_TYPE`, `PRE_PUSH_SKIP_TEST`,

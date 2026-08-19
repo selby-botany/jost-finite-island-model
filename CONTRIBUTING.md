@@ -38,7 +38,7 @@ Confirm the environment with `bash --version`, `docker version`,
 pytest
 ruff check src test
 ruff format --check src test
-mypy --strict src
+mypy
 ./build
 ```
 
