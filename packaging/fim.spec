@@ -41,6 +41,14 @@ executable = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    # UPX-compressed executables are a well-known antivirus/SmartScreen
+    # false-positive trigger (README already has to talk Windows users
+    # past SmartScreen for the unsigned binary alone) and UPX is an
+    # undeclared build dependency that PyInstaller silently skips
+    # compression for when absent -- so a compressed build was a
+    # function of whether the runner image happened to have `upx`
+    # installed, not of the tag. Never enable without pinning `upx` as
+    # an explicit, versioned build dependency.
+    upx=False,
     console=True,
 )

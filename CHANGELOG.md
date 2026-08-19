@@ -8,6 +8,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The Windows executable was built with `upx=True` in
+  `packaging/fim.spec`. UPX-compressed executables are a well-known
+  antivirus/SmartScreen false-positive trigger — for a project whose
+  README already has to talk Windows users past SmartScreen for the
+  unsigned binary alone — and `upx` is an undeclared build dependency
+  that PyInstaller silently skips compression for when it is absent, so
+  a compressed build was a function of whichever runner image happened
+  to build it, not of the tag. Set to `upx=False`; added a regression
+  test (`test/validation/test_packaging_spec.py`) so it cannot come
+  back without also pinning `upx` as an explicit, versioned build
+  dependency.
 - Any `v*` tag published a release from any branch with no CI gate.
   `release.yml`'s `windows` and `publish` jobs were triggered
   independently by the same tag push as `ci.yml`, with no dependency
