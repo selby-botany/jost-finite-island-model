@@ -257,9 +257,18 @@ def test_publish_rejects_a_malformed_tag_before_comparing_to_version_txt() -> No
     assert 'test "${GITHUB_REF_NAME#v}" = "$(cat version.txt)"' in verify_step["run"]
 
 
-def test_ci_build_includes_slow_statistical_tests() -> None:
-    """The authoritative release gate excludes only packaging-marked tests."""
+def test_ci_build_runs_every_test_marker() -> None:
+    """The authoritative release gate applies no marker exclusion at all.
+
+    Regression test for R17: `--ci` used to hard-code `not packaging`
+    even in CI mode, so a test marked `packaging` (declared in
+    `pyproject.toml` but, before this fix, carried by zero tests) could
+    never run through any path a contributor or CI actually exercises.
+    `--ci` now drops the `-m` marker filter entirely — the local default
+    still excludes `slow`, `statistical`, and `packaging` for fast
+    iteration, but the authoritative gate excludes nothing.
+    """
     build_script = BUILD_SCRIPT.read_text(encoding="utf-8")
 
-    assert "'not packaging'" in build_script
-    assert '"${ci}" && test_markers=' in build_script
+    assert "pytest_marker_args=(-m 'not slow and not packaging')" in build_script
+    assert '"${ci}" && pytest_marker_args=()' in build_script

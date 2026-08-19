@@ -143,10 +143,15 @@ fi
 
 if "${run_test}"; then
     if "${coverage}"; then
-        test_markers='not slow and not packaging'
-        "${ci}" && test_markers='not packaging'
+        # The authoritative --ci gate runs every marker, including
+        # `packaging` (R17) and the `slow`/`statistical` layers the fast
+        # local default skips; dropping -m's argument entirely, rather
+        # than negating every marker in turn, is what keeps a newly added
+        # marker included here by default instead of silently excluded.
+        pytest_marker_args=(-m 'not slow and not packaging')
+        "${ci}" && pytest_marker_args=()
         run "${python}" -m pytest -o addopts= --strict-config \
-            --strict-markers -m "${test_markers}" \
+            --strict-markers "${pytest_marker_args[@]}" \
             --cov=fim --cov-branch --cov-report=term-missing \
             --cov-fail-under=90
     else

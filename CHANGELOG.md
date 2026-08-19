@@ -8,6 +8,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The `packaging` pytest marker (`"requires a built distribution"`) was
+  declared in `pyproject.toml` but carried by zero tests, and `build`'s
+  `--ci` invocation hard-coded `not packaging` even in CI mode — so
+  wheel/sdist validation lived only in `build`'s own venv-based smoke
+  step (raw shell, not `pytest`), which no contributor exercised under
+  plain `pytest` and which a `packaging`-marked test could never reach
+  through any path CI or a contributor actually runs. `build`'s
+  coverage-mode test invocation now drops its `-m` marker filter
+  entirely under `--ci` (`pytest_marker_args=()`) instead of hard-coding
+  `not packaging`, so a marker added in the future is included by
+  default rather than silently excluded; the local (non-`--ci`) default
+  still excludes `slow`, `statistical`, and `packaging` for fast
+  iteration. The `packaging`-marked test added for R12
+  (`test/validation/test_sdist_contents.py`) is the first test this
+  marker has ever actually carried.
 - The source distribution (`sdist`) excluded `doc/`, `test/`, `dev/`,
   `CHANGELOG.md`, and `SECURITY.md` — only `LICENSE.md`, `README.md`,
   `src/fim`, and `version.txt` shipped, leaving a scientific package's
