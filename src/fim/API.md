@@ -104,6 +104,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation)
     * [read](#fim.persistence.jsonl_store.JSONLTrajectoryStore.read)
 * [fim.persistence.manifest](#fim.persistence.manifest)
+  * [ArtifactDigest](#fim.persistence.manifest.ArtifactDigest)
+  * [hash\_file](#fim.persistence.manifest.hash_file)
   * [RunManifest](#fim.persistence.manifest.RunManifest)
     * [\_\_post\_init\_\_](#fim.persistence.manifest.RunManifest.__post_init__)
     * [params](#fim.persistence.manifest.RunManifest.params)
@@ -439,6 +441,14 @@ one of them (``"any"``). With exactly one statistic, ``all`` and
 ``any`` of a single Boolean are the same value, so the combinator is a
 genuine no-op in that case rather than a separately tested path.
 
+A statistic can be legitimately undefined on a given round (see
+`record`'s ``value`` argument): rather than raise or invent a
+substitute number, that round simply contributes nothing to that
+statistic's own history, so its stability is judged once enough
+*defined* rounds have accumulated — never sooner, from a padded
+history, and never blocked by a round where a different statistic
+happened to have no value.
+
 <a id="fim.convergence.monitor.ConvergenceMonitor.__init__"></a>
 
 #### \_\_init\_\_
@@ -542,7 +552,16 @@ Record one ordered observation and update the stop decision.
 - `generation` - Non-negative generation number.
 - `value` - The watched statistic's finite value. A bare float is
   only accepted while watching exactly one statistic; with
-  several, pass a mapping covering every configured name.
+  several, pass a mapping. The mapping need not cover every
+  configured name: a statistic it omits simply is not
+  appended to that statistic's own history this round —
+  the caller's way of reporting "this statistic has no
+  defined value for this round" without fabricating one or
+  blocking the round's other, defined statistics. Every
+  key the mapping *does* include, however, must name a
+  configured statistic; an unrecognized name is far more
+  likely a typo than an intentional omission, so it still
+  raises.
 
 
 **Returns**:
@@ -881,8 +900,10 @@ Seed one locus's finite state space from its generation-zero alleles.
 
 **Raises**:
 
-- `ValueError` - If ``capacity`` is too small to hold every initial
-  ID, or an initial ID falls outside ``0 .. capacity - 1``.
+- `ValueError` - If ``capacity`` is fewer than two states (a single
+  state has no "other" for a mutation to target), too small
+  to hold every initial ID, or an initial ID falls outside
+  ``0 .. capacity - 1``.
 
 <a id="fim.model.allele.FiniteAlleleSpace.mutate_target"></a>
 
@@ -907,6 +928,16 @@ Return one state other than ``current``, uniformly at random.
   tracked minted set excluding ``current``, or the next not-yet-
   minted one, with probability proportional to how many of each
   kind remain.
+
+
+**Raises**:
+
+- `RuntimeError` - If every state in ``0 .. capacity - 1`` is already
+  minted. Unreachable in practice: once ``minted_count ==
+  capacity``, ``recurrence_probability`` is exactly ``1.0``
+  and this branch is never taken; the guard exists so a
+  capacity overrun fails loudly instead of minting an
+  out-of-range ID.
 
 <a id="fim.model.allele.FiniteAlleleRegistry"></a>
 
@@ -1300,7 +1331,15 @@ Store all values needed to reproduce a finite-island-model run.
   can derive this from a single per-base rate instead (`mu_b`);
   `mu` itself always holds the resolved per-locus probability.
 - `d` - Number of demes.
-- `seed` - Required PCG64 seed.
+- `seed` - Required PCG64 seed. Must be non-negative — NumPy's PCG64
+  rejects a negative seed with no equivalent upper bound (its
+  `SeedSequence` hashes an arbitrarily large non-negative
+  integer into a fixed-size entropy pool rather than rejecting
+  it), so this is the whole legal range. A batch replicate's
+  seed is `seed + replicate_index`, which is therefore also
+  always non-negative and always in range: see the
+  `_require_integer` call site for why no separate bound on
+  that derived value is needed.
 - `loci` - Nonempty ordered locus descriptions.
 - `initial_allele_count` - Founding allele count per locus.
 - `initial_concentration` - Symmetric Dirichlet concentration.
@@ -1741,7 +1780,37 @@ complete line is reported as corruption.
 
 # fim.persistence.manifest
 
-Replayable run-manifest representation and JSON I/O.
+Replayable, verifiable run-manifest representation and JSON I/O.
+
+<a id="fim.persistence.manifest.ArtifactDigest"></a>
+
+## ArtifactDigest Objects
+
+```python
+class ArtifactDigest(TypedDict)
+```
+
+One durable run-output file's content identity.
+
+<a id="fim.persistence.manifest.hash_file"></a>
+
+#### hash\_file
+
+```python
+def hash_file(path: Path | str) -> ArtifactDigest
+```
+
+Return one file's exact size and lowercase hex-encoded SHA-256 digest.
+
+**Arguments**:
+
+- `path` - File to hash.
+
+
+**Returns**:
+
+  The file's byte count and SHA-256 digest, together sufficient to
+  detect any edit, truncation, or replacement of the file's content.
 
 <a id="fim.persistence.manifest.RunManifest"></a>
 
@@ -1752,7 +1821,20 @@ Replayable run-manifest representation and JSON I/O.
 class RunManifest()
 ```
 
-Capture everything needed to identify and replay a run.
+Capture everything needed to identify, verify, and replay a run.
+
+`artifacts` is `None` for a manifest as the engine constructs it —
+`fim.engine._run_one` returns a `RunResult` without ever writing to
+disk, so it cannot yet know a durable file's content digest. A
+manifest actually persisted to disk (`fim.cli._write_run_artifacts`)
+is written only once every other artifact (`trajectory.jsonl`,
+`report.json`, `scatter.png`) is fully flushed, with `artifacts`
+populated from their real on-disk digests — so `artifacts is not
+None` on a *read* manifest doubles as "every sibling artifact this
+manifest names existed, complete, at the moment this manifest was
+written." `fim stats` (`fim.cli._verify_trajectory_integrity`) uses
+that digest to refuse a trajectory that was edited, truncated, or
+replaced after the fact.
 
 <a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
 
@@ -1762,7 +1844,7 @@ Capture everything needed to identify and replay a run.
 def __post_init__() -> None
 ```
 
-Validate required manifest identity and terminal fields.
+Validate required manifest identity, terminal, and digest fields.
 
 <a id="fim.persistence.manifest.RunManifest.params"></a>
 
