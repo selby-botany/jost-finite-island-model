@@ -111,9 +111,16 @@ ignore = [
 python_version = "3.12"
 strict = true
 files = ["src", "test"]
-packages = ["fim"]
 mypy_path = "src"
 warn_unreachable = true
+
+# mpl_toolkits (unlike matplotlib's main package) ships no py.typed marker
+# or stubs; this only lets mypy import it, it does not suppress any type
+# error — `test/viz/test_plots.py` still narrows to the real `Axes3D` type
+# via `isinstance` rather than ignoring the attribute access it enables.
+[[tool.mypy.overrides]]
+module = "mpl_toolkits.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 addopts = "-m 'not statistical and not slow and not packaging' --strict-config --strict-markers"

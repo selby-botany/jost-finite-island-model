@@ -23,7 +23,11 @@ if [[ "${PRE_PUSH_SKIP_LINT:-false}" != true ]]; then
 fi
 if [[ "${PRE_PUSH_SKIP_TYPE:-false}" != true ]]; then
     if command -v mypy >/dev/null 2>&1; then
-        mypy --strict src
+        # No positional path: [tool.mypy] in pyproject.toml is the single
+        # source of truth for scope (strict = true, files = ["src", "test"]).
+        # An explicit "src" here would silently narrow that scope back to
+        # src alone without changing the config -- see test/test_mypy_scope.py.
+        mypy
     else
         printf 'pre-push: mypy absent; types skipped\n'
     fi

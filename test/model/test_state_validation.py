@@ -85,7 +85,7 @@ def test_frequency_maps_require_positive_finite_probability_vectors(
 
 def test_state_rows_reject_empty_and_incomplete_or_inconsistent_inputs() -> None:
     """Trajectory reconstruction validates all row-level grouping invariants."""
-    cases = (
+    cases: tuple[tuple[list[dict[str, object]], str], ...] = (
         ([], "no rows"),
         ([_row(generation=2), _row(generation=3)], "one generation"),
         ([_row(run_id="a"), _row(run_id="b")], "one run"),

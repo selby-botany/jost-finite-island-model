@@ -133,7 +133,13 @@ if "${run_lint}"; then
         dev/bin/check-doc-links dev/bin/extract-release-notes
 fi
 
-"${run_type}" && run "${python}" -m mypy --strict src
+# No positional arguments: `[tool.mypy]` in pyproject.toml already sets
+# `strict = true` and `files = ["src", "test"]`, so the bare invocation is
+# the single source of truth for what the type gate covers. Passing an
+# explicit `src` here (as before) would silently narrow that scope back
+# to `src` alone without changing the config, letting the two drift apart
+# again — see `test/test_mypy_scope.py`.
+"${run_type}" && run "${python}" -m mypy
 
 if "${run_test}"; then
     if "${coverage}"; then

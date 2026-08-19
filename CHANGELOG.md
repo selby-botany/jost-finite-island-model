@@ -8,6 +8,42 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The mypy type gate's configuration and its actual invocations disagreed
+  with each other. `[tool.mypy]` set both `files = ["src", "test"]` and
+  `packages = ["fim"]`, which mypy rejects together (it accepts at most
+  one of `files`, `packages`, or explicit CLI arguments), so a bare
+  `mypy` failed immediately with "May only specify one of: module/
+  package, files, or command" — before checking anything. `build` and
+  `dev/git-hooks/pre-push` both sidestepped the crash by always passing
+  an explicit `mypy --strict src`, which happens to override a
+  conflicting config instead of erroring, but that same explicit `src`
+  argument also silently narrowed the checked scope away from `test/`
+  regardless of what `files` said — so the type gate actually run in CI
+  and at push time had never covered `test/` at all. Running `mypy src
+  test` directly surfaced 13 real errors across four test files that had
+  been accumulating unnoticed. Dropped `packages` from `[tool.mypy]`;
+  moved `build` and `pre-push` to the bare `mypy` invocation so the
+  config is the single source of truth for scope; fixed all 13 errors,
+  preferring the real underlying issue over a suppression in every case
+  — a private `Figure._suptitle` access became the public
+  `get_suptitle()`; two return-type/annotation gaps in
+  `test/statistics/test_differentiation.py` and
+  `test/model/test_state_validation.py` got explicit type narrowing or
+  annotations; two 3D/scatter-specific matplotlib return types
+  (`Axes3D.get_zlabel`, `PathCollection.get_sizes`) got `isinstance`
+  narrowing that doubles as a genuine runtime assertion instead of an
+  ignore; one deliberately-invalid-type test call and one genuinely
+  unstubbed alias method (`get_facecolors`, matplotlib's own
+  `_api.define_aliases`-generated alias for the stubbed
+  `get_facecolor`) kept the project's existing targeted
+  `# type: ignore[arg-type/attr-defined]` pattern; and one
+  `urllib.error.HTTPError` test construction switched from a bare `{}`
+  to a real `email.message.Message()` for its `hdrs` argument. Added
+  `test/test_mypy_scope.py`, asserting statically (no mypy subprocess)
+  that `[tool.mypy]` never declares a conflicting `packages` key
+  alongside `files`, and that neither `build` nor `pre-push` passes mypy
+  a positional path argument that would narrow it away from that
+  config again.
 - Adaptive `G_ST` batches raised `ValueError` on partial monomorphism
   (one tracked locus fixed for the same allele while another locus is
   still polymorphic) because three layers disagreed about what an

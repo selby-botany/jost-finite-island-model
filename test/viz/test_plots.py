@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
+import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib.collections import PathCollection
+from mpl_toolkits.mplot3d import Axes3D
 
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
@@ -49,7 +52,7 @@ def test_direct_scatter_has_deme_axes_and_parameter_title(tmp_path: Path) -> Non
     assert len(figure.axes) == 1
     assert figure.axes[0].get_xlabel() == "Deme 1"
     assert figure.axes[0].get_ylabel() == "Deme 2"
-    assert "N=20" in figure._suptitle.get_text()
+    assert "N=20" in figure.get_suptitle()
     plt.close(figure)
 
 
@@ -68,6 +71,10 @@ def test_three_demes_render_direct_three_dimensional_axes() -> None:
 
     assert axis.get_xlabel() == "Deme 1"
     assert axis.get_ylabel() == "Deme 2"
+    # `figure.axes` is stub-typed as the base (2D) `Axes`; narrowing to the
+    # real runtime `Axes3D` both satisfies mypy and asserts the projection
+    # this test exists to check.
+    assert isinstance(axis, Axes3D)
     assert axis.get_zlabel() == "Deme 3"
     plt.close(figure)
 
@@ -98,9 +105,20 @@ def test_coincident_common_and_rare_points_are_grouped_and_labeled() -> None:
     figure = plot_frequency_scatter(state, _params(2))
     axis = figure.axes[0]
     markers = axis.collections[0]
+    # `Axes.collections` is stub-typed as the base `Collection`; narrowing
+    # to `PathCollection` (what `Axes.scatter` actually returns) both
+    # satisfies mypy and asserts this really is a scatter layer.
+    assert isinstance(markers, PathCollection)
 
     assert len(markers.get_sizes()) == 2
-    assert len({tuple(color[:3]) for color in markers.get_facecolors()}) == 2
+    # `get_facecolors` is a real matplotlib `_api.define_aliases`-generated
+    # alias for `get_facecolor` — identical at runtime, invisible to the
+    # stubs, which declare only the singular name (and with a broader,
+    # single-or-many-colors return type unhelpful for this specific
+    # known-plural case). One targeted ignore, not a suppression of a
+    # genuine issue.
+    facecolors = markers.get_facecolors()  # type: ignore[attr-defined]
+    assert len({tuple(color[:3]) for color in facecolors}) == 2
     assert {text.get_text() for text in axis.texts} == {"2"}
     plt.close(figure)
 
@@ -110,7 +128,11 @@ def test_diagnostic_views_have_one_trace_and_one_bar_per_deme() -> None:
     trace = plot_convergence_trace([0, 1, 2], [0.1, 0.2, 0.2], "D")
     bars = plot_frequency_bars(_state(3))
 
-    assert len(trace.axes[0].lines[0].get_xdata()) == 3
+    # `Line2D.get_xdata()` is stub-typed as the broad `ArrayLike` (the same
+    # alias its setter accepts), not the concrete, always-`Sized` ndarray
+    # it actually returns; `np.asarray` makes that concrete for both mypy
+    # and any genuinely list-like runtime value.
+    assert len(np.asarray(trace.axes[0].lines[0].get_xdata())) == 3
     assert len(bars.axes[0].patches) == 6
     plt.close(trace)
     plt.close(bars)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from email.message import Message
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -631,7 +632,12 @@ class _ReleaseResponse:
 
 @pytest.mark.parametrize(
     "error",
-    [HTTPError("https://example.invalid", 500, "bad", {}, None), URLError("offline")],
+    [
+        # `hdrs` is typed as `email.message.Message`, not a bare dict — an
+        # empty `Message()` is what a header-less real response carries.
+        HTTPError("https://example.invalid", 500, "bad", Message(), None),
+        URLError("offline"),
+    ],
 )
 def test_fetch_latest_release_wraps_network_errors(
     monkeypatch: pytest.MonkeyPatch,

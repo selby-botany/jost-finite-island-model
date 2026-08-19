@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import math
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 from fim.statistics import (
     differentiation_q,
@@ -32,7 +34,9 @@ DATA_DIRECTORY = Path(__file__).parents[1] / "data" / "statistics"
 def _fixture(name: str) -> dict[str, object]:
     """Load one hand-checked golden frequency-table fixture."""
     with (DATA_DIRECTORY / name).open(encoding="utf-8") as fixture_file:
-        return json.load(fixture_file)
+        payload = json.load(fixture_file)
+    assert isinstance(payload, dict)
+    return payload
 
 
 def _frequency_table(fixture: dict[str, object]) -> list[dict[int, float]]:
@@ -65,10 +69,16 @@ class DifferentiationStatisticsTests(unittest.TestCase):
             with self.subTest(fixture_name=fixture_name):
                 fixture = _fixture(fixture_name)
                 report = statistics_report(_frequency_table(fixture))
+                # A TypedDict's keys are literals to mypy, but this test walks
+                # whatever statistic names each fixture's `expected` object
+                # happens to list; re-view the same TypedDict (still a plain
+                # dict at runtime) as an ordinary string-keyed mapping so a
+                # dynamic key is allowed.
+                report_values = cast("Mapping[str, float | None]", report)
                 expected = fixture["expected"]
-                self.assertIsInstance(expected, dict)
+                assert isinstance(expected, dict)
                 for name, value in expected.items():
-                    self.assertAlmostEqual(report[name], value, places=12)
+                    self.assertAlmostEqual(report_values[name], value, places=12)
 
     def test_single_deme_statistics_and_hill_orders(self) -> None:
         """H, J, and q=0,1,2 Hill numbers follow their defining equations."""
@@ -171,11 +181,11 @@ class DifferentiationStatisticsTests(unittest.TestCase):
             ("1", TypeError),
         ):
             with self.assertRaises(error):
-                hill_number({0: 1.0}, order)
+                hill_number({0: 1.0}, order)  # type: ignore[arg-type]
 
     def test_table_and_deme_validation_reports_bad_inputs(self) -> None:
         """Public statistics reject malformed mappings and frequencies."""
-        cases = (
+        cases: tuple[tuple[object, str], ...] = (
             (object(), "frequency table"),
             ([1], "deme 0"),
             ([{}], "at least one allele"),
@@ -217,7 +227,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                 self.subTest(function=function.__name__),
                 self.assertRaisesRegex(ValueError, "at least two"),
             ):
-                function(one)  # type: ignore[arg-type]
+                function(one)
         with self.assertRaisesRegex(ValueError, "only defined"):
             differentiation_q([{0: 1.0}, {0: 1.0}], 2, [1, 1])
 
