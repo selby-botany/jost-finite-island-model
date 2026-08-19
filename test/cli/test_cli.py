@@ -702,6 +702,49 @@ def test_run_batch_adaptive_tolerance_can_stop_before_n_replicates(
     assert manifest["replicate_count"] == 2
 
 
+def test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_directories(
+    tmp_path: Path,
+) -> None:
+    """A parallel batch's published `replicate-*` set exactly matches the manifest.
+
+    Regression test for S1: `fim.engine._run_batch_parallel` applies an
+    adaptive `replicate_tolerance` stop only after a whole concurrent
+    worker batch completes, in ascending replicate order — a worker
+    beyond the replicate that triggered the stop still runs to
+    completion and fully writes its own `replicate-*` directory before
+    its result is discarded. `--workers 4` with a generous tolerance
+    and a low `replicate_minimum` reliably stops mid-batch here, so
+    without pruning, the extra workers' directories would publish
+    complete, present on disk, and absent from `summary.json` and
+    `manifest.json`.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(
+        config,
+        n_replicates=10,
+        replicate_minimum=2,
+        replicate_tolerance=1000.0,
+    )
+    output = tmp_path / "output"
+
+    status = cli.main(
+        ["run", str(config), "-o", str(output), "--workers", "4", "--quiet"]
+    )
+
+    assert status == 0
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    replicate_run_ids = manifest["replicate_run_ids"]
+    expected_directories = {
+        cli._replicate_output_directory(output, manifest["run_id"], run_id).name
+        for run_id in replicate_run_ids
+    }
+    published_directories = {
+        entry.name for entry in output.iterdir() if entry.name.startswith("replicate-")
+    }
+    assert published_directories == expected_directories
+    assert len(published_directories) == manifest["replicate_count"]
+
+
 def test_run_batch_rejects_a_nonempty_output_directory(tmp_path: Path) -> None:
     """A batch run never writes into an already-populated directory."""
     config = tmp_path / "run.yaml"

@@ -215,6 +215,15 @@ def _command_run_batch(
     atomic rename (`_atomic_directory`), so a batch interrupted at any
     replicate, or between the last replicate and the batch-level
     summary/manifest, leaves no trace at `output_directory` at all.
+
+    Under `max_workers` (parallel, the default), an adaptive
+    `replicate_tolerance` stop is only ever applied after a whole
+    concurrent worker batch completes (`fim.engine._run_batch_parallel`),
+    so a worker whose replicate is not among the returned results can
+    still have fully written its own `replicate-*` directory before the
+    stop was decided. `_prune_orphan_replicate_directories` removes any
+    such directory before publishing, so the published `replicate-*` set
+    always equals `manifest.json`'s `replicate_run_ids` exactly.
     """
     run_id = deterministic_run_id(params)
     max_workers = (
@@ -243,6 +252,10 @@ def _command_run_batch(
             raise RuntimeError("batch CLI run unexpectedly returned a scalar result")
         ended_at = _format_timestamp(_utc_now())
 
+        published_run_ids = frozenset(result.run_id for result in output)
+        _prune_orphan_replicate_directories(
+            working_directory, run_id, published_run_ids
+        )
         for result in output:
             directory = _replicate_output_directory(
                 working_directory, run_id, result.run_id
@@ -426,6 +439,39 @@ def _default_output_directory() -> Path:
 def _format_timestamp(value: datetime) -> str:
     """Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`."""
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _prune_orphan_replicate_directories(
+    working_directory: Path,
+    batch_run_id: str,
+    published_run_ids: frozenset[str],
+) -> None:
+    """Remove any replicate directory not among the batch's published results.
+
+    Regression fix for S1: under `max_workers` (parallel, the default),
+    `fim.engine._run_batch_parallel` submits a whole worker batch and
+    applies an adaptive `replicate_tolerance` stop only afterward, in
+    ascending replicate order. A worker beyond the replicate that
+    triggered the stop still runs to completion — its `store_factory`
+    call has already created its `replicate-NNN/` directory and
+    streamed a full `trajectory.jsonl` into it — even though its
+    result is discarded, never appearing in the tuple `fim` returns.
+    Without this pass, `_atomic_directory` would publish that orphan
+    directory verbatim: complete, present on disk, and absent from
+    both `summary.json` and `manifest.json`.
+
+    Args:
+        working_directory: The batch's hidden temporary build directory.
+        batch_run_id: The batch's own run ID.
+        published_run_ids: Every replicate run ID actually returned by
+            `fim` — the set that will appear in `manifest.json`.
+    """
+    for entry in sorted(working_directory.glob("replicate-*")):
+        if not entry.is_dir():
+            continue
+        replicate_run_id = f"{batch_run_id}-r{entry.name.removeprefix('replicate-')}"
+        if replicate_run_id not in published_run_ids:
+            shutil.rmtree(entry)
 
 
 def _replicate_output_directory(

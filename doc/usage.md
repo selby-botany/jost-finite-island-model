@@ -464,7 +464,12 @@ statistic left with fewer than two defined replicates is omitted from
 The batch's own `manifest.json` (distinct from each replicate's own) records
 the batch `run_id`, every `replicate_run_ids` entry, `replicate_count`, the
 shared `parameters`, batch start/end timestamps, and `software_version` —
-not a per-run convergence outcome, since each replicate has its own.
+not a per-run convergence outcome, since each replicate has its own. Under
+parallel execution — the CLI default — an adaptive `replicate_tolerance`
+stop can leave a worker that had already started its own `replicate-NNN/`
+directory before the stop was decided; that directory is pruned before
+publishing, so the `replicate-*` subdirectories actually present always
+equal `replicate_run_ids` exactly.
 
 ## Reproduce a run
 
