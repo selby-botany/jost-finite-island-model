@@ -16,7 +16,7 @@
     - [5.1 Branch and tag model](#51-branch-and-tag-model)
     - [5.2 The `ci` workflow](#52-the-ci-workflow)
     - [5.3 The `gitleaks` workflow](#53-the-gitleaks-workflow)
-    - [5.4 The `release` workflow](#54-the-release-workflow)
+    - [5.4 The release jobs in `ci.yml`](#54-the-release-jobs-in-ciyml)
   - [6. Packaging and distribution](#6-packaging-and-distribution)
     - [6.1 `pyproject.toml` and the source layout](#61-pyprojecttoml-and-the-source-layout)
     - [6.2 The Windows one-file executable](#62-the-windows-one-file-executable)
@@ -171,9 +171,9 @@ inheritable project needs:
 jost-finite-island-model/
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml                 # lint, type-check, test, coverage, package smoke
-│       ├── gitleaks-ci.yml        # secret scan
-│       └── release.yml            # tag → build exe + wheel/sdist → GitHub Release
+│       ├── ci.yml                 # lint/type/test/coverage; on a tag, gates and
+│       │                           # runs build exe + wheel/sdist → GitHub Release
+│       └── gitleaks-ci.yml        # secret scan
 ├── .gitignore
 ├── .markdownlint.json             # markdown lint config
 ├── .markdownlintignore
@@ -381,26 +381,52 @@ full-history checkout (`fetch-depth: 0`) and `gitleaks/gitleaks-action@v2`.
 It is a separate workflow, not a step in `ci.yml`, so a secret-scan failure
 is legible on its own and does not mask a test failure or vice versa.
 
-### 5.4 The `release` workflow
+### 5.4 The release jobs in `ci.yml`
 
-`.github/workflows/release.yml` runs only on `v*` tags, with
-`contents: write` permission, and has two jobs:
+Release publishing was originally a separate `release.yml`, triggered
+independently by the same `v*` tag push as `ci.yml`, with no dependency
+between the two workflows — a tag could publish a release before CI had
+even started, let alone passed, and nothing checked that the tag was
+reachable from `main` or was more than a bare, unauthenticated ref. Both
+gaps are R7 review findings; the fix folds release publishing into
+`ci.yml` itself, where GitHub Actions' own `needs:` graph makes the
+dependency structural rather than advisory:
 
-1. **`windows` (runs-on `windows-latest`).** Install pinned runtime + build
-   deps, run `pyinstaller packaging/fim.spec`, smoke-test the resulting
-   `dist/fim.exe` (`fim.exe --version` must print the tag's version, and a
-   tiny bundled config must run end-to-end offline), rename to
-   `fim-windows-x64.exe`, and emit its `.sha256`.
-2. **`publish` (needs `windows`, runs-on `ubuntu-latest`).** Build the
-   `sdist` + `wheel`, verify `version.txt` equals the tag (fail loudly on
-   mismatch — a tag that disagrees with `version.txt` is a release bug, not
-   a warning), extract the matching `CHANGELOG.md` section as the release
-   notes, and create the GitHub Release attaching the `.exe`, its
-   `.sha256`, the wheel, and the sdist.
+1. **`verify-tag` (`if: startsWith(github.ref, 'refs/tags/v')`, runs
+   alongside `build` rather than after it — cheap, and independent of
+   source).** A full-history checkout, then: `git rev-parse --verify
+   "$GITHUB_REF_NAME^{tag}"` must succeed, which is only true for an
+   *annotated* tag (a lightweight tag has no tag object for `^{tag}` to
+   resolve) — rejecting a `git tag v1.2.3` shorthand that skipped a
+   message entirely; then `git merge-base --is-ancestor "$GITHUB_SHA"
+   origin/main` must hold, rejecting a tag pushed from a commit `main`
+   has never merged.
+2. **`windows` (`needs: [build, verify-tag]`, runs-on
+   `windows-latest`).** Install pinned runtime + build deps, run
+   `pyinstaller packaging/fim.spec`, smoke-test the resulting
+   `dist/fim.exe` (`fim.exe --version` must print the tag's version, and
+   a tiny bundled config must run end-to-end offline), rename to
+   `fim-windows-x64.exe`, and emit its `.sha256`. Cannot start until
+   every `build` matrix leg and `verify-tag` have succeeded.
+3. **`publish` (`needs: windows`, runs-on `ubuntu-latest`, its own
+   `contents: write` permission — the only job in the workflow that
+   needs it).** Build the `sdist` + `wheel`, verify `version.txt` equals
+   the tag (fail loudly on mismatch — a tag that disagrees with
+   `version.txt` is a release bug, not a warning), extract the matching
+   `CHANGELOG.md` section as the release notes, and create the GitHub
+   Release attaching the `.exe`, its `.sha256`, the wheel, and the
+   sdist.
 
 The tag-equals-`version.txt` check is the one guard that makes the version
 string trustworthy everywhere it appears (bundle, manifest, `--version`,
-Homebrew formula).
+Homebrew formula); `verify-tag` and the `needs:` chain are what makes the
+release itself trustworthy — built from a commit `main` actually contains,
+from a tag that was deliberately created rather than a stray ref, only
+after every test the project runs has passed for that exact commit.
+
+Repository-level branch protection on `main` and tag protection on `v*`
+(who may push either) are configured directly in GitHub settings, not in
+a workflow file — see `install/README.md`'s release-readiness checklist.
 
 ## 6. Packaging and distribution
 

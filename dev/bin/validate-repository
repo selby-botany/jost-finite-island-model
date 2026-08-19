@@ -33,8 +33,7 @@ shellcheck \
     install/homebrew/test-formula
 yamllint \
     .github/workflows/ci.yml \
-    .github/workflows/gitleaks-ci.yml \
-    .github/workflows/release.yml
+    .github/workflows/gitleaks-ci.yml
 markdownlint \
     "**/*.md" \
     "#.attic/**" \

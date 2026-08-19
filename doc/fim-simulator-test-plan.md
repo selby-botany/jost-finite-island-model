@@ -823,14 +823,21 @@ no wall-clock, fully reproducible.
   `dev/bin/extract-release-notes`, detailed design §5.4): the extractor
   returns exactly one version's `CHANGELOG.md` section, excluding adjacent
   releases, and fails rather than publishing a blank body when the tag has
-  no section; the release workflow is checked, by inspecting
-  `.github/workflows/release.yml`, to source its GitHub release notes from
+  no section; the release jobs are checked, by inspecting
+  `.github/workflows/ci.yml`, to source their GitHub release notes from
   the extractor rather than GitHub's own auto-generated notes, and to use
   a `pyinstaller` work path that does not collide with the build script's
   own directories. A companion check confirms `build`'s CI-mode test
   invocation excludes only `packaging`-marked tests — the authoritative
   release gate still runs the `statistical` and `slow` layers (§2's
   taxonomy), unlike the fast default `pytest` invocation (§3).
+- **Release gating** (`test_release_notes.py`, detailed design §5.4, R8
+  remediation): `windows` and `publish` name `verify-tag` and/or `build`
+  in their `needs:`, and `verify-tag` itself is checked to both `git
+  rev-parse --verify "...^{tag}"` (rejecting a lightweight tag) and `git
+  merge-base --is-ancestor` (rejecting a tag that is not reachable from
+  `main`) — so the structural dependency the fix relies on cannot silently
+  regress to independent, ungated workflows again.
 - **Repository-local Python tool resolution** (`test_python_wrappers.py`):
   `bin/ruff` and `build`'s lint step both work correctly in an environment
   with no activated virtual environment on `PATH`, confirming the

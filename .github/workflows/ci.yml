@@ -28,3 +28,120 @@ jobs:
           cache: pip
       - run: python -m pip install -e ".[dev]"
       - run: ./build --ci
+
+  # Gate for the release jobs below: cheap and fast, so it runs alongside
+  # `build` rather than waiting on it. Only ever runs for a tag push (every
+  # other trigger skips it via the `if:`), and only ever raises the tag's
+  # own shape and ancestry -- it does not touch source, so it does not
+  # duplicate what `build` already checks.
+  verify-tag:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require an annotated tag that is an ancestor of main
+        run: |
+          if ! git rev-parse --verify --quiet "${GITHUB_REF_NAME}^{tag}" >/dev/null; then
+            echo "::error::${GITHUB_REF_NAME} is a lightweight tag; releases require an annotated tag (git tag -a)" >&2
+            exit 1
+          fi
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "::error::${GITHUB_REF_NAME} (${GITHUB_SHA}) is not an ancestor of main" >&2
+            exit 1
+          fi
+
+  # windows and publish were formerly a separate release.yml, triggered
+  # independently by the same tag push with no dependency on this file's
+  # build job -- so a tag could publish a release before CI had even
+  # started, let alone passed. Folding them in here and gating on
+  # `needs: [build, verify-tag]` makes that structurally impossible: GitHub
+  # Actions cannot start a job until every job it needs has succeeded.
+  windows:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, verify-tag]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - shell: pwsh
+        run: |
+          $expectedVersion = "fim $($env:GITHUB_REF_NAME.TrimStart('v'))"
+          $actualVersion = .\dist\fim.exe --version
+          if ($actualVersion -ne $expectedVersion) {
+            throw "Executable version '$actualVersion' is not '$expectedVersion'"
+          }
+          .\dist\fim.exe --help
+          .\dist\fim.exe init --output tiny.yaml
+          (Get-Content tiny.yaml) `
+            -replace 'N: 450', 'N: 20' `
+            -replace 'd: 20', 'd: 2' `
+            -replace 'convergence_window: 50', 'convergence_window: 4' `
+            -replace 'convergence_tolerance: 0.01', 'convergence_tolerance: 1.0' `
+            -replace 'max_generations: 10000', 'max_generations: 10' `
+            | Set-Content tiny.yaml
+          .\dist\fim.exe run tiny.yaml --output smoke --quiet
+          $expectedArtifacts = @(
+            "manifest.json",
+            "report.json",
+            "scatter.png",
+            "trajectory.jsonl"
+          )
+          $actualArtifacts = @(
+            Get-ChildItem .\smoke -File |
+              ForEach-Object { $_.Name } |
+              Sort-Object
+          )
+          if (Compare-Object $expectedArtifacts $actualArtifacts) {
+            throw "Executable smoke run did not produce exactly four artifacts"
+          }
+          foreach ($artifact in $expectedArtifacts) {
+            if ((Get-Item ".\smoke\$artifact").Length -eq 0) {
+              throw "Executable smoke artifact '$artifact' is empty"
+            }
+          }
+          Rename-Item .\dist\fim.exe fim-windows-x64.exe
+          $hash = (Get-FileHash .\dist\fim-windows-x64.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  fim-windows-x64.exe" | Set-Content .\dist\fim-windows-x64.exe.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/fim-windows-x64.exe
+            dist/fim-windows-x64.exe.sha256
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build==1.2.*
+      - name: Verify tag and version
+        run: test "${GITHUB_REF_NAME#v}" = "$(cat version.txt)"
+      - run: python -m build
+      - name: Extract changelog release notes
+        run: dev/bin/extract-release-notes "$GITHUB_REF_NAME" > release-notes.md
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: dist
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --notes-file release-notes.md

@@ -69,13 +69,42 @@ Public functions require typed signatures and docstrings. Regenerate
 2. Move `[Unreleased]` changes into a dated `X.Y.Z` section.
 3. Set the same version in `version.txt`.
 4. Merge or fast-forward the verified commit to `main`.
-5. Tag `vX.Y.Z` from `main`.
-6. Confirm the release workflow publishes the Windows executable, checksum,
-   wheel, and source distribution.
+5. Tag `vX.Y.Z` from `main` with an **annotated** tag:
+   `git tag -a vX.Y.Z -m "X.Y.Z"`. A bare `git tag vX.Y.Z` (lightweight,
+   no message) is rejected by CI's `verify-tag` job before anything
+   publishes — see below.
+6. Confirm `ci.yml`'s `windows` and `publish` jobs run and publish the
+   Windows executable, checksum, wheel, and source distribution. They
+   cannot start until every `build` matrix leg and `verify-tag` succeed
+   for that exact commit (`needs: [build, verify-tag]` /
+   `needs: windows`), and `verify-tag` itself rejects a tag that is not
+   both annotated and an ancestor of `main`.
 7. Download the executable and independently verify `--version`, `--help`, and
    one offline tiny run.
 
-The release workflow rejects a tag that differs from `version.txt`.
+`publish` rejects a tag that differs from `version.txt`.
+
+### Repository settings (one-time, applied via GitHub, not this repo)
+
+`ci.yml`'s `verify-tag` job (workflow-level, checked on every tag push) is
+necessary but not sufficient on its own — it still runs *after* a tag has
+already been pushed. Closing the remaining gap (who is *allowed* to push to
+`main` or push a `v*` tag in the first place) requires GitHub repository
+settings that live outside this repo's version control and must be applied
+by hand, once, in the GitHub UI (Settings → Rules → Rulesets, or the legacy
+Settings → Branches / Tags):
+
+- **Branch protection on `main`**: require the `build` status check
+  (all matrix legs) to pass before merging; disallow force-pushes and
+  branch deletion.
+- **Tag protection on `v*`**: restrict who may create or delete a
+  matching tag to maintainers, so a release cannot be triggered by
+  anyone with ordinary push access alone.
+
+Neither setting is expressible in a workflow YAML file — a workflow only
+ever runs *after* a push has already happened, so it can refuse to
+*publish* a bad tag (which `verify-tag` now does) but cannot prevent the
+push itself. These two settings are what closes that remaining gap.
 
 ## Related documents
 

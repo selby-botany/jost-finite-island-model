@@ -8,6 +8,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Any `v*` tag published a release from any branch with no CI gate.
+  `release.yml`'s `windows` and `publish` jobs were triggered
+  independently by the same tag push as `ci.yml`, with no dependency
+  between the two workflows — a tag could publish a release before CI
+  had even started, let alone passed, and nothing checked that the
+  tag's commit was reachable from `main` or that the tag was more than
+  a bare, message-less ref. `windows` and `publish` now live inside
+  `ci.yml` itself, gated by `needs: [build, verify-tag]` and
+  `needs: windows` respectively — a structural dependency GitHub
+  Actions enforces, not an independent trigger that merely happened to
+  fire around the same time. The new `verify-tag` job requires the tag
+  to be annotated (`git rev-parse --verify "$GITHUB_REF_NAME^{tag}"`,
+  which only an annotated tag object satisfies) and an ancestor of
+  `main` (`git merge-base --is-ancestor`). `release.yml` is removed;
+  `dev/bin/validate-repository`'s `yamllint` invocation updated to
+  match. Repository-level branch protection on `main` and tag
+  protection on `v*` are GitHub settings outside version control and
+  are documented as a one-time manual checklist in `CONTRIBUTING.md`
+  rather than applied automatically.
 - A run's output directory was neither atomic nor integrity-checked. A
   scalar or batch run wrote its files directly at the final `-o` path as
   it went, so an interrupted run (a crash, a killed process, a full
