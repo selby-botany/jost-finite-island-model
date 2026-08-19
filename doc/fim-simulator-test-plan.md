@@ -569,7 +569,7 @@ Functional detail in §8.
 - **Atomic output publishing** (R7 remediation): a scalar or batch run's
   entire output directory is built in a hidden temporary sibling and
   published with one atomic rename (`_atomic_directory`), only once every
-  artifact is durable and `manifest.json` — written last — records each
+  artifact is flushed and `manifest.json` — written last — records each
   sibling artifact's SHA-256 digest (`_write_run_artifacts`). `-o` now
   refuses *any* pre-existing target directory, empty or not (stricter than
   the prior any-artifact-file check). **Failure injection** at three

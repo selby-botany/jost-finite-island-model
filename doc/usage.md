@@ -393,7 +393,7 @@ convergence or the hard cap ended the run. It also carries:
   rather than left implicit).
 - `artifacts`: the SHA-256 digest and byte count of `trajectory.jsonl`,
   `report.json`, and `scatter.png` as they existed at the moment the run
-  finished writing them durably. `fim stats` recomputes and checks the
+  finished writing and flushing them. `fim stats` recomputes and checks the
   trajectory's digest (and its generation count) before reading a single
   row, so a trajectory edited, truncated, or replaced after the run
   completed is refused with a clear error rather than re-analyzed
@@ -402,11 +402,14 @@ convergence or the hard cap ended the run. It also carries:
 `output_directory` (the whole four-file set for a scalar run, or the whole
 `replicate-NNN/` plus `summary.json`/`manifest.json` tree for a batch) is
 built in a hidden temporary location beside the target path and published
-with a single atomic rename only once every file in it is durable and
+with a single atomic rename only once every file in it is flushed and
 `manifest.json` has been written last with its `artifacts` digests. An
-interrupted run — a crash, a killed process, a full disk — therefore never
+interrupted run — an exception, `^C`, or a killed process — therefore never
 leaves a partial directory at the target path: it is either not there at
-all, or complete.
+all, or complete. This guarantee covers process-level interruption, not
+an unclean power loss: nothing in the write path calls `fsync`, so on
+power loss a directory can look complete (the rename itself is atomic)
+while some file inside it has content that never reached physical disk.
 
 **Compatibility with `fim` 1.0.0 output.** `fim` 1.0.0, the only version
 released before `schema_version` and `artifacts` existed, wrote manifests
@@ -480,7 +483,7 @@ The batch's own `manifest.json` (distinct from each replicate's own) records
 has its own. Like a scalar run's manifest, it also carries `artifacts`: the
 SHA-256 digest and byte count of `summary.json` and of each replicate's own
 `manifest.json` (keyed `replicate-NNN`), recorded once every one of them is
-durable, so an edited, truncated, or replaced batch-level artifact is
+flushed, so an edited, truncated, or replaced batch-level artifact is
 detectable the same way a scalar run's is. Under parallel execution — the
 CLI default — an adaptive `replicate_tolerance` stop can leave a worker that
 had already started its own `replicate-NNN/` directory before the stop was

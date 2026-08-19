@@ -203,7 +203,7 @@ class BatchManifest:
     one replicate: `replicate_run_ids` names every published
     `replicate-NNN/` subdirectory, and `artifacts` — populated the same
     way as `RunManifest.artifacts`, only once every sibling artifact is
-    durable — digests `summary.json` and each replicate's own
+    flushed — digests `summary.json` and each replicate's own
     `manifest.json`, so an edited, truncated, or replaced batch-level
     artifact is detectable the same way a scalar run's is.
     """

@@ -163,9 +163,9 @@ def _command_run_scalar(
     Every artifact is built inside a hidden temporary sibling directory
     and published at `output_directory` with one atomic rename, only
     once `trajectory.jsonl`, `report.json`, and `scatter.png` are all
-    fully durable and `manifest.json` — written last, and only then —
-    records each of their SHA-256 digests (`_write_run_artifacts`, and
-    see `_atomic_directory`). A run interrupted anywhere along the way
+    flushed and `manifest.json` — written last, and only then — records
+    each of their SHA-256 digests (`_write_run_artifacts`, and see
+    `_atomic_directory`). A run interrupted anywhere along the way
     leaves no trace at `output_directory` at all, rather than a partial
     directory silently indistinguishable from a complete one.
     """
@@ -390,10 +390,20 @@ def _atomic_directory(target: Path) -> Iterator[Path]:
     block raises anything, the temporary directory is discarded and
     `target` is left completely untouched. `target` therefore either
     does not exist yet or exists complete; there is no third, partial
-    state to observe from outside this function, no matter when a crash
-    happens (a hard kill or power loss skips the `except` cleanup too,
-    but still cannot leave anything at `target` itself — only an
-    orphaned temporary directory beside it).
+    state to observe from outside this function against process-level
+    interruption — an uncaught exception, `^C`, or `kill -9` all skip
+    the `except` cleanup but still cannot leave anything at `target`
+    itself, only an orphaned temporary directory beside it.
+
+    This guarantee is about the rename, not about physical durability
+    (S11): nothing in this function calls `fsync`, so on an unclean
+    power loss, a filesystem is free to have recorded the rename's
+    metadata before every byte written into the temporary directory
+    actually reached disk — a `target` that survives such an event can
+    exist, look complete, and still contain corrupted or truncated
+    file content. Treat this function's guarantee as "no partial
+    directory is ever observable," not "every observed directory
+    survived a power failure intact."
 
     Args:
         target: The directory's final path. Must not already exist.
@@ -576,10 +586,13 @@ def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
     generation-by-generation by the `TrajectoryStore` already passed
     into `fim`, so it exists before this function ever runs. Every other
     artifact is written and flushed first; ``manifest.json`` is written
-    only once every sibling artifact is durable, augmented with each
+    only once every sibling artifact is flushed, augmented with each
     one's SHA-256 digest and byte count (`fim.persistence.manifest.
     hash_file`) — the record `_verify_trajectory_integrity` later checks
-    against.
+    against. "Flushed" means reached the OS's page cache via the normal
+    file-close path, not confirmed on physical disk — no `fsync` is
+    called anywhere in this pipeline (S11), so this ordering protects
+    against a process dying mid-write, not against power loss.
     """
     targets = _run_artifact_targets(directory)
     _write_json(targets["report"], result.report)

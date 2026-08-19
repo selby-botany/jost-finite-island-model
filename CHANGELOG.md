@@ -8,6 +8,22 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Several docstrings and `doc/usage.md`/`doc/fim-simulator-test-plan.md`
+  described the atomic-publish write path (R7) as making output
+  "durable," including `_atomic_directory`'s claim that "no matter when
+  a crash happens (a hard kill or power loss...)" no partial state is
+  observable. There is no `fsync` anywhere in `src/`; the only
+  synchronization is `handle.flush()` in `jsonl_store.py`, which reaches
+  the OS page cache, not physical disk. Against process death — a
+  crash, `^C`, `kill -9` — the guarantee holds exactly as described:
+  the rename is atomic and either the whole directory exists or none of
+  it does. Against power loss it does not: a directory that looks
+  complete after an unclean shutdown can still contain a file whose
+  content never reached disk. Narrowed every claim to the crash class
+  actually covered ("flushed," not "durable") rather than adding
+  `fsync` calls, which would trade this reproducibility tool's write
+  throughput for a guarantee the design doesn't currently promise
+  anywhere else.
 - `ModelState`'s own constructor and `ModelState.from_rows` validated
   allele identity and row frequency more loosely than the config
   parser and `fim.persistence.store.normalize_row` did for the
