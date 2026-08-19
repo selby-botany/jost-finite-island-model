@@ -27,7 +27,24 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install -e ".[dev]"
-      - run: ./build --ci
+      # Split into two named, separately timed/budgeted steps (R19) rather
+      # than one opaque `./build --ci` step: the fast step re-runs the
+      # same deterministic layer `--ci` also covers (`build`'s own
+      # pyproject.toml-driven default marker filter, no coverage) purely
+      # to fail fast -- a few extra seconds -- before paying for the
+      # `slow`/`statistical` scenario suite's much larger wall-clock cost.
+      # Each step's own duration is visible in the Actions run summary
+      # without any extra instrumentation; each `timeout-minutes` is a
+      # hard, non-flaky budget enforced by the runner itself rather than
+      # a wall-clock assertion inside the test run, which machine-speed
+      # variance would make a non-deterministic pass/fail signal.
+      - name: Run the fast deterministic test layer (fail fast)
+        run: ./build --no-lint --no-type --no-docs --no-package
+        timeout-minutes: 5
+      - name: Run the full CI gate (lint, type, docs, package, and the
+          full test suite incl. slow/statistical scenarios)
+        run: ./build --ci
+        timeout-minutes: 30
 
   # Gate for the release jobs below: cheap and fast, so it runs alongside
   # `build` rather than waiting on it. Only ever runs for a tag push (every

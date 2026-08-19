@@ -350,13 +350,35 @@ release build is never cancelled mid-flight.
 ### 5.2 The `ci` workflow
 
 `.github/workflows/ci.yml` runs on `ubuntu-latest` across a Python matrix
-(`3.12`, `3.13`). It installs the pinned `dev` dependencies and then calls
-`./build --ci` — that call is the whole of the workflow's substance, so
-the workflow file stays a thin, stable shell and the logic lives in one
-script a maintainer runs identically offline (§7). Permissions are
-`contents: read`.
+(`3.12`, `3.13`). It installs the pinned `dev` dependencies, then runs the
+test suite as two separately named, separately budgeted steps (R19) before
+the workflow file's logic bottoms out in `./build`, the one script a
+maintainer runs identically offline (§7). Permissions are `contents: read`.
 
-`--ci` runs these stages in order (§7 gives the flag surface):
+**Two test steps, not one (R19 remediation).** A single `./build --ci`
+step used to be the workflow's entire test-related substance, so the
+`slow`/`statistical` scenario suite's own wall-clock cost (18m07s at
+review time) was invisible in the Actions run summary — indistinguishable
+from lint, type-checking, docs, and packaging, all bundled into the same
+opaque step, with no budget bounding any of it. The workflow now runs:
+
+1. `./build --no-lint --no-type --no-docs --no-package` — the same
+   deterministic layer `--ci` also covers (`pyproject.toml`'s own default
+   marker filter, no coverage), so it fails in seconds if anything
+   obviously broken slipped through, before CI pays for the much larger
+   scenario suite. `timeout-minutes: 5`.
+2. `./build --ci` — the authoritative gate, unchanged in substance
+   (below). `timeout-minutes: 30`.
+
+Each step's own duration is visible in the Actions run summary natively,
+with no extra instrumentation; each `timeout-minutes` is a hard budget
+enforced by the runner itself rather than a wall-clock assertion inside
+the test run, which machine-speed variance would make a non-deterministic
+pass/fail signal (the same commit reporting differently only because of
+runner load). `test/validation/test_ci_runtime_budget.py` statically
+checks both steps stay present, correctly ordered, and budgeted.
+
+`--ci` itself runs these stages in order (§7 gives the flag surface):
 
 1. `ruff check` and `ruff format --check` over `src`, `test`, and the
    Python programs under `dev/bin`.

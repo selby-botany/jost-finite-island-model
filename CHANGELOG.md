@@ -8,6 +8,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `ci.yml` ran the entire test suite as one `./build --ci` step, so the
+  `slow`/`statistical` scenario suite's own wall-clock cost (18m07s at
+  review time) was invisible in the Actions run summary — indistinguishable
+  from lint, type-checking, docs, and packaging, all bundled into the same
+  opaque step, with no budget bounding any of it. Split into two named
+  steps: a fast step re-running `build`'s own default marker-filtered
+  layer (no coverage, `--no-lint --no-type --no-docs --no-package`) to
+  fail in seconds before the expensive layer runs at all, then the
+  unchanged authoritative `./build --ci` gate. Each step declares its
+  own `timeout-minutes` (5 / 30) — a hard budget enforced by the runner
+  itself, not a wall-clock assertion inside the test run, which
+  machine-speed variance would make a non-deterministic pass/fail
+  signal. Added `test/validation/test_ci_runtime_budget.py`, statically
+  checking both steps stay present, correctly ordered, and budgeted.
 - The across-replicate Student's-t critical value interpolates an
   untabled degrees of freedom in `1/df` between two printed-table
   rows — a defensible dependency-free choice, but nothing previously

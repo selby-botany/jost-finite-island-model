@@ -893,6 +893,13 @@ no wall-clock, fully reproducible.
   merge-base --is-ancestor` (rejecting a tag that is not reachable from
   `main`) — so the structural dependency the fix relies on cannot silently
   regress to independent, ungated workflows again.
+- **CI test-layer runtime budget** (`test_ci_runtime_budget.py`, detailed
+  design §5.2, R19 remediation): the fast marker-filtered layer and the
+  full `--ci` gate are checked to be two separately named steps, in that
+  order, and each to declare its own `timeout-minutes` (the fast step's
+  smaller than the full step's) — so the expensive `slow`/`statistical`
+  scenario suite cannot silently be re-folded back into one opaque,
+  unbudgeted step.
 - **Repository-local Python tool resolution** (`test_python_wrappers.py`):
   `bin/ruff` and `build`'s lint step both work correctly in an environment
   with no activated virtual environment on `PATH`, confirming the
