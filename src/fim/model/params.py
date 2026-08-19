@@ -89,7 +89,15 @@ class SimulationParams:
             can derive this from a single per-base rate instead (`mu_b`);
             `mu` itself always holds the resolved per-locus probability.
         d: Number of demes.
-        seed: Required PCG64 seed.
+        seed: Required PCG64 seed. Must be non-negative — NumPy's PCG64
+            rejects a negative seed with no equivalent upper bound (its
+            `SeedSequence` hashes an arbitrarily large non-negative
+            integer into a fixed-size entropy pool rather than rejecting
+            it), so this is the whole legal range. A batch replicate's
+            seed is `seed + replicate_index`, which is therefore also
+            always non-negative and always in range: see the
+            `_require_integer` call site for why no separate bound on
+            that derived value is needed.
         loci: Nonempty ordered locus descriptions.
         initial_allele_count: Founding allele count per locus.
         initial_concentration: Symmetric Dirichlet concentration.
@@ -165,7 +173,21 @@ class SimulationParams:
     def __post_init__(self) -> None:
         """Normalize sequence inputs and validate every parameter."""
         _require_integer("d", self.d, minimum=2)
-        _require_integer("seed", self.seed)
+        # A negative seed previously passed this validation and was only
+        # ever caught deep inside `fim()`, when NumPy's PCG64 raises —
+        # potentially after CLI output directories already exist. Reject
+        # it here instead, at construction time. This one bound is also
+        # sufficient for every batch replicate's derived seed
+        # (`seed + replicate_index` in `fim.engine`): `replicate_index`
+        # ranges over `0 .. n_replicates - 1`, `n_replicates` is already
+        # required to be at least 1 below, and Python integers never
+        # overflow, so `seed >= 0` guarantees `seed + replicate_index >=
+        # 0` for every replicate without a further check. PCG64 has no
+        # enforced upper bound to check against in turn (verified up to
+        # a 1024-bit seed): `SeedSequence` hashes any non-negative
+        # integer into a fixed-size entropy pool rather than rejecting
+        # large values, so non-negativity is the entire legal range.
+        _require_integer("seed", self.seed, minimum=0)
 
         population_sizes = _normalize_population_sizes(self.N, self.d)
         migration = _normalize_migration(self.m, self.d)

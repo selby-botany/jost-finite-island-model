@@ -306,6 +306,31 @@ def test_config_validation_names_unknown_key(
     assert "migraiton" in capsys.readouterr().err
 
 
+def test_run_rejects_negative_seed_before_creating_the_output_directory(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A negative `seed` fails at config load, before any run artifact exists.
+
+    Regression test for R4: `load_config` runs before
+    `output_directory.mkdir(...)` in both `_command_run_scalar` and
+    `_command_run_batch`, so a config-level rejection here means the CLI
+    never creates an output directory for a run that could not possibly
+    start — unlike the prior behavior, where an invalid seed passed
+    config validation and only failed once NumPy's PCG64 rejected it deep
+    inside `fim()`.
+    """
+    config = tmp_path / "bad.yaml"
+    _write_config(config, seed=-1)
+    output = tmp_path / "output"
+
+    status = cli.main(["run", str(config), "-o", str(output), "--quiet"])
+
+    assert status == 2
+    assert "seed must be at least 0" in capsys.readouterr().err
+    assert not output.exists()
+
+
 def test_init_writes_parseable_starter_config(tmp_path: Path) -> None:
     """The initialization command creates the documented starter file."""
     output = tmp_path / "example-run.yaml"

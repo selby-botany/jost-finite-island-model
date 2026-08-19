@@ -499,6 +499,7 @@ def test_locus_lengths_accept_a_genuinely_distinct_value_per_locus() -> None:
         ("mu", True, "mu must be"),
         ("mu", float("inf"), "mu must be finite"),
         ("seed", 1.5, "seed must be"),
+        ("seed", -1, "seed must be at least 0"),
         ("d", True, "d must be"),
     ],
 )

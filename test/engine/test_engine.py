@@ -255,6 +255,39 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
     assert summary["D"]["confidence"] == 0.95
 
 
+def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:
+    """`seed=0`, the lowest legal value, still derives valid replicate seeds.
+
+    Regression boundary test for R4: `seed >= 0` is the whole legal
+    range (`fim.model.params.SimulationParams.__post_init__`), so
+    `seed=0` is the boundary most likely to expose an off-by-one in the
+    `seed + replicate_index` derivation. Every derived replicate seed
+    must land in `0 .. n_replicates - 1` with no gap or reuse.
+    """
+    params = SimulationParams.from_mapping(
+        {**_tiny_config(), "seed": 0, "n_replicates": 4}
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+    assert [result.params.seed for result in output] == [0, 1, 2, 3]
+
+
+def test_parallel_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:
+    """The `max_workers` batch path derives the same boundary seeds.
+
+    Parallel replicates are constructed identically to the sequential
+    loop (`fim.engine._run_batch_parallel`) but cross a process
+    boundary, so this is checked independently rather than assumed to
+    follow from the sequential case above.
+    """
+    params = SimulationParams.from_mapping(
+        {**_tiny_config(), "seed": 0, "n_replicates": 4}
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, max_workers=2)
+    assert isinstance(output, tuple)
+    assert sorted(result.params.seed for result in output) == [0, 1, 2, 3]
+
+
 def test_max_workers_produces_the_same_replicates_as_sequential_execution() -> None:
     """Parallel batching changes nothing about the computed results."""
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 4})

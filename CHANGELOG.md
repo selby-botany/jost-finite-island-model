@@ -48,6 +48,19 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   derivation showing the fix is a closed-form identity rather than a
   truncated series (there is no missing `O(1/N^2)` or higher term to add
   on top of it).
+- `SimulationParams.__post_init__` validated `seed` as "any integer",
+  with no lower bound, so a negative seed passed config validation and
+  was only ever rejected once `fim()` actually started and constructed
+  NumPy's `PCG64` — by which point, in the CLI, the output directory
+  could already exist. `seed` is now required to be `>= 0` at
+  construction time, matching PCG64's actual legal range (its
+  `SeedSequence` hashes any non-negative integer into a fixed-size
+  entropy pool rather than enforcing an upper bound, verified up to a
+  1024-bit seed, so non-negativity is the whole constraint). Every
+  batch replicate's derived seed (`seed + replicate_index`) is
+  therefore also always in range, with no separate bound needed, since
+  `n_replicates` is already required to be at least 1 and Python
+  integers never overflow.
 - `dev/bin/check-doc-links` stripped every underscore and asterisk from a
   heading's anchor, including ones inside a `` `code span` `` where they
   are literal identifier characters, not markdown emphasis syntax — so a
