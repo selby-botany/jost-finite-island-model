@@ -10,16 +10,17 @@
   - [4. Unit tests, by module](#4-unit-tests-by-module)
     - [4.1 `model/allele.py`](#41-modelallelepy)
     - [4.2 `model/locus.py`](#42-modellocuspy)
-    - [4.3 `model/state.py`](#43-modelstatepy)
-    - [4.4 `model/params.py`](#44-modelparamspy)
-    - [4.5 `model/initial.py`](#45-modelinitialpy)
-    - [4.6 `model/operators.py`](#46-modeloperatorspy)
-    - [4.7 `convergence/`](#47-convergence)
-    - [4.8 `persistence/`](#48-persistence)
-    - [4.9 `engine.py`](#49-enginepy)
-    - [4.10 `cli.py`](#410-clipy)
+    - [4.3 `model/topology.py`](#43-modeltopologypy)
+    - [4.4 `model/state.py`](#44-modelstatepy)
+    - [4.5 `model/params.py`](#45-modelparamspy)
+    - [4.6 `model/initial.py`](#46-modelinitialpy)
+    - [4.7 `model/operators.py`](#47-modeloperatorspy)
+    - [4.8 `convergence/`](#48-convergence)
+    - [4.9 `persistence/`](#49-persistence)
+    - [4.10 `engine.py`](#410-enginepy)
+    - [4.11 `cli.py`](#411-clipy)
   - [5. Property-based invariants for the statistics module](#5-property-based-invariants-for-the-statistics-module)
-  - [6. Golden worked examples](#6-golden-worked-examples)
+  - [6. Golden worked examples and focused statistics checks](#6-golden-worked-examples-and-focused-statistics-checks)
   - [7. Statistical and asymptotic tests](#7-statistical-and-asymptotic-tests)
     - [7.1 Deriving a tolerance band before choosing a seed](#71-deriving-a-tolerance-band-before-choosing-a-seed)
     - [7.2 Drift variance](#72-drift-variance)
@@ -28,7 +29,7 @@
   - [8. Functional and end-to-end tests](#8-functional-and-end-to-end-tests)
   - [9. Visualization tests](#9-visualization-tests)
   - [10. Packaging smoke tests](#10-packaging-smoke-tests)
-    - [10.1 Git-hook and doc-freshness checks](#101-git-hook-and-doc-freshness-checks)
+    - [10.1 Repository-tooling checks: git hooks, doc freshness, release notes](#101-repository-tooling-checks-git-hooks-doc-freshness-release-notes)
   - [11. Coverage targets and CI gating](#11-coverage-targets-and-ci-gating)
   - [12. Requirement traceability matrix](#12-requirement-traceability-matrix)
   - [Metadata](#metadata)
@@ -118,12 +119,22 @@ scaffolding:
 
 - `rng(seed)` — a factory returning `Generator(PCG64(seed))`; the only
   sanctioned RNG source in tests.
-- `freq_tables` — a Hypothesis strategy producing valid per-deme frequency
-  tables (`Σp == 1` per deme, arbitrary `d`, arbitrary allele support) for
-  the property tests.
-- `tiny_params` — a small, fast `SimulationParams` (e.g. `d=2`,
-  `initial_allele_count=2`, one locus) for end-to-end tests.
-- `golden` — loads the Part IV fixtures from `test/data/`.
+- `tiny_params` — a small, fast `SimulationParams` (`d=2`, `N=20`, one
+  200bp locus) for end-to-end tests.
+
+These two are the only fixtures `conftest.py` exports; they are the
+sanctioned way to get a generator or a minimal parameter object, but they
+are not the whole story for the property and golden layers below, which
+each own their scaffolding locally rather than sharing it through
+`conftest.py`:
+
+- The property tests (§5) build their own bounded per-deme frequency-table
+  Hypothesis strategy (`frequency_tables()` in
+  `test/statistics/test_properties.py`) rather than drawing on a shared
+  fixture.
+- The golden tests (§6) load the Part IV fixtures via a small local loader
+  (`_fixture`/`_frequency_table` in `test/statistics/test_differentiation.py`)
+  that reads the JSON files directly from `test/data/statistics/`.
 
 Markers keep the fast/slow split explicit:
 
@@ -150,15 +161,52 @@ every save. `build --ci` runs everything.
   is either absent or never used by the model code (enforced structurally by
   the `NewType` + `mypy --strict`, checked here at runtime for the equality
   contract).
+- **`FiniteAlleleSpace`** (the opt-in finite-alleles mutation model, design
+  §9): construction rejects a capacity too small for the initial IDs already
+  in use; a mutation target is always different from its own source and
+  never exceeds capacity; once every state is minted, every draw is a
+  recurrence by construction; recurrence probability is checked at both
+  extremes — a huge capacity underflows the recurrence chance to exactly
+  `0.0` (infinite-alleles recovered exactly, not approximately), while a
+  seeded many-draw sample at a known `(capacity, minted)` pair matches the
+  closed-form recurrence rate `(minted - 1) / (capacity - 1)` within a
+  pre-derived band (`@pytest.mark.statistical`, §7.1).
+- **`FiniteAlleleRegistry`** dispatches each mutation event to the correct
+  per-locus `FiniteAlleleSpace` by `locus_id`.
 
 ### 4.2 `model/locus.py`
 
-`LocusSpec` is immutable and hashable; `length` participates only as data
-(no statistic reads it — design §3.2), asserted by constructing two specs
-differing only in `length` and confirming identical statistical output
-downstream.
+- `LocusSpec` is immutable and hashable; `length` participates only as data
+  by default (no statistic reads it directly — design §3.2), asserted by
+  constructing two specs differing only in `length` and confirming
+  identical statistical output downstream.
+- `finite_allele_capacity(length)` returns `4 ** length` — the finite-alleles
+  model's per-locus state-space size (design §9) — and both `LocusSpec` and
+  `finite_allele_capacity` reject nonpositive values.
 
-### 4.3 `model/state.py`
+### 4.3 `model/topology.py`
+
+Sparse/stepping-stone migration topology (design §9). Both functions are
+tested directly, independent of `SimulationParams`'s config-sugar layer
+(§4.5), against hand-derived matrices and structural invariants:
+
+- `stepping_stone_neighbors` + `dense_matrix_from_neighbors`: a small ring's
+  and a small bounded chain's dense matrices match independently
+  hand-computed values exactly.
+- Ring wraps its two end demes together; linear leaves them at `0.0` — the
+  one property that actually distinguishes the two topologies.
+- Both topologies are row-stochastic (`Σrow == 1`) for every `d` tested
+  (`@pytest.mark.parametrize`, `d ∈ {2,3,4,10,25}`), including the linear
+  chain's boundary case, where the two end demes send their whole `rate`
+  to their single neighbor instead of splitting it.
+- `stepping_stone_neighbors` rejects invalid `d`, an unrecognized
+  `topology`, an out-of-range `rate`, and a ring smaller than 3 demes.
+- `dense_matrix_from_neighbors` leaves a deme absent from the sparse map at
+  the identity row, and rejects a deme/neighbor ID outside `1..d`, a deme
+  listing itself as a neighbor, an out-of-range weight, and neighbor
+  weights that sum to more than `1`.
+
+### 4.4 `model/state.py`
 
 - `total_frequency()` returns `1.0` within tolerance for every
   (deme, locus); a state that violates this is rejected/flagged.
@@ -167,22 +215,71 @@ downstream.
   states, including states with a single fixed allele and states at full
   `N`-allele support.
 - Equality is value equality, independent of internal dict ordering.
+- **Malformed-input validation** (`test/model/test_state_validation.py`,
+  split out from the happy-path tests above): construction rejects empty
+  `loci`, duplicate locus IDs, a negative `generation`, an empty deme list,
+  and a `frequencies` shape that disagrees with `loci`'s length; a
+  frequency map rejects an empty, negative, non-finite, or non-summing-to-1
+  probability vector. `ModelState.from_rows` separately validates
+  row-grouping invariants (no rows, more than one generation or run,
+  non-1-based or non-contiguous demes, an unknown `locus_id`, a duplicate
+  allele) and per-field types/presence (`generation` must be a real
+  integer — not `bool` or a numeric string; `run_id` a nonempty string;
+  `frequency` finite; every required field present, named individually
+  when missing). `to_rows("")` and `validate_support` are checked directly
+  for their own external-identifier and per-deme-support contracts.
 
-### 4.4 `model/params.py`
+### 4.5 `model/params.py`
 
 - Valid scalar `(N, m, μ, d)` construct; `seed` is required (no default —
-  design §4.3).
-- Invalid inputs raise with a clear message: `m ∉ [0,1]`, `μ ∉ [0,1]`,
-  `d < 2`, `N < 1`, empty `loci`, unknown `P`-bag key, `deme_weighting`
-  outside `{"equal","size"}`, `convergence_window < 2`.
+  design §4.3); invalid inputs raise with a clear message naming the
+  offending field (`m ∉ [0,1]`, `μ ∉ [0,1]`, `d < 2`, `N < 1`, empty
+  `loci`, unknown `P`-bag key, `deme_weighting` outside
+  `{"equal","size"}`, `convergence_window < 2`, and the newer fields
+  below), and an unknown top-level config key is rejected by name.
 - Every `P`-bag default matches design §4.3's table exactly; a self-checking
   test parses the schema and asserts the documented defaults are the applied
   defaults (guards against silent drift, mirroring the sibling projects'
   self-validating-helper pattern).
-- Array-typed `N`/`m` are accepted and shape-validated (`N` length `d`; `m`
-  `d×d`) so the design §9 extensions are a data change, not a schema change.
+- Array-typed `N` and matrix-typed `m` are accepted and shape-validated
+  (`N` length `d`; `m` `d×d`, each row summing to 1); `initial_allele_count`
+  is bounded by the smallest deme `N`; the full mapping round-trips
+  losslessly through `to_dict()`/`from_mapping()`.
+- **Multiple convergence statistics** (design §9): `convergence_statistic`
+  accepts a string or a list of names, rejects an empty list, an unknown
+  name, and a repeated name, and round-trips; a same-valued single-element
+  list collapses to the scalar form (mirroring `N`/`m`/`mu`'s own
+  collapse rule).
+- **`migrant_sampling`** and **`mutation_model`**: both default to their
+  documented value (`"continuous"`, `"infinite_alleles"`) and round-trip;
+  invalid values are rejected by name.
+- **Finite-alleles capacity**: a configuration is rejected if
+  `initial_allele_count`, or any allele ID an explicit `p_0` uses, exceeds
+  `finite_allele_capacity(length)` at *any* locus, not only the first one
+  checked.
+- **Per-locus mutation rate** (design §9): `mu` accepts an explicit list
+  with one rate per locus; a list of equal values collapses to the scalar
+  form. `mu_b` (mutually exclusive with `mu`, and exactly one of the two is
+  required) derives each locus's own `mu` from its `length` via the exact
+  Eq. 5 relation and is itself validated as a probability.
+- **Locus configuration shapes**: both the explicit `loci` list and the
+  `n_loci`/`locus_lengths` shorthand are accepted; malformed shapes are
+  rejected; a scalar `locus_lengths` expands to every locus while explicit
+  `locus_id`s round-trip, and a list of genuinely distinct per-locus
+  lengths is preserved (not collapsed).
+- **Migration config sugar** (design §9): the scalar and dense-matrix
+  parsers reject wrong types/shapes as before; in addition, a
+  `{topology, rate}` mapping expands through `stepping_stone_neighbors` +
+  `dense_matrix_from_neighbors` (§4.3) into the equivalent dense matrix,
+  and a hand-authored one-based sparse neighbor map (`{deme: {neighbor:
+  weight}}`) is accepted directly; both malformed-shape variants are
+  validated with field-naming errors.
+- **Explicit initial frequencies (`p_0`)**: normalized and losslessly
+  serialized; the parser names malformed inputs precisely; shape and
+  probability-vector validation is exercised per deme/locus; support
+  exceeding the deme's `N` is rejected.
 
-### 4.5 `model/initial.py`
+### 4.6 `model/initial.py`
 
 - Default Dirichlet generator: same seed ⇒ identical initial state; each
   (deme, locus) sums to 1; `initial_concentration` visibly changes evenness
@@ -192,53 +289,95 @@ downstream.
   validated (`Σp == 1`).
 - Founding alleles use locus-relative IDs `0..K-1` (design §3.3).
 
-### 4.6 `model/operators.py`
+### 4.7 `model/operators.py`
 
 Each operator is `ModelState → ModelState` and tested against its closed
 form.
 
 - **migrate**: expectation-preserving — the migrant-pool blend conserves the
   total allele frequency across demes; `m=0` is identity; `m=1` fully
-  replaces each deme with the pool (design §3.4).
+  replaces each deme with the pool (design §3.4). Matrix migration is
+  checked against a naive reference implementation, applies each row's
+  source weights (including a genuinely **asymmetric** matrix's
+  per-row-directional weights), ignores population size (a matrix's rows
+  are authoritative and never rescaled by `N`), and reduces to the scalar
+  symmetric case exactly when the matrix is that case's dense form.
+  Stepping-stone migration (ring and linear, §4.3) reaches only direct
+  neighbors and a linear chain never wraps.
+- **migrate, stochastic sampling** (`migrant_sampling="stochastic"`, design
+  §9): requires an explicit population size; a scalar-rate and a
+  matrix-rate migrant count each match `Binomial(N, rate)` theory within a
+  pre-derived band (`@pytest.mark.statistical`, §7.1); migrant pool
+  *composition* is unaffected by the sampling mode (only how many copies
+  move is stochastic, not what they carry); a matrix with self-weight `1`
+  (no migration) matches the continuous path exactly.
 - **mutate**: at rate `μ`, the expected count of mutated copies is `Nμ`;
-  every mutated copy gets a fresh registry ID; `μ=0` is identity. A seeded
-  test checks the mutated-count mean over many draws against `Nμ` within a
-  binomial band (§7.1).
+  every mutated copy gets a fresh registry ID; `μ=0` is identity; a
+  per-locus rate only mutates its own configured locus, and a uniform
+  per-locus tuple matches the scalar-broadcast case. A seeded test checks
+  the mutated-count mean over many draws against `Nμ` within a binomial
+  band (§7.1).
+- **mutate, finite alleles** (`mutation_model="finite_alleles"`, design §9):
+  respects each locus's own capacity independently; recurrent targets
+  accumulate onto an existing allele's mass rather than always minting
+  fresh; the default (`mutation_model` unset / `"infinite_alleles"`)
+  behavior is unchanged; the seeded recurrence rate matches
+  `FiniteAlleleSpace`'s own theoretical rate (§4.1) end-to-end through the
+  operator.
 - **drift**: `Σp == 1` post-resample; support ≤ `N`; `μ=0` runs drive toward
   fixation (trailing-window variance → 0); the per-generation variance
-  matches `p(1-p)/N` (§7.2). The dense fast path and the sparse path produce
-  identical results for a fixed-`K` no-mutation state at the same seed.
+  matches `p(1-p)/N` (§7.2), checked both with a shared `N` and per-deme
+  when `N` is unequal across demes. The dense fast path and the sparse
+  path produce identical results for a fixed-`K` no-mutation state at the
+  same seed.
 - **pipeline**: `step` composes `drift ∘ mutate ∘ migrate` in that order
-  (design §3.4); same seed ⇒ identical next state; the invariant holds after
-  every stage.
+  (design §3.4); same seed ⇒ identical next state; the invariant holds
+  after every stage; population-size shape is validated once, at the
+  operator boundary shared by all three stages.
 
-### 4.7 `convergence/`
+### 4.8 `convergence/`
 
 - Trailing-window criterion: a constant sequence is stable immediately once
   the window fills; a linearly drifting sequence is *not* stable; an
-  oscillating sequence within tolerance *is* stable, one exceeding it is not.
+  oscillating sequence within tolerance *is* stable (checked via
+  half-window means), one exceeding it is not.
 - `max_generations` criterion always eventually fires regardless of the
   statistic's behavior (the safety valve — design §3.5).
 - `ConvergenceMonitor.reason()` distinguishes "statistic converged" from
   "hit the cap"; a capped-unconverged run is a valid result, not an
   exception (design §5).
-- The `μ=0` zero-variance case is detected by the same criterion as a fast
-  special case (design §3.5), not a separate path.
+- **Several watched statistics with a combinator** (design §9): the
+  monitor requires a mapping that covers every watched statistic; the
+  `"all"` combinator requires every one stable before stopping, `"any"`
+  stops as soon as one is; construction validates the statistic list and
+  the combinator value together.
+- Constructor and criteria validation: invalid trailing-window
+  configuration, an incomplete window, invalid combinator children, and
+  `any`/`all` short-circuiting on child results are all covered directly,
+  as are a monitor rejecting invalid records and rejecting further records
+  once already converged.
 
-### 4.8 `persistence/`
+### 4.9 `persistence/`
 
 - `TrajectoryStore` round-trip: `write_generation` then `read` returns rows
   byte-faithful to the schema, for a multi-generation, multi-deme,
-  multi-locus run.
+  multi-locus run, including the in-memory store used by fast tests.
 - `JSONLTrajectoryStore` appends incrementally (each generation is a
-  flushed set of lines; a truncated file still parses every complete line).
+  flushed set of lines; a truncated file still parses every complete line
+  and reports a missing or corrupt complete line precisely).
 - Rows carry only nonzero frequencies (sparse — design §6).
 - Manifest captures the full `SimulationParams` incl. seed, convergence
   outcome, and version; a test reconstructs `SimulationParams` from the
   manifest and confirms it re-runs to an identical trajectory (the replay
-  contract — design §6).
+  contract — design §6), including a manifest that names **several**
+  convergence statistics (design §9), not only the single-statistic case.
+- **Validation** (`test/persistence/test_validation.py`): row normalization
+  rejects invalid values and reports missing/extra fields and context
+  mismatches by name; stores reject empty generations and filter by
+  `run_id`; the manifest constructor and its mapping-based reconstruction
+  both validate identity fields and nested-field types strictly.
 
-### 4.9 `engine.py`
+### 4.10 `engine.py`
 
 - A tiny seeded `fim(...)` run is bit-reproducible across two invocations.
 - Converged and capped runs both return a valid `RunResult` with the correct
@@ -248,55 +387,117 @@ form.
   engine).
 - Replicate batching: `n_replicates` runs are independent and each
   individually reproducible from the run seed; the scalar (`n=1`) case is
-  unchanged.
+  unchanged; an explicit caller-supplied `run_id` receives deterministic
+  one-based suffixes (`"batch-r001"`, `"batch-r002"`, …).
+- The legacy positional `(N, m, mu, d)` arguments are validated against the
+  parameter bag they must agree with, each mismatch reported by name.
+- A manifest `clock` without an explicit timezone is rejected.
+- Undefined `G_ST` at total shared fixation is treated as zero for
+  convergence purposes rather than blocking it.
+- **Several watched statistics** (design §9): the single-statistic report
+  shape is the several-statistic combinator's one-element special case
+  (`converged_on` is a bare string, not a one-item list); watching several
+  statistics is itself reproducible and reports every statistic's
+  convergence history; the `"any"` combinator is shown, on an identical
+  seed and parameters differing only in `convergence_combinator`, to stop
+  strictly earlier than `"all"`.
+- Mutation IDs never collide with allele labels already supplied through
+  an explicit `p_0`, even when that label sits above the registry's own
+  starting point.
+- **Per-deme population sizes, asymmetric migration, and multi-locus runs**
+  (design §9): an unequal-per-deme `N` run is reproducible and keeps every
+  deme's support within its own `N`; `deme_weighting="size"` vs.
+  `"equal"` on the same unequal-`N` run changes the reported `E_ST` while
+  leaving `D` unaffected (the config-level counterpart to §5/§6's
+  statistics-primitive-level weighting checks); an asymmetric migration
+  matrix run is
+  reproducible; a report over several loci with equal deme weighting is
+  shaped correctly; locus `length` does not affect the report (data only,
+  per §4.2); a multi-locus run with genuinely unequal lengths is
+  reproducible.
+- **Stepping-stone topology, stochastic migrant sampling, and the
+  finite-alleles model** (design §9): a run using topology sugar for `m`
+  is reproducible; a stochastic-migrant-sampling run is reproducible, and
+  the default (continuous) sampling is unaffected by the option's mere
+  existence; a finite-alleles run is reproducible and keeps every locus
+  within its own capacity, and the default (infinite-alleles) model is
+  unaffected; a `mu_b`-configured run matches the equivalent explicit
+  per-locus `mu` run bit-for-bit, and `mu_b` combines correctly with the
+  finite-alleles model in the same run.
 
-### 4.10 `cli.py`
+### 4.11 `cli.py`
 
 Functional detail in §8.
 
 - Config parsing maps every YAML key to the right `SimulationParams` field
-  and rejects unknown keys with a message naming the key.
-- `fim --version` prints `version.txt`'s value.
+  and rejects unknown keys with a message naming the key; loading a config
+  whose YAML root is not a mapping is rejected.
+- `fim --version` prints `version.txt`'s value, read from the single
+  source of truth shared with packaging (detailed design §6.4).
 - `fim update --check` is tested against a mocked Releases response only —
-  newer, equal, and older tags each produce the right message; **no test
-  performs a live request** (§1).
+  newer, equal, and older tags each produce the right message, network
+  failures (`HTTPError`, `URLError`) and a non-object payload are wrapped
+  into the documented runtime-error contract, version comparison/format
+  helpers are stable, and a non-semantic version string is rejected;
+  **no test performs a live request** (§1). `fim update` without
+  `--check` is rejected as an explicit-opt-in requirement.
+- `fim init` refuses to overwrite an existing starter config unless
+  forced.
+- Default output paths use the project's `results` directory, falling
+  back to the working directory when no project root is found.
 
 ## 5. Property-based invariants for the statistics module
 
-Checked with Hypothesis over `freq_tables` (derandomized in CI). These are
-the differentiation-measures guide's Part V identities, asserted as
-properties rather than point cases:
+Home: `test/statistics/test_properties.py`. Checked with Hypothesis over a
+locally defined `frequency_tables()` strategy (derandomized in CI — §3).
+These are the differentiation-measures guide's Part V identities, asserted
+as properties rather than point cases:
 
 - `H_T ≥ H_S` for every table.
 - `G_ST ≤ 1 − H_S` — the ceiling identity (Part V).
 - `H_T = H_S + H_ST − H_S · H_ST` — the correct subadditive partition, with
   `H_ST` equal to `D`'s own first bracket (Part V).
-- `D ∈ [0, 1]`; `D = 1` iff demes share no alleles; `D = 0` iff demes are
-  identical.
+- `D ∈ [0, 1]`; `E_ST`, `K_ST`, and (when defined) `G_ST` are also in
+  `[0, 1]` for valid tables; `D = 1` for two fully disjoint demes and
+  `D = 0` for two identical demes (the endpoints, asserted exactly).
 - **Replication principle**: pooling two equally sized, equally diverse,
   completely disjoint groups exactly doubles `^HD_T / ^HD_S` (Part V).
-- `G_ST`, `D`, `E_ST`, `K_ST` are all in `[0, 1]` for valid tables.
-- Deme-weighting: `D` is invariant to the `deme_weighting` setting (it is
-  fixed to equal weighting by construction — design §7); `E_ST` responds to
-  it. A property test confirms this separation.
 
-## 6. Golden worked examples
+Deme-weighting is exercised at two levels, neither of them property-based:
+the statistics module's own optional per-deme `weights` argument (`E_ST`
+accepts it, `D` never does — a focused check, §6), and the
+`SimulationParams.deme_weighting` config setting's effect on an actual
+engine report, where `"size"` vs. `"equal"` visibly changes `E_ST` for the
+same run while leaving `D` unaffected (§4.10).
 
-Fixtures live in `test/data/`. Asserted to **exact** values (these were
-independently recomputed from first principles in the differentiation
-guide's Part IV, not copied from the paper):
+## 6. Golden worked examples and focused statistics checks
 
-| Fixture family | Configuration | Expected | Note |
+Home: `test/statistics/test_differentiation.py`, fixtures in
+`test/data/statistics/`. The golden values were independently recomputed
+from first principles in the differentiation guide's Part IV, not copied
+from the paper, and are asserted **exact** (`assertAlmostEqual` to 12
+decimal places):
+
+| Fixture file | Scenario | Selected expected values | Note |
 |---|---|---|---|
-| Nine-fixed-for-A, one-for-B | three configurations | `D` = 0.20, 0.5556, 1.00 | The `0.5556` case documents the erratum against the paper's printed `0.5` — asserted as `0.5556`, not `0.5`. |
-| Three-species `G_ST`-near-zero | Species A/B/C | `G_ST ≈ 0`, `D` near 1 | The `G_ST`-hides-differentiation case. |
-| "98% within demes" trap | recomputation | Part IV value | The misleading-`G_ST` recomputation. |
-| `D`-vs-`K_ST` disagreement | as given | Part IV values | Confirms the two measures diverge as documented. |
-| Five-for-A / five-for-B | two demes | `D = 0.5556` | The erratum's canonical case. |
+| `fixed_nine_one.json` | Nine demes fixed for allele A, one for B | `D = 0.20`, `G_ST = 1.0` | |
+| `fixed_five_five.json` | Five demes fixed for A, five for B | `D = 0.5556`, `E_ST = 0.3010`, `K_ST = 0.1111` | The erratum's canonical case: documents `D = 0.5556` against the paper's printed `0.5`. |
+| `fixed_all_different.json` | Ten demes, each fixed for its own private allele | `D = 1.0`, `H_T = 0.9` | |
+| `reversed_frequencies.json` | Two demes, each 95% one allele and 5% spread over ten shared rare ones | `D = 0.9892`, `K_ST = 0.0` | `D` and `K_ST` diverge sharply on the same table. |
+| `shared_all.json` | Two demes with an identical 20-allele distribution | `D = 0.0`, `G_ST = 0.0` | The "demes are identical" endpoint, exercised as a golden value in addition to the property-test endpoint (§5). |
+| `shared_and_private.json` | Two demes sharing half their alleles, each private in the rest | `D = 0.5`, `G_ST = 0.0476` | The "`G_ST` hides differentiation" case: a near-zero `G_ST` alongside a mid-range `D`. |
+| `shared_none.json` | Two demes with disjoint 20-allele supports | `D = 1.0`, `G_ST = 0.0256` | `G_ST` stays small even though the demes share nothing — the "98% within demes" trap in miniature. |
 
-Each fixture is a JSON frequency table plus its expected scalars; the test
-loads the table, runs the statistics module, and asserts equality to the
-stored value within floating-point tolerance (exact for the rationals).
+Each fixture's `expected` object lists every statistic the test checks for
+that table, not just `D`; the loader (`_fixture`/`_frequency_table`, §3)
+reads the JSON directly rather than through a shared conftest fixture.
+The same file also carries focused (non-property, non-golden-fixture)
+checks: `q = 0, 1, 2` Hill-number endpoints against `D`/`E_ST`/`K_ST` and
+against `H`'s own partition; `G_ST` reporting `None` (not `NaN`) at total
+shared fixation; `E_ST` accepting optional deme-size weights while `D`
+stays equal-weighted regardless (the deme-weighting separation named in
+§5); and malformed-input validation for frequency tables, weights, and
+Hill-number orders.
 
 ## 7. Statistical and asymptotic tests
 
@@ -324,21 +525,39 @@ commit" for a stochastic check.
 
 ### 7.2 Drift variance
 
-A single-locus, single-deme drift step starting from a known `p` has
-per-generation sampling variance `p(1−p)/N` (design §3.1's gene-copy-count
-`N`). Over `R` seeded replicates of one step, the sample variance of the
-resulting frequency is asserted within its analytically derived band. This
-is the "validate before trusting anything built on top of it" check the
-prior research doc flags (design §10).
+Home: `test/model/test_operators.py`. A single-locus, single-deme drift
+step starting from a known `p` has per-generation sampling variance
+`p(1−p)/N` (design §3.1's gene-copy-count `N`). Over `R` seeded replicates
+of one step, the sample variance of the resulting frequency is asserted
+within its analytically derived band, checked both with a single shared
+`N` and per-deme when `N` differs across demes (design §9's per-deme
+population sizes). This is the "validate before trusting anything built
+on top of it" check the prior research doc flags (design §10).
 
 ### 7.3 Equilibrium formulas
 
-Many-replicate runs at fixed `(N, m, μ, d)`, carried to stochastic
-equilibrium, have sample-mean `G_ST` and `D` approaching the
-differentiation guide's Part VI Eq. 2 and Eq. 4. Each is asserted within a
-band derived from the replicate count. The letter's own closed-form `H_S`
-and `H_T` approximations provide an independent analytic cross-check used
-the same way.
+Home: `test/validation/test_equilibrium.py` (the closed-form formulas
+directly) and `test/validation/test_simulator_equilibrium.py` (the real
+engine against the same oracle). Two independent oracles are used, per the
+latter file's own module docstring, and are cross-checked against each
+other before either is trusted against the engine:
+
+1. The closed-form diffusion equilibria `equilibrium_g_st`/`equilibrium_d`
+   (differentiation guide Part VI Eq. 2/Eq. 4) — `O(1/N)` approximations.
+2. An exact per-generation identity recursion for the engine's own
+   Migrate → Mutate → Drift pipeline, built from first principles rather
+   than fitted to the simulator. This is the finite-`N` expectation of the
+   very quantities the engine samples, so it is the correct center for a
+   seeded many-replicate band, and it also supplies the fixed point used to
+   construct the near-equilibrium starting states in §7.4.
+
+`test_identity_recursion_oracle_matches_formula_and_published` confirms
+the two oracles and the published Dear-Nolan values agree with each other
+before either is used as a ruler. `test_engine_reproduces_part_vi_equilibrium`
+then runs the real engine to stochastic equilibrium and checks its
+sample-mean `G_ST` and `D` land in a `k = 5`-standard-error band (derived
+analytically from an independent replicate-spread characterization pass,
+never tuned to a realized draw) around the identity-recursion oracle.
 
 ### 7.4 Published-scenario fixtures
 
@@ -353,36 +572,63 @@ analytic values (design §10):
 | Higher migration, higher mutation | 2000 | 100 | 0.01 | 0.001 | 0.02 | 0.91 (0.90) |
 
 Both plug in directly under the ploidy-neutral `N` convention (no
-conversion — design §4.3). Each test runs many seeded replicates and
-asserts the sample-mean `G_ST` and `D` fall within a band derived from the
-replicate count and the letter's own expected/observed spread.
+conversion — design §4.3). Each is checked at two levels:
+
+- `test_equilibrium.py` plugs the scenario's `(N, m, μ, d)` directly into
+  the closed-form formulas and checks them against the published values.
+- `test_simulator_equilibrium.py` goes further: it runs the *real* engine,
+  started from a derived near-equilibrium state built from the identity
+  recursion (§7.3) — a 26-locus ensemble for the low-migration scenario,
+  a direct derived start for the high-migration one — and shows the
+  engine's own pooled `G_ST` and `D` directly reproduce both published
+  values, a stationarity property a biased operator would fail. The
+  letter's own closed-form `H_S`/`H_T` approximations provide an
+  additional independent analytic cross-check, used the same way.
 
 ## 8. Functional and end-to-end tests
 
 Home: `test/cli/`, `test/engine/`. These exercise the product as a
-researcher uses it (design §12), on `tiny_params` scenarios small enough
-to finish in well under a second.
+researcher uses it (design §12), on `tiny_params`-scale scenarios small
+enough to finish in well under a second, driven through the CLI's own
+config parsing (§4.11) rather than by constructing `SimulationParams`
+directly.
 
 - **`fim run` produces exactly the documented artifacts**: given a small
   YAML config and a fixed seed, the output directory contains
   `trajectory.jsonl`, `manifest.json`, `report.json`, and `scatter.png`,
   and `report.json` carries every scalar in design §12's example shape
   (requirement 6a). Two runs at the same seed produce identical
-  `trajectory.jsonl` and `report.json`.
+  `trajectory.jsonl` and `report.json`; a run that would collide with an
+  existing output directory, or that asks for `n_replicates > 1` (the
+  CLI's single-run artifact contract, `doc/configuration.md`), is
+  rejected. Progress output describes the run's outcome.
+- **Every design-§9 configuration surface is reachable end-to-end through
+  a YAML config**, not just through `SimulationParams` directly (§4.5,
+  §4.10): per-deme population sizes; an asymmetric migration matrix;
+  loci with unequal lengths; several convergence statistics; stepping-stone
+  topology sugar for `m`; stochastic migrant sampling; the finite-alleles
+  mutation model; and a per-base mutation rate (`mu_b`).
 - **Config validation**: malformed configs fail with a message naming the
-  offending key/value; a valid config round-trips into `SimulationParams`.
+  offending key/value; a config whose YAML root is not a mapping is
+  rejected; a valid config round-trips into `SimulationParams`.
 - **`fim stats` re-analysis**: re-computing a statistic (including a swept
   `q`) from a persisted `trajectory.jsonl` reproduces the live report,
-  without re-running the simulation (design §4.1).
+  without re-running the simulation (design §4.1); explicit-generation and
+  JSON-output modes are covered, as are an empty trajectory and a request
+  for an unknown generation.
 - **Manifest replay**: reconstructing `SimulationParams` from a run's
   `manifest.json` and re-running yields an identical trajectory (design §6).
 - **Cap vs. converge**: a config with a low `max_generations` and a tight
   tolerance returns a capped-but-valid result whose `report.json` says so
   plainly (design §5), not an error.
 - **`fim init`**: first run drops the starter config into the run folder
-  (design §12).
+  (design §12); refuses to overwrite an existing one unless forced.
+- **Default paths**: output defaults to the project's `results` directory,
+  falling back to the working directory when no project root is found.
 - **`fim update --check`**: fully mocked HTTP; asserts the newer/equal/older
-  messaging; never performs a live request.
+  messaging, error wrapping, and version-comparison/format helpers;
+  `fim update` without `--check` is rejected; never performs a live
+  request.
 
 ## 9. Visualization tests
 
@@ -419,44 +665,73 @@ Marked `@pytest.mark.packaging`; run in the CI package and release jobs
   (detailed design §5.4) — tested by construction (a mismatched tag fails
   the job).
 
-### 10.1 Git-hook and doc-freshness checks
+### 10.1 Repository-tooling checks: git hooks, doc freshness, release notes
 
-The repository-managed git hooks (detailed design §8.2) and the
-generated-API-doc freshness gate (§8.1) are themselves tested. These are
-fast, Docker-free shell/pytest checks that obey the determinism contract
-(§1): no network, no wall-clock, fully reproducible.
+Home: `test/validation/` — sharing a directory with the scientific
+statistical/asymptotic and published-scenario layers (§7) but a
+different, non-scientific kind of check. These are fast, Docker-free
+shell/pytest checks that obey the determinism contract (§1): no network,
+no wall-clock, fully reproducible.
 
-- **`commit-msg`**: accepts valid Conventional Commit subjects (including
-  `merge`, `revert`, `fixup!`, and `squash!` forms) and rejects malformed
-  ones, driven by a table of subject/expected-result cases.
-- **`pre-commit`**: formats a deliberately messy staged Python file and
-  confirms the re-staged content is `ruff`-clean; regenerates
-  `src/fim/API.md` only when a staged `.py` changed (a staged docs-only or
-  non-Python change leaves it untouched); rejects a newly added non-ASCII
-  filename.
-- **Doc-freshness gate**: a test edits a public docstring *without*
-  regenerating `src/fim/API.md`, then asserts both `build --ci` and the CI
-  `git diff --exit-code` step fail; regenerating makes them pass. This is
-  the direct proof that a stale API reference cannot reach `main` (§8.1).
-- **Graceful degradation**: each hook is run in a fixture repository with
-  the relevant tool (or `pyproject.toml`) absent and asserted to no-op with
-  an informational message rather than error, so a fresh clone that has
-  not yet installed the `dev` group is never blocked (detailed design
-  §8.2).
-- **Doc-navigation checker** (`dev/bin/check-doc-links`, detailed design
-  §8.3): a fixture set of small Markdown files exercises the pass and fail
-  paths — a valid relative link and in-page anchor pass; a link to a
-  missing file, an anchor with no matching heading, and an orphan document
-  each fail with a message naming the offending target. The checker is
-  offline and deterministic (§1); it never resolves external `http(s)`
-  URLs, so its result is a pure function of the tree.
+- **`commit-msg`** (`test_git_hooks.py`): accepts valid Conventional
+  Commit subjects (including `merge`, `revert`, `fixup!`, and `squash!`
+  forms) and rejects malformed ones, driven by a table of
+  subject/expected-result cases.
+- **`pre-commit`** (`test_git_hooks.py`): formats a deliberately messy
+  staged Python file and confirms the re-staged content is `ruff`-clean;
+  regenerates `src/fim/API.md` only when a staged `.py` changed (a staged
+  docs-only or non-Python change leaves it untouched); rejects a newly
+  added non-ASCII filename.
+- **`pre-push`** (`test_git_hooks.py`): detects a stale generated
+  `src/fim/API.md` (the same doc-freshness gate `pre-commit` enforces,
+  checked again at push time) and passes once it is regenerated.
+- **Graceful degradation** (`test_git_hooks.py`): each hook — including
+  `pre-push` — is run in a fixture repository with the relevant tool (or
+  `pyproject.toml`) absent and asserted to no-op with an informational
+  message rather than error, so a fresh clone that has not yet installed
+  the `dev` group is never blocked (detailed design §8.2).
+- **Hook installer** (`test_git_hooks.py`): `dev/git-hooks/install`
+  symlinks every documented hook (`commit-msg`, `pre-commit`, `pre-push`)
+  into a fixture repository's `.git/hooks/`.
+- **Doc-freshness gate** (`test_api_docs.py`): every committed Python
+  module receives an API section in the generated reference, the direct
+  proof (alongside the `pre-commit`/`pre-push` hook coverage above) that a
+  stale API reference cannot reach `main` (§8.1).
+- **Doc-navigation checker** (`test_doc_links.py`;
+  `dev/bin/check-doc-links`, detailed design §8.3): a fixture set of small
+  Markdown files exercises the pass and fail paths — a valid relative link,
+  in-page anchor, GitHub-style em/en-dash anchor, and a code-span heading's
+  literal underscore all pass; a link to a missing file, an anchor with no
+  matching heading, and an orphan document each fail with a message naming
+  the offending target. The checker is offline and deterministic (§1); it
+  never resolves external `http(s)` URLs, so its result is a pure function
+  of the tree.
+- **Changelog-backed release notes** (`test_release_notes.py`,
+  `dev/bin/extract-release-notes`, detailed design §5.4): the extractor
+  returns exactly one version's `CHANGELOG.md` section, excluding adjacent
+  releases, and fails rather than publishing a blank body when the tag has
+  no section; the release workflow is checked, by inspecting
+  `.github/workflows/release.yml`, to source its GitHub release notes from
+  the extractor rather than GitHub's own auto-generated notes, and to use
+  a `pyinstaller` work path that does not collide with the build script's
+  own directories. A companion check confirms `build`'s CI-mode test
+  invocation excludes only `packaging`-marked tests — the authoritative
+  release gate still runs the `statistical` and `slow` layers (§2's
+  taxonomy), unlike the fast default `pytest` invocation (§3).
+- **Repository-local Python tool resolution** (`test_python_wrappers.py`):
+  `bin/ruff` and `build`'s lint step both work correctly in an environment
+  with no activated virtual environment on `PATH`, confirming the
+  repository's own wrapper scripts — not whatever Python happens to be
+  first on a developer's `PATH` — resolve the pinned toolchain.
 
 ## 11. Coverage targets and CI gating
 
-- Branch coverage gate: **90%** of `src/fim`, excluding `viz/` (which is
-  smoke-tested by structure, not line-covered) and `cli.py`'s
-  `update --check` network wrapper (mocked, its live branch is unreachable
-  in test by design).
+- Branch coverage gate: **90%** of `src/fim`, excluding only `viz/`
+  (smoke-tested by structure, not line-covered — §9). `cli.py`'s
+  `update --check` network wrapper is *not* omitted: its `urlopen` call is
+  monkeypatched at the boundary (§4.11), so the surrounding logic is
+  exercised and counted normally, and the coverage gate itself never
+  performs a network request (§1).
 - The gate runs in `build --ci` and `ci.yml` identically (detailed design
   §5.2/§7), so local and CI coverage cannot diverge.
 - Coverage is a floor, not the goal: the golden, property, and statistical
@@ -470,21 +745,35 @@ it:
 
 | Requirement | Proven by |
 |---|---|
-| 1. `fim(N,m,μ,d;P)` yields per-generation state; ends on convergence | §4.9 engine reproducibility; §4.7 convergence; §8 end-to-end run |
+| 1. `fim(N,m,μ,d;P)` yields per-generation state; ends on convergence | §4.10 engine reproducibility; §4.8 convergence; §8 end-to-end run |
 | 2. Alleles are identity-only (`same` = integer equality) | §4.1 registry uniqueness + equality-only contract |
-| 3. Locus carries `length`; per-locus `L` is future-ready | §4.2 `LocusSpec`; §4.4 array-typed params |
-| 4. Random initial conditions; convergence is a modeling assumption | §4.5 initial conditions; §4.7 stochastic-equilibrium detection |
-| 5. Every generation persisted; converged final state reported | §4.8 persistence round-trip; §8 artifacts on disk |
+| 3. Locus carries `length`; per-locus `L` is future-ready | §4.2 `LocusSpec`, `finite_allele_capacity`; §4.5 array-typed params |
+| 4. Random initial conditions; convergence is a modeling assumption | §4.6 initial conditions; §4.8 stochastic-equilibrium detection |
+| 5. Every generation persisted; converged final state reported | §4.9 persistence round-trip; §8 artifacts on disk |
 | 6a. Final differentiation scalars | §6 golden values; §5 invariants; §8 `report.json` shape |
 | 6b. Per-deme allele-frequency distributions + canonical scatter | §8 report table; §9 scatter structure |
+
+Design §9's extensibility table also lists several "what if" extensions
+that have since moved from speculative to **implemented**; each has its
+own dedicated test coverage rather than riding along on the requirements
+above:
+
+| Design §9 extension | Proven by |
+|---|---|
+| Per-deme population sizes (`N` as an array) | §4.5 shape validation; §4.7 per-deme drift variance; §4.10 unequal-`N` run |
+| Asymmetric/matrix migration, incl. stepping-stone topology sugar and a hand-authored sparse map | §4.3 `topology.py`; §4.5 config-sugar parsing; §4.7 operator-level checks; §4.10 engine run; §8 CLI config |
+| Stochastic migrant-count sampling | §4.5 `migrant_sampling`; §4.7 binomial-theory check; §4.10 engine run; §8 CLI config |
+| Per-locus mutation rate, incl. `mu_b` per-base derivation | §4.5 `mu`/`mu_b` parsing; §4.7 per-locus mutate; §4.10 engine run; §8 CLI config |
+| Finite-alleles (K-allele) mutation model | §4.1 `FiniteAlleleSpace`/`FiniteAlleleRegistry`; §4.5 capacity validation; §4.7 operator-level checks; §4.10 engine run; §8 CLI config |
+| Several convergence statistics with a combinator | §4.5 `convergence_statistic` parsing; §4.8 monitor combinator; §4.10 engine run |
 
 ## Metadata
 
 ```text
-generator-name: Copilot CLI
-generator-version: Claude Opus 4.8
-generator-model-token: claude-opus-4-8
+generator-name: Claude Code
+generator-version: Claude Sonnet 5
+generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
-generation-date: 2026-08-14
+generation-date: 2026-08-18
 generator-responsibility: primary
 ```
