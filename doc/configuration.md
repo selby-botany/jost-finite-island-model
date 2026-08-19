@@ -385,7 +385,10 @@ value by construction, so this key has no effect and needs no attention.
 - **Default:** `50`
 
 The monitor compares the means of the first and second halves of the trailing
-window. Rejected if it exceeds `max_generations + 1` — generation 0 is
+window. An odd window splits as `window // 2` observations in the first half
+and one more in the second (a window of `5` compares `2` against `3`) — legal,
+but the two halves are then unevenly sized, unlike an even window. Rejected
+if it exceeds `max_generations + 1` — generation 0 is
 always recorded before the run loop's first step, so a run watching
 `max_generations` records at most that many generations; a window
 larger than that could never fill before the hard cap stops the run,

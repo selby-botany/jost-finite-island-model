@@ -28,6 +28,12 @@ def trailing_window_stable(
 ) -> bool:
     """Compare the means of the two halves of a trailing window.
 
+    An odd `window` splits as `window // 2` observations in the first
+    half and one more in the second (e.g. a window of 5 compares 2
+    against 3) — a legal configuration, not an error, but it means the
+    tolerance is being compared against unevenly sized samples for an
+    odd window and evenly sized ones for an even window.
+
     Args:
         history: Ordered statistic values.
         window: Number of trailing observations to inspect.
