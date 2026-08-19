@@ -8,6 +8,90 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A parallel batch (`--workers` greater than one, the CLI default)
+  published orphan `replicate-NNN/` directories: `fim.engine.
+  _run_batch_parallel` submits a whole worker batch and applies an
+  adaptive `replicate_tolerance` stop only afterward, in ascending
+  replicate order, so a worker beyond the replicate that triggered the
+  stop still ran to completion and fully wrote its own directory before
+  its result was discarded. `_command_run_batch` now prunes any
+  `replicate-*` directory not among the published results before the
+  atomic rename, so the published set always equals `manifest.json`'s
+  `replicate_run_ids` exactly. Confirmed live: `--workers 4` with a
+  generous `replicate_tolerance` reliably left `replicate-003` and
+  `replicate-004` behind before the fix.
+- The batch-level `manifest.json` was a raw, unversioned dict that
+  `fim.persistence.manifest.read_manifest` could not parse at all
+  (`missing: convergence, schema_version`) and carried no digest of
+  `summary.json` or of any child manifest, unlike every scalar run's own
+  manifest. Added `BatchManifest`, `read_batch_manifest`, and
+  `write_batch_manifest`, parallel to the existing `RunManifest`
+  machinery: a `schema_version`, and an `artifacts` map digesting
+  `summary.json` and every replicate's own `manifest.json`, computed
+  once every sibling artifact is durable.
+- `replicate_summary` omitted `H_ST` — every per-replicate `report.json`
+  printed it, but the batch-level statistic loop never named it, so a
+  batch could not interval-estimate the correctly partitioned
+  between-deme heterozygosity. Added, plus a self-asserting test that
+  parses `FinalReport`'s own field annotations so a future statistic
+  added there and never propagated to `replicate_summary` fails
+  immediately.
+- An unpicklable `clock` or `store_factory` closure reached
+  `ProcessPoolExecutor` under `max_workers` and failed as raw pickling
+  noise from inside worker-process spawn machinery, with nothing at the
+  call site naming which argument was at fault. `fim.engine.fim` now
+  preflight-checks both with `pickle.dumps` before starting any worker
+  process. Separately, `fim.cli.main`'s exception handler now also
+  catches `ArithmeticError`, `TypeError`, and `pickle.PicklingError`,
+  which could previously escape as raw tracebacks instead of the CLI's
+  own `fim: error: ...` reporting.
+- `fim run`'s `--workers` and `--sequential` flags parsed successfully
+  together and silently ignored `--workers`. They are now declared as an
+  `argparse` mutually exclusive group, so combining them is a clear
+  argument-parsing error instead of a silent no-op.
+- `--workers 0` silently became the CPU-count default
+  (`arguments.workers or _cpu_count()` treats `0` as falsy) instead of
+  reaching `fim.engine.fim`'s own `max_workers must be at least 1`
+  rejection — the one value it explicitly validates never got there.
+  Changed to an explicit `is not None` check.
+- `dev/bin/validate-repository`'s `markdownlint` invocation and
+  `.markdownlintignore` did not exclude `doc/dev/` review scratch, so a
+  documented contributor command failed on a clean `dev` checkout the
+  moment any review file crossed 120 columns. `dev/bin/check-doc-links`
+  already excluded the directory; both now match.
+- `CONTRIBUTING.md` and `doc/fim-simulator-detailed-design.md` still
+  instructed `mypy --strict src` in three places, the exact scope
+  narrowing commit `4d29387` removed from `build` and
+  `dev/git-hooks/pre-push` (and `test/test_mypy_scope.py` guards
+  against). All three now say bare `mypy`.
+- `doc/fim-simulator-design.md` §4.3 claimed `deme_weighting` governs
+  `E_ST` "and, if configured, the convergence statistic." It affects
+  `E_ST` alone: `fim.statistics.differentiation.statistics_report`
+  forwards deme weights only to its own `e_st()` call, so the setting is
+  a no-op for every other reported statistic and for any
+  `convergence_statistic` other than `E_ST`. This was flagged and
+  marked fixed in the prior remediation round without the wording
+  actually changing.
+- `doc/configuration.md`'s validation summary omitted three rejection
+  rules added by commit `d8c3bd5` (`seed < 0`, `convergence_window`
+  exceeding `max_generations + 1`, `replicate_minimum` exceeding
+  `n_replicates`) and still typed `seed` as plain "integer" rather than
+  non-negative. Documented in both the per-key sections and the summary
+  table.
+- `SECURITY.md` had no version-support table and its dependency list
+  omitted `pyparsing`, a deliberate transitive pin on a Matplotlib 3.9
+  compatibility issue recorded only in `CHANGELOG.md` and the detailed
+  design until now.
+- `trailing_window_stable`'s odd-window half-split (`window // 2`
+  observations in the first half, one more in the second) was legal and
+  deliberate but undocumented. Documented in the function's docstring
+  and `doc/configuration.md`'s `convergence_window` section.
+- `JSONLTrajectoryStore.read`'s tolerance of a partial trailing line had
+  no stated reason. Documented that trajectory completeness is a
+  manifest/CLI-level guarantee (`fim.cli._verify_trajectory_integrity`'s
+  digest check and `fim.cli._command_stats`'s generation-count
+  cross-check), not one this store makes on its own.
+
 - The `_SIGMA_*` constants that set the pass/fail boundary of the three
   most important scientific tests (`test/validation/
   test_simulator_equilibrium.py`) came from an unretained characterization
