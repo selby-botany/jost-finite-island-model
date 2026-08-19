@@ -288,6 +288,30 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   `replicate_tolerance` round-trips when set and stays absent from
   `to_dict()` when unset, so an adaptive batch is distinguishable from a
   fixed-count one in a persisted manifest.
+- **Stopping rules that can never fire (R23 remediation)**: two
+  cross-field checks, both raised from `_validate_stopping_rules`.
+  `convergence_window` is rejected once it exceeds
+  `max_generations + 1` — the most generations a run can ever record
+  (generation 0 plus `max_generations` steps) — since a trailing
+  window that large could never fill before the generation cap ends
+  the run. `replicate_minimum` is rejected once it exceeds
+  `n_replicates` whenever `replicate_tolerance` is set and
+  `n_replicates > 1`, since the adaptive criterion could never even be
+  evaluated before the batch's own `n_replicates` cap ends it (the
+  `n_replicates > 1` guard exists only so `fim.engine`'s internal
+  per-replicate `dataclasses.replace()` reconstruction — which forces
+  `n_replicates=1` while copying the two fields through unchanged —
+  does not spuriously trip this check on every adaptive batch's own
+  replicates; the adaptive machinery is provably inert at
+  `n_replicates == 1`). Covered by a parametrized case in this file's
+  own scalar-contract table (window) and by
+  `test/engine/test_engine.py::
+  test_replicate_minimum_exceeding_n_replicates_is_rejected`
+  (replicate), which also documents the *legal* neighbor this rule is
+  distinguished from —
+  `test_replicate_tolerance_never_stops_on_a_permanently_undefined_
+  statistic`, where the criterion is evaluable but never satisfied
+  rather than never evaluable at all.
 - **Explicit initial frequencies (`p_0`)**: normalized and losslessly
   serialized; the parser names malformed inputs precisely; shape and
   probability-vector validation is exercised per deme/locus; support

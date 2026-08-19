@@ -508,10 +508,15 @@ def _run_engine_pooled(
 ) -> tuple[list[float], list[float]]:
     """Run the real engine and return per-replicate pooled ``(G_ST, D)``.
 
-    The convergence monitor is disabled so the run is a deterministic
-    fixed-horizon integration: ``convergence_tolerance = 0`` never triggers a
-    moving statistic, and ``convergence_window > horizon`` means the trailing
-    window never fills, so the run always stops exactly at ``max_generations``.
+    The convergence monitor is effectively disabled so the run is a
+    deterministic fixed-horizon integration: ``convergence_tolerance = 0``
+    requires an exact match between the two half-window means, which a live
+    drift/migration/mutation trajectory essentially never produces, so the
+    run always stops exactly at ``max_generations``. ``convergence_window =
+    horizon + 1`` is the largest window `SimulationParams` accepts for this
+    ``max_generations`` (R23 rejects anything larger as structurally unable
+    to fill before the cap) — it still cannot fill until the very last
+    recorded generation, one step too late to preempt the cap.
 
     Args:
         population_size: Gene-copy count ``N``.
@@ -538,7 +543,7 @@ def _run_engine_pooled(
         loci=loci,
         initial_allele_count=2,
         convergence_tolerance=0.0,
-        convergence_window=horizon + 10,
+        convergence_window=horizon + 1,
         max_generations=horizon,
         n_replicates=replicates,
         initial_frequencies=initial_frequencies,

@@ -8,6 +8,33 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `SimulationParams` accepted stopping rules that could structurally
+  never fire. `convergence_window` could exceed `max_generations + 1`
+  (the most generations a run can ever record — generation 0 plus
+  `max_generations` steps), so `TrailingWindowCriterion.is_stable`
+  could never see a full window before the generation cap ended the
+  run; independently, `replicate_minimum` could exceed `n_replicates`
+  whenever `replicate_tolerance` was set (and `n_replicates > 1`), so
+  the adaptive replicate-batch criterion could never even be
+  evaluated before the batch's own `n_replicates` cap ended it. Both
+  configs ran to completion and reported an ordinary-looking "hit the
+  cap" / "batch ended" result with no indication the stopping rule
+  they described was unreachable from the start. Added
+  `_validate_stopping_rules`, called from `SimulationParams.
+  __post_init__`, rejecting both at construction. The per-replicate
+  `dataclasses.replace()` reconstruction inside `fim.engine` forces
+  `n_replicates=1` for each individual replicate run while copying
+  `replicate_minimum`/`replicate_tolerance` through unchanged, which
+  would otherwise make the new check spuriously reject every adaptive
+  batch's internal replicates; guarded with `n_replicates > 1` since
+  the adaptive-replicate machinery is provably inert at
+  `n_replicates == 1` (`fim()` returns a scalar result before ever
+  constructing the replicate monitor). Added a parametrized rejection
+  case to `test/model/test_params.py`'s scalar-contract table for the
+  window rule, `test_replicate_minimum_exceeding_n_replicates_is_
+  rejected` to `test/engine/test_engine.py` for the replicate rule,
+  and fixed the four existing tests whose fixtures happened to
+  construct a now-invalid combination.
 - `src/fim/viz/*` was entirely excluded from the coverage gate
   (`omit = ["src/fim/viz/*"]`), and its own test file
   (`test/viz/test_plots.py`) covered only happy paths — none of six

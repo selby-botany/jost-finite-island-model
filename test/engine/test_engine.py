@@ -83,11 +83,20 @@ def test_live_and_recomputed_reports_match(
 def test_cap_is_a_valid_nonconverged_result(
     tiny_params: SimulationParams,
 ) -> None:
-    """An intentionally impossible short window reports the hard cap."""
+    """An exact-match tolerance a live drift process cannot satisfy hits the cap.
+
+    `convergence_window=2` is the smallest legal window that still fits
+    `max_generations=2 + 1` (R23 rejects anything larger — see the
+    `convergence_window` case in `test/model/test_params.py::
+    test_post_init_validation_covers_all_scalar_contracts`);
+    `convergence_tolerance=0.0` requires the two half-window means to
+    match exactly, which a real drifting `D` trajectory essentially never
+    does in two generations.
+    """
     params = SimulationParams.from_mapping(
         {
             **tiny_params.to_dict(),
-            "convergence_window": 10,
+            "convergence_window": 2,
             "convergence_tolerance": 0.0,
             "max_generations": 2,
         }
@@ -196,19 +205,31 @@ def test_replicate_tolerance_can_stop_before_the_cap() -> None:
     assert len(output) == 3
 
 
-def test_replicate_tolerance_falls_back_to_the_n_replicates_cap() -> None:
-    """An unreachable `replicate_minimum` always falls back to the hard cap."""
-    params = SimulationParams.from_mapping(
-        {
-            **_tiny_config(),
-            "n_replicates": 3,
-            "replicate_minimum": 100,
-            "replicate_tolerance": 0.0,
-        }
-    )
-    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
-    assert isinstance(output, tuple)
-    assert len(output) == 3
+def test_replicate_minimum_exceeding_n_replicates_is_rejected() -> None:
+    """`replicate_minimum` unreachable within `n_replicates` fails at construction.
+
+    Regression test for R23: `replicate_minimum=100` with `n_replicates=3`
+    used to be accepted and silently fall back to the `n_replicates`
+    hard cap every time (adaptive stopping could never even be
+    evaluated, let alone fire) — a config that can never do what it
+    describes is now rejected up front instead of running to completion
+    and reporting an ordinary-looking "batch ended" result.
+    `test_replicate_tolerance_never_stops_on_a_permanently_undefined_
+    statistic` covers the *legal* way a batch falls back to the
+    `n_replicates` cap (a criterion that is evaluable but never
+    satisfied, rather than one that is never evaluable at all).
+    """
+    with pytest.raises(
+        ValueError, match="replicate_minimum cannot exceed n_replicates"
+    ):
+        SimulationParams.from_mapping(
+            {
+                **_tiny_config(),
+                "n_replicates": 3,
+                "replicate_minimum": 100,
+                "replicate_tolerance": 0.0,
+            }
+        )
 
 
 def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() -> None:
@@ -505,6 +526,11 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
         seed=7,
         loci=(LocusSpec(1, 100), LocusSpec(2, 100)),
         convergence_statistic="G_ST",
+        # R23: convergence_window must fit within max_generations + 1;
+        # this test is about replicate-batch behavior, not within-run
+        # convergence, so the minimum legal window keeps max_generations=1
+        # valid without changing what the test actually verifies.
+        convergence_window=2,
         max_generations=1,
         n_replicates=3,
         replicate_minimum=2,
@@ -543,6 +569,11 @@ def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None:
         seed=7,
         loci=(LocusSpec(1, 100),),
         convergence_statistic="G_ST",
+        # R23: convergence_window must fit within max_generations + 1;
+        # this test is about replicate-batch behavior, not within-run
+        # convergence, so the minimum legal window keeps max_generations=1
+        # valid without changing what the test actually verifies.
+        convergence_window=2,
         max_generations=1,
         n_replicates=3,
         replicate_minimum=2,

@@ -239,6 +239,13 @@ class SimulationParams:
         ):
             raise ValueError("replicate_tolerance must be finite and non-negative")
         _require_integer("replicate_minimum", self.replicate_minimum, minimum=2)
+        _validate_stopping_rules(
+            convergence_window=self.convergence_window,
+            max_generations=self.max_generations,
+            replicate_tolerance=self.replicate_tolerance,
+            replicate_minimum=self.replicate_minimum,
+            n_replicates=self.n_replicates,
+        )
         if self.replicate_confidence not in {0.90, 0.95, 0.99}:
             raise ValueError("replicate_confidence must be 0.90, 0.95, or 0.99")
         if self.migrant_sampling not in {"continuous", "stochastic"}:
@@ -1009,3 +1016,71 @@ def _validate_finite_allele_capacity(
                 f"finite_alleles capacity ({capacity}) for length "
                 f"{locus.length}"
             )
+
+
+def _validate_stopping_rules(
+    *,
+    convergence_window: int,
+    max_generations: int,
+    replicate_tolerance: float | None,
+    replicate_minimum: int,
+    n_replicates: int,
+) -> None:
+    """Reject a stopping rule that structurally can never fire.
+
+    Both checks compare a trailing-window size against the largest
+    sample that rule's own criterion could ever see — not whether
+    convergence is *likely*, only whether it is *possible* at all.
+    Accepting either misconfiguration would silently and permanently
+    change nothing about the run's actual behavior (it already always
+    hits its cap), while reporting that outcome as an ordinary,
+    unremarkable non-convergence rather than the unreachable stopping
+    condition it actually is.
+
+    Args:
+        convergence_window: Trailing within-run stability-window length.
+        max_generations: Hard generation safety cap.
+        replicate_tolerance: Opt-in adaptive-replicate-batching half-width,
+            or ``None`` when unused.
+        replicate_minimum: Fewest replicates before adaptive tightness is
+            checked.
+        n_replicates: Replicate-count hard cap.
+
+    Raises:
+        ValueError: If either window could never fill before its cap.
+    """
+    # Generation 0 is always recorded before the run loop's first step, so
+    # a run watching `max_generations` records at most `max_generations +
+    # 1` generations (0 .. max_generations inclusive) before the hard cap
+    # stops it -- one more than `max_generations` itself, not equal to
+    # it. A trailing window needing more observations than that can never
+    # fill, so `TrailingWindowCriterion.is_stable` can never return True.
+    if convergence_window > max_generations + 1:
+        raise ValueError(
+            "convergence_window cannot exceed max_generations + 1 (a "
+            "window this large can never fill before the generation cap "
+            "stops the run, so convergence could never be detected)"
+        )
+    # Unlike the generation-indexed window above, replicates are numbered
+    # 1 .. n_replicates (fim.engine's batch loop passes
+    # `replicate_index + 1`), so at most `n_replicates` -- not
+    # `n_replicates + 1` -- replicate outcomes are ever recorded. Gated on
+    # `replicate_tolerance` being set *and* `n_replicates > 1`:
+    # replicate_minimum's default (10) would otherwise reject the
+    # ordinary n_replicates=1 default, and fim.engine's own per-replicate
+    # reconstruction (`dataclasses.replace(params, ..., n_replicates=1)`,
+    # which copies replicate_minimum/replicate_tolerance through
+    # unchanged) would otherwise reject every adaptive batch's own
+    # replicates -- adaptive stopping is already inert at n_replicates=1
+    # regardless of these two fields' values, since `fim()` returns via
+    # `_run_one` before ever constructing a replicate monitor.
+    if (
+        replicate_tolerance is not None
+        and n_replicates > 1
+        and replicate_minimum > n_replicates
+    ):
+        raise ValueError(
+            "replicate_minimum cannot exceed n_replicates (adaptive "
+            "stopping could never be evaluated before the replicate cap "
+            "ends the batch)"
+        )
