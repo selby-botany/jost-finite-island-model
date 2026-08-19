@@ -375,7 +375,7 @@ that has to change when a key is added.
 | `locus_lengths` | `LocusSpec.length` per locus | one shared constant |
 | `initial_allele_count` | starting allele count per locus | `2` (biallelic/SNP-like) |
 | `initial_concentration` | Dirichlet concentration for random start | `1.0` (uniform) |
-| `deme_weighting` | `"equal"` or `"size"` — used by `E_ST` and by the convergence statistic if size-sensitive | `"size"` |
+| `deme_weighting` | `"equal"` or `"size"` — used only by `E_ST`; every other reported statistic (`D`, `G_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`) always uses equal deme weighting regardless of this setting | `"size"` |
 | `convergence_statistic` | which statistic(s) the monitor watches | `"D"` |
 | `convergence_window` | trailing-window length, generations | `50` |
 | `convergence_tolerance` | stability tolerance on that window | `0.01` |
@@ -392,9 +392,11 @@ sizes actually differ — while `"equal"` is only correct in the special
 case they don't. The two weighting choices are numerically identical only
 when every deme's `N_i` happens to be equal; with unequal deme sizes (§9)
 they diverge, and `"size"` is the correct one. `D` remains defined with
-equal deme weighting by construction regardless of this setting (§7) — the
-`deme_weighting` key governs `E_ST` and, if configured, the convergence
-statistic, never `D` itself.
+equal deme weighting by construction regardless of this setting (§7); so
+do `G_ST`, `K_ST`, `H_S`, `H_T`, and `H_ST` — the `deme_weighting` key
+governs `E_ST` alone (`fim.statistics.differentiation.statistics_report`)
+and nothing else, so setting `convergence_statistic` to anything other
+than `E_ST` makes this key a no-op for that run.
 
 **Default values.** `convergence_window` and `convergence_tolerance` have
 no botanically-derived default — the values above (`50` generations,
