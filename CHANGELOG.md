@@ -91,7 +91,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `write_batch_manifest`, parallel to the existing `RunManifest`
   machinery: a `schema_version`, and an `artifacts` map digesting
   `summary.json` and every replicate's own `manifest.json`, computed
-  once every sibling artifact is durable.
+  once every sibling artifact is flushed.
 - `replicate_summary` omitted `H_ST` — every per-replicate `report.json`
   printed it, but the batch-level statistic loop never named it, so a
   batch could not interval-estimate the correctly partitioned
@@ -154,7 +154,6 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   manifest/CLI-level guarantee (`fim.cli._verify_trajectory_integrity`'s
   digest check and `fim.cli._command_stats`'s generation-count
   cross-check), not one this store makes on its own.
-
 - The `_SIGMA_*` constants that set the pass/fail boundary of the three
   most important scientific tests (`test/validation/
   test_simulator_equilibrium.py`) came from an unretained characterization
