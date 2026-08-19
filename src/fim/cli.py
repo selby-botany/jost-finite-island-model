@@ -338,7 +338,7 @@ def _command_stats(arguments: argparse.Namespace) -> int:
     )
     if arguments.q:
         report["Differentiation_q"] = {
-            str(order): _differentiation_q_for_state(state, float(order))
+            str(order): _differentiation_q_for_state(state, params, float(order))
             for order in arguments.q
         }
     rendered = json.dumps(report, indent=2, sort_keys=True, allow_nan=False)
@@ -611,8 +611,26 @@ def _results_directory() -> Path:
     return _project_root() / "results"
 
 
-def _differentiation_q_for_state(state: ModelState, order: float) -> float:
-    """Average the requested differentiation order across loci."""
+def _differentiation_q_for_state(
+    state: ModelState,
+    params: SimulationParams,
+    order: float,
+) -> float:
+    """Average the requested differentiation order across loci.
+
+    `deme_weighting` has a defined effect only at ``q = 1``
+    (`fim.statistics.differentiation.differentiation_q` raises if
+    weights are passed at any other order) — the same order that
+    matches `E_ST`. Deriving the weights the same way
+    `fim.engine._statistics_for_locus` does keeps `Differentiation_1`
+    here identical to the report's own `E_ST`, rather than the two
+    silently disagreeing whenever `deme_weighting` is `"size"`.
+    """
+    weights = (
+        params.population_sizes
+        if order == 1.0 and params.deme_weighting == "size"
+        else None
+    )
     values: list[float] = []
     for locus_index in range(state.locus_count):
         table = [
@@ -625,7 +643,7 @@ def _differentiation_q_for_state(state: ModelState, order: float) -> float:
             }
             for deme_index in range(state.deme_count)
         ]
-        values.append(differentiation_q(table, order))
+        values.append(differentiation_q(table, order, weights))
     return sum(values) / len(values)
 
 

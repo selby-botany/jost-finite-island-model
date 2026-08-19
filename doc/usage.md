@@ -335,6 +335,10 @@ fim stats run/trajectory.jsonl --q 0 --q 1 --q 2
 ```
 
 JSON is printed to standard output. `--output` also writes the same result.
+`--q 0` and `--q 2` always match the report's own `K_ST` and `D`; `--q 1`
+matches `E_ST`, including the run's own `deme_weighting` setting — a
+size-weighted `E_ST` and an equal-weighted `Differentiation_1` would
+otherwise silently disagree on the same trajectory.
 
 ## Check for updates
 

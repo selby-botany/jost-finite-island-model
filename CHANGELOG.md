@@ -8,6 +8,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `fim stats --q 1` ignored the run's `deme_weighting`, so one JSON
+  report document could state two different values for the same
+  concept: its own `E_ST` and `Differentiation_q`'s `"1.0"` entry,
+  differing by up to 32% on a live run with unequal deme sizes.
+  `_differentiation_q_for_state` called `differentiation_q` with no
+  weights at all; `report_for_state` passed size weights whenever
+  `deme_weighting` was `"size"`, the default. `q = 0` and `q = 2`
+  already matched `K_ST` and `D` exactly — only `q = 1`, the order
+  `deme_weighting` actually has any effect on, drifted. Threaded
+  `params.deme_weighting`/`population_sizes` into the CLI's
+  `Differentiation_q` computation the same way
+  `fim.engine._statistics_for_locus` already does for the report.
 - `fim stats` rejected every manifest `fim` 1.0.0 wrote — the only
   released version so far — with `manifest is missing: schema_version`,
   a message naming the absent JSON key rather than the cause: 1.0.0

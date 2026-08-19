@@ -296,6 +296,48 @@ def test_stats_reanalysis_matches_live_report(
     assert printed["Differentiation_q"]["2.0"] == pytest.approx(live["D"])
 
 
+def test_stats_q1_agrees_with_e_st_under_size_weighting_and_unequal_demes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`fim stats --q 1` agrees with the run's own `E_ST` when demes are
+    unequal in size and `deme_weighting` is `"size"`.
+
+    Regression test for S2: `q = 0` and `q = 2` already matched `K_ST`
+    and `D` exactly, which isolated `deme_weighting` as the sole cause
+    of a 32% live discrepancy between `Differentiation_1` and `E_ST` —
+    `_differentiation_q_for_state` called `differentiation_q` with no
+    weights at all, while `report_for_state` passed size weights
+    whenever `deme_weighting` was `"size"`, the default. Unequal `N` is
+    required to expose it: with every deme the same size, `"size"` and
+    `"equal"` weighting are numerically identical.
+    """
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config, N=[12, 30])
+    assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 0
+
+    status = cli.main(
+        [
+            "stats",
+            str(output / "trajectory.jsonl"),
+            "--q",
+            "0",
+            "--q",
+            "1",
+            "--q",
+            "2",
+        ]
+    )
+    printed = json.loads(capsys.readouterr().out)
+    live = json.loads((output / "report.json").read_text(encoding="utf-8"))
+
+    assert status == 0
+    assert printed["Differentiation_q"]["0.0"] == pytest.approx(live["K_ST"])
+    assert printed["Differentiation_q"]["1.0"] == pytest.approx(live["E_ST"])
+    assert printed["Differentiation_q"]["2.0"] == pytest.approx(live["D"])
+
+
 def test_config_validation_names_unknown_key(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
