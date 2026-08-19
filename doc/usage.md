@@ -10,6 +10,7 @@ for that first. For parameter types and defaults, use the
 
 - [Create a configuration](#create-a-configuration)
 - [Run a simulation](#run-a-simulation)
+- [Worked examples](#worked-examples)
 - [Re-analyze a trajectory](#re-analyze-a-trajectory)
 - [Check for updates](#check-for-updates)
 - [Global flags](#global-flags)
@@ -70,6 +71,255 @@ replicates run. With it set, the batch can stop earlier, once every watched
 statistic's across-replicate confidence interval has tightened enough (see
 [configuration.md](configuration.md#replicate_tolerance)) — the number of
 `replicate-NNN/` subdirectories written can then be less than `n_replicates`.
+
+## Worked examples
+
+Each example below is a complete config and the exact command that runs
+it — save the YAML, run the command, and the result is reproducible: same
+seed, same parameters, same version gives the same `report.json` every
+time (see [Reproduce a run](#reproduce-a-run)). Every example uses a small
+`N`/`d`/`max_generations` so it finishes in a few seconds and a short seed
+distinct from [`fim init`](#create-a-configuration)'s starter config, so it
+never collides with it. Each one demonstrates one configuration option (or
+a natural pair) from [configuration.md](configuration.md); combine them
+freely in a real study.
+
+### Unequal island sizes with a migration hub
+
+Four demes of very different size, connected by an explicit `d x d`
+migration matrix rather than one shared rate — a small "hub" topology
+where deme 4 is both the largest and the best-connected:
+
+```yaml
+N: [200, 200, 200, 800]
+d: 4
+m:
+  - [0.95, 0.02, 0.02, 0.01]
+  - [0.02, 0.95, 0.02, 0.01]
+  - [0.02, 0.02, 0.95, 0.01]
+  - [0.01, 0.01, 0.01, 0.97]
+mu: 0.001
+seed: 20260819
+loci:
+  - locus_id: 1
+    length: 100
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 300
+```
+
+```console
+fim run hub-island.yaml --output results/hub-island --quiet
+```
+
+Converges at generation 11 with `D ~ 0.100`. `manifest.json`'s `parameters.N`
+and `parameters.m` record the exact per-deme sizes and matrix rows used —
+compare them against a run with one shared `N`/`m` to see the effect of
+unequal size and asymmetric connectivity on differentiation.
+
+### Stepping-stone (spatial) migration
+
+Six demes arranged on a ring, each migrating only with its two neighbors —
+`fim.model.topology`'s compact sugar for a sparse migration matrix, instead
+of hand-writing all 36 matrix entries:
+
+```yaml
+N: 150
+d: 6
+m:
+  topology: ring
+  rate: 0.05
+mu: 0.001
+seed: 20260819
+loci:
+  - locus_id: 1
+    length: 100
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 500
+```
+
+```console
+fim run stepping-stone.yaml --output results/stepping-stone --quiet
+```
+
+Converges at generation 10 with `D ~ 0.124`. Swap `topology: ring` for
+`linear` to remove the wrap-around edge between deme 1 and deme 6.
+
+### Stochastic migrant counts
+
+By default, migration blends each deme's frequencies with an exact
+`rate * N` fraction of its neighbors' — a deterministic step given that
+generation's frequencies. `migrant_sampling: stochastic` instead draws the
+migrant *count* from `Binomial(N, rate)`, adding a genuine, explicit source
+of randomness some studies want counted:
+
+```yaml
+N: 100
+d: 4
+m: 0.05
+mu: 0.001
+seed: 20260819
+migrant_sampling: stochastic
+loci:
+  - locus_id: 1
+    length: 100
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 500
+```
+
+```console
+fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
+```
+
+Converges at generation 15 with `D ~ 0.039`. Re-run with `migrant_sampling`
+removed (or set to `continuous`, the default) at the same seed to compare
+against the deterministic-migration baseline directly.
+
+### Finite-length alleles (the K-allele model)
+
+By default (`mutation_model: infinite_alleles`), every mutation receives a
+globally unique identity — the standard population-genetics idealization
+for a locus long enough that two independent mutations essentially never
+land on the same state. `finite_alleles` instead bounds a locus to
+`4 ** length` states and lets a mutation recur to one already present
+elsewhere in the run — deliberately exercised here with a very short
+3-base locus (only `4 ** 3 = 64` states) and a high `mu` so recurrence is
+actually likely within the run, not just theoretically possible:
+
+```yaml
+N: 100
+d: 3
+m: 0.02
+mu: 0.02
+seed: 20260819
+mutation_model: finite_alleles
+initial_allele_count: 2
+loci:
+  - locus_id: 1
+    length: 3
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 500
+```
+
+```console
+fim run finite-alleles.yaml --output results/finite-alleles --quiet
+```
+
+Converges at generation 12 with `D ~ 0.207`. See
+[configuration.md](configuration.md#mutation_model) for how this differs
+from a distance-based (stepwise) mutation model, which `fim` does not
+implement.
+
+### Per-base mutation rate across unequal locus lengths
+
+`mu_b` (mutually exclusive with `mu`) is a single per-base-pair mutation
+probability; each locus derives its own `mu` from `mu_b` and its own
+`length` via `mu = 1 - (1 - mu_b) ** length` — so two loci of very
+different lengths do not silently mutate at the same rate:
+
+```yaml
+N: 150
+d: 3
+m: 0.02
+mu_b: 0.00002
+seed: 20260819
+loci:
+  - locus_id: 1
+    length: 50
+  - locus_id: 2
+    length: 500
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 500
+```
+
+```console
+fim run mu-b.yaml --output results/mu-b --quiet
+```
+
+Converges at generation 15 with `D ~ 0.090`. `results/mu-b/manifest.json`'s
+`parameters.mu` records the two derived rates — `0.0009995` for the
+50-base locus and `0.0099503` for the 500-base one — the expanded,
+canonical form `mu_b` is sugar for; `mu_b` itself is never stored.
+
+### Several convergence statistics
+
+Watch more than one statistic and decide whether stopping needs every one
+of them stable (`convergence_combinator: all`, the default) or just one
+(`any`):
+
+```yaml
+N: 150
+d: 3
+m: 0.02
+mu: 0.001
+seed: 20260819
+loci:
+  - locus_id: 1
+    length: 100
+convergence_statistic: [D, G_ST]
+convergence_combinator: any
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 500
+```
+
+```console
+fim run multi-statistic.yaml --output results/multi-statistic --quiet
+```
+
+Converges at generation 16, with `report.json`'s `converged_on` recording
+`["D", "G_ST"]` — both were watched, and `any` means only one needed to
+stabilize first.
+
+### An adaptive replicate batch with a confidence interval
+
+Rather than guessing how many replicate runs a confidence interval needs
+(the question this feature exists to answer — see
+[configuration.md](configuration.md#replicate_tolerance)), cap it well above
+what should be necessary and let `replicate_tolerance` decide when enough
+have run:
+
+```yaml
+N: 100
+d: 5
+m: 0.001
+mu: 0.00003
+seed: 20260819
+loci:
+  - locus_id: 1
+    length: 100
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 500
+n_replicates: 50
+replicate_minimum: 10
+replicate_tolerance: 0.05
+```
+
+```console
+fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
+```
+
+Stops at exactly 10 replicates (`replicate_minimum`) — `D`'s 95% confidence
+interval is already `0.218 +/- 0.048`, tighter than the requested `0.05`
+half-width, so the remaining 40 possible replicates were never needed.
+`results/adaptive-batch/summary.json` reports every statistic's own
+interval; `results/adaptive-batch/replicate-001/` through `replicate-010/`
+each hold the ordinary four-file scalar-run contract for that one
+replicate. Drop `--sequential` to run the same batch across a worker
+process per CPU instead — the computed numbers are identical either way
+(see [Batches](#batches-n_replicates-greater-than-one)); only the wall-clock
+time differs.
 
 ## Re-analyze a trajectory
 
