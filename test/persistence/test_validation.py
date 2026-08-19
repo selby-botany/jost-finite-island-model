@@ -178,6 +178,39 @@ def test_manifest_mapping_validation_reports_missing_and_wrong_nested_types() ->
         RunManifest.from_dict({**value, "convergence": []})
 
 
+def test_manifest_missing_schema_version_names_the_legacy_cause() -> None:
+    """A pre-1.1.0 manifest missing only `schema_version` gets a specific,
+    actionable error naming the cause and the remedy.
+
+    Regression test for S9: `fim` 1.0.0, the only released version, wrote
+    no `schema_version` field at all, so every manifest it produced hits
+    exactly this case (missing `schema_version`, everything else
+    present, `software_version` a recognizable string) — the generic
+    "manifest is missing: schema_version" message named the absent JSON
+    key but not why it was absent or what to do about it.
+    """
+    legacy = dict(_manifest().to_dict())
+    del legacy["schema_version"]
+    legacy["software_version"] = "1.0.0"
+
+    with pytest.raises(ValueError, match="written by fim 1.0.0"):
+        RunManifest.from_dict(legacy)
+    with pytest.raises(ValueError, match="no automated migration"):
+        RunManifest.from_dict(legacy)
+
+
+def test_manifest_missing_several_fields_uses_the_generic_message() -> None:
+    """More than just `schema_version` missing falls back to the generic,
+    key-naming error rather than the legacy-specific one.
+    """
+    value = dict(_manifest().to_dict())
+    del value["schema_version"]
+    del value["run_id"]
+
+    with pytest.raises(ValueError, match="manifest is missing: run_id, schema_version"):
+        RunManifest.from_dict(value)
+
+
 def test_manifest_nested_fields_have_strict_types(tmp_path: Path) -> None:
     """Nested manifest fields reject wrong primitive types and negative values."""
     value = _manifest().to_dict()

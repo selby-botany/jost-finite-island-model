@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, NoReturn, TypedDict
 
 from fim.model.params import SimulationParams
 
@@ -147,8 +147,7 @@ class RunManifest:
         }
         missing = required - set(value)
         if missing:
-            names = ", ".join(sorted(missing))
-            raise ValueError(f"manifest is missing: {names}")
+            _raise_missing_manifest_fields(value, missing)
         parameters = value["parameters"]
         convergence = value["convergence"]
         if not isinstance(parameters, Mapping):
@@ -345,6 +344,44 @@ def _optional_artifacts(
             raise ValueError(f"manifest artifact {name!r} bytes must be non-negative")
         digests[name] = {"sha256": sha256, "bytes": digest_bytes}
     return digests
+
+
+def _raise_missing_manifest_fields(
+    value: Mapping[str, Any],
+    missing: set[str],
+) -> NoReturn:
+    """Raise a manifest-missing-fields error, naming cause and remedy for
+    the one case fim 1.0.0's own released output hits.
+
+    A manifest missing only `schema_version`, with a recognizable
+    `software_version` present, is not corrupt — it predates the
+    manifest schema-version contract this project added after 1.0.0,
+    the only version ever released (R7). Naming that explicitly, rather
+    than only the JSON key that happens to be absent, points at the
+    actual cause: there is no automated migration for a pre-schema-
+    version manifest, so re-running the same configuration with the
+    current `fim` is the way to get a manifest this version can read.
+
+    Args:
+        value: The manifest mapping being validated.
+        missing: The required field names not present in `value`.
+
+    Raises:
+        ValueError: Always.
+    """
+    software_version = value.get("software_version")
+    if missing == {"schema_version"} and isinstance(software_version, str):
+        raise ValueError(
+            f"manifest has no schema_version — it was written by fim "
+            f"{software_version}, before this project's manifest "
+            "schema-version contract existed (1.0.0, the only version "
+            "released so far, wrote no schema_version field at all). "
+            "There is no automated migration for a pre-schema-version "
+            "manifest; re-run the same configuration with the current "
+            "fim to get a manifest this version can read."
+        )
+    names = ", ".join(sorted(missing))
+    raise ValueError(f"manifest is missing: {names}")
 
 
 def _required_bool(value: Mapping[str, Any], key: str) -> bool:

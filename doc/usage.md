@@ -404,6 +404,14 @@ interrupted run — a crash, a killed process, a full disk — therefore never
 leaves a partial directory at the target path: it is either not there at
 all, or complete.
 
+**Compatibility with `fim` 1.0.0 output.** `fim` 1.0.0, the only version
+released before `schema_version` and `artifacts` existed, wrote manifests
+with neither field. `fim stats` refuses such a manifest — it has no
+digest to verify the trajectory against — with an error naming both the
+cause and that there is no automated migration: re-run the same
+configuration (the manifest's own `parameters`) with the current `fim`
+to get a manifest this version can read and verify.
+
 ### `report.json`
 
 The final report contains:

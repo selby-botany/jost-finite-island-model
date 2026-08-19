@@ -8,6 +8,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `fim stats` rejected every manifest `fim` 1.0.0 wrote — the only
+  released version so far — with `manifest is missing: schema_version`,
+  a message naming the absent JSON key rather than the cause: 1.0.0
+  predates the `schema_version`/`artifacts` contract (R7) entirely.
+  `RunManifest.from_dict` now recognizes this specific case (only
+  `schema_version` missing, a recognizable `software_version` present)
+  and raises an error naming both the cause and the remedy — there is no
+  automated migration for a pre-schema-version manifest; re-run the same
+  configuration with the current `fim`. Documented in `doc/usage.md`'s
+  `manifest.json` section as a compatibility note.
 - A parallel batch (`--workers` greater than one, the CLI default)
   published orphan `replicate-NNN/` directories: `fim.engine.
   _run_batch_parallel` submits a whole worker batch and applies an
