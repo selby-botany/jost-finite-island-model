@@ -1130,6 +1130,17 @@ class DirichletInitialCondition()
 
 Draw each deme/locus vector from a symmetric Dirichlet distribution.
 
+A symmetric Dirichlet is continuous, so the generation-zero state
+this produces almost surely does not land on the model's own
+``1/N`` lattice — the set of frequencies ``N`` gene copies can
+actually realize. That is deliberate: generation zero represents
+the *belief* a starting frequency is drawn from, not a sampled
+population state; `fim.model.operators.drift`'s first application
+(producing generation one) is what turns that belief into the
+model's first actual `N`-gene-copy realization. See the design
+doc's §3.3 for the full contract this deliberately documents rather
+than resolves in code.
+
 <a id="fim.model.initial.DirichletInitialCondition.generate"></a>
 
 #### generate

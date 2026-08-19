@@ -316,6 +316,13 @@ using IDs that were only ever meant for a longer locus.
 
 ## Initial conditions
 
+Generation 0 — whether drawn from `initial_concentration` or supplied
+explicitly via `p_0` — is a continuous prior, not a state the run's `N`
+gene copies could themselves produce; only generation 1 onward, once
+`drift` has resampled at `N` gene copies, lands on that discrete
+`1/N` lattice. See the [model contract](../README.md#model-contract)
+and [simulator design §3.3](fim-simulator-design.md#33-initial-conditions).
+
 ### `initial_allele_count`
 
 - **Type:** positive integer no larger than the smallest `N`

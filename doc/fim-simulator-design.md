@@ -232,6 +232,23 @@ model. An explicit, user-supplied `p_0` is also accepted as an alternative
 initial-condition source, for reproducing a specific published scenario or
 a real allele-frequency survey as a starting point.
 
+**Generation 0 is a continuous prior, not a state on the model's own
+`1/N` lattice.** Every generation from 1 onward is produced by `drift`
+(§3.4), a multinomial resample at exactly `N` gene copies, so every
+frequency at generation 1 or later is a ratio of integers with
+denominator `N` — the only values `N` gene copies can actually realize.
+`DirichletInitialCondition`'s draw has no such constraint: a symmetric
+Dirichlet distribution is continuous, so generation 0's frequencies
+almost surely do *not* land on that lattice (an explicit, user-supplied
+`p_0` is not bound by it either). This is deliberate, not an oversight —
+generation 0 represents the *belief* a starting frequency is drawn from,
+not a sampled population state, and `drift`'s first application (to
+produce generation 1) is what turns that belief into the model's first
+actual `N`-gene-copy realization. A statistic computed at generation 0
+(`fim stats --generation 0`) describes this continuous prior, not a
+population; treat it accordingly rather than assuming it is comparable,
+lattice-for-lattice, to every later generation.
+
 The requirement's claim that the model "is guaranteed (analytically) to
 converge for any starting population" is a property of the underlying
 Markov chain (ergodicity toward a stationary distribution once mutation

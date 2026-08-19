@@ -8,6 +8,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Generation 0 (the Dirichlet-drawn, or explicit `p_0`, initial state) is
+  a continuous prior, not a state the run's `N` gene copies could
+  themselves produce — only generation 1 onward, once `drift` has
+  resampled at `N` gene copies, lands on the model's own `1/N` lattice.
+  This was previously undocumented, so the first trajectory row, the
+  first convergence observation, and `fim stats --generation 0` all
+  described a state the README's own model contract implied was
+  impossible. Documented as deliberate (not a defect to fix in code) in
+  `README.md`'s model contract, `doc/configuration.md`'s "Initial
+  conditions" section, `doc/fim-simulator-design.md` §3.3, and
+  `DirichletInitialCondition`'s docstring.
 - Several docstrings and `doc/usage.md`/`doc/fim-simulator-test-plan.md`
   described the atomic-publish write path (R7) as making output
   "durable," including `_atomic_directory`'s claim that "no matter when

@@ -111,6 +111,11 @@ its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).
   diploid autosomal locus, pass twice the census number of individuals.
 - Every run uses one explicitly seeded NumPy `PCG64` generator.
 - A generation applies migration, mutation, then drift.
+- Generation 0 is a continuous Dirichlet prior (or an explicit `p_0`),
+  not a state the model's `N` gene copies could themselves produce.
+  Generation 1, the first `drift` application, is the first generation
+  on that `1/N` lattice — treat a generation-0 statistic as describing
+  the prior, not a sampled population.
 - Convergence means that a selected statistic's trailing-window half means are
   within a configured tolerance. Reaching the hard cap is a valid,
   non-converged result.
