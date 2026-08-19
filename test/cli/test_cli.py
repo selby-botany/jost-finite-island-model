@@ -650,6 +650,36 @@ def test_run_batch_rejects_zero_workers(
     assert not output.exists()
 
 
+def test_run_rejects_workers_combined_with_sequential(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--workers` and `--sequential` are declared mutually exclusive in
+    argparse, rather than one silently taking precedence over the other
+    inside the handler.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=2)
+    output = tmp_path / "output"
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(
+            [
+                "run",
+                str(config),
+                "-o",
+                str(output),
+                "--workers",
+                "2",
+                "--sequential",
+                "--quiet",
+            ]
+        )
+
+    assert exit_info.value.code == 2
+    assert "not allowed with argument" in capsys.readouterr().err
+
+
 def test_run_batch_adaptive_tolerance_can_stop_before_n_replicates(
     tmp_path: Path,
 ) -> None:

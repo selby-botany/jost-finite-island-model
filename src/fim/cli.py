@@ -648,7 +648,8 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="suppress progress and artifact messages",
     )
-    run_parser.add_argument(
+    workers_group = run_parser.add_mutually_exclusive_group()
+    workers_group.add_argument(
         "--workers",
         type=int,
         metavar="N",
@@ -657,7 +658,7 @@ def _parser() -> argparse.ArgumentParser:
             "(default: the CPU count; ignored for a scalar run)"
         ),
     )
-    run_parser.add_argument(
+    workers_group.add_argument(
         "--sequential",
         action="store_true",
         help="run a batch's replicates one at a time instead of in parallel",
