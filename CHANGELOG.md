@@ -34,6 +34,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   integral float, or a numeric string, and rejects a non-integral float,
   a boolean, or any other type outright. `p_0` allele IDs are further
   rejected if negative.
+- The engine-validation test suite's equilibrium oracle
+  (`test/validation/test_simulator_equilibrium.py`) approximated the
+  mutation step's per-generation survival factor as `(1 - mu) ** 2`, its
+  mean-only value, while the recursion actually needs that factor's
+  second moment because it tracks a pairwise (two-lineage) identity
+  quantity. The exact second moment is `(1 - mu) ** 2 + mu * (1 - mu) /
+  N`; the omitted `mu * (1 - mu) / N` term was documented as an `O(1/N)`
+  residual in five places even though the file's own module docstring
+  calls the recursion "exact". Every scientific test's verdict is judged
+  against this oracle, so the gap was invisible to every other test. Now
+  computed exactly via a new `_mutation_survival` helper, with a
+  derivation showing the fix is a closed-form identity rather than a
+  truncated series (there is no missing `O(1/N^2)` or higher term to add
+  on top of it).
 - `dev/bin/check-doc-links` stripped every underscore and asterisk from a
   heading's anchor, including ones inside a `` `code span` `` where they
   are literal identifier characters, not markdown emphasis syntax — so a

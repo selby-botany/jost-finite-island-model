@@ -153,6 +153,43 @@ def _identity_coefficients(m: float, d: int) -> tuple[float, float, float, float
     )
 
 
+def _mutation_survival(mu: float, population_size: int) -> float:
+    """Return the exact per-generation mutation-survival factor.
+
+    The identity recursion's mutation step scales existing pairwise
+    identity mass by ``1 - k/N``, where ``k ~ Binomial(N, mu)`` counts
+    this generation's mutating gene copies. Because the recursion tracks
+    a *pairwise* (two-lineage) quantity, it needs this factor's second
+    moment, ``E[(1 - k/N)^2]``, not just its mean ``1 - mu``.
+
+    ``k/N`` is the sample mean of ``N`` i.i.d. Bernoulli(mu) mutation
+    indicators, so ``1 - k/N`` is the sample mean of ``N`` i.i.d.
+    Bernoulli(1 - mu) "no mutation" indicators. Squaring a sample mean is
+    a degree-2 polynomial in those indicators, and by linearity its
+    expectation depends on nothing beyond the mean and variance of one
+    indicator -- both closed-form for a Bernoulli:
+
+        E[(1 - k/N)^2] = (1 - mu)^2 + mu(1 - mu)/N
+
+    This is an *exact* identity for every finite ``N >= 1``, not a
+    truncated ``O(1/N)`` asymptotic series: there is no ``O(1/N^2)`` or
+    higher term missing from it. (Were a higher power of this factor ever
+    needed -- e.g. a three-lineage identity requiring
+    ``E[(1 - k/N)^3]`` -- the exact value would still be a *finite*
+    polynomial in ``1/N``, of degree one less than the power, not an
+    infinite series; the second moment used here is that general
+    pattern's ``m=2`` case, hence degree 1.)
+
+    Args:
+        mu: Per-copy mutation probability.
+        population_size: Gene-copy count ``N``.
+
+    Returns:
+        ``E[(1 - k/N)^2]``, exactly.
+    """
+    return (1.0 - mu) ** 2 + mu * (1.0 - mu) / population_size
+
+
 def _iterate_identities(
     *,
     population_size: int,
@@ -171,10 +208,10 @@ def _iterate_identities(
     order in :func:`fim.model.operators.step`.
 
     Migration maps the identities by the fixed coefficients of
-    :func:`_identity_coefficients`. Mutation scales existing mass by
-    ``1 - k/N`` with ``k ~ Binomial(N, mu)``; using
-    ``E[(1 - k/N)^2] ~= (1 - mu)^2`` introduces the only ``O(1/N)`` residual.
-    Drift is exact Wright-Fisher multinomial resampling, for which
+    :func:`_identity_coefficients`. Mutation scales existing mass by the
+    exact second moment :func:`_mutation_survival`, so the mutation step
+    carries no ``O(1/N)`` residual of its own. Drift is exact
+    Wright-Fisher multinomial resampling, for which
     ``E[sum x'^2] = 1/N + (1 - 1/N) E[sum x^2]`` and between-deme identity is
     unchanged in expectation.
 
@@ -196,7 +233,7 @@ def _iterate_identities(
         between_from_within,
         between_from_between,
     ) = _identity_coefficients(m, d)
-    survival = (1.0 - mu) ** 2
+    survival = _mutation_survival(mu, population_size)
     inverse = 1.0 / population_size
 
     within = within_identity
@@ -515,6 +552,43 @@ def _run_engine_pooled(
         g_values.append(g_st)
         d_values.append(jost_d)
     return g_values, d_values
+
+
+@pytest.mark.parametrize(
+    ("mu", "population_size"),
+    [
+        (0.001, 100),
+        (0.1, 50),
+        (0.4, 3),
+        (0.9, 2),
+    ],
+)
+def test_mutation_survival_matches_brute_force_binomial_second_moment(
+    mu: float,
+    population_size: int,
+) -> None:
+    """The exact formula agrees with the full binomial second moment.
+
+    Independently sums ``E[(1 - k/N)^2]`` over every possible mutant count
+    ``k`` weighted by its exact binomial probability, rather than
+    re-deriving the same algebra :func:`_mutation_survival` already uses,
+    including a high-``mu``, small-``population_size`` case
+    (``mu=0.4, population_size=3``) where the omitted ``mu(1-mu)/N`` term
+    is ``0.08`` against a base of ``0.36`` -- large enough that the
+    ``(1 - mu) ** 2`` approximation R3 replaced would fail this comparison
+    outright, not merely drift outside a statistical tolerance.
+    """
+    brute_force = math.fsum(
+        math.comb(population_size, k)
+        * mu**k
+        * (1.0 - mu) ** (population_size - k)
+        * (1.0 - k / population_size) ** 2
+        for k in range(population_size + 1)
+    )
+
+    assert _mutation_survival(mu, population_size) == pytest.approx(
+        brute_force, abs=1e-12
+    )
 
 
 @pytest.mark.parametrize(
