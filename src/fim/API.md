@@ -761,7 +761,7 @@ construction, so nothing further is needed to treat them as a sample.
 **Returns**:
 
   One `ConfidenceInterval` per statistic name in `FinalReport`
-  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``).
+  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``).
   ``G_ST`` is undefined for a replicate whose locus is monomorphic
   across every deme (``H_T == 0``); such replicates are dropped
   from ``G_ST``'s own sample rather than papered over with a

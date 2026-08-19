@@ -280,10 +280,41 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
 
     summary = replicate_summary(output)
 
-    assert set(summary) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
+    assert set(summary) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"}
     assert summary["D"]["sample_count"] == 5
     assert summary["D"]["low"] <= summary["D"]["mean"] <= summary["D"]["high"]
     assert summary["D"]["confidence"] == 0.95
+
+
+def test_replicate_summary_covers_every_numeric_final_report_key(
+    tiny_params: SimulationParams,
+) -> None:
+    """Every numeric `FinalReport` field has a `replicate_summary` entry.
+
+    Regression test for S4: `H_ST` was computed into every replicate's
+    `FinalReport` and printed in every `report.json`, but silently
+    absent from the batch-level summary, with no test asserting the
+    two stay in correspondence. Parses `FinalReport`'s own field
+    annotations at test time (excluding the non-statistic identity and
+    metadata fields) so a future statistic added to `FinalReport` and
+    never propagated here fails this test immediately, rather than
+    only being noticed by inspection.
+    """
+    non_statistic_fields = {
+        "run_id",
+        "generation",
+        "converged",
+        "converged_on",
+        "reason",
+    }
+    numeric_fields = set(FinalReport.__annotations__) - non_statistic_fields
+    params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+
+    summary = replicate_summary(output)
+
+    assert set(summary) == numeric_fields
 
 
 def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:

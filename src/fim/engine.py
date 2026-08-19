@@ -296,7 +296,7 @@ def replicate_summary(
 
     Returns:
         One `ConfidenceInterval` per statistic name in `FinalReport`
-        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``).
+        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``).
         ``G_ST`` is undefined for a replicate whose locus is monomorphic
         across every deme (``H_T == 0``); such replicates are dropped
         from ``G_ST``'s own sample rather than papered over with a
@@ -311,7 +311,7 @@ def replicate_summary(
     if len(results) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
         raise ValueError("replicate_summary requires at least two results")
     summary: dict[str, ConfidenceInterval] = {}
-    for statistic in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"):
+    for statistic in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"):
         values = [
             value
             for result in results
@@ -653,19 +653,18 @@ def _mean_statistic_across_loci(
 
 def _final_report_statistic(report: FinalReport, statistic: str) -> float | None:
     """Read one named field from a final run report."""
-    if statistic == "D":
-        return report["D"]
-    if statistic == "G_ST":
-        return report["G_ST"]
-    if statistic == "E_ST":
-        return report["E_ST"]
-    if statistic == "K_ST":
-        return report["K_ST"]
-    if statistic == "H_S":
-        return report["H_S"]
-    if statistic == "H_T":
-        return report["H_T"]
-    raise ValueError(f"unsupported statistic: {statistic}")
+    fields: Mapping[str, float | None] = {
+        "D": report["D"],
+        "G_ST": report["G_ST"],
+        "E_ST": report["E_ST"],
+        "K_ST": report["K_ST"],
+        "H_S": report["H_S"],
+        "H_T": report["H_T"],
+        "H_ST": report["H_ST"],
+    }
+    if statistic not in fields:
+        raise ValueError(f"unsupported statistic: {statistic}")
+    return fields[statistic]
 
 
 def _format_timestamp(value: datetime) -> str:

@@ -439,7 +439,7 @@ Written only for `n_replicates` greater than one, alongside the
 files above.
 
 `summary.json` maps each reported statistic name (`D`, `G_ST`, `E_ST`,
-`K_ST`, `H_S`, `H_T`) to its across-replicate confidence interval:
+`K_ST`, `H_S`, `H_T`, `H_ST`) to its across-replicate confidence interval:
 
 ```json
 {
