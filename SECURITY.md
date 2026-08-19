@@ -4,6 +4,11 @@
 
 Security fixes are provided for the current `1.x` release.
 
+| Version | Supported |
+|---|---|
+| 1.x | Yes |
+| < 1.0 | No — pre-release; no compatibility or security guarantees |
+
 ## Threat model
 
 `fim` processes local YAML and JSON Lines files and writes local artifacts. A
@@ -30,7 +35,10 @@ from the tagged source.
 
 ## Dependencies
 
-Runtime dependencies are limited to NumPy, Matplotlib, and PyYAML and are
+Runtime dependencies are limited to NumPy, Matplotlib, and PyYAML, plus one
+deliberately pinned transitive dependency of Matplotlib, pyparsing (see
+[the detailed design's engineering decisions](doc/fim-simulator-detailed-design.md#2-engineering-decisions)
+for why it is pinned explicitly rather than left to resolution). All four are
 version constrained in `pyproject.toml`. CI runs deterministic tests against
 the supported Python versions. Release changes should review published
 dependency advisories before tagging.
