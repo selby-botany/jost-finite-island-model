@@ -414,6 +414,17 @@ without the engine:
 - An untabled degrees of freedom interpolates between its listed
   neighbors, and the interpolation matches the documented `1/df` formula
   rather than merely landing between them.
+- **Interpolation error is bounded against an independent oracle** (R22
+  remediation): for ten untabled degrees-of-freedom values spanning the
+  whole table, the interpolated critical value is fed to a numerical
+  quadrature of the closed-form Student's-t density — sharing no table,
+  formula, or code path with `interval._interpolate` — and the tail
+  probability that quadrature reports must land within `1e-4` of the
+  target the critical value is supposed to produce. Verified sensitive
+  by deliberately breaking the interpolation weight and confirming this
+  test fails from its own, independently computed reference value —
+  not merely because the formula-echo test above happened to catch the
+  same break.
 - Beyond the table's tail, the critical value is the exact standard-normal
   quantile, which is separately checked against well-known `z` values.
 - An interval on a fixed sample matches a hand-computed reference; an

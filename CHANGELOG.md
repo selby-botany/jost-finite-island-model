@@ -8,6 +8,23 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The across-replicate Student's-t critical value interpolates an
+  untabled degrees of freedom in `1/df` between two printed-table
+  rows — a defensible dependency-free choice, but nothing previously
+  bounded the interpolation's actual error against a reference
+  independent of that same table and formula; every existing test
+  either read a tabled row back or recomputed the identical 1/df
+  formula the production code already used, so a wrong interpolation
+  weight or a transposed table row would have passed as long as it
+  was internally self-consistent. Added a test-only oracle
+  (`test/statistics/test_interval.py`) that numerically integrates
+  the closed-form Student's-t density via Simpson's rule and checks
+  each interpolated critical value's implied tail probability against
+  it, for ten untabled degrees-of-freedom values across the whole
+  table; verified sensitive by deliberately breaking the production
+  interpolation weight and confirming the new test fails from its own
+  computation, not merely alongside the pre-existing formula-echo
+  test. Pure standard library — no new runtime or test dependency.
 - `SimulationParams` accepted stopping rules that could structurally
   never fire. `convergence_window` could exceed `max_generations + 1`
   (the most generations a run can ever record — generation 0 plus
