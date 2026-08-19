@@ -59,10 +59,21 @@ Repository = "https://github.com/selby-botany/jost-finite-island-model"
 
 [tool.hatch.build.targets.sdist]
 include = [
+    "/CHANGELOG.md",
+    "/CONTRIBUTING.md",
     "/LICENSE.md",
     "/README.md",
+    "/SECURITY.md",
+    "/dev",
+    "/doc",
     "/src/fim",
+    "/test",
     "/version.txt",
+]
+exclude = [
+    # Local scratch/review material, gitignored via doc/.gitignore and
+    # never meant to ship in a published artifact.
+    "/doc/dev",
 ]
 
 [tool.hatch.build.targets.wheel]

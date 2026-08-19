@@ -8,6 +8,27 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The source distribution (`sdist`) excluded `doc/`, `test/`, `dev/`,
+  `CHANGELOG.md`, and `SECURITY.md` — only `LICENSE.md`, `README.md`,
+  `src/fim`, and `version.txt` shipped, leaving a scientific package's
+  source archive without the documentation, test suite, maintainer
+  tooling, or release metadata a reviewer or downstream packager needs
+  to actually review or rebuild it end to end. `[tool.hatch.build.
+  targets.sdist]`'s `include` now also lists `/CHANGELOG.md`,
+  `/CONTRIBUTING.md`, `/SECURITY.md`, `/dev`, `/doc`, and `/test`.
+  Building a real sdist to verify surfaced a second, undocumented
+  defect this change would otherwise have introduced silently:
+  `hatchling`'s explicit `include` for `/doc` walks the filesystem
+  rather than consulting `doc/.gitignore` (a *nested* `.gitignore`,
+  which `hatchling` does not read), sweeping the entire gitignored
+  `doc/dev/` scratch directory — AI review drafts and reference PDFs
+  never meant for distribution — straight into the built archive. Added
+  a matching `exclude = ["/doc/dev"]`. Added
+  `test/validation/test_sdist_contents.py`: one static test asserting
+  the required paths are declared, and one `packaging`-marked test
+  (R17) that builds a real sdist and asserts `doc/dev/` is genuinely
+  absent from it — a config-only test cannot see `hatchling`'s own
+  file-walk behavior.
 - Release-workflow dependencies and permissions were not immutably
   pinned or scoped, and `publish` had several rough edges. Every
   `uses:` reference in `ci.yml` and `gitleaks-ci.yml` (`actions/
