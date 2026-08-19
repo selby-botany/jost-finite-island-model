@@ -707,6 +707,16 @@ the shape only. Eight test layers, mapped to where they live:
 Every layer obeys the determinism contract (§2.4): fixed seeds, bands
 derived before seeds, no wall-clock, no network, order-independent.
 
+**Deliberately absent:** a benchmark/scale-regression layer — wall-clock
+and memory guards for large migration matrices, high locus counts, and
+near-degenerate frequency vectors. Nothing today catches a performance
+regression in a computationally intensive package; adding one is a real
+investment (a stable measurement harness, environment-independent
+thresholds, and its own place in CI separate from the deterministic gate
+above) rather than a mechanical ninth entry in the list — tracked as a
+backlog item rather than adopted silently as a side effect of a later
+pass.
+
 ## 10. Risks and mitigations
 
 | Risk | Consequence if ignored | Mitigation |
