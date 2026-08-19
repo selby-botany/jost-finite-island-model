@@ -388,13 +388,16 @@ The final report contains:
 
 - run identity, generation, convergence flag, watched statistic, and reason;
 - `H_S`, `H_T`, and the correctly partitioned `H_ST`;
-- `G_ST` (`null` when all demes are fixed for the same allele);
+- `G_ST` (`null` only when *every* tracked locus is fixed for the same
+  allele in every deme; with several loci, a locus that is fixed on its
+  own does not blank out the others — it is dropped and the remaining,
+  genuinely polymorphic loci are averaged);
 - Jost's `D`, entropy differentiation `E_ST`, and allele-number
   differentiation `K_ST`.
 
 Multiple loci are independent repeats; report scalars are their arithmetic
-means. `D` and `K_ST` always use equal deme weighting. `deme_weighting` affects
-`E_ST`.
+means (`G_ST` as just described). `D` and `K_ST` always use equal deme
+weighting. `deme_weighting` affects `E_ST`.
 
 ### `scatter.png`
 

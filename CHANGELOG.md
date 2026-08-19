@@ -8,6 +8,42 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Adaptive `G_ST` batches raised `ValueError` on partial monomorphism
+  (one tracked locus fixed for the same allele while another locus is
+  still polymorphic) because three layers disagreed about what an
+  undefined `G_ST` means: within-run watching substituted `0.0` per
+  locus, the final report voided the whole multi-locus average if *any*
+  locus was undefined, and the adaptive replicate-batch monitor tried to
+  rescue a `None` report value only when the run's *averaged* `H_T` was
+  exactly zero — a condition partial monomorphism never satisfies, since
+  the polymorphic locus keeps the average above zero, so it raised
+  instead. All three layers now agree on one rule: drop whatever is
+  undefined and average what remains, at both locus and replicate
+  granularity, and never fabricate a substitute or raise for a
+  legitimately undefined value.
+  - `_mean_g_st_across_loci` (new, in `fim.engine`) drops any locus
+    where `G_ST` is undefined and averages the rest, returning `None`
+    only when *every* locus is undefined. `report_for_state` and the
+    within-run convergence watcher (`_convergence_values` /
+    `_mean_statistic_across_loci`) both use it, so they can no longer
+    disagree with each other.
+  - `_replicate_stopping_values` now drops an undefined statistic for a
+    replicate instead of raising or substituting `0.0` — the same rule
+    `replicate_summary` already used for the *published* interval, so
+    the stopping decision is now judged against the same sample the
+    summary reports from, not a different one.
+  - `ConvergenceMonitor.record()` accepts a mapping that omits any
+    statistic undefined this round (previously it required exact
+    coverage of every configured name); an omitted statistic simply
+    does not advance its own trailing window that round. An unknown
+    statistic name not in the configured set still raises.
+  - Net effect on a run/batch watching only `G_ST` where it is
+    *permanently* undefined (every locus, every generation or
+    replicate, monomorphic): its trailing window never fills, so the
+    run/batch now correctly falls back to `max_generations`/
+    `n_replicates` instead of the prior behavior, where padding the
+    window with fabricated `0.0`s reported spurious immediate
+    "convergence" regardless of what the run was actually doing.
 - `FiniteAlleleSpace` (the finite-alleles/K-allele mutation model) minted
   allele IDs outside `0 .. capacity - 1` whenever the generation-zero
   founding IDs at a locus were non-contiguous (for example `{0, 3}` at

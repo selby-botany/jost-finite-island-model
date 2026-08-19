@@ -54,8 +54,14 @@ def test_monitor_distinguishes_convergence_from_cap() -> None:
     assert not capped.outcome().converged
 
 
-def test_multi_statistic_monitor_requires_a_covering_mapping() -> None:
-    """Watching several statistics rejects a bare float and a partial mapping."""
+def test_multi_statistic_monitor_requires_a_mapping_but_accepts_a_partial_one() -> None:
+    """Watching several statistics rejects a bare float, not a partial mapping.
+
+    Regression test for R5: a mapping that omits a configured statistic
+    (its value is undefined this round) is now valid — that statistic
+    simply does not advance this round — but a name outside the
+    configured set is still almost certainly a typo and still raises.
+    """
     monitor = ConvergenceMonitor(
         TrailingWindowCriterion(2, 0.0),
         max_generations=10,
@@ -64,10 +70,13 @@ def test_multi_statistic_monitor_requires_a_covering_mapping() -> None:
 
     with pytest.raises(ValueError, match="requires a mapping"):
         monitor.record(0, 0.5)
-    with pytest.raises(ValueError, match="must cover exactly"):
-        monitor.record(0, {"D": 0.5})
-    with pytest.raises(ValueError, match="must cover exactly"):
-        monitor.record(0, {"D": 0.5, "G_ST": 0.5, "E_ST": 0.5})
+
+    monitor.record(0, {"D": 0.5})
+    monitor.record(1, {})
+    assert monitor.histories == {"D": (0.5,), "G_ST": ()}
+
+    with pytest.raises(ValueError, match="unconfigured statistic"):
+        monitor.record(2, {"D": 0.5, "G_ST": 0.5, "E_ST": 0.5})
 
 
 def test_all_combinator_requires_every_statistic_stable() -> None:

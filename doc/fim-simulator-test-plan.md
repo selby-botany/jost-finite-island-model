@@ -432,10 +432,13 @@ without the engine:
   no bounded statistic can miss, the batch stops at `replicate_minimum`
   exactly — a deterministic stop, not a lucky one, since every reported
   statistic lies in `[0, 1]`; with an unreachable `replicate_minimum`, the
-  `n_replicates` cap still ends the batch. A run whose `G_ST` is undefined
-  contributes the generation-layer substitution to the stop decision while
-  its report keeps `null`, and that statistic is then absent from the
-  summary rather than represented by a substituted value.
+  `n_replicates` cap still ends the batch. A replicate whose `G_ST` is
+  undefined (every tracked locus monomorphic) is dropped from `G_ST`'s
+  own stopping-criterion window for that round — never raised, never
+  substituted — exactly the sample `replicate_summary` reports from; a
+  batch watching only `G_ST` where it stays undefined for every replicate
+  runs to the full `n_replicates` cap rather than reporting a fabricated
+  early stop.
 - **`replicate_summary`**: reports an interval for every statistic with at
   least two defined samples, each `low <= mean <= high` at the configured
   confidence, and rejects a batch of fewer than two results outright.
@@ -454,8 +457,14 @@ without the engine:
 - The legacy positional `(N, m, mu, d)` arguments are validated against the
   parameter bag they must agree with, each mismatch reported by name.
 - A manifest `clock` without an explicit timezone is rejected.
-- Undefined `G_ST` at total shared fixation is treated as zero for
-  convergence purposes rather than blocking it.
+- A run watching only `G_ST` at total shared fixation (every locus
+  permanently monomorphic) never fabricates stability from a value that
+  does not exist; its trailing window never fills, so the run falls back
+  to `max_generations` rather than reporting a spurious immediate
+  "converged". A locus that is monomorphic alongside a polymorphic one
+  drops out of that generation's `G_ST` average instead — see the
+  differentiation-statistics golden-value tests (§6) for the same rule
+  applied to the final report.
 - **Several watched statistics** (design §9): the single-statistic report
   shape is the several-statistic combinator's one-element special case
   (`converged_on` is a bare string, not a one-item list); watching several

@@ -260,7 +260,7 @@ def report_for_state(
             else list(params.convergence_statistic)
         ),
         "reason": reason,
-        "G_ST": _mean_optional(tuple(report["G_ST"] for report in locus_reports)),
+        "G_ST": _mean_g_st_across_loci(locus_reports),
         "D": _mean(tuple(report["D"] for report in locus_reports)),
         "E_ST": _mean(tuple(report["E_ST"] for report in locus_reports)),
         "K_ST": _mean(tuple(report["K_ST"] for report in locus_reports)),
@@ -511,24 +511,32 @@ def _convergence_values(
     state: ModelState,
     params: SimulationParams,
 ) -> dict[str, float]:
-    """Return every watched statistic's value, each averaged across loci.
+    """Return every watched, currently-defined statistic's value, averaged across loci.
 
     Computes each locus's full differentiation report exactly once and reads
     every watched statistic from that same cached set of reports, rather than
     recomputing per-locus statistics once per watched name — the several-
     statistic case (design §9) costs one extra dictionary lookup per
     statistic per locus, not another pass over the state.
+
+    A watched statistic that is undefined this generation (only ``G_ST``
+    can be, and only when every tracked locus is currently monomorphic —
+    see `_mean_g_st_across_loci`) is omitted from the returned mapping
+    rather than represented by a substitute value; `ConvergenceMonitor`
+    treats an omitted statistic as simply not advancing its own trailing
+    window this generation, which is honest about there being no
+    observation to add, rather than fabricating one.
     """
     locus_reports = tuple(
         _statistics_for_locus(state, params, locus_index)
         for locus_index in range(state.locus_count)
     )
-    return {
-        statistic: _mean_statistic_across_loci(
-            locus_reports, statistic, state.generation
-        )
-        for statistic in params.convergence_statistics
-    }
+    values: dict[str, float] = {}
+    for statistic in params.convergence_statistics:
+        value = _mean_statistic_across_loci(locus_reports, statistic)
+        if value is not None:
+            values[statistic] = value
+    return values
 
 
 def _replicate_monitor(params: SimulationParams) -> ConvergenceMonitor | None:
@@ -557,44 +565,55 @@ def _replicate_stopping_values(
     result: RunResult,
     statistics: Sequence[str],
 ) -> dict[str, float]:
-    """Return one value per watched statistic for the replicate-batch monitor.
+    """Return each watched statistic's value for this replicate, for the batch monitor.
 
-    Mirrors `_convergence_values`'s own ``G_ST`` substitution (``0.0``
-    when a locus's ``H_T`` is zero) so the internal stopping decision
-    never sees an undefined value. `replicate_summary` computes the
-    *published* interval separately, from only the replicates where a
-    statistic is actually defined, and never substitutes a fabricated
-    value into it — this function decides only when to stop, not what
-    gets reported.
+    A statistic this replicate leaves undefined (only ``G_ST``, and only
+    when every one of this replicate's tracked loci was monomorphic — see
+    `_mean_g_st_across_loci`) is omitted rather than raised or
+    substituted: this replicate simply contributes nothing to that
+    statistic's own stopping-criterion window this round, exactly as
+    `ConvergenceMonitor.record` already treats any statistic missing from
+    its ``value`` mapping. This is deliberately the same rule
+    `replicate_summary` uses for the *published* interval — drop an
+    undefined replicate from that statistic's own sample rather than
+    fabricate a value — so the stopping decision is judged against the
+    same sample the summary will report, never a different one.
     """
     values: dict[str, float] = {}
     for statistic in statistics:
         value = _final_report_statistic(result.report, statistic)
-        if value is None:
-            if statistic == "G_ST" and result.report["H_T"] == 0.0:
-                value = 0.0
-            else:
-                raise ValueError(
-                    f"{statistic} is undefined for replicate {result.run_id!r}"
-                )
-        values[statistic] = value
+        if value is not None:
+            values[statistic] = value
     return values
 
 
 def _mean_statistic_across_loci(
     locus_reports: Sequence[DifferentiationReport],
     statistic: str,
-    generation: int,
-) -> float:
-    """Return one statistic's per-locus reports averaged into a single value."""
+) -> float | None:
+    """Return one statistic's per-locus reports averaged into a single value.
+
+    Only ``G_ST`` can be undefined at a locus — a monomorphic locus's
+    total heterozygosity is zero, leaving nothing to differentiate; every
+    other field in `DifferentiationReport` is always defined for valid
+    input. ``G_ST`` delegates to `_mean_g_st_across_loci`, which drops any
+    undefined locus from the average and returns ``None`` only when every
+    locus is undefined — exactly the rule `report_for_state` uses for the
+    final report, so the within-run convergence watcher's notion of
+    "G_ST this generation" never disagrees with what the report will say.
+    """
+    if statistic == "G_ST":
+        return _mean_g_st_across_loci(locus_reports)
     values: list[float] = []
     for report in locus_reports:
         value = _report_statistic(report, statistic)
         if value is None:
-            if statistic == "G_ST" and report["H_T"] == 0.0:
-                value = 0.0
-            else:
-                raise ValueError(f"{statistic} is undefined at generation {generation}")
+            # Unreachable given DifferentiationReport's own contract
+            # (every field but G_ST is always defined); guarded rather
+            # than asserted so a future statistic that can legitimately
+            # go undefined is forced to update this function, not
+            # silently mis-averaged.
+            raise ValueError(f"{statistic} is unexpectedly undefined")
         values.append(value)
     return _mean(tuple(values))
 
@@ -630,11 +649,26 @@ def _mean(values: Sequence[float]) -> float:
     return math.fsum(values) / len(values)
 
 
-def _mean_optional(values: Sequence[float | None]) -> float | None:
-    """Return the mean when every locus defines the statistic."""
-    if any(value is None for value in values):
+def _mean_g_st_across_loci(
+    locus_reports: Sequence[DifferentiationReport],
+) -> float | None:
+    """Return ``G_ST`` averaged across loci, dropping any locus where it is undefined.
+
+    ``g_st`` is undefined at a locus whose total heterozygosity (``H_T``)
+    is zero — a fully monomorphic locus has nothing to differentiate. Such
+    a locus contributes nothing to the average, rather than a fabricated
+    ``0.0`` (which would understate real differentiation at the other,
+    genuinely polymorphic, loci) or voiding the whole multi-locus average
+    over a single monomorphic locus among several. Returns ``None`` only
+    when *every* locus is undefined, since there is then no defined value
+    left to average — the honest reading of "this run/replicate has no
+    G_ST", matching the rule `fim.engine.replicate_summary` already
+    applies when building the published cross-replicate sample.
+    """
+    defined = [report["G_ST"] for report in locus_reports if report["G_ST"] is not None]
+    if not defined:
         return None
-    return _mean(tuple(value for value in values if value is not None))
+    return _mean(tuple(defined))
 
 
 def _statistics_for_locus(

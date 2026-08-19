@@ -211,8 +211,18 @@ def test_replicate_tolerance_falls_back_to_the_n_replicates_cap() -> None:
     assert len(output) == 3
 
 
-def test_replicate_tolerance_uses_the_generation_layer_g_st_substitution() -> None:
-    """Undefined `G_ST` is substituted for the stop decision, not the report."""
+def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() -> None:
+    """A batch watching only an always-undefined `G_ST` runs to the full cap.
+
+    Regression test for R5: every replicate here is fully monomorphic at
+    its one locus, so `G_ST` is undefined for every one of them and its
+    stopping-criterion window never fills. The batch correctly falls back
+    to the `n_replicates` cap rather than the prior behavior, where
+    substituting `0.0` for every undefined replicate produced a constant
+    zero history that satisfied an exact `replicate_tolerance=0.0`
+    immediately at `replicate_minimum` — a fabricated "convergence" the
+    run's actual (complete lack of) data never supported.
+    """
     params = SimulationParams(
         N=10,
         m=0.0,
@@ -234,7 +244,7 @@ def test_replicate_tolerance_uses_the_generation_layer_g_st_substitution() -> No
     )
     output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
     assert isinstance(output, tuple)
-    assert len(output) == 2
+    assert len(output) == 5
     assert all(result.report["G_ST"] is None for result in output)
     assert "G_ST" not in replicate_summary(output)
 
@@ -427,8 +437,18 @@ def test_naive_manifest_clock_is_rejected(tiny_params: SimulationParams) -> None
         )
 
 
-def test_g_st_convergence_handles_shared_fixation() -> None:
-    """Undefined G_ST at total fixation is treated as zero for convergence."""
+def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
+    """A run whose only watched statistic never becomes defined hits the cap.
+
+    Regression test for R5: `G_ST` is undefined every generation here (the
+    single locus is fixed for the same allele in both demes throughout,
+    since `mu=0.0`), so its trailing window never fills and the criterion
+    can never report stability — there is no data to judge stability
+    from. The run correctly falls back to `max_generations` rather than
+    reporting a spurious immediate "convergence" from a padded history of
+    fabricated zeros, which is what the prior `0.0`-substitution behavior
+    produced regardless of what the run was actually doing.
+    """
     params = SimulationParams(
         N=10,
         m=0.0,
@@ -454,8 +474,92 @@ def test_g_st_convergence_handles_shared_fixation() -> None:
         clock=_clock,
     )
     assert isinstance(result, RunResult)
-    assert result.report["converged"]
+    assert not result.report["converged"]
+    assert result.report["reason"] == "hit the cap"
+    assert result.report["generation"] == 2
     assert result.report["G_ST"] is None
+    assert result.convergence_histories["G_ST"] == ()
+
+
+def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
+    """A replicate with one monomorphic and one polymorphic locus never crashes.
+
+    Regression test for R5's headline defect: with two loci, one fixed
+    for the same allele in every deme (undefined at that locus alone) and
+    one polymorphic, the *replicate's* G_ST used to come out `None` (the
+    old rule voided the whole multi-locus average on any single
+    undefined locus) while the replicate's averaged H_T was still
+    nonzero (the polymorphic locus's own contribution) — so the adaptive
+    replicate-batch monitor's old "rescue only a fully-`H_T == 0`
+    replicate" check missed this case and raised
+    "G_ST is undefined for replicate ...". `G_ST` is now defined here (it
+    drops the one undefined locus and averages the other), so this
+    reaches neither the old crash nor even the drop path — it simply
+    works, end to end through the adaptive stopping monitor.
+    """
+    params = SimulationParams(
+        N=10,
+        m=0.0,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=(LocusSpec(1, 100), LocusSpec(2, 100)),
+        convergence_statistic="G_ST",
+        max_generations=1,
+        n_replicates=3,
+        replicate_minimum=2,
+        replicate_tolerance=1000.0,
+        initial_frequencies=(
+            ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
+            ({AlleleId(0): 1.0}, {AlleleId(0): 0.5, AlleleId(1): 0.5}),
+        ),
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params)
+    assert isinstance(output, tuple)
+    assert len(output) == 2
+    for result in output:
+        assert result.report["G_ST"] is not None
+        assert result.report["H_T"] > 0.0
+
+
+def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None:
+    """A replicate-batch monitor never raises or fabricates a value for G_ST.
+
+    Every replicate here is fully monomorphic at its one locus (`G_ST`
+    undefined for all three), so its trailing window never fills and the
+    batch runs to the full `n_replicates` cap rather than ever declaring
+    a fabricated early stop — mirroring
+    `test_g_st_convergence_falls_back_to_the_cap_at_total_fixation`'s
+    single-run case, but through the replicate-batch monitor instead of
+    the within-run one. `replicate_summary` then omits `G_ST` entirely
+    (zero defined samples), while every always-defined statistic is
+    unaffected.
+    """
+    params = SimulationParams(
+        N=10,
+        m=0.0,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=(LocusSpec(1, 100),),
+        convergence_statistic="G_ST",
+        max_generations=1,
+        n_replicates=3,
+        replicate_minimum=2,
+        replicate_tolerance=1000.0,
+        initial_frequencies=(
+            ({AlleleId(0): 1.0},),
+            ({AlleleId(0): 1.0},),
+        ),
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params)
+    assert isinstance(output, tuple)
+    assert len(output) == 3
+    assert all(result.report["G_ST"] is None for result in output)
+
+    summary = replicate_summary(output)
+    assert "G_ST" not in summary
+    assert summary["D"]["sample_count"] == 3
 
 
 def test_single_statistic_report_shape_is_the_multi_statistic_special_case(
@@ -714,6 +818,59 @@ def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None:
     )
     assert report["run_id"] == "run-a"
     assert report["G_ST"] is not None
+
+
+def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average() -> None:
+    """`G_ST` averages only the loci where it is defined, not zero-filled.
+
+    Regression test for R5: one locus fixed for the same allele in every
+    deme (`G_ST` undefined there — `H_T == 0`) alongside one polymorphic
+    locus. The reported `G_ST` must equal the polymorphic locus's own
+    value exactly, not that value averaged against a fabricated `0.0` for
+    the undefined locus (which would understate real differentiation),
+    and not `None` (which would discard the polymorphic locus's real
+    signal over one unrelated monomorphic locus).
+    """
+    loci = (LocusSpec(1, 100), LocusSpec(2, 100))
+    state = ModelState(
+        loci=loci,
+        frequencies=(
+            (
+                {AlleleId(0): 1.0},
+                {AlleleId(0): 0.7, AlleleId(1): 0.3},
+            ),
+            (
+                {AlleleId(0): 1.0},
+                {AlleleId(0): 0.2, AlleleId(1): 0.8},
+            ),
+        ),
+    )
+    params = SimulationParams(
+        N=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=loci,
+    )
+    report = report_for_state(
+        state,
+        params,
+        run_id="run-a",
+        converged=False,
+        reason="test",
+    )
+    polymorphic_locus_only = report_for_state(
+        ModelState(
+            loci=(loci[1],),
+            frequencies=tuple((deme[1],) for deme in state.frequencies),
+        ),
+        SimulationParams(N=10, m=0.1, mu=0.0, d=2, seed=7, loci=(loci[1],)),
+        run_id="run-b",
+        converged=False,
+        reason="test",
+    )
+    assert report["G_ST"] == pytest.approx(polymorphic_locus_only["G_ST"])
 
 
 def test_locus_length_does_not_affect_the_report() -> None:

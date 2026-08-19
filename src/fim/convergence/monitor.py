@@ -43,6 +43,14 @@ class ConvergenceMonitor:
     one of them (``"any"``). With exactly one statistic, ``all`` and
     ``any`` of a single Boolean are the same value, so the combinator is a
     genuine no-op in that case rather than a separately tested path.
+
+    A statistic can be legitimately undefined on a given round (see
+    `record`'s ``value`` argument): rather than raise or invent a
+    substitute number, that round simply contributes nothing to that
+    statistic's own history, so its stability is judged once enough
+    *defined* rounds have accumulated — never sooner, from a padded
+    history, and never blocked by a round where a different statistic
+    happened to have no value.
     """
 
     def __init__(
@@ -124,7 +132,16 @@ class ConvergenceMonitor:
             generation: Non-negative generation number.
             value: The watched statistic's finite value. A bare float is
                 only accepted while watching exactly one statistic; with
-                several, pass a mapping covering every configured name.
+                several, pass a mapping. The mapping need not cover every
+                configured name: a statistic it omits simply is not
+                appended to that statistic's own history this round —
+                the caller's way of reporting "this statistic has no
+                defined value for this round" without fabricating one or
+                blocking the round's other, defined statistics. Every
+                key the mapping *does* include, however, must name a
+                configured statistic; an unrecognized name is far more
+                likely a typo than an intentional omission, so it still
+                raises.
 
         Returns:
             The updated outcome.
@@ -182,11 +199,22 @@ class ConvergenceMonitor:
         self,
         value: float | Mapping[str, float],
     ) -> dict[str, float]:
-        """Normalize a bare float or a per-statistic mapping into full form."""
+        """Normalize a bare float or a per-statistic mapping into full form.
+
+        A mapping may be a partial or even empty subset of the configured
+        statistics (see `record`'s ``value`` argument) — every key it
+        includes is validated against the configured names, but no key is
+        required to be present.
+        """
         if isinstance(value, Mapping):
-            if set(value) != set(self._statistics):
+            unknown = set(value) - set(self._statistics)
+            if unknown:
                 expected = ", ".join(sorted(self._statistics))
-                raise ValueError(f"record() values must cover exactly: {expected}")
+                names = ", ".join(sorted(unknown))
+                raise ValueError(
+                    f"record() values named unconfigured statistic(s) "
+                    f"{names}; configured: {expected}"
+                )
             return dict(value)
         if len(self._statistics) != 1:
             raise ValueError(
