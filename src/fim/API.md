@@ -1782,6 +1782,17 @@ Yield complete rows matching ``run_id``.
 A final partial line from an interrupted append is ignored. Any malformed
 complete line is reported as corruption.
 
+This tolerance is a deliberate scope boundary, not a completeness
+guarantee: this method alone cannot tell an interrupted-append
+trailing partial line from a trajectory that is simply short a
+generation for some other reason, since it has no manifest to
+compare against. Detecting that a trajectory doesn't have as
+many generations as it claims to is a manifest/CLI-level
+guarantee (`fim.cli._verify_trajectory_integrity`'s SHA-256
+digest check, and `fim.cli._command_stats`'s generation-count
+cross-check against `RunManifest.generation_count`), not one
+this store makes on its own.
+
 <a id="fim.persistence.manifest"></a>
 
 # fim.persistence.manifest
