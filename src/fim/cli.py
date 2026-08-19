@@ -7,6 +7,7 @@ import contextlib
 import functools
 import json
 import os
+import pickle
 import shutil
 import sys
 import tempfile
@@ -106,7 +107,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _command_stats(arguments)
         if arguments.command == "update":
             return _command_update(arguments, parser)
-    except (OSError, RuntimeError, ValueError, yaml.YAMLError) as error:
+    except (
+        ArithmeticError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+        pickle.PicklingError,
+        yaml.YAMLError,
+    ) as error:
         print(f"fim: error: {error}", file=sys.stderr)
         return 2
     parser.error("a command is required")

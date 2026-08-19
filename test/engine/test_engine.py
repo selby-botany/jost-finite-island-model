@@ -390,6 +390,45 @@ def test_max_workers_rejects_a_non_positive_count() -> None:
         fim(params.N, params.m, params.mu, params.d, params=params, max_workers=0)
 
 
+def test_max_workers_rejects_an_unpicklable_clock() -> None:
+    """A closure `clock` fails at the call site, not deep in worker spawn.
+
+    Regression test for R24: the prior behavior let an unpicklable
+    `clock` reach `ProcessPoolExecutor`, where it failed as raw pickling
+    noise from inside worker-process spawn machinery.
+    """
+    params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
+    with pytest.raises(ValueError, match="clock must be picklable"):
+        fim(
+            params.N,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            max_workers=2,
+            clock=lambda: _clock(),
+        )
+
+
+def test_max_workers_rejects_an_unpicklable_store_factory() -> None:
+    """A closure `store_factory` fails at the call site, not in a worker.
+
+    Regression test for R24, the `store_factory` counterpart to
+    `test_max_workers_rejects_an_unpicklable_clock` above.
+    """
+    params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
+    with pytest.raises(ValueError, match="store_factory must be picklable"):
+        fim(
+            params.N,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            max_workers=2,
+            store_factory=lambda _run_id: InMemoryTrajectoryStore(),
+        )
+
+
 def test_max_workers_respects_adaptive_stopping_in_batches() -> None:
     """Batched parallel replicates still honor `replicate_tolerance`.
 

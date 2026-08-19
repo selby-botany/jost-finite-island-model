@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import pickle
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
@@ -165,6 +166,9 @@ def fim(
                 "cannot be shared across worker processes — pass "
                 "store_factory instead"
             )
+        _require_picklable("clock", run_clock)
+        if store_factory is not None:
+            _require_picklable("store_factory", store_factory)
         return _run_batch_parallel(
             params,
             max_workers,
@@ -343,6 +347,33 @@ def _build_finite_allele_spaces(
         )
         for locus_index, locus in enumerate(params.loci)
     }
+
+
+def _require_picklable(name: str, value: object) -> None:
+    """Reject an unpicklable `max_workers` argument before any worker spawns.
+
+    `ProcessPoolExecutor` ships `clock` and `store_factory` across a
+    process boundary by pickling them; a closure or lambda fails that
+    silently deep inside worker-process spawn machinery, surfacing as
+    raw pickling noise with no indication of which argument was at
+    fault (R24). Checking here instead fails at the call site, before a
+    single worker process is started, naming the offending argument.
+
+    Args:
+        name: The public keyword argument's name, for the error message.
+        value: The callable to verify.
+
+    Raises:
+        ValueError: If `value` cannot be pickled.
+    """
+    try:
+        pickle.dumps(value)
+    except (AttributeError, pickle.PicklingError, TypeError) as error:
+        raise ValueError(
+            f"{name} must be picklable to cross a max_workers process "
+            "boundary — a module-level function, or functools.partial "
+            f"over one, never a closure or lambda: {error}"
+        ) from error
 
 
 def _run_batch_parallel(
