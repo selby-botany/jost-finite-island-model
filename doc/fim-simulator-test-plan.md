@@ -661,6 +661,29 @@ essentially any seed, and the fixed seed only makes the single realization
 reproducible. This is the operational meaning of "deterministic given the
 commit" for a stochastic check.
 
+**Where step 2's standard error is empirical, not closed-form (R18
+remediation).** The three `test/validation/test_simulator_equilibrium.py`
+equilibrium tests (§7.3, §7.4) use a `k·sigma/sqrt(R)` band whose `sigma`
+has no known closed form (see that file's module docstring): the
+per-replicate `G_ST`/`D` estimate is a ratio-of-means statistic sampled
+from a multi-generation stochastic recursion, and a closed-form variance
+would need delta-method propagation through that recursion's higher
+moments, not currently derived. `sigma` is instead set from a **versioned
+empirical characterization pass** — `dev/bin/calibrate-statistical-bands`,
+a maintainer tool deliberately not wired into `build` or `ci.yml` (a
+characterization pass is itself stochastic by design, so it stays out of
+the deterministic PR gate) — whose raw per-replicate output, seeds, and
+environment fingerprint are retained in the
+[calibration evidence document](statistical-calibration-evidence.md), not
+only summarized in a code comment. This replaces an earlier, unretained
+characterization pass whose
+program, seeds, and environment were never recorded; re-running the new
+script against the current deployed constants found two (`_SIGMA_PART_VI_D`,
+`_SIGMA_DEAR_NOLAN_LOW_G`) narrower than a larger, retained sample supports,
+and they were widened accordingly — the assertion tests continue to pass
+at their existing fixed seeds either way, since a wider band only relaxes
+the check.
+
 ### 7.2 Drift variance
 
 Home: `test/model/test_operators.py`. A single-locus, single-deme drift
@@ -900,6 +923,15 @@ no wall-clock, fully reproducible.
   smaller than the full step's) — so the expensive `slow`/`statistical`
   scenario suite cannot silently be re-folded back into one opaque,
   unbudgeted step.
+- **Statistical calibration provenance** (`test_calibration_provenance.py`,
+  R18 remediation, §7.1): `dev/bin/calibrate-statistical-bands` is checked
+  to appear in `build` only inside the lint stage's static-analysis
+  invocations, never as an executed step, and nowhere in `ci.yml` — the
+  structural guarantee behind "characterization stays out of the
+  deterministic PR gate." `doc/statistical-calibration-evidence.md` is
+  checked to actually carry the retained evidence (every scenario's
+  section, seed, replicate count, empirical sigma, environment, and the
+  generator metadata block), not merely exist as an empty placeholder.
 - **Repository-local Python tool resolution** (`test_python_wrappers.py`):
   `bin/ruff` and `build`'s lint step both work correctly in an environment
   with no activated virtual environment on `PATH`, confirming the

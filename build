@@ -128,9 +128,11 @@ fi
 
 if "${run_lint}"; then
     run "${python}" -m ruff check src test \
-        dev/bin/check-doc-links dev/bin/extract-release-notes
+        dev/bin/check-doc-links dev/bin/extract-release-notes \
+        dev/bin/calibrate-statistical-bands
     run "${python}" -m ruff format --check src test \
-        dev/bin/check-doc-links dev/bin/extract-release-notes
+        dev/bin/check-doc-links dev/bin/extract-release-notes \
+        dev/bin/calibrate-statistical-bands
 fi
 
 # No positional arguments: `[tool.mypy]` in pyproject.toml already sets

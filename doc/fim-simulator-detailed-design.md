@@ -195,6 +195,8 @@ jost-finite-island-model/
 │   │   ├── pre-push               # fast static gates against the pushed commits
 │   │   └── README.md              # hook set + install instructions
 │   └── bin/
+│       ├── calibrate-statistical-bands  # versioned equilibrium-test band
+│       │                           # characterization (R18, §9)
 │       ├── check-doc-links        # validates Markdown links + anchors (§8.3)
 │       ├── extract-release-notes  # one CHANGELOG.md section → release notes (§5.4)
 │       ├── generate-api-docs      # docstrings → src/fim/API.md (pydoc-markdown)
@@ -208,6 +210,8 @@ jost-finite-island-model/
 │   ├── usage.md                   # user-facing command + config reference
 │   ├── configuration.md           # the P-bag schema, every key, every default
 │   ├── developer.md               # architecture-for-maintainers + how to extend
+│   ├── statistical-calibration-evidence.md  # retained calibration-pass
+│   │                               # output (R18, §9)
 │   └── img/                       # design mockups and release screenshots
 ├── include/
 │   └── dot-bashrc                 # puts bin/ on PATH for the current shell
@@ -739,6 +743,18 @@ thresholds, and its own place in CI separate from the deterministic gate
 above) rather than a mechanical ninth entry in the list — tracked as a
 backlog item rather than adopted silently as a side effect of a later
 pass.
+
+**Calibration provenance (R18 remediation).** The Statistical/asymptotic
+layer's equilibrium tests band against a per-replicate spread with no
+known closed form (test plan §7.1). That spread comes from
+`dev/bin/calibrate-statistical-bands`, a versioned characterization
+program, deliberately not wired into `build` or `ci.yml` — a
+characterization pass is itself stochastic by design, so it stays out of
+the deterministic gate the rest of this section describes. Its raw
+output (seeds, per-replicate values, environment fingerprint) is retained
+in `doc/statistical-calibration-evidence.md` rather than only summarized
+in a code comment, replacing an earlier, unretained characterization pass
+whose program and evidence were never recorded.
 
 ## 10. Risks and mitigations
 

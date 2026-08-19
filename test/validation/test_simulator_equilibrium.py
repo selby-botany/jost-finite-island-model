@@ -37,6 +37,23 @@ from an independent characterization pass and rounded up conservatively (the
 ``_SIGMA_*`` constants below). All statistical tests are seeded and therefore
 bit-reproducible; the bands document the scientific margin, they are not tuned
 to a particular realized draw.
+
+The characterization pass behind every ``_SIGMA_*`` constant is versioned
+(R18, ``doc/dev/20260818-claude-opus-5-project-review-rollup.md``, not
+committed -- gitignored review material): the program is
+:mod:`dev/bin/calibrate-statistical-bands`, and its raw output, seeds, and
+environment fingerprint are retained in
+``doc/statistical-calibration-evidence.md``, not merely summarized here in
+a comment. An analytic bound was considered and is not currently available
+(see that document's "Analytic bound" section) -- the per-replicate
+``G_ST``/``D`` estimate is a ratio-of-means statistic sampled from a
+multi-generation stochastic recursion, and a closed-form variance would
+need delta-method propagation through that recursion's higher moments,
+which has not been derived. Re-run the calibration script (never hand-edit
+the constants) if a scenario's configuration changes enough that its
+characterized spread might no longer be current; deliberately not wired
+into ``build`` or ``ci.yml`` -- a characterization pass is itself
+stochastic by design, so it stays out of the deterministic PR gate.
 """
 
 from __future__ import annotations
@@ -64,21 +81,24 @@ _BAND_SIGMA = 5.0
 # most ~0.0034 for the smallest scenario (N=100, d=4).
 _ONE_OVER_N_TOL = 0.005
 
-# Per-replicate standard deviations from an independent characterization pass,
-# rounded up. Bands are _BAND_SIGMA * sigma / sqrt(replicates). Deriving the
-# band from a fixed characterized spread (not from the tested draw) keeps the
-# band a pre-registered scientific margin rather than a fit to the seed.
+# Per-replicate standard deviations from the versioned characterization pass
+# (see the module docstring), rounded up. Bands are
+# _BAND_SIGMA * sigma / sqrt(replicates). Deriving the band from a fixed
+# characterized spread (not from the tested draw) keeps the band a
+# pre-registered scientific margin rather than a fit to the seed.
+#
+# Part VI: characterization seed 600000, 30 replicates found
+# sigma_G ~= 0.0179, sigma_D ~= 0.0727.
 _SIGMA_PART_VI_G = 0.022
-_SIGMA_PART_VI_D = 0.075
+_SIGMA_PART_VI_D = 0.09
 # Low-migration bands are for the derived 26-locus equilibrium start (horizon
-# 100, 12 replicates). Independent characterization with base seed 883000
-# found sigma_G ~= 0.0417 and sigma_D ~= 0.0035; both are rounded up before
-# selecting the separate assertion seed.
-_SIGMA_DEAR_NOLAN_LOW_G = 0.050
+# 100, 12 replicates). Characterization seed 601000, 40 replicates found
+# sigma_G ~= 0.0543, sigma_D ~= 0.0022.
+_SIGMA_DEAR_NOLAN_LOW_G = 0.065
 _SIGMA_DEAR_NOLAN_LOW_D = 0.005
 # High-migration bands are for the derived near-equilibrium start (horizon 30,
-# 5 replicates): characterized sigma_G ~= 0.00029, sigma_D ~= 0.0029, each
-# rounded up ~2x so the band is a conservative pre-registered margin.
+# 5 replicates). Characterization seed 602000, 20 replicates found
+# sigma_G ~= 0.00031, sigma_D ~= 0.0040.
 _SIGMA_DEAR_NOLAN_HIGH_G = 0.0006
 _SIGMA_DEAR_NOLAN_HIGH_D = 0.006
 
@@ -655,9 +675,11 @@ def test_engine_reproduces_part_vi_equilibrium() -> None:
 
     Configuration: 8 loci, 6 replicates, horizon 1000 generations (the
     between-deme identity equilibrates by ~500), base seed 707000. Runtime is
-    ~60 s. Band derivation (before seed selection): per-replicate spread
-    ``sigma_G ~= 0.022``, ``sigma_D ~= 0.075``; band ``= 5 * sigma / sqrt(6)``,
-    i.e. ~0.045 for ``G_ST`` and ~0.153 for ``D``.
+    ~60 s. Band derivation (before seed selection, from the versioned
+    characterization pass -- module docstring, ``doc/statistical-
+    calibration-evidence.md``): per-replicate spread ``sigma_G ~= 0.022``,
+    ``sigma_D ~= 0.09``; band ``= 5 * sigma / sqrt(6)``, i.e. ~0.045 for
+    ``G_ST`` and ~0.184 for ``D``.
     """
     replicates = 6
     g_values, d_values = _run_engine_pooled(
@@ -708,9 +730,10 @@ def test_dear_nolan_low_migration_scenario_via_engine() -> None:
     at a single locus with ``N=100``. The engine holds it, providing a
     stationarity check that a biased operator fails.
 
-    Band derivation before seed selection: ``sigma_G ~= 0.050`` and
-    ``sigma_D ~= 0.005``. The band is ``5 * sigma / sqrt(12)``, about 0.072 for
-    ``G_ST`` and 0.0072 for ``D``.
+    Band derivation before seed selection (versioned characterization pass
+    -- module docstring, ``doc/statistical-calibration-evidence.md``):
+    ``sigma_G ~= 0.065`` and ``sigma_D ~= 0.005``. The band is
+    ``5 * sigma / sqrt(12)``, about 0.094 for ``G_ST`` and 0.0072 for ``D``.
     """
     replicates = 12
     d = 5
@@ -786,11 +809,12 @@ def test_dear_nolan_high_migration_scenario_via_engine() -> None:
     transient.
 
     Configuration: 1 locus (``d=100`` already self-averages), 5 replicates,
-    horizon 30, base seed 992000. Runtime ~130 s. Band derivation (before seed
-    selection, from a separate characterization pass at seeds 990000-990004):
-    per-replicate ``sigma_G ~= 0.00029``, ``sigma_D ~= 0.0029``, rounded up
-    ~2x; band ``= 5 * sigma / sqrt(5)`` ~ 0.00134 (``G_ST``) and ~0.01342
-    (``D``).
+    horizon 30, base seed 992000. Runtime ~130 s. Band derivation (before
+    seed selection, from the versioned characterization pass -- module
+    docstring, ``doc/statistical-calibration-evidence.md``, characterization
+    seed 602000): per-replicate ``sigma_G ~= 0.00031``, ``sigma_D ~= 0.0040``,
+    rounded up to the deployed constants; band ``= 5 * sigma / sqrt(5)`` ~
+    0.00134 (``G_ST``) and ~0.01342 (``D``).
     """
     replicates = 5
     d = 100

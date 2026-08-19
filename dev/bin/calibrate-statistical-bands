@@ -1,0 +1,381 @@
+#!/usr/bin/env python3
+"""Characterize the per-replicate spread behind the equilibrium test bands.
+
+`test/validation/test_simulator_equilibrium.py` asserts three engine-level
+scientific tests (Part VI equilibrium, Dear-Nolan low migration, Dear-Nolan
+high migration) against a band of the form ``k * sigma / sqrt(replicates)``,
+where ``sigma`` is a per-replicate standard deviation. Deriving that
+``sigma`` analytically would require propagating variance through a
+multi-generation Migrate -> Mutate -> Drift recursion's higher moments (a
+delta-method expansion of a ratio-of-means statistic sampled from nested
+binomial/multinomial draws) -- not currently derived, and out of scope for
+this program; see the "Analytic bound" note in this script's report output.
+Absent that, the bands are set from an *empirical characterization pass*:
+run each scenario's exact configuration many times (many more replicates
+than the assertion test itself uses) with a seed range distinct from the
+assertion test's own seed, and take the sample standard deviation of the
+per-replicate ``G_ST``/``D`` estimates.
+
+This was previously done ad hoc -- an unretained, unversioned pass whose
+program, seeds, raw output, and environment were never recorded (R18,
+`doc/dev/20260818-claude-opus-5-project-review-rollup.md`, not committed --
+gitignored review material). This script versions that program; running it
+and committing its `--output` alongside a `CHANGELOG.md` entry versions the
+evidence.
+
+Deliberately NOT wired into `build` or `ci.yml`: this is a maintainer tool
+run manually, on demand, when a scenario's configuration changes enough
+that its previously characterized `_SIGMA_*` constants might no longer be
+a conservative bound -- not a step in the deterministic PR gate, which
+must stay a pure function of the commit (CLAUDE.md). A characterization
+pass is itself stochastic by design (that is the thing it measures); its
+raw output is retained precisely so a future maintainer never has to take
+today's numbers on faith.
+
+Usage:
+    dev/bin/calibrate-statistical-bands \\
+        --replicates-part-vi 30 --replicates-dear-nolan-low 40 \\
+        --replicates-dear-nolan-high 20 \\
+        --output doc/statistical-calibration-evidence.md
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import math
+import platform
+import statistics
+import sys
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from importlib.metadata import version as installed_version
+from pathlib import Path
+from types import ModuleType
+
+ROOT = Path(__file__).resolve().parents[2]
+SCENARIO_MODULE_PATH = ROOT / "test" / "validation" / "test_simulator_equilibrium.py"
+
+# Characterization seeds are disjoint from every assertion test's own seed
+# (707000, 884000, 992000) so a characterization run can never coincide with,
+# or be mistaken for, the specific realization an assertion test asserts
+# against.
+_DEFAULT_SEED_PART_VI = 600000
+_DEFAULT_SEED_DEAR_NOLAN_LOW = 601000
+_DEFAULT_SEED_DEAR_NOLAN_HIGH = 602000
+
+
+@dataclass(frozen=True)
+class CharacterizationResult:
+    """One scenario's empirical per-replicate spread."""
+
+    name: str
+    seed: int
+    replicates: int
+    elapsed_seconds: float
+    g_values: tuple[float, ...]
+    d_values: tuple[float, ...]
+
+    @property
+    def sigma_g(self) -> float:
+        """Sample standard deviation of the per-replicate `G_ST` draws."""
+        return statistics.stdev(self.g_values)
+
+    @property
+    def sigma_d(self) -> float:
+        """Sample standard deviation of the per-replicate `D` draws."""
+        return statistics.stdev(self.d_values)
+
+
+def _load_scenario_module() -> ModuleType:
+    """Import `test_simulator_equilibrium.py` by file path.
+
+    Loaded directly from its path -- not `import test.validation....` --
+    so this script runs standalone, without pytest's rootdir-based
+    `sys.path` setup, and is guaranteed to run the *exact* scenario
+    construction the assertion tests use rather than a hand-copied,
+    driftable duplicate of it.
+
+    Returns:
+        The loaded module, exposing `_run_engine_pooled`,
+        `_identity_fixed_point`, `_dn1_equilibrium_start`, and
+        `_dn2_equilibrium_start`.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "fim_equilibrium_test_scenarios", SCENARIO_MODULE_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load test module at {SCENARIO_MODULE_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _characterize_part_vi(
+    module: ModuleType, *, seed: int, replicates: int
+) -> CharacterizationResult:
+    """Characterize the moderate-migration Part VI scenario.
+
+    Same configuration as `test_engine_reproduces_part_vi_equilibrium`
+    (`N=100, m=0.01, mu=0.005, d=4`, 8 loci, horizon 1000).
+    """
+    started = time.monotonic()
+    g_values, d_values = module._run_engine_pooled(
+        population_size=100,
+        m=0.01,
+        mu=0.005,
+        d=4,
+        n_loci=8,
+        horizon=1000,
+        replicates=replicates,
+        seed=seed,
+    )
+    elapsed = time.monotonic() - started
+    return CharacterizationResult(
+        "part_vi", seed, replicates, elapsed, tuple(g_values), tuple(d_values)
+    )
+
+
+def _characterize_dear_nolan_low(
+    module: ModuleType, *, seed: int, replicates: int
+) -> CharacterizationResult:
+    """Characterize the low-migration Dear-Nolan scenario.
+
+    Same configuration as `test_dear_nolan_low_migration_scenario_via_engine`
+    (`N=100, d=5, m=0.0001, mu=0.000001`, derived multi-locus equilibrium
+    start, horizon 100).
+    """
+    d = 5
+    within_star, between_star = module._identity_fixed_point(
+        population_size=100, m=0.0001, mu=0.000001, d=d
+    )
+    equilibrium_start = module._dn1_equilibrium_start(
+        within_fixed_point=within_star, between_fixed_point=between_star, d=d
+    )
+    n_loci = len(equilibrium_start[0])
+    started = time.monotonic()
+    g_values, d_values = module._run_engine_pooled(
+        population_size=100,
+        m=0.0001,
+        mu=0.000001,
+        d=d,
+        n_loci=n_loci,
+        horizon=100,
+        replicates=replicates,
+        seed=seed,
+        initial_frequencies=equilibrium_start,
+    )
+    elapsed = time.monotonic() - started
+    return CharacterizationResult(
+        "dear_nolan_low", seed, replicates, elapsed, tuple(g_values), tuple(d_values)
+    )
+
+
+def _characterize_dear_nolan_high(
+    module: ModuleType, *, seed: int, replicates: int
+) -> CharacterizationResult:
+    """Characterize the high-migration Dear-Nolan scenario.
+
+    Same configuration as
+    `test_dear_nolan_high_migration_scenario_via_engine` (`N=2000, d=100,
+    m=0.01, mu=0.001`, derived near-equilibrium single-locus start,
+    horizon 30).
+    """
+    d = 100
+    within_star, between_star = module._identity_fixed_point(
+        population_size=2000, m=0.01, mu=0.001, d=d
+    )
+    equilibrium_start = module._dn2_equilibrium_start(
+        within_fixed_point=within_star,
+        between_fixed_point=between_star,
+        d=d,
+        shared_count=41,
+    )
+    started = time.monotonic()
+    g_values, d_values = module._run_engine_pooled(
+        population_size=2000,
+        m=0.01,
+        mu=0.001,
+        d=d,
+        n_loci=1,
+        horizon=30,
+        replicates=replicates,
+        seed=seed,
+        initial_frequencies=equilibrium_start,
+    )
+    elapsed = time.monotonic() - started
+    return CharacterizationResult(
+        "dear_nolan_high", seed, replicates, elapsed, tuple(g_values), tuple(d_values)
+    )
+
+
+def _environment_fingerprint() -> dict[str, str]:
+    """Return the interpreter/platform/package versions this run used."""
+    fingerprint = {
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+    }
+    for package in ("numpy", "matplotlib"):
+        try:
+            fingerprint[f"{package}_version"] = installed_version(package)
+        except Exception:  # best-effort: an environment fingerprint, not a gate
+            fingerprint[f"{package}_version"] = "unknown"
+    return fingerprint
+
+
+def _recommend_sigma(sigma: float) -> float:
+    """Round a characterized sigma up to a conservative, human-set constant.
+
+    Rounds up to two significant figures and adds ~20% headroom, matching
+    the "rounded up" practice the assertion test's own comments already
+    described before this script existed -- codified here rather than
+    left to be re-derived by hand each time.
+    """
+    if sigma <= 0.0:
+        return 0.0
+    magnitude = 10.0 ** math.floor(math.log10(sigma))
+    padded = sigma * 1.2
+    return math.ceil(padded / magnitude * 100.0) / 100.0 * magnitude
+
+
+def _render_report(
+    results: list[CharacterizationResult], fingerprint: dict[str, str]
+) -> str:
+    """Render the full evidence report as Markdown."""
+    lines = [
+        "# Statistical calibration evidence",
+        "",
+        "Generated by `dev/bin/calibrate-statistical-bands`. Raw output from",
+        "an empirical characterization pass behind the `_SIGMA_*` band",
+        "constants in `test/validation/test_simulator_equilibrium.py` (R18",
+        "remediation). Regenerate with the same script if a scenario's",
+        "configuration changes; do not hand-edit the numbers below.",
+        "",
+        "## Environment",
+        "",
+    ]
+    for key, value in fingerprint.items():
+        lines.append(f"- `{key}`: {value}")
+    lines.append("")
+    lines.append(
+        f"- `fim` version: {(ROOT / 'version.txt').read_text(encoding='utf-8').strip()}"
+    )
+    lines.append("")
+    lines.append("## Analytic bound")
+    lines.append("")
+    lines.append(
+        "Not currently available. The per-replicate `G_ST`/`D` estimate is a\n"
+        "ratio-of-means statistic over heterozygosities sampled from a\n"
+        "multi-generation Migrate -> Mutate -> Drift recursion; a closed-form\n"
+        "variance would need delta-method propagation through that\n"
+        "recursion's higher moments, which has not been derived. Empirical\n"
+        "characterization is used instead, per this document."
+    )
+    lines.append("")
+    lines.append("## Scenarios")
+    lines.append("")
+    for result in results:
+        recommended_g = _recommend_sigma(result.sigma_g)
+        recommended_d = _recommend_sigma(result.sigma_d)
+        lines.append(f"### {result.name}")
+        lines.append("")
+        lines.append(f"- Characterization seed: `{result.seed}`")
+        lines.append(f"- Replicates: `{result.replicates}`")
+        lines.append(f"- Elapsed: `{result.elapsed_seconds:.1f}s`")
+        lines.append(
+            f"- Empirical `sigma_G`: `{result.sigma_g:.6f}` "
+            f"(mean `{statistics.fmean(result.g_values):.6f}`)"
+        )
+        lines.append(
+            f"- Empirical `sigma_D`: `{result.sigma_d:.6f}` "
+            f"(mean `{statistics.fmean(result.d_values):.6f}`)"
+        )
+        lines.append(
+            f"- Recommended `_SIGMA_*_G` (rounded up with ~20% headroom): "
+            f"`{recommended_g}`"
+        )
+        lines.append(
+            f"- Recommended `_SIGMA_*_D` (rounded up with ~20% headroom): "
+            f"`{recommended_d}`"
+        )
+        lines.append("")
+        lines.append("<details><summary>Raw per-replicate values</summary>")
+        lines.append("")
+        lines.append("```text")
+        lines.append(f"G_ST: {list(result.g_values)}")
+        lines.append(f"D:    {list(result.d_values)}")
+        lines.append("```")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+    lines.append("## Metadata")
+    lines.append("")
+    lines.append("```text")
+    lines.append("generator-name: Claude Code")
+    lines.append("generator-version: Claude Sonnet 5")
+    lines.append("generator-model-token: claude-sonnet-5")
+    lines.append("generator-provider: Anthropic")
+    lines.append(f"generation-date: {datetime.now(UTC).date().isoformat()}")
+    lines.append("generator-responsibility: other")
+    lines.append("```")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run every scenario's characterization pass and write the report."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--replicates-part-vi", type=int, default=30, help="default: 30"
+    )
+    parser.add_argument(
+        "--replicates-dear-nolan-low", type=int, default=40, help="default: 40"
+    )
+    parser.add_argument(
+        "--replicates-dear-nolan-high", type=int, default=20, help="default: 20"
+    )
+    parser.add_argument("--seed-part-vi", type=int, default=_DEFAULT_SEED_PART_VI)
+    parser.add_argument(
+        "--seed-dear-nolan-low", type=int, default=_DEFAULT_SEED_DEAR_NOLAN_LOW
+    )
+    parser.add_argument(
+        "--seed-dear-nolan-high", type=int, default=_DEFAULT_SEED_DEAR_NOLAN_HIGH
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="write the Markdown report here (default: print to stdout)",
+    )
+    args = parser.parse_args(argv)
+
+    module = _load_scenario_module()
+    results = [
+        _characterize_part_vi(
+            module, seed=args.seed_part_vi, replicates=args.replicates_part_vi
+        ),
+        _characterize_dear_nolan_low(
+            module,
+            seed=args.seed_dear_nolan_low,
+            replicates=args.replicates_dear_nolan_low,
+        ),
+        _characterize_dear_nolan_high(
+            module,
+            seed=args.seed_dear_nolan_high,
+            replicates=args.replicates_dear_nolan_high,
+        ),
+    ]
+    report = _render_report(results, _environment_fingerprint())
+
+    if args.output is not None:
+        args.output.write_text(report, encoding="utf-8")
+        print(f"calibrate-statistical-bands: wrote {args.output}", file=sys.stderr)
+    else:
+        print(report)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

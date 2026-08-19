@@ -8,6 +8,32 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The `_SIGMA_*` constants that set the pass/fail boundary of the three
+  most important scientific tests (`test/validation/
+  test_simulator_equilibrium.py`) came from an unretained characterization
+  pass — no program, seeds, raw output, or environment fingerprint, only
+  a value and a rough note in a code comment. Added
+  `dev/bin/calibrate-statistical-bands`, a versioned characterization
+  program that runs each scenario's exact configuration (via the assertion
+  test's own scenario-construction functions, loaded by path, so it can
+  never silently drift from what is actually tested) at a distinct seed
+  and a larger replicate count, and writes its raw per-replicate output,
+  seeds, and environment fingerprint to
+  `doc/statistical-calibration-evidence.md`. An analytic bound was
+  considered (the per-replicate `G_ST`/`D` estimate is a ratio-of-means
+  statistic sampled from a multi-generation stochastic recursion; a
+  closed-form variance would need delta-method propagation through that
+  recursion's higher moments, not currently derived) and is documented as
+  not currently available rather than silently skipped. Deliberately not
+  wired into `build` or `ci.yml`: a characterization pass is itself
+  stochastic by design, so it stays out of the deterministic PR gate.
+  Re-running the new script found two deployed constants
+  (`_SIGMA_PART_VI_D`, `_SIGMA_DEAR_NOLAN_LOW_G`) narrower than a larger,
+  retained sample supports; both were widened accordingly (the assertion
+  tests continue to pass at their existing fixed seeds, since a wider band
+  only relaxes the check). Added
+  `test/validation/test_calibration_provenance.py`, checking the script
+  stays out of the gate and the evidence document stays populated.
 - `ci.yml` ran the entire test suite as one `./build --ci` step, so the
   `slow`/`statistical` scenario suite's own wall-clock cost (18m07s at
   review time) was invisible in the Actions run summary — indistinguishable
