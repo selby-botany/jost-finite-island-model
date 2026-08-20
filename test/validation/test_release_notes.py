@@ -183,6 +183,15 @@ def test_verify_tag_job_checks_annotation_and_main_ancestry() -> None:
     was an annotated tag (not a bare `git tag v1.2.3` ref) or that its
     commit was actually reachable from `main` — any ref matching `v*`,
     from any branch, published a release.
+
+    Regression test, second finding: the first live annotated-tag release
+    (`v1.1.0`) failed this exact job even though the tag genuinely was
+    annotated, because `actions/checkout`'s own fetch of the triggering
+    ref force-overwrites the local `refs/tags/<name>` to point directly at
+    `GITHUB_SHA`, stripping the annotation before this step ever runs. The
+    fix re-fetches the tag under a name checkout never touches
+    (`refs/tags/verify-tag-check`) rather than trusting the
+    already-clobbered local ref.
     """
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["verify-tag"]["steps"]
@@ -192,7 +201,10 @@ def test_verify_tag_job_checks_annotation_and_main_ancestry() -> None:
     )
 
     assert checkout_step["with"]["fetch-depth"] == 0
-    assert 'git rev-parse --verify --quiet "${GITHUB_REF_NAME}^{tag}"' in run_steps
+    assert '"+refs/tags/${GITHUB_REF_NAME}:refs/tags/verify-tag-check"' in run_steps
+    assert (
+        'git rev-parse --verify --quiet "refs/tags/verify-tag-check^{tag}"' in run_steps
+    )
     assert 'git merge-base --is-ancestor "${GITHUB_SHA}" origin/main' in run_steps
 
 

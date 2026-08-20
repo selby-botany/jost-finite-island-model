@@ -60,7 +60,21 @@ jobs:
           fetch-depth: 0
       - name: Require an annotated tag that is an ancestor of main
         run: |
-          if ! git rev-parse --verify --quiet "${GITHUB_REF_NAME}^{tag}" >/dev/null; then
+          # actions/checkout's own fetch of the triggering ref deliberately
+          # force-overwrites the local refs/tags/<name> to point directly at
+          # GITHUB_SHA (a guard against the remote tag moving between event
+          # and checkout) -- that strips the annotation, so reading
+          # refs/tags/${GITHUB_REF_NAME} here always looks lightweight,
+          # regardless of what was actually pushed. Confirmed live: v1.1.0
+          # is a genuine annotated tag on the remote (git cat-file -t
+          # reports "tag"), yet this exact step failed with "v1.1.0 is a
+          # lightweight tag" before this fix, because it was reading the
+          # checkout-clobbered local ref instead of the real one. Re-fetch
+          # the tag under a name checkout never touches to see its real,
+          # unclobbered type.
+          git fetch --no-tags --quiet origin \
+              "+refs/tags/${GITHUB_REF_NAME}:refs/tags/verify-tag-check"
+          if ! git rev-parse --verify --quiet "refs/tags/verify-tag-check^{tag}" >/dev/null; then
             echo "::error::${GITHUB_REF_NAME} is a lightweight tag; releases require an annotated tag (git tag -a)" >&2
             exit 1
           fi
