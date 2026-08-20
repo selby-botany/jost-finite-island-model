@@ -6,6 +6,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-19
+
 ### Fixed
 
 - Generation 0 (the Dirichlet-drawn, or explicit `p_0`, initial state) is
