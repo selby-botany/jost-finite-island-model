@@ -17,3 +17,17 @@ jobs:
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3
+        env:
+          # Required unconditionally since gitleaks-action's breaking
+          # change requiring GITHUB_TOKEN to scan pull requests: every
+          # `pull_request`-triggered run failed before scanning even
+          # started (100% of PR runs, confirmed against CI history),
+          # while `push` runs succeeded, because only PR scans call the
+          # GitHub compare-commits API to fetch the diff. `contents: read`
+          # (above) is sufficient scope for that read-only call.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This repo's `permissions:` block is deliberately minimal
+          # (`contents: read` only); PR-comment posting needs
+          # `pull-requests: write`, which is not granted, so disable the
+          # comment feature explicitly rather than let it fail silently.
+          GITLEAKS_ENABLE_COMMENTS: false
