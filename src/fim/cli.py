@@ -47,8 +47,7 @@ from fim.statistics.differentiation import differentiation_q
 from fim.viz.scatter import plot_frequency_scatter
 
 RELEASES_API = (
-    "https://api.github.com/repos/selby-botany/"
-    "jost-finite-island-model/releases/latest"
+    "https://api.github.com/repos/selby-botany/jost-finite-island-model/releases/latest"
 )
 SEMANTIC_VERSION_PARTS = 3
 

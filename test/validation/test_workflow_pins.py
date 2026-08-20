@@ -48,7 +48,7 @@ def test_every_workflow_action_is_pinned_to_a_full_commit_sha() -> None:
             name, _, ref = reference.partition("@")
             assert ref, f"{path.name}: {reference!r} has no @ref at all"
             assert _FULL_COMMIT_SHA.match(ref), (
-                f"{path.name}: {name}@{ref} is not pinned to a full commit " "SHA"
+                f"{path.name}: {name}@{ref} is not pinned to a full commit SHA"
             )
 
 

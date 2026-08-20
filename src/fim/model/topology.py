@@ -135,7 +135,7 @@ def _neighbor_weights(
             candidate for candidate in (deme - 1, deme + 1) if 1 <= candidate <= d
         )
     weight = rate / len(candidates)
-    return {neighbor: weight for neighbor in candidates}
+    return dict.fromkeys(candidates, weight)
 
 
 def _wrap(deme: int, d: int) -> int:

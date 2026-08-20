@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -68,7 +69,7 @@ def test_normalize_row_reports_missing_extra_and_context_mismatches() -> None:
         normalize_row({**_row(), "extra": 1})
     with pytest.raises(ValueError, match="does not match"):
         normalize_row(_row(run_id="other"), run_id="run-a")
-    with pytest.raises(ValueError, match="generation.*does not match"):
+    with pytest.raises(ValueError, match=r"generation.*does not match"):
         normalize_row(_row(generation=2), generation=1)
 
 
@@ -195,7 +196,7 @@ def test_manifest_missing_schema_version_names_the_legacy_cause() -> None:
     del legacy["schema_version"]
     legacy["software_version"] = "1.0.0"
 
-    with pytest.raises(ValueError, match="written by fim 1.0.0"):
+    with pytest.raises(ValueError, match=re.escape("written by fim 1.0.0")):
         RunManifest.from_dict(legacy)
     with pytest.raises(ValueError, match="no automated migration"):
         RunManifest.from_dict(legacy)

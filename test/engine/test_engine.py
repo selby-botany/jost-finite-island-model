@@ -437,7 +437,9 @@ def test_max_workers_rejects_an_unpicklable_clock() -> None:
             params.d,
             params=params,
             max_workers=2,
-            clock=lambda: _clock(),
+            # Deliberately unpicklable: the lambda closure is the point of
+            # this test, not `_clock` itself (which is picklable on its own).
+            clock=lambda: _clock(),  # noqa: PLW0108
         )
 
 

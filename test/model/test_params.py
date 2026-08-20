@@ -207,7 +207,7 @@ def test_finite_alleles_capacity_check_covers_every_locus_not_just_the_first() -
     `initial_allele_count=5`; locus 2 (length 1, capacity 4) does not. A
     validator that only checked `loci[0]` would miss this.
     """
-    with pytest.raises(ValueError, match="locus 2.*exceeds the finite_alleles"):
+    with pytest.raises(ValueError, match=r"locus 2.*exceeds the finite_alleles"):
         SimulationParams.from_mapping(
             {
                 **_valid_config(),
@@ -419,7 +419,7 @@ def test_replicate_tolerance_round_trips_and_is_omitted_when_unset() -> None:
 
 def test_required_and_conflicting_configuration_keys_are_named() -> None:
     """Missing required fields and incompatible locus forms fail clearly."""
-    with pytest.raises(ValueError, match="missing required.*N"):
+    with pytest.raises(ValueError, match=r"missing required.*N"):
         SimulationParams.from_mapping({"d": 2, "m": 0.1, "mu": 0.1, "seed": 1})
     with pytest.raises(ValueError, match="loci cannot be combined"):
         SimulationParams.from_mapping(

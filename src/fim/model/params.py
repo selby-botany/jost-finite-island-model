@@ -692,7 +692,14 @@ def _normalize_initial_frequencies(
 
 def _normalize_migration(value: Migration, d: int) -> Migration:
     """Validate scalar or matrix migration and normalize numeric values."""
-    if isinstance(value, int | float) and not isinstance(value, bool):
+    # `_parse_migration` already rejects a bool `m` before this function
+    # ever runs; the explicit reject here (rather than folding it into the
+    # `int | float` branch below) keeps the numeric-tower compatibility of
+    # `bool` with `float` from leaving a `bool` on the matrix-iteration
+    # path in mypy's eyes.
+    if isinstance(value, bool):
+        raise ValueError("m must be a number or a d x d matrix")
+    if isinstance(value, int | float):
         _require_probability("m", float(value))
         return float(value)
     rows = tuple(tuple(float(item) for item in row) for row in value)
@@ -826,7 +833,7 @@ def _parse_initial_frequencies(value: Any) -> InitialFrequencies | None:
                     )
                 allele_id = AlleleId(identity)
                 frequencies[allele_id] = _parse_float(
-                    (f"p_0[{deme_index}][{locus_index}]" f"[{raw_allele!r}]"),
+                    (f"p_0[{deme_index}][{locus_index}][{raw_allele!r}]"),
                     raw_frequency,
                 )
             loci.append(frequencies)

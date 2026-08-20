@@ -278,8 +278,7 @@ def _normalize_frequency_map(
         )
         if identity < 0:
             raise ValueError(
-                f"{context}: allele ID {raw_allele_id!r} must be a "
-                "non-negative integer"
+                f"{context}: allele ID {raw_allele_id!r} must be a non-negative integer"
             )
         allele_id = AlleleId(identity)
         frequency = float(raw_frequency)
