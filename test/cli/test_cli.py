@@ -418,12 +418,50 @@ def test_project_root_falls_back_to_working_directory(
     assert cli._project_root() == working_directory
 
 
+def _newer_version(version: str) -> str:
+    """Return a three-part semantic version that compares as newer.
+
+    Args:
+        version: A ``major.minor.patch`` version string.
+
+    Returns:
+        The same version with its patch component incremented — always
+        greater under `fim.cli._compare_versions`, regardless of what
+        `version` actually is. Bumping only the patch (never hardcoding a
+        specific version) keeps this test from going stale the next time
+        the project's own version changes, which is exactly what broke
+        the previous hardcoded `"v1.1.0"` the moment `1.1.0` shipped.
+    """
+    major, minor, patch = (int(part) for part in version.split("."))
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def _older_version(version: str) -> str:
+    """Return a three-part semantic version that compares as older.
+
+    Args:
+        version: A ``major.minor.patch`` version string.
+
+    Returns:
+        A version guaranteed to compare as less than `version` under
+        `fim.cli._compare_versions`: the patch component decremented, or
+        the minor/major component decremented and reset below it when
+        patch (and minor) are already zero.
+    """
+    major, minor, patch = (int(part) for part in version.split("."))
+    if patch > 0:
+        return f"{major}.{minor}.{patch - 1}"
+    if minor > 0:
+        return f"{major}.{minor - 1}.0"
+    return f"{major - 1}.0.0"
+
+
 @pytest.mark.parametrize(
     ("tag", "expected"),
     [
-        ("v1.1.0", "newer fim release"),
+        (f"v{_newer_version(__version__)}", "newer fim release"),
         (f"v{__version__}", "is current"),
-        ("v0.9.0", "is newer than"),
+        (f"v{_older_version(__version__)}", "is newer than"),
     ],
 )
 def test_update_check_messages_are_fully_mocked(
