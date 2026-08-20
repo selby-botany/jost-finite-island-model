@@ -28,10 +28,12 @@ normal user permissions and explicit resource limits appropriate to the host.
 
 ## Windows executable
 
-The release executable is an unsigned research tool, so Windows SmartScreen
-may show an unrecognized-publisher warning. Verify the adjacent SHA-256 file
-before running it. The executable is built on a GitHub-hosted Windows runner
-from the tagged source.
+Both release executables (`fim-windows-x64.exe` and `fim-windows-arm64.exe`)
+are unsigned research tools, so Windows SmartScreen may show an
+unrecognized-publisher warning for either one. Verify the adjacent SHA-256
+file before running it. Each is built natively — PyInstaller does not
+cross-compile — on its own architecture-matched GitHub-hosted Windows
+runner, from the same tagged source.
 
 ## Dependencies
 

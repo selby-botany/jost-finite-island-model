@@ -129,7 +129,7 @@ def test_publish_generates_a_checksum_manifest_before_release_create() -> None:
 
 
 def test_release_jobs_cannot_run_without_a_passing_build_and_valid_tag() -> None:
-    """`windows`/`publish` structurally depend on `build` and `verify-tag`.
+    """`windows`/`windows-arm64`/`publish` depend on `build` and `verify-tag`.
 
     Regression test for R8: `windows` and `publish` used to live in a
     separate `release.yml`, triggered independently by the same tag push
@@ -137,19 +137,23 @@ def test_release_jobs_cannot_run_without_a_passing_build_and_valid_tag() -> None
     publish a release before CI had even started, let alone passed.
     Parsing the workflow YAML (rather than grepping for `needs:` as text)
     confirms the actual dependency graph GitHub Actions will enforce:
-    `windows` cannot start until every `build` matrix leg and
-    `verify-tag` have succeeded, and `publish` cannot start until
-    `windows` has.
+    neither `windows` nor `windows-arm64` (PyInstaller cannot cross-compile,
+    so building for both Windows architectures needs two independent jobs)
+    can start until every `build` matrix leg and `verify-tag` have
+    succeeded, and `publish` cannot start until both have.
     """
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
     jobs = workflow["jobs"]
 
-    windows_needs = jobs["windows"]["needs"]
-    assert isinstance(windows_needs, list)
-    assert set(windows_needs) == {"build", "verify-tag"}
-    assert jobs["publish"]["needs"] == "windows"
+    for job_name in ("windows", "windows-arm64"):
+        job_needs = jobs[job_name]["needs"]
+        assert isinstance(job_needs, list)
+        assert set(job_needs) == {"build", "verify-tag"}
+    publish_needs = jobs["publish"]["needs"]
+    assert isinstance(publish_needs, list)
+    assert set(publish_needs) == {"windows", "windows-arm64"}
 
-    for job_name in ("verify-tag", "windows", "publish"):
+    for job_name in ("verify-tag", "windows", "windows-arm64", "publish"):
         assert jobs[job_name]["if"] == "startsWith(github.ref, 'refs/tags/v')"
 
 
@@ -168,7 +172,7 @@ def test_contents_write_is_scoped_to_the_publish_job_only() -> None:
 
     assert workflow["permissions"] == {"contents": "read"}
     assert jobs["publish"]["permissions"] == {"contents": "write"}
-    for job_name in ("build", "verify-tag", "windows"):
+    for job_name in ("build", "verify-tag", "windows", "windows-arm64"):
         assert "permissions" not in jobs[job_name]
 
 
@@ -193,41 +197,43 @@ def test_verify_tag_job_checks_annotation_and_main_ancestry() -> None:
 
 
 def test_windows_artifact_has_a_short_retention() -> None:
-    """The inter-job handoff artifact does not linger past its purpose.
+    """Neither inter-job handoff artifact lingers past its purpose.
 
     Regression test for R14: `actions/upload-artifact` defaults to the
     repository's general retention setting (up to 90 days) with no
-    `retention-days` override. The `windows` artifact exists only to
-    hand the executable from `windows` to `publish` within the same
-    workflow run; its durable home is the GitHub Release `publish`
-    creates from it, not this transient artifact.
+    `retention-days` override. The `windows`/`windows-arm64` artifacts
+    exist only to hand each executable to `publish` within the same
+    workflow run; their durable home is the GitHub Release `publish`
+    creates from them, not this transient artifact.
     """
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
-    upload_step = next(
-        step
-        for step in workflow["jobs"]["windows"]["steps"]
-        if step.get("uses", "").startswith("actions/upload-artifact")
-    )
-
-    assert upload_step["with"]["retention-days"] == 1
+    for job_name in ("windows", "windows-arm64"):
+        upload_step = next(
+            step
+            for step in workflow["jobs"][job_name]["steps"]
+            if step.get("uses", "").startswith("actions/upload-artifact")
+        )
+        assert upload_step["with"]["retention-days"] == 1
 
 
 def test_publish_verifies_the_downloaded_checksum_before_shipping_it() -> None:
-    """`publish` verifies the exe against its own `.sha256` before release.
+    """`publish` verifies both exes against their own `.sha256` before release.
 
     Regression test for R14: `publish` downloaded the Windows executable
     and its `.sha256` sidecar and re-shipped both without ever actually
     verifying they still matched each other — trusting the inter-job
-    artifact hand-off blindly rather than checking it.
+    artifact hand-off blindly rather than checking it. Both the x64 and
+    arm64 executables must be checked the same way.
     """
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["publish"]["steps"]
     step_texts = [step.get("run", "") for step in steps]
-    download_index = next(
+    download_indices = [
         index
         for index, step in enumerate(steps)
         if step.get("uses", "").startswith("actions/download-artifact")
-    )
+    ]
+    assert len(download_indices) == 2, "expected one download per Windows artifact"
     verify_index = next(
         index for index, text in enumerate(step_texts) if "sha256sum -c" in text
     )
@@ -236,7 +242,8 @@ def test_publish_verifies_the_downloaded_checksum_before_shipping_it() -> None:
     )
 
     assert "fim-windows-x64.exe.sha256" in step_texts[verify_index]
-    assert download_index < verify_index < release_index
+    assert "fim-windows-arm64.exe.sha256" in step_texts[verify_index]
+    assert max(download_indices) < verify_index < release_index
 
 
 def test_publish_rejects_a_malformed_tag_before_comparing_to_version_txt() -> None:

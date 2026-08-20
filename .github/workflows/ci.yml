@@ -76,6 +76,13 @@ jobs:
   # started, let alone passed. Folding them in here and gating on
   # `needs: [build, verify-tag]` makes that structurally impossible: GitHub
   # Actions cannot start a job until every job it needs has succeeded.
+  #
+  # windows (x64) and windows-arm64 are two independent jobs, not one
+  # matrix, because PyInstaller never cross-compiles: the executable it
+  # produces always matches the CPU architecture of the interpreter that
+  # ran it. Getting a native ARM64 executable means actually running the
+  # build on an ARM64 Windows runner, not passing a different flag on the
+  # same runner.
   windows:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build, verify-tag]
@@ -140,9 +147,80 @@ jobs:
             dist/fim-windows-x64.exe
             dist/fim-windows-x64.exe.sha256
 
+  # `windows-arm64` mirrors `windows` step for step; keep the two in sync by
+  # hand if either changes -- both are exercised on every tagged release, so
+  # a drift between them shows up as a failure here rather than staying
+  # latent. `windows-11-arm` is a GitHub-hosted ARM64 Windows runner;
+  # `actions/setup-python`'s `architecture: arm64` selects the matching
+  # native CPython build rather than an x64 build running under emulation.
+  windows-arm64:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, verify-tag]
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+          architecture: arm64
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - shell: pwsh
+        run: |
+          $expectedVersion = "fim $($env:GITHUB_REF_NAME.TrimStart('v'))"
+          $actualVersion = .\dist\fim.exe --version
+          if ($actualVersion -ne $expectedVersion) {
+            throw "Executable version '$actualVersion' is not '$expectedVersion'"
+          }
+          .\dist\fim.exe --help
+          .\dist\fim.exe init --output tiny.yaml
+          (Get-Content tiny.yaml) `
+            -replace 'N: 450', 'N: 20' `
+            -replace 'd: 20', 'd: 2' `
+            -replace 'convergence_window: 50', 'convergence_window: 4' `
+            -replace 'convergence_tolerance: 0.01', 'convergence_tolerance: 1.0' `
+            -replace 'max_generations: 10000', 'max_generations: 10' `
+            | Set-Content tiny.yaml
+          .\dist\fim.exe run tiny.yaml --output smoke --quiet
+          $expectedArtifacts = @(
+            "manifest.json",
+            "report.json",
+            "scatter.png",
+            "trajectory.jsonl"
+          )
+          $actualArtifacts = @(
+            Get-ChildItem .\smoke -File |
+              ForEach-Object { $_.Name } |
+              Sort-Object
+          )
+          if (Compare-Object $expectedArtifacts $actualArtifacts) {
+            throw "Executable smoke run did not produce exactly four artifacts"
+          }
+          foreach ($artifact in $expectedArtifacts) {
+            if ((Get-Item ".\smoke\$artifact").Length -eq 0) {
+              throw "Executable smoke artifact '$artifact' is empty"
+            }
+          }
+          Rename-Item .\dist\fim.exe fim-windows-arm64.exe
+          $hash = (Get-FileHash .\dist\fim-windows-arm64.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  fim-windows-arm64.exe" | Set-Content .\dist\fim-windows-arm64.exe.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: windows-arm64
+          # Handoff to `publish` within this same workflow run only; the
+          # executable's durable home is the GitHub Release `publish`
+          # creates from it, not this transient inter-job artifact.
+          retention-days: 1
+          path: |
+            dist/fim-windows-arm64.exe
+            dist/fim-windows-arm64.exe.sha256
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: windows
+    needs: [windows, windows-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -166,23 +244,29 @@ jobs:
         with:
           name: windows
           path: dist
-      # The exe and its .sha256 crossed a job boundary (upload from
-      # `windows`, download here); verify the sidecar the `windows` job
-      # generated still matches the file that actually arrived, rather
-      # than re-shipping both unread and trusting that hand-off blindly.
-      - name: Verify the downloaded executable against its own checksum
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: windows-arm64
+          path: dist
+      # Both executables and their .sha256 sidecars crossed a job boundary
+      # (upload from `windows`/`windows-arm64`, download here); verify each
+      # sidecar still matches the file that actually arrived, rather than
+      # re-shipping either pair unread and trusting the hand-off blindly.
+      - name: Verify the downloaded executables against their own checksums
         run: |
           cd dist
           sha256sum -c fim-windows-x64.exe.sha256
+          sha256sum -c fim-windows-arm64.exe.sha256
       # One consolidated manifest covering every artifact this release
-      # actually publishes (wheel, sdist, and the Windows executable),
-      # alongside the executable's own pre-existing `fim-windows-x64.exe
-      # .sha256` sidecar (README's documented per-file verification
-      # step, left in place for that specific workflow).
+      # actually publishes (wheel, sdist, and both Windows executables),
+      # alongside each executable's own pre-existing `.sha256` sidecar
+      # (README's documented per-file verification step, left in place for
+      # that specific workflow).
       - name: Generate a checksum manifest for every released artifact
         run: |
           cd dist
-          sha256sum fim-windows-x64.exe ./*.whl ./*.tar.gz > SHA256SUMS
+          sha256sum fim-windows-x64.exe fim-windows-arm64.exe ./*.whl ./*.tar.gz \
+            > SHA256SUMS
       - env:
           GH_TOKEN: ${{ github.token }}
         run: >-

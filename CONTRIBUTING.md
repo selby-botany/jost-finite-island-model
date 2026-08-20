@@ -73,14 +73,18 @@ Public functions require typed signatures and docstrings. Regenerate
    `git tag -a vX.Y.Z -m "X.Y.Z"`. A bare `git tag vX.Y.Z` (lightweight,
    no message) is rejected by CI's `verify-tag` job before anything
    publishes — see below.
-6. Confirm `ci.yml`'s `windows` and `publish` jobs run and publish the
-   Windows executable, checksum, wheel, and source distribution. They
-   cannot start until every `build` matrix leg and `verify-tag` succeed
-   for that exact commit (`needs: [build, verify-tag]` /
-   `needs: windows`), and `verify-tag` itself rejects a tag that is not
-   both annotated and an ancestor of `main`.
-7. Download the executable and independently verify `--version`, `--help`, and
-   one offline tiny run.
+6. Confirm `ci.yml`'s `windows`, `windows-arm64`, and `publish` jobs run and
+   publish both Windows executables, their checksums, the wheel, and the
+   source distribution. `windows` and `windows-arm64` are independent jobs
+   (PyInstaller does not cross-compile, so a native ARM64 executable needs
+   its own ARM64 runner), and neither can start until every `build` matrix
+   leg and `verify-tag` succeed for that exact commit
+   (`needs: [build, verify-tag]`); `publish` cannot start until both have
+   (`needs: [windows, windows-arm64]`). `verify-tag` itself rejects a tag
+   that is not both annotated and an ancestor of `main`.
+7. Download at least one executable matching hardware you have available
+   and independently verify `--version`, `--help`, and one offline tiny
+   run.
 
 `publish` rejects a tag that differs from `version.txt`.
 

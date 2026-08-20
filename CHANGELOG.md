@@ -6,6 +6,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A native Windows ARM64 release executable, `fim-windows-arm64.exe`,
+  built and smoke-tested alongside the existing x64 executable. PyInstaller
+  never cross-compiles — the executable it produces always matches the
+  architecture of the interpreter that ran it — so this required a second,
+  independent `windows-arm64` job in `ci.yml` running on GitHub's hosted
+  `windows-11-arm` runner with a native ARM64 CPython 3.12
+  (`actions/setup-python`'s `architecture: arm64`), not a flag on the
+  existing job. `publish` now downloads, verifies, and ships both
+  executables, each with its own `.sha256` sidecar, in the same
+  consolidated `SHA256SUMS` manifest.
+
+### Changed
+
+- Bumped the pinned `numpy` dependency from `2.1.*` to `2.3.*` and
+  `matplotlib` from `3.9.*` to `3.11.*` — the first minor series of each to
+  publish `win_arm64` wheels for CPython 3.12, which the new
+  `windows-arm64` release job needs to install natively rather than
+  attempting a source build against an ARM64 MSVC/OpenBLAS toolchain no
+  GitHub-hosted runner provides. Verified compatible before landing: the
+  full test suite (519 tests, plus the `slow`/`statistical` layer `--ci`
+  adds, 528 of 529 total with only the `packaging` marker excluded) passes
+  unchanged against both new pins, and `mypy --strict` remains clean.
+
 ## [1.1.0] - 2026-08-19
 
 ### Fixed

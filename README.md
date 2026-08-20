@@ -47,8 +47,12 @@ differentiation statistics.
 
 ### Windows release
 
-1. Download `fim-windows-x64.exe` and its `.sha256` file from the project's
-   GitHub Releases page.
+1. Download the executable matching your processor and its `.sha256` file
+   from the project's GitHub Releases page: `fim-windows-x64.exe` for an
+   Intel/AMD machine, `fim-windows-arm64.exe` for an ARM64 machine (for
+   example, a Windows-on-ARM laptop or VM). The examples below use the x64
+   name; substitute `fim-windows-arm64.exe` if that is the one you
+   downloaded.
 2. Open PowerShell in the download folder and verify the checksum:
 
    ```powershell
@@ -168,8 +172,8 @@ The supported build environment is a Unix-like system with Bash, Git, and
 Python 3.12 or newer. The scripts avoid modern-only Bash features; the Bash
 3.2 bundled with macOS is sufficient. Docker is required only for the complete
 repository-file and Homebrew validation commands. Native Windows development
-is not supported; the Windows executable is built and tested by the release
-workflow.
+is not supported; both Windows executables (x64 and ARM64) are built and
+tested by the release workflow.
 
 ```console
 python3 -m venv .venv
