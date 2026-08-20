@@ -15,6 +15,9 @@
 *.bak
 *.log
 
+# direnv config
+.envrc
+
 # Python
 __pycache__/
 *.py[cod]
