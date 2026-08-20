@@ -18,7 +18,7 @@ configuration changes; do not hand-edit the numbers below.
 
 ## Analytic bound
 
-Not currently available. The per-replicate `G_ST`/`D` estimate is a
+Not currently available. The per-replicate $G_{ST}/D$ estimate is a
 ratio-of-means statistic over heterozygosities sampled from a
 multi-generation Migrate -> Mutate -> Drift recursion; a closed-form
 variance would need delta-method propagation through that recursion's

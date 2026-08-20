@@ -944,10 +944,10 @@ incorrect. Here are the steps, separately.
 A short proof with large consequences. Since $H_T \leq 1$ always,
 
 ```math
-G_{ST} = 1 - \frac{H_S}{H_T} \leq 1 - \frac{H_S}{1} = 1 - H_S
+G_{ST} = 1 - \frac{H_S}{H_T} \leq 1 - \frac{H_{S}}{1} = 1 - H_{S}
 ```
 
-So if within-deme heterozygosity is $H_S = 0.95$, then $G_{ST}$ cannot
+So if within-deme heterozygosity is $H_{S} = 0.95$, then $G_{ST}$ cannot
 exceed 0.05 — **no matter what**. The demes could share no alleles. They
 could be different species, incapable of interbreeding at all. $G_{ST}$
 still cannot exceed 0.05.
@@ -957,27 +957,27 @@ fixed verbal scale ("below 0.05 is negligible structure, above 0.25 is
 strong"). With high-diversity markers such as microsatellites — chosen
 *because* they are informative — the entire upper range of $G_{ST}$ is
 mathematically unreachable. At the descriptive level this behavior is, the
-paper stresses, **correct**: a population with low $1 - H_S$ really is
+paper stresses, **correct**: a population with low $1 - H_{S}$ really is
 far from fixation, and $G_{ST}$ is a nearness-to-fixation measure. The
 defect lies entirely in the interpretation people give it.
 
 ### Heterozygosity is subadditive
 
-The classical partition assumes $H_T = H_S + H_{\mathrm{between}}$, so
-that $H_T - H_S$ is "the between-group component" and $H_S/H_T$ is
+The classical partition assumes $H_{T} = H_{S} + H_{\mathrm{between}}$, so
+that $H_{T} - H_{S}$ is "the between-group component" and $H_{S}/H_{T}$ is
 "the fraction of diversity found within demes." Shannon entropy really is
 additive this way — **heterozygosity is not**; it is subadditive. The
 correct partition into independent within- and between-group components
 (Jost, 2007), with equal deme weights, is:
 
 ```math
-H_T = H_S + H_{ST} - H_S\cdot H_{ST}
+H_{T} = H_{S} + H_{ST} - H_{S}\cdot H_{ST}
 ```
 
 Solving for the between-group component gives:
 
 ```math
-H_{ST} = \frac{H_T - H_S}{1 - H_S}
+H_{ST} = \frac{H_{T} - H_{S}}{1 - H_{S}}
 ```
 
 which is exactly the first bracket of **D**. So: **D is nothing more
@@ -1000,8 +1000,8 @@ demes, nothing shared):
 
 ```math
 \begin{aligned}
-H\text{ scale: } &H_S = 0.950 \to H_T = 0.975 \quad (\times 1.026) \quad \text{fails} \\
-{}^{H}D\text{ scale: } &{}^{H}D_S = 20.0 \to {}^{H}D_T = 40.0 \quad (\times 2.000) \quad \text{passes}
+H\text{ scale: } &H_{S} = 0.950 \to H_{T} = 0.975 \quad (\times 1.026) \quad \text{fails} \\
+{}^{H}D\text{ scale: } &{}^{H}D_{S} = 20.0 \to {}^{H}D_{T} = 40.0 \quad (\times 2.000) \quad \text{passes}
 \end{aligned}
 ```
 
@@ -1020,7 +1020,7 @@ pigeonhole principle guarantees some demes share an allele — so they are
 *not* completely differentiated, and a measure of actual allelic
 differentiation *should* report less than 1. The constraint is a true
 fact about the data. $G_{ST}$'s ceiling is different in kind: it depends
-on $H_S$, a property of within-deme diversity that has **nothing to do
+on $H_{S}$, a property of within-deme diversity that has **nothing to do
 with** how much the demes actually share.
 
 ---
@@ -1198,7 +1198,7 @@ premise is gone. The $\approx$ is doing real work.
 
 **What survives.** The reassuring structural point is that this assumption
 is quarantined. Everything in Parts II–V — the ceiling argument
-$G_{ST}$ $\le 1 - H_S$, the subadditivity of heterozygosity, the
+$G_{ST} \le 1 - H_{S}$, the subadditivity of heterozygosity, the
 replication principle, and every worked example in Part IV — is computed
 from allele frequency vectors alone and assumes **nothing whatever** about
 deme sizes, migration, mutation, or equilibrium. The paper's central thesis
@@ -1336,8 +1336,8 @@ hierarchical levels.
 | "$D$ is a corrected or standardized $F_{ST}$." | **False.** Different quantity, different question. | Part III, VIII |
 | "High $G_{ST}$ means the demes hold different alleles." | **False.** $G_{ST}=1$ when 9 of 10 demes are identical. | Part IV |
 | "Low $G_{ST}$ means the demes are genetically similar." | **False.** Species C shares zero alleles at $G_{ST}=0.026$. | Part IV |
-| "$G_{ST}$ below 0.05 means negligible structure." | **Unsound.** $G_{ST}\le 1-H_S$, so with $H_S=0.95$ it can never exceed 0.05. | Part V |
-| "$H_T-H_S$ is the between-group diversity." | **False.** $H$ is subadditive; the correct form is $H_T=H_S+H_{ST}-H_S H_{ST}$. | Part V |
+| "$G_{ST}$ below 0.05 means negligible structure." | **Unsound.** $G_{ST}\le 1-H_{S}$, so with $H_{S}=0.95$ it can never exceed 0.05. | Part V |
+| "$H_{T}-H_{S}$ is the between-group diversity." | **False.** $H$ is subadditive; the correct form is $H_T=H_S+H_{ST}-H_S H_{ST}$. | Part V |
 | "98% of diversity is within demes, so protect one." | **False.** Artifact of the $H$ scale; on effective alleles the demes are nearly disjoint. | Part IV, V |
 | "$Nm$ determines allelic differentiation when $\mu$ is low." | **False.** $Nm$ determines nearness to fixation; $m/(\mu(d-1))$ determines differentiation. | Part VI |
 | "$D$ varies across loci, so it is unreliable." | **False.** That variation is a real biological effect of differing $\mu$. | Part VI |
@@ -1364,7 +1364,7 @@ The substitution is mechanical:
 | Locus | The variable being tabulated |
 | Deme | Group, site, sample, class |
 | Allele frequency vector | Composition of one group |
-| $H_S$, $H_T$ | Mean within-group and pooled diversity |
+| $H_{S}$, $H_{T}$ | Mean within-group and pooled diversity |
 | $D$, $E_{ST}$, $K_{ST}$ | How little the groups' repertoires overlap |
 
 ### What carries over
@@ -1446,13 +1446,13 @@ changes results — make it explicitly and record it.
 | $\mu$ | Mutation rate per locus per generation |
 | $p_i$ | Frequency of allele $i$ |
 | $H$ | Expected heterozygosity of one deme |
-| $H_S$ | Mean within-deme heterozygosity |
-| $H_T$ | Total (pooled) heterozygosity |
+| $H_{S}$ | Mean within-deme heterozygosity |
+| $H_{T}$ | Total (pooled) heterozygosity |
 | $H_{ST}$ | Correctly partitioned between-group heterozygosity |
 | $J$ | Nei's gene identity, $= 1 - H$ |
 | ${}^{q}D$ | Hill number of order $q$ (effective number of alleles) |
-| $E_T$, $E_S$, $E_w$ | Total / mean-within / deme-size Shannon entropies |
-| $K_T$, $K_S$ | Total / mean-per-deme allele counts |
+| $E_{T}$, $E_{S}$, $E_{w}$ | Total / mean-within / deme-size Shannon entropies |
+| $K_{T}$, $K_{S}$ | Total / mean-per-deme allele counts |
 | $q$ | Order of a diversity measure (rare-allele weighting) |
 | $\mathrm{NGD}$ | Nei's genetic distance |
 
@@ -1469,7 +1469,7 @@ H = 1 - \sum_i p_i^2 \qquad J = \sum_i p_i^2 = 1 - H \qquad {}^{H}D = \frac{1}{1
 ### Across demes
 
 ```math
-G_{ST} = \frac{H_T - H_S}{H_T} = 1 - \frac{H_S}{H_T}
+G_{ST} = \frac{H_{T} - H_{S}}{H_{T}} = 1 - \frac{H_{S}}{H_{T}}
 ```
 
 ```math
@@ -1477,7 +1477,7 @@ G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1}
 ```
 
 ```math
-D = \left[\frac{H_T-H_S}{1-H_S}\right]\cdot\frac{d}{d-1}
+D = \left[\frac{H_{T}-H_{S}}{1-H_{S}}\right]\cdot\frac{d}{d-1}
   = 1 - \frac{J_{\mathrm{between}}}{J_{\mathrm{within}}}
   = 1 - \exp(-\mathrm{NGD})
 ```
@@ -1488,25 +1488,25 @@ D \approx \frac{1}{1 + m/[\mu(d-1)]}
 
 ```math
 \mathrm{Differentiation}_q
-  = 1 - \frac{({}^{q}D_S/{}^{q}D_T)^{q-1} - (1/d)^{q-1}}{1 - (1/d)^{q-1}}
+  = 1 - \frac{({}^{q}D_{S}/{}^{q}D_{T})^{q-1} - (1/d)^{q-1}}{1 - (1/d)^{q-1}}
 ```
 
 ```math
-E_{ST} = \frac{E_T - E_S}{E_w} \qquad (E_w = \ln d \text{ for equal deme sizes})
+E_{ST} = \frac{E_{T} - E_{S}}{E_{w}} \qquad (E_{w} = \ln d \text{ for equal deme sizes})
 ```
 
 ```math
-K_{ST} = 1 - \frac{K_T/K_S - d}{1 - d}
+K_{ST} = 1 - \frac{K_{T}/K_{S} - d}{1 - d}
 ```
 
 ### Useful identities
 
 ```math
-H_T = H_S + H_{ST} - H_S\cdot H_{ST}, \qquad H_{ST} = \frac{H_T-H_S}{1-H_S}
+H_{T} = H_{S} + H_{ST} - H_{S}\cdot H_{ST}, \qquad H_{ST} = \frac{H_{T}-H_{S}}{1-H_{S}}
 ```
 
 ```math
-D = \left(1 - \frac{1}{\beta}\right)\cdot\frac{d}{d-1}, \qquad \beta = {}^{H}D_T/{}^{H}D_S
+D = \left(1 - \frac{1}{\beta}\right)\cdot\frac{d}{d-1}, \qquad \beta = {}^{H}D_{T}/{}^{H}D_{S}
 ```
 
 ```math
@@ -1530,7 +1530,7 @@ scenarios. The first and third are exact. The middle case (five demes fixed for
 one allele and five fixed for another) computes as:
 
 ```math
-H_S = 0, \qquad H_T = 0.5, \qquad D = (0.5/1)\cdot(10/9) = 0.5556.
+H_{S} = 0, \qquad H_{T} = 0.5, \qquad D = (0.5/1)\cdot(10/9) = 0.5556.
 ```
 
 The pairwise derivation the paper itself offers agrees: $25$ differing pairs out
@@ -1544,7 +1544,7 @@ equilibrium formula for sets of loci with a roughly constant per-base-pair
 mutation rate $\mu_b$ and locus length $L$ (harmonic mean, in base pairs):
 
 ```math
-D \approx \frac{1}{1 + m/[(d-1)\cdot\mu_b\cdot L]}.
+D \approx \frac{1}{1 + m/[(d-1)\cdot\mu_{b}\cdot L]}.
 ```
 
 As printed in the accepted article, the $L$ term is missing from the denominator,
@@ -1583,9 +1583,9 @@ while the corresponding contact address is `eric.archer@noaa.gov`. This is not a
 mathematical issue, but it is a genuine name mismatch and could confuse readers
 trying to reconcile the paper with the author metadata.
 
-**7. Table S1 rounding.** The text gives $H_T = 0.97$ and $H_S = 0.95$ but
+**7. Table S1 rounding.** The text gives $H_{T} = 0.97$ and $H_{S} = 0.95$ but
 reports effective numbers $38.8$ and $20.4$, which correspond to the more precise
-values $H_T = 0.9742$ and $H_S = 0.9510$. Using the rounded two-decimal figures
+values $H_{T} = 0.9742$ and $H_{S} = 0.9510$. Using the rounded two-decimal figures
 gives $1/(1 - 0.97) = 33.3$, not $38.8$. Part IV.3 back-solves from the
 effective numbers, which are the relevant precise figures.
 
@@ -1761,8 +1761,8 @@ classical $G_{ST}$ family, and by extension many uses of $F_{ST}$ and $\theta$,
 was being interpreted as if it measured absolute genetic differentiation when it
 in fact measured the opposite: the degree to which a population has moved toward
 fixation within the pooled array. The formal point was not trivial. The
-classical family normalizes by $H_T$, while the allelic family normalizes by
-$1-H_S$. Those are different denominators, and therefore different concepts. Once
+classical family normalizes by $H_{T}$, while the allelic family normalizes by
+$1-H_{S}$. Those are different denominators, and therefore different concepts. Once
 this is acknowledged, the apparent paradoxes in the paper's worked examples are
 no longer paradoxes at all: a population can be nearly fixed within demes and yet
 retain almost no common allele content across demes, producing a very low

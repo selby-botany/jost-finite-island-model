@@ -81,7 +81,7 @@ Two ground rules shape everything below and are worth stating once:
 ## 2. Engineering decisions
 
 The design document settles the model, statistics, and architecture
-(Python, NumPy, JSONL, ploidy-neutral `N`, and so on). This section records
+(Python, NumPy, JSONL, ploidy-neutral $N$, and so on). This section records
 the engineering decisions on top of that: the concrete runtime,
 distribution, and reproducibility choices a maintainer needs to know.
 

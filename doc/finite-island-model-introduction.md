@@ -61,8 +61,8 @@ Answering it quantitatively takes two separate pieces of machinery:
    document.
 2. A **statistic** computed from real or simulated data that reports how
    much differentiation exists. This is where Lou Jost's own contribution —
-   a measure he calls **D** — enters, as a proposed replacement for the
-   older **F<sub>ST</sub>** and **G<sub>ST</sub>** family of statistics. (A companion document,
+   a measure he calls $D$— enters, as a proposed replacement for the
+   older $F_{ST}$ and $G_{ST}$ family of statistics. (A companion document,
    [the differentiation-measures guide](jost-differentiation-measures.md),
    covers that half in detail.)
 
@@ -83,8 +83,8 @@ place.
 
 ### 2.1 The setup
 
-- There are **d** separate subpopulations, called demes or, by metaphor,
-  islands, each holding a fixed number **N** of individuals. Most species of
+- There are $d$ separate subpopulations, called demes or, by metaphor,
+  islands, each holding a fixed number $N$ of individuals. Most species of
   conservation interest are diploid — each individual carries two copies of
   every gene, one from each parent — so each island holds $2N$ gene copies
   at any one location in the genome.
@@ -115,11 +115,11 @@ each); the *total* collection of all islands that supplies migrants is
 implicitly **infinite** — migrants always arrive from a fixed background
 frequency that itself never drifts. This is a convenient mathematical
 fiction: it makes it possible to write a simple, closed-form formula for the
-equilibrium value of **F<sub>ST</sub>** (the classic "differentiation" statistic),
+equilibrium value of $F_{ST}$ (the classic "differentiation" statistic),
 precisely because the migrant source never changes.
 
 The **finite island model** removes that fiction. There are only a *finite*
-number of islands, **D**, each of finite size $N$, and no infinite
+number of islands, $D$, each of finite size $N$, and no infinite
 external reservoir standing behind them. Migrants in generation $t$ are
 drawn from the actual, finite, currently-drifting collection of all the
 *other* islands' current frequencies. Three consequences follow:
@@ -131,10 +131,10 @@ drawn from the actual, finite, currently-drifting collection of all the
   eventually converge on a single allele everywhere — losing all variation
   — unless new mutations keep replenishing it.
 - This changes how differentiation statistics *behave at equilibrium*. The
-  classic **F<sub>ST</sub>** formula assumes an infinite source, which caps
-  **F<sub>ST</sub>** at a ceiling set purely by $N$ and $m$; once the source is
-  finite, the achievable range of **F<sub>ST</sub>**-like statistics depends on
-  **D** as well. More importantly, **F<sub>ST</sub>** and /**G<sub>ST</sub>** statistics have a
+  classic $F_{ST}$ formula assumes an infinite source, which caps
+  $F_{ST}$ at a ceiling set purely by $N$ and $m$; once the source is
+  finite, the achievable range of $F_{ST}$-like statistics depends on
+  $D$as well. More importantly, $F_{ST}$ and /$G_{ST}$ statistics have a
   known pathology: their maximum attainable value is *capped well below 1*
   whenever the genetic marker being used is highly variable (many alleles,
   high internal diversity) — even when the islands share *no* alleles at
@@ -143,7 +143,7 @@ drawn from the actual, finite, currently-drifting collection of all the
   populations share no alleles" with "these populations are only
   moderately different," because the statistic's own ceiling depends on how
   much diversity exists *within* each population, not on how different the
-  populations are *from each other*. His **D** statistic is built to
+  populations are *from each other*. His $D$statistic is built to
   separate those two things, and the finite island model is the testing
   ground where that claim gets checked, because it lets diversity and
   differentiation be dialed independently and the result observed directly.
@@ -151,7 +151,7 @@ drawn from the actual, finite, currently-drifting collection of all the
 **This is the single most important idea to take away**: the finite island
 model is a tool for generating data with a known, exact history — exactly
 how much migration, drift, and diversity went into producing it — so that a
-candidate summary statistic (**F<sub>ST</sub>**, **G<sub>ST</sub>**, **D**, **G'<sub>ST</sub>**, and
+candidate summary statistic ($F_{ST}$, $G_{ST}$, $D$, $G'_{ST}$, and
 so on) can be checked against that known history rather than against
 another guess.
 
@@ -170,7 +170,7 @@ At generation $t$, the complete state of the model is a table of allele
 frequencies — one row per island, one column per possible allele at the
 genetic location being tracked:
 
-- **D** = number of islands.
+- $D$= number of islands.
 - $k$ = number of distinct alleles possible at that location.
 - $p_{t,i,j}$ = the frequency (a number between 0 and 1) of allele $j$
   on island $i$ at generation $t$, with the frequencies in every row
@@ -183,7 +183,7 @@ since the second allele's frequency is always $1$ minus the first.
 Other markers, especially the short repeated-sequence markers called
 *microsatellites*, can have many alleles — $k$ in the range of 5 to 20 is
 common — which is one reason Jost's statistics are built to generalize
-cleanly past the two-allele case, unlike some of the older **F<sub>ST</sub>**
+cleanly past the two-allele case, unlike some of the older $F_{ST}$
 variants.
 
 ### 3.2 One generation, in two steps
@@ -207,17 +207,17 @@ the "migrant pool" it draws from:
 p_{\mathrm{mig},i} = (1 - m)\, p_{t,i} \;+\; m\, \bar p_i
 ```
 
-Here $\bar p_i$ is the frequency vector of the migrant pool available to
-island $i$. Two common choices for what $\bar p_i$ is, both still
+Here $\bar p_{i}$ is the frequency vector of the migrant pool available to
+island $i$. Two common choices for what $\bar p_{i}$ is, both still
 called "the finite island model":
 
 - **The island model proper** (the default meaning of the term, absent
-  other qualifiers). $\bar p_i$ is the average allele frequency across
+  other qualifiers). $\bar p_{i}$ is the average allele frequency across
   *all the other islands* — either an unweighted mean, or a mean weighted
   by island size if they differ. Every island exchanges migrants with one
   shared pool built from everyone else.
 - **The stepping-stone model** (a different, spatial relative, easily
-  confused with the island model in casual reading). $\bar p_i$ is the
+  confused with the island model in casual reading). $\bar p_{i}$ is the
   frequency of only the islands that are *physically adjacent* — a
   one- or two-dimensional lattice of islands exchanging migrants only with
   their neighbors. Under this model, differentiation grows with geographic
@@ -226,7 +226,7 @@ called "the finite island model":
   is normally the plain, non-spatial, all-to-all version.
 
 This step is written above as a deterministic blend *given* the current
-frequencies — but because $\bar p_i$ is itself built from $p_t$, which
+frequencies — but because $\bar p_{i}$ is itself built from $p_{t}$, which
 was produced by the *previous* generation's random drift step, the entire
 process is random from end to end, even though this one step, in
 isolation, involves no dice roll. Some more detailed simulators add an
@@ -249,7 +249,7 @@ X_i \sim \mathrm{Binomial}\bigl(2N,\ p_{\mathrm{mig},i}\bigr)
 ```
 
 ```math
-p_{t+1,i} = \frac{X_i}{2N}
+p_{t+1,i} = \frac{X_{i}}{2N}
 ```
 
 For a marker with more than two alleles ($k > 2$), the same idea
@@ -261,10 +261,10 @@ die $2N$ times and counting how often each face comes up:
 ```
 
 ```math
-\mathbf{p}_{t+1,i} = \frac{\mathbf{X}_i}{2N}
+\mathbf{p}_{t+1,i} = \frac{\mathbf{X}_{i}}{2N}
 ```
 
-($\mathbf{X}_i$ here is a list of $k$ counts, one per allele, rather
+($\mathbf{X}_{i}$ here is a list of $k$ counts, one per allele, rather
 than a single number.)
 
 That is the entire model: one weighted blend and one random draw, applied
@@ -285,8 +285,8 @@ many times over, once per location.
   generations from a defined starting point, where migration and drift
   alone dominate the outcome.
 - **Unequal island sizes.** Letting $N$ vary by island changes both the
-  drift step (each island draws its own $2N_i$ copies) and the weighting
-  used to build the migrant pool $\bar p_i$.
+  drift step (each island draws its own $2N_{i}$ copies) and the weighting
+  used to build the migrant pool $\bar p_{i}$.
 - **Unequal or asymmetric migration.** Letting the migration rate $m$
   vary by island, or specifying a full matrix of pairwise migration rates
   between specific island pairs, generalizes the model into what is
@@ -352,43 +352,43 @@ statistics become considerably easier to follow. Every citation below was
 checked directly against PubMed and can be trusted for title, authors,
 journal, year, and DOI.
 
-- **Jost L, "**G<sub>ST</sub>** and its relatives do not measure
+- **Jost L, "$G_{ST}$ and its relatives do not measure
   differentiation."** *Molecular Ecology* 17(18):4015–26, 2008. DOI:
   [10.1111/j.1365-294x.2008.03887.x](https://doi.org/10.1111/j.1365-294x.2008.03887.x).
   PMID: 19238703. The foundational critique. In the language of Part 2:
   under the finite island model, as the diversity within a population goes
-  up, the *maximum possible* value **G<sub>ST</sub>** can reach — even at complete
+  up, the *maximum possible* value $G_{ST}$ can reach — even at complete
   differentiation between islands, meaning zero shared alleles — goes
-  *down*, sometimes sharply. A highly diverse marker showing **G<sub>ST</sub>** =
+  *down*, sometimes sharply. A highly diverse marker showing $G_{ST}$ =
   0.2 might represent *complete* differentiation, while a low-diversity
   marker showing the same 0.2 represents only mild differentiation. The
   statistic is therefore not comparable across markers or studies with
   different diversity levels (Wikipedia's
   [Fixation index](https://en.wikipedia.org/wiki/Fixation_index) article
-  independently corroborates this point: "the interpretation of **F<sub>ST</sub>**
+  independently corroborates this point: "the interpretation of $F_{ST}$
   can be difficult when the data analyzed are highly polymorphic ...
-  **F<sub>ST</sub>** can have an arbitrarily low upper bound"). Jost proposes
+  $F_{ST}$ can have an arbitrarily low upper bound"). Jost proposes
   **D**, defined to isolate the "true" differentiation component
   independent of within-population diversity — a companion document,
   [the differentiation-measures guide](jost-differentiation-measures.md),
   walks through exactly how.
 - **The reply/rebuttal exchange** that followed in the same journal,
   confirmed via PubMed's "Comment in/on" links on the 2008 paper:
-  - Ryman N, Leimar O, "**G<sub>ST</sub>** is still a useful measure of genetic
-    differentiation — a comment on Jost's **D**." *Molecular Ecology*
+  - Ryman N, Leimar O, "$G_{ST}$ is still a useful measure of genetic
+    differentiation — a comment on Jost's **$D$**." *Molecular Ecology*
     18(10):2084–7, 2009. DOI:
     [10.1111/j.1365-294X.2009.04187.x](https://doi.org/10.1111/j.1365-294X.2009.04187.x).
   - Heller R, Siegismund HR, a further 2009 comment in the same exchange
     (PMID 19645078), and Gerlach G et al., "Calculations of population
-    differentiation based on ****G<sub>ST</sub>**** and **D**: forget **G<sub>ST</sub>** but not
+    differentiation based on **$G_{ST}$** and **$D$**: forget $G_{ST}$ but not
     all of statistics!" *Molecular Ecology* 19(18):3845–52, 2010. DOI:
     [10.1111/j.1365-294X.2010.04784.x](https://doi.org/10.1111/j.1365-294X.2010.04784.x).
-  - Whitlock MC, "**G'<sub>ST</sub>** and **D** do not replace **F<sub>ST</sub>**."
+  - Whitlock MC, "$G'_{ST}$ and $D$ do not replace $F_{ST}$."
     *Molecular Ecology* 20(6):1083–91, 2011. DOI:
     [10.1111/j.1365-294X.2010.04996.x](https://doi.org/10.1111/j.1365-294X.2010.04996.x).
-    This paper proposes the standardized **G'<sub>ST</sub>** as a partial fix to
-    the classic **G<sub>ST</sub>** ceiling problem, while arguing that **D** and
-    **G'<sub>ST</sub>** answer a different question from **F<sub>ST</sub>** and should not
+    This paper proposes the standardized $G'_{ST}$ as a partial fix to
+    the classic $G_{ST}$ ceiling problem, while arguing that $D$and
+    $G'_{ST}$ answer a different question from $F_{ST}$ and should not
     fully replace it. Read together, this whole exchange is the applied
     debate over what a differentiation statistic should mean, and all
     sides generally argue by simulating some version of a finite island
@@ -397,8 +397,8 @@ journal, year, and DOI.
 - **Jost L, Archer F, Flanagan S, Gaggiotti O, Hoban S, Latch E,
   "Differentiation measures for conservation genetics."** *Evolutionary
   Applications* 11(7):1139–48, 2018. PMID: 30026802. A synthesis, useful as
-  a map of the whole statistic family (**F<sub>ST</sub>**, **G<sub>ST</sub>**, **G'<sub>ST</sub>**,
-  **D**, and others) and when each is — and is not — an appropriate choice.
+  a map of the whole statistic family ($F_{ST}$, $G_{ST}$, $G'_{ST}$,
+  $D$, and others) and when each is — and is not — an appropriate choice.
   It is written for a conservation-genetics audience deciding which number
   to report, which makes it the best single paper to hand a newcomer. See
   the companion document,
@@ -484,15 +484,15 @@ coefficient $p(1-p)$ into a *constant* coefficient on $\theta \in
 a quarter-circle arc. This has a direct, well-known generalization to a
 marker with $k$ alleles (covered in standard mathematical population
 genetics references, e.g. Warren Ewens's *Mathematical Population
-Genetics*): writing $z_i = \sqrt{p_i}$ for each allele's frequency, the
-constraint $\sum_i p_i = 1$ becomes $\sum_i z_i^2 = 1$ — that is, the
-vector $z = (z_1, \ldots, z_k)$ lives on the unit sphere $S^{k-1}$ sitting
-inside $\mathbb{R}^k$. Under this transform, the Wright–Fisher diffusion
+Genetics*): writing $z_{i} = \sqrt{p_{i}}$ for each allele's frequency, the
+constraint $\sum_{i} p_{i} = 1$ becomes $\sum_{i} z_{i}^2 = 1$ — that is, the
+vector $z = (z_{1}, \ldots, z_{k})$ lives on the unit sphere $S^{k-1}$ sitting
+inside $\mathbb{R}^{k}$. Under this transform, the Wright–Fisher diffusion
 generator becomes (proportional to) the **Laplace–Beltrami operator on
 that sphere** — literally the same differential operator that governs
 heat diffusion on a curved surface, with eigenfunctions given by spherical
 harmonics. The natural continuous symmetry group of a round sphere in
-$\mathbb{R}^k$ is exactly $SO(k)$ (or $O(k)$, including reflections) — an
+$\mathbb{R}^{k}$ is exactly $SO(k)$ (or $O(k)$, including reflections) — an
 $n$-dimensional rotation group with $n = k$, the number of alleles. So:
 yes, there is a real $SO(n)$ here, with $n$ tied to the number of alleles
 at the locus (not, on current evidence, to $4L$ or any other function of
@@ -502,9 +502,9 @@ of the original recollection does not carry through cleanly).
 **Why that $SO(k)$ does not survive as a symmetry of the actual model.**
 The catch is the same one that sank $U(1)$: the physically meaningful
 region is not the *whole* sphere, only the positive orthant of it, since
-each $z_i = \sqrt{p_i} \geq 0$ by definition — an allele frequency cannot
-be negative. That positive-orthant patch covers only $1/2^k$ of the
-sphere's surface, and its boundary faces (where some $z_i = 0$, i.e. some
+each $z_{i} = \sqrt{p_{i}} \geq 0$ by definition — an allele frequency cannot
+be negative. That positive-orthant patch covers only $1/2^{k}$ of the
+sphere's surface, and its boundary faces (where some $z_{i} = 0$, i.e. some
 allele has gone extinct on that island) are exactly the absorbing
 fixation states already identified in the two-allele case. A generic
 rotation in $SO(k)$ does not map this patch to itself — it would rotate
@@ -517,14 +517,14 @@ toward. In other words: the model genuinely lives on (a patch of) a
 sphere with an ambient continuous $SO(k)$ symmetry, but the physical
 boundary — genetic drift's absorbing fixation states — breaks that
 continuous symmetry down to the finite subgroup of coordinate
-permutations, $S_k$, the same discrete label-permutation group identified
-in the two-allele analysis (there, the k = 2 case: $S_2 \cong
-\mathbb{Z}_2$).
+permutations, $S_{k}$, the same discrete label-permutation group identified
+in the two-allele analysis (there, the k = 2 case: $S_{2} \cong
+\mathbb{Z}_{2}$).
 
 **On the multi-locus case and "$n = 4L$."** If several independent,
 unlinked loci are tracked simultaneously (as real analyses do), the full
 state space becomes a product of one such sphere per locus — an ambient
-symmetry of $SO(k_1) \times SO(k_2) \times \cdots \times SO(k_L)$ (or
+symmetry of $SO(k_{1}) \times SO(k_{2}) \times \cdots \times SO(k_{L})$ (or
 $SO(k)^L$ if every locus has the same number of alleles $k$), possibly
 with an extra factor of $S_L$ if the loci themselves are statistically
 exchangeable. This product structure is a legitimate and probably closer
@@ -536,23 +536,23 @@ rather than papered over.
 
 | Symmetry | Group | Present in the model? |
 |---|---|---|
-| Relabeling the **k** alleles at one locus | **S<sub>k</sub>** | Yes, absent mutation bias or selection |
-| Relabeling the **D** islands | **S<sub>d</sub>** | Yes, if all island sizes and migration rates are equal |
-| Allele-frequency reflection (two-allele case, $k=2$) | $\mathbb{Z}_2 \cong S_2$ | Yes — the $k=2$ special case of the row above |
+| Relabeling the **$k$** alleles at one locus | **$S_{k}$** | Yes, absent mutation bias or selection |
+| Relabeling the $D$ islands | **$S_{d}$** | Yes, if all island sizes and migration rates are equal |
+| Allele-frequency reflection (two-allele case, $k=2$) | $\mathbb{Z}_{2} \cong S_{2}$ | Yes — the $k=2$ special case of the row above |
 | Ambient rotation of the $k$-allele sphere embedding | $SO(k)$ | Only before the positive-orthant constraint is applied — broken by absorbing fixation states |
 | Continuous phase rotation ($U(1)$, the original framing) | — | No — not the right ambient group in the first place; also broken by absorbing states even where it would apply |
 
 **Bottom line (unchanged by this correction):** the finite island model is
 best described as a mean-field (or, under stepping-stone migration,
 lattice) Markov random field with a discrete label-permutation symmetry
-group, $S_k \times S_d$ — a mean-field Potts-model analogy. What the
+group, $S_{k} \times S_{d}$ — a mean-field Potts-model analogy. What the
 correction adds is *why* a rotation group shows up in the first place: the
 multi-allele generalization of Wright's arcsine transform genuinely
 embeds the model on a sphere with ambient continuous symmetry $SO(k)$,
 not $U(1)$ — but the requirement that allele frequencies stay
 non-negative restricts the model to one small patch of that sphere, and
 the absorbing boundary of that patch (fixation) breaks $SO(k)$ down to
-the same finite permutation group, $S_k$, identified all along. The
+the same finite permutation group, $S_{k}$, identified all along. The
 discrete transform the corrected question pointed to is precisely this
 boundary-induced symmetry breaking, not a separate phenomenon.
 

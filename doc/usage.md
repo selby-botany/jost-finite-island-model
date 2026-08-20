@@ -76,7 +76,7 @@ Each example below is a complete config and the command that runs it: save
 the YAML, run the command, and the reported values match those shown here,
 because the same seed, parameters, and version always give the same
 `report.json` (see [Reproduce a run](#reproduce-a-run)). Each example uses
-a small `N`, `d`, and `max_generations` so it finishes in seconds, and a
+a small $N$, $d$, and $max_generations$ so it finishes in seconds, and a
 seed distinct from [`fim init`](#create-a-configuration)'s starter config.
 Each demonstrates one option, or one natural pair of options, from the
 [configuration reference](configuration.md); a real study combines them
@@ -84,7 +84,7 @@ freely.
 
 ### Unequal island sizes with a migration hub
 
-Four demes of very different size, connected by an explicit `d x d`
+Four demes of very different size, connected by an explicit $d x d$
 migration matrix rather than one shared rate — a small "hub" topology
 where deme 4 is both the largest and the best-connected:
 
@@ -111,9 +111,9 @@ max_generations: 300
 fim run hub-island.yaml --output results/hub-island --quiet
 ```
 
-Converges at generation 11 with `D ~ 0.100`. `manifest.json`'s `parameters.N`
+Converges at generation 11 with $D \sim 0.100$. `manifest.json`'s `parameters.N`
 and `parameters.m` record the exact per-deme sizes and matrix rows used —
-compare them against a run with one shared `N`/`m` to see the effect of
+compare them against a run with one shared $N/m$ to see the effect of
 unequal size and asymmetric connectivity on differentiation.
 
 ### Stepping-stone (spatial) migration
@@ -143,15 +143,15 @@ max_generations: 500
 fim run stepping-stone.yaml --output results/stepping-stone --quiet
 ```
 
-Converges at generation 10 with `D ~ 0.124`. Swap `topology: ring` for
+Converges at generation 10 with $D \sim 0.124$. Swap `topology: ring` for
 `linear` to remove the wrap-around edge between deme 1 and deme 6.
 
 ### Stochastic migrant counts
 
 By default, migration blends each deme's frequencies with an exact
-`rate * N` fraction of its neighbors' — a deterministic step given that
+$rate * N$ fraction of its neighbors' — a deterministic step given that
 generation's frequencies. `migrant_sampling: stochastic` instead draws the
-migrant *count* from `Binomial(N, rate)`, adding a genuine, explicit source
+migrant *count* from $Binomial(N, rate)$, adding a genuine, explicit source
 of randomness some studies want counted:
 
 ```yaml
@@ -174,7 +174,7 @@ max_generations: 500
 fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 ```
 
-Converges at generation 15 with `D ~ 0.039`. Re-run with `migrant_sampling`
+Converges at generation 15 with $D \sim 0.039$. Re-run with `migrant_sampling`
 removed (or set to `continuous`, the default) at the same seed to compare
 against the deterministic-migration baseline directly.
 
@@ -184,9 +184,9 @@ By default (`mutation_model: infinite_alleles`), every mutation receives a
 globally unique identity — the standard population-genetics idealization
 for a locus long enough that two independent mutations essentially never
 land on the same state. `finite_alleles` instead bounds a locus to
-`4 ** length` states and lets a mutation recur to one already present
+$4^{length}$ states and lets a mutation recur to one already present
 elsewhere in the run — deliberately exercised here with a very short
-3-base locus (only `4 ** 3 = 64` states) and a high `mu` so recurrence is
+3-base locus (only $4^{3} = 64$ states) and a high $mu$ so recurrence is
 actually likely within the run, not just theoretically possible:
 
 ```yaml
@@ -210,16 +210,16 @@ max_generations: 500
 fim run finite-alleles.yaml --output results/finite-alleles --quiet
 ```
 
-Converges at generation 12 with `D ~ 0.207`. See
+Converges at generation 12 with $D \sim 0.207$. See
 [configuration.md](configuration.md#mutation_model) for how this differs
 from a distance-based (stepwise) mutation model, which `fim` does not
 implement.
 
 ### Per-base mutation rate across unequal locus lengths
 
-`mu_b` (mutually exclusive with `mu`) is a single per-base-pair mutation
-probability; each locus derives its own `mu` from `mu_b` and its own
-`length` via `mu = 1 - (1 - mu_b) ** length` — so two loci of very
+$mu_{b}$ (mutually exclusive with $mu$) is a single per-base-pair mutation
+probability; each locus derives its own $mu$ from $mu_{b}$ and its own
+$length$ via $mu = 1 - (1 - mu_{b})^{length}$ — so two loci of very
 different lengths do not silently mutate at the same rate:
 
 ```yaml
@@ -243,10 +243,10 @@ max_generations: 500
 fim run mu-b.yaml --output results/mu-b --quiet
 ```
 
-Converges at generation 15 with `D ~ 0.090`. `results/mu-b/manifest.json`'s
+Converges at generation 15 with $D \sim 0.090$. `results/mu-b/manifest.json`'s
 `parameters.mu` records the two derived rates — `0.0009995` for the
 50-base locus and `0.0099503` for the 500-base one — the expanded,
-canonical form `mu_b` is sugar for; `mu_b` itself is never stored.
+canonical form $mu_{b}$ is sugar for; `mu_{b}` itself is never stored.
 
 ### Several convergence statistics
 
@@ -275,7 +275,7 @@ fim run multi-statistic.yaml --output results/multi-statistic --quiet
 ```
 
 Converges at generation 16, with `report.json`'s `converged_on` recording
-`["D", "G_ST"]` — both were watched, and `any` means only one needed to
+$["D", "G_ST"]$ — both were watched, and `any` means only one needed to
 stabilize first.
 
 ### An adaptive replicate batch with a confidence interval
@@ -307,8 +307,8 @@ replicate_tolerance: 0.05
 fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 ```
 
-Stops at exactly 10 replicates (`replicate_minimum`) — `D`'s 95% confidence
-interval is already `0.218 +/- 0.048`, tighter than the requested `0.05`
+Stops at exactly 10 replicates (`replicate_minimum`) — $D$'s 95% confidence
+interval is already $0.218 +/- 0.048$, tighter than the requested `0.05`
 half-width, so the remaining 40 possible replicates were never needed.
 `results/adaptive-batch/summary.json` reports every statistic's own
 interval; `results/adaptive-batch/replicate-001/` through `replicate-010/`
@@ -335,9 +335,9 @@ fim stats run/trajectory.jsonl --q 0 --q 1 --q 2
 ```
 
 JSON is printed to standard output. `--output` also writes the same result.
-`--q 0` and `--q 2` always match the report's own `K_ST` and `D`; `--q 1`
-matches `E_ST`, including the run's own `deme_weighting` setting — a
-size-weighted `E_ST` and an equal-weighted `Differentiation_1` would
+`--q 0` and `--q 2` always match the report's own $K_{ST}$ and $D$; `--q 1`
+matches $E_{ST}$, including the run's own `deme_weighting` setting — a
+size-weighted $E_{ST}$ and an equal-weighted `Differentiation_1` would
 otherwise silently disagree on the same trajectory.
 
 ## Check for updates
@@ -424,27 +424,27 @@ to get a manifest this version can read and verify.
 The final report contains:
 
 - run identity, generation, convergence flag, watched statistic, and reason;
-- `H_S`, `H_T`, and the correctly partitioned `H_ST`;
-- `G_ST` (`null` only when *every* tracked locus is fixed for the same
+- $H_{S}$, $H_{T}$, and the correctly partitioned $H_{ST}$;
+- $G_{ST}$ (`null` only when *every* tracked locus is fixed for the same
   allele in every deme; with several loci, a locus that is fixed on its
   own does not blank out the others — it is dropped and the remaining,
   genuinely polymorphic loci are averaged);
-- Jost's `D`, entropy differentiation `E_ST`, and allele-number
-  differentiation `K_ST`.
+- Jost's $D$, entropy differentiation $E_{ST}$, and allele-number
+  differentiation $K_{ST}$.
 
 Multiple loci are independent repeats; report scalars are their arithmetic
-means (`G_ST` as just described). `D` and `K_ST` always use equal deme
-weighting. `deme_weighting` affects `E_ST`.
+means ($G_{ST}$ as just described). $D$ and $K_{ST}$ always use equal deme
+weighting. `deme_weighting` affects $E_{ST}$.
 
 ### `scatter.png`
 
-- `d = 2`: direct Deme 1 versus Deme 2 scatter with a diagonal reference.
-- `d = 3`: direct three-dimensional scatter.
-- `4 <= d <= 6`: every pairwise deme projection.
-- `d > 6`: a single plot explicitly labeled as a two-dimensional PCA
+- $d = 2$: direct Deme 1 versus Deme 2 scatter with a diagonal reference.
+- $d = 3$: direct three-dimensional scatter.
+- $4 <= d <= 6$: every pairwise deme projection.
+- $d > 6$: a single plot explicitly labeled as a two-dimensional PCA
   projection.
 
-One point represents one `(locus, allele)` pair. Coincident points are enlarged
+One point represents one $(locus, allele)$ pair. Coincident points are enlarged
 and annotated.
 
 ### Batch `summary.json` and `manifest.json`
@@ -453,8 +453,8 @@ Written only for `n_replicates` greater than one, alongside the
 `replicate-NNN/` subdirectories, each of which holds the four scalar-run
 files above.
 
-`summary.json` maps each reported statistic name (`D`, `G_ST`, `E_ST`,
-`K_ST`, `H_S`, `H_T`, `H_ST`) to its across-replicate confidence interval:
+`summary.json` maps each reported statistic name ($D$, $G_{ST}$, $E_{ST}$,
+$K_{ST}$, $H_{S}$, $H_{T$}, $H_{ST}$) to its across-replicate confidence interval:
 
 ```json
 {
@@ -469,10 +469,10 @@ files above.
 }
 ```
 
-`G_ST` can have a smaller `sample_count` than the other statistics: a
-replicate whose locus is monomorphic across every deme reports `G_ST` as
+$G_{ST}$ can have a smaller `sample_count` than the other statistics: a
+replicate whose locus is monomorphic across every deme reports $G_{ST}$ as
 `null` in its own `report.json`, and that replicate is excluded from
-`G_ST`'s interval rather than papered over with a substitute value. A
+$G_{ST}$'s interval rather than papered over with a substitute value. A
 statistic left with fewer than two defined replicates is omitted from
 `summary.json` entirely.
 
