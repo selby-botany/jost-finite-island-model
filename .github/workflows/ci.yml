@@ -453,6 +453,15 @@ jobs:
           pyinstaller --workpath .pyinstaller-build --noconfirm
           packaging/fim.spec
       - name: Smoke-test the executable
+        # Explicit: inside a `container:`, GitHub Actions defaults `run:`
+        # steps to plain `sh` (dash in this image), not bash, since the
+        # image is not guaranteed to have bash on PATH -- `set -o
+        # pipefail` is a bashism dash rejects outright ("Illegal option
+        # -o pipefail"). Confirmed live: this exact step failed with
+        # that error on the first real run of the mirrored beta job
+        # (beta.yml's linux-beta-x64) before this fix, since this job
+        # itself had never yet been exercised by a real tag push.
+        shell: bash
         run: |
           set -euo pipefail
           expected_version="fim ${GITHUB_REF_NAME#v}"

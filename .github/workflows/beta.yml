@@ -376,6 +376,14 @@ jobs:
           pyinstaller --workpath .pyinstaller-build --noconfirm
           packaging/fim.spec
       - name: Smoke-test the executable
+        # Explicit: inside a `container:`, GitHub Actions defaults `run:`
+        # steps to plain `sh` (dash in this image), not bash -- `set -o
+        # pipefail` is a bashism dash rejects outright. Found live: this
+        # exact step failed with "Illegal option -o pipefail" on this
+        # workflow's first real run, before this fix -- the same defect
+        # exists in ci.yml's mirrored linux-x64 job, fixed there too in
+        # the same commit.
+        shell: bash
         env:
           BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
           BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
