@@ -596,6 +596,57 @@ def starter_form_values() -> dict[str, str]:
     return params_to_form_values(starter_params)
 
 
+# `configuration.md`'s own section order (§3.6: "same key order as
+# STARTER_CONFIG"), covering every key `form_values_to_payload` can
+# ever produce. Not every payload has every key — `mu` and `mu_b` are
+# mutually exclusive (only one is ever present) — so
+# `payload_to_yaml_text` filters this down to whichever keys are
+# actually present, in this order.
+_YAML_KEY_ORDER: Final[tuple[str, ...]] = (
+    "N",
+    "d",
+    "m",
+    "mu",
+    "mu_b",
+    "seed",
+    "n_loci",
+    "locus_lengths",
+    "mutation_model",
+    "initial_allele_count",
+    "initial_concentration",
+    "deme_weighting",
+    "convergence_statistic",
+    "convergence_combinator",
+    "convergence_window",
+    "convergence_tolerance",
+    "max_generations",
+    "n_replicates",
+    "replicate_tolerance",
+    "replicate_minimum",
+    "replicate_confidence",
+    "migrant_sampling",
+)
+
+
+def payload_to_yaml_text(payload: Mapping[str, object]) -> str:
+    """Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
+
+    Args:
+        payload: A payload already accepted by `SimulationParams.from_mapping`
+            (typically `form_values_to_payload`'s own return value).
+
+    Returns:
+        YAML text in `configuration.md`'s own key order (§3.6) — a
+        valid `fim run`/`fim init --force` replacement. Any key not in
+        `_YAML_KEY_ORDER` (none exist today; a defensive fallback
+        against this list drifting out of sync with a future field) is
+        appended afterward rather than silently dropped.
+    """
+    ordered = {name: payload[name] for name in _YAML_KEY_ORDER if name in payload}
+    ordered.update({key: value for key, value in payload.items() if key not in ordered})
+    return yaml.safe_dump(ordered, sort_keys=False)
+
+
 def _parse_float_named(name: str, text: str) -> float:
     """Parse one float field's text, matching `_parse_float`'s wording."""
     try:

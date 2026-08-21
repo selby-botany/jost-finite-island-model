@@ -19,15 +19,23 @@ tab and the message in the always-visible banner (§4.0 #2: "no
 click-through hunting"), flags that tab's own label with a small error
 dot, and — when the field also has an inline slot — shows the same
 message there too, a convenience for whoever is already on the right
-tab (design §4.6, §4.7).
+tab (design §4.6, §4.7). "Load YAML…" and "Save YAML…" go through
+`fim.cli.load_config` and `config_form.payload_to_yaml_text` — the
+identical config path `fim run` uses (design §3.6, requirement G5) —
+so a config that runs from the terminal loads identically here, and a
+config saved here runs identically from the terminal.
 """
 
 from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable, Mapping
-from tkinter import ttk
+from pathlib import Path
+from tkinter import filedialog, ttk
 
+import yaml
+
+from fim.cli import load_config
 from fim.gui import config_form
 from fim.model.params import SimulationParams
 
@@ -49,6 +57,8 @@ class InputScreen(ttk.Frame):
         parent: tk.Misc,
         *,
         on_run: Callable[[SimulationParams], None] | None = None,
+        open_dialog: Callable[[], str] = filedialog.askopenfilename,
+        save_dialog: Callable[[], str] = filedialog.asksaveasfilename,
     ) -> None:
         """Build every tab, the error banner, and the action buttons.
 
@@ -59,9 +69,19 @@ class InputScreen(ttk.Frame):
                 G2 gives this a real orchestrator to call; this screen
                 only ever hands it an already-validated
                 `SimulationParams`.
+            open_dialog: Returns the path "Load YAML…" reads, or an
+                empty string for a cancelled dialog. Defaults to the
+                real file-open dialog; injectable so tests never open
+                one.
+            save_dialog: Returns the path "Save YAML…" writes, or an
+                empty string for a cancelled dialog. Defaults to the
+                real file-save dialog; injectable so tests never open
+                one.
         """
         super().__init__(parent)
         self._on_run = on_run if on_run is not None else (lambda _params: None)
+        self._open_dialog = open_dialog
+        self._save_dialog = save_dialog
         self._vars: dict[str, tk.StringVar] = {}
         self._field_errors: dict[str, ttk.Label] = {}
         self._valid_params: SimulationParams | None = None
@@ -90,6 +110,12 @@ class InputScreen(ttk.Frame):
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", pady=(12, 4), padx=4)
+        ttk.Button(buttons, text="Load YAML…", command=self._on_load_yaml).pack(
+            side="left"
+        )
+        ttk.Button(buttons, text="Save YAML…", command=self._on_save_yaml).pack(
+            side="left"
+        )
         ttk.Button(
             buttons, text="Reset to defaults", command=self._on_reset_to_defaults
         ).pack(side="left")
@@ -398,6 +424,29 @@ class InputScreen(ttk.Frame):
         self._update_convergence_combinator_visibility()
         self._revalidate()
 
+    def _on_load_yaml(self) -> None:
+        """Load a YAML config through the exact path `fim run` uses.
+
+        `fim.cli.load_config` — not a second, GUI-local YAML reader —
+        parses and validates the file (design §3.6's "Load"); on
+        success every field on every tab is replaced from the result.
+        On failure the message is shown in the banner, verbatim, and
+        the form is left untouched: an inline placement would point at
+        whichever widget currently happens to share a config key with
+        the failure, which has nothing to do with what is actually
+        wrong with the file on disk.
+        """
+        path = self._open_dialog()
+        if not path:
+            return
+        try:
+            params = load_config(path)
+            values = config_form.params_to_form_values(params)
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            self._set_banner(str(error))
+            return
+        self.set_values(values)
+
     def _on_m_mode_changed(self) -> None:
         """React to the user changing `m`'s mode: update visibility, then revalidate."""
         self._update_m_visibility()
@@ -421,6 +470,31 @@ class InputScreen(ttk.Frame):
         """
         if self._valid_params is not None:
             self._on_run(self._valid_params)
+
+    def _on_save_yaml(self) -> None:
+        """Save the form's current values through the shared payload/YAML path.
+
+        Validated first (`config_form.form_values_to_payload` +
+        `SimulationParams.from_mapping`) so an invalid form never opens
+        the save dialog at all — there is nothing valid to write yet,
+        and the message belongs in the banner exactly like any other
+        validation failure. Only once that succeeds is
+        `config_form.payload_to_yaml_text` written to the chosen path,
+        producing a document `fim run`/`fim init --force` accepts
+        (design §3.6's "Save").
+        """
+        try:
+            payload = config_form.form_values_to_payload(self.get_values())
+            SimulationParams.from_mapping(payload)
+        except ValueError as error:
+            self._set_banner(str(error))
+            return
+        path = self._save_dialog()
+        if not path:
+            return
+        Path(path).write_text(
+            config_form.payload_to_yaml_text(payload), encoding="utf-8"
+        )
 
     def _revalidate(self) -> None:
         """Re-run validation against the form's current values.
@@ -453,11 +527,15 @@ class InputScreen(ttk.Frame):
             tab_name = config_form.tab_for_error(message)
             if tab_name is not None:
                 self._flag_tab(tab_name)
-                self._banner["text"] = f"{self._tab_labels[tab_name]}: {message}"
+                self._set_banner(f"{self._tab_labels[tab_name]}: {message}")
             else:
-                self._banner["text"] = message
+                self._set_banner(message)
             return
         self._run_button.state(["!disabled"])
+
+    def _set_banner(self, message: str) -> None:
+        """Show one whole-form error message (design §4.6)."""
+        self._banner["text"] = message
 
     def _update_batch_visibility(self) -> None:
         """Show the adaptive-batch fields only once `n_replicates` is greater than 1."""

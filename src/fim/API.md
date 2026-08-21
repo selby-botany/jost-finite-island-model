@@ -70,6 +70,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [p0\_summary\_from\_params](#fim.gui.config_form.p0_summary_from_params)
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
+  * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
 * [fim.gui.screens](#fim.gui.screens)
 * [fim.gui.screens.input\_screen](#fim.gui.screens.input_screen)
   * [InputScreen](#fim.gui.screens.input_screen.InputScreen)
@@ -1359,6 +1360,30 @@ Return the form's default values, from the CLI's own starter config.
   design §3.6 requires, so a fresh form and `fim init` can never
   drift apart into two documented starting scenarios.
 
+<a id="fim.gui.config_form.payload_to_yaml_text"></a>
+
+#### payload\_to\_yaml\_text
+
+```python
+def payload_to_yaml_text(payload: Mapping[str, object]) -> str
+```
+
+Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
+
+**Arguments**:
+
+- `payload` - A payload already accepted by `SimulationParams.from_mapping`
+  (typically `form_values_to_payload`'s own return value).
+
+
+**Returns**:
+
+  YAML text in `configuration.md`'s own key order (§3.6) — a
+  valid `fim run`/`fim init --force` replacement. Any key not in
+  `_YAML_KEY_ORDER` (none exist today; a defensive fallback
+  against this list drifting out of sync with a future field) is
+  appended afterward rather than silently dropped.
+
 <a id="fim.gui.screens"></a>
 
 # fim.gui.screens
@@ -1390,7 +1415,11 @@ tab and the message in the always-visible banner (§4.0 `2`: "no
 click-through hunting"), flags that tab's own label with a small error
 dot, and — when the field also has an inline slot — shows the same
 message there too, a convenience for whoever is already on the right
-tab (design §4.6, §4.7).
+tab (design §4.6, §4.7). "Load YAML…" and "Save YAML…" go through
+`fim.cli.load_config` and `config_form.payload_to_yaml_text` — the
+identical config path `fim run` uses (design §3.6, requirement G5) —
+so a config that runs from the terminal loads identically here, and a
+config saved here runs identically from the terminal.
 
 <a id="fim.gui.screens.input_screen.InputScreen"></a>
 
@@ -1407,9 +1436,12 @@ Screen 1: build and validate a `SimulationParams` from a tabbed form.
 #### \_\_init\_\_
 
 ```python
-def __init__(parent: tk.Misc,
-             *,
-             on_run: Callable[[SimulationParams], None] | None = None) -> None
+def __init__(
+        parent: tk.Misc,
+        *,
+        on_run: Callable[[SimulationParams], None] | None = None,
+        open_dialog: Callable[[], str] = filedialog.askopenfilename,
+        save_dialog: Callable[[], str] = filedialog.asksaveasfilename) -> None
 ```
 
 Build every tab, the error banner, and the action buttons.
@@ -1422,6 +1454,14 @@ Build every tab, the error banner, and the action buttons.
   G2 gives this a real orchestrator to call; this screen
   only ever hands it an already-validated
   `SimulationParams`.
+- `open_dialog` - Returns the path "Load YAML…" reads, or an
+  empty string for a cancelled dialog. Defaults to the
+  real file-open dialog; injectable so tests never open
+  one.
+- `save_dialog` - Returns the path "Save YAML…" writes, or an
+  empty string for a cancelled dialog. Defaults to the
+  real file-save dialog; injectable so tests never open
+  one.
 
 <a id="fim.gui.screens.input_screen.InputScreen.get_values"></a>
 

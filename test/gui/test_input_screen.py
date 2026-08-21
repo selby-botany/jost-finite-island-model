@@ -5,15 +5,21 @@ named test) is now meaningful end to end: every tab exists, so a fresh,
 prefilled screen actually validates successfully and enables "Run
 simulation." An invalid field's own tab gets a small error dot and the
 always-visible banner names both the tab and the message (design §4.0
-#2's "no click-through hunting").
+#2's "no click-through hunting"). "Load YAML…"/"Save YAML…" go through
+the same `fim.cli.load_config`/`config_form.payload_to_yaml_text` path
+`fim run` uses (requirement G5) — `open_dialog`/`save_dialog` are
+always injected in these tests, so none ever opens a real dialog.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
+from fim import cli
+from fim.gui import config_form
 from fim.gui.app import Application
 from fim.gui.screens.input_screen import InputScreen
 
@@ -359,3 +365,109 @@ def test_banner_names_convergence_for_a_below_minimum_window(app: Application) -
         )
         == "Convergence \N{WARNING SIGN}"
     )
+
+
+def test_load_yaml_uses_the_shared_cli_load_config(
+    app: Application, tmp_path: Path
+) -> None:
+    """ "Load YAML…" populates every tab via `fim.cli.load_config` verbatim.
+
+    Closes requirement G5's "load" half: a config the CLI accepts loads
+    identically here.
+    """
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        cli.STARTER_CONFIG.replace("seed: 20260814", "seed: 7"), encoding="utf-8"
+    )
+    screen = InputScreen(app, open_dialog=lambda: str(config_path))
+
+    screen._on_load_yaml()
+
+    assert screen.get_values()["seed"] == "7"
+    assert screen._banner["text"] == ""
+    assert screen._valid_params is not None
+
+
+def test_load_yaml_is_a_no_op_when_the_dialog_is_cancelled(app: Application) -> None:
+    """An empty path (a cancelled file dialog) leaves the form untouched."""
+    screen = InputScreen(app, open_dialog=lambda: "")
+    before = dict(screen.get_values())
+
+    screen._on_load_yaml()
+
+    assert screen.get_values() == before
+
+
+def test_load_yaml_rejects_a_malformed_file_and_leaves_the_form_untouched(
+    app: Application, tmp_path: Path
+) -> None:
+    """A rejected file shows the banner verbatim and never touches the form."""
+    bad_path = tmp_path / "bad.yaml"
+    bad_path.write_text("not: [valid, yaml: structure", encoding="utf-8")
+    screen = InputScreen(app, open_dialog=lambda: str(bad_path))
+    before = dict(screen.get_values())
+
+    screen._on_load_yaml()
+
+    assert screen.get_values() == before
+    assert screen._banner["text"] != ""
+
+
+def test_save_yaml_round_trips_through_the_shared_cli_load_config(
+    app: Application, tmp_path: Path
+) -> None:
+    """ "Save YAML…" writes a file `fim.cli.load_config` reads back identically.
+
+    Closes requirement G5's "save" half.
+    """
+    save_path = tmp_path / "saved.yaml"
+    screen = InputScreen(app, save_dialog=lambda: str(save_path))
+    assert screen._valid_params is not None
+
+    screen._on_save_yaml()
+
+    assert save_path.is_file()
+    assert cli.load_config(save_path) == screen._valid_params
+
+
+def test_save_yaml_is_a_no_op_when_the_dialog_is_cancelled(
+    app: Application, tmp_path: Path
+) -> None:
+    """An empty path (a cancelled file dialog) writes nothing."""
+    screen = InputScreen(app, save_dialog=lambda: "")
+
+    screen._on_save_yaml()
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_save_yaml_never_opens_the_dialog_for_an_invalid_form(
+    app: Application,
+) -> None:
+    """An invalid form is rejected before the save dialog ever opens."""
+    opened: list[None] = []
+
+    def fail_if_called() -> str:
+        opened.append(None)
+        return ""
+
+    screen = InputScreen(app, save_dialog=fail_if_called)
+    screen._vars["d"].set("not a number")
+    app.update_idletasks()
+
+    screen._on_save_yaml()
+
+    assert opened == []
+    assert screen._banner["text"] != ""
+
+
+def test_payload_to_yaml_text_matches_configuration_md_key_order() -> None:
+    """`payload_to_yaml_text` writes the starter payload in a stable, readable order."""
+    payload = config_form.form_values_to_payload(config_form.starter_form_values())
+
+    text = config_form.payload_to_yaml_text(payload)
+
+    lines = [line.split(":")[0] for line in text.splitlines()]
+    assert lines.index("N") < lines.index("d") < lines.index("m") < lines.index("mu")
+    assert lines.index("mu") < lines.index("seed")
+    assert lines.index("max_generations") < lines.index("n_replicates")
