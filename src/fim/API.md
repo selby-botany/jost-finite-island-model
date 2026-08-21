@@ -129,6 +129,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.gui.store.GuiProgressStore.__init__)
     * [write\_generation](#fim.gui.store.GuiProgressStore.write_generation)
     * [read](#fim.gui.store.GuiProgressStore.read)
+* [fim.launcher](#fim.launcher)
+  * [main](#fim.launcher.main)
 * [fim.model](#fim.model)
 * [fim.model.allele](#fim.model.allele)
   * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
@@ -2678,6 +2680,49 @@ def read(run_id: str) -> Iterator[TrajectoryRow]
 ```
 
 Delegate straight to the wrapped store; nothing to decorate here.
+
+<a id="fim.launcher"></a>
+
+# fim.launcher
+
+Dispatcher for the single packaged executable's ways into the GUI.
+
+Design doc `20260819-claude-sonnet-5-graphical-interface.md` §5.1: the
+Windows release ships one `.exe`, opened by double-clicking (GUI, no
+arguments) or from a terminal (CLI). `fim.cli.main` keeps its exact
+existing signature, behavior, and test suite untouched; this module
+only adds a branch in front of it. `fim = "fim.launcher:main"` in
+`pyproject.toml`'s `[project.scripts]` is the only thing that changes
+which callable actually runs `fim` — every documented invocation with a
+command still reaches the unmodified CLI parser.
+
+<a id="fim.launcher.main"></a>
+
+#### main
+
+```python
+def main(argv: Sequence[str] | None = None) -> int
+```
+
+Dispatch to the GUI (zero arguments) or the CLI (anything else).
+
+`fim.exe` invoked with zero arguments today already fails
+(`fim.cli.main`'s subparsers are `required=True`, so `parse_args`
+itself raises `SystemExit(2)` before any command runs) — there is no
+existing zero-argument behavior this branch could regress. Every
+other invocation (`fim run ...`, `fim --version`, `fim init`, and so
+on) is unaffected: a non-empty `arguments` passes straight through
+to the unmodified CLI parser.
+
+**Arguments**:
+
+- `argv` - Arguments excluding the program name, or ``None`` for
+  ``sys.argv``.
+
+
+**Returns**:
+
+  The dispatched entry point's own process-style exit status.
 
 <a id="fim.model"></a>
 

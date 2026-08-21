@@ -121,6 +121,14 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "src/fim/engine.py" = ["N803"]
+# The whole point of a launcher/dispatcher is to defer importing each
+# destination (fim.cli, fim.gui.app — the latter pulling in tkinter and
+# matplotlib) until the branch that actually needs it is chosen, so a
+# pure-CLI invocation never pays for the GUI's import cost. Late imports
+# here are deliberate, not a lint gap (design doc
+# 20260819-claude-sonnet-5-graphical-interface.md §5.1's own code sketch
+# does the same).
+"src/fim/launcher.py" = ["PLC0415"]
 "test/**/*.py" = ["ARG001", "PLR2004", "S101"]
 
 [tool.mypy]
