@@ -15,9 +15,12 @@ Security fixes are provided for the current `1.x` release.
 simulation has no network path, does not execute configuration content, and
 does not require elevated privileges.
 
-The only network operation is the explicit `fim update --check` command. It
-performs one HTTPS request to the public GitHub Releases API, reports the
-latest release page, and never downloads or modifies the executable.
+The only network operation is the explicit `fim update --check` command, or
+its identical GUI equivalent (`fim-gui`'s "Check for updates…" menu item —
+both call the same `fim.update` logic). Either one performs one HTTPS
+request to the public GitHub Releases API, reports the latest release page,
+and never downloads or modifies the executable. Nothing in `fim-gui` calls
+it on startup or on a timer; it runs only when explicitly chosen.
 
 ## Local data handling
 
