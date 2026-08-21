@@ -433,6 +433,17 @@ jobs:
     permissions:
       contents: write
     steps:
+      # `gh release create` shells out to `git` to determine which
+      # repository it is targeting; with no checkout present at all it
+      # fails immediately with "fatal: not a git repository" before
+      # ever reaching the release-creation call itself. Found live:
+      # this job had none of ci.yml's real `publish` job's steps that
+      # happen to establish that context (its own leading `actions/
+      # checkout`), since publish-beta only ever downloads artifacts
+      # and never otherwise needed the source tree -- confirmed on
+      # this job's second real run (the first was never reached; that
+      # run failed earlier, in linux-beta-x64).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
           name: windows-beta-x64
