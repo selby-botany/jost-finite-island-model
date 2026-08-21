@@ -41,6 +41,12 @@ from fim.persistence.manifest import (
     write_batch_manifest,
     write_manifest,
 )
+
+# Explicit re-export (not a rename): test/cli/test_cli.py patches
+# `cli.write_report` directly to inject a failure at a specific artifact
+# boundary, so it must resolve as this module's own attribute under
+# mypy strict, not merely an unexported transitive import.
+from fim.persistence.report import write_report as write_report  # noqa: PLC0414
 from fim.statistics.differentiation import differentiation_q
 from fim.viz.scatter import plot_frequency_scatter
 
@@ -265,7 +271,7 @@ def _command_run_batch(
             )
             _write_run_artifacts(result, directory)
             artifact_digests[directory.name] = hash_file(directory / "manifest.json")
-        _write_json(working_directory / "summary.json", replicate_summary(output))
+        write_report(working_directory / "summary.json", replicate_summary(output))
         artifact_digests["summary"] = hash_file(working_directory / "summary.json")
         write_batch_manifest(
             working_directory / "manifest.json",
@@ -533,7 +539,7 @@ def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
     against a process dying mid-write, not against power loss.
     """
     targets = _run_artifact_targets(directory)
-    _write_json(targets["report"], result.report)
+    write_report(targets["report"], result.report)
     figure = plot_frequency_scatter(
         result.final_state, result.params, targets["scatter"]
     )
@@ -736,13 +742,6 @@ def _version_parts(value: str) -> tuple[int, int, int]:
     if any(part < 0 for part in parsed):
         raise RuntimeError(f"release version is not semantic: {value}")
     return parsed  # type: ignore[return-value]
-
-
-def _write_json(path: Path, value: Mapping[str, object]) -> None:
-    """Write deterministic UTF-8 JSON."""
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump(value, handle, indent=2, sort_keys=True, allow_nan=False)
-        handle.write("\n")
 
 
 if __name__ == "__main__":

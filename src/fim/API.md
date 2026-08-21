@@ -129,6 +129,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [from\_dict](#fim.persistence.manifest.BatchManifest.from_dict)
   * [read\_batch\_manifest](#fim.persistence.manifest.read_batch_manifest)
   * [write\_batch\_manifest](#fim.persistence.manifest.write_batch_manifest)
+* [fim.persistence.report](#fim.persistence.report)
+  * [write\_report](#fim.persistence.report.write_report)
 * [fim.persistence.store](#fim.persistence.store)
   * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
@@ -2250,6 +2252,36 @@ def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None
 ```
 
 Write a batch manifest deterministically, replacing any prior file.
+
+<a id="fim.persistence.report"></a>
+
+# fim.persistence.report
+
+Deterministic JSON writing for run-level report and summary artifacts.
+
+Extracted from `fim.cli`'s private `_write_json` (design doc
+`20260819-claude-sonnet-5-graphical-interface.md` §3.7), parallel to
+`fim.persistence.manifest.write_manifest`: one shared, deterministic JSON
+writer for both `report.json` (a `fim.engine.FinalReport`, plus the CLI's
+`fim stats` re-analysis reports and `fim.gui`'s own run reports) and a
+batch's `summary.json` (`fim.engine.replicate_summary`'s across-replicate
+confidence intervals) — every caller needing byte-identical, sorted-key,
+newline-terminated JSON, not just report.json specifically.
+
+<a id="fim.persistence.report.write_report"></a>
+
+#### write\_report
+
+```python
+def write_report(path: Path | str, value: Mapping[str, object]) -> None
+```
+
+Write one JSON report artifact deterministically.
+
+**Arguments**:
+
+- `path` - Destination file path. Parent directories are created.
+- `value` - JSON-serializable mapping.
 
 <a id="fim.persistence.store"></a>
 
