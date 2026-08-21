@@ -59,21 +59,35 @@ differentiation statistics.
    Get-FileHash .\fim-windows-x64.exe -Algorithm SHA256
    ```
 
-3. Create a starter configuration:
+3. Choose how to run it — the same executable supports both:
 
-   ```powershell
-   .\fim-windows-x64.exe init
-   ```
+   - **Windows GUI (no terminal needed):** double-click
+     `fim-windows-x64.exe`. It opens a tabbed model-input form pre-filled
+     with the documented starter configuration; "Run simulation ▶" runs it
+     with a progress bar and a Cancel button, then shows the same summary
+     and scatter plot the terminal version writes to
+     `report.json`/`scatter.png` — or, for a batch (`n_replicates` greater
+     than one), a replicate table and confidence-interval panel instead.
+     "Open a run…" revisits any previous run later. See the
+     [GUI section of the command reference](doc/usage.md#desktop-gui-fim-gui)
+     for what each screen does.
+   - **Command line:** create a starter configuration, edit it, then run it:
 
-4. Edit `results\example-run.yaml`, then run:
+     ```powershell
+     .\fim-windows-x64.exe init
+     ```
 
-   ```powershell
-   .\fim-windows-x64.exe run `
-       "results\example-run.yaml"
-   ```
+     Edit `results\example-run.yaml`, then run:
 
-The executable is self-contained. A simulation does not use the network.
-Windows SmartScreen may identify this unsigned research executable as an
+     ```powershell
+     .\fim-windows-x64.exe run `
+         "results\example-run.yaml"
+     ```
+
+Both paths read and write the same `results\` folder, so a run started from
+one can be opened, re-analyzed, or animated from the other. The executable
+is self-contained. A simulation does not use the network. Windows
+SmartScreen may identify this unsigned research executable as an
 unrecognized application; verify the checksum before selecting **Run anyway**.
 
 ### Python installation
@@ -86,6 +100,13 @@ python3 -m venv .venv
 python -m pip install .
 fim init --output example-run.yaml
 fim run example-run.yaml --output results/example
+```
+
+`pip install .` also provides `fim-gui`, the same desktop application the
+Windows release bundles — launch it with:
+
+```console
+fim-gui
 ```
 
 See [installation alternatives](install/README.md) and the

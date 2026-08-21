@@ -13,6 +13,7 @@ for that first. For parameter types and defaults, use the
 - [Worked examples](#worked-examples)
 - [Re-analyze a trajectory](#re-analyze-a-trajectory)
 - [Check for updates](#check-for-updates)
+- [Desktop GUI (`fim-gui`)](#desktop-gui-fim-gui)
 - [Global flags](#global-flags)
 - [Output schemas](#output-schemas)
 - [Reproduce a run](#reproduce-a-run)
@@ -350,6 +351,39 @@ This explicit command queries the latest GitHub Release and prints its download
 page when a newer version exists. It does not download or modify anything.
 This is the application's only network path; `run`, `stats`, and `init` are
 offline.
+
+## Desktop GUI (`fim-gui`)
+
+```console
+fim-gui
+```
+
+A Tkinter desktop application that runs the same simulations and reads the
+same `results/` folder as the commands above — install it alongside `fim`
+(`python -m pip install .` already provides both console scripts) or launch
+it from the packaged Windows executable by opening it with no arguments, for
+example by double-clicking `fim-windows-x64.exe` instead of typing a
+command. `n_replicates` in the configuration is the only thing that decides
+whether a run goes through the scalar or the batch path — there is no
+separate "batch mode" toggle. Every screen calls the identical underlying
+function this guide already documents; nothing here is a second
+implementation:
+
+| Screen | What it does | Same as |
+|---|---|---|
+| Model input | Build and validate a full configuration from a tabbed form (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one tab per [configuration reference](configuration.md) section); "Load YAML…"/"Save YAML…" read and write the exact file format above | [Create a configuration](#create-a-configuration) |
+| Running | A progress bar and a Cancel button while the simulation runs on a background thread — the window stays responsive. A batch (`n_replicates` greater than one) adds an outer replicate-count bar above the generation bar, and the button reads "Cancel batch" | `run`'s own progress/error output, on one screen instead of terminal lines |
+| Results | A scalar run's summary (all six named statistics, convergence outcome) beside the canonical scatter plot; "Open output folder" reveals the same four artifacts; "Animate" plays back the persisted trajectory | [Output schemas](#output-schemas) |
+| Batch results | A replicate table (status, final generation, every named statistic) beside each statistic's across-replicate confidence interval; "Open replicate" reaches the Results screen for any one replicate; "Export summary.json" copies the file already written | [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
+| Open a run | Pick a previous run from a recent-runs list — a batch entry is labeled distinctly and opened one replicate at a time from its own Batch results screen, not from here — or browse for a `trajectory.jsonl` directly, then re-render its summary and scatter at any persisted generation, with the same optional differentiation-`q` sweep | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
+| Animated trajectory | Play back a completed run's persisted generations as a scatter animation, with play/pause and a scrub slider | No CLI equivalent — a GUI-only bonus view |
+
+A GUI-authored run with the same parameters and seed produces byte-identical
+`trajectory.jsonl`/`report.json` to the same configuration run from the
+terminal — see [Reproduce a run](#reproduce-a-run). The GUI performs no
+network access of its own; its own "Check for updates" menu item calls the
+identical logic `fim update --check` uses, only when explicitly chosen,
+never on startup or a timer.
 
 ## Global flags
 
