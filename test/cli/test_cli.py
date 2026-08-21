@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from email.message import Message
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
 
 import pytest
 import yaml
 
-from fim import __version__, cli, paths
+from fim import __version__, cli, paths, update
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
 
@@ -433,7 +431,7 @@ def _older_version(version: str) -> str:
 
     Returns:
         A version guaranteed to compare as less than `version` under
-        `fim.cli._compare_versions`: the patch component decremented, or
+        `fim.update.compare_versions`: the patch component decremented, or
         the minor/major component decremented and reset below it when
         patch (and minor) are already zero.
     """
@@ -464,7 +462,7 @@ def test_update_check_messages_are_fully_mocked(
     def release() -> tuple[str, str]:
         return tag, "https://example.invalid/release"
 
-    monkeypatch.setattr(cli, "_latest_release", release)
+    monkeypatch.setattr(update, "latest_release", release)
 
     assert cli.main(["update", "--check"]) == 0
     assert expected in capsys.readouterr().out
@@ -982,97 +980,21 @@ def test_stats_reports_a_tampered_trajectory_and_unknown_generations(
     assert "no generation" in capsys.readouterr().err
 
 
-class _ReleaseResponse:
-    """Minimal context-managed response for the urllib release client."""
+def test_format_optional_helper_is_stable() -> None:
+    """The optional-statistic terminal formatter has deterministic output.
 
-    def __init__(self, payload: object) -> None:
-        self._payload = payload
-
-    def __enter__(self) -> _ReleaseResponse:
-        return self
-
-    def __exit__(self, *_args: object) -> None:
-        return None
-
-    def read(self, *_args: object) -> bytes:
-        return json.dumps(self._payload).encode("utf-8")
-
-
-@pytest.mark.parametrize(
-    "error",
-    [
-        # `hdrs` is typed as `email.message.Message`, not a bare dict — an
-        # empty `Message()` is what a header-less real response carries.
-        HTTPError("https://example.invalid", 500, "bad", Message(), None),
-        URLError("offline"),
-    ],
-)
-def test_fetch_latest_release_wraps_network_errors(
-    monkeypatch: pytest.MonkeyPatch,
-    error: Exception,
-) -> None:
-    """Network failures become the documented runtime error contract."""
-
-    def fail(*args: object, **kwargs: object) -> Any:
-        raise error
-
-    monkeypatch.setattr(cli, "urlopen", fail)
-    with pytest.raises(RuntimeError, match="update check failed"):
-        cli._fetch_latest_release()
-
-
-def test_fetch_latest_release_rejects_non_object_payload(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A successful HTTP response still requires an object payload."""
-    monkeypatch.setattr(
-        cli,
-        "urlopen",
-        lambda _request, **_kwargs: _ReleaseResponse(["not", "an", "object"]),
-    )
-    with pytest.raises(RuntimeError, match="non-object"):
-        cli._fetch_latest_release()
-
-
-@pytest.mark.parametrize(
-    ("payload", "message"),
-    [
-        ({}, "tag_name"),
-        ({"tag_name": "v1.0.0"}, "html_url"),
-        ({"tag_name": "v1", "html_url": "x"}, "not semantic"),
-        ({"tag_name": "v1.0.x", "html_url": "x"}, "not semantic"),
-        ({"tag_name": "v-1.0.0", "html_url": "x"}, "not semantic"),
-    ],
-)
-def test_latest_release_validates_release_fields(
-    payload: dict[str, object],
-    message: str,
-) -> None:
-    """Update checks reject incomplete and malformed release metadata."""
-    with pytest.raises(RuntimeError, match=message):
-        cli._latest_release(lambda: payload)
-
-
-@pytest.mark.parametrize(
-    ("current", "latest", "expected"),
-    [("1.0.0", "1.0.0", 0), ("1.0.0", "1.0.1", -1), ("1.0.1", "1.0.0", 1)],
-)
-def test_version_comparison_and_format_helpers_are_stable(
-    current: str,
-    latest: str,
-    expected: int,
-) -> None:
-    """Semantic versions and optional report values have deterministic output."""
-    assert cli._compare_versions(current, latest) == expected
+    The network-error, non-object-payload, release-field-validation,
+    version-comparison, and version-parsing cases this test file used to
+    carry moved out to `test/test_update.py`'s own direct unit tests
+    against `fim.update` (design doc
+    `20260819-claude-sonnet-5-graphical-interface.md`, Milestone G0,
+    §3.9, §7.2) — they relied on monkeypatching `urlopen` as a `cli.py`
+    module attribute, which the extracted code no longer reads from this
+    location. `_format_optional` stays here: it is `cli.py`'s own
+    terminal-formatting helper, untouched by the extraction.
+    """
     assert cli._format_optional(None) == "undefined"
     assert cli._format_optional(1.23456789) == "1.23457"
-
-
-@pytest.mark.parametrize("value", ["1.0", "1.0.0.0", "1.a.0", "-1.0.0"])
-def test_version_parser_rejects_non_semantic_values(value: str) -> None:
-    """Release version parsing requires exactly three non-negative integers."""
-    with pytest.raises(RuntimeError, match="not semantic"):
-        cli._version_parts(value)
 
 
 def test_update_requires_explicit_opt_in() -> None:
