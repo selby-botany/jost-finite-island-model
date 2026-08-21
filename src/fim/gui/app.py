@@ -7,15 +7,23 @@ layout and behavior" framing. Each milestone in the implementation plan
 (`dev/doc/apps/selby/jost-finite-island-model/
 20260819-claude-sonnet-5-graphical-interface.md` §7) adds its own screen
 and wires it into `main()`.
+
+`Application` also carries the one menu item requirement G9/design §3.9
+name outside any specific milestone's own commit bullet: "Check for
+updates…", user-initiated only — never on startup, never on a timer
+(SECURITY.md's threat model: "the only network operation is the explicit
+`fim update --check` command"). `_check_for_updates` calls the identical
+`fim.update` logic that command uses and renders the same three outcomes
+as a dialog instead of stdout lines.
 """
 
 from __future__ import annotations
 
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
-from fim import paths
+from fim import __version__, paths, update
 from fim.engine import RunResult
 from fim.gui.screens.animation_screen import AnimationScreen
 from fim.gui.screens.batch_results_screen import BatchResultsScreen, BatchResultsView
@@ -31,9 +39,14 @@ class Application(tk.Tk):
     """Root window holding every screen as a stacked, raised `ttk.Frame`."""
 
     def __init__(self) -> None:
-        """Build the root window and its single screen-stacking container."""
+        """Build the root window, its menu bar, and its screen-stacking container."""
         super().__init__()
         self.title("fim")
+        menu_bar = tk.Menu(self)
+        help_menu = tk.Menu(menu_bar, tearoff=False)
+        help_menu.add_command(label="Check for updates…", command=_check_for_updates)
+        menu_bar.add_cascade(label="Help", menu=help_menu)
+        self.config(menu=menu_bar)
         self._container = ttk.Frame(self)
         self._container.pack(fill="both", expand=True)
         self._container.rowconfigure(0, weight=1)
@@ -61,6 +74,34 @@ class Application(tk.Tk):
             KeyError: If `name` was never registered.
         """
         self._screens[name].tkraise()
+
+
+def _check_for_updates() -> None:
+    """Query the latest GitHub release and show the outcome as a dialog.
+
+    The exact three outcomes `cli._command_update` prints as stdout lines
+    (design §3.9), rendered as a `messagebox` dialog instead — same
+    `fim.update.latest_release`/`compare_versions` calls, same wording,
+    only the presentation differs.
+    """
+    try:
+        latest_tag, release_url = update.latest_release()
+    except RuntimeError as error:
+        messagebox.showerror("Check for updates", str(error))
+        return
+    comparison = update.compare_versions(__version__, latest_tag.removeprefix("v"))
+    if comparison < 0:
+        messagebox.showinfo(
+            "Check for updates",
+            f"A newer fim release is available: {latest_tag}\n{release_url}",
+        )
+    elif comparison == 0:
+        messagebox.showinfo("Check for updates", f"fim {__version__} is current")
+    else:
+        messagebox.showinfo(
+            "Check for updates",
+            f"fim {__version__} is newer than the latest release {latest_tag}",
+        )
 
 
 def main() -> int:
