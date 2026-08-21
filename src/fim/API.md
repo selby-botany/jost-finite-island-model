@@ -53,6 +53,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [register\_screen](#fim.gui.app.Application.register_screen)
     * [show\_screen](#fim.gui.app.Application.show_screen)
   * [main](#fim.gui.app.main)
+* [fim.gui.batch\_runner](#fim.gui.batch_runner)
+  * [replicate\_index](#fim.gui.batch_runner.replicate_index)
+  * [replicate\_output\_directory](#fim.gui.batch_runner.replicate_output_directory)
+  * [start\_batch\_run](#fim.gui.batch_runner.start_batch_run)
 * [fim.gui.config\_form](#fim.gui.config_form)
   * [FormField](#fim.gui.config_form.FormField)
   * [TabSpec](#fim.gui.config_form.TabSpec)
@@ -963,6 +967,113 @@ an animation screen that does not exist yet.
 
   Always 0 — a normal window close ends the process successfully;
   an unhandled exception inside the loop propagates instead.
+
+<a id="fim.gui.batch_runner"></a>
+
+# fim.gui.batch\_runner
+
+Background-thread batch-run orchestration (design §3.4, §3.7, §2.2).
+
+`fim.gui.runner` runs one scalar simulation on a background thread;
+this module runs a multi-replicate batch the same way, sequentially
+(`max_workers=None`, always — §2.2: the GUI's progress/cancellation
+mechanism, `GuiProgressStore`, is an in-process decorator around one
+`threading.Thread`, and `max_workers` parallelism runs replicates in
+separate OS processes that cannot share it). This mirrors
+`cli._command_run_batch --sequential`'s own call shape exactly:
+`fim.engine.fim(..., store_factory=..., max_workers=None)`.
+
+Every replicate gets its own `GuiProgressStore`, all sharing one
+`cancel_event` — Cancel stops the whole batch, not one replicate
+(design §4.0 `6`): there is no partial-batch save point, since the
+whole tree is built inside one `fim.paths.atomic_directory` publish,
+exactly as `fim.gui.runner` does for a scalar run.
+
+Progress posts as `("replicate", replicate_index, generation)` instead
+of `fim.gui.runner`'s `("progress", generation)` alone, so Screen 2 can
+render both the outer (replicate count) and inner (generation count)
+progress axes (design §3.4, §4.2).
+
+Writes only each replicate's `trajectory.jsonl` so far; `report.json`,
+`scatter.png`, and `manifest.json` per replicate, plus the batch-level
+`summary.json` and `manifest.json`, are added by this milestone's third
+bullet (§7.6), inside the same `with` block, once the batch results
+screen exists to display them.
+
+<a id="fim.gui.batch_runner.replicate_index"></a>
+
+#### replicate\_index
+
+```python
+def replicate_index(batch_run_id: str, replicate_run_id: str) -> int
+```
+
+Return one replicate's 1-based ordinal within its batch.
+
+`replicate_run_id` is always exactly ``f"{batch_run_id}-r{index:03}"``
+(`fim.engine.fim`'s own batch run-ID convention, matching
+`cli._replicate_output_directory`'s identical parsing), so the
+zero-padded index is recovered from it directly.
+
+<a id="fim.gui.batch_runner.replicate_output_directory"></a>
+
+#### replicate\_output\_directory
+
+```python
+def replicate_output_directory(base: Path, batch_run_id: str,
+                               replicate_run_id: str) -> Path
+```
+
+Return one replicate's own artifact subdirectory.
+
+The same ``replicate-NNN`` naming `cli._replicate_output_directory`
+uses — a direct parallel, not a shared import, since that function
+is private to the CLI's own front end.
+
+<a id="fim.gui.batch_runner.start_batch_run"></a>
+
+#### start\_batch\_run
+
+```python
+def start_batch_run(
+        params: SimulationParams,
+        output_directory: Path,
+        message_queue: queue.Queue[BatchMessage],
+        cancel_event: threading.Event,
+        *,
+        clock: Callable[[], float] = time.monotonic) -> threading.Thread
+```
+
+Resolve targets, guard the existing target, and start the worker thread.
+
+**Arguments**:
+
+- `params` - Already-validated parameters with `n_replicates > 1` —
+  the screen calling this routes to the scalar runner instead
+  whenever `n_replicates == 1` (design §4.1: "there is no
+  separate 'batch mode' toggle; `n_replicates` *is* the
+  toggle").
+- `output_directory` - The batch's target directory, passed straight
+  to `fim.paths.atomic_directory` by the worker thread.
+  Checked for existence synchronously here too, exactly like
+  `fim.gui.runner.start_run`.
+- `message_queue` - Every `BatchMessage` the worker posts lands
+  here; the caller drains it (typically from a Tk
+  `root.after` poll).
+- `cancel_event` - Set by the UI's "Cancel batch" button; checked
+  before every generation write, in whichever replicate is
+  currently running.
+- `clock` - Injectable wall clock for `ProgressThrottle`, for tests.
+
+
+**Returns**:
+
+  The started (not yet joined) worker thread.
+
+
+**Raises**:
+
+- `FileExistsError` - If `output_directory` already exists.
 
 <a id="fim.gui.config_form"></a>
 
