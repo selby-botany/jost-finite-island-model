@@ -121,6 +121,50 @@ def test_start_run_leaves_no_temporary_sibling_after_a_successful_publish(
     assert {path.name for path in tmp_path.iterdir()} == {"output"}
 
 
+def test_cancel_during_run_leaves_no_output_directory(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+) -> None:
+    """A run cancelled before it ever writes leaves no output directory at all.
+
+    The one true integration test in this layer (design doc §6.4, plan
+    §7.4's fourth bullet): `cancel_event` is set *before* `start_run` is
+    even called, so the worker's very first `write_generation` call —
+    generation 0, made unconditionally before the convergence loop
+    begins — already observes it and raises `RunCancelledError`
+    deterministically, without any wall-clock race. Design §6.4 lists
+    this test under its "marked gui" heading, but it constructs no Tk
+    widget and needs no display — a real background thread, a real
+    `fim.engine.fim` call, and the real filesystem are the whole test —
+    so it stays here, unmarked, alongside every other test in this file
+    that shares exactly that same technical shape, rather than
+    acquiring a marker whose own documented meaning ("needs a display")
+    would not describe it.
+
+    Also confirms the property the module docstring and the previous
+    commit's message both claim: no `shutil.rmtree` or other bespoke
+    cleanup code runs anywhere in `fim.gui.runner` — this test would
+    fail exactly the same way whether that claim were true or not,
+    because `fim.paths.atomic_directory` alone is responsible for it.
+    """
+    output_directory = tmp_path / "output"
+    message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    thread = runner.start_run(
+        tiny_params, output_directory, message_queue, cancel_event
+    )
+    thread.join(timeout=30)
+
+    assert not thread.is_alive()
+    assert not output_directory.exists()
+    assert {path.name for path in tmp_path.iterdir()} == set()
+    kind, generation = message_queue.get_nowait()
+    assert kind == "cancelled"
+    assert generation == 0
+
+
 def _drain(message_queue: queue.Queue[runner.RunMessage]) -> list[runner.RunMessage]:
     """Return every message currently queued, in order."""
     messages: list[runner.RunMessage] = []
