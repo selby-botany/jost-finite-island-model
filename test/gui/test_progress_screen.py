@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import queue
 import threading
-from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 
@@ -33,16 +32,6 @@ _PARAMS = SimulationParams(
     N=20, m=0.1, mu=0.01, d=2, seed=1, loci=(LocusSpec(1, 200),), max_generations=100
 )
 _BATCH_PARAMS = replace(_PARAMS, n_replicates=3)
-
-
-@pytest.fixture
-def root() -> Iterator[Application]:
-    """Build and tear down one real Tk root per test."""
-    application = Application()
-    try:
-        yield application
-    finally:
-        application.destroy()
 
 
 def _noop_start_run(

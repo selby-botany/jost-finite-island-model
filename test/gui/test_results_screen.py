@@ -13,7 +13,6 @@ fake.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 
@@ -28,16 +27,6 @@ from fim.gui.screens.results_screen import (
     _animate_is_enabled,
 )
 from fim.model.params import SimulationParams
-
-
-@pytest.fixture
-def root() -> Iterator[Application]:
-    """Build and tear down one real Tk root per test."""
-    application = Application()
-    try:
-        yield application
-    finally:
-        application.destroy()
 
 
 @pytest.fixture
