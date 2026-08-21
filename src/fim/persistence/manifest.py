@@ -66,9 +66,9 @@ class RunManifest:
     populated from their real on-disk digests — so `artifacts is not
     None` on a *read* manifest doubles as "every sibling artifact this
     manifest names existed, complete, at the moment this manifest was
-    written." `fim stats` (`fim.cli._verify_trajectory_integrity`) uses
-    that digest to refuse a trajectory that was edited, truncated, or
-    replaced after the fact.
+    written." `fim stats` (this module's own `verify_trajectory_integrity`)
+    uses that digest to refuse a trajectory that was edited, truncated,
+    or replaced after the fact.
     """
 
     schema_version: int
@@ -193,6 +193,44 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None:
             allow_nan=False,
         )
         handle.write("\n")
+
+
+def verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) -> None:
+    """Refuse to analyze a trajectory that no longer matches its manifest.
+
+    Regression fix for R7 (`cli.py`'s own history, predating this
+    extraction): an edited or truncated trajectory used to re-analyze
+    silently under `fim stats`. The run that wrote `trajectory_path`
+    also recorded its exact SHA-256 digest and byte count in
+    `manifest.json` at the moment the run finished writing it durably;
+    recomputing that digest now and comparing catches any edit,
+    truncation, or replacement since.
+
+    Args:
+        trajectory_path: The trajectory file about to be read.
+        manifest: Its companion manifest.
+
+    Raises:
+        ValueError: If the manifest has no recorded trajectory digest
+            (written before this check existed), or the file no longer
+            matches the digest it does have.
+    """
+    if manifest.artifacts is None or "trajectory" not in manifest.artifacts:
+        raise ValueError(
+            f"manifest for {manifest.run_id!r} has no recorded trajectory "
+            "digest to verify against (written by a version of fim "
+            "predating this integrity check)"
+        )
+    expected = manifest.artifacts["trajectory"]
+    actual = hash_file(trajectory_path)
+    if actual != expected:
+        raise ValueError(
+            f"trajectory does not match its manifest: expected sha256 "
+            f"{expected['sha256']} ({expected['bytes']} bytes), found "
+            f"{actual['sha256']} ({actual['bytes']} bytes) — the file may "
+            "have been edited, truncated, or replaced since the run "
+            "completed"
+        )
 
 
 @dataclass(frozen=True, slots=True)

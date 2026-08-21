@@ -121,6 +121,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [from\_dict](#fim.persistence.manifest.RunManifest.from_dict)
   * [read\_manifest](#fim.persistence.manifest.read_manifest)
   * [write\_manifest](#fim.persistence.manifest.write_manifest)
+  * [verify\_trajectory\_integrity](#fim.persistence.manifest.verify_trajectory_integrity)
   * [BatchManifest](#fim.persistence.manifest.BatchManifest)
     * [\_\_post\_init\_\_](#fim.persistence.manifest.BatchManifest.__post_init__)
     * [replicate\_count](#fim.persistence.manifest.BatchManifest.replicate_count)
@@ -2097,9 +2098,9 @@ is written only once every other artifact (`trajectory.jsonl`,
 populated from their real on-disk digests — so `artifacts is not
 None` on a *read* manifest doubles as "every sibling artifact this
 manifest names existed, complete, at the moment this manifest was
-written." `fim stats` (`fim.cli._verify_trajectory_integrity`) uses
-that digest to refuse a trajectory that was edited, truncated, or
-replaced after the fact.
+written." `fim stats` (this module's own `verify_trajectory_integrity`)
+uses that digest to refuse a trajectory that was edited, truncated,
+or replaced after the fact.
 
 <a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
 
@@ -2161,6 +2162,37 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None
 ```
 
 Write a manifest deterministically, replacing any prior file.
+
+<a id="fim.persistence.manifest.verify_trajectory_integrity"></a>
+
+#### verify\_trajectory\_integrity
+
+```python
+def verify_trajectory_integrity(trajectory_path: Path,
+                                manifest: RunManifest) -> None
+```
+
+Refuse to analyze a trajectory that no longer matches its manifest.
+
+Regression fix for R7 (`cli.py`'s own history, predating this
+extraction): an edited or truncated trajectory used to re-analyze
+silently under `fim stats`. The run that wrote `trajectory_path`
+also recorded its exact SHA-256 digest and byte count in
+`manifest.json` at the moment the run finished writing it durably;
+recomputing that digest now and comparing catches any edit,
+truncation, or replacement since.
+
+**Arguments**:
+
+- `trajectory_path` - The trajectory file about to be read.
+- `manifest` - Its companion manifest.
+
+
+**Raises**:
+
+- `ValueError` - If the manifest has no recorded trajectory digest
+  (written before this check existed), or the file no longer
+  matches the digest it does have.
 
 <a id="fim.persistence.manifest.BatchManifest"></a>
 

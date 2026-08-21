@@ -35,9 +35,9 @@ from fim.persistence.manifest import (
     CURRENT_BATCH_SCHEMA_VERSION,
     ArtifactDigest,
     BatchManifest,
-    RunManifest,
     hash_file,
     read_manifest,
+    verify_trajectory_integrity,
     write_batch_manifest,
     write_manifest,
 )
@@ -308,7 +308,7 @@ def _command_stats(arguments: argparse.Namespace) -> int:
         else trajectory_path.with_name("manifest.json")
     )
     manifest = read_manifest(manifest_path)
-    _verify_trajectory_integrity(trajectory_path, manifest)
+    verify_trajectory_integrity(trajectory_path, manifest)
     params = manifest.params()
     rows = list(JSONLTrajectoryStore(trajectory_path).read(manifest.run_id))
     if not rows:
@@ -486,43 +486,6 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def _verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) -> None:
-    """Refuse to analyze a trajectory that no longer matches its manifest.
-
-    Regression fix for R7: an edited or truncated trajectory used to
-    re-analyze silently under `fim stats`. `_write_run_artifacts` records
-    the trajectory's exact SHA-256 digest and byte count in
-    `manifest.json` at the moment the run finished writing it durably;
-    recomputing that digest now and comparing catches any edit,
-    truncation, or replacement since.
-
-    Args:
-        trajectory_path: The trajectory file about to be read.
-        manifest: Its companion manifest.
-
-    Raises:
-        ValueError: If the manifest has no recorded trajectory digest
-            (written before this check existed), or the file no longer
-            matches the digest it does have.
-    """
-    if manifest.artifacts is None or "trajectory" not in manifest.artifacts:
-        raise ValueError(
-            f"manifest for {manifest.run_id!r} has no recorded trajectory "
-            "digest to verify against (written by a version of fim "
-            "predating this integrity check)"
-        )
-    expected = manifest.artifacts["trajectory"]
-    actual = hash_file(trajectory_path)
-    if actual != expected:
-        raise ValueError(
-            f"trajectory does not match its manifest: expected sha256 "
-            f"{expected['sha256']} ({expected['bytes']} bytes), found "
-            f"{actual['sha256']} ({actual['bytes']} bytes) — the file may "
-            "have been edited, truncated, or replaced since the run "
-            "completed"
-        )
-
-
 def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
     """Write one run's report, scatter plot, and — last — its verifiable manifest.
 
@@ -532,7 +495,8 @@ def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
     artifact is written and flushed first; ``manifest.json`` is written
     only once every sibling artifact is flushed, augmented with each
     one's SHA-256 digest and byte count (`fim.persistence.manifest.
-    hash_file`) — the record `_verify_trajectory_integrity` later checks
+    hash_file`) — the record `fim.persistence.manifest.verify_trajectory_integrity`
+    later checks
     against. "Flushed" means reached the OS's page cache via the normal
     file-close path, not confirmed on physical disk — no `fsync` is
     called anywhere in this pipeline (S11), so this ordering protects
