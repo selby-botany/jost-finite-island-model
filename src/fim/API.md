@@ -77,6 +77,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.gui.screens.input_screen.InputScreen.__init__)
     * [get\_values](#fim.gui.screens.input_screen.InputScreen.get_values)
     * [set\_values](#fim.gui.screens.input_screen.InputScreen.set_values)
+* [fim.gui.store](#fim.gui.store)
+  * [RunCancelledError](#fim.gui.store.RunCancelledError)
+  * [GuiProgressStore](#fim.gui.store.GuiProgressStore)
+    * [\_\_init\_\_](#fim.gui.store.GuiProgressStore.__init__)
+    * [write\_generation](#fim.gui.store.GuiProgressStore.write_generation)
+    * [read](#fim.gui.store.GuiProgressStore.read)
 * [fim.model](#fim.model)
 * [fim.model.allele](#fim.model.allele)
   * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
@@ -1488,6 +1494,102 @@ Replace every field's text and revalidate.
 - `values` - One string per exposed field, such as
   `config_form.starter_form_values()` or
   `config_form.params_to_form_values(...)` returns.
+
+<a id="fim.gui.store"></a>
+
+# fim.gui.store
+
+Progress reporting and cancellation for a background run (design §3.4).
+
+`fim.persistence.store.TrajectoryStore` is a `Protocol` (structural
+typing, not an ABC), and `fim.engine._run_one`'s generation loop already
+calls `store.write_generation(...)` unconditionally, every generation,
+with no `try`/`except` around it — a clean, pre-existing extension point
+`GuiProgressStore` decorates rather than a change to `fim.engine` itself.
+
+Named `RunCancelledError`, not the design doc's illustrative
+`RunCancelled` — ruff's `N818` (exception names end in `Error`) is part
+of this project's lint gate; the design's code block is a decision
+sketch, not a literal source requirement (§4's own "wireframes ... not
+final visuals" framing applies here too).
+
+<a id="fim.gui.store.RunCancelledError"></a>
+
+## RunCancelledError Objects
+
+```python
+class RunCancelledError(Exception)
+```
+
+Raised from `write_generation` to unwind an in-progress run.
+
+**Arguments**:
+
+- `run_id` - The cancelled run's identifier.
+- `generation` - The generation `write_generation` was about to write
+  when cancellation was observed — one generation past the
+  last one actually persisted.
+
+<a id="fim.gui.store.GuiProgressStore"></a>
+
+## GuiProgressStore Objects
+
+```python
+class GuiProgressStore()
+```
+
+Decorate a `TrajectoryStore` with progress reporting and cancellation.
+
+Structurally satisfies `TrajectoryStore` (a `Protocol`), so it drops
+into `fim.engine.fim(..., store=...)` exactly where the real
+`JSONLTrajectoryStore` would — the run loop cannot tell the
+difference.
+
+<a id="fim.gui.store.GuiProgressStore.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(inner: TrajectoryStore, *, on_generation: Callable[[int], None],
+             cancel_event: threading.Event) -> None
+```
+
+Wrap `inner`, reporting each write and honoring `cancel_event`.
+
+**Arguments**:
+
+- `inner` - The real store every non-cancelled write delegates to.
+- `on_generation` - Called with the generation number after each
+  successful delegated write — never before, and never for
+  a write that raised `RunCancelledError` instead.
+- `cancel_event` - Set by the UI's Cancel button; checked before
+  every write.
+
+<a id="fim.gui.store.GuiProgressStore.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(run_id: str, generation: int,
+                     rows: Iterable[Mapping[str, Any]]) -> None
+```
+
+Delegate one generation's write, or raise `RunCancelledError` instead.
+
+Checked before delegating, not after: a cancellation observed
+here never reaches the real store at all, so a cancelled run's
+`trajectory.jsonl` never gains the generation that triggered the
+cancellation — only the generations already written before it.
+
+<a id="fim.gui.store.GuiProgressStore.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> Iterator[TrajectoryRow]
+```
+
+Delegate straight to the wrapped store; nothing to decorate here.
 
 <a id="fim.model"></a>
 
