@@ -51,6 +51,7 @@ dev = [
 
 [project.scripts]
 fim = "fim.cli:main"
+fim-gui = "fim.gui.app:main"
 
 [project.urls]
 Documentation = "https://github.com/selby-botany/jost-finite-island-model#readme"
