@@ -75,6 +75,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
+* [fim.gui.recent\_runs](#fim.gui.recent_runs)
+  * [RecentRun](#fim.gui.recent_runs.RecentRun)
+  * [list\_recent\_runs](#fim.gui.recent_runs.list_recent_runs)
 * [fim.gui.runner](#fim.gui.runner)
   * [ProgressThrottle](#fim.gui.runner.ProgressThrottle)
     * [\_\_init\_\_](#fim.gui.runner.ProgressThrottle.__init__)
@@ -1547,6 +1550,77 @@ Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
   `_YAML_KEY_ORDER` (none exist today; a defensive fallback
   against this list drifting out of sync with a future field) is
   appended afterward rather than silently dropped.
+
+<a id="fim.gui.recent_runs"></a>
+
+# fim.gui.recent\_runs
+
+Scan `results/` for recently completed runs, scalar and batch (design
+doc §4.6).
+
+Screen 6's recent-runs list is populated by scanning
+`fim.paths.results_directory()` for `*/manifest.json`, reading each with
+`fim.persistence.manifest.read_manifest` (scalar) or
+`fim.persistence.manifest.read_batch_manifest` (batch) — the same files
+`fim stats` and `fim run`'s own batch summary default to. A batch's
+manifest is listed but labeled distinctly ("batch (14/20)", design §0,
+§4.0 `9`) rather than treated as something Screen 6 can open directly:
+Screen 4's own "Open replicate" is the path to any one replicate's
+trajectory, since a batch-level manifest has no single trajectory of
+its own to verify or re-analyze (design §3.8, §4.6).
+
+<a id="fim.gui.recent_runs.RecentRun"></a>
+
+## RecentRun Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class RecentRun()
+```
+
+One run — scalar or batch — found under `results/`, ready to list.
+
+**Arguments**:
+
+- `run_id` - The run's identity, from its manifest.
+- `directory` - The run's own output directory — the parent of its
+  `manifest.json`.
+- `ended_at` - ISO-8601 completion timestamp, from the manifest —
+  what `list_recent_runs` sorts by.
+- `label` - The mock's own display text: a scalar run's
+  `stop_reason` (e.g. "converged"), or a batch's
+  "batch (replicate_count/n_replicates)" (design §4.6's own
+  "batch (14/20)").
+- `is_batch` - Distinguishes a `BatchManifest` entry from a
+  `RunManifest` one — Screen 6 uses this to route "Open" to
+  re-analysis for a scalar run, or refuse it for a batch
+  (design §4.0 `9`, §4.6).
+
+<a id="fim.gui.recent_runs.list_recent_runs"></a>
+
+#### list\_recent\_runs
+
+```python
+def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]
+```
+
+Return every run under `results_directory`, newest first.
+
+**Arguments**:
+
+- `results_directory` - Optional override (default:
+  `fim.paths.results_directory()`).
+
+
+**Returns**:
+
+  One `RecentRun` per `*/manifest.json` found one level below
+  `results_directory` that parses as either manifest shape,
+  sorted by `ended_at` descending (an ISO-8601 string, so lexical
+  order already matches chronological order). Any file that
+  fails to parse as either shape is skipped rather than failing
+  the whole scan: one malformed entry should not hide every valid
+  one.
 
 <a id="fim.gui.runner"></a>
 
