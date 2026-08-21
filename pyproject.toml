@@ -50,7 +50,7 @@ dev = [
 ]
 
 [project.scripts]
-fim = "fim.cli:main"
+fim = "fim.launcher:main"
 fim-gui = "fim.gui.app:main"
 
 [project.urls]
