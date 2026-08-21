@@ -17,6 +17,7 @@ from tkinter import ttk
 
 from fim import paths
 from fim.engine import RunResult
+from fim.gui.screens.batch_results_screen import BatchResultsScreen, BatchResultsView
 from fim.gui.screens.input_screen import InputScreen
 from fim.gui.screens.progress_screen import ProgressScreen
 from fim.gui.screens.results_screen import ResultsScreen, ResultsView
@@ -62,7 +63,7 @@ class Application(tk.Tk):
 def main() -> int:
     """Launch the fim GUI: build the root window and run its main loop.
 
-    Wires Screen 1 (input) -> Screen 2 (progress) -> Screen 3 (results):
+    Wires Screen 1 (input) -> Screen 2 (progress) -> Screen 3/4 (results):
     "Run simulation" starts a real background run in
     `paths.default_output_directory()` and switches to Screen 2 —
     scalar mode for `n_replicates == 1`, batch mode otherwise (design
@@ -70,14 +71,16 @@ def main() -> int:
     *is* the toggle"). A cancelled or failed run returns to Screen 1
     with its message shown in the banner (design §4.6), form values
     intact. A completed scalar run becomes a `ResultsView`
-    (`ResultsView.from_run_result`) and is shown on Screen 3 alongside
-    its output directory. Screen 3's own "New run" returns to Screen 1
-    with the just-run configuration still in the form — "Reset to
-    defaults" is what starts genuinely fresh. "Animate" is still a
-    no-op here — Milestone G6 (§7.8) wires it to an animation screen
-    that does not exist yet. A completed batch is still a no-op too —
-    this milestone's own later bullets wire it to a batch results
-    screen that does not exist yet.
+    (`ResultsView.from_run_result`) shown on Screen 3; a completed batch
+    becomes a `BatchResultsView` (`BatchResultsView.from_results`) shown
+    on Screen 4 instead — the same routing split as Screen 2 itself.
+    Screen 3's own "New run" returns to Screen 1 with the just-run
+    configuration still in the form — "Reset to defaults" is what
+    starts genuinely fresh. Screen 4's "Open replicate" raises Screen 3
+    for the selected replicate, with its own output subdirectory rather
+    than the batch's top-level one (design §4.0 #8). "Animate" is still
+    a no-op here — Milestone G6 (§7.8) wires it to an animation screen
+    that does not exist yet.
 
     Returns:
         Always 0 — a normal window close ends the process successfully;
@@ -102,6 +105,19 @@ def main() -> int:
         results_screen.show(
             ResultsView.from_run_result(result), current_output_directory
         )
+        app.show_screen("results")
+
+    def show_batch_results(results: tuple[RunResult, ...]) -> None:
+        assert current_output_directory is not None, (
+            "on_batch_done fired without a preceding start_run"
+        )
+        batch_results_screen.show(
+            BatchResultsView.from_results(results), current_output_directory
+        )
+        app.show_screen("batch_results")
+
+    def show_replicate(view: ResultsView, output_directory: Path) -> None:
+        results_screen.show(view, output_directory)
         app.show_screen("results")
 
     def show_cancelled(generation: int) -> None:
@@ -129,14 +145,16 @@ def main() -> int:
         app,
         on_done=show_results,
         on_cancelled=show_cancelled,
-        on_batch_done=lambda _results: None,
+        on_batch_done=show_batch_results,
         on_batch_cancelled=show_batch_cancelled,
         on_error=show_error,
     )
     results_screen = ResultsScreen(app, on_new_run=show_input)
+    batch_results_screen = BatchResultsScreen(app, on_open_replicate=show_replicate)
     app.register_screen("input", input_screen)
     app.register_screen("progress", progress_screen)
     app.register_screen("results", results_screen)
+    app.register_screen("batch_results", batch_results_screen)
     app.show_screen("input")
     app.mainloop()
     return 0

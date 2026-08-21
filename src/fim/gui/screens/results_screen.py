@@ -87,7 +87,7 @@ def _animate_is_enabled(generation_count: int) -> bool:
     return generation_count > 1
 
 
-def _format_statistic(value: object) -> str:
+def format_statistic(value: object) -> str:
     """Format one report statistic for display, matching `cli._format_optional`.
 
     Args:
@@ -223,7 +223,7 @@ class ResultsScreen(ttk.Frame):
         self._outcome_label["text"] = f"{reason}: generation {report['generation']}"
         for name in _STATISTIC_NAMES:
             self._statistic_labels[name]["text"] = (
-                f"{name:<9}= {_format_statistic(report[name])}"
+                f"{name:<9}= {format_statistic(report[name])}"
             )
 
         for child in self._canvas_frame.winfo_children():
