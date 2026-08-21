@@ -1,13 +1,13 @@
 """Re-analyze a persisted trajectory (design doc §3.8).
 
-Extracted from `fim.cli._command_stats` so every future consumer that
-needs to "read a persisted `trajectory.jsonl` the same way
-`cli._command_stats` already does" (§3.8) — Screen 6, "open an existing
-run" (§4.6), and Screen 5, "animated trajectory" (§4.5) — shares the
-exact same algorithm `fim stats` uses, rather than a second,
-independently maintained copy of it. The developer guide's "do not
-duplicate model logic" rule, applied to trajectory re-analysis instead
-of engine logic.
+Extracted from `fim.cli._command_stats` so every consumer that needs to
+"read a persisted `trajectory.jsonl` the same way `cli._command_stats`
+already does" (§3.8) — Screen 6, "open an existing run" (§4.6), and
+Screen 5, "animated trajectory" (§4.5, via `group_rows_by_generation`)
+— shares the exact same algorithm `fim stats` uses, rather than a
+second, independently maintained copy of it. The developer guide's "do
+not duplicate model logic" rule, applied to trajectory re-analysis
+instead of engine logic.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from fim.persistence.manifest import (
     read_manifest,
     verify_trajectory_integrity,
 )
+from fim.persistence.store import TrajectoryRow
 from fim.statistics.differentiation import differentiation_q
 
 
@@ -83,6 +84,33 @@ def differentiation_q_for_state(
         ]
         values.append(differentiation_q(table, order, weights))
     return sum(values) / len(values)
+
+
+def group_rows_by_generation(
+    trajectory_path: Path,
+    run_id: str,
+) -> dict[int, list[TrajectoryRow]]:
+    """Group every persisted row by its generation number, in stored order.
+
+    Shared by `reanalyze_trajectory` — which instead filters `rows` to
+    just the one selected generation, matching `cli._command_stats`'s
+    own exact algorithm — and the animation screen's frame sampler
+    (design §3.8: several, evenly spaced generations), which needs
+    every persisted generation's rows available at once; only how many
+    of the resulting generations each caller turns into a `ModelState`
+    differs.
+
+    Args:
+        trajectory_path: The `trajectory.jsonl` to read.
+        run_id: The run identity every row must belong to.
+
+    Returns:
+        Every persisted generation's rows, keyed by generation number.
+    """
+    grouped: dict[int, list[TrajectoryRow]] = {}
+    for row in JSONLTrajectoryStore(trajectory_path).read(run_id):
+        grouped.setdefault(row["generation"], []).append(row)
+    return grouped
 
 
 def reanalyze_trajectory(
