@@ -30,4 +30,41 @@ docker run --rm \
             printf "%s\n" \
                 "Accepted the expected HEAD-only developer formula warning"
         fi
+
+        # Beyond style/audit (metadata only): actually run the install
+        # steps against the mounted checkout and exercise both entry
+        # points -- design doc
+        # 20260821-claude-sonnet-5-macos-linux-packaging.md §3.1/§3.4.
+        # Deliberately not `brew install --HEAD` against a rewritten
+        # `head` URL: the Homebrew git-resource checkout machinery for a
+        # local `file://` remote left the working directory somewhere
+        # `pyproject.toml` was not reachable from, in a real run of
+        # exactly that (`pip install .` failed with "Directory . is not
+        # installable"), while a plain manual `git clone` of the same
+        # `file://` URL checked out a normal, complete working tree with
+        # `pyproject.toml` at its root -- the mismatch is inside the
+        # Homebrew resource-download internals, not this repository
+        # layout, and not worth fighting for a local validation script.
+        # Running the same `venv` + `pip install` steps the formula
+        # itself uses, directly against `/workspace`, tests the actual
+        # question that matters here -- does that combination work
+        # under the Linuxbrew-provided `python@3.12`, including
+        # `tkinter` -- without depending on the git-checkout plumbing at
+        # all. Keep this block in sync with the `install do` method in
+        # `install/homebrew/Formula/fim.rb` if that ever changes, the
+        # same "keep two copies in sync by hand" tradeoff `windows-arm64`
+        # already accepts for mirroring `windows`.
+        brew install python@3.12
+        python="$(brew --prefix python@3.12)/bin/python3.12"
+        libexec=/tmp/fim-test-libexec
+        "${python}" -m venv "${libexec}"
+        "${libexec}/bin/python" -m pip install /workspace
+        version_output="$("${libexec}/bin/fim" --version)"
+        if [[ "${version_output}" != fim\ * ]]; then
+            printf "unexpected fim --version output: %s\n" "${version_output}" >&2
+            exit 1
+        fi
+        [[ -x "${libexec}/bin/fim-gui" ]] \
+            || { printf "fim-gui was not installed as an executable\n" >&2; exit 1; }
+        printf "Live venv+pip install succeeded: %s\n" "${version_output}"
     '
