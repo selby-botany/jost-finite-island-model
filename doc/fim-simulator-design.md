@@ -1120,17 +1120,22 @@ byte for byte — see [doc/usage.md](usage.md#reproduce-a-run).
 
 ## Appendix A. Graphical front-end sketches
 
-The front end is the command line only (§4.5, §2.2 of the engineering and
-release reference). The three screens below sketch what a graphical front
-end could look like, drawn from a small illustrative simulation rather
-than the run above. They are recorded here as a starting point should a
-graphical front end ever be commissioned; nothing in the simulator
-depends on them.
+At the time this document was written, the front end was the command line
+only (§4.5, §2.2 of the engineering and release reference). The three
+screens below sketched what a graphical front end could look like, drawn
+from a small illustrative simulation rather than the run above — recorded
+as a starting point should a graphical front end ever be commissioned.
+Their image files were later removed from the repository to keep it lean
+(the sketches remain described in prose below, in place of the removed
+images); a real graphical front end, `fim-gui`, was subsequently built and
+is documented in
+[doc/usage.md's Desktop GUI section](usage.md#desktop-gui-fim-gui) rather
+than in this historical appendix.
 
 **Screen 1 — model input.** The four named arguments and the `𝖯`-bag
-entries from §4.3, as a form instead of a YAML file:
-
-![Sketch of a model-input screen: labeled fields for N, d, m, \mu, seed, convergence statistic, initial condition, and loci, with a "Run simulation" button](img/fim-simulator-design/screen1-model-input.png)
+entries from §4.3, as a form instead of a YAML file: labeled fields for
+`N`, `d`, `m`, `\mu`, seed, convergence statistic, initial condition, and
+loci, with a "Run simulation" button.
 
 **Screen 2 — results.** Requirement 6 in one view: the run summary
 (scalars, requirement 6a) beside the canonical scatter (per-deme allele
@@ -1138,16 +1143,18 @@ frequencies, requirement 6b). The scenario is a deliberately tiny $d = 2$
 one, small enough that its whole trajectory fits on one screen, rather
 than §12's $N = 450, d = 20$ run, which has too many demes for a single
 two-axis scatter (§8's $d > 3$ fallback applies there instead). Each
-point is one allele; the axes are the two demes' frequencies for it.
-
-![Sketch of a results screen: a run-summary sidebar (converged, generation 50, D=0.65, G_ST=0.34) beside a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most of them well off the diagonal](img/fim-simulator-design/screen2-results.png)
+point is one allele; the axes are the two demes' frequencies for it — a
+run-summary sidebar (converged, generation 50, D=0.65, G_ST=0.34) beside
+a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most
+of them well off the diagonal.
 
 **Screen 3 — watching a run converge.** The same scenario animated across
 its generations: migration and drift pull the four alleles' points away
 from the diagonal as the demes differentiate. Because every generation is
-persisted (§6, §8), this view needs no data a run does not already write.
-
-![Sketch of an animated view: the same four-allele scatter plot stepping through generations 0, 5, 10, … 50, with points starting near the diagonal and drifting apart as the demes differentiate](img/fim-simulator-design/screen3-animated.gif)
+persisted (§6, §8), this view needs no data a run does not already write
+— the same four-allele scatter plot stepping through generations 0, 5,
+10, … 50, with points starting near the diagonal and drifting apart as
+the demes differentiate.
 
 ## Metadata
 

@@ -1258,7 +1258,7 @@ being handed to that one validator, never re-checked against a second,
 GUI-local copy of a rule.
 
 `TABS` groups fields the same way
-[configuration.md](../../../doc/configuration.md)'s own section
+[configuration.md](../../doc/configuration.md)'s own section
 headings do (design §3.6, §4.0 `1`). §3.6's cardinality rule decides
 what earns a live widget here at all: O(1) and O(d)/O(loci)-sized
 fields do (a comma-separated text field faithfully represents either);
