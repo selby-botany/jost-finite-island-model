@@ -182,12 +182,13 @@ def test_field_for_error_matches_a_plain_field_message() -> None:
 
 
 def test_field_for_error_returns_none_for_an_unmatched_message() -> None:
-    """`m`/`m.topology`/`m.rate` and unknown-key errors fall through to the banner.
+    """`m`/`m.topology`/`m.rate` and unknown-key errors have no inline widget.
 
     `m` has no single `FormField` of its own (the scalar/topology
     selector is composite), so its own and its sub-fields' messages are
-    deliberately unmatched here — the banner is where they show until a
-    later commit's tab-flagging work (§7.3's fifth bullet) exists.
+    deliberately unmatched here — `tab_for_error` (below) still routes
+    them to Migration for the banner/tab-dot, but there is no per-field
+    widget to show them beside.
     """
     assert config_form.field_for_error("m must be a number") is None
     assert config_form.field_for_error("m.topology must be 'ring' or 'linear'") is None
@@ -399,3 +400,62 @@ def test_params_to_form_values_includes_every_composite_fields_keys() -> None:
         assert key in values
     for name in config_form.CONVERGENCE_STATISTIC_NAMES:
         assert f"cs_{name}" in values
+
+
+@pytest.mark.parametrize(
+    ("name", "expected_tab"),
+    [
+        ("N", "population"),
+        ("d", "population"),
+        ("locus_lengths", "mutation"),
+        ("initial_allele_count", "initial_conditions"),
+        ("convergence_window", "convergence"),
+        ("n_replicates", "batch"),
+        ("m", "migration"),
+        ("mu", "mutation"),
+        ("mu_b", "mutation"),
+        ("convergence_statistic", "convergence"),
+    ],
+)
+def test_tab_for_field_finds_every_plain_and_composite_field(
+    name: str, expected_tab: str
+) -> None:
+    """Every plain `FormField` and every composite field resolves to its own tab."""
+    assert config_form.tab_for_field(name) == expected_tab
+
+
+def test_tab_for_field_returns_none_for_an_unknown_name() -> None:
+    """A name this form exposes nowhere at all resolves to no tab."""
+    assert config_form.tab_for_field("bogus") is None
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_tab"),
+    [
+        ("d must be an integer", "population"),
+        ("N[0] must be an integer", "population"),
+        ("mu must be a number", "mutation"),
+        ("mu_b must be a number", "mutation"),
+        ("m must be a number", "migration"),
+        ("m.topology must be 'ring' or 'linear'", "migration"),
+        ("m.rate must be a number", "migration"),
+        ("convergence_statistic must not be empty", "convergence"),
+        ("replicate_minimum cannot exceed n_replicates", "batch"),
+    ],
+)
+def test_tab_for_error_routes_plain_and_composite_messages(
+    message: str, expected_tab: str
+) -> None:
+    """`tab_for_error` finds the right tab for both plain and composite messages.
+
+    Regression proof that `mu`/`mu_b`/`m.topology`/`m.rate` messages
+    are not misrouted to Migration merely because they also start with
+    the single letter `m` — longer, more specific prefixes are checked
+    first.
+    """
+    assert config_form.tab_for_error(message) == expected_tab
+
+
+def test_tab_for_error_returns_none_for_an_unknown_key_message() -> None:
+    """A message naming no field this form exposes resolves to no tab."""
+    assert config_form.tab_for_error("unknown configuration key(s): bogus") is None

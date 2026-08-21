@@ -57,6 +57,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [FormField](#fim.gui.config_form.FormField)
   * [TabSpec](#fim.gui.config_form.TabSpec)
   * [all\_fields](#fim.gui.config_form.all_fields)
+  * [tab\_for\_field](#fim.gui.config_form.tab_for_field)
+  * [tab\_for\_error](#fim.gui.config_form.tab_for_error)
   * [field\_for\_error](#fim.gui.config_form.field_for_error)
   * [form\_values\_to\_payload](#fim.gui.config_form.form_values_to_payload)
   * [m\_to\_payload](#fim.gui.config_form.m_to_payload)
@@ -1017,6 +1019,55 @@ def all_fields() -> tuple[FormField, ...]
 
 Return every plain `FormField` across every tab, in tab order.
 
+<a id="fim.gui.config_form.tab_for_field"></a>
+
+#### tab\_for\_field
+
+```python
+def tab_for_field(name: str) -> str | None
+```
+
+Return the `TabSpec.name` holding the given config-key field, if any.
+
+**Arguments**:
+
+- `name` - A `FormField.name`, or one of the composite fields'
+  config keys (`m`, `mu`, `mu_b`, `convergence_statistic`).
+
+
+**Returns**:
+
+  The tab's `TabSpec.name` (`config_form.TABS`'s own identifier,
+  not its display `label`), or `None` if `name` names no field
+  this form exposes at all.
+
+<a id="fim.gui.config_form.tab_for_error"></a>
+
+#### tab\_for\_error
+
+```python
+def tab_for_error(message: str) -> str | None
+```
+
+Return the tab holding the field a validation error message names.
+
+**Arguments**:
+
+- `message` - A `ValueError` message raised by `form_values_to_payload`
+  or `SimulationParams.from_mapping`.
+
+
+**Returns**:
+
+  The offending field's tab (§4.0 `2`: "every tab with an invalid
+  field shows a small error dot" — in practice, the one tab
+  holding whichever single field `SimulationParams.from_mapping`
+  happened to reject first, since it stops validating at the
+  first failure rather than collecting every field's own error
+  independently), or `None` when the message names no field this
+  form can place on any tab (an unknown-key error, for instance)
+  — the caller shows those in the banner alone (design §4.6).
+
 <a id="fim.gui.config_form.field_for_error"></a>
 
 #### field\_for\_error
@@ -1334,13 +1385,12 @@ once two or more are checked), and **Batch** (`replicate_tolerance`/
 `n_replicates` is greater than one). "Run simulation" is disabled
 until `fim.model.params.SimulationParams.from_mapping` accepts the
 form's current values — a rejected mapping never reaches `on_run`
-(design §3.6). A validation failure is shown beside the field
-`fim.gui.config_form.field_for_error` names, or in a banner otherwise
-(design §4.6); routing the banner-shown failure to the tab that
-actually holds the field is the next commit in this milestone (§4.0
-`2`, §7.3's fifth bullet) — until then, every field error is at least
-visible on whichever tab happens to already be selected, or in the
-banner.
+(design §3.6). A validation failure always names both the offending
+tab and the message in the always-visible banner (§4.0 `2`: "no
+click-through hunting"), flags that tab's own label with a small error
+dot, and — when the field also has an inline slot — shows the same
+message there too, a convenience for whoever is already on the right
+tab (design §4.6, §4.7).
 
 <a id="fim.gui.screens.input_screen.InputScreen"></a>
 

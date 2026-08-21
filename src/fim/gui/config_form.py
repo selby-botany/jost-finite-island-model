@@ -196,6 +196,70 @@ def all_fields() -> tuple[FormField, ...]:
     return tuple(field for tab in TABS for field in tab.fields)
 
 
+# Composite fields' own config keys, mapped to the tab holding their
+# selector — `m`/`mu`/`mu_b`/`convergence_statistic` are never plain
+# `FormField`s (see `TabSpec`'s own docstring), so `tab_for_field`
+# cannot find them by walking `TABS` the way it does every other name.
+_COMPOSITE_FIELD_TABS: Final[Mapping[str, str]] = {
+    "m": "migration",
+    "m.topology": "migration",
+    "m.rate": "migration",
+    "mu": "mutation",
+    "mu_b": "mutation",
+    "convergence_statistic": "convergence",
+}
+
+
+def tab_for_field(name: str) -> str | None:
+    """Return the `TabSpec.name` holding the given config-key field, if any.
+
+    Args:
+        name: A `FormField.name`, or one of the composite fields'
+            config keys (`m`, `mu`, `mu_b`, `convergence_statistic`).
+
+    Returns:
+        The tab's `TabSpec.name` (`config_form.TABS`'s own identifier,
+        not its display `label`), or `None` if `name` names no field
+        this form exposes at all.
+    """
+    if name in _COMPOSITE_FIELD_TABS:
+        return _COMPOSITE_FIELD_TABS[name]
+    for tab in TABS:
+        if any(field.name == name for field in tab.fields):
+            return tab.name
+    return None
+
+
+def tab_for_error(message: str) -> str | None:
+    """Return the tab holding the field a validation error message names.
+
+    Args:
+        message: A `ValueError` message raised by `form_values_to_payload`
+            or `SimulationParams.from_mapping`.
+
+    Returns:
+        The offending field's tab (§4.0 #2: "every tab with an invalid
+        field shows a small error dot" — in practice, the one tab
+        holding whichever single field `SimulationParams.from_mapping`
+        happened to reject first, since it stops validating at the
+        first failure rather than collecting every field's own error
+        independently), or `None` when the message names no field this
+        form can place on any tab (an unknown-key error, for instance)
+        — the caller shows those in the banner alone (design §4.6).
+    """
+    plain_field = field_for_error(message)
+    if plain_field is not None:
+        return tab_for_field(plain_field)
+    # Longer, more specific prefixes first: bare "m" is itself a prefix
+    # of "m.topology", "m.rate", "mu", and "mu_b", so checking it first
+    # would misroute every one of those to Migration instead of their
+    # own tab.
+    for name in ("m.topology", "m.rate", "mu_b", "mu", "m", "convergence_statistic"):
+        if message.startswith(name):
+            return tab_for_field(name)
+    return None
+
+
 def field_for_error(message: str) -> str | None:
     """Return the form field name a validation error message names, if any.
 

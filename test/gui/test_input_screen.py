@@ -3,10 +3,9 @@
 `test_input_screen_run_button_disabled_until_valid` (design §6.4's own
 named test) is now meaningful end to end: every tab exists, so a fresh,
 prefilled screen actually validates successfully and enables "Run
-simulation" — unlike the two prior commits in this milestone, where it
-stayed permanently disabled for want of the remaining tabs' required
-fields. Routing a banner-shown error to the tab that actually holds
-the field (design §4.0 #2) is still the next commit's own job.
+simulation." An invalid field's own tab gets a small error dot and the
+always-visible banner names both the tab and the message (design §4.0
+#2's "no click-through hunting").
 """
 
 from __future__ import annotations
@@ -260,3 +259,103 @@ def test_get_values_includes_every_convergence_statistic_checkbox(
     assert values["cs_D"] == "true"
     for name in ("G_ST", "E_ST", "K_ST", "H_S", "H_T"):
         assert values[f"cs_{name}"] == "false"
+
+
+def test_invalid_field_flags_its_tab_with_an_error_dot(app: Application) -> None:
+    """An invalid plain field marks its own tab's label, not any other tab's."""
+    screen = InputScreen(app)
+
+    screen._vars["d"].set("not a number")
+    app.update_idletasks()
+
+    tab_labels = [
+        screen._notebook.tab(tab_id, "text")  # type: ignore[no-untyped-call]
+        for tab_id in screen._notebook.tabs()  # type: ignore[no-untyped-call]
+    ]
+    assert tab_labels[0] == "Population \N{WARNING SIGN}"
+    assert tab_labels[1:] == [
+        "Migration",
+        "Mutation",
+        "Initial conditions",
+        "Convergence",
+        "Batch",
+    ]
+
+
+def test_fixing_the_invalid_field_clears_its_tabs_error_dot(app: Application) -> None:
+    """Once the field validates again, its tab's error dot disappears."""
+    screen = InputScreen(app)
+    screen._vars["d"].set("not a number")
+    app.update_idletasks()
+    assert (
+        screen._notebook.tab(  # type: ignore[no-untyped-call]
+            screen._tab_frames["population"], "text"
+        )
+        == "Population \N{WARNING SIGN}"
+    )
+
+    screen._vars["d"].set("20")
+    app.update_idletasks()
+
+    assert (
+        screen._notebook.tab(  # type: ignore[no-untyped-call]
+            screen._tab_frames["population"], "text"
+        )
+        == "Population"
+    )
+
+
+def test_invalid_composite_field_flags_its_own_tab_not_migration(
+    app: Application,
+) -> None:
+    """A bad `mu` flags Mutation, not Migration — a regression guard for the
+    bare-`m`-is-a-prefix-of-`mu` routing bug."""
+    screen = InputScreen(app)
+
+    screen._vars["mu_value"].set("not a number")
+    app.update_idletasks()
+
+    assert (
+        screen._notebook.tab(  # type: ignore[no-untyped-call]
+            screen._tab_frames["mutation"], "text"
+        )
+        == "Mutation \N{WARNING SIGN}"
+    )
+    assert (
+        screen._notebook.tab(  # type: ignore[no-untyped-call]
+            screen._tab_frames["migration"], "text"
+        )
+        == "Migration"
+    )
+
+
+def test_banner_names_the_offending_tab_and_the_message(app: Application) -> None:
+    """The always-visible banner names both the tab and the validation message.
+
+    §4.0 #2's "no click-through hunting": the banner is readable
+    regardless of which tab happens to be selected.
+    """
+    screen = InputScreen(app)
+
+    screen._vars["d"].set("not a number")
+    app.update_idletasks()
+
+    assert screen._banner["text"] == "Population: d must be an integer"
+
+
+def test_banner_names_convergence_for_a_below_minimum_window(app: Application) -> None:
+    """A semantic (not just a parse) failure is routed and prefixed too."""
+    screen = InputScreen(app)
+
+    screen._vars["convergence_window"].set("1")
+    app.update_idletasks()
+
+    assert screen._banner["text"] == (
+        "Convergence: convergence_window must be at least 2"
+    )
+    assert (
+        screen._notebook.tab(  # type: ignore[no-untyped-call]
+            screen._tab_frames["convergence"], "text"
+        )
+        == "Convergence \N{WARNING SIGN}"
+    )

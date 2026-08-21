@@ -14,13 +14,12 @@ once two or more are checked), and **Batch** (`replicate_tolerance`/
 `n_replicates` is greater than one). "Run simulation" is disabled
 until `fim.model.params.SimulationParams.from_mapping` accepts the
 form's current values — a rejected mapping never reaches `on_run`
-(design §3.6). A validation failure is shown beside the field
-`fim.gui.config_form.field_for_error` names, or in a banner otherwise
-(design §4.6); routing the banner-shown failure to the tab that
-actually holds the field is the next commit in this milestone (§4.0
-#2, §7.3's fifth bullet) — until then, every field error is at least
-visible on whichever tab happens to already be selected, or in the
-banner.
+(design §3.6). A validation failure always names both the offending
+tab and the message in the always-visible banner (§4.0 #2: "no
+click-through hunting"), flags that tab's own label with a small error
+dot, and — when the field also has an inline slot — shows the same
+message there too, a convenience for whoever is already on the right
+tab (design §4.6, §4.7).
 """
 
 from __future__ import annotations
@@ -67,6 +66,8 @@ class InputScreen(ttk.Frame):
         self._field_errors: dict[str, ttk.Label] = {}
         self._valid_params: SimulationParams | None = None
         self._cs_vars: dict[str, tk.StringVar] = {}
+        self._tab_frames: dict[str, ttk.Frame] = {}
+        self._tab_labels: dict[str, str] = {}
 
         self._banner = ttk.Label(self, foreground="red", wraplength=480)
         self._banner.pack(fill="x", padx=4, pady=(4, 8))
@@ -83,6 +84,8 @@ class InputScreen(ttk.Frame):
         for tab in config_form.TABS:
             frame = ttk.Frame(self._notebook)
             self._notebook.add(frame, text=tab.label)
+            self._tab_frames[tab.name] = frame
+            self._tab_labels[tab.name] = tab.label
             builders.get(tab.name, self._build_plain_tab)(frame, tab)
 
         buttons = ttk.Frame(self)
@@ -362,10 +365,28 @@ class InputScreen(ttk.Frame):
             self._build_field_row(frame, row, field)
 
     def _clear_errors(self) -> None:
-        """Blank the banner and every inline field error label."""
+        """Blank the banner, every inline field error, and every tab's error dot."""
         self._banner["text"] = ""
         for label in self._field_errors.values():
             label["text"] = ""
+        for name, frame in self._tab_frames.items():
+            self._notebook.tab(frame, text=self._tab_labels[name])  # type: ignore[no-untyped-call]
+
+    def _flag_tab(self, tab_name: str) -> None:
+        """Mark one tab's label with a small error dot (§4.0 #2, §4.1 mockup).
+
+        `_clear_errors` already blanked every tab back to its plain
+        label this revalidation pass, so at most one tab is ever
+        flagged at a time — the one holding whichever single field
+        `SimulationParams.from_mapping` rejected first (§4.0 #2's own
+        text describes "every tab with an invalid field," but only one
+        field's error is ever known at once; see
+        `fim.gui.config_form.tab_for_error`).
+        """
+        frame = self._tab_frames[tab_name]
+        self._notebook.tab(  # type: ignore[no-untyped-call]
+            frame, text=f"{self._tab_labels[tab_name]} \N{WARNING SIGN}"
+        )
 
     def _on_batch_field_changed(self) -> None:
         """React to `n_replicates` changing: update visibility, then revalidate."""
@@ -407,9 +428,16 @@ class InputScreen(ttk.Frame):
         Builds a payload via `config_form.form_values_to_payload` and
         validates it with `SimulationParams.from_mapping` — the same
         validator `fim.cli` uses (design §3.6). On success, enables "Run
-        simulation" and clears every error. On failure, disables it and
-        shows the message beside the field `config_form.field_for_error`
-        names, or in the banner when it names none (design §4.6).
+        simulation" and clears every error and every tab's error dot.
+        On failure, disables it; the banner (always visible, regardless
+        of which tab is selected) always names the failure — prefixed
+        with the offending tab's label when `config_form.tab_for_error`
+        can place one, so there is no "click-through hunting" for which
+        tab to check (§4.0 #2, §4.7) — and, when the field also has an
+        inline slot on its own tab, the same message is shown there too
+        as a convenience for whoever is already looking at it. The
+        holding tab's own label also gets a small error dot
+        (`_flag_tab`).
         """
         self._clear_errors()
         try:
@@ -422,6 +450,10 @@ class InputScreen(ttk.Frame):
             field_name = config_form.field_for_error(message)
             if field_name is not None and field_name in self._field_errors:
                 self._field_errors[field_name]["text"] = message
+            tab_name = config_form.tab_for_error(message)
+            if tab_name is not None:
+                self._flag_tab(tab_name)
+                self._banner["text"] = f"{self._tab_labels[tab_name]}: {message}"
             else:
                 self._banner["text"] = message
             return
