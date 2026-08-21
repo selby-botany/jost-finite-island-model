@@ -40,7 +40,7 @@ def test_the_expensive_scenario_layer_runs_as_its_own_named_budgeted_step() -> N
     run_steps = _run_steps()
     fast_step = next(step for step in run_steps if "--no-package" in str(step["run"]))
     full_step = next(
-        step for step in run_steps if str(step["run"]).strip() == "./build --ci"
+        step for step in run_steps if str(step["run"]).strip().endswith("./build --ci")
     )
 
     # The fast step is the same deterministic layer `--ci` also covers
@@ -71,7 +71,7 @@ def test_each_test_step_has_a_nonflaky_wall_clock_budget() -> None:
     run_steps = _run_steps()
     fast_step = next(step for step in run_steps if "--no-package" in str(step["run"]))
     full_step = next(
-        step for step in run_steps if str(step["run"]).strip() == "./build --ci"
+        step for step in run_steps if str(step["run"]).strip().endswith("./build --ci")
     )
 
     fast_budget = fast_step["timeout-minutes"]

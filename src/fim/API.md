@@ -1026,6 +1026,14 @@ layout and behavior" framing. Each milestone in the implementation plan
 20260819-claude-sonnet-5-graphical-interface.md` §7) adds its own screen
 and wires it into `main()`.
 
+`Application` also carries the one menu item requirement G9/design §3.9
+name outside any specific milestone's own commit bullet: "Check for
+updates…", user-initiated only — never on startup, never on a timer
+(SECURITY.md's threat model: "the only network operation is the explicit
+`fim update --check` command"). `_check_for_updates` calls the identical
+`fim.update` logic that command uses and renders the same three outcomes
+as a dialog instead of stdout lines.
+
 <a id="fim.gui.app.Application"></a>
 
 ## Application Objects
@@ -1044,7 +1052,7 @@ Root window holding every screen as a stacked, raised `ttk.Frame`.
 def __init__() -> None
 ```
 
-Build the root window and its single screen-stacking container.
+Build the root window, its menu bar, and its screen-stacking container.
 
 <a id="fim.gui.app.Application.register_screen"></a>
 
