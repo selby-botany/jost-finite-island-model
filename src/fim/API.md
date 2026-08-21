@@ -71,6 +71,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
+* [fim.gui.runner](#fim.gui.runner)
+  * [ProgressThrottle](#fim.gui.runner.ProgressThrottle)
+    * [\_\_init\_\_](#fim.gui.runner.ProgressThrottle.__init__)
+    * [should\_report](#fim.gui.runner.ProgressThrottle.should_report)
+  * [run\_artifact\_targets](#fim.gui.runner.run_artifact_targets)
+  * [start\_run](#fim.gui.runner.start_run)
 * [fim.gui.screens](#fim.gui.screens)
 * [fim.gui.screens.input\_screen](#fim.gui.screens.input_screen)
   * [InputScreen](#fim.gui.screens.input_screen.InputScreen)
@@ -1389,6 +1395,138 @@ Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
   `_YAML_KEY_ORDER` (none exist today; a defensive fallback
   against this list drifting out of sync with a future field) is
   appended afterward rather than silently dropped.
+
+<a id="fim.gui.runner"></a>
+
+# fim.gui.runner
+
+Background-thread scalar-run orchestration (design §3.4, §3.7).
+
+`fim.engine.fim` is a single blocking call; a multi-thousand-generation
+run would freeze the Tk main thread for its whole duration. `start_run`
+runs it on a `threading.Thread` instead, and gets progress and
+cancellation for free from `fim.gui.store.GuiProgressStore` — no change
+to `fim.engine` at all.
+
+The worker does its work inside `fim.paths.atomic_directory`, the exact
+context manager `cli._command_run_scalar` already uses (§3.7 extracted
+it from the CLI for precisely this shared use): every write lands in a
+hidden temporary sibling of `output_directory`, published with one
+atomic rename only if the `with` block exits normally. A cancelled run
+raises `RunCancelledError` out of that block; an unexpected engine error
+raises one of `_EXPECTED_ENGINE_ERRORS`. Either way, `atomic_directory`'s
+own `except BaseException` clause discards the temporary directory and
+`output_directory` is never created — no GUI-specific cleanup code is
+needed for either outcome.
+
+This module writes only `trajectory.jsonl` so far (streamed
+generation-by-generation by the `TrajectoryStore` passed into `fim`);
+`report.json`, `scatter.png`, and `manifest.json` are added by Milestone
+G3's first bullet (§7.5), inside the same `with` block, once the results
+screen exists to display them.
+
+<a id="fim.gui.runner.ProgressThrottle"></a>
+
+## ProgressThrottle Objects
+
+```python
+class ProgressThrottle()
+```
+
+Decide which generation numbers reach the UI, by wall clock.
+
+Posting every generation is cheap for the queue but would flood a
+1500+-generation run's UI with redraws; throttling by a fixed
+generation stride would need `max_generations` up front in a way
+that scales badly for a very short or very long run. Instead this
+skips a report if under `interval_seconds` has elapsed since the
+last one — except `generation == max_generations`, which is always
+reported so a run that reaches the hard cap never appears stuck
+short of 100%. A run that instead stops early via convergence still
+gets a correct final state: the worker's own "done"/"cancelled"
+message carries its own generation number independent of this
+throttle (§3.4).
+
+<a id="fim.gui.runner.ProgressThrottle.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(*,
+             interval_seconds: float = PROGRESS_THROTTLE_INTERVAL_SECONDS,
+             clock: Callable[[], float] = time.monotonic) -> None
+```
+
+Start with no prior report, so the very first call always reports.
+
+<a id="fim.gui.runner.ProgressThrottle.should_report"></a>
+
+#### should\_report
+
+```python
+def should_report(generation: int, max_generations: int) -> bool
+```
+
+Return whether `generation` should be posted to the UI now.
+
+<a id="fim.gui.runner.run_artifact_targets"></a>
+
+#### run\_artifact\_targets
+
+```python
+def run_artifact_targets(directory: Path) -> dict[str, Path]
+```
+
+Return the four documented scalar-run artifact paths in one directory.
+
+Deliberately the same four names `cli._run_artifact_targets` uses
+(design §3.7's "the exact same four calls, same target filenames,
+same directory") — a direct parallel, not a shared import, since
+`cli._run_artifact_targets` is a private module-level function of
+the CLI's own front end. Only `targets["trajectory"]` is written by
+this milestone; the other three are added by Milestone G3.
+
+<a id="fim.gui.runner.start_run"></a>
+
+#### start\_run
+
+```python
+def start_run(params: SimulationParams,
+              output_directory: Path,
+              message_queue: queue.Queue[RunMessage],
+              cancel_event: threading.Event,
+              *,
+              clock: Callable[[], float] = time.monotonic) -> threading.Thread
+```
+
+Resolve targets, guard the existing target, and start the worker thread.
+
+**Arguments**:
+
+- `params` - Already-validated parameters — the screen calling this
+  never hands it an unvalidated payload (design §3.6).
+- `output_directory` - The run's target artifact directory, passed
+  straight to `fim.paths.atomic_directory` by the worker
+  thread. Checked for existence synchronously here too, so a
+  pre-existing target is reported to the caller immediately —
+  before a thread starts or a progress screen appears —
+  rather than only discovered later via the message queue.
+- `message_queue` - Every `RunMessage` the worker posts lands here;
+  the caller drains it (typically from a Tk `root.after`
+  poll).
+- `cancel_event` - Set by the UI's Cancel button; checked before
+  every generation write.
+- `clock` - Injectable wall clock for `ProgressThrottle`, for tests.
+
+
+**Returns**:
+
+  The started (not yet joined) worker thread.
+
+
+**Raises**:
+
+- `FileExistsError` - If `output_directory` already exists.
 
 <a id="fim.gui.screens"></a>
 
