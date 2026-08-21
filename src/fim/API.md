@@ -165,6 +165,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ConfidenceInterval](#fim.statistics.interval.ConfidenceInterval)
   * [confidence\_interval](#fim.statistics.interval.confidence_interval)
   * [student\_t\_critical\_value](#fim.statistics.interval.student_t_critical_value)
+* [fim.update](#fim.update)
+  * [compare\_versions](#fim.update.compare_versions)
+  * [fetch\_latest\_release](#fim.update.fetch_latest_release)
+  * [latest\_release](#fim.update.latest_release)
+  * [version\_parts](#fim.update.version_parts)
 * [fim.viz](#fim.viz)
 * [fim.viz.diagnostics](#fim.viz.diagnostics)
   * [plot\_convergence\_trace](#fim.viz.diagnostics.plot_convergence_trace)
@@ -2753,6 +2758,61 @@ Return the two-tailed Student's-t critical value.
 
 - `ValueError` - If `degrees_of_freedom` is not a positive integer or
   `confidence` is not a supported level.
+
+<a id="fim.update"></a>
+
+# fim.update
+
+Explicit, opt-in release-check logic shared by every front end.
+
+Extracted from `fim.cli` (design doc `20260819-claude-sonnet-5-graphical-
+interface.md` §3.9) so `fim.gui`'s "Check for updates" action performs
+exactly the same GitHub Releases lookup and version comparison as
+`fim update --check`, rather than a second implementation of the one
+network operation SECURITY.md's threat model permits. This module never
+runs on its own; every function here is reached only by an explicit,
+user-initiated caller.
+
+<a id="fim.update.compare_versions"></a>
+
+#### compare\_versions
+
+```python
+def compare_versions(current: str, latest: str) -> int
+```
+
+Compare two three-part semantic versions.
+
+<a id="fim.update.fetch_latest_release"></a>
+
+#### fetch\_latest\_release
+
+```python
+def fetch_latest_release() -> Mapping[str, Any]
+```
+
+Fetch the latest GitHub release; this is the sole network path.
+
+<a id="fim.update.latest_release"></a>
+
+#### latest\_release
+
+```python
+def latest_release(
+        fetcher: ReleaseFetcher = fetch_latest_release) -> tuple[str, str]
+```
+
+Validate the two release fields needed by an update check.
+
+<a id="fim.update.version_parts"></a>
+
+#### version\_parts
+
+```python
+def version_parts(value: str) -> tuple[int, int, int]
+```
+
+Parse a stable three-part semantic version.
 
 <a id="fim.viz"></a>
 

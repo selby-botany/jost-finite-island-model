@@ -9,18 +9,15 @@ import os
 import pickle
 import shutil
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypeAlias
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 import yaml
 from matplotlib import pyplot as plt
 
-from fim import __version__, paths
+from fim import __version__, paths, update
 from fim.engine import (
     RunResult,
     deterministic_run_id,
@@ -50,11 +47,6 @@ from fim.persistence.report import write_report as write_report  # noqa: PLC0414
 from fim.statistics.differentiation import differentiation_q
 from fim.viz.scatter import plot_frequency_scatter
 
-RELEASES_API = (
-    "https://api.github.com/repos/selby-botany/jost-finite-island-model/releases/latest"
-)
-SEMANTIC_VERSION_PARTS = 3
-
 STARTER_CONFIG = """\
 # Finite island model starter configuration
 N: 450
@@ -73,8 +65,6 @@ convergence_window: 50
 convergence_tolerance: 0.01
 max_generations: 10000
 """
-
-ReleaseFetcher: TypeAlias = Callable[[], Mapping[str, Any]]
 
 
 def load_config(path: Path | str) -> SimulationParams:
@@ -360,8 +350,8 @@ def _command_update(
     """Perform the explicit, opt-in release check."""
     if not arguments.check:
         parser.error("fim update requires --check")
-    latest_tag, release_url = _latest_release()
-    comparison = _compare_versions(__version__, latest_tag.removeprefix("v"))
+    latest_tag, release_url = update.latest_release()
+    comparison = update.compare_versions(__version__, latest_tag.removeprefix("v"))
     if comparison < 0:
         print(f"A newer fim release is available: {latest_tag}")
         print(release_url)
@@ -370,13 +360,6 @@ def _command_update(
     else:
         print(f"fim {__version__} is newer than the latest release {latest_tag}")
     return 0
-
-
-def _compare_versions(current: str, latest: str) -> int:
-    """Compare two three-part semantic versions."""
-    current_parts = _version_parts(current)
-    latest_parts = _version_parts(latest)
-    return (current_parts > latest_parts) - (current_parts < latest_parts)
 
 
 def _batch_description(params: SimulationParams, max_workers: int | None) -> str:
@@ -555,43 +538,9 @@ def _differentiation_q_for_state(
     return sum(values) / len(values)
 
 
-def _fetch_latest_release() -> Mapping[str, Any]:
-    """Fetch the latest GitHub release; this is the sole network path."""
-    request = Request(
-        RELEASES_API,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": f"fim/{__version__}",
-        },
-    )
-    try:
-        with urlopen(request, timeout=5) as response:
-            payload = json.load(response)
-    except (HTTPError, URLError) as error:
-        raise RuntimeError(f"update check failed: {error}") from error
-    if not isinstance(payload, Mapping):
-        raise RuntimeError("update check returned a non-object response")
-    return payload
-
-
 def _format_optional(value: float | None) -> str:
     """Format an optional statistic for terminal output."""
     return "undefined" if value is None else f"{value:.6g}"
-
-
-def _latest_release(
-    fetcher: ReleaseFetcher = _fetch_latest_release,
-) -> tuple[str, str]:
-    """Validate the two release fields needed by the update command."""
-    payload = fetcher()
-    tag = payload.get("tag_name")
-    release_url = payload.get("html_url")
-    if not isinstance(tag, str) or not tag:
-        raise RuntimeError("latest release response is missing tag_name")
-    if not isinstance(release_url, str) or not release_url:
-        raise RuntimeError("latest release response is missing html_url")
-    _version_parts(tag.removeprefix("v"))
-    return tag, release_url
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -692,20 +641,6 @@ def _parser() -> argparse.ArgumentParser:
         help="query the latest GitHub release without downloading",
     )
     return parser
-
-
-def _version_parts(value: str) -> tuple[int, int, int]:
-    """Parse a stable three-part semantic version."""
-    parts = value.split(".")
-    if len(parts) != SEMANTIC_VERSION_PARTS:
-        raise RuntimeError(f"release version is not semantic: {value}")
-    try:
-        parsed = tuple(int(part) for part in parts)
-    except ValueError as error:
-        raise RuntimeError(f"release version is not semantic: {value}") from error
-    if any(part < 0 for part in parsed):
-        raise RuntimeError(f"release version is not semantic: {value}")
-    return parsed  # type: ignore[return-value]
 
 
 if __name__ == "__main__":
