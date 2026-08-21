@@ -41,9 +41,20 @@ jobs:
       - name: Run the fast deterministic test layer (fail fast)
         run: ./build --no-lint --no-type --no-docs --no-package
         timeout-minutes: 5
+      # `--ci` drops the default `-m` marker filter entirely (build's own
+      # "authoritative --ci gate runs every marker" comment), so this step
+      # is also where the `gui`-marked suite (design doc
+      # `20260819-claude-sonnet-5-graphical-interface.md` §6.4) first runs
+      # -- real Tk widgets, which need a display server this headless
+      # ubuntu-latest runner does not have by default. The fast step above
+      # never needs this: its bare `./build` invocation keeps
+      # pyproject.toml's own default marker filter, which already excludes
+      # `gui` alongside `statistical`/`slow`/`packaging`.
+      - name: Install Xvfb for the gui-marked test suite
+        run: sudo apt-get update && sudo apt-get install -y xvfb
       - name: Run the full CI gate (lint, type, docs, package, and the
-          full test suite incl. slow/statistical scenarios)
-        run: ./build --ci
+          full test suite incl. slow/statistical/gui scenarios)
+        run: xvfb-run --auto-servernum ./build --ci
         timeout-minutes: 30
 
   # Gate for the release jobs below: cheap and fast, so it runs alongside
