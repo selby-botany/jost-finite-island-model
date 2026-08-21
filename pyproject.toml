@@ -37,10 +37,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "bandit==1.*",
     "build>=1.2,<1.6",
     "coverage[toml]==7.*",
     "hypothesis==6.*",
     "mypy>=1.11,<2.4",
+    "pip-audit==2.*",
     "pydoc-markdown==4.*",
     "pyinstaller==6.*",
     "pytest>=8,<10",

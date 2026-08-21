@@ -9,6 +9,7 @@ cd -- "${root}"
 PATH="${root}/bin:${PATH}"
 export PATH
 
+advise=""
 ci=false
 coverage=false
 dry_run=false
@@ -25,9 +26,103 @@ run_type=true
 #   0 after writing help
 usage() {
     cat <<'EOF'
-Usage: build [--ci] [--coverage] [--dry-run]
-             [--no-lint] [--no-type] [--no-test] [--no-docs] [--no-package]
-             [--help]
+build — local CI equivalent for fim.
+
+Copyright (C) 2026 Marie Selby Botanical Gardens
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+SYNOPSIS
+  build [--ci] [--coverage]
+        [--no-lint] [--no-type] [--no-test] [--no-docs] [--no-package]
+        [--advise [ADVISEMENTS]] [--advice [ADVISEMENTS]] [--no-advise]
+        [--dry-run] [--help]
+
+OPTIONS
+  --ci                Run the full CI gate: --coverage plus every pytest
+                      marker (including slow/statistical/gui/packaging,
+                      which the bare default run excludes), plus a docs
+                      drift check that fails if src/fim/API.md is out of
+                      date instead of silently regenerating it. Cannot be
+                      combined with any --no-* flag.
+  --coverage          Run tests with branch-coverage instrumentation and
+                      the 90% floor (pyproject.toml's
+                      [tool.coverage.report]), instead of a bare pytest
+                      run.
+  --no-lint           Skip ruff check + ruff format --check.
+  --no-type           Skip mypy (strict; src + test).
+  --no-test           Skip the pytest suite entirely.
+  --no-docs           Skip dev/bin/generate-api-docs and
+                      dev/bin/check-doc-links.
+  --no-package        Skip building the wheel/sdist and the
+                      install-then-smoke-test step.
+  --advise [ADVISEMENTS]
+                      Run advisory checks -- informational only, never
+                      fail the build regardless of what they find.
+                      Comma-delimited list:
+                      'security', 'bandit', 'churn', 'metrics',
+                      'all', 'none'.
+                      'all' selects every available advisement.
+                      'none' disables all (equivalent to --no-advise).
+                      Default with no list given: 'all'.
+                      Advisory checks are off by default.
+  --advice [ADVISEMENTS]
+                      Synonym for --advise.
+  --no-advise         Disable all advisory checks (equivalent to
+                      --advise none).
+  --dry-run           Print each command without executing it.
+  --help              Print this message and exit.
+
+ENVIRONMENT
+  PYTHON              Python interpreter to run every stage under.
+                      Default: python3 (resolved on PATH). Point this at
+                      a venv's interpreter (e.g. .venv-312/bin/python3)
+                      to pick up that venv's installed tools and console
+                      scripts.
+
+PREREQUISITES
+  • Python 3.12 or newer
+  • The [dev] extras installed: python -m pip install -e ".[dev]"
+  • For --advise metrics only: docker (runs ghcr.io/boyter/scc)
+
+STAGES (run in order; each can be skipped with --no-<stage>)
+  1. Lint      — ruff check + ruff format --check
+  2. Type      — mypy (strict; src + test)
+  3. Test      — pytest; --coverage adds branch-coverage instrumentation
+                 and the 90% floor; --ci additionally drops the default
+                 marker filter to run every marker
+  4. Docs      — regenerate src/fim/API.md and check every local
+                 Markdown link; --ci fails on drift instead of silently
+                 regenerating
+  5. Package   — build the wheel/sdist, install it into a throwaway venv
+                 (outside the checkout, so local source cannot mask a
+                 packaging defect), and smoke-test fim --version/--help
+                 from there
+  6. Advise    — advisory checks (never block the build; opt in with
+                 --advise)
+             security  — pip-audit against the resolved dependency set
+             bandit    — bandit source-pattern scan of src/
+             churn     — per-file git commit frequency (top 40)
+             metrics   — scc code-metrics summary (requires docker)
+
+EXAMPLES
+  # Local dev cycle — lint, type-check, test, docs, package
+  ./build
+
+  # The full gate CI runs
+  ./build --ci
+
+  # Fast iteration: skip everything except tests
+  ./build --no-lint --no-type --no-docs --no-package
+
+  # Full gate plus every advisory check
+  ./build --ci --advise
+
+  # Just the dependency-CVE and source-pattern scans, nothing else
+  ./build --no-lint --no-type --no-test --no-docs --no-package \
+      --advise security,bandit
+
+  # Dry-run: just print each command
+  ./build --dry-run
 EOF
 }
 
@@ -50,6 +145,19 @@ while (($#)); do
             ci=true
             coverage=true
             ;;
+        --advise | --advice)
+            # The value is optional (--advise alone means "all"), so only
+            # consume $2 as the value when it looks like one -- a bare
+            # trailing --advise, or one followed by another flag, must
+            # not swallow that next flag as if it were an advisement list.
+            if [[ $# -gt 1 && "$2" != --* ]]; then
+                advise="$2"
+                shift
+            else
+                advise="all"
+            fi
+            ;;
+        --no-advise) advise="" ;;
         --coverage) coverage=true ;;
         --dry-run) dry_run=true ;;
         --no-docs) run_docs=false ;;
@@ -78,6 +186,42 @@ if "${ci}" && {
     exit 2
 fi
 
+# Resolve the requested advisory categories (comma-delimited) into one
+# flag per category. The comma-list framework matches this project's
+# own citrus-family build-script convention (dev/doc source:
+# src/build/generate) so a future advisory category is additive here
+# rather than a flag redesign. 'security' is pip-audit (dependency
+# CVEs); 'bandit' is kept separate rather than folded into 'security'
+# because it checks something different (source patterns, not resolved
+# dependency versions) and citrus's own generator keeps the same two
+# concerns apart (a gating image CVE scan vs. an advisory source scan).
+run_advise_security=false
+run_advise_bandit=false
+run_advise_churn=false
+run_advise_metrics=false
+if [[ -n "${advise}" ]]; then
+    IFS=',' read -ra advise_categories <<<"${advise}"
+    for category in "${advise_categories[@]}"; do
+        case "${category}" in
+            all)
+                run_advise_security=true
+                run_advise_bandit=true
+                run_advise_churn=true
+                run_advise_metrics=true
+                ;;
+            security) run_advise_security=true ;;
+            bandit) run_advise_bandit=true ;;
+            churn) run_advise_churn=true ;;
+            metrics) run_advise_metrics=true ;;
+            none) ;;
+            *)
+                printf 'Unknown --advise category: %s\n' "${category}" >&2
+                exit 2
+                ;;
+        esac
+    done
+fi
+
 python=${PYTHON:-python3}
 
 # Make console scripts from an explicitly selected virtual environment available.
@@ -98,6 +242,14 @@ if ! "${dry_run}"; then
     fi
     "${run_docs}" && required_modules[${#required_modules[@]}]=pydoc_markdown
     "${run_package}" && required_modules[${#required_modules[@]}]=build
+    "${run_advise_security}" \
+        && required_modules[${#required_modules[@]}]=pip_audit
+    "${run_advise_bandit}" && required_modules[${#required_modules[@]}]=bandit
+    # churn (git+awk) and metrics (docker) are not Python modules, so
+    # they are not part of this pre-check; each is verified for real
+    # right before it runs (git already required to have a checkout at
+    # all; docker's absence is reported clearly, not as a raw
+    # command-not-found).
 
     if ! missing_modules=$(
         "${python}" - "${required_modules[@]}" <<'PY'
@@ -194,5 +346,60 @@ if "${run_package}"; then
             run "${smoke_venv}/bin/fim" --version
             run "${smoke_venv}/bin/fim" --help
         )
+    fi
+fi
+
+if "${run_advise_security}"; then
+    printf '\n== Advisory: security (pip-audit) ==\n'
+    # `fim` itself is always skipped: it is not published to PyPI (an
+    # editable local install), so "is this project vulnerable to
+    # itself" is not a meaningful question -- only its resolved
+    # third-party dependencies are worth auditing. Advisory only:
+    # `|| true` means a real finding is printed but never fails the
+    # build, matching every other advisory check's contract.
+    run "${python}" -m pip_audit --skip-editable || true
+fi
+
+if "${run_advise_bandit}"; then
+    printf '\n== Advisory: bandit (source-pattern scan) ==\n'
+    # src/ only, matching the same scope citrus's own graudit advisory
+    # scans (test/ triggering these same patterns is expected --
+    # mocking a subprocess/network call is not the thing this check is
+    # for). Advisory only: a real finding is printed but never fails
+    # the build.
+    run "${python}" -m bandit -r src -q || true
+fi
+
+if "${run_advise_churn}"; then
+    printf '\n== Advisory: churn (per-file commit frequency) ==\n'
+    # git + awk only, no external tool -- the 40 most-changed files,
+    # newest-history-first, as a quick "where does most of the editing
+    # happen" signal. Never fails the build.
+    churn_output=$(
+        git log --all --name-only --pretty=format: 2>/dev/null \
+            | grep -v '^[[:space:]]*$' \
+            | sort \
+            | uniq -c \
+            | sort -rn \
+            | awk 'length($0) > 0 { printf "%s,%d\n", $2, $1 }' \
+            | head -40
+    ) || true
+    if [[ -n "${churn_output}" ]]; then
+        printf 'entity,n-revs\n'
+        printf '%s\n' "${churn_output}"
+    else
+        printf 'Churn analysis skipped: no git history\n'
+    fi
+fi
+
+if "${run_advise_metrics}"; then
+    printf '\n== Advisory: metrics (scc code-metrics summary) ==\n'
+    if command -v docker >/dev/null 2>&1; then
+        run docker run --rm \
+            --volume "${root}:/data:ro" \
+            ghcr.io/boyter/scc:v3.7.0 \
+            scc --by-file /data || true
+    else
+        printf 'Metrics skipped: docker not found (see --help PREREQUISITES)\n'
     fi
 fi
