@@ -230,7 +230,7 @@ def _run_worker(
                 # `atomic_directory` discards the temporary directory
                 # exactly as it would for any other engine error.
                 raise RuntimeError("unexpected batch result from a scalar run")
-            _write_run_artifacts(result, targets)
+            write_run_artifacts(result, targets)
     except RunCancelledError as cancelled:
         message_queue.put(("cancelled", cancelled.generation))
         return
@@ -240,7 +240,7 @@ def _run_worker(
     message_queue.put(("done", result))
 
 
-def _write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None:
+def write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None:
     """Write `report.json`, `scatter.png`, and — last — `manifest.json`.
 
     Mirrors `cli._write_run_artifacts` exactly: `trajectory.jsonl` is
@@ -249,10 +249,15 @@ def _write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None:
     `fim`; every other artifact is written and flushed first, and
     `manifest.json` is written only once every sibling artifact is
     flushed, augmented with each one's SHA-256 digest. The returned
-    `Figure` is closed immediately — this worker thread never displays
-    it, unlike the results screen (next commit), which keeps its own
-    figure alive on screen and is responsible for closing that one
-    itself (design §3.5's `plt.close` care item).
+    `Figure` is closed immediately — the caller's worker thread never
+    displays it, unlike the results screen, which keeps its own figure
+    alive on screen and is responsible for closing that one itself
+    (design §3.5's `plt.close` care item). Public rather than
+    module-private: `fim.gui.batch_runner` reuses this same call, once
+    per replicate, rather than duplicating it — both modules live in
+    the same `fim.gui` package, unlike the CLI/GUI front-end boundary
+    `run_artifact_targets`'s own docstring keeps deliberately parallel
+    instead of shared.
     """
     write_report(targets["report"], result.report)
     figure = plot_frequency_scatter(

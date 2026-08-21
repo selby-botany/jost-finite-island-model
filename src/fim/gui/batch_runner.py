@@ -20,11 +20,13 @@ of `fim.gui.runner`'s `("progress", generation)` alone, so Screen 2 can
 render both the outer (replicate count) and inner (generation count)
 progress axes (design §3.4, §4.2).
 
-Writes only each replicate's `trajectory.jsonl` so far; `report.json`,
-`scatter.png`, and `manifest.json` per replicate, plus the batch-level
-`summary.json` and `manifest.json`, are added by this milestone's third
-bullet (§7.6), inside the same `with` block, once the batch results
-screen exists to display them.
+Writes the same artifacts `cli._command_run_batch --sequential` does:
+each replicate's own four-file scalar-run contract (reusing
+`fim.gui.runner.write_run_artifacts`, the same call the scalar runner
+uses), then a batch-level `summary.json`
+(`fim.engine.replicate_summary`) and `manifest.json`
+(`fim.persistence.manifest.write_batch_manifest`), all still inside the
+one `fim.paths.atomic_directory` publish (design §3.7).
 """
 
 from __future__ import annotations
@@ -33,15 +35,24 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Literal
 
-from fim import paths
-from fim.engine import RunResult, deterministic_run_id, fim
-from fim.gui.runner import ProgressThrottle
+from fim import __version__, paths
+from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
+from fim.gui.runner import ProgressThrottle, run_artifact_targets, write_run_artifacts
 from fim.gui.store import GuiProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.manifest import (
+    CURRENT_BATCH_SCHEMA_VERSION,
+    ArtifactDigest,
+    BatchManifest,
+    hash_file,
+    write_batch_manifest,
+)
+from fim.persistence.report import write_report
 
 # Mirrors `fim.gui.runner`'s own catch-all — see its definition for the
 # full rationale. Duplicated rather than imported: `fim.gui.runner`'s
@@ -170,6 +181,7 @@ def _batch_worker(
             cancel_event=cancel_event,
         )
 
+    started_at = _format_timestamp(_utc_now())
     try:
         with paths.atomic_directory(output_directory) as working_directory:
             results = fim(
@@ -192,6 +204,10 @@ def _batch_worker(
                 # temporary directory exactly as it would for any
                 # other engine error.
                 raise RuntimeError("unexpected scalar result from a batch run")
+            ended_at = _format_timestamp(_utc_now())
+            _write_batch_artifacts(
+                results, working_directory, run_id, params, started_at, ended_at
+            )
     except RunCancelledError as cancelled:
         message_queue.put(("cancelled", current_replicate, cancelled.generation))
         return
@@ -199,3 +215,67 @@ def _batch_worker(
         message_queue.put(("error", str(error)))
         return
     message_queue.put(("done", results))
+
+
+def _format_timestamp(value: datetime) -> str:
+    """Return an unambiguous UTC ISO-8601 timestamp, matching `RunManifest`.
+
+    Duplicated from `cli._format_timestamp` — a private CLI helper, not
+    a shared import, per the same front-end-boundary convention
+    `_EXPECTED_ENGINE_ERRORS` already follows.
+    """
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _utc_now() -> datetime:
+    """Return the current UTC time for the batch manifest's timestamps."""
+    return datetime.now(UTC)
+
+
+def _write_batch_artifacts(
+    results: tuple[RunResult, ...],
+    working_directory: Path,
+    run_id: str,
+    params: SimulationParams,
+    started_at: str,
+    ended_at: str,
+) -> None:
+    """Write every replicate's artifacts, then the batch-level summary and manifest.
+
+    Mirrors `cli._command_run_batch`'s own artifact-writing pass
+    exactly: each replicate's four-file scalar-run contract
+    (`fim.gui.runner.write_run_artifacts`, reused rather than
+    duplicated — both modules live in the same `fim.gui` package), then
+    `summary.json` (`fim.engine.replicate_summary`), then — last, only
+    once every sibling artifact is flushed — the batch-level
+    `manifest.json`, augmented with each replicate's own manifest
+    digest plus `summary.json`'s own. Unlike
+    `cli._command_run_batch`'s `max_workers` (parallel) path, the GUI
+    batch runner is always sequential (`max_workers=None`), so every
+    replicate `fim()` returns was actually run in full — there is no
+    orphan-replicate-directory case to prune here (`cli.
+    _prune_orphan_replicate_directories`'s own docstring: that pass
+    exists only for a worker whose replicate result was discarded by an
+    adaptive stop decided *after* a whole concurrent worker batch
+    completed, a shape sequential execution never produces).
+    """
+    artifact_digests: dict[str, ArtifactDigest] = {}
+    for result in results:
+        directory = replicate_output_directory(working_directory, run_id, result.run_id)
+        write_run_artifacts(result, run_artifact_targets(directory))
+        artifact_digests[directory.name] = hash_file(directory / "manifest.json")
+    write_report(working_directory / "summary.json", replicate_summary(results))
+    artifact_digests["summary"] = hash_file(working_directory / "summary.json")
+    write_batch_manifest(
+        working_directory / "manifest.json",
+        BatchManifest(
+            schema_version=CURRENT_BATCH_SCHEMA_VERSION,
+            run_id=run_id,
+            replicate_run_ids=tuple(result.run_id for result in results),
+            parameters=params.to_dict(),
+            started_at=started_at,
+            ended_at=ended_at,
+            software_version=__version__,
+            artifacts=artifact_digests,
+        ),
+    )

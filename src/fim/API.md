@@ -81,6 +81,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [should\_report](#fim.gui.runner.ProgressThrottle.should_report)
   * [run\_artifact\_targets](#fim.gui.runner.run_artifact_targets)
   * [start\_run](#fim.gui.runner.start_run)
+  * [write\_run\_artifacts](#fim.gui.runner.write_run_artifacts)
 * [fim.gui.screens](#fim.gui.screens)
 * [fim.gui.screens.input\_screen](#fim.gui.screens.input_screen)
   * [InputScreen](#fim.gui.screens.input_screen.InputScreen)
@@ -1000,11 +1001,13 @@ of `fim.gui.runner`'s `("progress", generation)` alone, so Screen 2 can
 render both the outer (replicate count) and inner (generation count)
 progress axes (design §3.4, §4.2).
 
-Writes only each replicate's `trajectory.jsonl` so far; `report.json`,
-`scatter.png`, and `manifest.json` per replicate, plus the batch-level
-`summary.json` and `manifest.json`, are added by this milestone's third
-bullet (§7.6), inside the same `with` block, once the batch results
-screen exists to display them.
+Writes the same artifacts `cli._command_run_batch --sequential` does:
+each replicate's own four-file scalar-run contract (reusing
+`fim.gui.runner.write_run_artifacts`, the same call the scalar runner
+uses), then a batch-level `summary.json`
+(`fim.engine.replicate_summary`) and `manifest.json`
+(`fim.persistence.manifest.write_batch_manifest`), all still inside the
+one `fim.paths.atomic_directory` publish (design §3.7).
 
 <a id="fim.gui.batch_runner.replicate_index"></a>
 
@@ -1669,6 +1672,32 @@ Resolve targets, guard the existing target, and start the worker thread.
 **Raises**:
 
 - `FileExistsError` - If `output_directory` already exists.
+
+<a id="fim.gui.runner.write_run_artifacts"></a>
+
+#### write\_run\_artifacts
+
+```python
+def write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None
+```
+
+Write `report.json`, `scatter.png`, and — last — `manifest.json`.
+
+Mirrors `cli._write_run_artifacts` exactly: `trajectory.jsonl` is
+not written here, since it was already streamed
+generation-by-generation by the `TrajectoryStore` passed into
+`fim`; every other artifact is written and flushed first, and
+`manifest.json` is written only once every sibling artifact is
+flushed, augmented with each one's SHA-256 digest. The returned
+`Figure` is closed immediately — the caller's worker thread never
+displays it, unlike the results screen, which keeps its own figure
+alive on screen and is responsible for closing that one itself
+(design §3.5's `plt.close` care item). Public rather than
+module-private: `fim.gui.batch_runner` reuses this same call, once
+per replicate, rather than duplicating it — both modules live in
+the same `fim.gui` package, unlike the CLI/GUI front-end boundary
+`run_artifact_targets`'s own docstring keeps deliberately parallel
+instead of shared.
 
 <a id="fim.gui.screens"></a>
 

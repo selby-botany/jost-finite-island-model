@@ -12,6 +12,7 @@ commit and is not part of this file.
 from __future__ import annotations
 
 import itertools
+import json
 import queue
 import threading
 from collections.abc import Callable
@@ -20,8 +21,10 @@ from pathlib import Path
 
 import pytest
 
+from fim.engine import replicate_summary
 from fim.gui import batch_runner
 from fim.model.params import SimulationParams
+from fim.persistence.manifest import hash_file, read_batch_manifest
 
 
 def _always_reporting_clock() -> Callable[[], float]:
@@ -79,18 +82,11 @@ def test_start_batch_run_raises_when_output_directory_already_exists(
         )
 
 
-def test_start_batch_run_streams_every_replicate_trajectory_on_success(
+def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
     tmp_path: Path,
     batch_params: SimulationParams,
 ) -> None:
-    """A real, uncancelled batch publishes one trajectory per replicate.
-
-    Only `trajectory.jsonl` exists per replicate yet — `report.json`,
-    `scatter.png`, and each replicate's own `manifest.json`, plus the
-    batch-level `summary.json`/`manifest.json`, are added by this
-    milestone's third bullet (§7.6), once the batch results screen
-    exists to display them.
-    """
+    """A real, uncancelled batch publishes the full documented artifact tree."""
     output_directory = tmp_path / "output"
     message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
 
@@ -108,17 +104,75 @@ def test_start_batch_run_streams_every_replicate_trajectory_on_success(
         "replicate-001",
         "replicate-002",
         "replicate-003",
+        "summary.json",
+        "manifest.json",
     }
     for index in (1, 2, 3):
         replicate_directory = output_directory / f"replicate-{index:03}"
         assert {path.name for path in replicate_directory.iterdir()} == {
-            "trajectory.jsonl"
+            "trajectory.jsonl",
+            "manifest.json",
+            "report.json",
+            "scatter.png",
         }
     messages = _drain(message_queue)
     assert messages[-1][0] == "done"
     assert len(messages[-1][1]) == 3
     assert all(message[0] == "replicate" for message in messages[:-1])
     assert {message[1] for message in messages[:-1]} == {1, 2, 3}
+
+
+def test_start_batch_run_records_matching_digests_in_the_published_manifest(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+) -> None:
+    """The batch manifest's digests match every actually-published artifact.
+
+    The same guarantee `test/gui/test_runner.py`'s equivalent test
+    checks for a scalar run — the record
+    `fim.persistence.manifest.verify_trajectory_integrity` (per
+    replicate) and any future batch-level integrity check would rely
+    on.
+    """
+    output_directory = tmp_path / "output"
+    message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
+
+    thread = batch_runner.start_batch_run(
+        batch_params, output_directory, message_queue, threading.Event()
+    )
+    thread.join(timeout=30)
+
+    manifest = read_batch_manifest(output_directory / "manifest.json")
+    assert manifest.artifacts is not None
+    assert manifest.artifacts["summary"] == hash_file(output_directory / "summary.json")
+    for index in (1, 2, 3):
+        replicate_directory = output_directory / f"replicate-{index:03}"
+        assert manifest.artifacts[replicate_directory.name] == hash_file(
+            replicate_directory / "manifest.json"
+        )
+
+
+def test_start_batch_run_summary_matches_replicate_summary(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+) -> None:
+    """`summary.json` matches `fim.engine.replicate_summary` over the same results."""
+    output_directory = tmp_path / "output"
+    message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
+
+    thread = batch_runner.start_batch_run(
+        batch_params, output_directory, message_queue, threading.Event()
+    )
+    thread.join(timeout=30)
+
+    done = _drain(message_queue)[-1]
+    assert done[0] == "done"
+    expected = replicate_summary(done[1])
+    summary = json.loads((output_directory / "summary.json").read_text())
+    assert set(summary) == set(expected)
+    for name, interval in expected.items():
+        assert summary[name]["mean"] == pytest.approx(interval["mean"])
+        assert summary[name]["sample_count"] == interval["sample_count"]
 
 
 def test_start_batch_run_leaves_no_temporary_sibling_after_a_successful_publish(
