@@ -83,6 +83,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [start\_run](#fim.gui.runner.start_run)
   * [write\_run\_artifacts](#fim.gui.runner.write_run_artifacts)
 * [fim.gui.screens](#fim.gui.screens)
+* [fim.gui.screens.batch\_results\_screen](#fim.gui.screens.batch_results_screen)
+  * [BatchResultsView](#fim.gui.screens.batch_results_screen.BatchResultsView)
+    * [from\_results](#fim.gui.screens.batch_results_screen.BatchResultsView.from_results)
+  * [BatchResultsScreen](#fim.gui.screens.batch_results_screen.BatchResultsScreen)
+    * [\_\_init\_\_](#fim.gui.screens.batch_results_screen.BatchResultsScreen.__init__)
+    * [show](#fim.gui.screens.batch_results_screen.BatchResultsScreen.show)
 * [fim.gui.screens.input\_screen](#fim.gui.screens.input_screen)
   * [InputScreen](#fim.gui.screens.input_screen.InputScreen)
     * [\_\_init\_\_](#fim.gui.screens.input_screen.InputScreen.__init__)
@@ -97,6 +103,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.screens.results\_screen](#fim.gui.screens.results_screen)
   * [ResultsView](#fim.gui.screens.results_screen.ResultsView)
     * [from\_run\_result](#fim.gui.screens.results_screen.ResultsView.from_run_result)
+  * [format\_statistic](#fim.gui.screens.results_screen.format_statistic)
   * [ResultsScreen](#fim.gui.screens.results_screen.ResultsScreen)
     * [\_\_init\_\_](#fim.gui.screens.results_screen.ResultsScreen.__init__)
     * [show](#fim.gui.screens.results_screen.ResultsScreen.show)
@@ -953,7 +960,7 @@ def main() -> int
 
 Launch the fim GUI: build the root window and run its main loop.
 
-Wires Screen 1 (input) -> Screen 2 (progress) -> Screen 3 (results):
+Wires Screen 1 (input) -> Screen 2 (progress) -> Screen 3/4 (results):
 "Run simulation" starts a real background run in
 `paths.default_output_directory()` and switches to Screen 2 —
 scalar mode for `n_replicates == 1`, batch mode otherwise (design
@@ -961,14 +968,16 @@ scalar mode for `n_replicates == 1`, batch mode otherwise (design
 *is* the toggle"). A cancelled or failed run returns to Screen 1
 with its message shown in the banner (design §4.6), form values
 intact. A completed scalar run becomes a `ResultsView`
-(`ResultsView.from_run_result`) and is shown on Screen 3 alongside
-its output directory. Screen 3's own "New run" returns to Screen 1
-with the just-run configuration still in the form — "Reset to
-defaults" is what starts genuinely fresh. "Animate" is still a
-no-op here — Milestone G6 (§7.8) wires it to an animation screen
-that does not exist yet. A completed batch is still a no-op too —
-this milestone's own later bullets wire it to a batch results
-screen that does not exist yet.
+(`ResultsView.from_run_result`) shown on Screen 3; a completed batch
+becomes a `BatchResultsView` (`BatchResultsView.from_results`) shown
+on Screen 4 instead — the same routing split as Screen 2 itself.
+Screen 3's own "New run" returns to Screen 1 with the just-run
+configuration still in the form — "Reset to defaults" is what
+starts genuinely fresh. Screen 4's "Open replicate" raises Screen 3
+for the selected replicate, with its own output subdirectory rather
+than the batch's top-level one (design §4.0 `8`). "Animate" is still
+a no-op here — Milestone G6 (§7.8) wires it to an animation screen
+that does not exist yet.
 
 **Returns**:
 
@@ -1705,6 +1714,120 @@ instead of shared.
 
 Individual `fim.gui` screens, each one `ttk.Frame` `fim.gui.app` raises.
 
+<a id="fim.gui.screens.batch_results_screen"></a>
+
+# fim.gui.screens.batch\_results\_screen
+
+Screen 4 — batch results (design doc §4.4): a replicate table beside
+each watched statistic's across-replicate confidence interval.
+
+New this revision (requirement G10, §2.1; §4.0 `7`). Reached instead of
+Screen 3 when a completed run's `n_replicates` was greater than one — a
+batch has as many final states as replicates and no principled way to
+privilege one as *the* scatter, so this screen shows the honest
+alternative: a **replicate table** (id, status, final generation, and
+every named statistic's final value — the same fields `report.json`
+records per replicate) beside each statistic's **confidence interval**
+from `fim.engine.replicate_summary` (the same computation `summary.json`
+records), rendered as one row per statistic with the mean marked and the
+interval drawn as an error bar — a labeled bar rather than a scatter,
+since there is no principled single point to plot per statistic either.
+A statistic omitted from the summary (fewer than two replicates had a
+defined value) is shown as omitted, not silently blank.
+
+<a id="fim.gui.screens.batch_results_screen.BatchResultsView"></a>
+
+## BatchResultsView Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class BatchResultsView()
+```
+
+Screen 4's input: every replicate result from one completed batch.
+
+<a id="fim.gui.screens.batch_results_screen.BatchResultsView.from_results"></a>
+
+#### from\_results
+
+```python
+@classmethod
+def from_results(cls, replicates: tuple[RunResult, ...]) -> BatchResultsView
+```
+
+Build a view from a just-completed background batch run.
+
+<a id="fim.gui.screens.batch_results_screen.BatchResultsScreen"></a>
+
+## BatchResultsScreen Objects
+
+```python
+class BatchResultsScreen(ttk.Frame)
+```
+
+Screen 4: a batch's replicate table and per-statistic confidence intervals.
+
+<a id="fim.gui.screens.batch_results_screen.BatchResultsScreen.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(
+        parent: tk.Misc,
+        *,
+        on_open_replicate: Callable[[ResultsView, Path], None] | None = None,
+        open_folder: Callable[[Path], None] = _reveal_in_file_browser,
+        export_dialog: Callable[[],
+                                str] = filedialog.asksaveasfilename) -> None
+```
+
+Build the header, replicate table, CI panel, and action buttons.
+
+**Arguments**:
+
+- `parent` - The Tk container this screen is gridded into.
+- `on_open_replicate` - Called with the selected replicate's
+  `ResultsView` and its own output subdirectory when
+  "Open replicate" is clicked. Defaults to a no-op;
+  `fim.gui.app` wires this to raise Screen 3.
+- `open_folder` - Reveals a directory in the platform file
+  browser. Defaults to the real, OS-dispatching
+  implementation; injectable so tests never launch one.
+- `export_dialog` - Returns the path "Export summary.json"
+  copies the file to, or an empty string for a cancelled
+  dialog. Defaults to the real file-save dialog;
+  injectable so tests never open one.
+
+<a id="fim.gui.screens.batch_results_screen.BatchResultsScreen.show"></a>
+
+#### show
+
+```python
+def show(view: BatchResultsView, output_directory: Path) -> None
+```
+
+Render one batch's replicate table and a fresh confidence-interval panel.
+
+Closes the previously embedded figure first, if any — the same
+`plt.close` care item `ResultsScreen.show` observes (design
+§3.5): this screen keeps its own figure alive on screen, so a
+long GUI session that views many batches without this would
+leak one `Figure` per batch shown here.
+
+**Arguments**:
+
+- `view` - A just-completed background batch
+  (`BatchResultsView.from_results`, as `fim.gui.
+  batch_runner`'s `("done", results)` message carries the
+  replicate tuple that builds it).
+- `output_directory` - The batch's own top-level artifact
+  directory — "Open batch folder" reveals this,
+  "Export summary.json" copies `output_directory /
+  'summary.json'`, and each replicate row's own
+  subdirectory (`fim.gui.batch_runner.
+  replicate_output_directory`) is resolved relative to
+  it.
+
 <a id="fim.gui.screens.input_screen"></a>
 
 # fim.gui.screens.input\_screen
@@ -1999,6 +2122,23 @@ def from_run_result(cls, result: RunResult) -> ResultsView
 ```
 
 Build a view from a just-completed background run.
+
+<a id="fim.gui.screens.results_screen.format_statistic"></a>
+
+#### format\_statistic
+
+```python
+def format_statistic(value: object) -> str
+```
+
+Format one report statistic for display, matching `cli._format_optional`.
+
+**Arguments**:
+
+- `value` - A `ResultsView.report` entry — `float | None` in every
+  real case (`RunResult.report`'s six named statistics), but
+  typed as `object` here since `ResultsView.report` is a
+  plain `Mapping[str, object]` shared across every source.
 
 <a id="fim.gui.screens.results_screen.ResultsScreen"></a>
 

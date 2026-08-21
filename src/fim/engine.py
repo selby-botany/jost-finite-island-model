@@ -14,6 +14,30 @@ from typing import Any, TypeAlias, TypedDict
 
 import numpy as np
 
+# `numpy.random` is one of numpy's lazily loaded submodules — `import numpy`
+# alone does not import it; `numpy/__init__.py`'s own `__getattr__` imports
+# it on first attribute access instead (`_run_one`'s `np.random.Generator`
+# call below is that first access in every prior release, since nothing
+# else in this module touches `np.random` at import time). Triggering that
+# lazy import from two threads at once — the ordinary case for
+# `fim.gui.runner`/`fim.gui.batch_runner`, which each start a real
+# background thread that calls straight into `_run_one` — races
+# `importlib`'s module-loading machinery against the interpreter's own
+# garbage collector and can abort the whole process (observed reliably
+# running this project's `gui`-marked test suite: multiple background
+# threads across `test/gui/test_runner.py`, `test/gui/test_batch_runner.py`,
+# and `test/gui/test_batch_results_screen.py` all reach this line for the
+# first time in quick succession). Importing the submodule explicitly here
+# — on the main thread, at `fim.engine` import time, before any caller can
+# possibly have started a second thread yet — forces it fully loaded and
+# cached in `sys.modules` first, so every later `np.random` attribute
+# access resolves directly rather than ever re-entering the lazy import
+# path. Not independently unit-testable: the failure this prevents is a
+# GC/import-timing race, not a deterministic code path: import ordering
+# structurally rules it out, which no assertion on `_run_one`'s own
+# behavior could establish.
+import numpy.random
+
 from fim import __version__
 from fim.convergence.criteria import (
     ConfidenceIntervalCriterion,
