@@ -1435,11 +1435,14 @@ own `except BaseException` clause discards the temporary directory and
 `output_directory` is never created — no GUI-specific cleanup code is
 needed for either outcome.
 
-This module writes only `trajectory.jsonl` so far (streamed
-generation-by-generation by the `TrajectoryStore` passed into `fim`);
-`report.json`, `scatter.png`, and `manifest.json` are added by Milestone
-G3's first bullet (§7.5), inside the same `with` block, once the results
-screen exists to display them.
+Writes the same four artifacts, in the same order, as
+`cli._write_run_artifacts`: `trajectory.jsonl` streamed
+generation-by-generation by the `TrajectoryStore` passed into `fim`,
+then `report.json` and `scatter.png` once the run finishes, then —
+last, and only once both are flushed — `manifest.json`, augmented with
+each artifact's SHA-256 digest, the record
+`fim.persistence.manifest.verify_trajectory_integrity` later checks
+against (design §3.7).
 
 <a id="fim.gui.runner.ProgressThrottle"></a>
 
@@ -1499,8 +1502,7 @@ Deliberately the same four names `cli._run_artifact_targets` uses
 (design §3.7's "the exact same four calls, same target filenames,
 same directory") — a direct parallel, not a shared import, since
 `cli._run_artifact_targets` is a private module-level function of
-the CLI's own front end. Only `targets["trajectory"]` is written by
-this milestone; the other three are added by Milestone G3.
+the CLI's own front end.
 
 <a id="fim.gui.runner.start_run"></a>
 

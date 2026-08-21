@@ -24,6 +24,7 @@ import pytest
 from fim.engine import RunResult
 from fim.gui import runner
 from fim.model.params import SimulationParams
+from fim.persistence.manifest import hash_file, read_manifest
 
 
 def test_progress_throttle_always_reports_the_final_generation() -> None:
@@ -78,17 +79,11 @@ def test_start_run_raises_when_output_directory_already_exists(
         )
 
 
-def test_start_run_streams_the_trajectory_and_publishes_on_success(
+def test_start_run_writes_the_four_documented_artifacts_on_success(
     tmp_path: Path,
     tiny_params: SimulationParams,
 ) -> None:
-    """A real, uncancelled run publishes a trajectory via one atomic rename.
-
-    Only `trajectory.jsonl` exists yet — `report.json`, `scatter.png`,
-    and `manifest.json` are added by Milestone G3 (§7.5), inside the
-    same `with paths.atomic_directory(...)` block this worker already
-    uses, once the results screen exists to display them.
-    """
+    """A real, uncancelled run produces the same four artifacts `fim run` does."""
     output_directory = tmp_path / "output"
     message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
 
@@ -98,11 +93,45 @@ def test_start_run_streams_the_trajectory_and_publishes_on_success(
     thread.join(timeout=30)
 
     assert not thread.is_alive()
-    assert {path.name for path in output_directory.iterdir()} == {"trajectory.jsonl"}
+    assert {path.name for path in output_directory.iterdir()} == {
+        "trajectory.jsonl",
+        "manifest.json",
+        "report.json",
+        "scatter.png",
+    }
     messages = _drain(message_queue)
     assert messages[-1][0] == "done"
     assert isinstance(messages[-1][1], RunResult)
     assert all(kind == "progress" for kind, _payload in messages[:-1])
+
+
+def test_start_run_records_matching_digests_in_the_published_manifest(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+) -> None:
+    """`manifest.json`'s recorded digests match the published artifacts' own.
+
+    The same guarantee `cli._write_run_artifacts` gives `fim run`'s own
+    output (`test/cli/test_cli.py`'s manifest-digest assertions) — the
+    record `fim.persistence.manifest.verify_trajectory_integrity` later
+    checks against.
+    """
+    output_directory = tmp_path / "output"
+    message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
+
+    thread = runner.start_run(
+        tiny_params, output_directory, message_queue, threading.Event()
+    )
+    thread.join(timeout=30)
+
+    manifest = read_manifest(output_directory / "manifest.json")
+    assert manifest.artifacts is not None
+    for name, filename in (
+        ("trajectory", "trajectory.jsonl"),
+        ("report", "report.json"),
+        ("scatter", "scatter.png"),
+    ):
+        assert manifest.artifacts[name] == hash_file(output_directory / filename)
 
 
 def test_start_run_leaves_no_temporary_sibling_after_a_successful_publish(

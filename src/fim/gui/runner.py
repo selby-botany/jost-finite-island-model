@@ -17,11 +17,14 @@ own `except BaseException` clause discards the temporary directory and
 `output_directory` is never created — no GUI-specific cleanup code is
 needed for either outcome.
 
-This module writes only `trajectory.jsonl` so far (streamed
-generation-by-generation by the `TrajectoryStore` passed into `fim`);
-`report.json`, `scatter.png`, and `manifest.json` are added by Milestone
-G3's first bullet (§7.5), inside the same `with` block, once the results
-screen exists to display them.
+Writes the same four artifacts, in the same order, as
+`cli._write_run_artifacts`: `trajectory.jsonl` streamed
+generation-by-generation by the `TrajectoryStore` passed into `fim`,
+then `report.json` and `scatter.png` once the run finishes, then —
+last, and only once both are flushed — `manifest.json`, augmented with
+each artifact's SHA-256 digest, the record
+`fim.persistence.manifest.verify_trajectory_integrity` later checks
+against (design §3.7).
 """
 
 from __future__ import annotations
@@ -30,14 +33,20 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Final, Literal
+
+from matplotlib import pyplot as plt
 
 from fim import paths
 from fim.engine import RunResult, deterministic_run_id, fim
 from fim.gui.store import GuiProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.manifest import hash_file, write_manifest
+from fim.persistence.report import write_report
+from fim.viz.scatter import plot_frequency_scatter
 
 # The wall-clock throttle interval design §3.4 names ("skip posting if
 # under ~50 ms since the last post").
@@ -113,8 +122,7 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
     (design §3.7's "the exact same four calls, same target filenames,
     same directory") — a direct parallel, not a shared import, since
     `cli._run_artifact_targets` is a private module-level function of
-    the CLI's own front end. Only `targets["trajectory"]` is written by
-    this milestone; the other three are added by Milestone G3.
+    the CLI's own front end.
     """
     return {
         "trajectory": directory / "trajectory.jsonl",
@@ -183,7 +191,11 @@ def _run_worker(
     of `_EXPECTED_ENGINE_ERRORS` both propagate out of the `with` block,
     so `atomic_directory`'s own exception handling discards the
     temporary directory in either case: no `shutil.rmtree` call, and no
-    other cleanup, appears anywhere in this function.
+    other cleanup, appears anywhere in this function. `("done", result)`
+    is posted only after the `with` block exits — that is, only once
+    `output_directory` has already been published by the atomic rename
+    — so a screen reacting to "done" can rely on every artifact already
+    being on disk at that path.
     """
     throttle = ProgressThrottle(clock=clock)
 
@@ -218,6 +230,7 @@ def _run_worker(
                 # `atomic_directory` discards the temporary directory
                 # exactly as it would for any other engine error.
                 raise RuntimeError("unexpected batch result from a scalar run")
+            _write_run_artifacts(result, targets)
     except RunCancelledError as cancelled:
         message_queue.put(("cancelled", cancelled.generation))
         return
@@ -225,3 +238,32 @@ def _run_worker(
         message_queue.put(("error", str(error)))
         return
     message_queue.put(("done", result))
+
+
+def _write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None:
+    """Write `report.json`, `scatter.png`, and — last — `manifest.json`.
+
+    Mirrors `cli._write_run_artifacts` exactly: `trajectory.jsonl` is
+    not written here, since it was already streamed
+    generation-by-generation by the `TrajectoryStore` passed into
+    `fim`; every other artifact is written and flushed first, and
+    `manifest.json` is written only once every sibling artifact is
+    flushed, augmented with each one's SHA-256 digest. The returned
+    `Figure` is closed immediately — this worker thread never displays
+    it, unlike the results screen (next commit), which keeps its own
+    figure alive on screen and is responsible for closing that one
+    itself (design §3.5's `plt.close` care item).
+    """
+    write_report(targets["report"], result.report)
+    figure = plot_frequency_scatter(
+        result.final_state, result.params, targets["scatter"]
+    )
+    plt.close(figure)
+    manifest = replace(
+        result.manifest,
+        artifacts={
+            name: hash_file(targets[name])
+            for name in ("trajectory", "report", "scatter")
+        },
+    )
+    write_manifest(targets["manifest"], manifest)
