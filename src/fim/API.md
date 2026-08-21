@@ -2685,13 +2685,16 @@ Delegate straight to the wrapped store; nothing to decorate here.
 
 # fim.launcher
 
-Dispatcher for the single packaged executable's ways into the GUI.
+Dispatcher for the single packaged executable's three ways into the GUI.
 
 Design doc `20260819-claude-sonnet-5-graphical-interface.md` §5.1: the
 Windows release ships one `.exe`, opened by double-clicking (GUI, no
-arguments) or from a terminal (CLI). `fim.cli.main` keeps its exact
-existing signature, behavior, and test suite untouched; this module
-only adds a branch in front of it. `fim = "fim.launcher:main"` in
+arguments), from a terminal (CLI), or via an explicit `--graphical
+[--detach]` flag pair for a shortcut, `.bat` wrapper, or Start Menu tile
+that wants to name the GUI directly rather than relying on the
+zero-argument heuristic. `fim.cli.main` keeps its exact existing
+signature, behavior, and test suite untouched; this module only adds
+branches in front of it. `fim = "fim.launcher:main"` in
 `pyproject.toml`'s `[project.scripts]` is the only thing that changes
 which callable actually runs `fim` — every documented invocation with a
 command still reaches the unmodified CLI parser.
@@ -2704,15 +2707,17 @@ command still reaches the unmodified CLI parser.
 def main(argv: Sequence[str] | None = None) -> int
 ```
 
-Dispatch to the GUI (zero arguments) or the CLI (anything else).
+Dispatch to the GUI (implicitly, or via --graphical) or the CLI.
 
 `fim.exe` invoked with zero arguments today already fails
 (`fim.cli.main`'s subparsers are `required=True`, so `parse_args`
 itself raises `SystemExit(2)` before any command runs) — there is no
-existing zero-argument behavior this branch could regress. Every
-other invocation (`fim run ...`, `fim --version`, `fim init`, and so
-on) is unaffected: a non-empty `arguments` passes straight through
-to the unmodified CLI parser.
+existing zero-argument behavior this branch could regress. Neither
+`--graphical` nor `--detach` collides with any flag `fim.cli`'s
+parser defines today, so every other invocation (`fim run ...`,
+`fim --version`, `fim init`, and so on) is unaffected: `arguments`
+matches none of the shapes below and control passes straight
+through to the unmodified CLI parser.
 
 **Arguments**:
 

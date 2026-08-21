@@ -2,18 +2,30 @@
 
 No subprocess and no real PyInstaller build (§6.5's packaging smoke
 layer owns that): these exercise `fim.launcher.main`'s branching logic
-directly, with `fim.cli.main` and `fim.gui.app.main` replaced by
-recording stubs so a real simulation run or a real `Tk` root is never
-built here. Design doc `20260819-claude-sonnet-5-graphical-interface.md`
-§7.9's own commit bullet: "explicit regression test that every existing
-non-empty-argv CLI invocation still reaches `fim.cli.main` unchanged."
-`--graphical`/`--detach` do not exist yet — the next commit adds them
-and their own tests.
+directly, with `fim.cli.main`, `fim.gui.app.main`, and
+`subprocess.Popen` replaced by recording stubs so a real simulation
+run, a real `Tk` root, or a real detached process is never built here.
+Design doc `20260819-claude-sonnet-5-graphical-interface.md` §7.9's own
+commit bullets: "explicit regression test that every existing
+non-empty-argv CLI invocation still reaches `fim.cli.main` unchanged"
+and "unit tests for all four cases: `--graphical` alone (foreground
+GUI, no `subprocess.Popen` call), `--graphical --detach`/`--detach
+--graphical` (asserts the exact `subprocess.Popen` argv and
+`start_new_session=True`, mocked), `--detach` alone (exit status 2,
+the clear usage error), and every existing subcommand/flag combination
+still reaching `fim.cli.main` unchanged."
+
+The Windows-only `FreeConsole` mechanic is exercised at the end of this
+file rather than beside the flag-parsing tests above — it fires from
+every foreground GUI launch path, not just one of them, so it stays
+next to the plain zero-argv dispatch test it was originally written
+against.
 """
 
 from __future__ import annotations
 
 import ctypes
+import subprocess
 from collections.abc import Sequence
 
 import pytest
@@ -98,6 +110,87 @@ def test_launcher_dispatches_nonempty_argv_to_cli_main_unchanged(
 
     assert status == 42
     assert received == [argv]
+
+
+def test_launcher_graphical_alone_launches_the_gui_in_the_foreground(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--graphical` alone runs the GUI in this process — no subprocess spawned."""
+    calls: list[None] = []
+
+    def fake_gui_main() -> int:
+        calls.append(None)
+        return 0
+
+    def fail_if_popen_called(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("subprocess.Popen was called")
+
+    monkeypatch.setattr(fim.gui.app, "main", fake_gui_main)
+    monkeypatch.setattr(subprocess, "Popen", fail_if_popen_called)
+
+    status = launcher.main(["--graphical"])
+
+    assert status == 0
+    assert calls == [None]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["--graphical", "--detach"], ["--detach", "--graphical"]],
+)
+def test_launcher_graphical_detach_spawns_a_detached_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+) -> None:
+    """Either flag order relaunches `[sys.argv[0], "--graphical"]`, detached.
+
+    The foreground GUI itself is never entered by *this* process — only
+    the relaunched (here, faked) child would reach it.
+    """
+    popen_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class _FakePopen:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            popen_calls.append((args, kwargs))
+
+    def fail_if_gui_main_called() -> int:
+        pytest.fail("gui.app.main was called in the detaching process")
+
+    monkeypatch.setattr(subprocess, "Popen", _FakePopen)
+    monkeypatch.setattr(fim.gui.app, "main", fail_if_gui_main_called)
+    monkeypatch.setattr("sys.argv", ["/path/to/fim"])
+
+    status = launcher.main(argv)
+
+    assert status == 0
+    assert len(popen_calls) == 1
+    args, kwargs = popen_calls[0]
+    assert args == (["/path/to/fim", "--graphical"],)
+    assert kwargs["start_new_session"] is True
+    assert kwargs["stdin"] is subprocess.DEVNULL
+    assert kwargs["stdout"] is subprocess.DEVNULL
+    assert kwargs["stderr"] is subprocess.DEVNULL
+
+
+def test_launcher_bare_detach_is_a_usage_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--detach` without `--graphical` is a clear usage error, not a silent no-op."""
+
+    def fail_if_gui_main_called() -> int:
+        pytest.fail("gui.app.main was called")
+
+    def fail_if_cli_main_called(argv: Sequence[str] | None = None) -> int:
+        pytest.fail("cli.main was called")
+
+    monkeypatch.setattr(fim.gui.app, "main", fail_if_gui_main_called)
+    monkeypatch.setattr(fim.cli, "main", fail_if_cli_main_called)
+
+    status = launcher.main(["--detach"])
+
+    assert status == 2
+    assert "fim: error: --detach requires --graphical" in capsys.readouterr().err
 
 
 def test_launcher_dispatches_nonempty_sys_argv_to_cli_main_unchanged(
