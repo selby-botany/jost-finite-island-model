@@ -3,10 +3,6 @@
 No Tk import and no display needed anywhere in this file — real
 background threads, real `fim.engine.fim` batch calls, and the real
 filesystem, the same technical shape as `test/gui/test_runner.py`.
-
-`test_cancel_during_batch_leaves_no_output_directory`, the dedicated
-integration test this milestone's fifth bullet names, lives in its own
-commit and is not part of this file.
 """
 
 from __future__ import annotations
@@ -189,6 +185,46 @@ def test_start_batch_run_leaves_no_temporary_sibling_after_a_successful_publish(
     thread.join(timeout=30)
 
     assert {path.name for path in tmp_path.iterdir()} == {"output"}
+
+
+def test_cancel_during_batch_leaves_no_output_directory(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+) -> None:
+    """A batch cancelled before it ever writes leaves no output directory at all.
+
+    The batch-level parallel to `test/gui/test_runner.py`'s
+    `test_cancel_during_run_leaves_no_output_directory` (design doc
+    §6.4, plan §7.6's fifth and final bullet): `cancel_event` is set
+    *before* `start_batch_run` is even called, so the first
+    replicate's very first `write_generation` call — generation 0,
+    made unconditionally before that replicate's convergence loop
+    begins — already observes it and raises `RunCancelledError`
+    deterministically, without any wall-clock race (§6.1). "Cancel
+    batch" stops the whole batch, not one replicate (design §4.0 #6):
+    there is no partial-batch save point to preserve, so this asserts
+    the same "nothing at all" outcome a mid-first-replicate
+    cancellation and a mid-third-replicate cancellation would both
+    produce — `fim.paths.atomic_directory` does not distinguish
+    between them.
+    """
+    output_directory = tmp_path / "output"
+    message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    thread = batch_runner.start_batch_run(
+        batch_params, output_directory, message_queue, cancel_event
+    )
+    thread.join(timeout=30)
+
+    assert not thread.is_alive()
+    assert not output_directory.exists()
+    assert {path.name for path in tmp_path.iterdir()} == set()
+    message = message_queue.get_nowait()
+    assert message[0] == "cancelled"
+    assert message[1] == 1
+    assert message[2] == 0
 
 
 def _drain(
