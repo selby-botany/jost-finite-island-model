@@ -92,6 +92,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ProgressScreen](#fim.gui.screens.progress_screen.ProgressScreen)
     * [\_\_init\_\_](#fim.gui.screens.progress_screen.ProgressScreen.__init__)
     * [start](#fim.gui.screens.progress_screen.ProgressScreen.start)
+    * [start\_batch](#fim.gui.screens.progress_screen.ProgressScreen.start_batch)
 * [fim.gui.screens.results\_screen](#fim.gui.screens.results_screen)
   * [ResultsView](#fim.gui.screens.results_screen.ResultsView)
     * [from\_run\_result](#fim.gui.screens.results_screen.ResultsView.from_run_result)
@@ -952,16 +953,21 @@ def main() -> int
 Launch the fim GUI: build the root window and run its main loop.
 
 Wires Screen 1 (input) -> Screen 2 (progress) -> Screen 3 (results):
-"Run simulation" starts a real background scalar run in
-`paths.default_output_directory()` and switches to Screen 2. A
-cancelled or failed run returns to Screen 1 with its message shown
-in the banner (design §4.6), form values intact. A completed run
-becomes a `ResultsView` (`ResultsView.from_run_result`) and is
-shown on Screen 3 alongside its output directory. Screen 3's own
-"New run" returns to Screen 1 with the just-run configuration still
-in the form — "Reset to defaults" is what starts genuinely fresh.
-"Animate" is still a no-op here — Milestone G6 (§7.8) wires it to
-an animation screen that does not exist yet.
+"Run simulation" starts a real background run in
+`paths.default_output_directory()` and switches to Screen 2 —
+scalar mode for `n_replicates == 1`, batch mode otherwise (design
+§4.1: "there is no separate 'batch mode' toggle; `n_replicates`
+*is* the toggle"). A cancelled or failed run returns to Screen 1
+with its message shown in the banner (design §4.6), form values
+intact. A completed scalar run becomes a `ResultsView`
+(`ResultsView.from_run_result`) and is shown on Screen 3 alongside
+its output directory. Screen 3's own "New run" returns to Screen 1
+with the just-run configuration still in the form — "Reset to
+defaults" is what starts genuinely fresh. "Animate" is still a
+no-op here — Milestone G6 (§7.8) wires it to an animation screen
+that does not exist yet. A completed batch is still a no-op too —
+this milestone's own later bullets wire it to a batch results
+screen that does not exist yet.
 
 **Returns**:
 
@@ -1791,18 +1797,24 @@ validation state is unrelated to either outcome and
 # fim.gui.screens.progress\_screen
 
 Screen 2 — running (design doc §4.2): live progress for one background
-scalar simulation, with an always-effective Cancel.
+simulation, scalar or batch, with an always-effective Cancel.
 
-Backed entirely by `fim.gui.runner.start_run` and the `RunMessage` queue
-it posts to (design §3.4). The progress bar is determinate against
-`max_generations` because that value is always known up front — a run
-that instead converges early simply ends the bar short of 100% rather
-than reaching it, which is a normal, non-failure outcome (design §4.2).
+Backed by `fim.gui.runner.start_run` (scalar) and
+`fim.gui.batch_runner.start_batch_run` (batch), and the `RunMessage`/
+`BatchMessage` queues they post to (design §3.4). Every progress bar is
+determinate against a value known up front — `max_generations` for the
+inner bar, `n_replicates` for the batch's outer bar — because a run or
+replicate that instead converges early simply ends its bar short of
+100% rather than reaching it, a normal, non-failure outcome (design
+§4.2).
 
-Scalar-only: a single "generation N / max_generations" bar, one Cancel
-button. Milestone G4 (§7.6) adds the outer replicate-count bar and
-relabels Cancel to "Cancel batch" for `n_replicates > 1`; this screen's
-scalar shape does not change underneath that addition.
+Scalar mode (`.start()`) shows a single "generation N / max_generations"
+bar and a "Cancel" button. Batch mode (`.start_batch()`) adds an outer
+"replicate N / n_replicates" bar above it and relabels the button
+"Cancel batch" — cancellation stops the whole batch, never one
+replicate, since there is no partial-batch save point (design §4.0 `5`,
+`6`). Both modes share one screen and one `Cancel`/`Cancel batch`
+button; only one of the two runs at a time.
 
 <a id="fim.gui.screens.progress_screen.ProgressScreen"></a>
 
@@ -1812,7 +1824,7 @@ scalar shape does not change underneath that addition.
 class ProgressScreen(ttk.Frame)
 ```
 
-Screen 2: display one background scalar run's progress, with Cancel.
+Screen 2: display one background run's (scalar or batch) progress.
 
 <a id="fim.gui.screens.progress_screen.ProgressScreen.__init__"></a>
 
@@ -1825,10 +1837,17 @@ def __init__(
         on_done: Callable[[RunResult], None] | None = None,
         on_cancelled: Callable[[int], None] | None = None,
         on_error: Callable[[str], None] | None = None,
+        on_batch_done: Callable[[tuple[RunResult, ...]], None] | None = None,
+        on_batch_cancelled: Callable[[int, int], None] | None = None,
         start_run: Callable[
             [SimulationParams, Path, queue.Queue[RunMessage], threading.Event],
             threading.Thread,
         ] = runner.start_run,
+        start_batch_run:
+    Callable[
+        [SimulationParams, Path, queue.Queue[BatchMessage], threading.Event],
+        threading.Thread,
+    ] = batch_runner.start_batch_run,
         poll_interval_ms: int = 100,
         clock: Callable[[], float] = time.monotonic) -> None
 ```
@@ -1838,20 +1857,33 @@ Build the progress display; no run is started until `.start()`.
 **Arguments**:
 
 - `parent` - The Tk container this screen is gridded into.
-- `on_done` - Called with the completed `RunResult` once the
-  worker posts `("done", result)`. Defaults to a no-op —
-  Milestone G3 gives this a real results-screen navigator.
-- `on_cancelled` - Called with the generation the run was
+- `on_done` - Called with the completed `RunResult` once a
+  scalar worker posts `("done", result)`. Defaults to a
+  no-op — Milestone G3 gives this a real results-screen
+  navigator.
+- `on_cancelled` - Called with the generation a scalar run was
   cancelled at, once the worker posts
   `("cancelled", generation)`. Defaults to a no-op.
-- `on_error` - Called with the message text once the worker
-  posts `("error", message)` — an unexpected engine error,
-  or a pre-existing output directory the guard in
-  `runner.start_run` rejected before any thread started.
+- `on_error` - Called with the message text once either worker
+  posts `("error", message)` — an unexpected engine
+  error, or a pre-existing output directory the guard in
+  `start_run`/`start_batch_run` rejected before any
+  thread started. Defaults to a no-op.
+- `on_batch_done` - Called with the completed replicate tuple
+  once a batch worker posts `("done", results)`. Defaults
+  to a no-op — Milestone G4's own batch-results-screen
+  bullet gives this a real navigator.
+- `on_batch_cancelled` - Called with the replicate index and
+  generation a batch was cancelled at, once the worker
+  posts `("cancelled", replicate_index, generation)`.
   Defaults to a no-op.
-- `start_run` - Builds and starts the background worker thread.
-  Defaults to the real `runner.start_run`; injectable so
-  tests never spawn a real thread.
+- `start_run` - Builds and starts the scalar background worker
+  thread. Defaults to the real `runner.start_run`;
+  injectable so tests never spawn a real thread.
+- `start_batch_run` - Builds and starts the batch background
+  worker thread. Defaults to the real
+  `batch_runner.start_batch_run`; injectable for the same
+  reason.
 - `poll_interval_ms` - How often the main thread drains the
   message queue (design §3.4's `root.after(100, poll)`).
 - `clock` - Injectable wall clock for the elapsed-time label.
@@ -1864,13 +1896,32 @@ Build the progress display; no run is started until `.start()`.
 def start(params: SimulationParams, output_directory: Path) -> None
 ```
 
-Start a real background run and begin polling for progress.
+Start a real background scalar run and begin polling for progress.
 
 **Arguments**:
 
 - `params` - Already-validated parameters — Screen 1 never hands
   this an unvalidated payload (design §3.6).
 - `output_directory` - The run's target artifact directory.
+
+<a id="fim.gui.screens.progress_screen.ProgressScreen.start_batch"></a>
+
+#### start\_batch
+
+```python
+def start_batch(params: SimulationParams, output_directory: Path) -> None
+```
+
+Start a real background batch run and begin polling for progress.
+
+**Arguments**:
+
+- `params` - Already-validated parameters with `n_replicates > 1`
+  — Screen 1 never hands this an unvalidated payload
+  (design §3.6); `fim.gui.app.main` routes here instead
+  of `.start()` exactly when `n_replicates > 1` (design
+- `§4.1` - "there is no separate 'batch mode' toggle").
+- `output_directory` - The batch's target artifact directory.
 
 <a id="fim.gui.screens.results_screen"></a>
 

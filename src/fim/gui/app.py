@@ -63,16 +63,21 @@ def main() -> int:
     """Launch the fim GUI: build the root window and run its main loop.
 
     Wires Screen 1 (input) -> Screen 2 (progress) -> Screen 3 (results):
-    "Run simulation" starts a real background scalar run in
-    `paths.default_output_directory()` and switches to Screen 2. A
-    cancelled or failed run returns to Screen 1 with its message shown
-    in the banner (design §4.6), form values intact. A completed run
-    becomes a `ResultsView` (`ResultsView.from_run_result`) and is
-    shown on Screen 3 alongside its output directory. Screen 3's own
-    "New run" returns to Screen 1 with the just-run configuration still
-    in the form — "Reset to defaults" is what starts genuinely fresh.
-    "Animate" is still a no-op here — Milestone G6 (§7.8) wires it to
-    an animation screen that does not exist yet.
+    "Run simulation" starts a real background run in
+    `paths.default_output_directory()` and switches to Screen 2 —
+    scalar mode for `n_replicates == 1`, batch mode otherwise (design
+    §4.1: "there is no separate 'batch mode' toggle; `n_replicates`
+    *is* the toggle"). A cancelled or failed run returns to Screen 1
+    with its message shown in the banner (design §4.6), form values
+    intact. A completed scalar run becomes a `ResultsView`
+    (`ResultsView.from_run_result`) and is shown on Screen 3 alongside
+    its output directory. Screen 3's own "New run" returns to Screen 1
+    with the just-run configuration still in the form — "Reset to
+    defaults" is what starts genuinely fresh. "Animate" is still a
+    no-op here — Milestone G6 (§7.8) wires it to an animation screen
+    that does not exist yet. A completed batch is still a no-op too —
+    this milestone's own later bullets wire it to a batch results
+    screen that does not exist yet.
 
     Returns:
         Always 0 — a normal window close ends the process successfully;
@@ -84,7 +89,10 @@ def main() -> int:
     def start_run(params: SimulationParams) -> None:
         nonlocal current_output_directory
         current_output_directory = paths.default_output_directory()
-        progress_screen.start(params, current_output_directory)
+        if params.n_replicates == 1:
+            progress_screen.start(params, current_output_directory)
+        else:
+            progress_screen.start_batch(params, current_output_directory)
         app.show_screen("progress")
 
     def show_results(result: RunResult) -> None:
@@ -102,6 +110,13 @@ def main() -> int:
         )
         app.show_screen("input")
 
+    def show_batch_cancelled(replicate_index: int, generation: int) -> None:
+        input_screen.show_message(
+            f"Batch cancelled at replicate {replicate_index}, "
+            f"generation {generation}; no artifacts were written"
+        )
+        app.show_screen("input")
+
     def show_error(message: str) -> None:
         input_screen.show_message(message)
         app.show_screen("input")
@@ -114,6 +129,8 @@ def main() -> int:
         app,
         on_done=show_results,
         on_cancelled=show_cancelled,
+        on_batch_done=lambda _results: None,
+        on_batch_cancelled=show_batch_cancelled,
         on_error=show_error,
     )
     results_screen = ResultsScreen(app, on_new_run=show_input)
