@@ -14,6 +14,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from fim.gui.screens.input_screen import InputScreen
+
 
 class Application(tk.Tk):
     """Root window holding every screen as a stacked, raised `ttk.Frame`."""
@@ -59,6 +61,9 @@ def main() -> int:
         an unhandled exception inside the loop propagates instead.
     """
     app = Application()
+    input_screen = InputScreen(app)
+    app.register_screen("input", input_screen)
+    app.show_screen("input")
     app.mainloop()
     return 0
 

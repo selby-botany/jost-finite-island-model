@@ -53,7 +53,22 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [register\_screen](#fim.gui.app.Application.register_screen)
     * [show\_screen](#fim.gui.app.Application.show_screen)
   * [main](#fim.gui.app.main)
+* [fim.gui.config\_form](#fim.gui.config_form)
+  * [FormField](#fim.gui.config_form.FormField)
+  * [TabSpec](#fim.gui.config_form.TabSpec)
+  * [all\_fields](#fim.gui.config_form.all_fields)
+  * [field\_for\_error](#fim.gui.config_form.field_for_error)
+  * [form\_values\_to\_payload](#fim.gui.config_form.form_values_to_payload)
+  * [m\_to\_payload](#fim.gui.config_form.m_to_payload)
+  * [m\_from\_params](#fim.gui.config_form.m_from_params)
+  * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
+  * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
 * [fim.gui.screens](#fim.gui.screens)
+* [fim.gui.screens.input\_screen](#fim.gui.screens.input_screen)
+  * [InputScreen](#fim.gui.screens.input_screen.InputScreen)
+    * [\_\_init\_\_](#fim.gui.screens.input_screen.InputScreen.__init__)
+    * [get\_values](#fim.gui.screens.input_screen.InputScreen.get_values)
+    * [set\_values](#fim.gui.screens.input_screen.InputScreen.set_values)
 * [fim.model](#fim.model)
 * [fim.model.allele](#fim.model.allele)
   * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
@@ -906,11 +921,328 @@ Launch the fim GUI: build the root window and run its main loop.
   Always 0 — a normal window close ends the process successfully;
   an unhandled exception inside the loop propagates instead.
 
+<a id="fim.gui.config_form"></a>
+
+# fim.gui.config\_form
+
+Marshal `SimulationParams` to and from the tabbed model-input screen.
+
+Every function here is a pure, Tk-free transformation between three
+shapes: a `SimulationParams` instance, a `dict[str, str]` of one string
+per form field (what `screens.input_screen.InputScreen` reads from and
+writes to its widgets), and a `dict[str, object]` payload ready for
+`fim.model.params.SimulationParams.from_mapping` — the identical
+validator `fim.cli` already uses (design doc §3.6). Nothing here
+duplicates a validation rule `from_mapping` already enforces: a
+malformed string is only ever coerced to the right Python type before
+being handed to that one validator, never re-checked against a second,
+GUI-local copy of a rule.
+
+`TABS` groups fields the same way
+[configuration.md](../../../doc/configuration.md)'s own section
+headings do (design §3.6, §4.0 `1`) — this commit builds the first two,
+**Population** and **Migration**; later commits in this milestone add
+the remaining four. §3.6's cardinality rule decides what earns a live
+widget here at all: O(1) and O(d)/O(loci)-sized fields do (a
+comma-separated text field faithfully represents either); a `d`-by-`d`
+migration matrix or an arbitrary sparse map does not (§2.3) — `m`
+itself is edited only as a scalar rate or a named stepping-stone
+topology (`ring`/`linear` + one shared rate), matching
+[configuration.md](../../../doc/configuration.md#m)'s own two O(1)
+shorthands.
+
+<a id="fim.gui.config_form.FormField"></a>
+
+## FormField Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class FormField()
+```
+
+One model-input screen field's config key, label, and value kind.
+
+**Arguments**:
+
+- `name` - The exact `SimulationParams.from_mapping` config key this
+  field edits — also the prefix `field_for_error` matches an
+  error message against, so it must match verbatim.
+- `label` - Human-readable text shown beside the field.
+- `kind` - How the field's text is parsed and, for "choice", which
+  values are offered. "int_list" accepts either one bare
+  integer or a comma-separated list of them (§3.6's O(d)
+- `case` - a scalar and a per-deme list are both faithfully
+  representable by the same widget).
+- `choices` - The fixed option list for a "choice" field; empty
+  otherwise.
+
+<a id="fim.gui.config_form.TabSpec"></a>
+
+## TabSpec Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TabSpec()
+```
+
+One Screen 1 tab: a name, a display label, and its plain fields.
+
+`m`'s scalar-vs-topology selector is not a `FormField` — it needs
+its own composite widget (a mode radio plus one or two sub-fields,
+§4.1) — and so is marshaled by the dedicated `m_*` functions below
+instead of appearing in any `TabSpec.fields` tuple.
+
+<a id="fim.gui.config_form.all_fields"></a>
+
+#### all\_fields
+
+```python
+def all_fields() -> tuple[FormField, ...]
+```
+
+Return every plain `FormField` across every tab, in tab order.
+
+<a id="fim.gui.config_form.field_for_error"></a>
+
+#### field\_for\_error
+
+```python
+def field_for_error(message: str) -> str | None
+```
+
+Return the form field name a validation error message names, if any.
+
+**Arguments**:
+
+- `message` - A `ValueError` message raised by `form_values_to_payload`
+  or `SimulationParams.from_mapping`.
+
+
+**Returns**:
+
+  The matching `FormField.name`, for an inline error placement next
+  to that field, or `None` when the message names no exposed field
+  (an unknown-key error, an `m`/`m.topology`/`m.rate` message —
+  `m` has no single `FormField` of its own — or a construct not
+  yet in scope) — the caller shows those in a banner instead
+  (design §4.6).
+
+<a id="fim.gui.config_form.form_values_to_payload"></a>
+
+#### form\_values\_to\_payload
+
+```python
+def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]
+```
+
+Coerce the form's string values into a `from_mapping`-ready payload.
+
+**Arguments**:
+
+- `values` - One string per `all_fields()` entry, plus the `m_*`
+  selector keys `m_to_payload` reads, keyed by name.
+
+
+**Returns**:
+
+  A mapping ready for `SimulationParams.from_mapping`.
+
+
+**Raises**:
+
+- `ValueError` - If a field's text does not parse as its declared
+  kind. Every message begins with the field's own `name`
+  (or, for `N`'s list form, `name[index]`), matching
+  `SimulationParams.from_mapping`'s own wording, so
+  `field_for_error` and the CLI's error text stay in
+  lockstep.
+
+<a id="fim.gui.config_form.m_to_payload"></a>
+
+#### m\_to\_payload
+
+```python
+def m_to_payload(values: Mapping[str, str]) -> float | dict[str, object]
+```
+
+Build `m`'s payload from the selector's mode and its own sub-fields.
+
+**Arguments**:
+
+- `values` - The full form-values mapping; only `m_mode`, `m_rate`,
+  `m_topology`, and `m_topology_rate` are read.
+
+
+**Returns**:
+
+  A bare scalar rate (`m_mode == "scalar"`), or a `{"topology",
+  "rate"}` mapping (`m_mode == "topology"`) —
+  `fim.model.params._parse_migration` accepts either verbatim.
+
+
+**Raises**:
+
+- `ValueError` - If the active sub-field's text is not a number, or
+  `m_mode` is neither `"scalar"` nor `"topology"` (a
+  programming error in the caller, not a user-facing
+  validation case — every real widget only ever writes one
+  of the two).
+
+<a id="fim.gui.config_form.m_from_params"></a>
+
+#### m\_from\_params
+
+```python
+def m_from_params(params: SimulationParams) -> dict[str, str]
+```
+
+Render `params.m` back into the selector's form-value keys.
+
+**Arguments**:
+
+- `params` - A validated configuration.
+
+
+**Returns**:
+
+  `m_mode`/`m_rate`/`m_topology`/`m_topology_rate`, covering the
+  one shape this selector can represent: a scalar rate. A
+  stepping-stone topology's own `{topology, rate}` sugar expands
+  into a full dense matrix the moment `from_mapping` parses it
+  (`fim.model.params.Migration = float | tuple[tuple[float,
+  ...], ...]`) — there is no way to tell, from the matrix alone,
+  which topology (or no topology at all) produced it, so a
+  matrix-shaped `m` is never reconstructed into "topology" mode
+  here. A later commit in this milestone (§4.0 `3`, §3.6) adds the
+  read-only summary badge that handles a matrix-shaped `m`
+  instead; until then this falls back to an empty scalar field
+  rather than guessing.
+
+<a id="fim.gui.config_form.params_to_form_values"></a>
+
+#### params\_to\_form\_values
+
+```python
+def params_to_form_values(params: SimulationParams) -> dict[str, str]
+```
+
+Render a validated `SimulationParams` back into the form's fields.
+
+**Arguments**:
+
+- `params` - A validated configuration, typically loaded from YAML or
+  produced by `starter_form_values`'s own round trip.
+
+
+**Returns**:
+
+  One string per `all_fields()` entry, plus the `m_*` selector
+  keys from `m_from_params`, suitable for
+  `screens.input_screen.InputScreen.set_values`.
+
+<a id="fim.gui.config_form.starter_form_values"></a>
+
+#### starter\_form\_values
+
+```python
+def starter_form_values() -> dict[str, str]
+```
+
+Return the form's default values, from the CLI's own starter config.
+
+**Returns**:
+
+  The same values `params_to_form_values` would compute for
+  `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults"
+  design §3.6 requires, so a fresh form and `fim init` can never
+  drift apart into two documented starting scenarios.
+
 <a id="fim.gui.screens"></a>
 
 # fim.gui.screens
 
 Individual `fim.gui` screens, each one `ttk.Frame` `fim.gui.app` raises.
+
+<a id="fim.gui.screens.input_screen"></a>
+
+# fim.gui.screens.input\_screen
+
+Screen 1 — model input (design doc §4.1): a tabbed form that edits
+one `SimulationParams` at a time.
+
+Every plain field maps one-to-one to a `fim.gui.config_form` entry, in
+the same order `doc/configuration.md` documents those keys, grouped
+into tabs the same way that document's own section headings do (design
+§3.6, §4.0 `1`). This commit builds the **Population** and
+**Migration** tabs — including Migration's scalar-vs-named-topology
+`m` selector (§4.0 `4`'s exclusivity-as-shape principle, applied to `m`
+rather than `mu`/`mu_b`, which arrives in the next commit). "Run
+simulation" is disabled until `fim.model.params.SimulationParams.
+from_mapping` accepts the form's current values — a rejected mapping
+never reaches `on_run` (design §3.6). A validation failure is shown
+beside the field `fim.gui.config_form.field_for_error` names, or in a
+banner otherwise (design §4.6); routing the banner-shown failure to
+the tab that actually holds the field is a later commit in this
+milestone (§4.0 `2`, §7.3's fifth bullet) — until then, every field
+error is at least visible on whichever tab happens to already be
+selected, or in the banner.
+
+<a id="fim.gui.screens.input_screen.InputScreen"></a>
+
+## InputScreen Objects
+
+```python
+class InputScreen(ttk.Frame)
+```
+
+Screen 1: build and validate a `SimulationParams` from a tabbed form.
+
+<a id="fim.gui.screens.input_screen.InputScreen.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(parent: tk.Misc,
+             *,
+             on_run: Callable[[SimulationParams], None] | None = None) -> None
+```
+
+Build every tab, the error banner, and the action buttons.
+
+**Arguments**:
+
+- `parent` - The Tk container this screen is gridded into.
+- `on_run` - Called with the validated params when "Run
+  simulation" is clicked. Defaults to a no-op — Milestone
+  G2 gives this a real orchestrator to call; this screen
+  only ever hands it an already-validated
+  `SimulationParams`.
+
+<a id="fim.gui.screens.input_screen.InputScreen.get_values"></a>
+
+#### get\_values
+
+```python
+def get_values() -> dict[str, str]
+```
+
+Return the form's current values, one string per exposed field.
+
+<a id="fim.gui.screens.input_screen.InputScreen.set_values"></a>
+
+#### set\_values
+
+```python
+def set_values(values: Mapping[str, str]) -> None
+```
+
+Replace every field's text and revalidate.
+
+**Arguments**:
+
+- `values` - One string per exposed field, such as
+  `config_form.starter_form_values()` or
+  `config_form.params_to_form_values(...)` returns.
 
 <a id="fim.model"></a>
 
