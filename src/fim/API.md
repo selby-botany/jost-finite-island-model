@@ -966,7 +966,7 @@ Wires Screen 1 (input) -> Screen 2 (progress) -> Screen 3/4 (results):
 scalar mode for `n_replicates == 1`, batch mode otherwise (design
 §4.1: "there is no separate 'batch mode' toggle; `n_replicates`
 *is* the toggle"). A cancelled or failed run returns to Screen 1
-with its message shown in the banner (design §4.6), form values
+with its message shown in the banner (design §4.7), form values
 intact. A completed scalar run becomes a `ResultsView`
 (`ResultsView.from_run_result`) shown on Screen 3; a completed batch
 becomes a `BatchResultsView` (`BatchResultsView.from_results`) shown

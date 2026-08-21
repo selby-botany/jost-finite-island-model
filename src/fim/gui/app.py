@@ -69,7 +69,7 @@ def main() -> int:
     scalar mode for `n_replicates == 1`, batch mode otherwise (design
     §4.1: "there is no separate 'batch mode' toggle; `n_replicates`
     *is* the toggle"). A cancelled or failed run returns to Screen 1
-    with its message shown in the banner (design §4.6), form values
+    with its message shown in the banner (design §4.7), form values
     intact. A completed scalar run becomes a `ResultsView`
     (`ResultsView.from_run_result`) shown on Screen 3; a completed batch
     becomes a `BatchResultsView` (`BatchResultsView.from_results`) shown
@@ -88,10 +88,12 @@ def main() -> int:
     """
     app = Application()
     current_output_directory: Path | None = None
+    current_n_replicates: int | None = None
 
     def start_run(params: SimulationParams) -> None:
-        nonlocal current_output_directory
+        nonlocal current_output_directory, current_n_replicates
         current_output_directory = paths.default_output_directory()
+        current_n_replicates = params.n_replicates
         if params.n_replicates == 1:
             progress_screen.start(params, current_output_directory)
         else:
@@ -126,10 +128,13 @@ def main() -> int:
         )
         app.show_screen("input")
 
-    def show_batch_cancelled(replicate_index: int, generation: int) -> None:
+    def show_batch_cancelled(replicate_index: int, _generation: int) -> None:
+        assert current_n_replicates is not None, (
+            "on_batch_cancelled fired without a preceding start_run"
+        )
         input_screen.show_message(
-            f"Batch cancelled at replicate {replicate_index}, "
-            f"generation {generation}; no artifacts were written"
+            f"Batch cancelled during replicate {replicate_index} of "
+            f"{current_n_replicates}; no artifacts were written"
         )
         app.show_screen("input")
 
