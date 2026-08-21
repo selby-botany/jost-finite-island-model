@@ -158,6 +158,18 @@ jobs:
               throw "Executable smoke artifact '$artifact' is empty"
             }
           }
+          # A startup smoke check, not a functional GUI test (design doc
+          # 20260819-claude-sonnet-5-graphical-interface.md §5.3; §6.4/§6.5
+          # explain why that split is deliberate): no widget is driven
+          # here, only that the zero-argument launch stays alive for a few
+          # seconds instead of crashing immediately, proving the GUI path
+          # starts at all.
+          $guiProcess = Start-Process -FilePath .\dist\fim.exe -PassThru
+          Start-Sleep -Seconds 5
+          if ($guiProcess.HasExited) {
+            throw "GUI process exited early (exit code $($guiProcess.ExitCode)) instead of staying open"
+          }
+          Stop-Process -Id $guiProcess.Id -Force
           Rename-Item .\dist\fim.exe fim-windows-x64.exe
           $hash = (Get-FileHash .\dist\fim-windows-x64.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  fim-windows-x64.exe" | Set-Content .\dist\fim-windows-x64.exe.sha256
@@ -229,6 +241,18 @@ jobs:
               throw "Executable smoke artifact '$artifact' is empty"
             }
           }
+          # A startup smoke check, not a functional GUI test (design doc
+          # 20260819-claude-sonnet-5-graphical-interface.md §5.3; §6.4/§6.5
+          # explain why that split is deliberate): no widget is driven
+          # here, only that the zero-argument launch stays alive for a few
+          # seconds instead of crashing immediately, proving the GUI path
+          # starts at all.
+          $guiProcess = Start-Process -FilePath .\dist\fim.exe -PassThru
+          Start-Sleep -Seconds 5
+          if ($guiProcess.HasExited) {
+            throw "GUI process exited early (exit code $($guiProcess.ExitCode)) instead of staying open"
+          }
+          Stop-Process -Id $guiProcess.Id -Force
           Rename-Item .\dist\fim.exe fim-windows-arm64.exe
           $hash = (Get-FileHash .\dist\fim-windows-arm64.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  fim-windows-arm64.exe" | Set-Content .\dist\fim-windows-arm64.exe.sha256
