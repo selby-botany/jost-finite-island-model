@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 import pytest
 import yaml
 
-from fim import __version__, cli
+from fim import __version__, cli, paths
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
 
@@ -392,30 +392,19 @@ def test_default_paths_use_project_results(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Default configuration and run outputs stay under project-root/results."""
-    monkeypatch.setattr(cli, "_project_root", lambda: tmp_path)
+    """Default configuration and run outputs stay under project-root/results.
 
-    assert cli._results_directory() == tmp_path / "results"
+    `_project_root`/`_results_directory`/`_default_output_directory`'s own
+    resolution logic is tested directly in `test/test_paths.py` (design
+    doc `20260819-claude-sonnet-5-graphical-interface.md`, Milestone G0,
+    §3.7) against `fim.paths` — this test only confirms `cli._command_init`
+    still calls through to it correctly, by patching the one shared root
+    resolver both front ends now use.
+    """
+    monkeypatch.setattr(paths, "project_root", lambda: tmp_path)
+
     assert cli.main(["init"]) == 0
     assert (tmp_path / "results" / "example-run.yaml").is_file()
-    assert cli._default_output_directory().parent == tmp_path / "results"
-
-
-def test_project_root_falls_back_to_working_directory(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Installed and frozen applications never write inside their package."""
-    working_directory = tmp_path / "working"
-    working_directory.mkdir()
-    monkeypatch.chdir(working_directory)
-    monkeypatch.setattr(
-        cli,
-        "__file__",
-        str(tmp_path / "installed" / "site-packages" / "fim" / "cli.py"),
-    )
-
-    assert cli._project_root() == working_directory
 
 
 def _newer_version(version: str) -> str:

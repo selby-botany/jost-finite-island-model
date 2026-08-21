@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import functools
 import json
 import os
 import pickle
 import shutil
 import sys
-import tempfile
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,7 +20,7 @@ from urllib.request import Request, urlopen
 import yaml
 from matplotlib import pyplot as plt
 
-from fim import __version__
+from fim import __version__, paths
 from fim.engine import (
     RunResult,
     deterministic_run_id,
@@ -129,7 +127,7 @@ def _command_init(arguments: argparse.Namespace) -> int:
     output = (
         Path(arguments.output)
         if arguments.output is not None
-        else _results_directory() / "example-run.yaml"
+        else paths.results_directory() / "example-run.yaml"
     )
     if output.exists() and not arguments.force:
         raise ValueError(f"starter config already exists: {output}")
@@ -145,7 +143,7 @@ def _command_run(arguments: argparse.Namespace) -> int:
     output_directory = (
         Path(arguments.output)
         if arguments.output is not None
-        else _default_output_directory()
+        else paths.default_output_directory()
     )
     if params.n_replicates == 1:
         return _command_run_scalar(params, output_directory, arguments.quiet)
@@ -164,7 +162,7 @@ def _command_run_scalar(
     once `trajectory.jsonl`, `report.json`, and `scatter.png` are all
     flushed and `manifest.json` — written last, and only then — records
     each of their SHA-256 digests (`_write_run_artifacts`, and see
-    `_atomic_directory`). A run interrupted anywhere along the way
+    `fim.paths.atomic_directory`). A run interrupted anywhere along the way
     leaves no trace at `output_directory` at all, rather than a partial
     directory silently indistinguishable from a complete one.
     """
@@ -175,7 +173,7 @@ def _command_run_scalar(
             f"(N={params.N}, d={params.d}, m={params.m}, "
             f"mu={params.mu}, seed={params.seed})"
         )
-    with _atomic_directory(output_directory) as working_directory:
+    with paths.atomic_directory(output_directory) as working_directory:
         targets = _run_artifact_targets(working_directory)
         store = JSONLTrajectoryStore(targets["trajectory"])
         output = fim(
@@ -216,7 +214,7 @@ def _command_run_batch(
     confidence interval, from `fim.engine.replicate_summary`) sit
     alongside them. The whole tree is built inside one hidden temporary
     sibling directory and published at `output_directory` with a single
-    atomic rename (`_atomic_directory`), so a batch interrupted at any
+    atomic rename (`fim.paths.atomic_directory`), so a batch interrupted at any
     replicate, or between the last replicate and the batch-level
     summary/manifest, leaves no trace at `output_directory` at all.
 
@@ -239,7 +237,7 @@ def _command_run_batch(
         print(f"Running batch {run_id} {_batch_description(params, max_workers)}")
 
     started_at = _format_timestamp(_utc_now())
-    with _atomic_directory(output_directory) as working_directory:
+    with paths.atomic_directory(output_directory) as working_directory:
         output = fim(
             params.N,
             params.m,
@@ -375,59 +373,6 @@ def _compare_versions(current: str, latest: str) -> int:
     return (current_parts > latest_parts) - (current_parts < latest_parts)
 
 
-@contextlib.contextmanager
-def _atomic_directory(target: Path) -> Iterator[Path]:
-    """Build a directory's contents in a hidden temporary sibling, then
-    publish it at `target` with one atomic rename.
-
-    Regression fix for R7: an interrupted run used to leave a partial
-    output directory that was silently indistinguishable from a
-    complete one. Every write inside the `with` block happens in a
-    temporary sibling of `target` — on the same filesystem, since it is
-    always created directly inside `target.parent`, which guarantees the
-    final publish is a single atomic rename rather than a copy. If the
-    block raises anything, the temporary directory is discarded and
-    `target` is left completely untouched. `target` therefore either
-    does not exist yet or exists complete; there is no third, partial
-    state to observe from outside this function against process-level
-    interruption — an uncaught exception, `^C`, or `kill -9` all skip
-    the `except` cleanup but still cannot leave anything at `target`
-    itself, only an orphaned temporary directory beside it.
-
-    This guarantee is about the rename, not about physical durability
-    (S11): nothing in this function calls `fsync`, so on an unclean
-    power loss, a filesystem is free to have recorded the rename's
-    metadata before every byte written into the temporary directory
-    actually reached disk — a `target` that survives such an event can
-    exist, look complete, and still contain corrupted or truncated
-    file content. Treat this function's guarantee as "no partial
-    directory is ever observable," not "every observed directory
-    survived a power failure intact."
-
-    Args:
-        target: The directory's final path. Must not already exist.
-
-    Yields:
-        The temporary directory to build the run's output inside.
-
-    Raises:
-        FileExistsError: If `target` already exists.
-    """
-    if target.exists():
-        raise FileExistsError(f"output directory already exists: {target}")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    working_directory = Path(
-        tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent)
-    )
-    try:
-        yield working_directory
-    except BaseException:
-        shutil.rmtree(working_directory, ignore_errors=True)
-        raise
-    else:
-        working_directory.replace(target)
-
-
 def _batch_description(params: SimulationParams, max_workers: int | None) -> str:
     """Return the batch-run progress line's parameter summary."""
     adaptive = (
@@ -446,12 +391,6 @@ def _batch_description(params: SimulationParams, max_workers: int | None) -> str
 def _cpu_count() -> int:
     """Return the default parallel worker count for a CLI batch run."""
     return os.cpu_count() or 1
-
-
-def _default_output_directory() -> Path:
-    """Return a timestamped output folder without affecting run data."""
-    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    return _results_directory() / f"run-{stamp}"
 
 
 def _format_timestamp(value: datetime) -> str:
@@ -474,7 +413,7 @@ def _prune_orphan_replicate_directories(
     call has already created its `replicate-NNN/` directory and
     streamed a full `trajectory.jsonl` into it — even though its
     result is discarded, never appearing in the tuple `fim` returns.
-    Without this pass, `_atomic_directory` would publish that orphan
+    Without this pass, `fim.paths.atomic_directory` would publish that orphan
     directory verbatim: complete, present on disk, and absent from
     both `summary.json` and `manifest.json`.
 
@@ -608,19 +547,6 @@ def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
     )
     write_manifest(targets["manifest"], manifest)
     return targets
-
-
-def _project_root() -> Path:
-    """Return the source checkout root, falling back to the working directory."""
-    source_root = Path(__file__).resolve().parents[2]
-    if (source_root / "pyproject.toml").is_file():
-        return source_root
-    return Path.cwd()
-
-
-def _results_directory() -> Path:
-    """Return the project-local results directory."""
-    return _project_root() / "results"
 
 
 def _differentiation_q_for_state(

@@ -100,6 +100,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.model.topology](#fim.model.topology)
   * [stepping\_stone\_neighbors](#fim.model.topology.stepping_stone_neighbors)
   * [dense\_matrix\_from\_neighbors](#fim.model.topology.dense_matrix_from_neighbors)
+* [fim.paths](#fim.paths)
+  * [atomic\_directory](#fim.paths.atomic_directory)
+  * [default\_output\_directory](#fim.paths.default_output_directory)
+  * [project\_root](#fim.paths.project_root)
+  * [results\_directory](#fim.paths.results_directory)
 * [fim.persistence](#fim.persistence)
 * [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
@@ -1832,6 +1837,136 @@ migrates with nobody — its row is the identity row.
 - `ValueError` - If a deme or neighbor id is outside ``1..d``, a deme
   lists itself as its own neighbor, a weight is outside
   ``[0, 1]``, or one deme's weights sum to more than ``1``.
+
+<a id="fim.paths"></a>
+
+# fim.paths
+
+Project-root, results-directory, and atomic-publish logic, shared by
+every front end.
+
+Extracted from `fim.cli` (design doc `20260819-claude-sonnet-5-graphical-
+interface.md` §3.7) so `fim.gui`'s run orchestration resolves the exact same
+`project-root/results/` layout, timestamped default folder naming, and
+atomic-publish-or-nothing guarantee as `fim run`, rather than a second,
+independently maintained copy of this logic. `project_root` is anchored on
+the `fim` package's own `__init__.py` (`fim.__file__`), not the calling
+module's `__file__`: every caller under `src/fim/`, regardless of how deep
+it sits (`fim/cli.py`, `fim/gui/runner.py`, ...), resolves the identical
+root this way, where anchoring on each caller's own `__file__` would need a
+different `parents[N]` depth per caller and silently break the moment a new
+caller sat at a different depth.
+
+<a id="fim.paths.atomic_directory"></a>
+
+#### atomic\_directory
+
+```python
+@contextlib.contextmanager
+def atomic_directory(target: Path) -> Iterator[Path]
+```
+
+Build a directory's contents in a hidden temporary sibling, then
+publish it at `target` with one atomic rename.
+
+Regression fix for R7 (`cli.py`'s own history, predating this
+extraction): an interrupted run used to leave a partial output
+directory that was silently indistinguishable from a complete one.
+Every write inside the `with` block happens in a temporary sibling
+of `target` — on the same filesystem, since it is always created
+directly inside `target.parent`, which guarantees the final publish
+is a single atomic rename rather than a copy. If the block raises
+anything, the temporary directory is discarded and `target` is left
+completely untouched. `target` therefore either does not exist yet
+or exists complete; there is no third, partial state to observe
+from outside this function against process-level interruption — an
+uncaught exception, `^C`, or `kill -9` all skip the `except` cleanup
+but still cannot leave anything at `target` itself, only an
+orphaned temporary directory beside it.
+
+This guarantee is about the rename, not about physical durability
+(S11): nothing in this function calls `fsync`, so on an unclean
+power loss, a filesystem is free to have recorded the rename's
+metadata before every byte written into the temporary directory
+actually reached disk — a `target` that survives such an event can
+exist, look complete, and still contain corrupted or truncated file
+content. Treat this function's guarantee as "no partial directory
+is ever observable," not "every observed directory survived a
+power failure intact."
+
+**Arguments**:
+
+- `target` - The directory's final path. Must not already exist.
+
+
+**Yields**:
+
+  The temporary directory to build the run's output inside.
+
+
+**Raises**:
+
+- `FileExistsError` - If `target` already exists.
+
+<a id="fim.paths.default_output_directory"></a>
+
+#### default\_output\_directory
+
+```python
+def default_output_directory(results: Path | None = None,
+                             *,
+                             clock: Clock = lambda: datetime.now(UTC)) -> Path
+```
+
+Return a timestamped output folder without affecting run data.
+
+**Arguments**:
+
+- `results` - Optional results-directory override (default:
+  `results_directory()`).
+- `clock` - Injectable UTC clock, for deterministic tests.
+
+
+**Returns**:
+
+  `results / f"run-{timestamp}"`. The timestamp names the folder
+  only; it never enters any persisted scientific value.
+
+<a id="fim.paths.project_root"></a>
+
+#### project\_root
+
+```python
+def project_root() -> Path
+```
+
+Return the source checkout root, falling back to the working directory.
+
+**Returns**:
+
+  The checkout root containing `pyproject.toml`, if one is found
+  above the installed `fim` package; otherwise the current working
+  directory — the same fallback an installed or PyInstaller-frozen
+  application needs, since it has no source checkout to find.
+
+<a id="fim.paths.results_directory"></a>
+
+#### results\_directory
+
+```python
+def results_directory(root: Path | None = None) -> Path
+```
+
+Return the project-local results directory.
+
+**Arguments**:
+
+- `root` - Optional project root override (default: `project_root()`).
+
+
+**Returns**:
+
+  `root / "results"`.
 
 <a id="fim.persistence"></a>
 
