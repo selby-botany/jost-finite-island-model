@@ -88,6 +88,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ProgressScreen](#fim.gui.screens.progress_screen.ProgressScreen)
     * [\_\_init\_\_](#fim.gui.screens.progress_screen.ProgressScreen.__init__)
     * [start](#fim.gui.screens.progress_screen.ProgressScreen.start)
+* [fim.gui.screens.results\_screen](#fim.gui.screens.results_screen)
+  * [ResultsView](#fim.gui.screens.results_screen.ResultsView)
+    * [from\_run\_result](#fim.gui.screens.results_screen.ResultsView.from_run_result)
+  * [ResultsScreen](#fim.gui.screens.results_screen.ResultsScreen)
+    * [\_\_init\_\_](#fim.gui.screens.results_screen.ResultsScreen.__init__)
+    * [show](#fim.gui.screens.results_screen.ResultsScreen.show)
 * [fim.gui.store](#fim.gui.store)
   * [RunCancelledError](#fim.gui.store.RunCancelledError)
   * [GuiProgressStore](#fim.gui.store.GuiProgressStore)
@@ -941,16 +947,17 @@ def main() -> int
 
 Launch the fim GUI: build the root window and run its main loop.
 
-Wires Screen 1 (input) to Screen 2 (progress): "Run simulation"
-starts a real background scalar run in
+Wires Screen 1 (input) -> Screen 2 (progress) -> Screen 3 (results):
+"Run simulation" starts a real background scalar run in
 `paths.default_output_directory()` and switches to Screen 2. A
 cancelled or failed run returns to Screen 1 with its message shown
-in the banner (design §4.6), form values intact. A completed run's
-`on_done` is still a no-op here — Milestone G3 (§7.5) wires it to a
-results screen that does not exist yet; requirement G2 (§2.1) is
-"run without freezing the window, with visible progress and a
-working Cancel button," which this wiring already satisfies on its
-own.
+in the banner (design §4.6), form values intact. A completed run
+becomes a `ResultsView` (`ResultsView.from_run_result`) and is
+shown on Screen 3 alongside its output directory. Screen 3's own
+"New run" returns to Screen 1 with the just-run configuration still
+in the form — "Reset to defaults" is what starts genuinely fresh.
+"Animate" is still a no-op here — Milestone G6 (§7.8) wires it to
+an animation screen that does not exist yet.
 
 **Returns**:
 
@@ -1753,6 +1760,111 @@ Start a real background run and begin polling for progress.
 - `params` - Already-validated parameters — Screen 1 never hands
   this an unvalidated payload (design §3.6).
 - `output_directory` - The run's target artifact directory.
+
+<a id="fim.gui.screens.results_screen"></a>
+
+# fim.gui.screens.results\_screen
+
+Screen 3 — results (design doc §4.3): run summary beside the canonical
+scatter, embedded via `FigureCanvasTkAgg`.
+
+Design §13 Screen 2 realized: run summary (requirement G3's "all six
+named statistics, convergence outcome") beside the scatter
+`fim.viz.scatter.plot_frequency_scatter` already returns without writing
+anything when `path=None` (design §3.5) — the same figure-building call
+`fim.gui.runner._run_worker` makes to save `scatter.png`, just a second,
+independent call building a second `Figure` for this screen to keep
+alive on screen instead of on disk.
+
+`ResultsView` renders a just-completed background run
+(`fim.engine.RunResult`, as `fim.gui.runner`'s `("done", result)`
+message carries it) today. Milestone G5 (§7.7) adds a second source —
+an opened, re-analyzed trajectory (design §4.6) — as another
+`ResultsView` classmethod alongside `from_run_result`, at which point
+this screen's own widget logic still only ever depends on `ResultsView`
+itself, never on either source type by name.
+
+<a id="fim.gui.screens.results_screen.ResultsView"></a>
+
+## ResultsView Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ResultsView()
+```
+
+Screen 3's shared input: whatever every result source supplies.
+
+Built via a classmethod per source (`from_run_result` today) rather
+than the screen depending on any source type directly.
+
+<a id="fim.gui.screens.results_screen.ResultsView.from_run_result"></a>
+
+#### from\_run\_result
+
+```python
+@classmethod
+def from_run_result(cls, result: RunResult) -> ResultsView
+```
+
+Build a view from a just-completed background run.
+
+<a id="fim.gui.screens.results_screen.ResultsScreen"></a>
+
+## ResultsScreen Objects
+
+```python
+class ResultsScreen(ttk.Frame)
+```
+
+Screen 3: one completed run's summary and embedded scatter.
+
+<a id="fim.gui.screens.results_screen.ResultsScreen.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(
+        parent: tk.Misc,
+        *,
+        on_new_run: Callable[[], None] | None = None,
+        on_animate: Callable[[ResultsView, Path], None] | None = None,
+        open_folder: Callable[[Path], None] = _reveal_in_file_browser) -> None
+```
+
+Build the summary labels, canvas frame, and action buttons.
+
+**Arguments**:
+
+- `parent` - The Tk container this screen is gridded into.
+- `on_new_run` - Called when "New run" is clicked. Defaults to a
+  no-op — `fim.gui.app` wires this to return to Screen 1.
+- `on_animate` - Called with the shown `ResultsView` and its
+  output directory when "Animate" is clicked. Defaults
+  to a no-op; Milestone G6 (§7.8) wires this to a real
+  animation screen that does not exist yet.
+- `open_folder` - Reveals a directory in the platform file
+  browser. Defaults to the real, OS-dispatching
+  implementation; injectable so tests never launch one.
+
+<a id="fim.gui.screens.results_screen.ResultsScreen.show"></a>
+
+#### show
+
+```python
+def show(view: ResultsView, output_directory: Path) -> None
+```
+
+Render one run's summary and a fresh embedded scatter.
+
+**Arguments**:
+
+- `view` - A just-completed background run
+  (`ResultsView.from_run_result`, as `fim.gui.runner`'s
+  `("done", result)` message carries it).
+- `output_directory` - The run's artifact directory — "Open
+  output folder" reveals this, and "Animate" passes it
+  through to `on_animate`.
 
 <a id="fim.gui.store"></a>
 

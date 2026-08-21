@@ -12,11 +12,14 @@ and wires it into `main()`.
 from __future__ import annotations
 
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 
 from fim import paths
+from fim.engine import RunResult
 from fim.gui.screens.input_screen import InputScreen
 from fim.gui.screens.progress_screen import ProgressScreen
+from fim.gui.screens.results_screen import ResultsScreen, ResultsView
 from fim.model.params import SimulationParams
 
 
@@ -59,26 +62,39 @@ class Application(tk.Tk):
 def main() -> int:
     """Launch the fim GUI: build the root window and run its main loop.
 
-    Wires Screen 1 (input) to Screen 2 (progress): "Run simulation"
-    starts a real background scalar run in
+    Wires Screen 1 (input) -> Screen 2 (progress) -> Screen 3 (results):
+    "Run simulation" starts a real background scalar run in
     `paths.default_output_directory()` and switches to Screen 2. A
     cancelled or failed run returns to Screen 1 with its message shown
-    in the banner (design §4.6), form values intact. A completed run's
-    `on_done` is still a no-op here — Milestone G3 (§7.5) wires it to a
-    results screen that does not exist yet; requirement G2 (§2.1) is
-    "run without freezing the window, with visible progress and a
-    working Cancel button," which this wiring already satisfies on its
-    own.
+    in the banner (design §4.6), form values intact. A completed run
+    becomes a `ResultsView` (`ResultsView.from_run_result`) and is
+    shown on Screen 3 alongside its output directory. Screen 3's own
+    "New run" returns to Screen 1 with the just-run configuration still
+    in the form — "Reset to defaults" is what starts genuinely fresh.
+    "Animate" is still a no-op here — Milestone G6 (§7.8) wires it to
+    an animation screen that does not exist yet.
 
     Returns:
         Always 0 — a normal window close ends the process successfully;
         an unhandled exception inside the loop propagates instead.
     """
     app = Application()
+    current_output_directory: Path | None = None
 
     def start_run(params: SimulationParams) -> None:
-        progress_screen.start(params, paths.default_output_directory())
+        nonlocal current_output_directory
+        current_output_directory = paths.default_output_directory()
+        progress_screen.start(params, current_output_directory)
         app.show_screen("progress")
+
+    def show_results(result: RunResult) -> None:
+        assert current_output_directory is not None, (
+            "on_done fired without a preceding start_run"
+        )
+        results_screen.show(
+            ResultsView.from_run_result(result), current_output_directory
+        )
+        app.show_screen("results")
 
     def show_cancelled(generation: int) -> None:
         input_screen.show_message(
@@ -90,15 +106,20 @@ def main() -> int:
         input_screen.show_message(message)
         app.show_screen("input")
 
+    def show_input() -> None:
+        app.show_screen("input")
+
     input_screen = InputScreen(app, on_run=start_run)
     progress_screen = ProgressScreen(
         app,
-        on_done=lambda _result: None,
+        on_done=show_results,
         on_cancelled=show_cancelled,
         on_error=show_error,
     )
+    results_screen = ResultsScreen(app, on_new_run=show_input)
     app.register_screen("input", input_screen)
     app.register_screen("progress", progress_screen)
+    app.register_screen("results", results_screen)
     app.show_screen("input")
     app.mainloop()
     return 0
