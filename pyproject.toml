@@ -138,9 +138,13 @@ module = "mpl_toolkits.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-addopts = "-m 'not statistical and not slow and not packaging' --strict-config --strict-markers"
+addopts = """\
+    -m 'not statistical and not slow and not packaging and not gui' \
+    --strict-config --strict-markers\
+    """
 testpaths = ["test"]
 markers = [
+    "gui: constructs real Tk widgets; needs a display (xvfb-run in CI)",
     "packaging: requires a built distribution",
     "slow: long-running simulation horizon",
     "statistical: deterministic, seeded statistical validation",

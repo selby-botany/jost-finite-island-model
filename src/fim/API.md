@@ -46,6 +46,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [deterministic\_run\_id](#fim.engine.deterministic_run_id)
   * [report\_for\_state](#fim.engine.report_for_state)
   * [replicate\_summary](#fim.engine.replicate_summary)
+* [fim.gui](#fim.gui)
+* [fim.gui.app](#fim.gui.app)
+  * [Application](#fim.gui.app.Application)
+    * [\_\_init\_\_](#fim.gui.app.Application.__init__)
+    * [register\_screen](#fim.gui.app.Application.register_screen)
+    * [show\_screen](#fim.gui.app.Application.show_screen)
+  * [main](#fim.gui.app.main)
+* [fim.gui.screens](#fim.gui.screens)
 * [fim.model](#fim.model)
 * [fim.model.allele](#fim.model.allele)
   * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
@@ -798,6 +806,111 @@ construction, so nothing further is needed to treat them as a sample.
 **Raises**:
 
 - `ValueError` - If fewer than two results are supplied.
+
+<a id="fim.gui"></a>
+
+# fim.gui
+
+Desktop GUI front end: a Tk consumer of the existing simulator engine.
+
+Every screen here calls `fim.engine.fim`, `fim.viz.scatter`, and
+`fim.model.params.SimulationParams` — the same public API `fim.cli`
+already uses — and never re-implements validation, statistics, or run
+orchestration (`doc/developer.md`'s architecture table: "GUI: call
+`fim.engine.fim`; do not duplicate model logic."). See
+`dev/doc/apps/selby/jost-finite-island-model/
+20260819-claude-sonnet-5-graphical-interface.md` for the full design
+and implementation plan this package follows.
+
+<a id="fim.gui.app"></a>
+
+# fim.gui.app
+
+Tk application shell: root window and screen-switching mechanism.
+
+`Application` owns exactly one `Tk` root and stacks every screen as a
+`ttk.Frame` occupying the same grid cell, raised over its siblings with
+`tkraise()` — design doc §4's "one `Tk` root ..., these are wireframes of
+layout and behavior" framing. No screen is registered here yet; each
+milestone in the implementation plan (`dev/doc/apps/selby/
+jost-finite-island-model/20260819-claude-sonnet-5-graphical-interface.md`
+§7) adds its own screen and wires it into `main()`.
+
+<a id="fim.gui.app.Application"></a>
+
+## Application Objects
+
+```python
+class Application(tk.Tk)
+```
+
+Root window holding every screen as a stacked, raised `ttk.Frame`.
+
+<a id="fim.gui.app.Application.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__() -> None
+```
+
+Build the root window and its single screen-stacking container.
+
+<a id="fim.gui.app.Application.register_screen"></a>
+
+#### register\_screen
+
+```python
+def register_screen(name: str, screen: ttk.Frame) -> None
+```
+
+Add one screen to the stack, under `name`, without showing it.
+
+**Arguments**:
+
+- `name` - Identifier `show_screen` later raises this screen by.
+- `screen` - A `ttk.Frame` already built with this application (or
+  its container) as an ancestor.
+
+<a id="fim.gui.app.Application.show_screen"></a>
+
+#### show\_screen
+
+```python
+def show_screen(name: str) -> None
+```
+
+Raise a previously registered screen above every other one.
+
+**Arguments**:
+
+- `name` - The identifier passed to `register_screen`.
+
+
+**Raises**:
+
+- `KeyError` - If `name` was never registered.
+
+<a id="fim.gui.app.main"></a>
+
+#### main
+
+```python
+def main() -> int
+```
+
+Launch the fim GUI: build the root window and run its main loop.
+
+**Returns**:
+
+  Always 0 — a normal window close ends the process successfully;
+  an unhandled exception inside the loop propagates instead.
+
+<a id="fim.gui.screens"></a>
+
+# fim.gui.screens
+
+Individual `fim.gui` screens, each one `ttk.Frame` `fim.gui.app` raises.
 
 <a id="fim.model"></a>
 
