@@ -90,6 +90,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [start\_run](#fim.gui.runner.start_run)
   * [write\_run\_artifacts](#fim.gui.runner.write_run_artifacts)
 * [fim.gui.screens](#fim.gui.screens)
+* [fim.gui.screens.animation\_screen](#fim.gui.screens.animation_screen)
+  * [AnimationScreen](#fim.gui.screens.animation_screen.AnimationScreen)
+    * [\_\_init\_\_](#fim.gui.screens.animation_screen.AnimationScreen.__init__)
+    * [show](#fim.gui.screens.animation_screen.AnimationScreen.show)
 * [fim.gui.screens.batch\_results\_screen](#fim.gui.screens.batch_results_screen)
   * [BatchResultsView](#fim.gui.screens.batch_results_screen.BatchResultsView)
     * [from\_results](#fim.gui.screens.batch_results_screen.BatchResultsView.from_results)
@@ -1107,8 +1111,10 @@ analyzes a persisted trajectory
 becomes a `ResultsView`
 (`ResultsView.from_reanalyzed_generation`), and is shown on Screen 3
 exactly like a live run (design §4.6: "opening a run re-renders
-Screen 3"). "Animate" is still a no-op here — Milestone G6 (§7.8)
-wires it to an animation screen that does not exist yet.
+Screen 3"). Screen 3's "Animate" raises Screen 5 for the shown
+view's own `trajectory.jsonl`; Screen 5's "Back" returns to
+Screen 3 (design §4.5's mock omits the control, but the screen is
+otherwise a dead end).
 
 **Returns**:
 
@@ -1915,6 +1921,81 @@ instead of shared.
 # fim.gui.screens
 
 Individual `fim.gui` screens, each one `ttk.Frame` `fim.gui.app` raises.
+
+<a id="fim.gui.screens.animation_screen"></a>
+
+# fim.gui.screens.animation\_screen
+
+Screen 5 — animated trajectory (design doc §4.5): play back a
+persisted run's sampled generations as a stepped scatter.
+
+Reached only from Screen 3, never as a standalone entry point, since it
+always operates on an already-completed run's persisted trajectory that
+has already passed the integrity check (design §3.8, §4.6) — this
+screen itself does not know or care whether that run was a live run, a
+replicate opened from Screen 4, or a re-analyzed trajectory opened from
+Screen 6, only the `(run_id, params, trajectory_path)` triple it was
+handed. Frames are pre-rendered once per `.show()` call (design §3.8,
+`fim.gui.animation.pre_render_frames`) and then only swapped, never
+rebuilt, while stepping or scrubbing — playback is driven by
+`root.after`-scheduled steps rather than `matplotlib.animation.
+FuncAnimation`'s own timer, so there is exactly one event loop driving
+the window (design §3.8).
+
+<a id="fim.gui.screens.animation_screen.AnimationScreen"></a>
+
+## AnimationScreen Objects
+
+```python
+class AnimationScreen(ttk.Frame)
+```
+
+Screen 5: step or scrub through a persisted trajectory's sampled frames.
+
+<a id="fim.gui.screens.animation_screen.AnimationScreen.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(parent: tk.Misc,
+             *,
+             pre_render_frames: Callable[
+                 [Path, SimulationParams, str],
+                 list[AnimationFrame]] = animation.pre_render_frames,
+             step_interval_ms: int = _DEFAULT_STEP_INTERVAL_MS,
+             on_back: Callable[[], None] | None = None) -> None
+```
+
+Build the embedded canvas, generation label, play/pause, and scrub slider.
+
+**Arguments**:
+
+- `parent` - The Tk container this screen is gridded into.
+- `pre_render_frames` - Samples and builds every displayed
+  frame. Defaults to the real
+  `fim.gui.animation.pre_render_frames`; injectable so
+  tests never render a real trajectory through here.
+- `step_interval_ms` - Milliseconds between playback steps.
+- `on_back` - Called when "Back" is clicked. Defaults to a
+  no-op; `fim.gui.app` wires this to return to Screen 3 —
+  design §4.5's mock omits this control, but this screen
+  is otherwise a dead end with no other way to leave it.
+
+<a id="fim.gui.screens.animation_screen.AnimationScreen.show"></a>
+
+#### show
+
+```python
+def show(run_id: str, params: SimulationParams, trajectory_path: Path) -> None
+```
+
+Sample, pre-render, and display a fresh set of frames.
+
+**Arguments**:
+
+- `run_id` - The run identity every trajectory row must belong to.
+- `params` - The run's validated parameters.
+- `trajectory_path` - The persisted `trajectory.jsonl` to read.
 
 <a id="fim.gui.screens.batch_results_screen"></a>
 
