@@ -17,24 +17,15 @@ from pathlib import Path
 import yaml
 from matplotlib import pyplot as plt
 
-from fim import __version__, paths, update
-from fim.engine import (
-    RunResult,
-    deterministic_run_id,
-    fim,
-    replicate_summary,
-    report_for_state,
-)
+from fim import __version__, paths, reanalyze, update
+from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
 from fim.model.params import SimulationParams
-from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import (
     CURRENT_BATCH_SCHEMA_VERSION,
     ArtifactDigest,
     BatchManifest,
     hash_file,
-    read_manifest,
-    verify_trajectory_integrity,
     write_batch_manifest,
     write_manifest,
 )
@@ -44,7 +35,6 @@ from fim.persistence.manifest import (
 # boundary, so it must resolve as this module's own attribute under
 # mypy strict, not merely an unexported transitive import.
 from fim.persistence.report import write_report as write_report  # noqa: PLC0414
-from fim.statistics.differentiation import differentiation_q
 from fim.viz.scatter import plot_frequency_scatter
 
 STARTER_CONFIG = """\
@@ -290,51 +280,26 @@ def _command_run_batch(
 
 
 def _command_stats(arguments: argparse.Namespace) -> int:
-    """Recompute statistics from a persisted generation."""
+    """Recompute statistics from a persisted generation.
+
+    Delegates to `fim.reanalyze.reanalyze_trajectory` (design doc
+    `20260819-claude-sonnet-5-graphical-interface.md` §3.8) — the exact
+    algorithm this command has always run, extracted so `fim.gui`'s
+    "open an existing run" (§4.6) and "animated trajectory" (§4.5)
+    screens share it rather than a second, independently maintained
+    copy.
+    """
     trajectory_path = Path(arguments.trajectory)
-    manifest_path = (
-        Path(arguments.manifest)
-        if arguments.manifest is not None
-        else trajectory_path.with_name("manifest.json")
+    manifest_path = Path(arguments.manifest) if arguments.manifest is not None else None
+    reanalyzed = reanalyze.reanalyze_trajectory(
+        trajectory_path,
+        manifest_path=manifest_path,
+        generation=arguments.generation,
+        differentiation_orders=(
+            tuple(float(order) for order in arguments.q) if arguments.q else ()
+        ),
     )
-    manifest = read_manifest(manifest_path)
-    verify_trajectory_integrity(trajectory_path, manifest)
-    params = manifest.params()
-    rows = list(JSONLTrajectoryStore(trajectory_path).read(manifest.run_id))
-    if not rows:
-        raise ValueError(f"trajectory has no rows for {manifest.run_id}")
-    observed_generation_count = len({row["generation"] for row in rows})
-    if observed_generation_count != manifest.generation_count:
-        raise ValueError(
-            f"trajectory has {observed_generation_count} generation(s), "
-            f"manifest records {manifest.generation_count} — the file may "
-            "have been edited since the run completed"
-        )
-    generation = (
-        arguments.generation
-        if arguments.generation is not None
-        else max(row["generation"] for row in rows)
-    )
-    generation_rows = [row for row in rows if row["generation"] == generation]
-    if not generation_rows:
-        raise ValueError(f"trajectory has no generation {generation}")
-    state = ModelState.from_rows(generation_rows, params.loci)
-    final_generation = generation == manifest.generation
-    report: dict[str, object] = dict(
-        report_for_state(
-            state,
-            params,
-            run_id=manifest.run_id,
-            converged=manifest.converged if final_generation else False,
-            reason=manifest.stop_reason if final_generation else "re-analysis",
-        )
-    )
-    if arguments.q:
-        report["Differentiation_q"] = {
-            str(order): _differentiation_q_for_state(state, params, float(order))
-            for order in arguments.q
-        }
-    rendered = json.dumps(report, indent=2, sort_keys=True, allow_nan=False)
+    rendered = json.dumps(reanalyzed.report, indent=2, sort_keys=True, allow_nan=False)
     if arguments.output is not None:
         output_path = Path(arguments.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -500,42 +465,6 @@ def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
     )
     write_manifest(targets["manifest"], manifest)
     return targets
-
-
-def _differentiation_q_for_state(
-    state: ModelState,
-    params: SimulationParams,
-    order: float,
-) -> float:
-    """Average the requested differentiation order across loci.
-
-    `deme_weighting` has a defined effect only at ``q = 1``
-    (`fim.statistics.differentiation.differentiation_q` raises if
-    weights are passed at any other order) — the same order that
-    matches `E_ST`. Deriving the weights the same way
-    `fim.engine._statistics_for_locus` does keeps `Differentiation_1`
-    here identical to the report's own `E_ST`, rather than the two
-    silently disagreeing whenever `deme_weighting` is `"size"`.
-    """
-    weights = (
-        params.population_sizes
-        if order == 1.0 and params.deme_weighting == "size"
-        else None
-    )
-    values: list[float] = []
-    for locus_index in range(state.locus_count):
-        table = [
-            {
-                int(allele_id): frequency
-                for allele_id, frequency in state.frequency_map(
-                    deme_index,
-                    locus_index,
-                ).items()
-            }
-            for deme_index in range(state.deme_count)
-        ]
-        values.append(differentiation_q(table, order, weights))
-    return sum(values) / len(values)
 
 
 def _format_optional(value: float | None) -> str:
