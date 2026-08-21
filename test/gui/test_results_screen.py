@@ -9,18 +9,16 @@ doc §6.2/§6.4) and drives it via `.show()`/`.invoke()`, never
 the same structural-assertion style `test/viz/test_plots.py` already
 uses (axis labels, not a pixel diff) — rather than a hand-constructed
 fake.
-
-The figure-leak regression test design §3.5's `plt.close` care item
-names is not part of this file — it lands in its own `fix` commit next
-(§7.5's third bullet), once this screen exists for it to fix.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from matplotlib import pyplot as plt
 
 from fim.engine import RunResult, fim
 from fim.gui.app import Application
@@ -196,3 +194,49 @@ def test_results_screen_open_folder_invokes_the_injected_opener(
     screen._on_open_folder_clicked()
 
     assert opened == [tmp_path]
+
+
+@pytest.mark.gui
+def test_results_screen_show_does_not_leak_a_figure_across_repeated_runs(
+    root: Application,
+    tiny_params: SimulationParams,
+    tmp_path: Path,
+) -> None:
+    """`.show()` closes the previously embedded figure before building a new one.
+
+    Regression test for design §3.5's `plt.close` care item: without
+    it, `pyplot`'s global figure registry (`plt.get_fignums()`) grows
+    by one every time this screen shows another run, for the lifetime
+    of a long GUI session.
+    """
+    screen = ResultsScreen(root)
+    baseline = len(plt.get_fignums())
+
+    for seed in (1, 2, 3):
+        result = fim(
+            tiny_params.N,
+            tiny_params.m,
+            tiny_params.mu,
+            tiny_params.d,
+            params=replace(tiny_params, seed=seed),
+        )
+        assert isinstance(result, RunResult)
+        screen.show(ResultsView.from_run_result(result), tmp_path)
+        assert len(plt.get_fignums()) == baseline + 1
+
+
+@pytest.mark.gui
+def test_results_screen_new_run_closes_the_embedded_figure(
+    root: Application,
+    completed: RunResult,
+    tmp_path: Path,
+) -> None:
+    """ "New run" (navigating away) closes the currently embedded figure too."""
+    screen = ResultsScreen(root)
+    baseline = len(plt.get_fignums())
+    screen.show(ResultsView.from_run_result(completed), tmp_path)
+    assert len(plt.get_fignums()) == baseline + 1
+
+    screen._on_new_run_clicked()
+
+    assert len(plt.get_fignums()) == baseline

@@ -1857,6 +1857,15 @@ def show(view: ResultsView, output_directory: Path) -> None
 
 Render one run's summary and a fresh embedded scatter.
 
+Closes the previously embedded figure first, if any — design
+§3.5's own care item: `pyplot` keeps every created `Figure`
+registered in memory until closed, and this screen's whole
+point is to keep its figure alive on screen rather than
+closing it right after saving the way `fim.gui.runner` does
+with its own (separate) scatter, so a long GUI session that
+runs many simulations without this would leak one `Figure` per
+run shown here.
+
 **Arguments**:
 
 - `view` - A just-completed background run

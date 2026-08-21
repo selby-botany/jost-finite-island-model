@@ -29,6 +29,7 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Final
 
+from matplotlib import pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
@@ -195,6 +196,15 @@ class ResultsScreen(ttk.Frame):
     def show(self, view: ResultsView, output_directory: Path) -> None:
         """Render one run's summary and a fresh embedded scatter.
 
+        Closes the previously embedded figure first, if any — design
+        §3.5's own care item: `pyplot` keeps every created `Figure`
+        registered in memory until closed, and this screen's whole
+        point is to keep its figure alive on screen rather than
+        closing it right after saving the way `fim.gui.runner` does
+        with its own (separate) scatter, so a long GUI session that
+        runs many simulations without this would leak one `Figure` per
+        run shown here.
+
         Args:
             view: A just-completed background run
                 (`ResultsView.from_run_result`, as `fim.gui.runner`'s
@@ -203,6 +213,7 @@ class ResultsScreen(ttk.Frame):
                 output folder" reveals this, and "Animate" passes it
                 through to `on_animate`.
         """
+        self._close_figure()
         self._result = view
         self._output_directory = output_directory
         report = view.report
@@ -233,13 +244,20 @@ class ResultsScreen(ttk.Frame):
         else:
             self._animate_button.state(["disabled"])
 
+    def _close_figure(self) -> None:
+        """Close the currently embedded figure, if any (design §3.5)."""
+        if self._figure is not None:
+            plt.close(self._figure)
+            self._figure = None
+
     def _on_animate_clicked(self) -> None:
         """Forward the shown result and its output directory to `on_animate`."""
         if self._result is not None and self._output_directory is not None:
             self._on_animate(self._result, self._output_directory)
 
     def _on_new_run_clicked(self) -> None:
-        """Invoke `on_new_run`, returning to Screen 1."""
+        """Close the embedded figure — navigating away — then invoke `on_new_run`."""
+        self._close_figure()
         self._on_new_run()
 
     def _on_open_folder_clicked(self) -> None:
