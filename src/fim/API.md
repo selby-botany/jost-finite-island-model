@@ -212,6 +212,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.store.InMemoryTrajectoryStore.write_generation)
     * [read](#fim.persistence.store.InMemoryTrajectoryStore.read)
   * [normalize\_row](#fim.persistence.store.normalize_row)
+* [fim.reanalyze](#fim.reanalyze)
+  * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
+  * [differentiation\_q\_for\_state](#fim.reanalyze.differentiation_q_for_state)
+  * [reanalyze\_trajectory](#fim.reanalyze.reanalyze_trajectory)
 * [fim.statistics](#fim.statistics)
 * [fim.statistics.differentiation](#fim.statistics.differentiation)
   * [DifferentiationReport](#fim.statistics.differentiation.DifferentiationReport)
@@ -4008,6 +4012,109 @@ Validate and normalize one public-schema trajectory row.
 **Returns**:
 
   A typed row with primitive values.
+
+<a id="fim.reanalyze"></a>
+
+# fim.reanalyze
+
+Re-analyze a persisted trajectory (design doc §3.8).
+
+Extracted from `fim.cli._command_stats` so every future consumer that
+needs to "read a persisted `trajectory.jsonl` the same way
+`cli._command_stats` already does" (§3.8) — Screen 6, "open an existing
+run" (§4.6), and Screen 5, "animated trajectory" (§4.5) — shares the
+exact same algorithm `fim stats` uses, rather than a second,
+independently maintained copy of it. The developer guide's "do not
+duplicate model logic" rule, applied to trajectory re-analysis instead
+of engine logic.
+
+<a id="fim.reanalyze.ReanalyzedGeneration"></a>
+
+## ReanalyzedGeneration Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ReanalyzedGeneration()
+```
+
+One re-analyzed generation's manifest, params, state, and report.
+
+**Arguments**:
+
+- `manifest` - The run's manifest, as recorded at completion time.
+- `params` - The run's validated parameters, reconstructed from the
+  manifest (`RunManifest.params()`).
+- `state` - The selected generation's model state.
+- `report` - The same JSON-serializable mapping `fim stats` prints —
+  `fim.engine.FinalReport`'s fields, plus `"Differentiation_q"`
+  when `reanalyze_trajectory`'s `differentiation_orders` was
+  non-empty.
+
+<a id="fim.reanalyze.differentiation_q_for_state"></a>
+
+#### differentiation\_q\_for\_state
+
+```python
+def differentiation_q_for_state(state: ModelState, params: SimulationParams,
+                                order: float) -> float
+```
+
+Average the requested differentiation order across loci.
+
+`deme_weighting` has a defined effect only at ``q = 1``
+(`fim.statistics.differentiation.differentiation_q` raises if
+weights are passed at any other order) — the same order that
+matches `E_ST`. Deriving the weights the same way
+`fim.engine._statistics_for_locus` does keeps `Differentiation_1`
+here identical to the report's own `E_ST`, rather than the two
+silently disagreeing whenever `deme_weighting` is `"size"`.
+
+<a id="fim.reanalyze.reanalyze_trajectory"></a>
+
+#### reanalyze\_trajectory
+
+```python
+def reanalyze_trajectory(
+    trajectory_path: Path,
+    *,
+    manifest_path: Path | None = None,
+    generation: int | None = None,
+    differentiation_orders: Sequence[float] = ()
+) -> ReanalyzedGeneration
+```
+
+Recompute one generation's statistics from a persisted trajectory.
+
+The exact algorithm `fim stats` runs: verify the trajectory against
+its manifest's recorded digest, verify the trajectory's observed
+generation count still matches the manifest's, select a generation,
+and build its report — optionally including a differentiation-q
+sweep.
+
+**Arguments**:
+
+- `trajectory_path` - The `trajectory.jsonl` to read.
+- `manifest_path` - Its companion manifest; defaults to
+  `trajectory_path.with_name("manifest.json")`, `fim stats`'s
+  own default.
+- `generation` - Generation to analyze; defaults to the run's final
+  persisted generation.
+- `differentiation_orders` - Optional differentiation-q sweep
+  orders; each becomes one `"Differentiation_q"` entry in the
+  returned report.
+
+
+**Returns**:
+
+  The manifest, validated params, the selected generation's
+  state, and its report.
+
+
+**Raises**:
+
+- `ValueError` - If the trajectory has been edited, truncated, or
+  replaced since the run completed, has no rows, or the
+  requested generation does not exist.
 
 <a id="fim.statistics"></a>
 
