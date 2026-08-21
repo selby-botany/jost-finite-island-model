@@ -8,6 +8,33 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A Tkinter desktop GUI, `fim-gui` (`python -m pip install .` provides it
+  alongside `fim`; the packaged Windows executable now also opens it when
+  launched with no arguments, e.g. by double-clicking it, instead of
+  exiting with a usage error — `fim --graphical [--detach]` reaches it
+  explicitly from a terminal, shortcut, or `.bat` wrapper too). Six
+  screens — a tabbed model-input form (one tab per
+  [configuration reference](doc/configuration.md) section), running
+  progress with cancellation (a batch's own outer replicate-count bar and
+  "Cancel batch"), results (summary plus the canonical scatter) or, for a
+  batch, a replicate table plus each statistic's confidence interval,
+  open an existing run (with the same optional differentiation-`q` sweep
+  `fim stats` offers; a batch entry is labeled distinctly and opened one
+  replicate at a time), and an animated playback of a completed run's
+  persisted generations — call `fim.engine.fim`, `fim.viz.scatter`, and
+  `fim.persistence` exactly as `fim.cli` does, so a GUI-authored run with
+  the same parameters and seed produces byte-identical
+  `trajectory.jsonl`/`report.json` to the same configuration run from the
+  terminal. An opt-in "Check for updates" menu item calls the identical,
+  explicit-only logic `fim update --check` uses — the GUI performs no
+  other network access. Four small modules (`fim.paths`, `fim.reanalyze`,
+  `fim.update`, `fim.launcher`) were extracted from private `fim.cli`
+  helpers (or, for `fim.launcher`, added new) so both front ends share one
+  implementation of output-directory resolution, trajectory re-analysis,
+  the explicit release-check network call, and single-executable dispatch
+  rather than each keeping a private copy. See the
+  [desktop GUI section of the command reference](doc/usage.md#desktop-gui-fim-gui)
+  for what each screen does and which CLI command it mirrors.
 - A native Windows ARM64 release executable, `fim-windows-arm64.exe`,
   built and smoke-tested alongside the existing x64 executable. PyInstaller
   never cross-compiles — the executable it produces always matches the
