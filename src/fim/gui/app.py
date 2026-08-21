@@ -3,10 +3,10 @@
 `Application` owns exactly one `Tk` root and stacks every screen as a
 `ttk.Frame` occupying the same grid cell, raised over its siblings with
 `tkraise()` — design doc §4's "one `Tk` root ..., these are wireframes of
-layout and behavior" framing. No screen is registered here yet; each
-milestone in the implementation plan (`dev/doc/apps/selby/
-jost-finite-island-model/20260819-claude-sonnet-5-graphical-interface.md`
-§7) adds its own screen and wires it into `main()`.
+layout and behavior" framing. Each milestone in the implementation plan
+(`dev/doc/apps/selby/jost-finite-island-model/
+20260819-claude-sonnet-5-graphical-interface.md` §7) adds its own screen
+and wires it into `main()`.
 """
 
 from __future__ import annotations
@@ -14,7 +14,10 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from fim import paths
 from fim.gui.screens.input_screen import InputScreen
+from fim.gui.screens.progress_screen import ProgressScreen
+from fim.model.params import SimulationParams
 
 
 class Application(tk.Tk):
@@ -56,13 +59,46 @@ class Application(tk.Tk):
 def main() -> int:
     """Launch the fim GUI: build the root window and run its main loop.
 
+    Wires Screen 1 (input) to Screen 2 (progress): "Run simulation"
+    starts a real background scalar run in
+    `paths.default_output_directory()` and switches to Screen 2. A
+    cancelled or failed run returns to Screen 1 with its message shown
+    in the banner (design §4.6), form values intact. A completed run's
+    `on_done` is still a no-op here — Milestone G3 (§7.5) wires it to a
+    results screen that does not exist yet; requirement G2 (§2.1) is
+    "run without freezing the window, with visible progress and a
+    working Cancel button," which this wiring already satisfies on its
+    own.
+
     Returns:
         Always 0 — a normal window close ends the process successfully;
         an unhandled exception inside the loop propagates instead.
     """
     app = Application()
-    input_screen = InputScreen(app)
+
+    def start_run(params: SimulationParams) -> None:
+        progress_screen.start(params, paths.default_output_directory())
+        app.show_screen("progress")
+
+    def show_cancelled(generation: int) -> None:
+        input_screen.show_message(
+            f"Run cancelled at generation {generation}; no artifacts were written"
+        )
+        app.show_screen("input")
+
+    def show_error(message: str) -> None:
+        input_screen.show_message(message)
+        app.show_screen("input")
+
+    input_screen = InputScreen(app, on_run=start_run)
+    progress_screen = ProgressScreen(
+        app,
+        on_done=lambda _result: None,
+        on_cancelled=show_cancelled,
+        on_error=show_error,
+    )
     app.register_screen("input", input_screen)
+    app.register_screen("progress", progress_screen)
     app.show_screen("input")
     app.mainloop()
     return 0

@@ -149,6 +149,18 @@ class InputScreen(ttk.Frame):
             variable.set(values[f"cs_{name}"])
         self._revalidate()
 
+    def show_message(self, message: str) -> None:
+        """Show one whole-form message in the banner (design §4.6).
+
+        Called by `fim.gui.app.main`'s navigation when a run this
+        screen started ends without reaching the results screen — a
+        cancelled run's "cancelled at generation N" text, or an
+        unexpected engine error's message — since the form's own
+        validation state is unrelated to either outcome and
+        `_clear_errors`/`_revalidate` must not run just to show it.
+        """
+        self._set_banner(message)
+
     def _build_batch_tab(self, frame: ttk.Frame, tab: config_form.TabSpec) -> None:
         """Build the Batch tab: `n_replicates`, plus fields shown only once it's > 1."""
         fields = {field.name: field for field in tab.fields}

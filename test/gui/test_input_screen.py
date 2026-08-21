@@ -461,6 +461,27 @@ def test_save_yaml_never_opens_the_dialog_for_an_invalid_form(
     assert screen._banner["text"] != ""
 
 
+def test_show_message_sets_the_banner_without_revalidating(app: Application) -> None:
+    """`show_message` displays text in the banner and leaves validity untouched.
+
+    Called by `fim.gui.app.main`'s navigation for a cancelled or failed
+    run (§7.4's progress-screen commit) — a message unrelated to the
+    form's own current validity, so `_clear_errors`/`_revalidate` must
+    not run just to show it.
+    """
+    screen = InputScreen(app)
+    app.update_idletasks()
+    valid_before = screen._valid_params
+
+    screen.show_message("Run cancelled at generation 3; no artifacts were written")
+
+    assert (
+        screen._banner["text"]
+        == "Run cancelled at generation 3; no artifacts were written"
+    )
+    assert screen._valid_params == valid_before
+
+
 def test_payload_to_yaml_text_matches_configuration_md_key_order() -> None:
     """`payload_to_yaml_text` writes the starter payload in a stable, readable order."""
     payload = config_form.form_values_to_payload(config_form.starter_form_values())

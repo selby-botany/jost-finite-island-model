@@ -83,6 +83,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.gui.screens.input_screen.InputScreen.__init__)
     * [get\_values](#fim.gui.screens.input_screen.InputScreen.get_values)
     * [set\_values](#fim.gui.screens.input_screen.InputScreen.set_values)
+    * [show\_message](#fim.gui.screens.input_screen.InputScreen.show_message)
+* [fim.gui.screens.progress\_screen](#fim.gui.screens.progress_screen)
+  * [ProgressScreen](#fim.gui.screens.progress_screen.ProgressScreen)
+    * [\_\_init\_\_](#fim.gui.screens.progress_screen.ProgressScreen.__init__)
+    * [start](#fim.gui.screens.progress_screen.ProgressScreen.start)
 * [fim.gui.store](#fim.gui.store)
   * [RunCancelledError](#fim.gui.store.RunCancelledError)
   * [GuiProgressStore](#fim.gui.store.GuiProgressStore)
@@ -866,10 +871,10 @@ Tk application shell: root window and screen-switching mechanism.
 `Application` owns exactly one `Tk` root and stacks every screen as a
 `ttk.Frame` occupying the same grid cell, raised over its siblings with
 `tkraise()` — design doc §4's "one `Tk` root ..., these are wireframes of
-layout and behavior" framing. No screen is registered here yet; each
-milestone in the implementation plan (`dev/doc/apps/selby/
-jost-finite-island-model/20260819-claude-sonnet-5-graphical-interface.md`
-§7) adds its own screen and wires it into `main()`.
+layout and behavior" framing. Each milestone in the implementation plan
+(`dev/doc/apps/selby/jost-finite-island-model/
+20260819-claude-sonnet-5-graphical-interface.md` §7) adds its own screen
+and wires it into `main()`.
 
 <a id="fim.gui.app.Application"></a>
 
@@ -935,6 +940,17 @@ def main() -> int
 ```
 
 Launch the fim GUI: build the root window and run its main loop.
+
+Wires Screen 1 (input) to Screen 2 (progress): "Run simulation"
+starts a real background scalar run in
+`paths.default_output_directory()` and switches to Screen 2. A
+cancelled or failed run returns to Screen 1 with its message shown
+in the banner (design §4.6), form values intact. A completed run's
+`on_done` is still a no-op here — Milestone G3 (§7.5) wires it to a
+results screen that does not exist yet; requirement G2 (§2.1) is
+"run without freezing the window, with visible progress and a
+working Cancel button," which this wiring already satisfies on its
+own.
 
 **Returns**:
 
@@ -1632,6 +1648,109 @@ Replace every field's text and revalidate.
 - `values` - One string per exposed field, such as
   `config_form.starter_form_values()` or
   `config_form.params_to_form_values(...)` returns.
+
+<a id="fim.gui.screens.input_screen.InputScreen.show_message"></a>
+
+#### show\_message
+
+```python
+def show_message(message: str) -> None
+```
+
+Show one whole-form message in the banner (design §4.6).
+
+Called by `fim.gui.app.main`'s navigation when a run this
+screen started ends without reaching the results screen — a
+cancelled run's "cancelled at generation N" text, or an
+unexpected engine error's message — since the form's own
+validation state is unrelated to either outcome and
+`_clear_errors`/`_revalidate` must not run just to show it.
+
+<a id="fim.gui.screens.progress_screen"></a>
+
+# fim.gui.screens.progress\_screen
+
+Screen 2 — running (design doc §4.2): live progress for one background
+scalar simulation, with an always-effective Cancel.
+
+Backed entirely by `fim.gui.runner.start_run` and the `RunMessage` queue
+it posts to (design §3.4). The progress bar is determinate against
+`max_generations` because that value is always known up front — a run
+that instead converges early simply ends the bar short of 100% rather
+than reaching it, which is a normal, non-failure outcome (design §4.2).
+
+Scalar-only: a single "generation N / max_generations" bar, one Cancel
+button. Milestone G4 (§7.6) adds the outer replicate-count bar and
+relabels Cancel to "Cancel batch" for `n_replicates > 1`; this screen's
+scalar shape does not change underneath that addition.
+
+<a id="fim.gui.screens.progress_screen.ProgressScreen"></a>
+
+## ProgressScreen Objects
+
+```python
+class ProgressScreen(ttk.Frame)
+```
+
+Screen 2: display one background scalar run's progress, with Cancel.
+
+<a id="fim.gui.screens.progress_screen.ProgressScreen.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(
+        parent: tk.Misc,
+        *,
+        on_done: Callable[[RunResult], None] | None = None,
+        on_cancelled: Callable[[int], None] | None = None,
+        on_error: Callable[[str], None] | None = None,
+        start_run: Callable[
+            [SimulationParams, Path, queue.Queue[RunMessage], threading.Event],
+            threading.Thread,
+        ] = runner.start_run,
+        poll_interval_ms: int = 100,
+        clock: Callable[[], float] = time.monotonic) -> None
+```
+
+Build the progress display; no run is started until `.start()`.
+
+**Arguments**:
+
+- `parent` - The Tk container this screen is gridded into.
+- `on_done` - Called with the completed `RunResult` once the
+  worker posts `("done", result)`. Defaults to a no-op —
+  Milestone G3 gives this a real results-screen navigator.
+- `on_cancelled` - Called with the generation the run was
+  cancelled at, once the worker posts
+  `("cancelled", generation)`. Defaults to a no-op.
+- `on_error` - Called with the message text once the worker
+  posts `("error", message)` — an unexpected engine error,
+  or a pre-existing output directory the guard in
+  `runner.start_run` rejected before any thread started.
+  Defaults to a no-op.
+- `start_run` - Builds and starts the background worker thread.
+  Defaults to the real `runner.start_run`; injectable so
+  tests never spawn a real thread.
+- `poll_interval_ms` - How often the main thread drains the
+  message queue (design §3.4's `root.after(100, poll)`).
+- `clock` - Injectable wall clock for the elapsed-time label.
+
+<a id="fim.gui.screens.progress_screen.ProgressScreen.start"></a>
+
+#### start
+
+```python
+def start(params: SimulationParams, output_directory: Path) -> None
+```
+
+Start a real background run and begin polling for progress.
+
+**Arguments**:
+
+- `params` - Already-validated parameters — Screen 1 never hands
+  this an unvalidated payload (design §3.6).
+- `output_directory` - The run's target artifact directory.
 
 <a id="fim.gui.store"></a>
 
