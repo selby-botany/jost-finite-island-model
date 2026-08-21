@@ -61,6 +61,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [form\_values\_to\_payload](#fim.gui.config_form.form_values_to_payload)
   * [m\_to\_payload](#fim.gui.config_form.m_to_payload)
   * [m\_from\_params](#fim.gui.config_form.m_from_params)
+  * [mu\_to\_payload](#fim.gui.config_form.mu_to_payload)
+  * [mu\_from\_params](#fim.gui.config_form.mu_from_params)
+  * [convergence\_statistic\_to\_payload](#fim.gui.config_form.convergence_statistic_to_payload)
+  * [convergence\_statistic\_from\_params](#fim.gui.config_form.convergence_statistic_from_params)
+  * [p0\_summary\_from\_params](#fim.gui.config_form.p0_summary_from_params)
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
 * [fim.gui.screens](#fim.gui.screens)
@@ -940,16 +945,20 @@ GUI-local copy of a rule.
 
 `TABS` groups fields the same way
 [configuration.md](../../../doc/configuration.md)'s own section
-headings do (design §3.6, §4.0 `1`) — this commit builds the first two,
-**Population** and **Migration**; later commits in this milestone add
-the remaining four. §3.6's cardinality rule decides what earns a live
-widget here at all: O(1) and O(d)/O(loci)-sized fields do (a
-comma-separated text field faithfully represents either); a `d`-by-`d`
-migration matrix or an arbitrary sparse map does not (§2.3) — `m`
-itself is edited only as a scalar rate or a named stepping-stone
-topology (`ring`/`linear` + one shared rate), matching
-[configuration.md](../../../doc/configuration.md#m)'s own two O(1)
-shorthands.
+headings do (design §3.6, §4.0 `1`). §3.6's cardinality rule decides
+what earns a live widget here at all: O(1) and O(d)/O(loci)-sized
+fields do (a comma-separated text field faithfully represents either);
+a `d`-by-`d` migration matrix, an arbitrary sparse map, a per-locus
+`p_0`, and — narrower cases the design doc does not work through in
+the same detail — a genuinely per-locus `mu` or a `loci` list with
+custom `locus_id`s do not (§2.3). `m` and `p_0` get the read-only
+"loaded from file" badge treatment §4.0 `3` describes when a loaded
+configuration actually uses one; `mu`-per-locus and custom-ID `loci`
+instead raise a clear `ValueError` from `params_to_form_values` (the
+same "edit the YAML file directly" pattern this form has always used
+for a construct it cannot represent at all, load-only badge or not) —
+narrower, later-discovered edge cases than the two the design doc's
+own worked examples cover, not a deliberate scope reduction.
 
 <a id="fim.gui.config_form.FormField"></a>
 
@@ -968,13 +977,19 @@ One model-input screen field's config key, label, and value kind.
   field edits — also the prefix `field_for_error` matches an
   error message against, so it must match verbatim.
 - `label` - Human-readable text shown beside the field.
-- `kind` - How the field's text is parsed and, for "choice", which
-  values are offered. "int_list" accepts either one bare
-  integer or a comma-separated list of them (§3.6's O(d)
-- `case` - a scalar and a per-deme list are both faithfully
-  representable by the same widget).
-- `choices` - The fixed option list for a "choice" field; empty
-  otherwise.
+- `kind` - How the field's text is parsed and, for "choice"/
+  "float_choice", which values are offered. "int_list"
+  accepts either one bare integer or a comma-separated list
+  of them (§3.6's O(d)/O(loci) case: a scalar and a per-
+  deme/per-locus list are both faithfully representable by
+  the same widget). "optional_float" treats an empty string
+  as `None`, matching a field whose `SimulationParams`
+  default is `None` (`replicate_tolerance`). "float_choice"
+  is "choice" restricted to a fixed set of numbers rather
+  than tokens (`replicate_confidence`) — `from_mapping`
+  requires an actual `float`, not its string spelling.
+- `choices` - The fixed option list for a "choice"/"float_choice"
+  field; empty otherwise.
 
 <a id="fim.gui.config_form.TabSpec"></a>
 
@@ -1082,11 +1097,15 @@ Build `m`'s payload from the selector's mode and its own sub-fields.
 
 **Raises**:
 
-- `ValueError` - If the active sub-field's text is not a number, or
-  `m_mode` is neither `"scalar"` nor `"topology"` (a
-  programming error in the caller, not a user-facing
-  validation case — every real widget only ever writes one
-  of the two).
+- `ValueError` - If the active sub-field's text is not a number, if
+  `m_mode == "loaded"` (a loaded matrix/sparse map has no
+  editable representation here at all — §3.6, §4.0 `3`; the
+  screen itself is responsible for re-submitting a loaded,
+  untouched `m` from the `SimulationParams` it was loaded
+  from, rather than asking this function to reconstruct a
+  matrix from a summary string), or `m_mode` is none of the
+  three (a programming error in the caller, not a
+  user-facing validation case).
 
 <a id="fim.gui.config_form.m_from_params"></a>
 
@@ -1105,18 +1124,139 @@ Render `params.m` back into the selector's form-value keys.
 
 **Returns**:
 
-  `m_mode`/`m_rate`/`m_topology`/`m_topology_rate`, covering the
-  one shape this selector can represent: a scalar rate. A
-  stepping-stone topology's own `{topology, rate}` sugar expands
-  into a full dense matrix the moment `from_mapping` parses it
+  `m_mode`/`m_rate`/`m_topology`/`m_topology_rate`/
+  `m_loaded_summary`. A scalar `params.m` renders as `"scalar"`
+  mode. A matrix-shaped `params.m` renders as `"loaded"` mode
+  with a read-only summary (§3.6, §4.0 `3`) — a stepping-stone
+  topology's own `{topology, rate}` sugar expands into a full
+  dense matrix the moment `from_mapping` parses it
   (`fim.model.params.Migration = float | tuple[tuple[float,
-  ...], ...]`) — there is no way to tell, from the matrix alone,
-  which topology (or no topology at all) produced it, so a
-  matrix-shaped `m` is never reconstructed into "topology" mode
-  here. A later commit in this milestone (§4.0 `3`, §3.6) adds the
-  read-only summary badge that handles a matrix-shaped `m`
-  instead; until then this falls back to an empty scalar field
-  rather than guessing.
+  ...], ...]`), so there is no way to tell, from the matrix
+  alone, which topology (or none at all, an explicit or sparse-
+  map matrix) produced it — "loaded" is the only honest
+  representation for any matrix-shaped `m`, not only a sparse-
+  map or explicitly-authored one.
+
+<a id="fim.gui.config_form.mu_to_payload"></a>
+
+#### mu\_to\_payload
+
+```python
+def mu_to_payload(values: Mapping[str, str]) -> dict[str, object]
+```
+
+Build `mu`'s or `mu_b`'s payload key from the selector's mode.
+
+**Arguments**:
+
+- `values` - The full form-values mapping; only `mu_mode`,
+  `mu_value`, and `mu_b_value` are read.
+
+
+**Returns**:
+
+- ``{"mu"` - <rate>}` or `{"mu_b": <rate>}` — never both, matching
+  `SimulationParams.from_mapping`'s own mutual-exclusivity rule
+  (§4.0 `4`: the exclusivity is this selector's shape, not a
+  validation message discovered after submitting both).
+
+
+**Raises**:
+
+- `ValueError` - If the active sub-field's text is not a number, or
+  `mu_mode` is neither `"mu"` nor `"mu_b"` (a programming
+  error in the caller).
+
+<a id="fim.gui.config_form.mu_from_params"></a>
+
+#### mu\_from\_params
+
+```python
+def mu_from_params(params: SimulationParams) -> dict[str, str]
+```
+
+Render `params.mu` back into the mu/mu_b selector's form-value keys.
+
+**Arguments**:
+
+- `params` - A validated configuration.
+
+
+**Returns**:
+
+  `mu_mode`/`mu_value`/`mu_b_value`. `SimulationParams.
+  __post_init__` collapses `mu` back to a scalar whenever every
+  locus's rate happens to be equal — whether it came from a
+  scalar `mu`, a per-locus `mu` list whose values all matched, or
+  `mu_b` with equal-length loci — so a scalar `params.mu` is
+  always representable here as `mu_mode="mu"`, exactly
+  reproducing the value actually used regardless of how the
+  loaded config originally spelled it.
+
+
+**Raises**:
+
+- `ValueError` - If `params.mu` is a genuinely per-locus tuple
+  (unequal rates across loci) — narrower than the design
+  doc's own worked "loaded" badge examples (m, p_0); this
+  form has no per-locus mu editor, load-only or otherwise,
+  so the message says to edit the YAML file directly, the
+  same pattern this form already uses for every other
+  construct it cannot represent at all.
+
+<a id="fim.gui.config_form.convergence_statistic_to_payload"></a>
+
+#### convergence\_statistic\_to\_payload
+
+```python
+def convergence_statistic_to_payload(
+        values: Mapping[str, str]) -> str | list[str]
+```
+
+Build `convergence_statistic`'s payload from the multi-select checkboxes.
+
+**Arguments**:
+
+- `values` - The full form-values mapping; only the `cs_<NAME>` keys
+  (one per `CONVERGENCE_STATISTIC_NAMES` entry, `"true"` or
+  `"false"`) are read.
+
+
+**Returns**:
+
+  The one checked name as a bare string (`from_mapping`'s own
+  single-statistic shape), or every checked name as a list, in
+  `CONVERGENCE_STATISTIC_NAMES` order, once two or more are
+  checked.
+
+<a id="fim.gui.config_form.convergence_statistic_from_params"></a>
+
+#### convergence\_statistic\_from\_params
+
+```python
+def convergence_statistic_from_params(
+        params: SimulationParams) -> dict[str, str]
+```
+
+Render `params.convergence_statistic` back into the checkbox keys.
+
+<a id="fim.gui.config_form.p0_summary_from_params"></a>
+
+#### p0\_summary\_from\_params
+
+```python
+def p0_summary_from_params(params: SimulationParams) -> str
+```
+
+Return the Initial conditions tab's read-only `p_0` summary.
+
+**Returns**:
+
+  A description naming the deme and locus counts when
+  `params.initial_frequencies` is set (§2.3: `p_0` is genuinely
+  unbounded and load-only, unlike every other field this
+  revision brings into scope — there is no editable widget for
+  it at all, load-only badge or not), or `""` otherwise.
 
 <a id="fim.gui.config_form.params_to_form_values"></a>
 
@@ -1136,9 +1276,20 @@ Render a validated `SimulationParams` back into the form's fields.
 
 **Returns**:
 
-  One string per `all_fields()` entry, plus the `m_*` selector
-  keys from `m_from_params`, suitable for
-  `screens.input_screen.InputScreen.set_values`.
+  One string per `all_fields()` entry, plus every composite
+  field's own keys (`m_*`, `mu_*`, `cs_*`, `p0_summary`),
+  suitable for `screens.input_screen.InputScreen.set_values`.
+
+
+**Raises**:
+
+- `ValueError` - If `params` uses a construct this form cannot
+  represent at all — a per-locus `mu` (`mu_from_params`), or
+  a `loci` list with custom, non-default-position
+  `locus_id`s (narrower than the design doc's own worked
+  "loaded" badge examples; §2.3 names an explicit `loci` list
+  with custom ordering as load-only, and this form's one
+  `locus_lengths` field cannot express a custom ID either).
 
 <a id="fim.gui.config_form.starter_form_values"></a>
 
@@ -1173,19 +1324,23 @@ one `SimulationParams` at a time.
 Every plain field maps one-to-one to a `fim.gui.config_form` entry, in
 the same order `doc/configuration.md` documents those keys, grouped
 into tabs the same way that document's own section headings do (design
-§3.6, §4.0 `1`). This commit builds the **Population** and
-**Migration** tabs — including Migration's scalar-vs-named-topology
-`m` selector (§4.0 `4`'s exclusivity-as-shape principle, applied to `m`
-rather than `mu`/`mu_b`, which arrives in the next commit). "Run
-simulation" is disabled until `fim.model.params.SimulationParams.
-from_mapping` accepts the form's current values — a rejected mapping
-never reaches `on_run` (design §3.6). A validation failure is shown
-beside the field `fim.gui.config_form.field_for_error` names, or in a
-banner otherwise (design §4.6); routing the banner-shown failure to
-the tab that actually holds the field is a later commit in this
-milestone (§4.0 `2`, §7.3's fifth bullet) — until then, every field
-error is at least visible on whichever tab happens to already be
-selected, or in the banner.
+§3.6, §4.0 `1`). All six tabs are built here: **Population**,
+**Migration** (the scalar-vs-named-topology `m` selector), **Mutation**
+(the `mu`/`mu_b` selector, §4.0 `4`), **Initial conditions** (`p_0`'s
+read-only summary when loaded, §3.6/§4.0 `3`), **Convergence** (the
+multi-select `convergence_statistic` plus its combinator, shown only
+once two or more are checked), and **Batch** (`replicate_tolerance`/
+`replicate_minimum`/`replicate_confidence`, shown only once
+`n_replicates` is greater than one). "Run simulation" is disabled
+until `fim.model.params.SimulationParams.from_mapping` accepts the
+form's current values — a rejected mapping never reaches `on_run`
+(design §3.6). A validation failure is shown beside the field
+`fim.gui.config_form.field_for_error` names, or in a banner otherwise
+(design §4.6); routing the banner-shown failure to the tab that
+actually holds the field is the next commit in this milestone (§4.0
+`2`, §7.3's fifth bullet) — until then, every field error is at least
+visible on whichever tab happens to already be selected, or in the
+banner.
 
 <a id="fim.gui.screens.input_screen.InputScreen"></a>
 

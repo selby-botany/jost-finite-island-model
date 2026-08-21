@@ -1,9 +1,12 @@
-"""Headless functional tests for Screen 1's Population and Migration tabs.
+"""Headless functional tests for Screen 1's six tabs.
 
-Full validation-wiring tests (`Run simulation` enabling/disabling,
-inline vs. banner error placement across every tab) belong once every
-tab exists — this commit's own surface is the tab structure itself,
-the two tabs' plain fields, and the `m` selector's mode switch.
+`test_input_screen_run_button_disabled_until_valid` (design §6.4's own
+named test) is now meaningful end to end: every tab exists, so a fresh,
+prefilled screen actually validates successfully and enables "Run
+simulation" — unlike the two prior commits in this milestone, where it
+stayed permanently disabled for want of the remaining tabs' required
+fields. Routing a banner-shown error to the tab that actually holds
+the field (design §4.0 #2) is still the next commit's own job.
 """
 
 from __future__ import annotations
@@ -28,8 +31,8 @@ def app() -> Iterator[Application]:
         application.destroy()
 
 
-def test_notebook_has_population_and_migration_tabs_in_order(app: Application) -> None:
-    """The two tabs this commit builds appear, in the design's own order."""
+def test_notebook_has_all_six_tabs_in_order(app: Application) -> None:
+    """Every tab §4.1 names appears, in `configuration.md`'s own section order."""
     screen = InputScreen(app)
 
     tab_labels = [
@@ -37,7 +40,14 @@ def test_notebook_has_population_and_migration_tabs_in_order(app: Application) -
         for tab_id in screen._notebook.tabs()  # type: ignore[no-untyped-call]
     ]
 
-    assert tab_labels == ["Population", "Migration"]
+    assert tab_labels == [
+        "Population",
+        "Migration",
+        "Mutation",
+        "Initial conditions",
+        "Convergence",
+        "Batch",
+    ]
 
 
 def test_prefill_matches_the_starter_config(app: Application) -> None:
@@ -122,3 +132,131 @@ def test_reset_to_defaults_restores_the_starter_config(app: Application) -> None
     screen._on_reset_to_defaults()
 
     assert screen.get_values()["d"] == "20"
+
+
+def test_input_screen_run_button_disabled_until_valid(app: Application) -> None:
+    """Design §6.4's own named test: valid by default, invalid once broken.
+
+    A fresh, prefilled screen validates successfully (every tab's
+    required fields now exist) and enables "Run simulation"; an
+    invalid edit disables it again.
+    """
+    screen = InputScreen(app)
+    assert "disabled" not in screen._run_button.state()
+    assert screen._valid_params is not None
+
+    screen._vars["d"].set("not a number")
+    app.update_idletasks()
+
+    assert "disabled" in screen._run_button.state()
+    assert screen._valid_params is None
+
+
+def test_on_run_only_ever_fires_with_validated_params(app: Application) -> None:
+    """ "Run simulation" calls `on_run` with the validated params, never otherwise."""
+    received: list[object] = []
+    screen = InputScreen(app, on_run=received.append)
+
+    screen._vars["d"].set("not a number")
+    app.update_idletasks()
+    screen._on_run_clicked()
+    assert received == []
+
+    screen._vars["d"].set("5")
+    app.update_idletasks()
+    screen._on_run_clicked()
+
+    assert len(received) == 1
+    assert received[0] is screen._valid_params
+
+
+def test_batch_extra_fields_shown_only_once_n_replicates_exceeds_one(
+    app: Application,
+) -> None:
+    """`replicate_tolerance`/`minimum`/`confidence` appear once `n_replicates > 1`."""
+    screen = InputScreen(app)
+    assert len(screen._batch_extra_rows.grid_info()) == 0
+
+    screen._vars["n_replicates"].set("20")
+    app.update_idletasks()
+
+    assert len(screen._batch_extra_rows.grid_info()) > 0
+
+    screen._vars["n_replicates"].set("1")
+    app.update_idletasks()
+
+    assert len(screen._batch_extra_rows.grid_info()) == 0
+
+
+def test_convergence_combinator_shown_only_once_two_statistics_are_checked(
+    app: Application,
+) -> None:
+    """`convergence_combinator` appears only once two or more statistics are checked."""
+    screen = InputScreen(app)
+    assert len(screen._combinator_row.grid_info()) == 0
+
+    screen._cs_vars["G_ST"].set("true")
+    app.update_idletasks()
+
+    assert len(screen._combinator_row.grid_info()) > 0
+
+    screen._cs_vars["G_ST"].set("false")
+    app.update_idletasks()
+
+    assert len(screen._combinator_row.grid_info()) == 0
+
+
+def test_mu_mode_switch_shows_only_the_selected_sub_row(app: Application) -> None:
+    """Selecting "mu_b" hides the `mu` row and reveals the `mu_b` row."""
+    screen = InputScreen(app)
+    assert len(screen._mu_row.grid_info()) > 0
+    assert len(screen._mu_b_row.grid_info()) == 0
+
+    screen._vars["mu_mode"].set("mu_b")
+    app.update_idletasks()
+
+    assert len(screen._mu_row.grid_info()) == 0
+    assert len(screen._mu_b_row.grid_info()) > 0
+
+
+def test_loading_a_matrix_m_shows_the_read_only_badge(app: Application) -> None:
+    """`set_values` with a "loaded" `m_mode` shows the badge row, not either sub-row."""
+    screen = InputScreen(app)
+    values = dict(screen.get_values())
+    values.update(
+        {
+            "m_mode": "loaded",
+            "m_loaded_summary": "3x3 migration matrix (loaded from file)",
+        }
+    )
+
+    screen.set_values(values)
+
+    assert len(screen._m_scalar_row.grid_info()) == 0
+    assert len(screen._m_topology_row.grid_info()) == 0
+    assert len(screen._m_loaded_row.grid_info()) > 0
+
+
+def test_p0_summary_field_reflects_set_values(app: Application) -> None:
+    """The read-only `p_0` summary label follows `set_values`, like any other field."""
+    screen = InputScreen(app)
+    assert screen.get_values()["p0_summary"] == ""
+
+    screen.set_values(
+        {**screen.get_values(), "p0_summary": "initial frequencies loaded"}
+    )
+
+    assert screen.get_values()["p0_summary"] == "initial frequencies loaded"
+
+
+def test_get_values_includes_every_convergence_statistic_checkbox(
+    app: Application,
+) -> None:
+    """`get_values` reports every `cs_<NAME>` checkbox key, checked or not."""
+    screen = InputScreen(app)
+
+    values = screen.get_values()
+
+    assert values["cs_D"] == "true"
+    for name in ("G_ST", "E_ST", "K_ST", "H_S", "H_T"):
+        assert values[f"cs_{name}"] == "false"
