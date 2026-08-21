@@ -4,7 +4,8 @@
 `cli.main(["stats", ...])` end to end, unmodified by this extraction
 (confirmed: they pass unchanged against the new import path); these
 tests instead call `fim.reanalyze` directly, the way `fim.gui`'s
-"open an existing run" screen (design doc §3.8, §4.6) will.
+"open an existing run" (design doc §3.8, §4.6) and "animated
+trajectory" (§4.5) screens do.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import pytest
 import yaml
 
 from fim import cli, reanalyze
+from fim.persistence.manifest import read_manifest
 
 
 def _write_run(tmp_path: Path, **overrides: object) -> Path:
@@ -121,3 +123,21 @@ def test_differentiation_q_for_state_agrees_with_e_st_under_size_weighting(
     swept = result.report["Differentiation_q"]
     assert isinstance(swept, dict)
     assert swept["1.0"] == pytest.approx(result.report["E_ST"])
+
+
+def test_group_rows_by_generation_groups_every_persisted_generation(
+    tmp_path: Path,
+) -> None:
+    """Every persisted generation appears, keyed by its own generation number."""
+    output = _write_run(tmp_path)
+    trajectory = output / "trajectory.jsonl"
+    manifest = read_manifest(output / "manifest.json")
+
+    grouped = reanalyze.group_rows_by_generation(trajectory, manifest.run_id)
+
+    assert set(grouped) == set(range(manifest.generation + 1))
+    assert all(
+        row["generation"] == generation
+        for generation, rows in grouped.items()
+        for row in rows
+    )

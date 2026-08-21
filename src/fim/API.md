@@ -47,6 +47,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [report\_for\_state](#fim.engine.report_for_state)
   * [replicate\_summary](#fim.engine.replicate_summary)
 * [fim.gui](#fim.gui)
+* [fim.gui.animation](#fim.gui.animation)
+  * [AnimationFrame](#fim.gui.animation.AnimationFrame)
+  * [pre\_render\_frames](#fim.gui.animation.pre_render_frames)
+  * [select\_sample\_generations](#fim.gui.animation.select_sample_generations)
 * [fim.gui.config\_form](#fim.gui.config_form)
   * [FormField](#fim.gui.config_form.FormField)
   * [TabSpec](#fim.gui.config_form.TabSpec)
@@ -180,6 +184,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.reanalyze](#fim.reanalyze)
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
   * [differentiation\_q\_for\_state](#fim.reanalyze.differentiation_q_for_state)
+  * [group\_rows\_by\_generation](#fim.reanalyze.group_rows_by_generation)
   * [reanalyze\_trajectory](#fim.reanalyze.reanalyze_trajectory)
 * [fim.statistics](#fim.statistics)
 * [fim.statistics.differentiation](#fim.statistics.differentiation)
@@ -852,6 +857,114 @@ orchestration (`doc/developer.md`'s architecture table: "GUI: call
 `dev/doc/apps/selby/jost-finite-island-model/
 20260819-claude-sonnet-5-graphical-interface.md` for the full design
 and implementation plan this package follows.
+
+<a id="fim.gui.animation"></a>
+
+# fim.gui.animation
+
+Sample and pre-render animation frames from a persisted trajectory
+(design doc §3.8).
+
+A converged run can persist hundreds or thousands of generations, and
+rendering every one of them as a separate Matplotlib frame is both slow
+and unnecessary for a human watching a scatter drift. This module
+samples at most `GUI_ANIMATION_MAX_FRAMES` generations, evenly spaced
+across the run's persisted range, always including generation 0 and the
+final generation, and pre-renders each as its own `Figure` — reusing
+`fim.viz.scatter.plot_frequency_scatter` per sampled generation, the
+same call the results screen embeds its own live scatter with
+(design §3.5).
+
+Reached only after the same trajectory-integrity check §4.6 already
+performed: Screen 5 (`fim.gui.screens.animation_screen`) is reached
+only from Screen 3, which by the time "Animate" is clickable has
+already shown a `ResultsView` built either from a just-completed live
+run (whose manifest was just written, never edited) or from
+`fim.reanalyze.reanalyze_trajectory` (which calls
+`fim.persistence.manifest.verify_trajectory_integrity` itself). This
+module therefore reads the trajectory directly, trusting the caller,
+rather than re-verifying it a second time.
+
+<a id="fim.gui.animation.AnimationFrame"></a>
+
+## AnimationFrame Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class AnimationFrame()
+```
+
+One pre-rendered animation frame.
+
+**Arguments**:
+
+- `generation` - The persisted generation this frame renders.
+- `figure` - The rendered scatter figure. Caller-owned: whoever
+  pre-rendered it is responsible for closing it
+  (`matplotlib.pyplot.close`) once it is no longer needed —
+  this module never closes a figure it returns.
+
+<a id="fim.gui.animation.pre_render_frames"></a>
+
+#### pre\_render\_frames
+
+```python
+def pre_render_frames(
+        trajectory_path: Path,
+        params: SimulationParams,
+        run_id: str,
+        *,
+        max_frames: int = GUI_ANIMATION_MAX_FRAMES) -> list[AnimationFrame]
+```
+
+Sample and pre-render up to `max_frames` frames from a persisted trajectory.
+
+**Arguments**:
+
+- `trajectory_path` - The `trajectory.jsonl` to read.
+- `params` - The run's validated parameters.
+- `run_id` - The run identity every row must belong to.
+- `max_frames` - See `select_sample_generations`.
+
+
+**Returns**:
+
+  One `AnimationFrame` per sampled generation, sorted ascending
+  by generation. Each figure is built independently — not
+  written to disk. The caller owns closing every one of them.
+
+<a id="fim.gui.animation.select_sample_generations"></a>
+
+#### select\_sample\_generations
+
+```python
+def select_sample_generations(
+        available_generations: Sequence[int],
+        max_frames: int = GUI_ANIMATION_MAX_FRAMES) -> list[int]
+```
+
+Return at most `max_frames` generation numbers, evenly spaced.
+
+**Arguments**:
+
+- `available_generations` - Every persisted generation number (need
+  not be sorted or unique).
+- `max_frames` - The largest number of generations to return.
+
+
+**Returns**:
+
+  A strictly ascending, deduplicated list of at most
+  `max_frames` generation numbers, drawn from
+  `available_generations`. Always includes the lowest and the
+  highest generation number when `max_frames >= 2` and
+  `available_generations` is non-empty (design §3.8: "always
+  including generation 0 and the final generation"). Returns
+  every available generation, sorted, when there are
+  `max_frames` or fewer of them. `max_frames <= 0` returns
+  `[]`; `max_frames == 1` returns only the highest generation —
+  a run's terminal state is the single most informative frame
+  to keep alone.
 
 <a id="fim.gui.config_form"></a>
 
@@ -3274,14 +3387,14 @@ Validate and normalize one public-schema trajectory row.
 
 Re-analyze a persisted trajectory (design doc §3.8).
 
-Extracted from `fim.cli._command_stats` so every future consumer that
-needs to "read a persisted `trajectory.jsonl` the same way
-`cli._command_stats` already does" (§3.8) — Screen 6, "open an existing
-run" (§4.6), and Screen 5, "animated trajectory" (§4.5) — shares the
-exact same algorithm `fim stats` uses, rather than a second,
-independently maintained copy of it. The developer guide's "do not
-duplicate model logic" rule, applied to trajectory re-analysis instead
-of engine logic.
+Extracted from `fim.cli._command_stats` so every consumer that needs to
+"read a persisted `trajectory.jsonl` the same way `cli._command_stats`
+already does" (§3.8) — Screen 6, "open an existing run" (§4.6), and
+Screen 5, "animated trajectory" (§4.5, via `group_rows_by_generation`)
+— shares the exact same algorithm `fim stats` uses, rather than a
+second, independently maintained copy of it. The developer guide's "do
+not duplicate model logic" rule, applied to trajectory re-analysis
+instead of engine logic.
 
 <a id="fim.reanalyze.ReanalyzedGeneration"></a>
 
@@ -3323,6 +3436,35 @@ matches `E_ST`. Deriving the weights the same way
 `fim.engine._statistics_for_locus` does keeps `Differentiation_1`
 here identical to the report's own `E_ST`, rather than the two
 silently disagreeing whenever `deme_weighting` is `"size"`.
+
+<a id="fim.reanalyze.group_rows_by_generation"></a>
+
+#### group\_rows\_by\_generation
+
+```python
+def group_rows_by_generation(trajectory_path: Path,
+                             run_id: str) -> dict[int, list[TrajectoryRow]]
+```
+
+Group every persisted row by its generation number, in stored order.
+
+Shared by `reanalyze_trajectory` — which instead filters `rows` to
+just the one selected generation, matching `cli._command_stats`'s
+own exact algorithm — and the animation screen's frame sampler
+(design §3.8: several, evenly spaced generations), which needs
+every persisted generation's rows available at once; only how many
+of the resulting generations each caller turns into a `ModelState`
+differs.
+
+**Arguments**:
+
+- `trajectory_path` - The `trajectory.jsonl` to read.
+- `run_id` - The run identity every row must belong to.
+
+
+**Returns**:
+
+  Every persisted generation's rows, keyed by generation number.
 
 <a id="fim.reanalyze.reanalyze_trajectory"></a>
 
