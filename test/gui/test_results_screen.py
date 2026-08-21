@@ -17,8 +17,10 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 from matplotlib import pyplot as plt
 
+from fim import cli
 from fim.engine import RunResult, fim
 from fim.gui.app import Application
 from fim.gui.screens.results_screen import (
@@ -27,6 +29,7 @@ from fim.gui.screens.results_screen import (
     _animate_is_enabled,
 )
 from fim.model.params import SimulationParams
+from fim.reanalyze import reanalyze_trajectory
 
 
 @pytest.fixture
@@ -50,6 +53,41 @@ def test_animate_is_enabled_only_for_more_than_one_generation() -> None:
     assert _animate_is_enabled(1) is False
     assert _animate_is_enabled(2) is True
     assert _animate_is_enabled(1518) is True
+
+
+def test_results_view_from_reanalyzed_generation_matches_the_source(
+    tmp_path: Path,
+) -> None:
+    """`from_reanalyzed_generation` carries every field straight through.
+
+    A real trajectory, re-analyzed via `fim.reanalyze.reanalyze_trajectory`
+    (design §4.6) — the same source Screen 6's "Open ▶" hands this
+    classmethod.
+    """
+    config = {
+        "N": 20,
+        "d": 2,
+        "m": 0.1,
+        "mu": 0.01,
+        "seed": 20260814,
+        "loci": [{"locus_id": 1, "length": 200}],
+        "convergence_window": 4,
+        "convergence_tolerance": 1.0,
+        "max_generations": 10,
+    }
+    config_path = tmp_path / "run.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    output = tmp_path / "output"
+    assert cli.main(["run", str(config_path), "-o", str(output), "--quiet"]) == 0
+    reanalyzed = reanalyze_trajectory(output / "trajectory.jsonl")
+
+    view = ResultsView.from_reanalyzed_generation(reanalyzed)
+
+    assert view.run_id == reanalyzed.manifest.run_id
+    assert view.report == reanalyzed.report
+    assert view.state == reanalyzed.state
+    assert view.params == reanalyzed.params
+    assert view.generation_count == reanalyzed.manifest.generation_count
 
 
 @pytest.mark.gui

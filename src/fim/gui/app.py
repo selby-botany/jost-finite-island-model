@@ -19,9 +19,11 @@ from fim import paths
 from fim.engine import RunResult
 from fim.gui.screens.batch_results_screen import BatchResultsScreen, BatchResultsView
 from fim.gui.screens.input_screen import InputScreen
+from fim.gui.screens.open_run_screen import OpenRunScreen
 from fim.gui.screens.progress_screen import ProgressScreen
 from fim.gui.screens.results_screen import ResultsScreen, ResultsView
 from fim.model.params import SimulationParams
+from fim.reanalyze import ReanalyzedGeneration
 
 
 class Application(tk.Tk):
@@ -78,9 +80,15 @@ def main() -> int:
     configuration still in the form — "Reset to defaults" is what
     starts genuinely fresh. Screen 4's "Open replicate" raises Screen 3
     for the selected replicate, with its own output subdirectory rather
-    than the batch's top-level one (design §4.0 #8). "Animate" is still
-    a no-op here — Milestone G6 (§7.8) wires it to an animation screen
-    that does not exist yet.
+    than the batch's top-level one (design §4.0 #8). Screen 1's own
+    "Open a run…" refreshes and raises Screen 6; its "Open ▶" re-
+    analyzes a persisted trajectory
+    (`fim.reanalyze.reanalyze_trajectory`) into a `ReanalyzedGeneration`,
+    becomes a `ResultsView`
+    (`ResultsView.from_reanalyzed_generation`), and is shown on Screen 3
+    exactly like a live run (design §4.6: "opening a run re-renders
+    Screen 3"). "Animate" is still a no-op here — Milestone G6 (§7.8)
+    wires it to an animation screen that does not exist yet.
 
     Returns:
         Always 0 — a normal window close ends the process successfully;
@@ -122,44 +130,59 @@ def main() -> int:
         results_screen.show(view, output_directory)
         app.show_screen("results")
 
+    def show_reanalyzed_results(
+        reanalyzed: ReanalyzedGeneration, output_directory: Path
+    ) -> None:
+        results_screen.show(
+            ResultsView.from_reanalyzed_generation(reanalyzed), output_directory
+        )
+        app.show_screen("results")
+
+    def show_open_run() -> None:
+        open_run_screen.refresh()
+        app.show_screen("open_run")
+
+    def return_to_input(message: str) -> None:
+        input_screen.show_message(message)
+        app.show_screen("input")
+
     def show_cancelled(generation: int) -> None:
-        input_screen.show_message(
+        return_to_input(
             f"Run cancelled at generation {generation}; no artifacts were written"
         )
-        app.show_screen("input")
 
     def show_batch_cancelled(replicate_index: int, _generation: int) -> None:
         assert current_n_replicates is not None, (
             "on_batch_cancelled fired without a preceding start_run"
         )
-        input_screen.show_message(
+        return_to_input(
             f"Batch cancelled during replicate {replicate_index} of "
             f"{current_n_replicates}; no artifacts were written"
         )
-        app.show_screen("input")
-
-    def show_error(message: str) -> None:
-        input_screen.show_message(message)
-        app.show_screen("input")
 
     def show_input() -> None:
         app.show_screen("input")
 
-    input_screen = InputScreen(app, on_run=start_run)
+    input_screen = InputScreen(app, on_run=start_run, on_open_run=show_open_run)
     progress_screen = ProgressScreen(
         app,
         on_done=show_results,
         on_cancelled=show_cancelled,
         on_batch_done=show_batch_results,
         on_batch_cancelled=show_batch_cancelled,
-        on_error=show_error,
+        on_error=return_to_input,
     )
     results_screen = ResultsScreen(app, on_new_run=show_input)
     batch_results_screen = BatchResultsScreen(app, on_open_replicate=show_replicate)
-    app.register_screen("input", input_screen)
-    app.register_screen("progress", progress_screen)
-    app.register_screen("results", results_screen)
-    app.register_screen("batch_results", batch_results_screen)
+    open_run_screen = OpenRunScreen(app, on_open=show_reanalyzed_results)
+    for name, screen in (
+        ("input", input_screen),
+        ("progress", progress_screen),
+        ("results", results_screen),
+        ("batch_results", batch_results_screen),
+        ("open_run", open_run_screen),
+    ):
+        app.register_screen(name, screen)
     app.show_screen("input")
     app.mainloop()
     return 0

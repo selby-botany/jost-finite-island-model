@@ -139,6 +139,23 @@ def test_reset_to_defaults_restores_the_starter_config(app: Application) -> None
     assert screen.get_values()["d"] == "20"
 
 
+def test_open_a_run_invokes_the_callback(app: Application) -> None:
+    """ "Open a run…" calls `on_open_run` with no arguments (design §4.6).
+
+    Independent of the form's own current validity — `fim.gui.app`
+    wires this to raise Screen 6 regardless of whether Screen 1's own
+    form is currently valid.
+    """
+    calls: list[None] = []
+    screen = InputScreen(app, on_open_run=lambda: calls.append(None))
+    screen._vars["d"].set("not a number")
+    app.update_idletasks()
+
+    screen._on_open_run_clicked()
+
+    assert calls == [None]
+
+
 def test_input_screen_run_button_disabled_until_valid(app: Application) -> None:
     """Design §6.4's own named test: valid by default, invalid once broken.
 

@@ -23,7 +23,9 @@ tab (design §4.6, §4.7). "Load YAML…" and "Save YAML…" go through
 `fim.cli.load_config` and `config_form.payload_to_yaml_text` — the
 identical config path `fim run` uses (design §3.6, requirement G5) —
 so a config that runs from the terminal loads identically here, and a
-config saved here runs identically from the terminal.
+config saved here runs identically from the terminal. "Open a run…"
+raises Screen 6 (`fim.gui.screens.open_run_screen.OpenRunScreen`,
+design §4.6), independent of the form's own current validity.
 """
 
 from __future__ import annotations
@@ -57,6 +59,7 @@ class InputScreen(ttk.Frame):
         parent: tk.Misc,
         *,
         on_run: Callable[[SimulationParams], None] | None = None,
+        on_open_run: Callable[[], None] | None = None,
         open_dialog: Callable[[], str] = filedialog.askopenfilename,
         save_dialog: Callable[[], str] = filedialog.asksaveasfilename,
     ) -> None:
@@ -69,6 +72,9 @@ class InputScreen(ttk.Frame):
                 G2 gives this a real orchestrator to call; this screen
                 only ever hands it an already-validated
                 `SimulationParams`.
+            on_open_run: Called when "Open a run…" is clicked. Defaults
+                to a no-op; `fim.gui.app` wires this to raise Screen 6
+                (design §4.6).
             open_dialog: Returns the path "Load YAML…" reads, or an
                 empty string for a cancelled dialog. Defaults to the
                 real file-open dialog; injectable so tests never open
@@ -80,6 +86,7 @@ class InputScreen(ttk.Frame):
         """
         super().__init__(parent)
         self._on_run = on_run if on_run is not None else (lambda _params: None)
+        self._on_open_run = on_open_run if on_open_run is not None else (lambda: None)
         self._open_dialog = open_dialog
         self._save_dialog = save_dialog
         self._vars: dict[str, tk.StringVar] = {}
@@ -119,6 +126,9 @@ class InputScreen(ttk.Frame):
         ttk.Button(
             buttons, text="Reset to defaults", command=self._on_reset_to_defaults
         ).pack(side="left")
+        ttk.Button(buttons, text="Open a run…", command=self._on_open_run_clicked).pack(
+            side="left"
+        )
         self._run_button = ttk.Button(
             buttons, text="Run simulation ▶", command=self._on_run_clicked
         )
@@ -468,6 +478,10 @@ class InputScreen(ttk.Frame):
         """React to the user changing `mu`'s mode: update, then revalidate."""
         self._update_mu_visibility()
         self._revalidate()
+
+    def _on_open_run_clicked(self) -> None:
+        """Invoke `on_open_run`, raising Screen 6 (design §4.6)."""
+        self._on_open_run()
 
     def _on_reset_to_defaults(self) -> None:
         """Restore the CLI's starter configuration (design §3.6's "Prefill")."""

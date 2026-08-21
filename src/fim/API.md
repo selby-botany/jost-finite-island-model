@@ -98,6 +98,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_values](#fim.gui.screens.input_screen.InputScreen.get_values)
     * [set\_values](#fim.gui.screens.input_screen.InputScreen.set_values)
     * [show\_message](#fim.gui.screens.input_screen.InputScreen.show_message)
+* [fim.gui.screens.open\_run\_screen](#fim.gui.screens.open_run_screen)
+  * [OpenRunScreen](#fim.gui.screens.open_run_screen.OpenRunScreen)
+    * [\_\_init\_\_](#fim.gui.screens.open_run_screen.OpenRunScreen.__init__)
+    * [refresh](#fim.gui.screens.open_run_screen.OpenRunScreen.refresh)
 * [fim.gui.screens.progress\_screen](#fim.gui.screens.progress_screen)
   * [ProgressScreen](#fim.gui.screens.progress_screen.ProgressScreen)
     * [\_\_init\_\_](#fim.gui.screens.progress_screen.ProgressScreen.__init__)
@@ -105,6 +109,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [start\_batch](#fim.gui.screens.progress_screen.ProgressScreen.start_batch)
 * [fim.gui.screens.results\_screen](#fim.gui.screens.results_screen)
   * [ResultsView](#fim.gui.screens.results_screen.ResultsView)
+    * [from\_reanalyzed\_generation](#fim.gui.screens.results_screen.ResultsView.from_reanalyzed_generation)
     * [from\_run\_result](#fim.gui.screens.results_screen.ResultsView.from_run_result)
   * [format\_statistic](#fim.gui.screens.results_screen.format_statistic)
   * [ResultsScreen](#fim.gui.screens.results_screen.ResultsScreen)
@@ -982,9 +987,15 @@ Screen 3's own "New run" returns to Screen 1 with the just-run
 configuration still in the form — "Reset to defaults" is what
 starts genuinely fresh. Screen 4's "Open replicate" raises Screen 3
 for the selected replicate, with its own output subdirectory rather
-than the batch's top-level one (design §4.0 `8`). "Animate" is still
-a no-op here — Milestone G6 (§7.8) wires it to an animation screen
-that does not exist yet.
+than the batch's top-level one (design §4.0 `8`). Screen 1's own
+"Open a run…" refreshes and raises Screen 6; its "Open ▶" re-
+analyzes a persisted trajectory
+(`fim.reanalyze.reanalyze_trajectory`) into a `ReanalyzedGeneration`,
+becomes a `ResultsView`
+(`ResultsView.from_reanalyzed_generation`), and is shown on Screen 3
+exactly like a live run (design §4.6: "opening a run re-renders
+Screen 3"). "Animate" is still a no-op here — Milestone G6 (§7.8)
+wires it to an animation screen that does not exist yet.
 
 **Returns**:
 
@@ -1935,7 +1946,9 @@ tab (design §4.6, §4.7). "Load YAML…" and "Save YAML…" go through
 `fim.cli.load_config` and `config_form.payload_to_yaml_text` — the
 identical config path `fim run` uses (design §3.6, requirement G5) —
 so a config that runs from the terminal loads identically here, and a
-config saved here runs identically from the terminal.
+config saved here runs identically from the terminal. "Open a run…"
+raises Screen 6 (`fim.gui.screens.open_run_screen.OpenRunScreen`,
+design §4.6), independent of the form's own current validity.
 
 <a id="fim.gui.screens.input_screen.InputScreen"></a>
 
@@ -1956,6 +1969,7 @@ def __init__(
         parent: tk.Misc,
         *,
         on_run: Callable[[SimulationParams], None] | None = None,
+        on_open_run: Callable[[], None] | None = None,
         open_dialog: Callable[[], str] = filedialog.askopenfilename,
         save_dialog: Callable[[], str] = filedialog.asksaveasfilename) -> None
 ```
@@ -1970,6 +1984,9 @@ Build every tab, the error banner, and the action buttons.
   G2 gives this a real orchestrator to call; this screen
   only ever hands it an already-validated
   `SimulationParams`.
+- `on_open_run` - Called when "Open a run…" is clicked. Defaults
+  to a no-op; `fim.gui.app` wires this to raise Screen 6
+  (design §4.6).
 - `open_dialog` - Returns the path "Load YAML…" reads, or an
   empty string for a cancelled dialog. Defaults to the
   real file-open dialog; injectable so tests never open
@@ -2021,6 +2038,79 @@ cancelled run's "cancelled at generation N" text, or an
 unexpected engine error's message — since the form's own
 validation state is unrelated to either outcome and
 `_clear_errors`/`_revalidate` must not run just to show it.
+
+<a id="fim.gui.screens.open_run_screen"></a>
+
+# fim.gui.screens.open\_run\_screen
+
+Screen 6 — open an existing run (design doc §4.6): pick a persisted
+trajectory and re-analyze it, mirroring `fim stats`.
+
+This screen never renders a summary or a scatter itself: it resolves a
+trajectory, calls `fim.reanalyze.reanalyze_trajectory`, and hands the
+result to `on_open` — the same GUI/CLI parity requirement (G6, G8)
+`fim.reanalyze` was extracted from `cli.py` for. `fim.gui.app` wires
+`on_open` to Screen 3 (`ResultsView.from_reanalyzed_generation`),
+exactly matching design §4.6: "opening a run re-renders Screen 3 for
+the selected generation."
+
+A recent-runs row for a batch manifest is listed (design §0, §4.0 `9`)
+but cannot be opened here — a batch has no single trajectory of its own
+to verify or re-analyze (design §3.8, §4.6); selecting one shows a
+banner naming Screen 4's "Open replicate" as the actual path to any one
+replicate's trajectory, rather than either silently doing nothing or
+attempting (and failing) to re-analyze the batch-level manifest itself.
+
+<a id="fim.gui.screens.open_run_screen.OpenRunScreen"></a>
+
+## OpenRunScreen Objects
+
+```python
+class OpenRunScreen(ttk.Frame)
+```
+
+Screen 6: pick a persisted trajectory and generation, then re-analyze it.
+
+<a id="fim.gui.screens.open_run_screen.OpenRunScreen.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(
+        parent: tk.Misc,
+        *,
+        on_open: Callable[[ReanalyzedGeneration, Path], None] | None = None,
+        list_recent_runs: Callable[
+            [], list[RecentRun]] = recent_runs.list_recent_runs,
+        open_dialog: Callable[[], str] = filedialog.askopenfilename) -> None
+```
+
+Build the recent-runs list, browse button, and generation/q inputs.
+
+**Arguments**:
+
+- `parent` - The Tk container this screen is gridded into.
+- `on_open` - Called with the re-analyzed generation and the
+  trajectory's parent directory once "Open" succeeds.
+  Defaults to a no-op; `fim.gui.app` wires this to raise
+  Screen 3.
+- `list_recent_runs` - Populates the recent-runs list. Defaults
+  to the real `fim.gui.recent_runs.list_recent_runs`;
+  injectable so tests never touch the real filesystem.
+- `open_dialog` - Returns the path "Browse for trajectory.jsonl…"
+  reads, or an empty string for a cancelled dialog.
+  Defaults to the real file-open dialog; injectable so
+  tests never open one.
+
+<a id="fim.gui.screens.open_run_screen.OpenRunScreen.refresh"></a>
+
+#### refresh
+
+```python
+def refresh() -> None
+```
+
+Reload the recent-runs list from `list_recent_runs`.
 
 <a id="fim.gui.screens.progress_screen"></a>
 
@@ -2168,13 +2258,13 @@ anything when `path=None` (design §3.5) — the same figure-building call
 independent call building a second `Figure` for this screen to keep
 alive on screen instead of on disk.
 
-`ResultsView` renders a just-completed background run
-(`fim.engine.RunResult`, as `fim.gui.runner`'s `("done", result)`
-message carries it) today. Milestone G5 (§7.7) adds a second source —
-an opened, re-analyzed trajectory (design §4.6) — as another
-`ResultsView` classmethod alongside `from_run_result`, at which point
-this screen's own widget logic still only ever depends on `ResultsView`
-itself, never on either source type by name.
+`ResultsView` renders either of two sources: a just-completed
+background run (`fim.engine.RunResult`, as `fim.gui.runner`'s
+`("done", result)` message carries it), or an opened, re-analyzed
+trajectory (`fim.reanalyze.ReanalyzedGeneration`, design §4.6 —
+"opening a run re-renders Screen 3 for the selected generation").
+Neither source type is imported by name into this screen's own widget
+logic below; only `ResultsView` is.
 
 <a id="fim.gui.screens.results_screen.ResultsView"></a>
 
@@ -2185,10 +2275,25 @@ itself, never on either source type by name.
 class ResultsView()
 ```
 
-Screen 3's shared input: whatever every result source supplies.
+Screen 3's shared input: whatever both a live and a re-analyzed run supply.
 
-Built via a classmethod per source (`from_run_result` today) rather
-than the screen depending on any source type directly.
+`fim.engine.RunResult` and `fim.reanalyze.ReanalyzedGeneration`
+carry the same underlying information under two different shapes;
+this is the one shape `ResultsScreen.show` actually reads, built
+via `from_run_result`/`from_reanalyzed_generation` rather than the
+screen depending on either source type directly.
+
+<a id="fim.gui.screens.results_screen.ResultsView.from_reanalyzed_generation"></a>
+
+#### from\_reanalyzed\_generation
+
+```python
+@classmethod
+def from_reanalyzed_generation(
+        cls, reanalyzed: ReanalyzedGeneration) -> ResultsView
+```
+
+Build a view from an opened, re-analyzed trajectory (design §4.6).
 
 <a id="fim.gui.screens.results_screen.ResultsView.from_run_result"></a>
 

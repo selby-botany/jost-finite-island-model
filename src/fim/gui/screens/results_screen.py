@@ -9,13 +9,13 @@ anything when `path=None` (design §3.5) — the same figure-building call
 independent call building a second `Figure` for this screen to keep
 alive on screen instead of on disk.
 
-`ResultsView` renders a just-completed background run
-(`fim.engine.RunResult`, as `fim.gui.runner`'s `("done", result)`
-message carries it) today. Milestone G5 (§7.7) adds a second source —
-an opened, re-analyzed trajectory (design §4.6) — as another
-`ResultsView` classmethod alongside `from_run_result`, at which point
-this screen's own widget logic still only ever depends on `ResultsView`
-itself, never on either source type by name.
+`ResultsView` renders either of two sources: a just-completed
+background run (`fim.engine.RunResult`, as `fim.gui.runner`'s
+`("done", result)` message carries it), or an opened, re-analyzed
+trajectory (`fim.reanalyze.ReanalyzedGeneration`, design §4.6 —
+"opening a run re-renders Screen 3 for the selected generation").
+Neither source type is imported by name into this screen's own widget
+logic below; only `ResultsView` is.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ from matplotlib.figure import Figure
 from fim.engine import RunResult
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
+from fim.reanalyze import ReanalyzedGeneration
 from fim.viz.scatter import plot_frequency_scatter
 
 # The mock's own six named statistics (design §4.3) — `FinalReport` also
@@ -46,10 +47,13 @@ _STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T")
 
 @dataclass(frozen=True, slots=True)
 class ResultsView:
-    """Screen 3's shared input: whatever every result source supplies.
+    """Screen 3's shared input: whatever both a live and a re-analyzed run supply.
 
-    Built via a classmethod per source (`from_run_result` today) rather
-    than the screen depending on any source type directly.
+    `fim.engine.RunResult` and `fim.reanalyze.ReanalyzedGeneration`
+    carry the same underlying information under two different shapes;
+    this is the one shape `ResultsScreen.show` actually reads, built
+    via `from_run_result`/`from_reanalyzed_generation` rather than the
+    screen depending on either source type directly.
     """
 
     run_id: str
@@ -57,6 +61,19 @@ class ResultsView:
     state: ModelState
     params: SimulationParams
     generation_count: int
+
+    @classmethod
+    def from_reanalyzed_generation(
+        cls, reanalyzed: ReanalyzedGeneration
+    ) -> ResultsView:
+        """Build a view from an opened, re-analyzed trajectory (design §4.6)."""
+        return cls(
+            run_id=reanalyzed.manifest.run_id,
+            report=reanalyzed.report,
+            state=reanalyzed.state,
+            params=reanalyzed.params,
+            generation_count=reanalyzed.manifest.generation_count,
+        )
 
     @classmethod
     def from_run_result(cls, result: RunResult) -> ResultsView:
