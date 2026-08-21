@@ -1032,7 +1032,13 @@ updates…", user-initiated only — never on startup, never on a timer
 (SECURITY.md's threat model: "the only network operation is the explicit
 `fim update --check` command"). `_check_for_updates` calls the identical
 `fim.update` logic that command uses and renders the same three outcomes
-as a dialog instead of stdout lines.
+as a dialog instead of stdout lines — on a background thread, unlike the
+CLI's own blocking call: a frozen window is a GUI-specific cost a
+blocking terminal command never pays, so this follows the same
+background-thread-plus-`root.after`-poll shape every other network- or
+time-costly action in this application already uses (design §3.4),
+rather than freezing on the Tk main thread for the length of one HTTPS
+round trip.
 
 <a id="fim.gui.app.Application"></a>
 

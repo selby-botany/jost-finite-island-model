@@ -14,14 +14,23 @@ updates…", user-initiated only — never on startup, never on a timer
 (SECURITY.md's threat model: "the only network operation is the explicit
 `fim update --check` command"). `_check_for_updates` calls the identical
 `fim.update` logic that command uses and renders the same three outcomes
-as a dialog instead of stdout lines.
+as a dialog instead of stdout lines — on a background thread, unlike the
+CLI's own blocking call: a frozen window is a GUI-specific cost a
+blocking terminal command never pays, so this follows the same
+background-thread-plus-`root.after`-poll shape every other network- or
+time-costly action in this application already uses (design §3.4),
+rather than freezing on the Tk main thread for the length of one HTTPS
+round trip.
 """
 
 from __future__ import annotations
 
+import queue
+import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
+from typing import Final, Literal
 
 from fim import __version__, paths, update
 from fim.engine import RunResult
@@ -43,9 +52,12 @@ class Application(tk.Tk):
         super().__init__()
         self.title("fim")
         menu_bar = tk.Menu(self)
-        help_menu = tk.Menu(menu_bar, tearoff=False)
-        help_menu.add_command(label="Check for updates…", command=_check_for_updates)
-        menu_bar.add_cascade(label="Help", menu=help_menu)
+        self._help_menu = tk.Menu(menu_bar, tearoff=False)
+        self._help_menu.add_command(
+            label="Check for updates…",
+            command=lambda: _check_for_updates(self, self._help_menu),
+        )
+        menu_bar.add_cascade(label="Help", menu=self._help_menu)
         self.config(menu=menu_bar)
         self._container = ttk.Frame(self)
         self._container.pack(fill="both", expand=True)
@@ -76,32 +88,100 @@ class Application(tk.Tk):
         self._screens[name].tkraise()
 
 
-def _check_for_updates() -> None:
-    """Query the latest GitHub release and show the outcome as a dialog.
+# A watchable-but-cheap poll cadence, matching every other queue-drained
+# background action in this application (design §3.4).
+_UPDATE_POLL_INTERVAL_MS: Final = 100
+# The one and only entry `_help_menu` ever holds (`Application.__init__`) —
+# named rather than a bare `0` so `_poll_update_result`'s enable/disable
+# calls read as "the Check-for-updates entry," not a magic index.
+_CHECK_FOR_UPDATES_INDEX: Final = 0
 
-    The exact three outcomes `cli._command_update` prints as stdout lines
-    (design §3.9), rendered as a `messagebox` dialog instead — same
-    `fim.update.latest_release`/`compare_versions` calls, same wording,
-    only the presentation differs.
+DoneMessage = tuple[Literal["done"], tuple[str, str]]
+ErrorMessage = tuple[Literal["error"], str]
+UpdateMessage = DoneMessage | ErrorMessage
+
+
+def _check_for_updates(root: tk.Misc, help_menu: tk.Menu) -> None:
+    """Query the latest GitHub release on a background thread.
+
+    Returns immediately; `_poll_update_result` shows the outcome as a
+    dialog once the worker thread finishes. Backgrounded so the window
+    stays responsive during the network call — a frozen window is a
+    cost only a GUI pays, never a blocking terminal command — matching
+    every other network- or time-costly action in this application
+    (design §3.4). The menu entry disables for the duration of one
+    check so a user cannot start a second, overlapping one before the
+    first finishes; `_poll_update_result` re-enables it once the result
+    (or failure) arrives.
+    """
+    help_menu.entryconfigure(_CHECK_FOR_UPDATES_INDEX, state="disabled")
+    message_queue: queue.Queue[UpdateMessage] = queue.Queue()
+
+    def worker() -> None:
+        try:
+            message_queue.put(("done", update.latest_release()))
+        except RuntimeError as error:
+            message_queue.put(("error", str(error)))
+
+    threading.Thread(target=worker, daemon=True).start()
+    _poll_update_result(root, help_menu, message_queue)
+
+
+def _poll_update_result(
+    root: tk.Misc,
+    help_menu: tk.Menu,
+    message_queue: queue.Queue[UpdateMessage],
+) -> None:
+    """Drain the worker's one message, rescheduling itself until it arrives.
+
+    Never a blocking queue read — the same `root.after`-driven poll
+    every other background action in this application already uses
+    (design §3.4).
     """
     try:
-        latest_tag, release_url = update.latest_release()
-    except RuntimeError as error:
-        messagebox.showerror("Check for updates", str(error))
+        message = message_queue.get_nowait()
+    except queue.Empty:
+        root.after(
+            _UPDATE_POLL_INTERVAL_MS,
+            lambda: _poll_update_result(root, help_menu, message_queue),
+        )
         return
-    comparison = update.compare_versions(__version__, latest_tag.removeprefix("v"))
-    if comparison < 0:
-        messagebox.showinfo(
-            "Check for updates",
-            f"A newer fim release is available: {latest_tag}\n{release_url}",
-        )
-    elif comparison == 0:
-        messagebox.showinfo("Check for updates", f"fim {__version__} is current")
-    else:
-        messagebox.showinfo(
-            "Check for updates",
-            f"fim {__version__} is newer than the latest release {latest_tag}",
-        )
+    help_menu.entryconfigure(_CHECK_FOR_UPDATES_INDEX, state="normal")
+    _show_update_result(message)
+
+
+def _show_update_result(message: UpdateMessage) -> None:
+    """Render one completed update check's outcome as a dialog.
+
+    The exact three success outcomes `cli._command_update` prints as
+    stdout lines (design §3.9), rendered as a `messagebox` dialog
+    instead — same `fim.update.compare_versions` call, same wording,
+    only the presentation differs. A `match` on the message's literal
+    tag (not an `if`-chain on a separately bound variable) is what lets
+    mypy narrow each branch's payload type, the same reason
+    `fim.gui.screens.progress_screen._handle_message` uses one.
+    """
+    match message:
+        case ("error", text):
+            messagebox.showerror("Check for updates", text)
+        case ("done", (latest_tag, release_url)):
+            comparison = update.compare_versions(
+                __version__, latest_tag.removeprefix("v")
+            )
+            if comparison < 0:
+                messagebox.showinfo(
+                    "Check for updates",
+                    f"A newer fim release is available: {latest_tag}\n{release_url}",
+                )
+            elif comparison == 0:
+                messagebox.showinfo(
+                    "Check for updates", f"fim {__version__} is current"
+                )
+            else:
+                messagebox.showinfo(
+                    "Check for updates",
+                    f"fim {__version__} is newer than the latest release {latest_tag}",
+                )
 
 
 def main() -> int:
