@@ -1,0 +1,487 @@
+name: Beta builds
+
+# Design doc 20260821-claude-sonnet-5-windows-beta-build-pipeline.md,
+# extended to cover every platform ci.yml's own tag-gated release path
+# now builds (macOS and Linux did not exist when that doc was written).
+# A separate workflow, not a broadened `if:` on ci.yml's own release
+# jobs: `publish` there hard-validates `GITHUB_REF_NAME` against
+# `^v[0-9]+\.[0-9]+\.[0-9]+$`, extracts release notes by looking that
+# exact version up in CHANGELOG.md, and names the GitHub Release after
+# it -- none of which has a meaningful value for a bare branch push, so
+# widening that trigger would break `publish` outright rather than
+# harmlessly extend it. This workflow never touches ci.yml's jobs,
+# `version.txt`, or the `v*` tag namespace.
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beta-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Computes a date-plus-sequence label (beta-YYYYMMDD.NN) rather than
+  # tying the label to a not-yet-decided target version number --
+  # nothing here derives "the next version" automatically, and a beta
+  # label should not imply a promise about the eventual release number.
+  # The sequence number increments per real day by querying existing
+  # prerelease tags; a short commit SHA travels alongside the label
+  # (not embedded in the tag itself, to keep it human-readable when a
+  # tester is asked "which beta did you try?") for full traceability.
+  compute-beta-label:
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.compute.outputs.label }}
+      short_sha: ${{ steps.compute.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 0
+      - id: compute
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          date_stamp=$(date -u +%Y%m%d)
+          existing=$(
+              gh release list --limit 100 --json tagName -q '.[].tagName' \
+                  | grep "^beta-${date_stamp}\\." || true
+          )
+          max_seq=0
+          while IFS= read -r tag; do
+              [[ -z "${tag}" ]] && continue
+              seq="${tag##*.}"
+              seq=$((10#${seq}))
+              if ((seq > max_seq)); then
+                  max_seq=${seq}
+              fi
+          done <<<"${existing}"
+          next_seq=$(printf '%02d' $((max_seq + 1)))
+          label="beta-${date_stamp}.${next_seq}"
+          short_sha=$(git rev-parse --short HEAD)
+          echo "label=${label}" >>"${GITHUB_OUTPUT}"
+          echo "short_sha=${short_sha}" >>"${GITHUB_OUTPUT}"
+
+  # windows-beta-x64/windows-beta-arm64/macos-beta-arm64/macos-beta-x64/
+  # linux-beta-x64 mirror ci.yml's windows/windows-arm64/macos-arm64/
+  # macos-x64/linux-x64 jobs step for step, duplicated rather than
+  # shared via a reusable workflow (the same "don't touch the proven
+  # release path to make room for a lower-stakes one" tradeoff the
+  # design doc's own §3.2 already accepted) -- with two differences:
+  # `version.txt` is overwritten with the computed label before
+  # building (safe: this checkout is never pushed back), and every
+  # output filename carries a `-beta` suffix so a beta download is
+  # never mistaken for a real release artifact by filename alone.
+  windows-beta-x64:
+    needs: compute-beta-label
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - shell: pwsh
+        env:
+          BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
+          BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
+        run: |
+          Set-Content -Path version.txt -Value "$env:BETA_LABEL+$env:BETA_SHA" -NoNewline
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - shell: pwsh
+        env:
+          BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
+          BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
+        run: |
+          $expectedVersion = "fim $env:BETA_LABEL+$env:BETA_SHA"
+          $actualVersion = .\dist\fim.exe --version
+          if ($actualVersion -ne $expectedVersion) {
+            throw "Executable version '$actualVersion' is not '$expectedVersion'"
+          }
+          .\dist\fim.exe --help
+          .\dist\fim.exe init --output tiny.yaml
+          (Get-Content tiny.yaml) `
+            -replace 'N: 450', 'N: 20' `
+            -replace 'd: 20', 'd: 2' `
+            -replace 'convergence_window: 50', 'convergence_window: 4' `
+            -replace 'convergence_tolerance: 0.01', 'convergence_tolerance: 1.0' `
+            -replace 'max_generations: 10000', 'max_generations: 10' `
+            | Set-Content tiny.yaml
+          .\dist\fim.exe run tiny.yaml --output smoke --quiet
+          $expectedArtifacts = @(
+            "manifest.json",
+            "report.json",
+            "scatter.png",
+            "trajectory.jsonl"
+          )
+          $actualArtifacts = @(
+            Get-ChildItem .\smoke -File |
+              ForEach-Object { $_.Name } |
+              Sort-Object
+          )
+          if (Compare-Object $expectedArtifacts $actualArtifacts) {
+            throw "Executable smoke run did not produce exactly four artifacts"
+          }
+          foreach ($artifact in $expectedArtifacts) {
+            if ((Get-Item ".\smoke\$artifact").Length -eq 0) {
+              throw "Executable smoke artifact '$artifact' is empty"
+            }
+          }
+          $guiProcess = Start-Process -FilePath .\dist\fim.exe -PassThru
+          Start-Sleep -Seconds 5
+          if ($guiProcess.HasExited) {
+            throw "GUI process exited early (exit code $($guiProcess.ExitCode)) instead of staying open"
+          }
+          Stop-Process -Id $guiProcess.Id -Force
+          Rename-Item .\dist\fim.exe fim-windows-x64-beta.exe
+          $hash = (Get-FileHash .\dist\fim-windows-x64-beta.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  fim-windows-x64-beta.exe" | Set-Content .\dist\fim-windows-x64-beta.exe.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: windows-beta-x64
+          retention-days: 1
+          path: |
+            dist/fim-windows-x64-beta.exe
+            dist/fim-windows-x64-beta.exe.sha256
+
+  windows-beta-arm64:
+    needs: compute-beta-label
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.12"
+          architecture: arm64
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - shell: pwsh
+        env:
+          BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
+          BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
+        run: |
+          Set-Content -Path version.txt -Value "$env:BETA_LABEL+$env:BETA_SHA" -NoNewline
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - shell: pwsh
+        env:
+          BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
+          BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
+        run: |
+          $expectedVersion = "fim $env:BETA_LABEL+$env:BETA_SHA"
+          $actualVersion = .\dist\fim.exe --version
+          if ($actualVersion -ne $expectedVersion) {
+            throw "Executable version '$actualVersion' is not '$expectedVersion'"
+          }
+          .\dist\fim.exe --help
+          .\dist\fim.exe init --output tiny.yaml
+          (Get-Content tiny.yaml) `
+            -replace 'N: 450', 'N: 20' `
+            -replace 'd: 20', 'd: 2' `
+            -replace 'convergence_window: 50', 'convergence_window: 4' `
+            -replace 'convergence_tolerance: 0.01', 'convergence_tolerance: 1.0' `
+            -replace 'max_generations: 10000', 'max_generations: 10' `
+            | Set-Content tiny.yaml
+          .\dist\fim.exe run tiny.yaml --output smoke --quiet
+          $expectedArtifacts = @(
+            "manifest.json",
+            "report.json",
+            "scatter.png",
+            "trajectory.jsonl"
+          )
+          $actualArtifacts = @(
+            Get-ChildItem .\smoke -File |
+              ForEach-Object { $_.Name } |
+              Sort-Object
+          )
+          if (Compare-Object $expectedArtifacts $actualArtifacts) {
+            throw "Executable smoke run did not produce exactly four artifacts"
+          }
+          foreach ($artifact in $expectedArtifacts) {
+            if ((Get-Item ".\smoke\$artifact").Length -eq 0) {
+              throw "Executable smoke artifact '$artifact' is empty"
+            }
+          }
+          $guiProcess = Start-Process -FilePath .\dist\fim.exe -PassThru
+          Start-Sleep -Seconds 5
+          if ($guiProcess.HasExited) {
+            throw "GUI process exited early (exit code $($guiProcess.ExitCode)) instead of staying open"
+          }
+          Stop-Process -Id $guiProcess.Id -Force
+          Rename-Item .\dist\fim.exe fim-windows-arm64-beta.exe
+          $hash = (Get-FileHash .\dist\fim-windows-arm64-beta.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  fim-windows-arm64-beta.exe" | Set-Content .\dist\fim-windows-arm64-beta.exe.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: windows-beta-arm64
+          retention-days: 1
+          path: |
+            dist/fim-windows-arm64-beta.exe
+            dist/fim-windows-arm64-beta.exe.sha256
+
+  macos-beta-arm64:
+    needs: compute-beta-label
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: >-
+          printf '%s+%s' "${{ needs.compute-beta-label.outputs.label }}"
+          "${{ needs.compute-beta-label.outputs.short_sha }}" > version.txt
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - name: Smoke-test the .app and wrap it in a .dmg
+        env:
+          BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
+          BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          expected_version="fim ${BETA_LABEL}+${BETA_SHA}"
+          actual_version="$(dist/fim.app/Contents/MacOS/fim --version)"
+          if [[ "${actual_version}" != "${expected_version}" ]]; then
+            echo "::error::Executable version '${actual_version}' is not '${expected_version}'"
+            exit 1
+          fi
+          dist/fim.app/Contents/MacOS/fim --help >/dev/null
+          dist/fim.app/Contents/MacOS/fim init --output tiny.yaml
+          sed -i '' \
+            -e 's/N: 450/N: 20/' \
+            -e 's/d: 20/d: 2/' \
+            -e 's/convergence_window: 50/convergence_window: 4/' \
+            -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
+            -e 's/max_generations: 10000/max_generations: 10/' \
+            tiny.yaml
+          dist/fim.app/Contents/MacOS/fim run tiny.yaml --output smoke --quiet
+          for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
+            if [[ ! -s "smoke/${artifact}" ]]; then
+              echo "::error::Executable smoke artifact '${artifact}' missing or empty"
+              exit 1
+            fi
+          done
+          open dist/fim.app
+          sleep 5
+          gui_pid="$(pgrep -f 'dist/fim.app/Contents/MacOS/fim' | head -1)"
+          if [[ -z "${gui_pid}" ]] || ! kill -0 "${gui_pid}" 2>/dev/null; then
+            echo "::error::GUI process exited early instead of staying open"
+            exit 1
+          fi
+          kill "${gui_pid}"
+          mkdir .dmg-staging
+          cp -R dist/fim.app .dmg-staging/
+          ln -s /Applications .dmg-staging/Applications
+          hdiutil create -volname "fim" -srcfolder .dmg-staging \
+              -ov -format UDZO fim-macos-arm64-beta.dmg
+          shasum -a 256 fim-macos-arm64-beta.dmg > fim-macos-arm64-beta.dmg.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: macos-beta-arm64
+          retention-days: 1
+          path: |
+            fim-macos-arm64-beta.dmg
+            fim-macos-arm64-beta.dmg.sha256
+
+  macos-beta-x64:
+    needs: compute-beta-label
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: >-
+          printf '%s+%s' "${{ needs.compute-beta-label.outputs.label }}"
+          "${{ needs.compute-beta-label.outputs.short_sha }}" > version.txt
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - name: Smoke-test the .app and wrap it in a .dmg
+        env:
+          BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
+          BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          expected_version="fim ${BETA_LABEL}+${BETA_SHA}"
+          actual_version="$(dist/fim.app/Contents/MacOS/fim --version)"
+          if [[ "${actual_version}" != "${expected_version}" ]]; then
+            echo "::error::Executable version '${actual_version}' is not '${expected_version}'"
+            exit 1
+          fi
+          dist/fim.app/Contents/MacOS/fim --help >/dev/null
+          dist/fim.app/Contents/MacOS/fim init --output tiny.yaml
+          sed -i '' \
+            -e 's/N: 450/N: 20/' \
+            -e 's/d: 20/d: 2/' \
+            -e 's/convergence_window: 50/convergence_window: 4/' \
+            -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
+            -e 's/max_generations: 10000/max_generations: 10/' \
+            tiny.yaml
+          dist/fim.app/Contents/MacOS/fim run tiny.yaml --output smoke --quiet
+          for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
+            if [[ ! -s "smoke/${artifact}" ]]; then
+              echo "::error::Executable smoke artifact '${artifact}' missing or empty"
+              exit 1
+            fi
+          done
+          open dist/fim.app
+          sleep 5
+          gui_pid="$(pgrep -f 'dist/fim.app/Contents/MacOS/fim' | head -1)"
+          if [[ -z "${gui_pid}" ]] || ! kill -0 "${gui_pid}" 2>/dev/null; then
+            echo "::error::GUI process exited early instead of staying open"
+            exit 1
+          fi
+          kill "${gui_pid}"
+          mkdir .dmg-staging
+          cp -R dist/fim.app .dmg-staging/
+          ln -s /Applications .dmg-staging/Applications
+          hdiutil create -volname "fim" -srcfolder .dmg-staging \
+              -ov -format UDZO fim-macos-x64-beta.dmg
+          shasum -a 256 fim-macos-x64-beta.dmg > fim-macos-x64-beta.dmg.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: macos-beta-x64
+          retention-days: 1
+          path: |
+            fim-macos-x64-beta.dmg
+            fim-macos-x64-beta.dmg.sha256
+
+  linux-beta-x64:
+    needs: compute-beta-label
+    runs-on: ubuntu-latest
+    container: python:3.12-slim-bullseye
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - run: apt-get update -qq && apt-get install -qq -y --no-install-recommends binutils
+      - run: python -m pip install -e ".[dev]"
+      - run: >-
+          printf '%s+%s' "${{ needs.compute-beta-label.outputs.label }}"
+          "${{ needs.compute-beta-label.outputs.short_sha }}" > version.txt
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - name: Smoke-test the executable
+        env:
+          BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
+          BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          expected_version="fim ${BETA_LABEL}+${BETA_SHA}"
+          actual_version="$(dist/fim --version)"
+          if [[ "${actual_version}" != "${expected_version}" ]]; then
+            echo "::error::Executable version '${actual_version}' is not '${expected_version}'"
+            exit 1
+          fi
+          dist/fim --help >/dev/null
+          dist/fim init --output tiny.yaml
+          sed -i \
+            -e 's/N: 450/N: 20/' \
+            -e 's/d: 20/d: 2/' \
+            -e 's/convergence_window: 50/convergence_window: 4/' \
+            -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
+            -e 's/max_generations: 10000/max_generations: 10/' \
+            tiny.yaml
+          dist/fim run tiny.yaml --output smoke --quiet
+          for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
+            if [[ ! -s "smoke/${artifact}" ]]; then
+              echo "::error::Executable smoke artifact '${artifact}' missing or empty"
+              exit 1
+            fi
+          done
+          mv dist/fim fim-linux-x64-beta
+          sha256sum fim-linux-x64-beta > fim-linux-x64-beta.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: linux-beta-x64
+          retention-days: 1
+          path: |
+            fim-linux-x64-beta
+            fim-linux-x64-beta.sha256
+
+  publish-beta:
+    needs:
+      - compute-beta-label
+      - windows-beta-x64
+      - windows-beta-arm64
+      - macos-beta-arm64
+      - macos-beta-x64
+      - linux-beta-x64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: windows-beta-x64
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: windows-beta-arm64
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: macos-beta-arm64
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: macos-beta-x64
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: linux-beta-x64
+          path: dist
+      - name: Verify the downloaded artifacts against their own checksums
+        run: |
+          cd dist
+          sha256sum -c fim-windows-x64-beta.exe.sha256
+          sha256sum -c fim-windows-arm64-beta.exe.sha256
+          sha256sum -c fim-macos-arm64-beta.dmg.sha256
+          sha256sum -c fim-macos-x64-beta.dmg.sha256
+          sha256sum -c fim-linux-x64-beta.sha256
+      - name: Generate a checksum manifest for every beta artifact
+        run: |
+          cd dist
+          sha256sum \
+            fim-windows-x64-beta.exe fim-windows-arm64-beta.exe \
+            fim-macos-arm64-beta.dmg fim-macos-x64-beta.dmg \
+            fim-linux-x64-beta \
+            > SHA256SUMS
+      - name: Write release notes
+        env:
+          BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
+          BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
+        run: |
+          cat > release-notes.md <<NOTES
+          **This is an unofficial pre-release test build, not a supported
+          release.** It was built from commit \`${BETA_SHA}\` for testing
+          only -- if something goes wrong, please say which beta you tried
+          (\`${BETA_LABEL}\`) when reporting it.
+
+          Download the file matching your platform, verify it against its
+          \`.sha256\` sidecar, and run it the same way as a real release
+          build.
+          NOTES
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
+          BETA_SHA: ${{ needs.compute-beta-label.outputs.short_sha }}
+        run: >-
+          gh release create "${BETA_LABEL}" dist/*
+          --prerelease
+          --title "Beta build ${BETA_LABEL} (${BETA_SHA})"
+          --notes-file release-notes.md
