@@ -596,14 +596,14 @@ def test_run_scalar_leaves_no_trace_when_the_report_write_fails(
     config = tmp_path / "run.yaml"
     _write_config(config)
     output = tmp_path / "output"
-    original_write_json = cli._write_json
+    original_write_report = cli.write_report
 
-    def flaky_write_json(path: Path, value: Mapping[str, object]) -> None:
-        if path.name == "report.json":
+    def flaky_write_report(path: Path, value: Mapping[str, object]) -> None:
+        if Path(path).name == "report.json":
             raise RuntimeError("simulated report write failure")
-        original_write_json(path, value)
+        original_write_report(path, value)
 
-    monkeypatch.setattr(cli, "_write_json", flaky_write_json)
+    monkeypatch.setattr(cli, "write_report", flaky_write_report)
 
     assert cli.main(["run", str(config), "-o", str(output), "--quiet"]) == 2
     assert not output.exists()
