@@ -1,18 +1,16 @@
 """Unit tests for `fim.gui.animation`.
 
-No display, no Tk import — `select_sample_generations` is a pure
-function and `pre_render_frames` builds `Figure` objects directly, no
-widgets, so nothing here carries the `gui` marker.
+No display, no Tk import, no Matplotlib import at all — `pre_render_frames`
+returns plain coordinate data (design doc §0.5, §3.8 of
+`20260821-claude-sonnet-5-graphical-interface.md`), not rendered `Figure`
+objects, so nothing here carries the `gui` marker.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 
-import pytest
 import yaml
-from matplotlib import pyplot as plt
 
 from fim import cli
 from fim.gui import animation
@@ -110,10 +108,10 @@ def test_pre_render_frames_matches_select_sample_generations(tmp_path: Path) -> 
     )
     assert [frame.generation for frame in frames] == expected_generations
     for frame in frames:
-        assert len(frame.figure.axes) == 1
-        assert frame.figure.axes[0].get_xlabel() == "Deme 1"
-        assert frame.figure.axes[0].get_ylabel() == "Deme 2"
-        plt.close(frame.figure)
+        # d=2 (the config above): one column per deme, at least one row
+        # (one persisted locus/allele pair is always present).
+        assert frame.points.shape[1] == 2
+        assert frame.points.shape[0] >= 1
 
 
 def test_pre_render_frames_are_sorted_ascending_by_generation(tmp_path: Path) -> None:
@@ -127,13 +125,16 @@ def test_pre_render_frames_are_sorted_ascending_by_generation(tmp_path: Path) ->
 
     generations = [frame.generation for frame in frames]
     assert generations == sorted(generations)
-    for frame in frames:
-        plt.close(frame.figure)
 
 
-@pytest.fixture(autouse=True)
-def _no_leftover_figures() -> Iterator[None]:
-    """Guard against this file's own tests leaking figures across the session."""
-    baseline = len(plt.get_fignums())
-    yield
-    assert len(plt.get_fignums()) == baseline, "a test in this file left a figure open"
+def test_animation_module_never_imports_matplotlib() -> None:
+    """Direct regression test for §0.5/§3.8: no rendering happens on this path.
+
+    A static check of the module's own source, not a runtime
+    `sys.modules` check — other test files in this session may have
+    already imported `matplotlib` for unrelated reasons, which would
+    make a runtime check pass regardless of whether `animation.py`
+    itself ever does.
+    """
+    source = Path(animation.__file__).read_text(encoding="utf-8")
+    assert "matplotlib" not in source

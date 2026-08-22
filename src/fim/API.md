@@ -869,26 +869,31 @@ and implementation plan this package follows.
 
 # fim.gui.animation
 
-Sample and pre-render animation frames from a persisted trajectory
-(design doc §3.8).
+Sample animation frames from a persisted trajectory as raw scatter
+coordinates, not rendered images (design doc §0.5, §3.8 of
+`20260821-claude-sonnet-5-graphical-interface.md`).
 
 A converged run can persist hundreds or thousands of generations, and
-rendering every one of them as a separate Matplotlib frame is both slow
-and unnecessary for a human watching a scatter drift. This module
-samples at most `GUI_ANIMATION_MAX_FRAMES` generations, evenly spaced
-across the run's persisted range, always including generation 0 and the
-final generation, and pre-renders each as its own `Figure` — reusing
-`fim.viz.scatter.plot_frequency_scatter` per sampled generation, the
-same call the results screen embeds its own live scatter with
-(design §3.5).
+turning every one of them into a separate frame is both slow and
+unnecessary for a human watching a scatter drift. This module samples at
+most `GUI_ANIMATION_MAX_FRAMES` generations, evenly spaced across the
+run's persisted range, always including generation 0 and the final
+generation — unchanged from the design's Tk-era revision — but each
+sampled generation now produces a plain coordinate array
+(`fim.viz.scatter.frequency_points`), not a rendered `Figure`: pywebview's
+animation screen ships the whole sampled set to the page once and drives
+play/pause/scrub entirely with client-side Canvas redraws (§3.5, §3.8),
+so nothing here needs to render anything at all. This also makes
+pre-computation itself cheaper, not just playback: building `max_frames`
+coordinate arrays costs a fraction of what building `max_frames`
+Matplotlib figures did, since no rasterization happens on this path.
 
 Reached only after the same trajectory-integrity check §4.6 already
-performed: Screen 5 (`fim.gui.screens.animation_screen`) is reached
-only from Screen 3, which by the time "Animate" is clickable has
-already shown a `ResultsView` built either from a just-completed live
-run (whose manifest was just written, never edited) or from
-`fim.reanalyze.reanalyze_trajectory` (which calls
-`fim.persistence.manifest.verify_trajectory_integrity` itself). This
+performed: Screen 5 is reached only from Screen 3 or Screen 6, both of
+which have already verified the trajectory
+(`fim.reanalyze.reanalyze_trajectory` calls
+`fim.persistence.manifest.verify_trajectory_integrity` itself, and a
+just-completed live run's manifest was just written, never edited). This
 module therefore reads the trajectory directly, trusting the caller,
 rather than re-verifying it a second time.
 
@@ -901,15 +906,18 @@ rather than re-verifying it a second time.
 class AnimationFrame()
 ```
 
-One pre-rendered animation frame.
+One sampled animation frame's raw scatter coordinates.
 
 **Arguments**:
 
-- `generation` - The persisted generation this frame renders.
-- `figure` - The rendered scatter figure. Caller-owned: whoever
-  pre-rendered it is responsible for closing it
-  (`matplotlib.pyplot.close`) once it is no longer needed —
-  this module never closes a figure it returns.
+- `generation` - The persisted generation this frame represents.
+- `points` - `frequency_points`' own return shape — one row per
+  (locus, allele) pair, one column per deme. Whoever renders
+  this (the GUI bridge, §3.5) is responsible for any further
+  reduction a high deme count needs (the pairwise-grid or
+  PCA-projection cases `plot_frequency_scatter` itself
+  handles) and for the client-side Canvas draw itself; this
+  module never touches either.
 
 <a id="fim.gui.animation.pre_render_frames"></a>
 
@@ -924,7 +932,7 @@ def pre_render_frames(
         max_frames: int = GUI_ANIMATION_MAX_FRAMES) -> list[AnimationFrame]
 ```
 
-Sample and pre-render up to `max_frames` frames from a persisted trajectory.
+Sample up to `max_frames` frames' worth of coordinates from a trajectory.
 
 **Arguments**:
 
@@ -936,9 +944,11 @@ Sample and pre-render up to `max_frames` frames from a persisted trajectory.
 
 **Returns**:
 
-  One `AnimationFrame` per sampled generation, sorted ascending
-  by generation. Each figure is built independently — not
-  written to disk. The caller owns closing every one of them.
+  One `AnimationFrame` per sampled generation, sorted ascending by
+  generation. No rendering happens on this path at all — each
+  frame's `points` is a plain `frequency_points` array, computed
+  directly from the persisted rows, nothing written to disk and
+  nothing for the caller to close.
 
 <a id="fim.gui.animation.select_sample_generations"></a>
 
