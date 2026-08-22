@@ -21,6 +21,23 @@ wrapper that `await`s the real `js_api` call and writes its result
 somewhere read back with a second `evaluate_js` call — `drive_and_read`
 below is the one place that pattern lives, so no individual test file
 has to re-derive it.
+
+`_POLL_INTERVAL_SECONDS` is deliberately not aggressive. `webview.
+Window.evaluate_js`'s macOS implementation (`platforms/cocoa.py`)
+schedules the real JS call onto the main run loop via `AppHelper.
+callAfter` and blocks the calling thread on an un-timed `Semaphore.
+acquire()` until a completion handler fires — safe for one caller, but
+`test/gui/test_running_screen.py`'s own docstring records a real,
+repeatedly-reproduced investigation into a hang traced to *this* poll
+loop and a real background thread (`fim.gui.app._drain_run_messages`,
+pushing `fim.onRunProgress`/`onRunDone` from its own thread as a run
+proceeds) both calling `evaluate_js` on the same window at once — a
+20ms poll cadence, hammering `AppHelper.callAfter` continuously for the
+lifetime of a whole test, measurably raised the odds of landing on
+whichever thread the collision hit. `poll_attempts` in each test
+controls the real wall-clock ceiling this trades against; a slower
+cadence here only costs time in a genuine failure path, not in the
+common (fast, already-converged) case.
 """
 
 from __future__ import annotations
@@ -35,7 +52,7 @@ import webview
 
 from fim.gui.app import create_window
 
-_POLL_INTERVAL_SECONDS = 0.02
+_POLL_INTERVAL_SECONDS = 0.1
 
 
 @pytest.fixture

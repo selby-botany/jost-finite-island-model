@@ -32,11 +32,14 @@ from __future__ import annotations
 
 import json
 import queue
+import subprocess
 import sys
 import threading
+import time
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import webview
 import yaml
@@ -58,6 +61,86 @@ from fim.viz.scatter import scatter_panels
 
 _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
 
+# `paths.default_output_directory()` names a directory by the current
+# second (`run-YYYYMMDD-HHMMSS`, UTC) — deliberately unchanged here
+# (`test/test_paths.py`'s own regression proof for Milestone G0, "the
+# timestamped folder name format... is unchanged"), so two calls inside
+# the same real second collide on the identical path. A real, if narrow,
+# reliability gap this bridge owns fixing, not `fim.paths` itself: a
+# user clicking "Run simulation" again within the same second a previous
+# attempt's directory was created — or several of this project's own
+# `gui`-marked tests, each starting a real run in quick succession —
+# would otherwise see a confusing "output directory already exists"
+# error for what is, from their perspective, an entirely fresh run.
+# `_START_RUN_COLLISION_*` bounds how long `start_run` waits for the
+# wall clock to cross into a new second before giving up for real.
+_START_RUN_COLLISION_RETRY_INTERVAL_SECONDS: Final = 0.1
+_START_RUN_COLLISION_MAX_WAIT_SECONDS: Final = 2.0
+
+# The Tk-era `results_screen.py`'s own six named statistics (design
+# §4.3, requirement G3's "all six named statistics") — `FinalReport`
+# also carries `H_ST`, added after that screen was first built; G3
+# names exactly these six, so `H_ST` stays out of the results screen.
+_RESULT_STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T")
+
+
+def format_statistic(value: float | None) -> str:
+    """Format one `FinalReport` statistic for display (Screen 3, design §4.3).
+
+    A direct parallel to `cli._format_optional` — not a shared import,
+    per this package's established front-end-boundary convention
+    (`runner.run_artifact_targets`'s own docstring) — kept here rather
+    than in `webui/screens/results.js` so the six statistics reach the
+    page as ready-to-show strings: one formatting rule in Python beats
+    the same rule reimplemented a second time in JavaScript, with the
+    two silently drifting apart later.
+    """
+    return "undefined" if value is None else f"{value:.6g}"
+
+
+def _resolve_available_output_directory() -> Path:
+    """Return a fresh, not-yet-existing timestamped output directory.
+
+    Retries past a same-second collision with `paths.default_output_
+    directory()` (`_START_RUN_COLLISION_*`'s own comment: "a user
+    clicking Run again within the same second") by waiting for the wall
+    clock to cross into a new second, up to `_START_RUN_COLLISION_MAX_
+    WAIT_SECONDS`. A separate, pure function rather than inlined into
+    `Api.start_run` specifically so it can be unit-tested directly
+    (`test/gui/test_app_api.py`) — `Api.start_run` itself cannot be,
+    since it also touches `webview.windows[0]`, unavailable without a
+    real window.
+    """
+    output_directory = paths.default_output_directory()
+    waited_seconds = 0.0
+    while (
+        output_directory.exists()
+        and waited_seconds < _START_RUN_COLLISION_MAX_WAIT_SECONDS
+    ):
+        time.sleep(_START_RUN_COLLISION_RETRY_INTERVAL_SECONDS)
+        waited_seconds += _START_RUN_COLLISION_RETRY_INTERVAL_SECONDS
+        output_directory = paths.default_output_directory()
+    return output_directory
+
+
+def _reveal_in_file_browser(directory: Path) -> None:
+    """Open `directory` in the platform's file browser.
+
+    Ported unchanged from the Tk-era `results_screen.py`'s own
+    `_reveal_in_file_browser` (design §4.3: "reuses whatever native
+    folder-opening mechanism the Tk build's `results_screen.py` already
+    implements... that helper is presentation-adjacent but toolkit-
+    independent"). `check=False` throughout: a file browser's own exit
+    status is not this button's concern, and `explorer.exe` on Windows
+    is well known to return a nonzero status for benign reasons.
+    """
+    if sys.platform == "win32":
+        subprocess.run(["explorer", str(directory)], check=False)
+    elif sys.platform == "darwin":
+        subprocess.run(["open", str(directory)], check=False)
+    else:
+        subprocess.run(["xdg-open", str(directory)], check=False)
+
 
 class Api:
     """The `window.pywebview.api` surface every `webui/*.js` screen calls into.
@@ -74,9 +157,45 @@ class Api:
     reimplemented here.
     """
 
-    def __init__(self) -> None:
-        """Start with no run in flight."""
+    def __init__(
+        self,
+        *,
+        open_folder: Callable[[Path], None] = _reveal_in_file_browser,
+        on_run_started: Callable[[], None] | None = None,
+        on_message: Callable[[runner.RunMessage], None] | None = None,
+    ) -> None:
+        """Start with no run in flight.
+
+        Args:
+            open_folder: Reveals a directory in the platform file
+                browser, called by `open_output_folder`. Defaults to
+                the real, OS-dispatching implementation; injectable so
+                tests never launch one — the same `open_folder`
+                injection point the Tk-era `ResultsScreen.__init__`
+                offered.
+            on_run_started: Test-only hook, called synchronously from
+                `start_run` the moment `_cancel_event` is assigned (real
+                UI code never sets this — `create_window`'s own default
+                `Api()` call passes neither hook, so production
+                behavior is unchanged). Exists so a test can know
+                *exactly* when `cancel_run` would stop being a no-op,
+                without polling `window.evaluate_js` for a DOM signal
+                to infer it — see `test/gui/test_running_screen.py`'s
+                own module docstring for why a test-side
+                `window.evaluate_js` poll loop is the wrong tool here.
+            on_message: Test-only hook, called with every
+                `runner.RunMessage` `_drain_run_messages` dispatches,
+                right after that message's own `window.evaluate_js`
+                push — the same "push, not poll" shape this bridge
+                already uses toward the page, extended to let a test
+                observe it directly in Python (a `threading.Event`/
+                `queue.Queue`, no `evaluate_js` call of the test's own
+                involved) instead of polling the DOM for the same fact.
+        """
         self._cancel_event: threading.Event | None = None
+        self._open_folder = open_folder
+        self._on_run_started = on_run_started
+        self._on_message = on_message
 
     def start_run(self, values: dict[str, str]) -> dict[str, Any]:
         """Validate the form, then start a scalar run pushing live progress to the page.
@@ -98,15 +217,19 @@ class Api:
             `{"ok": True}` once the run has *started* — not once it
             finishes; the real outcome arrives via the pushed calls
             above. `{"ok": False, "message": ...}` if the form does not
-            validate, or if `output_directory` (extremely unlikely: a
-            fresh timestamp-named directory) already exists.
+            validate, or if a fresh timestamp-named `output_directory`
+            still collides after waiting out
+            `_START_RUN_COLLISION_MAX_WAIT_SECONDS` for the wall clock
+            to cross into a new second (see that constant's own
+            comment) — in practice reached only if something else is
+            actively writing into `results/` at exactly this rate.
         """
         try:
             payload = form_values_to_payload(values)
             params = SimulationParams.from_mapping(payload)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        output_directory = paths.default_output_directory()
+        output_directory = _resolve_available_output_directory()
         message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
         cancel_event = threading.Event()
         try:
@@ -114,10 +237,18 @@ class Api:
         except FileExistsError as error:
             return {"ok": False, "message": str(error)}
         self._cancel_event = cancel_event
+        if self._on_run_started is not None:
+            self._on_run_started()
         window = webview.windows[0]
         threading.Thread(
             target=_drain_run_messages,
-            args=(window, message_queue, params.max_generations),
+            args=(
+                window,
+                message_queue,
+                params.max_generations,
+                output_directory,
+                self._on_message,
+            ),
             daemon=True,
         ).start()
         return {"ok": True}
@@ -132,6 +263,19 @@ class Api:
         """
         if self._cancel_event is not None:
             self._cancel_event.set()
+
+    def open_output_folder(self, path: str) -> None:
+        """Reveal a completed run's output directory (Screen 3, design §4.3).
+
+        Args:
+            path: The directory to reveal — `webui/screens/results.js`'s
+                own copy of the `outputDirectory` `onRunDone` last
+                pushed it, not state this bridge tracks itself (design
+                §4.0's "holds almost no state of its own" applies here
+                too: nothing about a already-shown results screen
+                needs `Api` to remember which run it was showing).
+        """
+        self._open_folder(Path(path))
 
     def get_starter_form(self) -> dict[str, str]:
         """Return a fresh form's default values (Screen 1, design §3.6, §4.1).
@@ -271,6 +415,8 @@ def _drain_run_messages(
     window: webview.Window,
     message_queue: queue.Queue[runner.RunMessage],
     max_generations: int,
+    output_directory: Path,
+    on_message: Callable[[runner.RunMessage], None] | None = None,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
 
@@ -285,6 +431,13 @@ def _drain_run_messages(
     behavior for a dedicated thread with no other job, unlike `fim.gui.
     batch_runner`'s own non-blocking poll loop, which has to interleave
     watching several replicates' sidecar files at once.
+
+    `on_message`, if given (test-only — see `Api.__init__`'s own
+    docstring), is called *after* each message's own `window.
+    evaluate_js` push has already returned, never concurrently with it:
+    this thread is still the only one calling `evaluate_js` at that
+    point, so a test's own hook firing here never becomes a second
+    concurrent caller the way a test-side polling loop would.
     """
     while True:
         # Indexed access under an `if` on `message[0]`, not a tuple-
@@ -303,19 +456,34 @@ def _drain_run_messages(
                 "panels": message[2],
             }
             window.evaluate_js(f"fim.onRunProgress({json.dumps(progress_payload)})")
+            if on_message is not None:
+                on_message(message)
         elif message[0] == "done":
             result = message[1]
             payload = {
+                "runId": result.run_id,
                 "report": result.report,
                 "panels": scatter_panels(result.final_state),
+                "statistics": {
+                    name: format_statistic(result.report[name])
+                    for name in _RESULT_STATISTIC_NAMES
+                },
+                "outputDirectory": str(output_directory),
+                "generationCount": result.manifest.generation_count,
             }
             window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")
+            if on_message is not None:
+                on_message(message)
             return
         elif message[0] == "cancelled":
             window.evaluate_js(f"fim.onRunCancelled({json.dumps(message[1])})")
+            if on_message is not None:
+                on_message(message)
             return
         else:
             window.evaluate_js(f"fim.onRunError({json.dumps(message[1])})")
+            if on_message is not None:
+                on_message(message)
             return
 
 
@@ -331,7 +499,7 @@ def _worker_ping() -> str:
     return "pong from worker"
 
 
-def create_window() -> webview.Window:
+def create_window(*, api: Api | None = None) -> webview.Window:
     """Build, but do not show, fim's one pywebview window over `webui/index.html`.
 
     Separate from `main` specifically so tests can drive the window
@@ -340,6 +508,14 @@ def create_window() -> webview.Window:
     synchronously, never call the real blocking entry point without a
     controlled exit" discipline the design's test plan requires (§6.1,
     §6.4), now against pywebview's own API instead of Tk's.
+
+    Args:
+        api: The `Api` instance to serve as `js_api`. Defaults to a
+            plain `Api()` (production shape, unchanged); a test passes
+            its own `Api(on_run_started=..., on_message=...)` to
+            observe a run event-driven rather than by polling
+            `window.evaluate_js` for a DOM signal (`test/gui/
+            test_running_screen.py`'s own module docstring).
 
     Raises:
         RuntimeError: If pywebview itself reports the window as never
@@ -353,7 +529,7 @@ def create_window() -> webview.Window:
     created = webview.create_window(
         "fim",
         url=str(_webui_directory() / "index.html"),
-        js_api=Api(),
+        js_api=api if api is not None else Api(),
         width=900,
         height=700,
     )

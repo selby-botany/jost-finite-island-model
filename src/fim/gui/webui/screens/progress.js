@@ -52,16 +52,8 @@ window.fim.onRunProgress = function onRunProgress(payload) {
 };
 
 window.fim.onRunDone = function onRunDone(payload) {
-    drawFirstPanel(payload.panels);
-    showProgressBanner(
-        payload.report.converged
-            ? `Converged at generation ${payload.report.generation}.`
-            : `Reached the generation cap (${payload.report.generation}), not converged.`
-    );
     cancelButton.disabled = true;
-    // Milestone W4 replaces this with the real results screen
-    // (design §4.3); Screen 2 stays showing the run's own final scatter
-    // and summary text in the meantime rather than a dead end.
+    window.fim.showResults(payload);
 };
 
 window.fim.onRunCancelled = function onRunCancelled(generation) {

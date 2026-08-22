@@ -52,10 +52,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pre\_render\_frames](#fim.gui.animation.pre_render_frames)
   * [select\_sample\_generations](#fim.gui.animation.select_sample_generations)
 * [fim.gui.app](#fim.gui.app)
+  * [format\_statistic](#fim.gui.app.format_statistic)
   * [Api](#fim.gui.app.Api)
     * [\_\_init\_\_](#fim.gui.app.Api.__init__)
     * [start\_run](#fim.gui.app.Api.start_run)
     * [cancel\_run](#fim.gui.app.Api.cancel_run)
+    * [open\_output\_folder](#fim.gui.app.Api.open_output_folder)
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
     * [validate\_form](#fim.gui.app.Api.validate_form)
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
@@ -1042,6 +1044,24 @@ also the correct, natural shape for a real UI event handler, which never
 needs to return a value to Python either — only update its own screen
 after the `await` resolves.
 
+<a id="fim.gui.app.format_statistic"></a>
+
+#### format\_statistic
+
+```python
+def format_statistic(value: float | None) -> str
+```
+
+Format one `FinalReport` statistic for display (Screen 3, design §4.3).
+
+A direct parallel to `cli._format_optional` — not a shared import,
+per this package's established front-end-boundary convention
+(`runner.run_artifact_targets`'s own docstring) — kept here rather
+than in `webui/screens/results.js` so the six statistics reach the
+page as ready-to-show strings: one formatting rule in Python beats
+the same rule reimplemented a second time in JavaScript, with the
+two silently drifting apart later.
+
 <a id="fim.gui.app.Api"></a>
 
 ## Api Objects
@@ -1068,10 +1088,41 @@ reimplemented here.
 #### \_\_init\_\_
 
 ```python
-def __init__() -> None
+def __init__(
+        *,
+        open_folder: Callable[[Path], None] = _reveal_in_file_browser,
+        on_run_started: Callable[[], None] | None = None,
+        on_message: Callable[[runner.RunMessage], None] | None = None) -> None
 ```
 
 Start with no run in flight.
+
+**Arguments**:
+
+- `open_folder` - Reveals a directory in the platform file
+  browser, called by `open_output_folder`. Defaults to
+  the real, OS-dispatching implementation; injectable so
+  tests never launch one — the same `open_folder`
+  injection point the Tk-era `ResultsScreen.__init__`
+  offered.
+- `on_run_started` - Test-only hook, called synchronously from
+  `start_run` the moment `_cancel_event` is assigned (real
+  UI code never sets this — `create_window`'s own default
+  `Api()` call passes neither hook, so production
+  behavior is unchanged). Exists so a test can know
+  *exactly* when `cancel_run` would stop being a no-op,
+  without polling `window.evaluate_js` for a DOM signal
+  to infer it — see `test/gui/test_running_screen.py`'s
+  own module docstring for why a test-side
+  `window.evaluate_js` poll loop is the wrong tool here.
+- `on_message` - Test-only hook, called with every
+  `runner.RunMessage` `_drain_run_messages` dispatches,
+  right after that message's own `window.evaluate_js`
+  push — the same "push, not poll" shape this bridge
+  already uses toward the page, extended to let a test
+  observe it directly in Python (a `threading.Event`/
+  `queue.Queue`, no `evaluate_js` call of the test's own
+  involved) instead of polling the DOM for the same fact.
 
 <a id="fim.gui.app.Api.start_run"></a>
 
@@ -1103,8 +1154,12 @@ method was written; see `test/gui/test_running_screen.py`).
 - ``{"ok"` - True}` once the run has *started* — not once it
   finishes; the real outcome arrives via the pushed calls
   above. `{"ok": False, "message": ...}` if the form does not
-  validate, or if `output_directory` (extremely unlikely: a
-  fresh timestamp-named directory) already exists.
+  validate, or if a fresh timestamp-named `output_directory`
+  still collides after waiting out
+  `_START_RUN_COLLISION_MAX_WAIT_SECONDS` for the wall clock
+  to cross into a new second (see that constant's own
+  comment) — in practice reached only if something else is
+  actively writing into `results/` at exactly this rate.
 
 <a id="fim.gui.app.Api.cancel_run"></a>
 
@@ -1120,6 +1175,25 @@ A no-op if no run is currently in flight — mirrors `GuiProgress
 Store.write_generation`'s own tolerance of a `cancel_event` that
 was never going to matter, rather than raising for a Cancel click
 that arrives a moment after the run already finished on its own.
+
+<a id="fim.gui.app.Api.open_output_folder"></a>
+
+#### open\_output\_folder
+
+```python
+def open_output_folder(path: str) -> None
+```
+
+Reveal a completed run's output directory (Screen 3, design §4.3).
+
+**Arguments**:
+
+- `path` - The directory to reveal — `webui/screens/results.js`'s
+  own copy of the `outputDirectory` `onRunDone` last
+  pushed it, not state this bridge tracks itself (design
+  §4.0's "holds almost no state of its own" applies here
+- `too` - nothing about a already-shown results screen
+  needs `Api` to remember which run it was showing).
 
 <a id="fim.gui.app.Api.get_starter_form"></a>
 
@@ -1262,7 +1336,7 @@ inside a real batch run.
 #### create\_window
 
 ```python
-def create_window() -> webview.Window
+def create_window(*, api: Api | None = None) -> webview.Window
 ```
 
 Build, but do not show, fim's one pywebview window over `webui/index.html`.
@@ -1273,6 +1347,16 @@ real, blocking `main` — the same "construct real widgets, drive them
 synchronously, never call the real blocking entry point without a
 controlled exit" discipline the design's test plan requires (§6.1,
 §6.4), now against pywebview's own API instead of Tk's.
+
+**Arguments**:
+
+- `api` - The `Api` instance to serve as `js_api`. Defaults to a
+  plain `Api()` (production shape, unchanged); a test passes
+  its own `Api(on_run_started=..., on_message=...)` to
+  observe a run event-driven rather than by polling
+  `window.evaluate_js` for a DOM signal (`test/gui/
+  test_running_screen.py`'s own module docstring).
+
 
 **Raises**:
 

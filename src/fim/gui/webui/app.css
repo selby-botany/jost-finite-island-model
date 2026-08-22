@@ -235,3 +235,34 @@ fieldset.composite > label {
     border-radius: 4px;
     background: var(--fim-background);
 }
+
+/* Screen 3: results (design §4.3). */
+.results-run-id {
+    font-weight: 600;
+}
+
+.results-outcome {
+    color: var(--fim-muted);
+    margin-top: -0.5rem;
+}
+
+.results-body {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.results-stats {
+    min-width: 12rem;
+}
+
+.results-stats .field-stat {
+    margin: 0 0 0.35rem;
+    font-variant-numeric: tabular-nums;
+}
+
+#results-canvas {
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    background: var(--fim-background);
+}
