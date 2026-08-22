@@ -397,12 +397,35 @@ def test_batch_replicates_actually_run_concurrently(
     no matter how fast each replicate ran. A sequential regression here
     (`max_workers` silently dropped back to `None`) makes every window
     strictly disjoint and fails this test every time, not intermittently.
+
+    Overrides `batch_params`'s own `convergence_tolerance`/
+    `max_generations` to force a genuinely multi-generation run, rather
+    than using the shared fixture's own loose tolerance (which this test
+    alone does not want widened — many sibling tests in this file want
+    `batch_params` to stay fast). Found deterministically broken on real
+    Linux (reproduced 5/5 on native, non-emulated arm64 and x86_64-under-
+    QEMU Docker containers; never on macOS): `batch_params`'s own
+    `convergence_tolerance=1.0` converges within the first few
+    generations, and Linux's `fork()`-based `multiprocessing` start
+    method (versus macOS's `spawn`) launches each worker process fast
+    enough that a whole tiny replicate can start and finish between two
+    of this test's own 5ms polls — every replicate's own observed window
+    collapses to a single instant, and three near-simultaneous instants
+    can easily land as non-overlapping by pure scheduling luck, exactly
+    as this test's own pre-existing docstring already anticipated
+    ("widen the polling window or slow tiny_params down if this ever
+    flakes"). A real convergence run over many more generations gives
+    each replicate a genuinely wide window to be observed within,
+    independent of any one platform's own process-startup speed.
     """
     output_directory = tmp_path / "output"
     message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
+    slow_batch_params = replace(
+        batch_params, convergence_tolerance=1e-9, max_generations=200
+    )
 
     thread = batch_runner.start_batch_run(
-        batch_params, output_directory, message_queue, threading.Event()
+        slow_batch_params, output_directory, message_queue, threading.Event()
     )
     try:
         windows: dict[int, list[datetime]] = {1: [], 2: [], 3: []}
@@ -420,7 +443,7 @@ def test_batch_replicates_actually_run_concurrently(
                         windows[index].append(
                             datetime.fromisoformat(written_at.replace("Z", "+00:00"))
                         )
-            time.sleep(0.005)
+            time.sleep(0.001)
     finally:
         thread.join(timeout=30)
 
