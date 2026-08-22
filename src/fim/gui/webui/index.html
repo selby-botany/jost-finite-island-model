@@ -226,6 +226,35 @@
     </div>
   </section>
 
+  <section id="screen-batch-results" class="screen" hidden>
+    <p id="batch-results-run-id" class="results-run-id"></p>
+    <div class="batch-results-body">
+      <canvas id="batch-results-canvas" width="640" height="520"></canvas>
+      <div class="batch-results-summary" id="batch-results-summary"></div>
+    </div>
+    <table class="batch-results-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Run ID</th>
+          <th>Generation</th>
+          <th>Outcome</th>
+          <th>D</th>
+          <th>G_ST</th>
+          <th>E_ST</th>
+          <th>K_ST</th>
+          <th>H_S</th>
+          <th>H_T</th>
+        </tr>
+      </thead>
+      <tbody id="batch-results-table-body"></tbody>
+    </table>
+    <div class="actions">
+      <button type="button" id="batch-new-run-button">New run</button>
+      <button type="button" id="batch-open-folder-button">Open batch folder</button>
+    </div>
+  </section>
+
   <p id="bridge-status" class="bridge-status">Connecting…</p>
 </div>
 <script src="app.js"></script>
@@ -233,5 +262,6 @@
 <script src="screens/input.js"></script>
 <script src="screens/progress.js"></script>
 <script src="screens/results.js"></script>
+<script src="screens/batch-results.js"></script>
 </body>
 </html>

@@ -266,3 +266,95 @@ fieldset.composite > label {
     border-radius: 4px;
     background: var(--fim-background);
 }
+
+/* Screen 4: batch results (design §4.4). `.results-run-id` is reused
+ * as-is for `#batch-results-run-id` -- the same visual role, one run
+ * id string, no batch-specific styling needed for it. */
+.batch-results-body {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+#batch-results-canvas {
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    background: var(--fim-background);
+    flex-shrink: 0;
+}
+
+.batch-results-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    min-width: 20rem;
+}
+
+.ci-bar {
+    display: grid;
+    grid-template-columns: 3.5rem 1fr;
+    grid-template-areas: "label track" ". value";
+    align-items: center;
+    column-gap: 0.6rem;
+    row-gap: 0.15rem;
+}
+
+.ci-bar-label {
+    grid-area: label;
+    font-weight: 600;
+}
+
+.ci-bar-track {
+    grid-area: track;
+    position: relative;
+    height: 0.6rem;
+    background: var(--fim-border);
+    border-radius: 3px;
+}
+
+.ci-bar-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--fim-accent);
+    opacity: 0.4;
+    border-radius: 3px;
+}
+
+.ci-bar-mean {
+    position: absolute;
+    top: -0.15rem;
+    bottom: -0.15rem;
+    width: 2px;
+    background: var(--fim-accent);
+    transform: translateX(-1px);
+}
+
+.ci-bar-value {
+    grid-area: value;
+    color: var(--fim-muted);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.ci-bar-omitted {
+    grid-area: track / track / value / value;
+    color: var(--fim-muted);
+    font-style: italic;
+    font-size: 0.85rem;
+}
+
+.batch-results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.batch-results-table th,
+.batch-results-table td {
+    text-align: left;
+    padding: 0.3rem 0.6rem;
+    border-bottom: 1px solid var(--fim-border);
+}

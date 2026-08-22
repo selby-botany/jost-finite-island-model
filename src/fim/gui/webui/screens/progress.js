@@ -4,17 +4,26 @@
  * direct answer to "the botanists want to see scatterplots... live".
  *
  * `Api.start_run` pushes `fim.onRunProgress`/`onRunDone`/`onRunCancelled`/
- * `onRunError` from a background thread as a scalar run proceeds (design
+ * `onRunError` (scalar) or `onBatchProgress`/`onBatchDone`/
+ * `onBatchCancelled`/`onBatchError` (batch -- design §4.1's "n_replicates
+ * *is* the toggle") from a background thread as a run proceeds (design
  * §3.4); this file's only job is reacting to those pushes -- it never
- * calls into the bridge itself except to fire "Cancel".
+ * calls into the bridge itself except to fire "Cancel". One screen, one
+ * set of DOM elements, either way (design §4.4's "the same screen, not
+ * two different ones" principle, applied here too): the batch handlers
+ * repurpose the same progress bar/label/canvas the scalar ones use,
+ * showing replicate-reporting progress and a *pooled* scatter
+ * (`fim.viz.scatter.pooled_scatter_panels`) instead of one run's own
+ * generation and single-state scatter.
  *
- * `panels` (from `fim.viz.scatter.scatter_panels`, design §3.5) can hold
- * more than one 2-D panel for `3 <= d <= 6` (one per deme pair) -- this
- * screen draws only the first panel onto its one `<canvas>` for now,
- * a deliberate scope line for Milestone W3 (the common case, `d == 2`
- * or `d > 6`, both already draw everything scatter_panels returns) --
- * a multi-panel grid is a follow-up, not silently dropped data (every
- * panel is still present in `panels`, just not all rendered yet).
+ * `panels` (from `fim.viz.scatter.scatter_panels`/`pooled_scatter_
+ * panels`, design §3.5) can hold more than one 2-D panel for
+ * `3 <= d <= 6` (one per deme pair) -- this screen draws only the first
+ * panel onto its one `<canvas>` for now, a deliberate scope line for
+ * Milestone W3 (the common case, `d == 2` or `d > 6`, both already draw
+ * everything the panel list returns) -- a multi-panel grid is a
+ * follow-up, not silently dropped data (every panel is still present in
+ * `panels`, just not all rendered yet).
  */
 
 const progressCanvas = document.getElementById("progress-canvas");
@@ -62,6 +71,32 @@ window.fim.onRunCancelled = function onRunCancelled(generation) {
 };
 
 window.fim.onRunError = function onRunError(message) {
+    showProgressBanner(message);
+    cancelButton.disabled = true;
+};
+
+window.fim.onBatchProgress = function onBatchProgress(payload) {
+    progressBar.max = payload.replicateCount;
+    progressBar.value = payload.reportedReplicateCount;
+    progressLabel.textContent =
+        `${payload.reportedReplicateCount} / ${payload.replicateCount} replicates reporting`;
+    drawFirstPanel(payload.panels);
+};
+
+window.fim.onBatchDone = function onBatchDone(payload) {
+    cancelButton.disabled = true;
+    window.fim.showBatchResults(payload);
+};
+
+window.fim.onBatchCancelled = function onBatchCancelled(payload) {
+    showProgressBanner(
+        `Batch cancelled (replicate ${payload.replicateIndex}, ` +
+            `generation ${payload.generation}); no artifacts were written.`
+    );
+    cancelButton.disabled = true;
+};
+
+window.fim.onBatchError = function onBatchError(message) {
     showProgressBanner(message);
     cancelButton.disabled = true;
 };
