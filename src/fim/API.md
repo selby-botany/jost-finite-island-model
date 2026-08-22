@@ -52,6 +52,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [pre\_render\_frames](#fim.gui.animation.pre_render_frames)
   * [select\_sample\_generations](#fim.gui.animation.select_sample_generations)
 * [fim.gui.batch\_runner](#fim.gui.batch_runner)
+  * [default\_max\_workers](#fim.gui.batch_runner.default_max_workers)
   * [replicate\_index](#fim.gui.batch_runner.replicate_index)
   * [replicate\_output\_directory](#fim.gui.batch_runner.replicate_output_directory)
   * [start\_batch\_run](#fim.gui.batch_runner.start_batch_run)
@@ -993,35 +994,58 @@ Return at most `max_frames` generation numbers, evenly spaced.
 
 # fim.gui.batch\_runner
 
-Background-thread batch-run orchestration (design §3.4, §3.7, §2.2).
+Background-thread batch-run orchestration (design §0.5, §3.4, §3.7 of
+`20260821-claude-sonnet-5-graphical-interface.md`).
 
-`fim.gui.runner` runs one scalar simulation on a background thread;
-this module runs a multi-replicate batch the same way, sequentially
-(`max_workers=None`, always — §2.2: the GUI's progress/cancellation
-mechanism, `GuiProgressStore`, is an in-process decorator around one
-`threading.Thread`, and `max_workers` parallelism runs replicates in
-separate OS processes that cannot share it). This mirrors
-`cli._command_run_batch --sequential`'s own call shape exactly:
-`fim.engine.fim(..., store_factory=..., max_workers=None)`.
+Runs a multi-replicate batch in parallel, as real OS processes, via
+`fim.engine.fim(..., max_workers=N, store_factory=...)` — the same call
+shape `cli._command_run_batch`'s own default (non-`--sequential`) path
+already makes. This reverses the Tk-era design's "sequential-only,
+deliberately" decision: that constraint belonged to `GuiProgressStore`'s
+in-process `threading.Event`/callback pair, which cannot cross a process
+boundary — not to the engine, which has supported real parallel replicate
+execution since before any GUI existed.
 
-Every replicate gets its own `GuiProgressStore`, all sharing one
-`cancel_event` — Cancel stops the whole batch, not one replicate
-(design §4.0 `6`): there is no partial-batch save point, since the
-whole tree is built inside one `fim.paths.atomic_directory` publish,
-exactly as `fim.gui.runner` does for a scalar run.
+Progress and cancellation for this parallel path are entirely
+file-mediated (`fim.gui.store.LiveProgressStore`), not posted through
+`message_queue` per generation the way the Tk-era sequential runner did:
+a lightweight poller elsewhere (the pywebview bridge, not yet built)
+discovers progress by reading each in-flight replicate's own `.progress`
+sidecar, and requests cancellation by creating one shared file every
+worker's `LiveProgressStore` checks before each write. `message_queue`
+still carries the batch's terminal outcome — done, cancelled, or error —
+exactly as before, since those remain discrete events worth queueing;
+only per-generation progress moved off the queue and onto the filesystem.
 
-Progress posts as `("replicate", replicate_index, generation)` instead
-of `fim.gui.runner`'s `("progress", generation)` alone, so Screen 2 can
-render both the outer (replicate count) and inner (generation count)
-progress axes (design §3.4, §4.2).
+Writes the same artifacts `cli._command_run_batch`'s own default
+(parallel) path does, including the same orphan-replicate-directory
+pruning `cli._prune_orphan_replicate_directories` performs: under
+`max_workers`, an adaptive `replicate_tolerance` stop is applied only
+after a whole concurrent worker batch completes
+(`fim.engine._run_batch_parallel`), so a worker beyond the replicate that
+triggered the stop can still have fully written its own `replicate-NNN/`
+directory even though its result is discarded, never appearing in the
+tuple `fim` returns. Without pruning, `fim.paths.atomic_directory` would
+publish that orphan directory verbatim — a bug class the Tk-era sequential
+runner could never hit (sequential execution never overshoots), mirrored
+here now that real parallelism reopens it for the GUI too.
 
-Writes the same artifacts `cli._command_run_batch --sequential` does:
-each replicate's own four-file scalar-run contract (reusing
-`fim.gui.runner.write_run_artifacts`, the same call the scalar runner
-uses), then a batch-level `summary.json`
-(`fim.engine.replicate_summary`) and `manifest.json`
-(`fim.persistence.manifest.write_batch_manifest`), all still inside the
-one `fim.paths.atomic_directory` publish (design §3.7).
+<a id="fim.gui.batch_runner.default_max_workers"></a>
+
+#### default\_max\_workers
+
+```python
+def default_max_workers() -> int
+```
+
+Return the GUI's own default batch worker count.
+
+Matches `cli._cpu_count()` — the CLI's own default (non-`--sequential`)
+parallel batch worker count — so the GUI's default batch behavior is
+never silently weaker than the CLI's own (design §2.3, H5). Still
+overridable per call via `start_batch_run`'s `max_workers` argument,
+which the Batch tab's own parallelism control (design §4.1, not yet
+built) will eventually expose.
 
 <a id="fim.gui.batch_runner.replicate_index"></a>
 
@@ -1058,13 +1082,12 @@ is private to the CLI's own front end.
 #### start\_batch\_run
 
 ```python
-def start_batch_run(
-        params: SimulationParams,
-        output_directory: Path,
-        message_queue: queue.Queue[BatchMessage],
-        cancel_event: threading.Event,
-        *,
-        clock: Callable[[], float] = time.monotonic) -> threading.Thread
+def start_batch_run(params: SimulationParams,
+                    output_directory: Path,
+                    message_queue: queue.Queue[BatchMessage],
+                    cancel_event: threading.Event,
+                    *,
+                    max_workers: int | None = None) -> threading.Thread
 ```
 
 Resolve targets, guard the existing target, and start the worker thread.
@@ -1080,13 +1103,21 @@ Resolve targets, guard the existing target, and start the worker thread.
   to `fim.paths.atomic_directory` by the worker thread.
   Checked for existence synchronously here too, exactly like
   `fim.gui.runner.start_run`.
-- `message_queue` - Every `BatchMessage` the worker posts lands
-  here; the caller drains it (typically from a Tk
-  `root.after` poll).
-- `cancel_event` - Set by the UI's "Cancel batch" button; checked
-  before every generation write, in whichever replicate is
-  currently running.
-- `clock` - Injectable wall clock for `ProgressThrottle`, for tests.
+- `message_queue` - Every `BatchMessage` the worker posts lands here;
+  the caller drains it on its own timer.
+- `cancel_event` - Set by the UI's "Cancel batch" button; translated
+  internally into a shared cancellation file every replicate
+  worker's `LiveProgressStore` checks before each write (design
+  §3.4) — nothing about this argument's own meaning changes
+  from the Tk-era sequential runner.
+- `max_workers` - Worker-process count for this batch. **`None` here
+  does not mean "run sequentially in-process"** — unlike
+  `fim.engine.fim`'s own `max_workers=None` — it means "use
+  this GUI's own default" (`default_max_workers()`, matching
+  the CLI's own default), a deliberate divergence from the
+  engine's convention worth stating explicitly rather than
+  leaving implicit, since batch execution is parallel by
+  default here (design §0.5, H5).
 
 
 **Returns**:
