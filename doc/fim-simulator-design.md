@@ -1128,9 +1128,9 @@ graphical front end ever be commissioned; nothing in the simulator
 depends on them.
 
 **Screen 1 — model input.** The four named arguments and the `𝖯`-bag
-entries from §4.3, as a form instead of a YAML file:
-
-![Sketch of a model-input screen: labeled fields for N, d, m, \mu, seed, convergence statistic, initial condition, and loci, with a "Run simulation" button](img/fim-simulator-design/screen1-model-input.png)
+entries from §4.3, as a form instead of a YAML file: labeled fields for
+`N`, `d`, `m`, `\mu`, seed, convergence statistic, initial condition, and
+loci, with a "Run simulation" button.
 
 **Screen 2 — results.** Requirement 6 in one view: the run summary
 (scalars, requirement 6a) beside the canonical scatter (per-deme allele
@@ -1138,16 +1138,24 @@ frequencies, requirement 6b). The scenario is a deliberately tiny $d = 2$
 one, small enough that its whole trajectory fits on one screen, rather
 than §12's $N = 450, d = 20$ run, which has too many demes for a single
 two-axis scatter (§8's $d > 3$ fallback applies there instead). Each
-point is one allele; the axes are the two demes' frequencies for it.
-
-![Sketch of a results screen: a run-summary sidebar (converged, generation 50, D=0.65, G_ST=0.34) beside a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most of them well off the diagonal](img/fim-simulator-design/screen2-results.png)
+point is one allele; the axes are the two demes' frequencies for it: a
+run-summary sidebar (converged, generation 50, D=0.65, G_ST=0.34) beside
+a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most
+of them well off the diagonal.
 
 **Screen 3 — watching a run converge.** The same scenario animated across
 its generations: migration and drift pull the four alleles' points away
 from the diagonal as the demes differentiate. Because every generation is
-persisted (§6, §8), this view needs no data a run does not already write.
+persisted (§6, §8), this view needs no data a run does not already write:
+the same four-allele scatter plot stepping through generations 0, 5,
+10, … 50, with points starting near the diagonal and drifting apart as
+the demes differentiate.
 
-![Sketch of an animated view: the same four-allele scatter plot stepping through generations 0, 5, 10, … 50, with points starting near the diagonal and drifting apart as the demes differentiate](img/fim-simulator-design/screen3-animated.gif)
+These three sketches predate a real graphical front end (`fim-gui`)
+under active development — kept here only as the original illustrative
+sketches this appendix's introduction describes, with their
+now-unavailable images (moved out of this repository) replaced by their
+own alt-text descriptions rather than left as broken links.
 
 ## Metadata
 
