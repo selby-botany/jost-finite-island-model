@@ -47,6 +47,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [report\_for\_state](#fim.engine.report_for_state)
   * [replicate\_summary](#fim.engine.replicate_summary)
 * [fim.gui](#fim.gui)
+* [fim.gui.runner](#fim.gui.runner)
+  * [ProgressThrottle](#fim.gui.runner.ProgressThrottle)
+    * [\_\_init\_\_](#fim.gui.runner.ProgressThrottle.__init__)
+    * [should\_report](#fim.gui.runner.ProgressThrottle.should_report)
+  * [run\_artifact\_targets](#fim.gui.runner.run_artifact_targets)
+  * [start\_run](#fim.gui.runner.start_run)
+  * [write\_run\_artifacts](#fim.gui.runner.write_run_artifacts)
 * [fim.gui.store](#fim.gui.store)
   * [RunCancelledError](#fim.gui.store.RunCancelledError)
   * [GuiProgressStore](#fim.gui.store.GuiProgressStore)
@@ -824,6 +831,166 @@ orchestration (`doc/developer.md`'s architecture table: "GUI: call
 `dev/doc/apps/selby/jost-finite-island-model/
 20260819-claude-sonnet-5-graphical-interface.md` for the full design
 and implementation plan this package follows.
+
+<a id="fim.gui.runner"></a>
+
+# fim.gui.runner
+
+Background-thread scalar-run orchestration (design §3.4, §3.7).
+
+`fim.engine.fim` is a single blocking call; a multi-thousand-generation
+run would freeze the Tk main thread for its whole duration. `start_run`
+runs it on a `threading.Thread` instead, and gets progress and
+cancellation for free from `fim.gui.store.GuiProgressStore` — no change
+to `fim.engine` at all.
+
+The worker does its work inside `fim.paths.atomic_directory`, the exact
+context manager `cli._command_run_scalar` already uses (§3.7 extracted
+it from the CLI for precisely this shared use): every write lands in a
+hidden temporary sibling of `output_directory`, published with one
+atomic rename only if the `with` block exits normally. A cancelled run
+raises `RunCancelledError` out of that block; an unexpected engine error
+raises one of `_EXPECTED_ENGINE_ERRORS`. Either way, `atomic_directory`'s
+own `except BaseException` clause discards the temporary directory and
+`output_directory` is never created — no GUI-specific cleanup code is
+needed for either outcome.
+
+Writes the same four artifacts, in the same order, as
+`cli._write_run_artifacts`: `trajectory.jsonl` streamed
+generation-by-generation by the `TrajectoryStore` passed into `fim`,
+then `report.json` and `scatter.png` once the run finishes, then —
+last, and only once both are flushed — `manifest.json`, augmented with
+each artifact's SHA-256 digest, the record
+`fim.persistence.manifest.verify_trajectory_integrity` later checks
+against (design §3.7).
+
+<a id="fim.gui.runner.ProgressThrottle"></a>
+
+## ProgressThrottle Objects
+
+```python
+class ProgressThrottle()
+```
+
+Decide which generation numbers reach the UI, by wall clock.
+
+Posting every generation is cheap for the queue but would flood a
+1500+-generation run's UI with redraws; throttling by a fixed
+generation stride would need `max_generations` up front in a way
+that scales badly for a very short or very long run. Instead this
+skips a report if under `interval_seconds` has elapsed since the
+last one — except `generation == max_generations`, which is always
+reported so a run that reaches the hard cap never appears stuck
+short of 100%. A run that instead stops early via convergence still
+gets a correct final state: the worker's own "done"/"cancelled"
+message carries its own generation number independent of this
+throttle (§3.4).
+
+<a id="fim.gui.runner.ProgressThrottle.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(*,
+             interval_seconds: float = PROGRESS_THROTTLE_INTERVAL_SECONDS,
+             clock: Callable[[], float] = time.monotonic) -> None
+```
+
+Start with no prior report, so the very first call always reports.
+
+<a id="fim.gui.runner.ProgressThrottle.should_report"></a>
+
+#### should\_report
+
+```python
+def should_report(generation: int, max_generations: int) -> bool
+```
+
+Return whether `generation` should be posted to the UI now.
+
+<a id="fim.gui.runner.run_artifact_targets"></a>
+
+#### run\_artifact\_targets
+
+```python
+def run_artifact_targets(directory: Path) -> dict[str, Path]
+```
+
+Return the four documented scalar-run artifact paths in one directory.
+
+Deliberately the same four names `cli._run_artifact_targets` uses
+(design §3.7's "the exact same four calls, same target filenames,
+same directory") — a direct parallel, not a shared import, since
+`cli._run_artifact_targets` is a private module-level function of
+the CLI's own front end.
+
+<a id="fim.gui.runner.start_run"></a>
+
+#### start\_run
+
+```python
+def start_run(params: SimulationParams,
+              output_directory: Path,
+              message_queue: queue.Queue[RunMessage],
+              cancel_event: threading.Event,
+              *,
+              clock: Callable[[], float] = time.monotonic) -> threading.Thread
+```
+
+Resolve targets, guard the existing target, and start the worker thread.
+
+**Arguments**:
+
+- `params` - Already-validated parameters — the screen calling this
+  never hands it an unvalidated payload (design §3.6).
+- `output_directory` - The run's target artifact directory, passed
+  straight to `fim.paths.atomic_directory` by the worker
+  thread. Checked for existence synchronously here too, so a
+  pre-existing target is reported to the caller immediately —
+  before a thread starts or a progress screen appears —
+  rather than only discovered later via the message queue.
+- `message_queue` - Every `RunMessage` the worker posts lands here;
+  the caller drains it (typically from a Tk `root.after`
+  poll).
+- `cancel_event` - Set by the UI's Cancel button; checked before
+  every generation write.
+- `clock` - Injectable wall clock for `ProgressThrottle`, for tests.
+
+
+**Returns**:
+
+  The started (not yet joined) worker thread.
+
+
+**Raises**:
+
+- `FileExistsError` - If `output_directory` already exists.
+
+<a id="fim.gui.runner.write_run_artifacts"></a>
+
+#### write\_run\_artifacts
+
+```python
+def write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None
+```
+
+Write `report.json`, `scatter.png`, and — last — `manifest.json`.
+
+Mirrors `cli._write_run_artifacts` exactly: `trajectory.jsonl` is
+not written here, since it was already streamed
+generation-by-generation by the `TrajectoryStore` passed into
+`fim`; every other artifact is written and flushed first, and
+`manifest.json` is written only once every sibling artifact is
+flushed, augmented with each one's SHA-256 digest. The returned
+`Figure` is closed immediately — the caller's worker thread never
+displays it, unlike the results screen, which keeps its own figure
+alive on screen and is responsible for closing that one itself
+(design §3.5's `plt.close` care item). Public rather than
+module-private: `fim.gui.batch_runner` reuses this same call, once
+per replicate, rather than duplicating it — both modules live in
+the same `fim.gui` package, unlike the CLI/GUI front-end boundary
+`run_artifact_targets`'s own docstring keeps deliberately parallel
+instead of shared.
 
 <a id="fim.gui.store"></a>
 
