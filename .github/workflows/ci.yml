@@ -60,23 +60,23 @@ jobs:
       - name: Run the fast deterministic test layer (fail fast)
         run: ./build --no-lint --no-type --no-docs --no-package
         timeout-minutes: 5
+      # `build`'s own `--ci` branch deliberately drops `-m`'s argument
+      # entirely (`pytest_marker_args=()`) rather than negating every
+      # marker in turn, specifically so a newly added marker is included
+      # by default instead of silently excluded (`build`'s own comment
+      # at that line) -- `gui` is exactly such a marker, so this step
+      # really does try to open a real pywebview/GTK window, unlike the
+      # fast layer above (a bare, unflagged `pytest` call, which still
+      # gets pyproject.toml's own default `-m 'not ... and not gui'`).
+      # Found the hard way: without `xvfb-run`, this step crashed
+      # instantly the moment pytest reached the first `gui`-marked test
+      # file, before printing a single result from it -- no display at
+      # all, not a slow hang, `##[error]Process completed with exit
+      # code 1` arriving 1.2ms after that file's own collection line.
       - name: Run the full CI gate (lint, type, docs, package, and the
-          full test suite incl. slow/statistical scenarios)
-        run: ./build --ci
+          full test suite incl. slow/statistical/gui scenarios)
+        run: xvfb-run --auto-servernum ./build --ci
         timeout-minutes: 30
-      # `./build`'s own default `addopts` marker filter excludes `gui`
-      # (pyproject.toml) on every platform, including this one -- a real
-      # pywebview window still needs a display even under Xvfb, exactly
-      # as it did under Tk (design doc
-      # 20260821-claude-sonnet-5-graphical-interface.md §5.5). Run once,
-      # on the newer of the two matrix Pythons only: the `gui` suite
-      # drives real DOM/bridge behavior, not version-specific language
-      # features, so doubling it across both Pythons buys no real
-      # coverage for twice the wall-clock cost.
-      - name: Run the gui-marked functional test suite under a virtual display
-        if: matrix.python-version == '3.13'
-        run: xvfb-run --auto-servernum python -m pytest -m gui -q
-        timeout-minutes: 10
 
   # Gate for the release jobs below: cheap and fast, so it runs alongside
   # `build` rather than waiting on it. Only ever runs for a tag push (every
