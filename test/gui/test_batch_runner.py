@@ -104,11 +104,15 @@ def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
         }
     # Progress no longer travels through `message_queue` at all (design
     # §0.5, §3.4): it is entirely file-mediated now, so a successful
-    # batch posts exactly one message, its terminal outcome.
+    # batch posts exactly two messages — `"started"` (the parent-side
+    # poller's own only way to learn the hidden working directory, since
+    # its random `mkdtemp` suffix is not derivable from `output_
+    # directory`) and its terminal outcome.
     messages = _drain(message_queue)
-    assert len(messages) == 1
-    assert messages[0][0] == "done"
-    assert len(messages[0][1]) == 3
+    assert len(messages) == 2
+    assert messages[0][0] == "started"
+    assert messages[1][0] == "done"
+    assert len(messages[1][1]) == 3
 
 
 def test_start_batch_run_records_matching_digests_in_the_published_manifest(
@@ -265,6 +269,8 @@ def test_cancel_during_batch_leaves_no_output_directory(
     assert not thread.is_alive()
     assert not output_directory.exists()
     assert {path.name for path in tmp_path.iterdir()} == set()
+    started = message_queue.get_nowait()
+    assert started[0] == "started"
     message = message_queue.get_nowait()
     assert message[0] == "cancelled"
     assert message[1] == 1

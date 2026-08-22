@@ -82,10 +82,11 @@ _EXPECTED_ENGINE_ERRORS: Final = (
 # `LiveProgressStore` already checks immediately on its own next write.
 _CANCEL_WATCH_INTERVAL_SECONDS: Final = 0.1
 
+StartedMessage = tuple[Literal["started"], Path]
 DoneMessage = tuple[Literal["done"], tuple[RunResult, ...]]
 CancelledMessage = tuple[Literal["cancelled"], int, int]
 ErrorMessage = tuple[Literal["error"], str]
-BatchMessage = DoneMessage | CancelledMessage | ErrorMessage
+BatchMessage = StartedMessage | DoneMessage | CancelledMessage | ErrorMessage
 
 
 def default_max_workers() -> int:
@@ -229,6 +230,17 @@ def _batch_worker(
     started_at = _format_timestamp(_utc_now())
     try:
         with paths.atomic_directory(output_directory) as working_directory:
+            # `working_directory` is `atomic_directory`'s own hidden
+            # temporary sibling of `output_directory` (a random `mkdtemp`
+            # suffix, not derivable from `output_directory` alone) —
+            # posted here, first, so a parent-side poller (design §3.4,
+            # §7.6's "live/parent-side polling loop reading each
+            # replicate's own sidecar") knows where each replicate's
+            # `.progress` sidecar and `trajectory.jsonl` actually live
+            # while the batch is still running, not only once it is
+            # published at `output_directory` — an event no reader
+            # outside this worker could otherwise ever observe.
+            message_queue.put(("started", working_directory))
             results = fim(
                 params.N,
                 params.m,
