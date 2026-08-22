@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+export PYTHONPATH="${root}/src${PYTHONPATH:+:${PYTHONPATH}}"
+# A direct, argv-sniff-free path into the GUI, matching the same
+# fim/fim-gui pairing the Homebrew formula and install.sh both provide --
+# design doc 20260821-claude-sonnet-5-graphical-interface.md §3.1.
+exec "${root}/bin/python3" -m fim.gui.app "$@"

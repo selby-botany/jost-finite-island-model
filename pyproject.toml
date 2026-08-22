@@ -33,6 +33,7 @@ dependencies = [
     "numpy>=2.3,<2.6",
     "pyparsing>=3.1,<3.4",
     "PyYAML==6.0.*",
+    "pywebview==6.*",
 ]
 
 [project.optional-dependencies]
@@ -50,7 +51,8 @@ dev = [
 ]
 
 [project.scripts]
-fim = "fim.cli:main"
+fim = "fim.launcher:main"
+fim-gui = "fim.gui.app:main"
 
 [project.urls]
 Documentation = "https://github.com/selby-botany/jost-finite-island-model#readme"
@@ -138,9 +140,10 @@ module = "mpl_toolkits.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-addopts = "-m 'not statistical and not slow and not packaging' --strict-config --strict-markers"
+addopts = "-m 'not statistical and not slow and not packaging and not gui' --strict-config --strict-markers"
 testpaths = ["test"]
 markers = [
+    "gui: opens a real pywebview window; needs a display (xvfb-run in CI)",
     "packaging: requires a built distribution",
     "slow: long-running simulation horizon",
     "statistical: deterministic, seeded statistical validation",

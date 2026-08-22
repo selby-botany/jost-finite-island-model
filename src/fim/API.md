@@ -51,6 +51,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
   * [pre\_render\_frames](#fim.gui.animation.pre_render_frames)
   * [select\_sample\_generations](#fim.gui.animation.select_sample_generations)
+* [fim.gui.app](#fim.gui.app)
+  * [Api](#fim.gui.app.Api)
+    * [ping](#fim.gui.app.Api.ping)
+    * [ping\_from\_worker](#fim.gui.app.Api.ping_from_worker)
+  * [create\_window](#fim.gui.app.create_window)
+  * [main](#fim.gui.app.main)
 * [fim.gui.batch\_runner](#fim.gui.batch_runner)
   * [default\_max\_workers](#fim.gui.batch_runner.default_max_workers)
   * [replicate\_index](#fim.gui.batch_runner.replicate_index)
@@ -96,6 +102,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [read](#fim.gui.store.LiveProgressStore.read)
   * [write\_progress\_sidecar](#fim.gui.store.write_progress_sidecar)
   * [read\_progress\_sidecar](#fim.gui.store.read_progress_sidecar)
+* [fim.launcher](#fim.launcher)
+  * [main](#fim.launcher.main)
 * [fim.model](#fim.model)
 * [fim.model.allele](#fim.model.allele)
   * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
@@ -989,6 +997,131 @@ Return at most `max_frames` generation numbers, evenly spaced.
   `[]`; `max_frames == 1` returns only the highest generation —
   a run's terminal state is the single most informative frame
   to keep alone.
+
+<a id="fim.gui.app"></a>
+
+# fim.gui.app
+
+pywebview bootstrap and `Api` bridge — the GUI's own entry point
+(design doc `20260821-claude-sonnet-5-graphical-interface.md` §3.1, §3.2).
+
+`fim.launcher` dispatches here for the zero-argument and `--graphical`
+paths, exactly as it dispatched to the Tk build's own `fim.gui.app:main`
+before this migration — the entry point name and shape are stable across
+the toolkit swap (§3.1: "`fim.launcher` does not change at all").
+
+`create_window` and `main` are deliberately separate: `main` blocks
+(`webview.start()` runs the GUI's own event loop until the window
+closes), so no test calls it directly. Every headless test instead calls
+`create_window()` itself, then drives the result with its own
+`webview.start(callback)` — the pattern `§0.3`'s prototype proved works,
+confirmed again directly against this window/bridge before writing this
+module (see `test/gui/test_app.py`): `window.evaluate_js(...)` returns
+the raw value of whatever JS expression it evaluates, not the resolved
+value of a Promise that expression happens to produce — a `js_api` call
+like `window.pywebview.api.ping()` returns a Promise to JS, so a direct
+`evaluate_js("window.pywebview.api.ping()")` reads back `{}` (Chromium's
+own JSON view of an unresolved Promise object), not `"pong"`. Every real
+call into the bridge — from a test, and from `webui/*.js` alike —
+therefore goes through a small `async` JS wrapper that `await`s the
+`js_api` call and writes its result into the DOM (or, for a test, a
+`window`-scoped variable), read back with a second, separate
+`evaluate_js` call. This is not a workaround bolted on for testing: it is
+also the correct, natural shape for a real UI event handler, which never
+needs to return a value to Python either — only update its own screen
+after the `await` resolves.
+
+<a id="fim.gui.app.Api"></a>
+
+## Api Objects
+
+```python
+class Api()
+```
+
+The `window.pywebview.api` surface every `webui/*.js` screen calls into.
+
+Grows one method per bridge call as each screen is built (design
+§4); holds no state of its own beyond what a given call needs —
+every real piece of work still routes through `fim.gui`'s existing
+business-logic modules (`config_form`, `runner`, `batch_runner`,
+`recent_runs`, `animation`) or `fim.viz.scatter`'s public data
+functions, never reimplemented here.
+
+<a id="fim.gui.app.Api.ping"></a>
+
+#### ping
+
+```python
+def ping() -> str
+```
+
+Prove the basic JS-to-Python bridge round trip (Milestone W1).
+
+The walking skeleton's first proof: nothing about pywebview's
+window/bridge wiring is broken in this exact packaging/hosting
+context, before any real screen is built on top of it.
+
+<a id="fim.gui.app.Api.ping_from_worker"></a>
+
+#### ping\_from\_worker
+
+```python
+def ping_from_worker() -> str
+```
+
+Prove a trivial picklable callable survives a real cross-process round trip.
+
+Deliberately proven this early (design §0.5, before `Live
+ProgressStore`/`batch_runner`'s own parallel plumbing, both
+already built and tested, are ever reached through this
+specific pywebview-hosted process): `ProcessPoolExecutor`
+working at all from inside a GUI application process, not just
+from a plain CLI process, is an assumption worth its own direct
+check rather than only discovering a failure three layers away
+inside a real batch run.
+
+<a id="fim.gui.app.create_window"></a>
+
+#### create\_window
+
+```python
+def create_window() -> webview.Window
+```
+
+Build, but do not show, fim's one pywebview window over `webui/index.html`.
+
+Separate from `main` specifically so tests can drive the window
+themselves via `webview.start(callback)` without ever calling the
+real, blocking `main` — the same "construct real widgets, drive them
+synchronously, never call the real blocking entry point without a
+controlled exit" discipline the design's test plan requires (§6.1,
+§6.4), now against pywebview's own API instead of Tk's.
+
+**Raises**:
+
+- `RuntimeError` - If pywebview itself reports the window as never
+  created — `webview.create_window`'s own documented (if,
+  absent any `window.events.initialized` hook of our own,
+  never actually observed) `None` return, for "window
+  initialization is cancelled." Surfaced loudly rather than
+  silently narrowed away, since nothing downstream of this
+  function is prepared to run without a real window.
+
+<a id="fim.gui.app.main"></a>
+
+#### main
+
+```python
+def main() -> int
+```
+
+Launch the GUI and block until the window closes.
+
+**Returns**:
+
+  0 always — `webview.start()` returning means the user closed the
+  window, not an error condition to report differently.
 
 <a id="fim.gui.batch_runner"></a>
 
@@ -2039,6 +2172,54 @@ sidecar at all — a normal, expected state for a just-started
 worker, not an error. `os.replace`'s atomicity (see
 `write_progress_sidecar`) means a sidecar that does exist is always
 a complete, valid write; no partial-read handling is needed here.
+
+<a id="fim.launcher"></a>
+
+# fim.launcher
+
+Dispatcher for the single packaged executable's three ways into the GUI.
+
+Design doc `20260819-claude-sonnet-5-graphical-interface.md` §5.1: the
+Windows release ships one `.exe`, opened by double-clicking (GUI, no
+arguments), from a terminal (CLI), or via an explicit `--graphical
+[--detach]` flag pair for a shortcut, `.bat` wrapper, or Start Menu tile
+that wants to name the GUI directly rather than relying on the
+zero-argument heuristic. `fim.cli.main` keeps its exact existing
+signature, behavior, and test suite untouched; this module only adds
+branches in front of it. `fim = "fim.launcher:main"` in
+`pyproject.toml`'s `[project.scripts]` is the only thing that changes
+which callable actually runs `fim` — every documented invocation with a
+command still reaches the unmodified CLI parser.
+
+<a id="fim.launcher.main"></a>
+
+#### main
+
+```python
+def main(argv: Sequence[str] | None = None) -> int
+```
+
+Dispatch to the GUI (implicitly, or via --graphical) or the CLI.
+
+`fim.exe` invoked with zero arguments today already fails
+(`fim.cli.main`'s subparsers are `required=True`, so `parse_args`
+itself raises `SystemExit(2)` before any command runs) — there is no
+existing zero-argument behavior this branch could regress. Neither
+`--graphical` nor `--detach` collides with any flag `fim.cli`'s
+parser defines today, so every other invocation (`fim run ...`,
+`fim --version`, `fim init`, and so on) is unaffected: `arguments`
+matches none of the shapes below and control passes straight
+through to the unmodified CLI parser.
+
+**Arguments**:
+
+- `argv` - Arguments excluding the program name, or ``None`` for
+  ``sys.argv``.
+
+
+**Returns**:
+
+  The dispatched entry point's own process-style exit status.
 
 <a id="fim.model"></a>
 

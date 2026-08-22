@@ -6,4 +6,9 @@ set -o pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 export PYTHONPATH="${root}/src${PYTHONPATH:+:${PYTHONPATH}}"
-exec "${root}/bin/python3" -m fim.cli "$@"
+# fim.launcher, not fim.cli directly: pyproject.toml's `fim` script
+# points at `fim.launcher:main`, which dispatches zero-argv/--graphical
+# to the GUI and everything else straight through to the unmodified CLI
+# parser -- calling fim.cli here directly would silently drop GUI
+# dispatch for anyone using this dev-clone wrapper.
+exec "${root}/bin/python3" -m fim.launcher "$@"
