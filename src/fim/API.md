@@ -63,6 +63,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
+    * [list\_recent\_runs](#fim.gui.app.Api.list_recent_runs)
+    * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
+    * [open\_run](#fim.gui.app.Api.open_run)
+    * [get\_animation\_frames](#fim.gui.app.Api.get_animation_frames)
     * [ping](#fim.gui.app.Api.ping)
     * [ping\_from\_worker](#fim.gui.app.Api.ping_from_worker)
   * [create\_window](#fim.gui.app.create_window)
@@ -1310,6 +1314,127 @@ Return the Batch tab's own default parallel-worker count (design §4.1, H5).
 never reaches `form_values_to_payload` — so it has no
 `config_form` entry; this reuses `batch_runner.default_max_
 workers` directly rather than inventing a second default.
+
+<a id="fim.gui.app.Api.list_recent_runs"></a>
+
+#### list\_recent\_runs
+
+```python
+def list_recent_runs() -> list[dict[str, Any]]
+```
+
+List every run under `results/`, newest first (Screen 6, design §4.6).
+
+`fim.gui.recent_runs.list_recent_runs` is unchanged from the
+Tk-era build (no `tkinter` import today, needs none tomorrow) —
+this bridge method adds little logic of its own beyond calling
+it and reshaping each `RecentRun` into a JSON-ready dict.
+`trajectoryPath` is joined here, in Python (`pathlib.Path`'s
+own platform-correct separator), rather than the page
+concatenating `directory` and `"trajectory.jsonl"` itself —
+string-joining a path client-side would silently produce a
+mixed-separator path on Windows. `None` for a batch row (design
+§0, §4.0 `9`): it has no single trajectory of its own to open.
+
+<a id="fim.gui.app.Api.browse_for_trajectory"></a>
+
+#### browse\_for\_trajectory
+
+```python
+def browse_for_trajectory() -> dict[str, Any]
+```
+
+Browse for a `trajectory.jsonl` via the OS's own native file picker.
+
+`window.create_file_dialog(...)`, not an HTML `<input
+type="file">` — design §4.6's own "a *better* native-feel win
+than Tk's `filedialog.askopenfilename`, since pywebview's
+dialog is the OS's own file picker on every platform."
+
+**Returns**:
+
+- ``{"ok"` - True, "path": "..."}` on a real selection;
+- ``{"ok"` - False, "path": ""}` for a cancelled dialog —
+  mirrors `load_yaml`'s own cancelled-dialog shape exactly,
+  the established convention every dialog-backed bridge
+  method here follows.
+
+<a id="fim.gui.app.Api.open_run"></a>
+
+#### open\_run
+
+```python
+def open_run(values: dict[str, str]) -> dict[str, Any]
+```
+
+Re-analyze a persisted trajectory, matching `fim stats`'s own semantics.
+
+Reached from Screen 6 (a recent-runs row or a browsed path) or
+Screen 4 ("Open replicate" — the exact same operation over one
+replicate's own `trajectory.jsonl`, design §4.4). The returned
+payload is deliberately shaped exactly like `_drain_run_
+messages`'s own `"done"` payload, so the caller can hand it
+straight to the already-built `window.fim.showResults` —
+design §4.6's "opening a run re-renders Screen 3... unchanged"
+realized here as literal reuse, not a second rendering path.
+
+**Arguments**:
+
+- `values` - `{"trajectoryPath": "...", "generationMode":
+  "final"|"choose", "generation": "...", "differentiation
+- `Orders"` - "..."}` — `webui/screens/open-run.js`'s own
+  form fields, mirroring the Tk-era `OpenRunScreen`'s
+  `_parse_generation`/`_parse_differentiation_orders`
+  (ported here as module-level functions, the same
+  presentation-adjacent-but-toolkit-independent shape
+  `_reveal_in_file_browser`/`_parse_max_workers` already
+  established).
+
+
+**Returns**:
+
+- ``{"ok"` - True, "runId", "report", "panels", "statistics",
+  "outputDirectory", "generationCount"}` on success;
+- ``{"ok"` - False, "message": ...}` if no trajectory was given,
+  the generation/q-sweep fields do not parse, or `fim.
+  reanalyze.reanalyze_trajectory` itself raises (a
+  trajectory-integrity failure, an edited file, or a
+  generation that does not exist — design §4.7's "shown
+  verbatim, matching `fim stats`'s wording").
+
+<a id="fim.gui.app.Api.get_animation_frames"></a>
+
+#### get\_animation\_frames
+
+```python
+def get_animation_frames(output_directory: str) -> dict[str, Any]
+```
+
+Sample and ship every animation frame for one run, in a single call.
+
+Design §3.8, §4.5: loads the whole sampled set up front, as raw
+coordinate data — play, pause, and scrub are then pure
+client-side JavaScript (`webui/screens/animation.js`), with
+zero further Python calls and zero further rendering calls of
+any kind during playback.
+
+**Arguments**:
+
+- `output_directory` - The run's own artifact directory (Screen
+  3's `outputDirectory`, already on hand from whichever
+  bridge call last raised it — `start_run`'s `"done"`
+  push or `open_run`'s own return value).
+
+
+**Returns**:
+
+- ``{"ok"` - True, "frames": [{"generation", "panels"}, ...]}`
+  — one entry per sampled generation, each `panels` already
+  in `scatter_panels`' own client-ready shape
+  (`fim.viz.scatter.panels_from_points`, design §3.8: "whoever
+  renders this... is responsible for any further reduction a
+  high deme count needs"). `{"ok": False, "message": ...}` if
+  the trajectory or its manifest cannot be read.
 
 <a id="fim.gui.app.Api.ping"></a>
 

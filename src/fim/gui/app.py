@@ -39,7 +39,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, cast
 
 import webview
 import yaml
@@ -47,7 +47,8 @@ import yaml
 from fim import paths
 from fim.cli import load_config
 from fim.engine import RunResult, deterministic_run_id, replicate_summary
-from fim.gui import batch_runner, runner
+from fim.gui import batch_runner, recent_runs, runner
+from fim.gui.animation import pre_render_frames
 from fim.gui.config_form import (
     field_for_error,
     form_values_to_payload,
@@ -59,9 +60,12 @@ from fim.gui.config_form import (
 from fim.gui.store import read_live_state, read_progress_sidecar
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.viz.scatter import pooled_scatter_panels, scatter_panels
+from fim.persistence.manifest import read_manifest
+from fim.reanalyze import reanalyze_trajectory
+from fim.viz.scatter import panels_from_points, pooled_scatter_panels, scatter_panels
 
 _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
+_TRAJECTORY_FILE_TYPES = ("trajectory.jsonl files (*.jsonl)", "All files (*.*)")
 
 
 class _EvaluatesJs(Protocol):
@@ -471,6 +475,176 @@ class Api:
         """
         return batch_runner.default_max_workers()
 
+    def list_recent_runs(self) -> list[dict[str, Any]]:
+        """List every run under `results/`, newest first (Screen 6, design §4.6).
+
+        `fim.gui.recent_runs.list_recent_runs` is unchanged from the
+        Tk-era build (no `tkinter` import today, needs none tomorrow) —
+        this bridge method adds little logic of its own beyond calling
+        it and reshaping each `RecentRun` into a JSON-ready dict.
+        `trajectoryPath` is joined here, in Python (`pathlib.Path`'s
+        own platform-correct separator), rather than the page
+        concatenating `directory` and `"trajectory.jsonl"` itself —
+        string-joining a path client-side would silently produce a
+        mixed-separator path on Windows. `None` for a batch row (design
+        §0, §4.0 #9): it has no single trajectory of its own to open.
+        """
+        return [
+            {
+                "runId": run.run_id,
+                "directory": str(run.directory),
+                "trajectoryPath": (
+                    None if run.is_batch else str(run.directory / "trajectory.jsonl")
+                ),
+                "endedAt": run.ended_at,
+                "label": run.label,
+                "isBatch": run.is_batch,
+            }
+            for run in recent_runs.list_recent_runs()
+        ]
+
+    def browse_for_trajectory(self) -> dict[str, Any]:
+        """Browse for a `trajectory.jsonl` via the OS's own native file picker.
+
+        `window.create_file_dialog(...)`, not an HTML `<input
+        type="file">` — design §4.6's own "a *better* native-feel win
+        than Tk's `filedialog.askopenfilename`, since pywebview's
+        dialog is the OS's own file picker on every platform."
+
+        Returns:
+            `{"ok": True, "path": "..."}` on a real selection;
+            `{"ok": False, "path": ""}` for a cancelled dialog —
+            mirrors `load_yaml`'s own cancelled-dialog shape exactly,
+            the established convention every dialog-backed bridge
+            method here follows.
+        """
+        window = webview.windows[0]
+        selection = window.create_file_dialog(
+            webview.FileDialog.OPEN, file_types=_TRAJECTORY_FILE_TYPES
+        )
+        if not selection:
+            return {"ok": False, "path": ""}
+        return {"ok": True, "path": selection[0]}
+
+    def open_run(self, values: dict[str, str]) -> dict[str, Any]:
+        """Re-analyze a persisted trajectory, matching `fim stats`'s own semantics.
+
+        Reached from Screen 6 (a recent-runs row or a browsed path) or
+        Screen 4 ("Open replicate" — the exact same operation over one
+        replicate's own `trajectory.jsonl`, design §4.4). The returned
+        payload is deliberately shaped exactly like `_drain_run_
+        messages`'s own `"done"` payload, so the caller can hand it
+        straight to the already-built `window.fim.showResults` —
+        design §4.6's "opening a run re-renders Screen 3... unchanged"
+        realized here as literal reuse, not a second rendering path.
+
+        Args:
+            values: `{"trajectoryPath": "...", "generationMode":
+                "final"|"choose", "generation": "...", "differentiation
+                Orders": "..."}` — `webui/screens/open-run.js`'s own
+                form fields, mirroring the Tk-era `OpenRunScreen`'s
+                `_parse_generation`/`_parse_differentiation_orders`
+                (ported here as module-level functions, the same
+                presentation-adjacent-but-toolkit-independent shape
+                `_reveal_in_file_browser`/`_parse_max_workers` already
+                established).
+
+        Returns:
+            `{"ok": True, "runId", "report", "panels", "statistics",
+            "outputDirectory", "generationCount"}` on success;
+            `{"ok": False, "message": ...}` if no trajectory was given,
+            the generation/q-sweep fields do not parse, or `fim.
+            reanalyze.reanalyze_trajectory` itself raises (a
+            trajectory-integrity failure, an edited file, or a
+            generation that does not exist — design §4.7's "shown
+            verbatim, matching `fim stats`'s wording").
+        """
+        trajectory_path_text = values.get("trajectoryPath", "")
+        if not trajectory_path_text:
+            return {"ok": False, "message": "no trajectory selected"}
+        try:
+            generation = _parse_generation(
+                values.get("generationMode", "final"), values.get("generation", "")
+            )
+            differentiation_orders = _parse_differentiation_orders(
+                values.get("differentiationOrders", "")
+            )
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        trajectory_path = Path(trajectory_path_text)
+        try:
+            reanalyzed = reanalyze_trajectory(
+                trajectory_path,
+                generation=generation,
+                differentiation_orders=differentiation_orders,
+            )
+        except (OSError, ValueError) as error:
+            # `OSError` (its own `FileNotFoundError` case, in practice):
+            # `reanalyze_trajectory`'s own `read_manifest` call raises it
+            # directly for a missing/unreadable manifest — not a
+            # `ValueError` `fim.reanalyze`'s own docstring documents,
+            # but exactly the same "shown verbatim, matching `fim
+            # stats`'s wording" (design §4.7) case from this bridge
+            # method's own caller's point of view.
+            return {"ok": False, "message": str(error)}
+        report = reanalyzed.report
+        return {
+            "ok": True,
+            "runId": reanalyzed.manifest.run_id,
+            "report": report,
+            "panels": scatter_panels(reanalyzed.state),
+            "statistics": {
+                name: format_statistic(cast("float | None", report[name]))
+                for name in _RESULT_STATISTIC_NAMES
+            },
+            "outputDirectory": str(trajectory_path.parent),
+            "generationCount": reanalyzed.manifest.generation_count,
+        }
+
+    def get_animation_frames(self, output_directory: str) -> dict[str, Any]:
+        """Sample and ship every animation frame for one run, in a single call.
+
+        Design §3.8, §4.5: loads the whole sampled set up front, as raw
+        coordinate data — play, pause, and scrub are then pure
+        client-side JavaScript (`webui/screens/animation.js`), with
+        zero further Python calls and zero further rendering calls of
+        any kind during playback.
+
+        Args:
+            output_directory: The run's own artifact directory (Screen
+                3's `outputDirectory`, already on hand from whichever
+                bridge call last raised it — `start_run`'s `"done"`
+                push or `open_run`'s own return value).
+
+        Returns:
+            `{"ok": True, "frames": [{"generation", "panels"}, ...]}`
+            — one entry per sampled generation, each `panels` already
+            in `scatter_panels`' own client-ready shape
+            (`fim.viz.scatter.panels_from_points`, design §3.8: "whoever
+            renders this... is responsible for any further reduction a
+            high deme count needs"). `{"ok": False, "message": ...}` if
+            the trajectory or its manifest cannot be read.
+        """
+        directory = Path(output_directory)
+        try:
+            manifest = read_manifest(directory / "manifest.json")
+            params = manifest.params()
+            frames = pre_render_frames(
+                directory / "trajectory.jsonl", params, manifest.run_id
+            )
+        except (OSError, ValueError, KeyError) as error:
+            return {"ok": False, "message": str(error)}
+        return {
+            "ok": True,
+            "frames": [
+                {
+                    "generation": frame.generation,
+                    "panels": panels_from_points(frame.points, params.d),
+                }
+                for frame in frames
+            ],
+        }
+
     def ping(self) -> str:
         """Prove the basic JS-to-Python bridge round trip (Milestone W1).
 
@@ -590,6 +764,64 @@ def _parse_max_workers(value: str) -> int | None:
     return parsed if parsed > 0 else None
 
 
+def _parse_generation(mode: str, generation_text: str) -> int | None:
+    """Parse Screen 6's "final"/"choose" generation selector.
+
+    Ported directly from the Tk-era `OpenRunScreen._parse_generation`
+    (design §4.6) — the same parsing rule, moved from a private Tk
+    screen method to a module-level function here.
+
+    Args:
+        mode: `"final"` (the default) or `"choose"`.
+        generation_text: The explicit generation number, read only when
+            `mode == "choose"`.
+
+    Returns:
+        `None` for `"final"` (`reanalyze_trajectory`'s own "defaults to
+        the run's final persisted generation"); the parsed integer for
+        `"choose"`.
+
+    Raises:
+        ValueError: If `mode == "choose"` and `generation_text` is
+            empty or not an integer.
+    """
+    if mode != "choose":
+        return None
+    try:
+        return int(generation_text.strip())
+    except ValueError as error:
+        raise ValueError("generation must be an integer") from error
+
+
+def _parse_differentiation_orders(text: str) -> tuple[float, ...]:
+    """Parse Screen 6's optional differentiation-q sweep field.
+
+    Ported directly from the Tk-era `OpenRunScreen`'s own module-level
+    `_parse_differentiation_orders` (design §4.6) — unchanged.
+
+    Args:
+        text: Zero or more space/comma-separated numbers; empty means
+            no sweep.
+
+    Returns:
+        `()` for an empty/whitespace-only `text`; the parsed orders
+        otherwise.
+
+    Raises:
+        ValueError: If any token is not a number.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return ()
+    tokens = stripped.replace(",", " ").split()
+    try:
+        return tuple(float(token) for token in tokens)
+    except ValueError as error:
+        raise ValueError(
+            "differentiation-q sweep must be space/comma-separated numbers"
+        ) from error
+
+
 def _push_batch_progress(
     window: _EvaluatesJs,
     params: SimulationParams,
@@ -641,15 +873,22 @@ def _batch_done_payload(
     `replicates` is the row data for Screen 4's own table (one row per
     *published* replicate — `results`' own length, not necessarily
     `params.n_replicates`: an adaptive `replicate_tolerance` stop can
-    end a batch short of its own cap). `summary` is `replicate_summary`'s
-    own per-statistic confidence interval, pre-formatted server-side
-    (`format_statistic`, matching every other statistic this bridge
-    ever sends the page — §3.5's "the client never reimplements
-    Python's own display formatting" extended from Screen 3 to Screen
-    4) — omitted entirely (an empty `{}`) if `replicate_summary` itself
-    has too few results to define an interval from, its own documented
-    `ValueError` case, not something this bridge treats as a real
-    error partway through an otherwise-successful batch.
+    end a batch short of its own cap), including each row's own
+    `trajectoryPath` — joined here, in Python
+    (`batch_runner.replicate_output_directory`), rather than the page
+    concatenating `outputDirectory` and a replicate directory name
+    itself (the same Windows mixed-separator risk `list_recent_runs`'
+    own docstring names) — for "Open replicate" (design §4.4) to hand
+    straight to `Api.open_run` with no path logic of its own. `summary`
+    is `replicate_summary`'s own per-statistic confidence interval,
+    pre-formatted server-side (`format_statistic`, matching every
+    other statistic this bridge ever sends the page — §3.5's "the
+    client never reimplements Python's own display formatting"
+    extended from Screen 3 to Screen 4) — omitted entirely (an empty
+    `{}`) if `replicate_summary` itself has too few results to define
+    an interval from, its own documented `ValueError` case, not
+    something this bridge treats as a real error partway through an
+    otherwise-successful batch.
     """
     replicates = [
         {
@@ -662,6 +901,12 @@ def _batch_done_payload(
                 name: format_statistic(result.report[name])
                 for name in _RESULT_STATISTIC_NAMES
             },
+            "trajectoryPath": str(
+                batch_runner.replicate_output_directory(
+                    output_directory, run_id, result.run_id
+                )
+                / "trajectory.jsonl"
+            ),
         }
         for index, result in enumerate(results, start=1)
     ]
