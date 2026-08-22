@@ -26,6 +26,25 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+      # pywebview's GTK backend (webview/platforms/gtk.py) imports `gi`
+      # (PyGObject) and needs GTK3/WebKit2 4.1/Soup 3.0 GObject
+      # Introspection typelibs -- none of which the bare `pywebview`
+      # package pulls in on its own (pyproject.toml's own `[gtk]`-extra
+      # split). `libgirepository1.0-dev`/`libcairo2-dev`/`pkg-config` are
+      # PyGObject's own build-time requirements, needed before `pip
+      # install` below, not just at runtime -- confirmed by a real,
+      # isolated-venv install on this exact `ubuntu-latest` image family
+      # (Ubuntu 24.04) before this step was added. `xvfb` provides the
+      # virtual display this job's own `gui`-marked pytest step (below)
+      # needs; installed explicitly rather than assumed pre-provisioned
+      # on the runner image.
+      - name: Install pywebview's Linux GTK/WebKit runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y --no-install-recommends \
+              xvfb gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-soup-3.0 \
+              libwebkit2gtk-4.1-0 libgirepository1.0-dev libcairo2-dev \
+              pkg-config
       - run: python -m pip install -e ".[dev]"
       # Split into two named, separately timed/budgeted steps (R19) rather
       # than one opaque `./build --ci` step: the fast step re-runs the
@@ -45,6 +64,19 @@ jobs:
           full test suite incl. slow/statistical scenarios)
         run: ./build --ci
         timeout-minutes: 30
+      # `./build`'s own default `addopts` marker filter excludes `gui`
+      # (pyproject.toml) on every platform, including this one -- a real
+      # pywebview window still needs a display even under Xvfb, exactly
+      # as it did under Tk (design doc
+      # 20260821-claude-sonnet-5-graphical-interface.md §5.5). Run once,
+      # on the newer of the two matrix Pythons only: the `gui` suite
+      # drives real DOM/bridge behavior, not version-specific language
+      # features, so doubling it across both Pythons buys no real
+      # coverage for twice the wall-clock cost.
+      - name: Run the gui-marked functional test suite under a virtual display
+        if: matrix.python-version == '3.13'
+        run: xvfb-run --auto-servernum python -m pytest -m gui -q
+        timeout-minutes: 10
 
   # Gate for the release jobs below: cheap and fast, so it runs alongside
   # `build` rather than waiting on it. Only ever runs for a tag push (every
@@ -147,6 +179,18 @@ jobs:
               throw "Executable smoke artifact '$artifact' is empty"
             }
           }
+          # A startup smoke check, not a functional GUI test (design doc
+          # 20260821-claude-sonnet-5-graphical-interface.md §6.5): no
+          # widget is driven here, only that the zero-argument launch
+          # stays alive for a few seconds instead of crashing
+          # immediately, proving WebView2 starts at all on this runner
+          # image (§3.11's own open question for Windows).
+          $guiProcess = Start-Process -FilePath .\dist\fim.exe -PassThru
+          Start-Sleep -Seconds 5
+          if ($guiProcess.HasExited) {
+            throw "GUI process exited early (exit code $($guiProcess.ExitCode)) instead of staying open"
+          }
+          Stop-Process -Id $guiProcess.Id -Force
           Rename-Item .\dist\fim.exe fim-windows-x64.exe
           $hash = (Get-FileHash .\dist\fim-windows-x64.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  fim-windows-x64.exe" | Set-Content .\dist\fim-windows-x64.exe.sha256
@@ -218,6 +262,13 @@ jobs:
               throw "Executable smoke artifact '$artifact' is empty"
             }
           }
+          # See `windows`'s own identical step for what this checks and why.
+          $guiProcess = Start-Process -FilePath .\dist\fim.exe -PassThru
+          Start-Sleep -Seconds 5
+          if ($guiProcess.HasExited) {
+            throw "GUI process exited early (exit code $($guiProcess.ExitCode)) instead of staying open"
+          }
+          Stop-Process -Id $guiProcess.Id -Force
           Rename-Item .\dist\fim.exe fim-windows-arm64.exe
           $hash = (Get-FileHash .\dist\fim-windows-arm64.exe -Algorithm SHA256).Hash.ToLower()
           "$hash  fim-windows-arm64.exe" | Set-Content .\dist\fim-windows-arm64.exe.sha256
@@ -232,9 +283,286 @@ jobs:
             dist/fim-windows-arm64.exe
             dist/fim-windows-arm64.exe.sha256
 
+  # Validates install/homebrew/Formula/fim.rb on every push, independent
+  # of a tag: a `head`-only formula (no stable download yet) can still
+  # drift out of sync with pyproject.toml's own dependencies at any
+  # time, not only at release time.
+  homebrew:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - run: bash install/homebrew/test-formula
+
+  # macos-arm64 (Apple Silicon) and macos-x64 (Intel) are two independent
+  # jobs, not one matrix, for the same reason windows/windows-arm64 are:
+  # PyInstaller never cross-compiles, so a native executable requires
+  # actually running the build on a matching runner. `macos-13` (Intel)
+  # was fully retired by GitHub in December 2025; `macos-15-intel` is the
+  # current Intel label, confirmed against GitHub's own runner-images
+  # changelog (design doc
+  # 20260821-claude-sonnet-5-macos-linux-packaging.md §2) rather than
+  # assumed from older knowledge. Unlike Windows, macOS builds a real
+  # `.app` (packaging/fim.spec's `sys.platform == "darwin"` branch, onedir
+  # plus `BUNDLE`) so Finder can double-click-launch it, then wraps that
+  # in a `.dmg` for the drag-to-Applications install pattern macOS users
+  # actually expect -- a bare `.app` zip has no equivalent of that.
+  macos-arm64:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, verify-tag]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - name: Smoke-test the .app and wrap it in a .dmg
+        run: |
+          set -euo pipefail
+          expected_version="fim ${GITHUB_REF_NAME#v}"
+          actual_version="$(dist/fim.app/Contents/MacOS/fim --version)"
+          if [[ "${actual_version}" != "${expected_version}" ]]; then
+            echo "::error::Executable version '${actual_version}' is not '${expected_version}'"
+            exit 1
+          fi
+          dist/fim.app/Contents/MacOS/fim --help >/dev/null
+          dist/fim.app/Contents/MacOS/fim init --output tiny.yaml
+          sed -i '' \
+            -e 's/N: 450/N: 20/' \
+            -e 's/d: 20/d: 2/' \
+            -e 's/convergence_window: 50/convergence_window: 4/' \
+            -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
+            -e 's/max_generations: 10000/max_generations: 10/' \
+            tiny.yaml
+          dist/fim.app/Contents/MacOS/fim run tiny.yaml --output smoke --quiet
+          for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
+            if [[ ! -s "smoke/${artifact}" ]]; then
+              echo "::error::Executable smoke artifact '${artifact}' missing or empty"
+              exit 1
+            fi
+          done
+          # A startup smoke check, not a functional GUI test (matches
+          # the Windows job's own equivalent): proves the zero-argument
+          # Finder-launch path starts and stays alive instead of
+          # crashing immediately -- no widget is driven.
+          open dist/fim.app
+          sleep 5
+          gui_pid="$(pgrep -f 'dist/fim.app/Contents/MacOS/fim' | head -1)"
+          if [[ -z "${gui_pid}" ]] || ! kill -0 "${gui_pid}" 2>/dev/null; then
+            echo "::error::GUI process exited early instead of staying open"
+            exit 1
+          fi
+          kill "${gui_pid}"
+          mkdir .dmg-staging
+          cp -R dist/fim.app .dmg-staging/
+          ln -s /Applications .dmg-staging/Applications
+          hdiutil create -volname "fim" -srcfolder .dmg-staging \
+              -ov -format UDZO fim-macos-arm64.dmg
+          shasum -a 256 fim-macos-arm64.dmg > fim-macos-arm64.dmg.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: macos-arm64
+          retention-days: 1
+          path: |
+            fim-macos-arm64.dmg
+            fim-macos-arm64.dmg.sha256
+
+  # macos-x64 mirrors macos-arm64 step for step; keep the two in sync by
+  # hand if either changes, the same tradeoff windows-arm64 already
+  # accepts for mirroring windows.
+  macos-x64:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, verify-tag]
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - name: Smoke-test the .app and wrap it in a .dmg
+        run: |
+          set -euo pipefail
+          expected_version="fim ${GITHUB_REF_NAME#v}"
+          actual_version="$(dist/fim.app/Contents/MacOS/fim --version)"
+          if [[ "${actual_version}" != "${expected_version}" ]]; then
+            echo "::error::Executable version '${actual_version}' is not '${expected_version}'"
+            exit 1
+          fi
+          dist/fim.app/Contents/MacOS/fim --help >/dev/null
+          dist/fim.app/Contents/MacOS/fim init --output tiny.yaml
+          sed -i '' \
+            -e 's/N: 450/N: 20/' \
+            -e 's/d: 20/d: 2/' \
+            -e 's/convergence_window: 50/convergence_window: 4/' \
+            -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
+            -e 's/max_generations: 10000/max_generations: 10/' \
+            tiny.yaml
+          dist/fim.app/Contents/MacOS/fim run tiny.yaml --output smoke --quiet
+          for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
+            if [[ ! -s "smoke/${artifact}" ]]; then
+              echo "::error::Executable smoke artifact '${artifact}' missing or empty"
+              exit 1
+            fi
+          done
+          open dist/fim.app
+          sleep 5
+          gui_pid="$(pgrep -f 'dist/fim.app/Contents/MacOS/fim' | head -1)"
+          if [[ -z "${gui_pid}" ]] || ! kill -0 "${gui_pid}" 2>/dev/null; then
+            echo "::error::GUI process exited early instead of staying open"
+            exit 1
+          fi
+          kill "${gui_pid}"
+          mkdir .dmg-staging
+          cp -R dist/fim.app .dmg-staging/
+          ln -s /Applications .dmg-staging/Applications
+          hdiutil create -volname "fim" -srcfolder .dmg-staging \
+              -ov -format UDZO fim-macos-x64.dmg
+          shasum -a 256 fim-macos-x64.dmg > fim-macos-x64.dmg.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: macos-x64
+          retention-days: 1
+          path: |
+            fim-macos-x64.dmg
+            fim-macos-x64.dmg.sha256
+
+  # The single Linux release artifact install.sh downloads (design doc
+  # 20260821-claude-sonnet-5-macos-linux-packaging.md §3.5). Built inside
+  # `python:3.12-slim-bullseye`, not a bare `ubuntu-latest` runner and
+  # not a `manylinux`-family image: a bare runner links against whatever
+  # glibc that runner happens to ship, which can be newer than a user's
+  # own system and fail with `GLIBC_2.XX not found`; manylinux's own
+  # bundled Pythons are built without `--enable-shared`, which
+  # PyInstaller requires ("Python was built without a shared library")
+  # -- confirmed by a real local build attempt against
+  # `manylinux_2_28_x86_64` before switching to this image. Debian 11
+  # (bullseye)'s glibc 2.31 gives the same older-baseline portability
+  # goal manylinux was chosen for, with a Python build PyInstaller can
+  # actually use.
+  linux-x64:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, verify-tag]
+    runs-on: ubuntu-latest
+    container: python:3.12-slim-bullseye
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      # PyInstaller requires `objdump` on Linux to analyze shared
+      # libraries, and this image ships neither it nor a compiler.
+      # `gcc`/`pkg-config`/`libgirepository1.0-dev`/`libcairo2-dev` are
+      # PyGObject's own build-time requirements (`pyproject.toml`'s
+      # `pywebview[gtk]` extra, Linux-only) -- confirmed by a real local
+      # build against this exact image failing with "Unknown
+      # compiler(s)" before these were added. `libwebkit2gtk-4.0-37`/
+      # `gir1.2-webkit2-4.0`/`gir1.2-soup-2.4` are bullseye's available
+      # versions -- older than the `4.1`/`3.0` pair a newer distribution
+      # offers, but `pywebview`'s own GTK backend already falls back to
+      # exactly this pair when `4.1` is not found, so this is a real,
+      # supported combination, not a compromise.
+      - run: |
+          apt-get update -qq
+          apt-get install -qq -y --no-install-recommends \
+              binutils gcc pkg-config \
+              libgirepository1.0-dev libcairo2-dev \
+              gir1.2-gtk-3.0 gir1.2-webkit2-4.0 gir1.2-soup-2.4 \
+              libwebkit2gtk-4.0-37 xvfb xauth procps
+      - run: python -m pip install -e ".[dev]"
+      - run: >-
+          pyinstaller --workpath .pyinstaller-build --noconfirm
+          packaging/fim.spec
+      - name: Smoke-test the executable
+        # Explicit: inside a `container:`, GitHub Actions defaults `run:`
+        # steps to plain `sh` (dash in this image), not bash, since the
+        # image is not guaranteed to have bash on PATH -- `set -o
+        # pipefail` is a bashism dash rejects outright ("Illegal option
+        # -o pipefail").
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_version="fim ${GITHUB_REF_NAME#v}"
+          actual_version="$(dist/fim --version)"
+          if [[ "${actual_version}" != "${expected_version}" ]]; then
+            echo "::error::Executable version '${actual_version}' is not '${expected_version}'"
+            exit 1
+          fi
+          dist/fim --help >/dev/null
+          dist/fim init --output tiny.yaml
+          sed -i \
+            -e 's/N: 450/N: 20/' \
+            -e 's/d: 20/d: 2/' \
+            -e 's/convergence_window: 50/convergence_window: 4/' \
+            -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
+            -e 's/max_generations: 10000/max_generations: 10/' \
+            tiny.yaml
+          dist/fim run tiny.yaml --output smoke --quiet
+          for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
+            if [[ ! -s "smoke/${artifact}" ]]; then
+              echo "::error::Executable smoke artifact '${artifact}' missing or empty"
+              exit 1
+            fi
+          done
+          # A startup smoke check under a virtual display, matching the
+          # other five platforms' own "stays alive" proof -- confirmed
+          # working end to end against a real local build before this
+          # step was written (xvfb-run needs xauth too, or it fails
+          # immediately with "xauth command not found").
+          xvfb-run --auto-servernum dist/fim &
+          gui_pid=$!
+          sleep 5
+          if ! kill -0 "${gui_pid}" 2>/dev/null; then
+            echo "::error::GUI process exited early instead of staying open"
+            exit 1
+          fi
+          kill "${gui_pid}"
+          # §3.11's own named worst case, made a real assertion rather
+          # than left as an open question: on a Linux machine with no
+          # WebKitGTK at all, the zero-argument launch must fail loudly
+          # (a clear, bounded, non-zero-exit failure) rather than hang or
+          # silently degrade. Purges the runtime packages the build
+          # step's own `pip install`/`pyinstaller` needed, not the
+          # already-built executable -- the frozen binary under test is
+          # the exact same one the CLI smoke check above already
+          # verified is otherwise correct.
+          apt-get remove -qq -y libwebkit2gtk-4.0-37 gir1.2-webkit2-4.0
+          set +e
+          timeout 10 dist/fim >gui-startup.log 2>&1
+          gui_exit=$?
+          set -e
+          if [[ "${gui_exit}" -eq 0 || "${gui_exit}" -eq 124 ]]; then
+            echo "::error::Missing-WebKitGTK launch did not fail loudly (exit ${gui_exit})"
+            cat gui-startup.log
+            exit 1
+          fi
+          if [[ ! -s gui-startup.log ]]; then
+            echo "::error::Missing-WebKitGTK launch failed silently (no stderr output)"
+            exit 1
+          fi
+          # No GUI-launch smoke check beyond this: `fim-linux-x64` is
+          # what install.sh downloads and dispatches through
+          # `fim.launcher` exactly like the other two single-executable
+          # platforms already do.
+          mv dist/fim fim-linux-x64
+          sha256sum fim-linux-x64 > fim-linux-x64.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: linux-x64
+          retention-days: 1
+          path: |
+            fim-linux-x64
+            fim-linux-x64.sha256
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, windows-arm64]
+    needs: [windows, windows-arm64, macos-arm64, macos-x64, linux-x64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -262,24 +590,45 @@ jobs:
         with:
           name: windows-arm64
           path: dist
-      # Both executables and their .sha256 sidecars crossed a job boundary
-      # (upload from `windows`/`windows-arm64`, download here); verify each
-      # sidecar still matches the file that actually arrived, rather than
-      # re-shipping either pair unread and trusting the hand-off blindly.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: macos-arm64
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: macos-x64
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: linux-x64
+          path: dist
+      # Every executable/archive and its .sha256 sidecar crossed a job
+      # boundary (upload from windows/windows-arm64/macos-arm64/
+      # macos-x64/linux-x64, download here); verify each sidecar still
+      # matches the file that actually arrived, rather than re-shipping
+      # any of them unread and trusting the hand-off blindly.
       - name: Verify the downloaded executables against their own checksums
         run: |
           cd dist
           sha256sum -c fim-windows-x64.exe.sha256
           sha256sum -c fim-windows-arm64.exe.sha256
+          sha256sum -c fim-macos-arm64.dmg.sha256
+          sha256sum -c fim-macos-x64.dmg.sha256
+          sha256sum -c fim-linux-x64.sha256
       # One consolidated manifest covering every artifact this release
-      # actually publishes (wheel, sdist, and both Windows executables),
-      # alongside each executable's own pre-existing `.sha256` sidecar
-      # (README's documented per-file verification step, left in place for
-      # that specific workflow).
+      # actually publishes (wheel, sdist, both Windows executables, both
+      # macOS .dmg images, and the Linux binary), alongside each
+      # artifact's own pre-existing `.sha256` sidecar (README's
+      # documented per-file verification step, left in place for that
+      # specific workflow).
       - name: Generate a checksum manifest for every released artifact
         run: |
           cd dist
-          sha256sum fim-windows-x64.exe fim-windows-arm64.exe ./*.whl ./*.tar.gz \
+          sha256sum \
+            fim-windows-x64.exe fim-windows-arm64.exe \
+            fim-macos-arm64.dmg fim-macos-x64.dmg \
+            fim-linux-x64 \
+            ./*.whl ./*.tar.gz \
             > SHA256SUMS
       - env:
           GH_TOKEN: ${{ github.token }}

@@ -15,6 +15,18 @@ EXTRACTOR = PROJECT_ROOT / "dev" / "bin" / "extract-release-notes"
 # not a separate `release.yml`, so their `needs:` on `build` is structural
 # rather than a race between two independently triggered workflows.
 RELEASE_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+# Every job that builds one platform's release artifact and hands it to
+# `publish` -- design doc 20260821-claude-sonnet-5-macos-linux-packaging.md
+# §3.2/§3.5 added the macOS and Linux jobs alongside the original two
+# Windows ones. Named once here so the four tests that walk this same
+# list cannot drift from each other as new platforms are added.
+RELEASE_ARTIFACT_JOBS = (
+    "windows",
+    "windows-arm64",
+    "macos-arm64",
+    "macos-x64",
+    "linux-x64",
+)
 
 
 def _run_extractor(
@@ -129,31 +141,31 @@ def test_publish_generates_a_checksum_manifest_before_release_create() -> None:
 
 
 def test_release_jobs_cannot_run_without_a_passing_build_and_valid_tag() -> None:
-    """`windows`/`windows-arm64`/`publish` depend on `build` and `verify-tag`.
+    """Every platform job, and `publish`, depend on `build` and `verify-tag`.
 
     Regression test for R8: `windows` and `publish` used to live in a
     separate `release.yml`, triggered independently by the same tag push
     with no dependency on `ci.yml`'s `build` job at all — a tag could
     publish a release before CI had even started, let alone passed.
     Parsing the workflow YAML (rather than grepping for `needs:` as text)
-    confirms the actual dependency graph GitHub Actions will enforce:
-    neither `windows` nor `windows-arm64` (PyInstaller cannot cross-compile,
-    so building for both Windows architectures needs two independent jobs)
-    can start until every `build` matrix leg and `verify-tag` have
-    succeeded, and `publish` cannot start until both have.
+    confirms the actual dependency graph GitHub Actions will enforce: no
+    platform job (each is independent — PyInstaller cannot cross-compile,
+    so every OS/architecture combination needs its own runner) can start
+    until every `build` matrix leg and `verify-tag` have succeeded, and
+    `publish` cannot start until every one of them has.
     """
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
     jobs = workflow["jobs"]
 
-    for job_name in ("windows", "windows-arm64"):
+    for job_name in RELEASE_ARTIFACT_JOBS:
         job_needs = jobs[job_name]["needs"]
         assert isinstance(job_needs, list)
         assert set(job_needs) == {"build", "verify-tag"}
     publish_needs = jobs["publish"]["needs"]
     assert isinstance(publish_needs, list)
-    assert set(publish_needs) == {"windows", "windows-arm64"}
+    assert set(publish_needs) == set(RELEASE_ARTIFACT_JOBS)
 
-    for job_name in ("verify-tag", "windows", "windows-arm64", "publish"):
+    for job_name in ("verify-tag", *RELEASE_ARTIFACT_JOBS, "publish"):
         assert jobs[job_name]["if"] == "startsWith(github.ref, 'refs/tags/v')"
 
 
@@ -172,7 +184,7 @@ def test_contents_write_is_scoped_to_the_publish_job_only() -> None:
 
     assert workflow["permissions"] == {"contents": "read"}
     assert jobs["publish"]["permissions"] == {"contents": "write"}
-    for job_name in ("build", "verify-tag", "windows", "windows-arm64"):
+    for job_name in ("build", "verify-tag", *RELEASE_ARTIFACT_JOBS):
         assert "permissions" not in jobs[job_name]
 
 
@@ -208,18 +220,18 @@ def test_verify_tag_job_checks_annotation_and_main_ancestry() -> None:
     assert 'git merge-base --is-ancestor "${GITHUB_SHA}" origin/main' in run_steps
 
 
-def test_windows_artifact_has_a_short_retention() -> None:
-    """Neither inter-job handoff artifact lingers past its purpose.
+def test_release_artifacts_have_a_short_retention() -> None:
+    """No inter-job handoff artifact lingers past its purpose.
 
     Regression test for R14: `actions/upload-artifact` defaults to the
     repository's general retention setting (up to 90 days) with no
-    `retention-days` override. The `windows`/`windows-arm64` artifacts
-    exist only to hand each executable to `publish` within the same
-    workflow run; their durable home is the GitHub Release `publish`
-    creates from them, not this transient artifact.
+    `retention-days` override. Every platform job's artifact exists only
+    to hand its build to `publish` within the same workflow run; its
+    durable home is the GitHub Release `publish` creates from it, not
+    this transient artifact.
     """
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
-    for job_name in ("windows", "windows-arm64"):
+    for job_name in RELEASE_ARTIFACT_JOBS:
         upload_step = next(
             step
             for step in workflow["jobs"][job_name]["steps"]
@@ -229,13 +241,13 @@ def test_windows_artifact_has_a_short_retention() -> None:
 
 
 def test_publish_verifies_the_downloaded_checksum_before_shipping_it() -> None:
-    """`publish` verifies both exes against their own `.sha256` before release.
+    """`publish` verifies every platform artifact against its `.sha256`.
 
     Regression test for R14: `publish` downloaded the Windows executable
     and its `.sha256` sidecar and re-shipped both without ever actually
     verifying they still matched each other — trusting the inter-job
-    artifact hand-off blindly rather than checking it. Both the x64 and
-    arm64 executables must be checked the same way.
+    artifact hand-off blindly rather than checking it. Every platform
+    artifact must be checked the same way.
     """
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["publish"]["steps"]
@@ -245,7 +257,9 @@ def test_publish_verifies_the_downloaded_checksum_before_shipping_it() -> None:
         for index, step in enumerate(steps)
         if step.get("uses", "").startswith("actions/download-artifact")
     ]
-    assert len(download_indices) == 2, "expected one download per Windows artifact"
+    assert len(download_indices) == len(RELEASE_ARTIFACT_JOBS), (
+        "expected one download per platform artifact"
+    )
     verify_index = next(
         index for index, text in enumerate(step_texts) if "sha256sum -c" in text
     )
@@ -253,8 +267,14 @@ def test_publish_verifies_the_downloaded_checksum_before_shipping_it() -> None:
         index for index, text in enumerate(step_texts) if "gh release create" in text
     )
 
-    assert "fim-windows-x64.exe.sha256" in step_texts[verify_index]
-    assert "fim-windows-arm64.exe.sha256" in step_texts[verify_index]
+    for sidecar in (
+        "fim-windows-x64.exe.sha256",
+        "fim-windows-arm64.exe.sha256",
+        "fim-macos-arm64.dmg.sha256",
+        "fim-macos-x64.dmg.sha256",
+        "fim-linux-x64.sha256",
+    ):
+        assert sidecar in step_texts[verify_index]
     assert max(download_indices) < verify_index < release_index
 
 
