@@ -19,9 +19,12 @@ from fim.viz.diagnostics import (
 )
 from fim.viz.scatter import (
     frequency_points,
+    grouped_points,
     marker_groups,
+    pca_project,
     plot_frequency_scatter,
     pooled_frequency_points,
+    scatter_panels,
 )
 
 
@@ -337,3 +340,92 @@ def test_pooled_frequency_points_concatenates_before_grouping() -> None:
 def test_pooled_frequency_points_of_no_states_is_empty() -> None:
     """An empty pool is empty, not an error — a batch with no replicates yet."""
     assert pooled_frequency_points([]).shape == (0, 0)
+
+
+def test_grouped_points_matches_marker_groups_exactly() -> None:
+    """`marker_groups` is now a thin reshaping of `grouped_points` — proven directly.
+
+    Regression test for the refactor introduced alongside `scatter_
+    panels` (graphical-interface migration §3.5): the two functions'
+    grouping must never silently drift apart, since `marker_groups` is
+    implemented in terms of `grouped_points` specifically to make that
+    impossible by construction.
+    """
+    coordinates = ((0.1, 0.9), (0.1, 0.9), (0.5, 0.5))
+
+    grouped = grouped_points(coordinates)
+    unique, sizes, colors, labels = marker_groups(coordinates)
+
+    assert len(grouped) == len(unique) == 2
+    by_point = {(entry["x"], entry["y"]): entry for entry in grouped}
+    for point, size, color, label in zip(unique, sizes, colors, labels, strict=True):
+        entry = by_point[(point[0], point[1])]
+        assert size == pytest.approx(30.0 + 18.0 * entry["count"] ** 0.5)
+        assert color == ("tab:blue" if entry["common"] else "tab:orange")
+        assert label == (str(entry["count"]) if entry["count"] > 1 else "")
+
+
+def test_scatter_panels_two_demes_is_one_direct_panel() -> None:
+    """`d == 2` produces exactly one panel, the direct two demes."""
+    panels = scatter_panels(_state(2))
+
+    assert len(panels) == 1
+    assert panels[0]["x_label"] == "Deme 1"
+    assert panels[0]["y_label"] == "Deme 2"
+    points = panels[0]["points"]
+    assert isinstance(points, list)
+    assert len(points) == 2
+
+
+def test_scatter_panels_four_demes_is_one_panel_per_pair() -> None:
+    """`3 <= d <= pairwise_max_demes` produces `C(d, 2)` panels, one per deme pair."""
+    panels = scatter_panels(_state(4))
+
+    assert len(panels) == 6
+    labels = {(panel["x_label"], panel["y_label"]) for panel in panels}
+    assert ("Deme 1", "Deme 2") in labels
+    assert ("Deme 3", "Deme 4") in labels
+
+
+def test_scatter_panels_large_d_is_one_pca_panel() -> None:
+    """`d > pairwise_max_demes` produces one PCA-projected panel."""
+    panels = scatter_panels(_state(7))
+
+    assert len(panels) == 1
+    assert panels[0]["x_label"] == "Principal component 1"
+    assert panels[0]["y_label"] == "Principal component 2"
+
+
+def test_pca_project_matches_the_rendered_pca_plot() -> None:
+    """`pca_project`'s standalone output matches what `_plot_pca` actually draws.
+
+    Direct regression test that factoring the SVD out of `_plot_pca` and
+    into `pca_project` (graphical-interface migration §3.5) changed
+    nothing about the rendered figure.
+    """
+    state = _state(7)
+    points = frequency_points(state)
+
+    projected = pca_project(points)
+    figure = plot_frequency_scatter(state, _params(7))
+    markers = figure.axes[0].collections[0]
+    assert isinstance(markers, PathCollection)
+    rendered = np.asarray(markers.get_offsets())
+    plt.close(figure)
+
+    # The rendered figure groups coincident projected points first
+    # (`_scatter_on_axis`), so compare the *set* of projected
+    # coordinates, not a positional row-for-row match.
+    projected_set = {tuple(np.round(row, 6)) for row in projected}
+    rendered_set = {tuple(np.round(row, 6)) for row in rendered}
+    assert projected_set == rendered_set
+
+
+def test_pca_project_handles_a_single_point_without_svd() -> None:
+    """A single-row input skips SVD entirely, matching `_plot_pca`'s special case."""
+    single_point = np.asarray([[1.0]], dtype=np.float64)
+
+    projected = pca_project(single_point)
+
+    assert projected.shape == (1, 2)
+    assert tuple(projected[0]) == (0.0, 0.0)

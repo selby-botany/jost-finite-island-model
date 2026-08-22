@@ -246,7 +246,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [plot\_frequency\_scatter](#fim.viz.scatter.plot_frequency_scatter)
   * [frequency\_points](#fim.viz.scatter.frequency_points)
   * [pooled\_frequency\_points](#fim.viz.scatter.pooled_frequency_points)
+  * [grouped\_points](#fim.viz.scatter.grouped_points)
   * [marker\_groups](#fim.viz.scatter.marker_groups)
+  * [scatter\_panels](#fim.viz.scatter.scatter_panels)
+  * [pca\_project](#fim.viz.scatter.pca_project)
 
 <a id="fim"></a>
 
@@ -4623,6 +4626,26 @@ special case needed either way.
   every state, in the given order. Empty (zero rows, but still
   correctly shaped) if `states` is empty.
 
+<a id="fim.viz.scatter.grouped_points"></a>
+
+#### grouped\_points
+
+```python
+def grouped_points(
+    coordinates: Sequence[tuple[float, float]]
+) -> list[dict[str, float | int | bool]]
+```
+
+Collapse coincident points into JSON-ready `{x, y, count, common}` entries.
+
+Public (graphical-interface migration design doc §3.5): the GUI
+bridge's own shape for `webui/scatter.js`'s Canvas renderer —
+`marker_groups`' data-only sibling. `marker_groups` itself is
+rewritten in terms of this function's own grouping (below) rather
+than repeating `Counter(coordinates)` independently, so the two
+functions' outputs can never silently drift out of sync with each
+other.
+
 <a id="fim.viz.scatter.marker_groups"></a>
 
 #### marker\_groups
@@ -4639,4 +4662,63 @@ Public (graphical-interface migration design doc §3.3, §3.5): the
 GUI's bridge calls this directly, over `pooled_frequency_points`'s
 output as readily as over one state's own `frequency_points` output
 — coincidence counting has no notion of where a point came from.
+
+<a id="fim.viz.scatter.scatter_panels"></a>
+
+#### scatter\_panels
+
+```python
+def scatter_panels(state: ModelState,
+                   *,
+                   pairwise_max_demes: int = PAIRWISE_MAX_DEMES
+                   ) -> list[dict[str, object]]
+```
+
+Return one or more 2-D panels of grouped points, ready for client rendering.
+
+The data-only equivalent of `plot_frequency_scatter`'s own layout
+dispatch (design §3.5): the client never performs dimensionality
+reduction or picks which deme pair to show — it only ever draws
+already-2-D points `webui/scatter.js` hands to a `<canvas>`.
+
+- `d == 2`: one panel, the direct two demes.
+- `3 <= d <= pairwise_max_demes`: one panel per deme pair (`C(d, 2)`
+of them). Unlike `plot_frequency_scatter`'s own `d == 3` special
+case (a true 3-D plot), a 2-D `<canvas>` has no 3-D equivalent to
+draw into, so `d == 3` is treated as three pairwise panels here
+instead — a deliberate difference from the CLI's own `scatter.png`
+for this one case, named as worth reconsidering in the migration
+design's own open questions rather than silently diverging.
+- `d > pairwise_max_demes`: one panel, PCA-projected — the same
+projection `_plot_pca` renders, reused via `pca_project` rather
+than a second implementation of the same SVD.
+
+**Arguments**:
+
+- `state` - State to visualize.
+- `pairwise_max_demes` - Largest `d` rendered as one panel per pair,
+  matching `plot_frequency_scatter`'s own parameter.
+
+
+**Returns**:
+
+  One dict per panel: `{"x_label", "y_label", "points"}`, `points`
+  being `grouped_points`' own list of `{x, y, count, common}`
+  entries.
+
+<a id="fim.viz.scatter.pca_project"></a>
+
+#### pca\_project
+
+```python
+def pca_project(points: FloatArray) -> FloatArray
+```
+
+Return `points` projected onto its first two principal components.
+
+Public (graphical-interface migration design doc §3.5): the same
+projection `_plot_pca` renders as a `Figure`, factored out so
+`scatter_panels` can reuse the identical math for the data-only
+path rather than a second SVD implementation. `_plot_pca` itself now
+calls this too — one implementation, two consumers.
 

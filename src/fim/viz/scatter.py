@@ -144,6 +144,31 @@ def pooled_frequency_points(states: Sequence[ModelState]) -> FloatArray:
     return np.concatenate([frequency_points(state) for state in states], axis=0)
 
 
+def grouped_points(
+    coordinates: Sequence[tuple[float, float]],
+) -> list[dict[str, float | int | bool]]:
+    """Collapse coincident points into JSON-ready `{x, y, count, common}` entries.
+
+    Public (graphical-interface migration design doc §3.5): the GUI
+    bridge's own shape for `webui/scatter.js`'s Canvas renderer —
+    `marker_groups`' data-only sibling. `marker_groups` itself is
+    rewritten in terms of this function's own grouping (below) rather
+    than repeating `Counter(coordinates)` independently, so the two
+    functions' outputs can never silently drift out of sync with each
+    other.
+    """
+    counts = Counter(coordinates)
+    return [
+        {
+            "x": point[0],
+            "y": point[1],
+            "count": count,
+            "common": max(point) >= COMMON_ALLELE_THRESHOLD,
+        }
+        for point, count in counts.items()
+    ]
+
+
 def marker_groups(
     coordinates: Sequence[tuple[float, float]],
 ) -> tuple[FloatArray, FloatArray, list[str], list[str]]:
@@ -154,18 +179,110 @@ def marker_groups(
     output as readily as over one state's own `frequency_points` output
     — coincidence counting has no notion of where a point came from.
     """
-    counts = Counter(coordinates)
-    unique = np.asarray(tuple(counts), dtype=np.float64)
+    grouped = grouped_points(coordinates)
+    unique = np.asarray(
+        [(point["x"], point["y"]) for point in grouped], dtype=np.float64
+    )
     sizes = np.asarray(
-        [30.0 + 18.0 * math.sqrt(counts[point]) for point in counts],
+        [30.0 + 18.0 * math.sqrt(point["count"]) for point in grouped],
         dtype=np.float64,
     )
-    colors = [
-        "tab:blue" if max(point) >= COMMON_ALLELE_THRESHOLD else "tab:orange"
-        for point in counts
-    ]
-    labels = [str(counts[point]) if counts[point] > 1 else "" for point in counts]
+    colors = ["tab:blue" if point["common"] else "tab:orange" for point in grouped]
+    labels = [str(point["count"]) if point["count"] > 1 else "" for point in grouped]
     return unique, sizes, colors, labels
+
+
+def scatter_panels(
+    state: ModelState,
+    *,
+    pairwise_max_demes: int = PAIRWISE_MAX_DEMES,
+) -> list[dict[str, object]]:
+    """Return one or more 2-D panels of grouped points, ready for client rendering.
+
+    The data-only equivalent of `plot_frequency_scatter`'s own layout
+    dispatch (design §3.5): the client never performs dimensionality
+    reduction or picks which deme pair to show — it only ever draws
+    already-2-D points `webui/scatter.js` hands to a `<canvas>`.
+
+    - `d == 2`: one panel, the direct two demes.
+    - `3 <= d <= pairwise_max_demes`: one panel per deme pair (`C(d, 2)`
+      of them). Unlike `plot_frequency_scatter`'s own `d == 3` special
+      case (a true 3-D plot), a 2-D `<canvas>` has no 3-D equivalent to
+      draw into, so `d == 3` is treated as three pairwise panels here
+      instead — a deliberate difference from the CLI's own `scatter.png`
+      for this one case, named as worth reconsidering in the migration
+      design's own open questions rather than silently diverging.
+    - `d > pairwise_max_demes`: one panel, PCA-projected — the same
+      projection `_plot_pca` renders, reused via `pca_project` rather
+      than a second implementation of the same SVD.
+
+    Args:
+        state: State to visualize.
+        pairwise_max_demes: Largest `d` rendered as one panel per pair,
+            matching `plot_frequency_scatter`'s own parameter.
+
+    Returns:
+        One dict per panel: `{"x_label", "y_label", "points"}`, `points`
+        being `grouped_points`' own list of `{x, y, count, common}`
+        entries.
+    """
+    points = frequency_points(state)
+    deme_count = state.deme_count
+    if deme_count == DIRECT_2D_DEMES:
+        return [_panel(points[:, 0], points[:, 1], "Deme 1", "Deme 2")]
+    if deme_count <= pairwise_max_demes:
+        return [
+            _panel(
+                points[:, first],
+                points[:, second],
+                f"Deme {first + 1}",
+                f"Deme {second + 1}",
+            )
+            for first in range(deme_count)
+            for second in range(first + 1, deme_count)
+        ]
+    projected = pca_project(points)
+    return [
+        _panel(
+            projected[:, 0],
+            projected[:, 1],
+            "Principal component 1",
+            "Principal component 2",
+        )
+    ]
+
+
+def _panel(
+    horizontal: FloatArray, vertical: FloatArray, x_label: str, y_label: str
+) -> dict[str, object]:
+    """Build one `scatter_panels` entry from a pair of coordinate columns."""
+    coordinates = tuple(
+        (float(x), float(y)) for x, y in zip(horizontal, vertical, strict=True)
+    )
+    return {
+        "x_label": x_label,
+        "y_label": y_label,
+        "points": grouped_points(coordinates),
+    }
+
+
+def pca_project(points: FloatArray) -> FloatArray:
+    """Return `points` projected onto its first two principal components.
+
+    Public (graphical-interface migration design doc §3.5): the same
+    projection `_plot_pca` renders as a `Figure`, factored out so
+    `scatter_panels` can reuse the identical math for the data-only
+    path rather than a second SVD implementation. `_plot_pca` itself now
+    calls this too — one implementation, two consumers.
+    """
+    centered = points - points.mean(axis=0, keepdims=True)
+    if len(points) == 1:
+        return np.zeros((1, 2), dtype=np.float64)
+    left, singular_values, _right = np.linalg.svd(centered, full_matrices=False)
+    dimensions = min(2, left.shape[1])
+    projected = np.zeros((len(points), 2), dtype=np.float64)
+    projected[:, :dimensions] = left[:, :dimensions] * singular_values[:dimensions]
+    return projected
 
 
 def _plot_pairwise(points: FloatArray, deme_count: int) -> Figure:
@@ -194,17 +311,7 @@ def _plot_pairwise(points: FloatArray, deme_count: int) -> Figure:
 
 def _plot_pca(points: FloatArray) -> Figure:
     """Render a labeled two-dimensional principal-component projection."""
-    centered = points - points.mean(axis=0, keepdims=True)
-    if len(points) == 1:
-        projected = np.zeros((1, 2), dtype=np.float64)
-    else:
-        left, singular_values, _right = np.linalg.svd(
-            centered,
-            full_matrices=False,
-        )
-        dimensions = min(2, left.shape[1])
-        projected = np.zeros((len(points), 2), dtype=np.float64)
-        projected[:, :dimensions] = left[:, :dimensions] * singular_values[:dimensions]
+    projected = pca_project(points)
     figure, axis = plt.subplots(figsize=(7, 6))
     _scatter_on_axis(axis, projected[:, 0], projected[:, 1], reference=False)
     axis.set_xlabel("Principal component 1")
