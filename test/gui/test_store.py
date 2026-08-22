@@ -21,9 +21,13 @@ from fim.gui.store import (
     GuiProgressStore,
     LiveProgressStore,
     RunCancelledError,
+    read_live_state,
     read_progress_sidecar,
     write_progress_sidecar,
 )
+from fim.model.locus import LocusSpec
+from fim.model.state import ModelState
+from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import InMemoryTrajectoryStore
 
 
@@ -308,3 +312,55 @@ def test_write_progress_sidecar_records_a_real_wall_clock_timestamp(
     # rules single out.
     parsed = datetime.fromisoformat(written_at.replace("Z", "+00:00"))
     assert before <= parsed <= after
+
+
+def test_read_live_state_reconstructs_a_sidecar_confirmed_generation(
+    tmp_path: Path,
+) -> None:
+    """A generation already written and flushed is safely readable mid-run."""
+    trajectory_path = tmp_path / "trajectory.jsonl"
+    store = JSONLTrajectoryStore(trajectory_path)
+    store.write_generation("run-1", 0, _rows(0))
+    store.write_generation("run-1", 1, _rows(1))
+
+    state = read_live_state(trajectory_path, "run-1", 1, (LocusSpec(1, 200),))
+
+    assert state == ModelState.from_rows(_rows(1), (LocusSpec(1, 200),))
+
+
+def test_read_live_state_returns_none_for_a_not_yet_created_trajectory(
+    tmp_path: Path,
+) -> None:
+    """A replicate that has not created its own directory yet is not an error."""
+    never_written = tmp_path / "trajectory.jsonl"
+
+    assert read_live_state(never_written, "run-1", 0, (LocusSpec(1, 200),)) is None
+
+
+def test_read_live_state_returns_none_for_a_generation_not_yet_written(
+    tmp_path: Path,
+) -> None:
+    """Asking for a generation ahead of what has been persisted is not an error.
+
+    Guards against a real, if narrow, race: a caller reading a slightly
+    stale `.progress` sidecar snapshot (generation N) against a
+    trajectory that has already advanced past it is safe (the "not yet
+    written" case never actually applies there); this is the true
+    "haven't gotten there yet" case instead.
+    """
+    trajectory_path = tmp_path / "trajectory.jsonl"
+    JSONLTrajectoryStore(trajectory_path).write_generation("run-1", 0, _rows(0))
+
+    result = read_live_state(trajectory_path, "run-1", 5, (LocusSpec(1, 200),))
+
+    assert result is None
+
+
+def test_read_live_state_returns_none_for_a_different_run_id(tmp_path: Path) -> None:
+    """Rows from a different run id are never mistaken for this replicate's own."""
+    trajectory_path = tmp_path / "trajectory.jsonl"
+    JSONLTrajectoryStore(trajectory_path).write_generation("run-1", 0, _rows(0))
+
+    result = read_live_state(trajectory_path, "run-2", 0, (LocusSpec(1, 200),))
+
+    assert result is None

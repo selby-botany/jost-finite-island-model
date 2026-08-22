@@ -112,6 +112,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [read](#fim.gui.store.LiveProgressStore.read)
   * [write\_progress\_sidecar](#fim.gui.store.write_progress_sidecar)
   * [read\_progress\_sidecar](#fim.gui.store.read_progress_sidecar)
+  * [read\_live\_state](#fim.gui.store.read_live_state)
 * [fim.launcher](#fim.launcher)
   * [main](#fim.launcher.main)
 * [fim.model](#fim.model)
@@ -2450,6 +2451,48 @@ sidecar at all — a normal, expected state for a just-started
 worker, not an error. `os.replace`'s atomicity (see
 `write_progress_sidecar`) means a sidecar that does exist is always
 a complete, valid write; no partial-read handling is needed here.
+
+<a id="fim.gui.store.read_live_state"></a>
+
+#### read\_live\_state
+
+```python
+def read_live_state(trajectory_path: Path, run_id: str, generation: int,
+                    loci: Sequence[LocusSpec]) -> ModelState | None
+```
+
+Reconstruct an in-flight replicate's state at a sidecar-confirmed generation.
+
+Design §3.4, §7.6 — the live-batch counterpart to `fim.reanalyze.
+reanalyze_trajectory`: that function requires a completed run's own
+`manifest.json` (written only once, at the very end), so it cannot
+read a replicate that is still running. This reads the same
+`trajectory.jsonl` directly instead, with no manifest at all, and
+is meant to be called only with a `generation` already confirmed by
+that replicate's own `.progress` sidecar
+(`read_progress_sidecar`/`write_progress_sidecar`):
+`LiveProgressStore.write_generation` writes and flushes a
+generation's rows *before* updating the sidecar, so a sidecar-
+reported generation's own rows are always already safe to read —
+this function does not, by itself, guard against reading a
+generation still being written.
+
+**Arguments**:
+
+- `trajectory_path` - The replicate's own `trajectory.jsonl`.
+- `run_id` - The replicate's own run id (not the batch's).
+- `generation` - The generation to reconstruct — normally
+  `read_progress_sidecar(...)`'s own `"generation"` value.
+- `loci` - The batch's own `params.loci`, in order.
+
+
+**Returns**:
+
+  The reconstructed state, or `None` if `trajectory_path` does
+  not exist yet, or `generation`'s own rows are not (or are no
+  longer, or not yet fully) present — a transient filesystem-
+  visibility race a live poller's own next call simply retries,
+  never an error to raise partway through a still-running batch.
 
 <a id="fim.launcher"></a>
 
