@@ -21,6 +21,7 @@ from fim.viz.scatter import (
     frequency_points,
     grouped_points,
     marker_groups,
+    panels_from_points,
     pca_project,
     plot_frequency_scatter,
     pooled_frequency_points,
@@ -364,6 +365,22 @@ def test_grouped_points_matches_marker_groups_exactly() -> None:
         assert size == pytest.approx(30.0 + 18.0 * entry["count"] ** 0.5)
         assert color == ("tab:blue" if entry["common"] else "tab:orange")
         assert label == (str(entry["count"]) if entry["count"] > 1 else "")
+
+
+def test_panels_from_points_matches_scatter_panels_directly() -> None:
+    """`scatter_panels` is a thin wrapper: calling the shared dispatch directly agrees.
+
+    Milestone W6's own caller (`Api.get_animation_frames`, via `fim.gui.
+    animation.pre_render_frames`'s already-computed `frequency_points`
+    per frame) never has a `ModelState` to hand `scatter_panels` — this
+    is the direct regression proof the newly-public function it calls
+    instead produces identical output.
+    """
+    state = _state(4)
+
+    assert panels_from_points(frequency_points(state), state.deme_count) == (
+        scatter_panels(state)
+    )
 
 
 def test_scatter_panels_two_demes_is_one_direct_panel() -> None:

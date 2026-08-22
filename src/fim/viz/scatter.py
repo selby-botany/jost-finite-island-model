@@ -226,7 +226,7 @@ def scatter_panels(
         being `grouped_points`' own list of `{x, y, count, common}`
         entries.
     """
-    return _panels_from_points(
+    return panels_from_points(
         frequency_points(state), state.deme_count, pairwise_max_demes
     )
 
@@ -271,13 +271,15 @@ def pooled_scatter_panels(
     """
     if not states:
         return []
-    return _panels_from_points(
+    return panels_from_points(
         pooled_frequency_points(states), deme_count, pairwise_max_demes
     )
 
 
-def _panels_from_points(
-    points: FloatArray, deme_count: int, pairwise_max_demes: int
+def panels_from_points(
+    points: FloatArray,
+    deme_count: int,
+    pairwise_max_demes: int = PAIRWISE_MAX_DEMES,
 ) -> list[dict[str, object]]:
     """Share `scatter_panels`/`pooled_scatter_panels`' own layout dispatch.
 
@@ -285,6 +287,15 @@ def _panels_from_points(
     (locus, allele) pair, one column per deme) — a single state's own
     rows for `scatter_panels`, or several states' pooled rows for
     `pooled_scatter_panels`; this function does not know or care which.
+
+    Public (design §3.8, Milestone W6): `fim.gui.animation.
+    pre_render_frames` deliberately stops at a plain `frequency_points`
+    array per sampled generation — "whoever renders this... is
+    responsible for any further reduction a high deme count needs," by
+    its own docstring — so the GUI bridge (`Api.get_animation_frames`)
+    calls this directly, once per frame, to ship the page already-2-D
+    points for any `d`, the same "the client never does linear algebra"
+    rule `scatter_panels` itself exists to uphold.
     """
     if deme_count == DIRECT_2D_DEMES:
         return [_panel(points[:, 0], points[:, 1], "Deme 1", "Deme 2")]

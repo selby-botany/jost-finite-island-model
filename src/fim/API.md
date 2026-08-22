@@ -256,6 +256,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [marker\_groups](#fim.viz.scatter.marker_groups)
   * [scatter\_panels](#fim.viz.scatter.scatter_panels)
   * [pooled\_scatter\_panels](#fim.viz.scatter.pooled_scatter_panels)
+  * [panels\_from\_points](#fim.viz.scatter.panels_from_points)
   * [pca\_project](#fim.viz.scatter.pca_project)
 
 <a id="fim"></a>
@@ -4973,6 +4974,34 @@ layout dispatch needs no special case for "pooled" either.
   `[]` if `states` is empty (nothing to pool yet); otherwise the
   same `scatter_panels`-shaped panel list, built from the pooled
   points.
+
+<a id="fim.viz.scatter.panels_from_points"></a>
+
+#### panels\_from\_points
+
+```python
+def panels_from_points(
+        points: FloatArray,
+        deme_count: int,
+        pairwise_max_demes: int = PAIRWISE_MAX_DEMES
+) -> list[dict[str, object]]
+```
+
+Share `scatter_panels`/`pooled_scatter_panels`' own layout dispatch.
+
+`points` is `frequency_points`-shaped either way (one row per
+(locus, allele) pair, one column per deme) — a single state's own
+rows for `scatter_panels`, or several states' pooled rows for
+`pooled_scatter_panels`; this function does not know or care which.
+
+Public (design §3.8, Milestone W6): `fim.gui.animation.
+pre_render_frames` deliberately stops at a plain `frequency_points`
+array per sampled generation — "whoever renders this... is
+responsible for any further reduction a high deme count needs," by
+its own docstring — so the GUI bridge (`Api.get_animation_frames`)
+calls this directly, once per frame, to ship the page already-2-D
+points for any `d`, the same "the client never does linear algebra"
+rule `scatter_panels` itself exists to uphold.
 
 <a id="fim.viz.scatter.pca_project"></a>
 
