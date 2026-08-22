@@ -17,7 +17,12 @@ from fim.viz.diagnostics import (
     plot_convergence_trace,
     plot_frequency_bars,
 )
-from fim.viz.scatter import plot_frequency_scatter
+from fim.viz.scatter import (
+    frequency_points,
+    marker_groups,
+    plot_frequency_scatter,
+    pooled_frequency_points,
+)
 
 
 def _params(d: int) -> SimulationParams:
@@ -268,3 +273,67 @@ def test_frequency_bars_omits_the_legend_beyond_the_display_cap() -> None:
 
     assert figure.axes[0].get_legend() is None
     plt.close(figure)
+
+
+def test_frequency_points_shape_is_locus_allele_rows_by_deme_columns() -> None:
+    """Public data function (graphical-interface migration §3.3): shape and content.
+
+    Direct regression test that the GUI's own bridge can rely on this
+    function without ever building a `Figure` — no `matplotlib.pyplot`
+    call anywhere in this test.
+    """
+    state = _state(2)
+
+    points = frequency_points(state)
+
+    assert points.shape == (2, 2)
+    # Row 0 is allele 0's frequency in each deme (deme 0's own construction:
+    # {AlleleId(0): 1/4, AlleleId(1): 3/4}; deme 1's: {AlleleId(0): 2/4, ...}).
+    assert points[0][0] == pytest.approx(1 / 4)
+    assert points[0][1] == pytest.approx(2 / 4)
+
+
+def test_pooled_frequency_points_matches_frequency_points_for_one_state() -> None:
+    """Pooling a single state is exactly that state's own `frequency_points`."""
+    state = _state(2)
+
+    pooled = pooled_frequency_points([state])
+
+    assert np.array_equal(pooled, frequency_points(state))
+
+
+def test_pooled_frequency_points_concatenates_before_grouping() -> None:
+    """Two states' points pool into one array; coincident rows across states group.
+
+    The direct regression test for the "some engine work" the migration
+    design (§0.5) anticipated: two independent states that happen to
+    share one (deme-1, deme-2) coordinate must group into one bigger,
+    numbered marker exactly as two coincident loci within a single
+    state already do (`test_coincident_common_and_rare_points_are_
+    grouped_and_labeled` above) — coincidence counting must not care
+    whether the coincidence came from two loci or two replicates.
+    """
+    loci = (LocusSpec(1, 100),)
+    # A single allele fixed at every deme (mirrors
+    # test_pca_projection_handles_a_single_point_without_svd above): each
+    # state alone contributes exactly one (locus, allele) row, at the same
+    # coordinate — the direct replicate-level analog of that test's own
+    # single-run collapse.
+    first = ModelState(loci=loci, frequencies=(({AlleleId(0): 1.0},),) * 2)
+    second = ModelState(loci=loci, frequencies=(({AlleleId(0): 1.0},),) * 2)
+
+    pooled = pooled_frequency_points([first, second])
+
+    assert pooled.shape == (2, 2)
+    unique, sizes, colors, labels = marker_groups(
+        tuple((float(x), float(y)) for x, y in pooled)
+    )
+    assert len(unique) == 1
+    assert sizes[0] > 30.0
+    assert labels == ["2"]
+    assert colors == ["tab:blue"]
+
+
+def test_pooled_frequency_points_of_no_states_is_empty() -> None:
+    """An empty pool is empty, not an error — a batch with no replicates yet."""
+    assert pooled_frequency_points([]).shape == (0, 0)

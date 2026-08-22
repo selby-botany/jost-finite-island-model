@@ -53,7 +53,7 @@ def plot_frequency_scatter(
         raise ValueError("state deme count does not match params.d")
     if pairwise_max_demes < MINIMUM_PAIRWISE_MAX_DEMES:
         raise ValueError("pairwise_max_demes must be at least 4")
-    points = _frequency_points(state)
+    points = frequency_points(state)
     if state.deme_count == DIRECT_2D_DEMES:
         figure = _plot_two_dimensional(points)
     elif state.deme_count == DIRECT_3D_DEMES:
@@ -75,8 +75,16 @@ def plot_frequency_scatter(
     return figure
 
 
-def _frequency_points(state: ModelState) -> FloatArray:
-    """Return one row per locus/allele and one column per deme."""
+def frequency_points(state: ModelState) -> FloatArray:
+    """Return one row per locus/allele and one column per deme.
+
+    Public (graphical-interface migration design doc §3.3, §3.5): the
+    GUI's bridge calls this directly to get raw scatter coordinates for
+    client-side rendering, without going through `plot_frequency_scatter`
+    at all — it never builds a `Figure`. `plot_frequency_scatter` itself
+    still calls this internally for the CLI's own `scatter.png`; nothing
+    about that path changes.
+    """
     locus_allele_pairs: list[tuple[int, AlleleId]] = []
     for locus_index in range(state.locus_count):
         allele_ids: dict[AlleleId, None] = {}
@@ -105,10 +113,47 @@ def _frequency_points(state: ModelState) -> FloatArray:
     return np.asarray(point_rows, dtype=np.float64)
 
 
-def _marker_groups(
+def pooled_frequency_points(states: Sequence[ModelState]) -> FloatArray:
+    """Pool several states' `frequency_points` into one combined array.
+
+    Public (graphical-interface migration design doc §0.5, §3.3): the
+    GUI's live/batch-results bridge methods call this to build the
+    pooled, multi-replicate overlay scatter the reference visualization
+    (Lou Jost's `Dear-NolanMarch17Final.pdf` Figs. 1-2) uses — the
+    frequency of each allele in one deme plotted against another,
+    pooled across every replicate run, not one run's own loci/alleles
+    alone. `frequency_points` already returns one row per (locus,
+    allele) pair for a single state; this concatenates that same
+    per-state result across several states (independent replicates, or
+    the same replicate sampled at different generations) before
+    `marker_groups` groups the pooled rows — coincidence counting then
+    treats a point shared by two replicates exactly the same way it
+    already treats a point shared by two loci within one replicate, no
+    special case needed either way.
+
+    Args:
+        states: One or more states sharing the same deme count.
+
+    Returns:
+        The row-wise concatenation of `frequency_points(state)` for
+        every state, in the given order. Empty (zero rows, but still
+        correctly shaped) if `states` is empty.
+    """
+    if not states:
+        return np.empty((0, 0), dtype=np.float64)
+    return np.concatenate([frequency_points(state) for state in states], axis=0)
+
+
+def marker_groups(
     coordinates: Sequence[tuple[float, float]],
 ) -> tuple[FloatArray, FloatArray, list[str], list[str]]:
-    """Collapse coincident points and derive marker sizes, colors, and labels."""
+    """Collapse coincident points and derive marker sizes, colors, and labels.
+
+    Public (graphical-interface migration design doc §3.3, §3.5): the
+    GUI's bridge calls this directly, over `pooled_frequency_points`'s
+    output as readily as over one state's own `frequency_points` output
+    — coincidence counting has no notion of where a point came from.
+    """
     counts = Counter(coordinates)
     unique = np.asarray(tuple(counts), dtype=np.float64)
     sizes = np.asarray(
@@ -207,7 +252,7 @@ def _scatter_on_axis(
     coordinates = tuple(
         (float(x), float(y)) for x, y in zip(horizontal, vertical, strict=True)
     )
-    unique, sizes, colors, labels = _marker_groups(coordinates)
+    unique, sizes, colors, labels = marker_groups(coordinates)
     axis.scatter(
         unique[:, 0],
         unique[:, 1],

@@ -224,6 +224,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [plot\_frequency\_bars](#fim.viz.diagnostics.plot_frequency_bars)
 * [fim.viz.scatter](#fim.viz.scatter)
   * [plot\_frequency\_scatter](#fim.viz.scatter.plot_frequency_scatter)
+  * [frequency\_points](#fim.viz.scatter.frequency_points)
+  * [pooled\_frequency\_points](#fim.viz.scatter.pooled_frequency_points)
+  * [marker\_groups](#fim.viz.scatter.marker_groups)
 
 <a id="fim"></a>
 
@@ -4101,4 +4104,74 @@ Plot one point per locus/allele in deme-frequency coordinate space.
 **Returns**:
 
   The created Matplotlib figure.
+
+<a id="fim.viz.scatter.frequency_points"></a>
+
+#### frequency\_points
+
+```python
+def frequency_points(state: ModelState) -> FloatArray
+```
+
+Return one row per locus/allele and one column per deme.
+
+Public (graphical-interface migration design doc §3.3, §3.5): the
+GUI's bridge calls this directly to get raw scatter coordinates for
+client-side rendering, without going through `plot_frequency_scatter`
+at all — it never builds a `Figure`. `plot_frequency_scatter` itself
+still calls this internally for the CLI's own `scatter.png`; nothing
+about that path changes.
+
+<a id="fim.viz.scatter.pooled_frequency_points"></a>
+
+#### pooled\_frequency\_points
+
+```python
+def pooled_frequency_points(states: Sequence[ModelState]) -> FloatArray
+```
+
+Pool several states' `frequency_points` into one combined array.
+
+Public (graphical-interface migration design doc §0.5, §3.3): the
+GUI's live/batch-results bridge methods call this to build the
+pooled, multi-replicate overlay scatter the reference visualization
+(Lou Jost's `Dear-NolanMarch17Final.pdf` Figs. 1-2) uses — the
+frequency of each allele in one deme plotted against another,
+pooled across every replicate run, not one run's own loci/alleles
+alone. `frequency_points` already returns one row per (locus,
+allele) pair for a single state; this concatenates that same
+per-state result across several states (independent replicates, or
+the same replicate sampled at different generations) before
+`marker_groups` groups the pooled rows — coincidence counting then
+treats a point shared by two replicates exactly the same way it
+already treats a point shared by two loci within one replicate, no
+special case needed either way.
+
+**Arguments**:
+
+- `states` - One or more states sharing the same deme count.
+
+
+**Returns**:
+
+  The row-wise concatenation of `frequency_points(state)` for
+  every state, in the given order. Empty (zero rows, but still
+  correctly shaped) if `states` is empty.
+
+<a id="fim.viz.scatter.marker_groups"></a>
+
+#### marker\_groups
+
+```python
+def marker_groups(
+    coordinates: Sequence[tuple[float, float]]
+) -> tuple[FloatArray, FloatArray, list[str], list[str]]
+```
+
+Collapse coincident points and derive marker sizes, colors, and labels.
+
+Public (graphical-interface migration design doc §3.3, §3.5): the
+GUI's bridge calls this directly, over `pooled_frequency_points`'s
+output as readily as over one state's own `frequency_points` output
+— coincidence counting has no notion of where a point came from.
 
