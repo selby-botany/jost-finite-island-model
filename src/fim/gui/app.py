@@ -39,15 +39,15 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 import webview
 import yaml
 
 from fim import paths
 from fim.cli import load_config
-from fim.gui import runner
-from fim.gui.batch_runner import default_max_workers
+from fim.engine import RunResult, deterministic_run_id, replicate_summary
+from fim.gui import batch_runner, runner
 from fim.gui.config_form import (
     field_for_error,
     form_values_to_payload,
@@ -56,10 +56,28 @@ from fim.gui.config_form import (
     starter_form_values,
     tab_for_error,
 )
+from fim.gui.store import read_live_state, read_progress_sidecar
 from fim.model.params import SimulationParams
-from fim.viz.scatter import scatter_panels
+from fim.model.state import ModelState
+from fim.viz.scatter import pooled_scatter_panels, scatter_panels
 
 _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
+
+
+class _EvaluatesJs(Protocol):
+    """Structural stand-in for the one `webview.Window` capability this
+    module's background-thread targets actually use — pushing a script
+    to the page via `evaluate_js`. Every real caller still passes a
+    real `webview.Window` (which satisfies this structurally, with no
+    inheritance needed); this exists so `test/gui/test_app_api.py` can
+    exercise `_push_batch_progress`'s own real file-reading logic
+    against a lightweight fake instead, with no `gui` marker and no
+    real window required for logic that never otherwise touches
+    pywebview.
+    """
+
+    def evaluate_js(self, script: str) -> Any: ...
+
 
 # `paths.default_output_directory()` names a directory by the current
 # second (`run-YYYYMMDD-HHMMSS`, UTC) — deliberately unchanged here
@@ -76,6 +94,16 @@ _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
 # wall clock to cross into a new second before giving up for real.
 _START_RUN_COLLISION_RETRY_INTERVAL_SECONDS: Final = 0.1
 _START_RUN_COLLISION_MAX_WAIT_SECONDS: Final = 2.0
+
+# How often `_drain_batch_messages` re-polls every in-flight replicate's
+# own `.progress` sidecar between checking `message_queue` for the
+# batch's terminal outcome (design §3.4, §7.6). Coarser than `fim.gui.
+# runner.PROGRESS_THROTTLE_INTERVAL_SECONDS` (a scalar run's own,
+# in-process push interval) on purpose: each tick here re-reads a whole
+# `trajectory.jsonl` per currently-reporting replicate
+# (`read_live_state`'s own docstring), a real, if usually small, cost
+# that grows with both replicate count and how far each has run.
+_BATCH_POLL_INTERVAL_SECONDS: Final = 0.5
 
 # The Tk-era `results_screen.py`'s own six named statistics (design
 # §4.3, requirement G3's "all six named statistics") — `FinalReport`
@@ -162,7 +190,9 @@ class Api:
         *,
         open_folder: Callable[[Path], None] = _reveal_in_file_browser,
         on_run_started: Callable[[], None] | None = None,
-        on_message: Callable[[runner.RunMessage], None] | None = None,
+        on_message: (
+            Callable[[runner.RunMessage | batch_runner.BatchMessage], None] | None
+        ) = None,
     ) -> None:
         """Start with no run in flight.
 
@@ -183,14 +213,16 @@ class Api:
                 to infer it — see `test/gui/test_running_screen.py`'s
                 own module docstring for why a test-side
                 `window.evaluate_js` poll loop is the wrong tool here.
-            on_message: Test-only hook, called with every
-                `runner.RunMessage` `_drain_run_messages` dispatches,
-                right after that message's own `window.evaluate_js`
-                push — the same "push, not poll" shape this bridge
-                already uses toward the page, extended to let a test
-                observe it directly in Python (a `threading.Event`/
-                `queue.Queue`, no `evaluate_js` call of the test's own
-                involved) instead of polling the DOM for the same fact.
+            on_message: Test-only hook, called with every message
+                `_drain_run_messages` (a `runner.RunMessage`) or
+                `_drain_batch_messages` (a `batch_runner.BatchMessage`)
+                dispatches, right after that message's own `window.
+                evaluate_js` push — the same "push, not poll" shape
+                this bridge already uses toward the page, extended to
+                let a test observe it directly in Python (a `threading.
+                Event`/`queue.Queue`, no `evaluate_js` call of the
+                test's own involved) instead of polling the DOM for the
+                same fact.
         """
         self._cancel_event: threading.Event | None = None
         self._open_folder = open_folder
@@ -198,20 +230,26 @@ class Api:
         self._on_message = on_message
 
     def start_run(self, values: dict[str, str]) -> dict[str, Any]:
-        """Validate the form, then start a scalar run pushing live progress to the page.
+        """Validate the form, then start a run pushing live progress to the page.
 
-        Runs on a background `threading.Thread` (`fim.gui.runner.
-        start_run`, unchanged from the Tk-era build — design §1.2) so
+        Dispatches to a scalar or a real parallel batch run based on
+        `params.n_replicates` alone — design §4.1's "there is no
+        separate 'batch mode' toggle; `n_replicates` *is* the toggle,"
+        so this one bridge method serves both, and `webui/screens/
+        input.js`'s own `onRunClicked` never needs to know or care
+        which. Either path runs on a background `threading.Thread` so
         this call itself returns immediately; the caller drives Screen 2
-        from the `fim.onRunProgress`/`fim.onRunDone`/`fim.onRunCancelled`/
-        `fim.onRunError` calls a second background thread pushes via
-        `window.evaluate_js` as each message arrives (design §3.4's
-        "push, not poll" — proven safe from an arbitrary background
-        thread, not only `webview.start`'s own driver thread, before this
-        method was written; see `test/gui/test_running_screen.py`).
+        from the pushed `fim.onRun*`/`fim.onBatch*` calls a second
+        background thread makes via `window.evaluate_js` as each
+        message arrives (design §3.4's "push, not poll" — proven safe
+        from an arbitrary background thread, not only `webview.start`'s
+        own driver thread, before this method was written; see
+        `test/gui/test_running_screen.py`).
 
         Args:
-            values: The same shape `validate_form` accepts.
+            values: The same shape `validate_form` accepts, plus (for a
+                batch) the Batch tab's own `max_workers` field — not a
+                `SimulationParams` field at all, parsed here directly.
 
         Returns:
             `{"ok": True}` once the run has *started* — not once it
@@ -230,6 +268,14 @@ class Api:
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         output_directory = _resolve_available_output_directory()
+        if params.n_replicates > 1:
+            return self._start_batch_run(params, output_directory, values)
+        return self._start_scalar_run(params, output_directory)
+
+    def _start_scalar_run(
+        self, params: SimulationParams, output_directory: Path
+    ) -> dict[str, Any]:
+        """The `n_replicates == 1` half of `start_run` (`fim.gui.runner`, unchanged)."""
         message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
         cancel_event = threading.Event()
         try:
@@ -246,6 +292,45 @@ class Api:
                 window,
                 message_queue,
                 params.max_generations,
+                output_directory,
+                self._on_message,
+            ),
+            daemon=True,
+        ).start()
+        return {"ok": True}
+
+    def _start_batch_run(
+        self,
+        params: SimulationParams,
+        output_directory: Path,
+        values: dict[str, str],
+    ) -> dict[str, Any]:
+        """The `n_replicates > 1` half of `start_run` (`fim.gui.batch_runner`, §7.6)."""
+        max_workers = _parse_max_workers(values.get("max_workers", ""))
+        run_id = deterministic_run_id(params)
+        message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
+        cancel_event = threading.Event()
+        try:
+            batch_runner.start_batch_run(
+                params,
+                output_directory,
+                message_queue,
+                cancel_event,
+                max_workers=max_workers,
+            )
+        except FileExistsError as error:
+            return {"ok": False, "message": str(error)}
+        self._cancel_event = cancel_event
+        if self._on_run_started is not None:
+            self._on_run_started()
+        window = webview.windows[0]
+        threading.Thread(
+            target=_drain_batch_messages,
+            args=(
+                window,
+                message_queue,
+                params,
+                run_id,
                 output_directory,
                 self._on_message,
             ),
@@ -384,7 +469,7 @@ class Api:
         `config_form` entry; this reuses `batch_runner.default_max_
         workers` directly rather than inventing a second default.
         """
-        return default_max_workers()
+        return batch_runner.default_max_workers()
 
     def ping(self) -> str:
         """Prove the basic JS-to-Python bridge round trip (Milestone W1).
@@ -412,7 +497,7 @@ class Api:
 
 
 def _drain_run_messages(
-    window: webview.Window,
+    window: _EvaluatesJs,
     message_queue: queue.Queue[runner.RunMessage],
     max_generations: int,
     output_directory: Path,
@@ -485,6 +570,180 @@ def _drain_run_messages(
             if on_message is not None:
                 on_message(message)
             return
+
+
+def _parse_max_workers(value: str) -> int | None:
+    """Parse the Batch tab's own `max_workers` field.
+
+    Returns `None` (meaning "use `batch_runner.default_max_workers()`")
+    for anything that does not parse to a positive integer — this field
+    has no validation UI of its own (`config_form.py`'s "O(1)/O(d)
+    fields get a live widget" cardinality rule never covered it, since
+    it is not a `SimulationParams` field at all), so a blank or
+    corrupted value falls back to the default silently rather than
+    blocking the run on a field the user has no way to see flagged.
+    """
+    try:
+        parsed = int(value)
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _push_batch_progress(
+    window: _EvaluatesJs,
+    params: SimulationParams,
+    run_id: str,
+    working_directory: Path,
+) -> None:
+    """Read every currently-reporting replicate's live state, push a pooled scatter.
+
+    A replicate that has not yet written its own `.progress` sidecar
+    (`read_progress_sidecar` returns `None`) or whose sidecar-reported
+    generation is not yet safely readable (`read_live_state` returns
+    `None` — a transient race, not an error; see its own docstring) is
+    silently skipped for *this* tick, not treated as a failure: the
+    next tick, `_BATCH_POLL_INTERVAL_SECONDS` later, tries again.
+    """
+    states: list[ModelState] = []
+    for index in range(1, params.n_replicates + 1):
+        replicate_run_id = f"{run_id}-r{index:03}"
+        directory = batch_runner.replicate_output_directory(
+            working_directory, run_id, replicate_run_id
+        )
+        sidecar = read_progress_sidecar(directory / ".progress")
+        if sidecar is None:
+            continue
+        state = read_live_state(
+            directory / "trajectory.jsonl",
+            replicate_run_id,
+            sidecar["generation"],
+            params.loci,
+        )
+        if state is not None:
+            states.append(state)
+    progress_payload = {
+        "replicateCount": params.n_replicates,
+        "reportedReplicateCount": len(states),
+        "panels": pooled_scatter_panels(states, params.d),
+    }
+    window.evaluate_js(f"fim.onBatchProgress({json.dumps(progress_payload)})")
+
+
+def _batch_done_payload(
+    params: SimulationParams,
+    run_id: str,
+    output_directory: Path,
+    results: tuple[RunResult, ...],
+) -> dict[str, Any]:
+    """Build `fim.onBatchDone`'s own payload from a batch's final results (design §4.4).
+
+    `replicates` is the row data for Screen 4's own table (one row per
+    *published* replicate — `results`' own length, not necessarily
+    `params.n_replicates`: an adaptive `replicate_tolerance` stop can
+    end a batch short of its own cap). `summary` is `replicate_summary`'s
+    own per-statistic confidence interval, pre-formatted server-side
+    (`format_statistic`, matching every other statistic this bridge
+    ever sends the page — §3.5's "the client never reimplements
+    Python's own display formatting" extended from Screen 3 to Screen
+    4) — omitted entirely (an empty `{}`) if `replicate_summary` itself
+    has too few results to define an interval from, its own documented
+    `ValueError` case, not something this bridge treats as a real
+    error partway through an otherwise-successful batch.
+    """
+    replicates = [
+        {
+            "index": index,
+            "runId": result.run_id,
+            "generation": result.report["generation"],
+            "converged": result.report["converged"],
+            "reason": result.report["reason"],
+            "statistics": {
+                name: format_statistic(result.report[name])
+                for name in _RESULT_STATISTIC_NAMES
+            },
+        }
+        for index, result in enumerate(results, start=1)
+    ]
+    try:
+        raw_summary = replicate_summary(results)
+    except ValueError:
+        raw_summary = {}
+    summary = {
+        name: {
+            "mean": format_statistic(interval["mean"]),
+            "low": format_statistic(interval["low"]),
+            "high": format_statistic(interval["high"]),
+            "sampleCount": interval["sample_count"],
+        }
+        for name, interval in raw_summary.items()
+    }
+    return {
+        "runId": run_id,
+        "outputDirectory": str(output_directory),
+        "panels": pooled_scatter_panels(
+            [result.final_state for result in results], params.d
+        ),
+        "replicates": replicates,
+        "summary": summary,
+    }
+
+
+def _drain_batch_messages(
+    window: _EvaluatesJs,
+    message_queue: queue.Queue[batch_runner.BatchMessage],
+    params: SimulationParams,
+    run_id: str,
+    output_directory: Path,
+    on_message: Callable[[batch_runner.BatchMessage], None] | None = None,
+) -> None:
+    """Push every `batch_runner.BatchMessage`, polling live progress between them.
+
+    Unlike `_drain_run_messages`'s single blocking `message_queue.get()`
+    loop, this thread has two jobs to interleave (`fim.gui.batch_
+    runner`'s own module docstring: "a lightweight poller... discovers
+    progress by reading each in-flight replicate's own `.progress`
+    sidecar"): draining `message_queue` for the batch's own terminal
+    outcome, and periodically pushing a pooled live-progress scatter —
+    nothing about a batch's own per-generation progress is queued the
+    way a scalar run's is, since it is entirely file-mediated (design
+    §3.4).
+
+    The very first message is always `("started", working_directory)`
+    — `batch_runner._batch_worker` posts it before calling `fim(...)`
+    at all — so this thread blocks for it specifically before its own
+    poll loop starts: nothing here is possible without knowing where
+    the batch's replicates are actually writing.
+    """
+    started = message_queue.get()
+    if started[0] != "started":
+        # Structurally unreachable: `_batch_worker` always posts
+        # `("started", working_directory)` first, before anything else
+        # (`batch_runner.py`'s own comment at that call site) — this
+        # narrows `started[1]`'s type for mypy the same way every other
+        # `BatchMessage`/`RunMessage` union member is narrowed elsewhere
+        # in this file, rather than indexing it away with a cast.
+        raise RuntimeError(f"expected a 'started' message first, got {started[0]!r}")
+    if on_message is not None:
+        on_message(started)
+    working_directory = started[1]
+    while True:
+        try:
+            message = message_queue.get(timeout=_BATCH_POLL_INTERVAL_SECONDS)
+        except queue.Empty:
+            _push_batch_progress(window, params, run_id, working_directory)
+            continue
+        if message[0] == "done":
+            payload = _batch_done_payload(params, run_id, output_directory, message[1])
+            window.evaluate_js(f"fim.onBatchDone({json.dumps(payload)})")
+        elif message[0] == "cancelled":
+            cancelled_payload = {"replicateIndex": message[1], "generation": message[2]}
+            window.evaluate_js(f"fim.onBatchCancelled({json.dumps(cancelled_payload)})")
+        else:
+            window.evaluate_js(f"fim.onBatchError({json.dumps(message[1])})")
+        if on_message is not None:
+            on_message(message)
+        return
 
 
 def _worker_ping() -> str:

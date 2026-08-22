@@ -1091,10 +1091,12 @@ reimplemented here.
 
 ```python
 def __init__(
-        *,
-        open_folder: Callable[[Path], None] = _reveal_in_file_browser,
-        on_run_started: Callable[[], None] | None = None,
-        on_message: Callable[[runner.RunMessage], None] | None = None) -> None
+    *,
+    open_folder: Callable[[Path], None] = _reveal_in_file_browser,
+    on_run_started: Callable[[], None] | None = None,
+    on_message: (Callable[[runner.RunMessage | batch_runner.BatchMessage],
+                          None] | None) = None
+) -> None
 ```
 
 Start with no run in flight.
@@ -1117,14 +1119,16 @@ Start with no run in flight.
   to infer it — see `test/gui/test_running_screen.py`'s
   own module docstring for why a test-side
   `window.evaluate_js` poll loop is the wrong tool here.
-- `on_message` - Test-only hook, called with every
-  `runner.RunMessage` `_drain_run_messages` dispatches,
-  right after that message's own `window.evaluate_js`
-  push — the same "push, not poll" shape this bridge
-  already uses toward the page, extended to let a test
-  observe it directly in Python (a `threading.Event`/
-  `queue.Queue`, no `evaluate_js` call of the test's own
-  involved) instead of polling the DOM for the same fact.
+- `on_message` - Test-only hook, called with every message
+  `_drain_run_messages` (a `runner.RunMessage`) or
+  `_drain_batch_messages` (a `batch_runner.BatchMessage`)
+  dispatches, right after that message's own `window.
+  evaluate_js` push — the same "push, not poll" shape
+  this bridge already uses toward the page, extended to
+  let a test observe it directly in Python (a `threading.
+  Event`/`queue.Queue`, no `evaluate_js` call of the
+  test's own involved) instead of polling the DOM for the
+  same fact.
 
 <a id="fim.gui.app.Api.start_run"></a>
 
@@ -1134,21 +1138,27 @@ Start with no run in flight.
 def start_run(values: dict[str, str]) -> dict[str, Any]
 ```
 
-Validate the form, then start a scalar run pushing live progress to the page.
+Validate the form, then start a run pushing live progress to the page.
 
-Runs on a background `threading.Thread` (`fim.gui.runner.
-start_run`, unchanged from the Tk-era build — design §1.2) so
+Dispatches to a scalar or a real parallel batch run based on
+`params.n_replicates` alone — design §4.1's "there is no
+separate 'batch mode' toggle; `n_replicates` *is* the toggle,"
+so this one bridge method serves both, and `webui/screens/
+input.js`'s own `onRunClicked` never needs to know or care
+which. Either path runs on a background `threading.Thread` so
 this call itself returns immediately; the caller drives Screen 2
-from the `fim.onRunProgress`/`fim.onRunDone`/`fim.onRunCancelled`/
-`fim.onRunError` calls a second background thread pushes via
-`window.evaluate_js` as each message arrives (design §3.4's
-"push, not poll" — proven safe from an arbitrary background
-thread, not only `webview.start`'s own driver thread, before this
-method was written; see `test/gui/test_running_screen.py`).
+from the pushed `fim.onRun*`/`fim.onBatch*` calls a second
+background thread makes via `window.evaluate_js` as each
+message arrives (design §3.4's "push, not poll" — proven safe
+from an arbitrary background thread, not only `webview.start`'s
+own driver thread, before this method was written; see
+`test/gui/test_running_screen.py`).
 
 **Arguments**:
 
-- `values` - The same shape `validate_form` accepts.
+- `values` - The same shape `validate_form` accepts, plus (for a
+  batch) the Batch tab's own `max_workers` field — not a
+  `SimulationParams` field at all, parsed here directly.
 
 
 **Returns**:

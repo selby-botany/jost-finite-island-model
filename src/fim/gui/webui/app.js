@@ -37,6 +37,28 @@ const fim = {
     onRunError() {
         // Overridden once Screen 2 (screens/progress.js) exists.
     },
+
+    // The batch (`n_replicates > 1`) counterparts `Api._start_batch_run`
+    // pushes instead (design §4.1's "n_replicates *is* the toggle" —
+    // the same one `start_run` call, a different message shape). No-op
+    // stubs for now, matching the scalar handlers' own walking-skeleton
+    // precedent above: `fim.gui.app._drain_batch_messages` already
+    // calls these for real (Milestone W5's backend half), so a real
+    // batch run does not throw a `JavascriptException` calling an
+    // undefined function — Screen 2/4's own batch-aware rendering is
+    // Milestone W5's remaining, frontend half.
+    onBatchProgress() {
+        // Overridden once the batch progress screen extension exists.
+    },
+    onBatchDone() {
+        // Overridden once Screen 4 (screens/batch-results.js) exists.
+    },
+    onBatchCancelled() {
+        // Overridden once the batch progress screen extension exists.
+    },
+    onBatchError() {
+        // Overridden once the batch progress screen extension exists.
+    },
 };
 
 window.fim = fim;

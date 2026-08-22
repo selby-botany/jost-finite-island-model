@@ -12,16 +12,28 @@ dialog) and are covered instead in `test/gui/test_app.py`, marked `gui`.
 
 from __future__ import annotations
 
+import json
 import time as time_module
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from fim import paths as paths_module
+from fim.engine import RunResult, replicate_summary
+from fim.engine import fim as engine_fim
 from fim.gui import app as app_module
+from fim.gui import batch_runner
 from fim.gui.app import Api, format_statistic
 from fim.gui.batch_runner import default_max_workers
 from fim.gui.config_form import starter_form_values
+from fim.gui.store import LiveProgressStore
+from fim.model.allele import AlleleId
+from fim.model.locus import LocusSpec
+from fim.model.params import SimulationParams
+from fim.model.state import ModelState
+from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.viz.scatter import pooled_scatter_panels
 
 
 def test_get_starter_form_matches_config_form_directly() -> None:
@@ -172,3 +184,211 @@ def test_resolve_available_output_directory_gives_up_after_the_max_wait(
         / app_module._START_RUN_COLLISION_RETRY_INTERVAL_SECONDS
     )
     assert len(sleeps) == expected_retries
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("4", 4),
+        ("1", 1),
+        ("", None),
+        ("not-a-number", None),
+        ("0", None),
+        ("-1", None),
+        ("3.5", None),
+    ],
+)
+def test_parse_max_workers(raw: str, expected: int | None) -> None:
+    """Only a positive integer parses; everything else falls back to the default.
+
+    The Batch tab's own `max_workers` field has no validation UI of its
+    own (it is not a `SimulationParams` field), so a blank or corrupted
+    value must fail *silently* to the default, not block the run —
+    `None` is that "use `batch_runner.default_max_workers()`" signal.
+    """
+    assert app_module._parse_max_workers(raw) == expected
+
+
+@pytest.fixture
+def batch_params(tiny_params: SimulationParams) -> SimulationParams:
+    """A small, fast three-replicate batch configuration.
+
+    Mirrors `test/gui/test_batch_runner.py`'s own identically-named
+    fixture — a direct parallel, not a shared import, per this
+    project's established per-test-file fixture convention.
+    """
+    return replace(tiny_params, n_replicates=3)
+
+
+@pytest.fixture
+def batch_results(batch_params: SimulationParams) -> tuple[RunResult, ...]:
+    """Three real, completed replicates — the shape `_batch_done_payload` consumes.
+
+    A real `fim.engine.fim(...)` batch call, not hand-built `RunResult`
+    fakes — the same "construct the real thing" precedent `test/gui/
+    test_batch_runner.py`'s own fixtures already established for this
+    exact scale of batch.
+    """
+    results = engine_fim(
+        batch_params.N,
+        batch_params.m,
+        batch_params.mu,
+        batch_params.d,
+        params=batch_params,
+    )
+    assert isinstance(results, tuple)
+    return results
+
+
+def test_batch_done_payload_carries_one_replicate_row_per_result(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+    batch_results: tuple[RunResult, ...],
+) -> None:
+    """`replicates` has one row per published result, 1-indexed, stats formatted."""
+    payload = app_module._batch_done_payload(
+        batch_params, "batch-run-1", tmp_path, batch_results
+    )
+
+    assert payload["runId"] == "batch-run-1"
+    assert payload["outputDirectory"] == str(tmp_path)
+    replicates = payload["replicates"]
+    assert isinstance(replicates, list)
+    assert [row["index"] for row in replicates] == [1, 2, 3]
+    for row, result in zip(replicates, batch_results, strict=True):
+        assert row["runId"] == result.run_id
+        assert row["generation"] == result.report["generation"]
+        assert row["statistics"]["D"] == format_statistic(result.report["D"])
+
+
+def test_batch_done_payload_summary_matches_replicate_summary(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+    batch_results: tuple[RunResult, ...],
+) -> None:
+    """`summary`'s own numbers are `replicate_summary`'s, formatted server-side.
+
+    The same "the client never reimplements Python's own display
+    formatting" rule every other statistic this bridge sends the page
+    already follows.
+    """
+    payload = app_module._batch_done_payload(
+        batch_params, "batch-run-1", tmp_path, batch_results
+    )
+
+    expected = replicate_summary(batch_results)
+    summary = payload["summary"]
+    assert isinstance(summary, dict)
+    assert set(summary) == set(expected)
+    for name, interval in expected.items():
+        assert summary[name]["mean"] == format_statistic(interval["mean"])
+        assert summary[name]["sampleCount"] == interval["sample_count"]
+
+
+def test_batch_done_payload_pools_every_replicate_final_state(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+    batch_results: tuple[RunResult, ...],
+) -> None:
+    """`panels` is the pooled scatter over every replicate's own final state."""
+    payload = app_module._batch_done_payload(
+        batch_params, "batch-run-1", tmp_path, batch_results
+    )
+
+    expected = pooled_scatter_panels(
+        [result.final_state for result in batch_results], batch_params.d
+    )
+    assert payload["panels"] == expected
+
+
+class _FakeWindow:
+    """A `webview.Window` stand-in exposing only `evaluate_js`.
+
+    `_push_batch_progress`'s only "window" dependency is calling
+    `.evaluate_js(script)` — this lets its own real file-reading logic
+    (sidecar discovery, `read_live_state`, `pooled_scatter_panels`) be
+    exercised directly, against real files under `tmp_path`, with no
+    real `pywebview` window and no `gui` marker needed at all.
+    """
+
+    def __init__(self) -> None:
+        self.scripts: list[str] = []
+
+    def evaluate_js(self, script: str) -> None:
+        self.scripts.append(script)
+
+
+def _one_call_payload(window: _FakeWindow, function_name: str) -> dict[str, object]:
+    """Extract and parse the one JSON argument `evaluate_js` was called with."""
+    assert len(window.scripts) == 1
+    script = window.scripts[0]
+    prefix = f"fim.{function_name}("
+    assert script.startswith(prefix)
+    assert script.endswith(")")
+    result: dict[str, object] = json.loads(script[len(prefix) : -1])
+    return result
+
+
+def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+) -> None:
+    """Reads whichever replicates have reported so far; skips the rest silently.
+
+    Writes one replicate's own real `.progress` sidecar and
+    `trajectory.jsonl`, in exactly the file layout `LiveProgressStore`
+    itself produces (`fim.gui.batch_runner._replicate_store_factory`'s
+    own construction, mirrored here directly) — the second replicate's
+    directory is never created at all, the "has not started yet" case
+    `_push_batch_progress`'s own docstring names as normal, not an
+    error.
+    """
+    params = replace(tiny_params, n_replicates=2)
+    run_id = "batch-run-1"
+    replicate_run_id = f"{run_id}-r001"
+    directory = batch_runner.replicate_output_directory(
+        tmp_path, run_id, replicate_run_id
+    )
+    directory.mkdir(parents=True)
+    store = LiveProgressStore(
+        JSONLTrajectoryStore(directory / "trajectory.jsonl"),
+        progress_path=directory / ".progress",
+        cancel_path=tmp_path / "cancel",
+    )
+    state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(0): 0.25, AlleleId(1): 0.75},),
+        ),
+    )
+    store.write_generation(replicate_run_id, 0, state.to_rows(replicate_run_id))
+    window = _FakeWindow()
+
+    app_module._push_batch_progress(window, params, run_id, tmp_path)
+
+    payload = _one_call_payload(window, "onBatchProgress")
+    assert payload["replicateCount"] == 2
+    assert payload["reportedReplicateCount"] == 1
+    panels = payload["panels"]
+    assert isinstance(panels, list)
+    assert len(panels) == 1
+    points = panels[0]["points"]
+    assert isinstance(points, list)
+    assert len(points) == 2
+
+
+def test_push_batch_progress_reports_nothing_before_any_replicate_starts(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+) -> None:
+    """No sidecar anywhere yet still pushes a well-formed, empty progress payload."""
+    params = replace(tiny_params, n_replicates=2)
+    window = _FakeWindow()
+
+    app_module._push_batch_progress(window, params, "batch-run-1", tmp_path)
+
+    payload = _one_call_payload(window, "onBatchProgress")
+    assert payload["replicateCount"] == 2
+    assert payload["reportedReplicateCount"] == 0
+    assert payload["panels"] == []

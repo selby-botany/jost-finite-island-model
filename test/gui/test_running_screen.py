@@ -75,6 +75,7 @@ import pytest
 import webview
 
 from fim.gui.app import Api, create_window
+from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
 
 pytestmark = pytest.mark.gui
@@ -160,12 +161,12 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
     """
     started_event = threading.Event()
     done_event = threading.Event()
-    messages: list[RunMessage] = []
+    messages: list[RunMessage | BatchMessage] = []
 
     def on_run_started() -> None:
         started_event.set()
 
-    def on_message(message: RunMessage) -> None:
+    def on_message(message: RunMessage | BatchMessage) -> None:
         messages.append(message)
         if message[0] in ("done", "cancelled", "error"):
             done_event.set()
@@ -242,7 +243,7 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
     def on_run_started() -> None:
         started_event.set()
 
-    def on_message(message: RunMessage) -> None:
+    def on_message(message: RunMessage | BatchMessage) -> None:
         if message[0] == "cancelled":
             cancelled_event.set()
 
