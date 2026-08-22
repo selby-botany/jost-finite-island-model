@@ -18,21 +18,26 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 
+from fim import cli
 from fim import paths as paths_module
-from fim.engine import RunResult, replicate_summary
+from fim.engine import RunResult, deterministic_run_id, replicate_summary
 from fim.engine import fim as engine_fim
 from fim.gui import app as app_module
 from fim.gui import batch_runner
+from fim.gui import recent_runs as recent_runs_module
 from fim.gui.app import Api, format_statistic
 from fim.gui.batch_runner import default_max_workers
 from fim.gui.config_form import starter_form_values
+from fim.gui.recent_runs import RecentRun
 from fim.gui.store import LiveProgressStore
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
+from fim.persistence.manifest import read_manifest
 from fim.viz.scatter import pooled_scatter_panels
 
 
@@ -228,13 +233,23 @@ def batch_results(batch_params: SimulationParams) -> tuple[RunResult, ...]:
     fakes — the same "construct the real thing" precedent `test/gui/
     test_batch_runner.py`'s own fixtures already established for this
     exact scale of batch.
+
+    Passes `run_id=deterministic_run_id(batch_params)` explicitly,
+    matching `batch_runner._batch_worker`'s own real call exactly
+    (`batch_runner.py`'s own `run_id = deterministic_run_id(params)`
+    then `fim(..., run_id=run_id)`): only then does each replicate's
+    own `run_id` actually come out as `f"{batch_run_id}-r{index:03}"`
+    — `fim()`'s own `run_id is None` branch gives each replicate an
+    independent `deterministic_run_id`, unrelated to any batch run_id.
     """
+    run_id = deterministic_run_id(batch_params)
     results = engine_fim(
         batch_params.N,
         batch_params.m,
         batch_params.mu,
         batch_params.d,
         params=batch_params,
+        run_id=run_id,
     )
     assert isinstance(results, tuple)
     return results
@@ -246,11 +261,19 @@ def test_batch_done_payload_carries_one_replicate_row_per_result(
     batch_results: tuple[RunResult, ...],
 ) -> None:
     """`replicates` has one row per published result, 1-indexed, stats formatted."""
+    # The real batch's own deterministic run_id, not an arbitrary
+    # literal: `_batch_done_payload` uses this same value both as the
+    # payload's own `"runId"` label and, via `replicate_output_
+    # directory`, to recover each replicate's own ordinal from its
+    # `run_id` prefix — only the real value both purposes agree with
+    # what `batch_results` was actually run under.
+    run_id = deterministic_run_id(batch_params)
+
     payload = app_module._batch_done_payload(
-        batch_params, "batch-run-1", tmp_path, batch_results
+        batch_params, run_id, tmp_path, batch_results
     )
 
-    assert payload["runId"] == "batch-run-1"
+    assert payload["runId"] == run_id
     assert payload["outputDirectory"] == str(tmp_path)
     replicates = payload["replicates"]
     assert isinstance(replicates, list)
@@ -259,6 +282,10 @@ def test_batch_done_payload_carries_one_replicate_row_per_result(
         assert row["runId"] == result.run_id
         assert row["generation"] == result.report["generation"]
         assert row["statistics"]["D"] == format_statistic(result.report["D"])
+        expected_directory = batch_runner.replicate_output_directory(
+            tmp_path, run_id, result.run_id
+        )
+        assert row["trajectoryPath"] == str(expected_directory / "trajectory.jsonl")
 
 
 def test_batch_done_payload_summary_matches_replicate_summary(
@@ -272,8 +299,10 @@ def test_batch_done_payload_summary_matches_replicate_summary(
     formatting" rule every other statistic this bridge sends the page
     already follows.
     """
+    run_id = deterministic_run_id(batch_params)
+
     payload = app_module._batch_done_payload(
-        batch_params, "batch-run-1", tmp_path, batch_results
+        batch_params, run_id, tmp_path, batch_results
     )
 
     expected = replicate_summary(batch_results)
@@ -291,8 +320,10 @@ def test_batch_done_payload_pools_every_replicate_final_state(
     batch_results: tuple[RunResult, ...],
 ) -> None:
     """`panels` is the pooled scatter over every replicate's own final state."""
+    run_id = deterministic_run_id(batch_params)
+
     payload = app_module._batch_done_payload(
-        batch_params, "batch-run-1", tmp_path, batch_results
+        batch_params, run_id, tmp_path, batch_results
     )
 
     expected = pooled_scatter_panels(
@@ -392,3 +423,238 @@ def test_push_batch_progress_reports_nothing_before_any_replicate_starts(
     assert payload["replicateCount"] == 2
     assert payload["reportedReplicateCount"] == 0
     assert payload["panels"] == []
+
+
+def _write_run(tmp_path: Path, **overrides: object) -> Path:
+    """Write a small config with several generations and return its output directory.
+
+    Mirrors `test/gui/test_animation.py`'s own identically-named
+    helper — a direct parallel, not a shared import, per this
+    project's established per-test-file fixture convention.
+    """
+    config: dict[str, object] = {
+        "N": 20,
+        "d": 2,
+        "m": 0.1,
+        "mu": 0.01,
+        "seed": 1,
+        "loci": [{"locus_id": 1, "length": 200}],
+        "convergence_window": 8,
+        "convergence_tolerance": 1e-6,
+        "max_generations": 12,
+    }
+    config.update(overrides)
+    config_path = tmp_path / "run.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    output_directory = tmp_path / "output"
+    assert (
+        cli.main(["run", str(config_path), "-o", str(output_directory), "--quiet"]) == 0
+    )
+    return output_directory
+
+
+@pytest.mark.parametrize(
+    ("mode", "text", "expected"),
+    [
+        ("final", "", None),
+        ("final", "5", None),
+        ("choose", "7", 7),
+        ("choose", " 3 ", 3),
+    ],
+)
+def test_parse_generation_accepts_valid_input(
+    mode: str, text: str, expected: int | None
+) -> None:
+    """ "final" always means `None`; "choose" parses its own entry."""
+    assert app_module._parse_generation(mode, text) == expected
+
+
+@pytest.mark.parametrize("text", ["", "not-a-number", "3.5"])
+def test_parse_generation_rejects_invalid_choose_input(text: str) -> None:
+    """ "choose" with an empty or non-integer entry is a real validation error."""
+    with pytest.raises(ValueError, match="generation must be an integer"):
+        app_module._parse_generation("choose", text)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("", ()),
+        ("   ", ()),
+        ("1", (1.0,)),
+        ("1 2 3", (1.0, 2.0, 3.0)),
+        ("1, 2,3", (1.0, 2.0, 3.0)),
+    ],
+)
+def test_parse_differentiation_orders_accepts_valid_input(
+    text: str, expected: tuple[float, ...]
+) -> None:
+    assert app_module._parse_differentiation_orders(text) == expected
+
+
+def test_parse_differentiation_orders_rejects_a_non_numeric_token() -> None:
+    with pytest.raises(ValueError, match="space/comma-separated numbers"):
+        app_module._parse_differentiation_orders("1 not-a-number 3")
+
+
+def test_list_recent_runs_reshapes_every_recent_run_into_a_json_dict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bridge method adds little logic beyond calling `recent_runs.
+    list_recent_runs` and joining each non-batch row's own trajectory
+    path (in Python, not the page — a client-side string join would
+    silently mix path separators on Windows).
+
+    Injected via monkeypatch, not a real `results/` scan — `fim.gui.
+    recent_runs`'s own test suite already covers the real scan directly.
+    """
+    canned = [
+        RecentRun(
+            run_id="run-1",
+            directory=tmp_path / "run-1",
+            ended_at="2026-08-22T00:00:00Z",
+            label="statistic converged",
+            is_batch=False,
+        ),
+        RecentRun(
+            run_id="run-2",
+            directory=tmp_path / "run-2",
+            ended_at="2026-08-21T00:00:00Z",
+            label="batch (14/20)",
+            is_batch=True,
+        ),
+    ]
+    monkeypatch.setattr(recent_runs_module, "list_recent_runs", lambda: canned)
+
+    result = Api().list_recent_runs()
+
+    assert result == [
+        {
+            "runId": "run-1",
+            "directory": str(tmp_path / "run-1"),
+            "trajectoryPath": str(tmp_path / "run-1" / "trajectory.jsonl"),
+            "endedAt": "2026-08-22T00:00:00Z",
+            "label": "statistic converged",
+            "isBatch": False,
+        },
+        {
+            "runId": "run-2",
+            "directory": str(tmp_path / "run-2"),
+            "trajectoryPath": None,
+            "endedAt": "2026-08-21T00:00:00Z",
+            "label": "batch (14/20)",
+            "isBatch": True,
+        },
+    ]
+
+
+def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> None:
+    """A bare "final" open reproduces the run's own terminal report."""
+    output = _write_run(tmp_path)
+    manifest = read_manifest(output / "manifest.json")
+
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+
+    assert result["ok"] is True
+    assert result["runId"] == manifest.run_id
+    assert result["report"]["generation"] == manifest.generation
+    assert result["report"]["reason"] == manifest.stop_reason
+    assert result["outputDirectory"] == str(output)
+    assert result["generationCount"] == manifest.generation_count
+    assert set(result["statistics"]) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
+    assert isinstance(result["panels"], list)
+
+
+def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(
+    tmp_path: Path,
+) -> None:
+    """A non-final generation reports "re-analysis", not the run's own reason."""
+    output = _write_run(tmp_path)
+    manifest = read_manifest(output / "manifest.json")
+    earlier = max(manifest.generation - 1, 0)
+
+    result = Api().open_run(
+        {
+            "trajectoryPath": str(output / "trajectory.jsonl"),
+            "generationMode": "choose",
+            "generation": str(earlier),
+        }
+    )
+
+    assert result["ok"] is True
+    assert result["report"]["generation"] == earlier
+    assert result["report"]["reason"] == "re-analysis"
+    assert result["report"]["converged"] is False
+
+
+def test_open_run_runs_a_differentiation_q_sweep_when_requested(
+    tmp_path: Path,
+) -> None:
+    output = _write_run(tmp_path)
+
+    result = Api().open_run(
+        {
+            "trajectoryPath": str(output / "trajectory.jsonl"),
+            "differentiationOrders": "0.5, 2",
+        }
+    )
+
+    assert result["ok"] is True
+    assert set(result["report"]["Differentiation_q"]) == {"0.5", "2.0"}
+
+
+def test_open_run_rejects_no_trajectory_selected() -> None:
+    assert Api().open_run({}) == {"ok": False, "message": "no trajectory selected"}
+
+
+def test_open_run_rejects_an_invalid_generation_entry(tmp_path: Path) -> None:
+    output = _write_run(tmp_path)
+
+    result = Api().open_run(
+        {
+            "trajectoryPath": str(output / "trajectory.jsonl"),
+            "generationMode": "choose",
+            "generation": "not-a-number",
+        }
+    )
+
+    assert result == {"ok": False, "message": "generation must be an integer"}
+
+
+def test_open_run_reports_a_missing_trajectory_without_raising(tmp_path: Path) -> None:
+    """A real regression: `reanalyze_trajectory`'s own manifest read raises
+    `FileNotFoundError` (an `OSError`), not the `ValueError` this bridge
+    method's exception handling originally caught alone."""
+    result = Api().open_run(
+        {"trajectoryPath": str(tmp_path / "never-written" / "trajectory.jsonl")}
+    )
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_get_animation_frames_ships_client_ready_panels(tmp_path: Path) -> None:
+    """Every sampled frame's points already arrive as `scatter_panels`-shaped panels."""
+    output = _write_run(tmp_path)
+
+    result = Api().get_animation_frames(str(output))
+
+    assert result["ok"] is True
+    frames = result["frames"]
+    assert isinstance(frames, list)
+    assert len(frames) >= 2
+    assert frames[0]["generation"] == 0
+    for frame in frames:
+        panels = frame["panels"]
+        assert isinstance(panels, list)
+        assert len(panels) == 1
+        assert panels[0]["x_label"] == "Deme 1"
+
+
+def test_get_animation_frames_reports_a_missing_run_without_raising(
+    tmp_path: Path,
+) -> None:
+    result = Api().get_animation_frames(str(tmp_path / "never-written"))
+
+    assert result["ok"] is False
+    assert "message" in result
