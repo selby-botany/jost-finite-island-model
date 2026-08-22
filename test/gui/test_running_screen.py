@@ -172,7 +172,7 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
             done_event.set()
 
     window = create_window(
-        api=Api(on_run_started=on_run_started, on_message=on_message)
+        api=Api(on_run_started=on_run_started, on_message=on_message), hidden=True
     )
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
@@ -248,7 +248,7 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
             cancelled_event.set()
 
     window = create_window(
-        api=Api(on_run_started=on_run_started, on_message=on_message)
+        api=Api(on_run_started=on_run_started, on_message=on_message), hidden=True
     )
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 

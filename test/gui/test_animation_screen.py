@@ -86,7 +86,7 @@ def test_animate_button_plays_real_frames_and_back_returns_to_results(
 ) -> None:
     """A real multi-generation run animates, scrubs, and "Back" returns cleanly."""
     output = _write_run(tmp_path)
-    window = create_window()
+    window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
     def _drive() -> None:

@@ -141,7 +141,7 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     output = _write_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
 
-    window = create_window()
+    window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
     def _drive() -> None:

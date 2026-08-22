@@ -101,7 +101,7 @@ def test_a_completed_batch_renders_the_batch_results_screen() -> None:
         if message[0] in ("done", "cancelled", "error"):
             done_event.set()
 
-    window = create_window(api=Api(on_message=on_message))
+    window = create_window(api=Api(on_message=on_message), hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
     def _drive() -> None:
@@ -159,7 +159,7 @@ def test_batch_new_run_button_switches_back_to_the_input_screen() -> None:
         if message[0] in ("done", "cancelled", "error"):
             done_event.set()
 
-    window = create_window(api=Api(on_message=on_message))
+    window = create_window(api=Api(on_message=on_message), hidden=True)
     outcome: queue.Queue[bool] = queue.Queue(maxsize=1)
 
     def _drive() -> None:

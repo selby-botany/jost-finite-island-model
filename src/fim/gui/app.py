@@ -1003,7 +1003,7 @@ def _worker_ping() -> str:
     return "pong from worker"
 
 
-def create_window(*, api: Api | None = None) -> webview.Window:
+def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Window:
     """Build, but do not show, fim's one pywebview window over `webui/index.html`.
 
     Separate from `main` specifically so tests can drive the window
@@ -1020,6 +1020,17 @@ def create_window(*, api: Api | None = None) -> webview.Window:
             observe a run event-driven rather than by polling
             `window.evaluate_js` for a DOM signal (`test/gui/
             test_running_screen.py`'s own module docstring).
+        hidden: Forwarded to `webview.create_window`'s own `hidden`
+            parameter. `False` (the default) is production's own real
+            shape — a real user expects to see the window they just
+            opened. Every `gui`-marked test passes `True`: the DOM
+            renders and `evaluate_js` behaves identically either way
+            (confirmed directly against a real window before this
+            parameter was added), so a headless CI runner and a local
+            `git push` both drive the exact same window a visible one
+            would be, without a real macOS/Windows window ever
+            flashing on screen — the literal complaint that motivated
+            this parameter, not merely a CI convenience.
 
     Raises:
         RuntimeError: If pywebview itself reports the window as never
@@ -1036,6 +1047,7 @@ def create_window(*, api: Api | None = None) -> webview.Window:
         js_api=api if api is not None else Api(),
         width=900,
         height=700,
+        hidden=hidden,
     )
     if created is None:
         raise RuntimeError("pywebview did not create a window")

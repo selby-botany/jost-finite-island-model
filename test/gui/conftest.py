@@ -121,7 +121,15 @@ def window() -> Iterator[webview.Window]:
     describes doing), so each test gets a genuinely fresh window rather
     than reusing one across the whole session.
     """
-    built = create_window()
+    # `hidden=True`: a real window is still built and driven identically
+    # (evaluate_js behaves the same either way), it just never becomes
+    # visible on screen -- the same reason every `gui`-marked test in
+    # this package passes it, not only under CI's own Xvfb: a real
+    # window flashing open on a developer's own screen on every local
+    # `git push` (the pre-push hook's own `pytest` run includes `gui`)
+    # is a genuine nuisance this removes entirely, on every platform,
+    # not only headless Linux.
+    built = create_window(hidden=True)
     yield built
     if built in webview.windows:
         built.destroy()
