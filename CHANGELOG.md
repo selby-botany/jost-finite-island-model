@@ -8,6 +8,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A desktop GUI (`fim-gui`, or double-click the packaged executable /
+  `fim.app` / run `fim` with no arguments) alongside the existing command
+  line: six screens covering model input, a live scatter plot while a run
+  or batch is in progress, results (scalar and batch), opening and
+  re-analyzing a previous run, and an animated playback of any persisted
+  trajectory. Reads and writes the exact same `results/` folder and file
+  formats the command line already does — a GUI-authored run with the same
+  parameters and seed produces byte-identical output to the same
+  configuration run from the terminal. Ships on every platform: Windows
+  (x64/ARM64), macOS (`.dmg`, both architectures), and Linux
+  (`fim-linux-x64`, needs the system's own WebKitGTK package). See the
+  [desktop GUI section of the command reference](doc/usage.md#desktop-gui-fim-gui).
+- macOS (`fim-macos-arm64.dmg`, `fim-macos-x64.dmg`) and Linux
+  (`fim-linux-x64`) release executables, alongside the existing Windows
+  ones — every platform in the project's own support matrix now has a
+  self-contained, no-Python-required distribution. Linux also gains
+  `install.sh`, a `curl | bash` installer matching the rustup/uv
+  pattern (no root, installs to `~/.local/bin`, verifies a checksum
+  before installing anything).
 - A native Windows ARM64 release executable, `fim-windows-arm64.exe`,
   built and smoke-tested alongside the existing x64 executable. PyInstaller
   never cross-compiles — the executable it produces always matches the

@@ -13,6 +13,7 @@ for that first. For parameter types and defaults, use the
 - [Worked examples](#worked-examples)
 - [Re-analyze a trajectory](#re-analyze-a-trajectory)
 - [Check for updates](#check-for-updates)
+- [Desktop GUI (`fim-gui`)](#desktop-gui-fim-gui)
 - [Global flags](#global-flags)
 - [Output schemas](#output-schemas)
 - [Reproduce a run](#reproduce-a-run)
@@ -350,6 +351,46 @@ This explicit command queries the latest GitHub Release and prints its download
 page when a newer version exists. It does not download or modify anything.
 This is the application's only network path; `run`, `stats`, and `init` are
 offline.
+
+## Desktop GUI (`fim-gui`)
+
+```console
+fim-gui
+```
+
+A desktop application — six screens over a small, static local web page
+(`fim`'s own bundled `webview` renderer, the OS's native web view; no
+browser, no server, no network) — that runs the same simulations and reads
+the same `results/` folder as the commands above. Install it alongside
+`fim` (`python -m pip install .` already provides both console scripts), or
+launch it from a packaged executable by opening it with no arguments — for
+example by double-clicking `fim-windows-x64.exe`/`fim.app`, or running
+`fim-gui`/`fim --graphical` from a Linux install. `n_replicates` in the
+configuration is the only thing that decides whether a run goes through the
+scalar or the batch path — there is no separate "batch mode" toggle. Every
+screen calls the identical underlying function this guide already
+documents; nothing here is a second implementation:
+
+| Screen | What it does | Same as |
+|---|---|---|
+| Model input | Build and validate a full configuration from a tabbed form (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one tab per [configuration reference](configuration.md) section); "Load YAML…"/"Save YAML…" read and write the exact file format above; "Open a run…" reaches the Open a run screen | [Create a configuration](#create-a-configuration) |
+| Running | A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout | `run`'s own progress/error output, on one screen instead of terminal lines |
+| Results | A scalar run's summary (all six named statistics, convergence outcome) beside the canonical scatter plot; "Open output folder" reveals the same four artifacts; "Animate" plays back the persisted trajectory (disabled for a single-generation run, which has nothing to animate) | [Output schemas](#output-schemas) |
+| Batch results | A pooled scatter across every replicate's final state, beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval; each row's own "Open" button reaches the Results screen for that one replicate; "Open batch folder" reveals `summary.json` and every replicate subdirectory | [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
+| Open a run | Pick a previous run from a recent-runs list — a batch entry is labeled distinctly and opened one replicate at a time from its own Batch results screen, not from here — or browse for a `trajectory.jsonl` directly, then re-render its summary and scatter at any persisted generation, with the same optional differentiation-`q` sweep | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
+| Animated trajectory | Play back a completed run's persisted generations as a scatter animation, with a play/pause button and a scrub slider | No CLI equivalent — a GUI-only bonus view |
+
+A GUI-authored run with the same parameters and seed produces byte-identical
+`trajectory.jsonl`/`report.json` to the same configuration run from the
+terminal — see [Reproduce a run](#reproduce-a-run). The GUI itself performs
+no network access at all; unlike the terminal's `fim update --check`, the
+GUI has no update-check feature of its own — check for a newer release from
+the command line, or the project's GitHub Releases page, instead.
+
+On Linux, the GUI needs WebKitGTK, a system package most desktop
+distributions already have installed — see
+[installation alternatives](../install/README.md) if `fim-gui` reports it
+is missing rather than opening a window.
 
 ## Global flags
 

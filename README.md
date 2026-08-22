@@ -45,6 +45,14 @@ differentiation statistics.
 
 ## Quick start
 
+Every packaged executable below supports both a **desktop GUI** (double-click
+it, or run it with no arguments) and the **command line** (the same
+executable with a command, e.g. `run`). Both read and write the same
+`results/` folder, so a run started from one can be opened, re-analyzed, or
+animated from the other. See the
+[desktop GUI section of the command reference](doc/usage.md#desktop-gui-fim-gui)
+for what each screen does.
+
 ### Windows release
 
 1. Download the executable matching your processor and its `.sha256` file
@@ -59,15 +67,10 @@ differentiation statistics.
    Get-FileHash .\fim-windows-x64.exe -Algorithm SHA256
    ```
 
-3. Create a starter configuration:
+3. Double-click `fim-windows-x64.exe` for the GUI, or use the command line:
 
    ```powershell
    .\fim-windows-x64.exe init
-   ```
-
-4. Edit `results\example-run.yaml`, then run:
-
-   ```powershell
    .\fim-windows-x64.exe run `
        "results\example-run.yaml"
    ```
@@ -75,6 +78,45 @@ differentiation statistics.
 The executable is self-contained. A simulation does not use the network.
 Windows SmartScreen may identify this unsigned research executable as an
 unrecognized application; verify the checksum before selecting **Run anyway**.
+
+### macOS release
+
+1. Download `fim-macos-arm64.dmg` (Apple Silicon) or `fim-macos-x64.dmg`
+   (Intel) and its `.sha256` file from the project's GitHub Releases page.
+2. Verify the checksum, then open the `.dmg` and drag `fim.app` to
+   Applications:
+
+   ```console
+   shasum -a 256 -c fim-macos-arm64.dmg.sha256
+   ```
+
+3. Double-click `fim.app` for the GUI. For the command line, the same
+   binary lives inside the bundle:
+
+   ```console
+   /Applications/fim.app/Contents/MacOS/fim init
+   /Applications/fim.app/Contents/MacOS/fim run results/example-run.yaml
+   ```
+
+macOS Gatekeeper may warn that this unsigned research application is from an
+unidentified developer; verify the checksum, then allow it via **System
+Settings → Privacy & Security**.
+
+### Linux release
+
+Install with one command — downloads, verifies, and installs `fim` and
+`fim-gui` to `~/.local/bin`, no root required:
+
+```console
+curl -sSL https://raw.githubusercontent.com/selby-botany/jost-finite-island-model/main/install.sh | bash
+```
+
+Or download `fim-linux-x64` and its `.sha256` file from the Releases page
+directly. `fim-gui` opens the same GUI as double-clicking the other two
+platforms' executables; the desktop backend (WebKitGTK) is a system
+package most desktop distributions already have — see
+[installation alternatives](install/README.md) if `fim-gui` reports it is
+missing.
 
 ### Python installation
 
@@ -86,6 +128,13 @@ python3 -m venv .venv
 python -m pip install .
 fim init --output example-run.yaml
 fim run example-run.yaml --output results/example
+```
+
+`pip install .` also provides `fim-gui`, the same desktop application every
+packaged executable above bundles — launch it with:
+
+```console
+fim-gui
 ```
 
 See [installation alternatives](install/README.md) and the
@@ -172,8 +221,9 @@ The supported build environment is a Unix-like system with Bash, Git, and
 Python 3.12 or newer. The scripts avoid modern-only Bash features; the Bash
 3.2 bundled with macOS is sufficient. Docker is required only for the complete
 repository-file and Homebrew validation commands. Native Windows development
-is not supported; both Windows executables (x64 and ARM64) are built and
-tested by the release workflow.
+is not supported; every packaged executable (Windows x64/ARM64, macOS
+arm64/x64, Linux x64) is built and smoke-tested by the release workflow
+regardless of which platform develops it.
 
 ```console
 python3 -m venv .venv

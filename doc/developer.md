@@ -25,11 +25,14 @@ use the [generated API reference](../src/fim/API.md) for exact signatures.
 | `fim.persistence` | Store protocol, JSON Lines backend, replayable manifest |
 | `fim.engine` | Public run loop and final report assembly |
 | `fim.viz` | Headless scatter and diagnostic plots |
-| `fim.cli` | YAML and command-line boundary |
+| `fim.cli` | YAML and command-line front end |
+| `fim.launcher` | Packaged single-executable dispatch: no arguments (or `--graphical`) launches `fim.gui`, anything else reaches `fim.cli` unchanged |
+| `fim.gui` | pywebview desktop front end — six screens as a static local `webui/` page (plain HTML/CSS/JS) driven by an `Api` bridge class (`fim.gui.app.Api`), the JS side's only way into Python; calls `fim.engine`/`fim.viz`/`fim.persistence` directly, never duplicates model logic |
 
 The engine depends on these modules; none depends on the engine. Statistics can
 analyze a frequency table without running a simulation, and persisted rows can
-be re-analyzed through the CLI.
+be re-analyzed through either front end. `fim.cli` and `fim.gui` are peers —
+two consumers of the same public API, not a case of one wrapping the other.
 
 The scientific rationale is in the
 [simulator design](fim-simulator-design.md). The
