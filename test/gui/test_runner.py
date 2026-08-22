@@ -102,7 +102,22 @@ def test_start_run_writes_the_four_documented_artifacts_on_success(
     messages = _drain(message_queue)
     assert messages[-1][0] == "done"
     assert isinstance(messages[-1][1], RunResult)
-    assert all(kind == "progress" for kind, _payload in messages[:-1])
+    progress_messages = messages[:-1]
+    # Each progress message carries that generation's own live scatter
+    # data (design §0.5) — `d == 2` for `tiny_params`, so exactly one
+    # direct panel per message, never empty. The `if` (not a bare
+    # `assert message[0] == ...` followed by indexing) is what lets
+    # mypy narrow `message` from the full `RunMessage` union down to
+    # `ProgressMessage` before `message[2]` is indexed.
+    checked = 0
+    for message in progress_messages:
+        assert message[0] == "progress"
+        if message[0] == "progress":
+            panels = message[2]
+            assert len(panels) == 1
+            assert panels[0]["points"]
+            checked += 1
+    assert checked == len(progress_messages)
 
 
 def test_start_run_records_matching_digests_in_the_published_manifest(
@@ -189,9 +204,9 @@ def test_cancel_during_run_leaves_no_output_directory(
     assert not thread.is_alive()
     assert not output_directory.exists()
     assert {path.name for path in tmp_path.iterdir()} == set()
-    kind, generation = message_queue.get_nowait()
-    assert kind == "cancelled"
-    assert generation == 0
+    message = message_queue.get_nowait()
+    assert message[0] == "cancelled"
+    assert message[1] == 0
 
 
 def _drain(message_queue: queue.Queue[runner.RunMessage]) -> list[runner.RunMessage]:

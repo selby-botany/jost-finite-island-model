@@ -32,10 +32,10 @@ from __future__ import annotations
 import queue
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 from matplotlib import pyplot as plt
 
@@ -43,10 +43,11 @@ from fim import paths
 from fim.engine import RunResult, deterministic_run_id, fim
 from fim.gui.store import GuiProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
+from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, write_manifest
 from fim.persistence.report import write_report
-from fim.viz.scatter import plot_frequency_scatter
+from fim.viz.scatter import plot_frequency_scatter, scatter_panels
 
 # The wall-clock throttle interval design §3.4 names ("skip posting if
 # under ~50 ms since the last post").
@@ -66,7 +67,7 @@ _EXPECTED_ENGINE_ERRORS: Final = (
     ValueError,
 )
 
-ProgressMessage = tuple[Literal["progress"], int]
+ProgressMessage = tuple[Literal["progress"], int, list[dict[str, object]]]
 DoneMessage = tuple[Literal["done"], RunResult]
 CancelledMessage = tuple[Literal["cancelled"], int]
 ErrorMessage = tuple[Literal["error"], str]
@@ -199,9 +200,10 @@ def _run_worker(
     """
     throttle = ProgressThrottle(clock=clock)
 
-    def on_generation(generation: int) -> None:
+    def on_generation(generation: int, rows: list[Mapping[str, Any]]) -> None:
         if throttle.should_report(generation, params.max_generations):
-            message_queue.put(("progress", generation))
+            state = ModelState.from_rows(rows, params.loci)
+            message_queue.put(("progress", generation, scatter_panels(state)))
 
     try:
         with paths.atomic_directory(output_directory) as working_directory:

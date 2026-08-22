@@ -76,16 +76,21 @@ class GuiProgressStore:
         self,
         inner: TrajectoryStore,
         *,
-        on_generation: Callable[[int], None],
+        on_generation: Callable[[int, list[Mapping[str, Any]]], None],
         cancel_event: threading.Event,
     ) -> None:
         """Wrap `inner`, reporting each write and honoring `cancel_event`.
 
         Args:
             inner: The real store every non-cancelled write delegates to.
-            on_generation: Called with the generation number after each
-                successful delegated write — never before, and never for
-                a write that raised `RunCancelledError` instead.
+            on_generation: Called with the generation number and that
+                generation's own rows (design §0.5: the caller's own
+                live-scatter push needs the actual frequency data, not
+                just a bare count — re-reading it back from `inner`
+                would need a path this decorator has no reason to know)
+                after each successful delegated write — never before,
+                and never for a write that raised `RunCancelledError`
+                instead.
             cancel_event: Set by the UI's Cancel button; checked before
                 every write.
         """
@@ -105,11 +110,23 @@ class GuiProgressStore:
         here never reaches the real store at all, so a cancelled run's
         `trajectory.jsonl` never gains the generation that triggered the
         cancellation — only the generations already written before it.
+
+        `rows` is materialized into a plain `list` before delegating,
+        not passed through as whatever `Iterable` the caller handed in:
+        `self._inner.write_generation` (a real `JSONLTrajectoryStore`)
+        already fully consumes it to write the file, and only a concrete,
+        already-realized `list` is safe to hand to `on_generation`
+        *afterward* — a one-shot iterator would come back empty on this
+        second read. Every real caller in this codebase already passes a
+        `list` (`ModelState.to_rows`'s own return type), so this costs
+        nothing extra in practice; it exists so the decorator's own
+        contract does not silently depend on that happening to be true.
         """
         if self._cancel_event.is_set():
             raise RunCancelledError(run_id, generation)
-        self._inner.write_generation(run_id, generation, rows)
-        self._on_generation(generation)
+        materialized_rows = list(rows)
+        self._inner.write_generation(run_id, generation, materialized_rows)
+        self._on_generation(generation, materialized_rows)
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Delegate straight to the wrapped store; nothing to decorate here."""

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pickle
 import threading
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -45,7 +46,7 @@ def test_gui_progress_store_calls_on_generation_once_per_write() -> None:
     reported: list[int] = []
     store = GuiProgressStore(
         InMemoryTrajectoryStore(),
-        on_generation=reported.append,
+        on_generation=lambda generation, _rows: reported.append(generation),
         cancel_event=threading.Event(),
     )
 
@@ -55,11 +56,53 @@ def test_gui_progress_store_calls_on_generation_once_per_write() -> None:
     assert reported == [0, 1]
 
 
+def test_gui_progress_store_passes_the_generation_own_rows_to_on_generation() -> None:
+    """`on_generation` receives that generation's real rows, not just its number.
+
+    Direct regression test for design §0.5: the scalar run screen's live
+    scatter needs the actual frequency data, and there is no trajectory
+    file path the caller could otherwise re-read it from (the temporary
+    working directory `fim.paths.atomic_directory` builds is private to
+    `runner.py`'s own worker).
+    """
+    reported: list[list[Mapping[str, object]]] = []
+    store = GuiProgressStore(
+        InMemoryTrajectoryStore(),
+        on_generation=lambda _generation, rows: reported.append(list(rows)),
+        cancel_event=threading.Event(),
+    )
+
+    store.write_generation("run-1", 3, _rows(3))
+
+    assert reported == [_rows(3)]
+
+
+def test_gui_progress_store_materializes_a_one_shot_rows_iterator() -> None:
+    """A one-shot iterator (not just a `list`) still reaches `on_generation` intact.
+
+    `write_generation`'s own `rows: Iterable[...]` type is broader than
+    "always a `list`" — this proves the decorator does not silently
+    depend on every caller happening to pass a re-iterable one.
+    """
+    reported: list[list[Mapping[str, object]]] = []
+    store = GuiProgressStore(
+        InMemoryTrajectoryStore(),
+        on_generation=lambda _generation, rows: reported.append(list(rows)),
+        cancel_event=threading.Event(),
+    )
+
+    store.write_generation("run-1", 0, iter(_rows(0)))
+
+    assert reported == [_rows(0)]
+
+
 def test_gui_progress_store_delegates_to_the_inner_store() -> None:
     """A non-cancelled write reaches the wrapped store, not just the callback."""
     inner = InMemoryTrajectoryStore()
     store = GuiProgressStore(
-        inner, on_generation=lambda _generation: None, cancel_event=threading.Event()
+        inner,
+        on_generation=lambda _generation, _rows: None,
+        cancel_event=threading.Event(),
     )
 
     store.write_generation("run-1", 0, _rows(0))
@@ -73,7 +116,7 @@ def test_gui_progress_store_raises_run_cancelled_when_event_is_set() -> None:
     cancel_event.set()
     store = GuiProgressStore(
         InMemoryTrajectoryStore(),
-        on_generation=lambda _generation: None,
+        on_generation=lambda _generation, _rows: None,
         cancel_event=cancel_event,
     )
 
@@ -91,7 +134,9 @@ def test_gui_progress_store_never_delegates_after_cancellation() -> None:
     cancel_event = threading.Event()
     cancel_event.set()
     store = GuiProgressStore(
-        inner, on_generation=reported.append, cancel_event=cancel_event
+        inner,
+        on_generation=lambda generation, _rows: reported.append(generation),
+        cancel_event=cancel_event,
     )
 
     with pytest.raises(RunCancelledError):
@@ -106,7 +151,9 @@ def test_gui_progress_store_read_delegates_to_the_inner_store() -> None:
     inner = InMemoryTrajectoryStore()
     inner.write_generation("run-1", 0, _rows(0))
     store = GuiProgressStore(
-        inner, on_generation=lambda _generation: None, cancel_event=threading.Event()
+        inner,
+        on_generation=lambda _generation, _rows: None,
+        cancel_event=threading.Event(),
     )
 
     assert [row["generation"] for row in store.read("run-1")] == [0]

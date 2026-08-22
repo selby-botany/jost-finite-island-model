@@ -1,15 +1,45 @@
 "use strict";
 
-/* Walking-skeleton bootstrap (Milestone W1, design doc §7.2). Every real
- * screen (§4, from Milestone W2 onward) replaces `#app`'s contents once
- * pywebview's bridge is confirmed live -- this file's only job right now
- * is proving that confirmation, using the two-step await-then-read-back
- * pattern every bridge call in this application uses (see
- * src/fim/gui/app.py's own module docstring for why a direct
- * `evaluate_js("window.pywebview.api.foo()")` call cannot be used
- * instead): an `async` handler awaits the `js_api` call and writes the
- * result into the DOM itself, rather than returning a value through
- * `evaluate_js`. */
+/* App-wide bootstrap and the small shared namespace every screen script
+ * attaches its own bridge-push handlers to (design doc §4, §7.2-§7.4).
+ *
+ * `window.fim` exists for exactly one reason: `Api.start_run` (design
+ * §3.4's "push, not poll") calls `window.evaluate_js("fim.onRunProgress(
+ * ...)")` from a background thread whenever a run reports progress --
+ * that call needs a stable, always-present global to land on regardless
+ * of which screen happens to be showing, so `showScreen`/`onRun*` live
+ * here rather than inside `screens/progress.js` itself (which only
+ * *implements* what `onRunProgress` etc. actually do once Screen 2
+ * exists -- see that file). Screens not yet built register no-op
+ * handlers here implicitly, by simply not overriding them.
+ */
+
+const fim = {
+    /**
+     * Show exactly one top-level `.screen` section, hiding the rest.
+     * @param {string} screenId
+     */
+    showScreen(screenId) {
+        for (const section of document.querySelectorAll(".screen")) {
+            section.hidden = section.id !== screenId;
+        }
+    },
+
+    onRunProgress() {
+        // Overridden once Screen 2 (screens/progress.js) exists.
+    },
+    onRunDone() {
+        // Overridden once Screen 2 (screens/progress.js) exists.
+    },
+    onRunCancelled() {
+        // Overridden once Screen 2 (screens/progress.js) exists.
+    },
+    onRunError() {
+        // Overridden once Screen 2 (screens/progress.js) exists.
+    },
+};
+
+window.fim = fim;
 
 async function connectBridge() {
     const status = document.getElementById("bridge-status");

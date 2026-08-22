@@ -53,6 +53,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [select\_sample\_generations](#fim.gui.animation.select_sample_generations)
 * [fim.gui.app](#fim.gui.app)
   * [Api](#fim.gui.app.Api)
+    * [\_\_init\_\_](#fim.gui.app.Api.__init__)
+    * [start\_run](#fim.gui.app.Api.start_run)
+    * [cancel\_run](#fim.gui.app.Api.cancel_run)
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
     * [validate\_form](#fim.gui.app.Api.validate_form)
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
@@ -1050,11 +1053,73 @@ class Api()
 The `window.pywebview.api` surface every `webui/*.js` screen calls into.
 
 Grows one method per bridge call as each screen is built (design
-§4); holds no state of its own beyond what a given call needs —
-every real piece of work still routes through `fim.gui`'s existing
-business-logic modules (`config_form`, `runner`, `batch_runner`,
-`recent_runs`, `animation`) or `fim.viz.scatter`'s public data
-functions, never reimplemented here.
+§4); holds almost no state of its own beyond what a given call
+needs — `_cancel_event` (set by `start_run`, read by `cancel_run`)
+is the one exception, since a running scalar simulation's own
+cancel button has to reach the same `threading.Event` the
+background worker thread is already checking. Every real piece of
+work still routes through `fim.gui`'s existing business-logic
+modules (`config_form`, `runner`, `batch_runner`, `recent_runs`,
+`animation`) or `fim.viz.scatter`'s public data functions, never
+reimplemented here.
+
+<a id="fim.gui.app.Api.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__() -> None
+```
+
+Start with no run in flight.
+
+<a id="fim.gui.app.Api.start_run"></a>
+
+#### start\_run
+
+```python
+def start_run(values: dict[str, str]) -> dict[str, Any]
+```
+
+Validate the form, then start a scalar run pushing live progress to the page.
+
+Runs on a background `threading.Thread` (`fim.gui.runner.
+start_run`, unchanged from the Tk-era build — design §1.2) so
+this call itself returns immediately; the caller drives Screen 2
+from the `fim.onRunProgress`/`fim.onRunDone`/`fim.onRunCancelled`/
+`fim.onRunError` calls a second background thread pushes via
+`window.evaluate_js` as each message arrives (design §3.4's
+"push, not poll" — proven safe from an arbitrary background
+thread, not only `webview.start`'s own driver thread, before this
+method was written; see `test/gui/test_running_screen.py`).
+
+**Arguments**:
+
+- `values` - The same shape `validate_form` accepts.
+
+
+**Returns**:
+
+- ``{"ok"` - True}` once the run has *started* — not once it
+  finishes; the real outcome arrives via the pushed calls
+  above. `{"ok": False, "message": ...}` if the form does not
+  validate, or if `output_directory` (extremely unlikely: a
+  fresh timestamp-named directory) already exists.
+
+<a id="fim.gui.app.Api.cancel_run"></a>
+
+#### cancel\_run
+
+```python
+def cancel_run() -> None
+```
+
+Request cancellation of whichever scalar run `start_run` last started.
+
+A no-op if no run is currently in flight — mirrors `GuiProgress
+Store.write_generation`'s own tolerance of a `cancel_event` that
+was never going to matter, rather than raising for a Cancel click
+that arrives a moment after the run already finished on its own.
 
 <a id="fim.gui.app.Api.get_starter_form"></a>
 
@@ -2134,7 +2199,8 @@ difference.
 #### \_\_init\_\_
 
 ```python
-def __init__(inner: TrajectoryStore, *, on_generation: Callable[[int], None],
+def __init__(inner: TrajectoryStore, *,
+             on_generation: Callable[[int, list[Mapping[str, Any]]], None],
              cancel_event: threading.Event) -> None
 ```
 
@@ -2143,9 +2209,14 @@ Wrap `inner`, reporting each write and honoring `cancel_event`.
 **Arguments**:
 
 - `inner` - The real store every non-cancelled write delegates to.
-- `on_generation` - Called with the generation number after each
-  successful delegated write — never before, and never for
-  a write that raised `RunCancelledError` instead.
+- `on_generation` - Called with the generation number and that
+  generation's own rows (design §0.5: the caller's own
+  live-scatter push needs the actual frequency data, not
+  just a bare count — re-reading it back from `inner`
+  would need a path this decorator has no reason to know)
+  after each successful delegated write — never before,
+  and never for a write that raised `RunCancelledError`
+  instead.
 - `cancel_event` - Set by the UI's Cancel button; checked before
   every write.
 
@@ -2164,6 +2235,17 @@ Checked before delegating, not after: a cancellation observed
 here never reaches the real store at all, so a cancelled run's
 `trajectory.jsonl` never gains the generation that triggered the
 cancellation — only the generations already written before it.
+
+`rows` is materialized into a plain `list` before delegating,
+not passed through as whatever `Iterable` the caller handed in:
+`self._inner.write_generation` (a real `JSONLTrajectoryStore`)
+already fully consumes it to write the file, and only a concrete,
+already-realized `list` is safe to hand to `on_generation`
+*afterward* — a one-shot iterator would come back empty on this
+second read. Every real caller in this codebase already passes a
+`list` (`ModelState.to_rows`'s own return type), so this costs
+nothing extra in practice; it exists so the decorator's own
+contract does not silently depend on that happening to be true.
 
 <a id="fim.gui.store.GuiProgressStore.read"></a>
 

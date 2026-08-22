@@ -158,10 +158,16 @@ async function onRunClicked() {
         await switchToTab(result.tab);
         return;
     }
-    // Milestone W3 wires this to a real background run; the walking
-    // skeleton for Screen 1 only proves the form validates correctly.
+    const values = collectFormValues();
+    const started = await window.pywebview.api.start_run(values);
+    if (!started.ok) {
+        showBanner(started.message);
+        return;
+    }
     showBanner("");
-    runReason.textContent = "Form is valid. Run orchestration lands in Milestone W3.";
+    document.getElementById("progress-generation").value = 0;
+    document.getElementById("cancel-run-button").disabled = false;
+    window.fim.showScreen("screen-progress");
 }
 
 async function onLoadYamlClicked() {
