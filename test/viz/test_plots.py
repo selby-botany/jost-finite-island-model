@@ -24,6 +24,7 @@ from fim.viz.scatter import (
     pca_project,
     plot_frequency_scatter,
     pooled_frequency_points,
+    pooled_scatter_panels,
     scatter_panels,
 )
 
@@ -394,6 +395,49 @@ def test_scatter_panels_large_d_is_one_pca_panel() -> None:
     assert len(panels) == 1
     assert panels[0]["x_label"] == "Principal component 1"
     assert panels[0]["y_label"] == "Principal component 2"
+
+
+def test_pooled_scatter_panels_of_no_states_is_empty() -> None:
+    """An empty pool is zero panels, not an error — the "no replicate has
+    reported a generation yet" case a live batch progress screen starts
+    from."""
+    assert pooled_scatter_panels([], deme_count=2) == []
+
+
+def test_pooled_scatter_panels_matches_scatter_panels_for_one_state() -> None:
+    """Pooling a single state produces exactly that state's own `scatter_panels`."""
+    state = _state(4)
+
+    assert pooled_scatter_panels([state], deme_count=4) == scatter_panels(state)
+
+
+def test_pooled_scatter_panels_pools_coincident_points_across_states() -> None:
+    """Two states sharing a coordinate group into one bigger, numbered marker.
+
+    The `scatter_panels`-shaped analog of `test_pooled_frequency_points_
+    concatenates_before_grouping` above.
+    """
+    loci = (LocusSpec(1, 100),)
+    first = ModelState(loci=loci, frequencies=(({AlleleId(0): 1.0},),) * 2)
+    second = ModelState(loci=loci, frequencies=(({AlleleId(0): 1.0},),) * 2)
+
+    panels = pooled_scatter_panels([first, second], deme_count=2)
+
+    assert len(panels) == 1
+    points = panels[0]["points"]
+    assert isinstance(points, list)
+    assert len(points) == 1
+    assert points[0]["count"] == 2
+
+
+def test_pooled_scatter_panels_dispatches_layout_by_deme_count() -> None:
+    """`deme_count` alone decides direct/pairwise/PCA, matching `scatter_panels`."""
+    states = [_state(7), _state(7)]
+
+    panels = pooled_scatter_panels(states, deme_count=7)
+
+    assert len(panels) == 1
+    assert panels[0]["x_label"] == "Principal component 1"
 
 
 def test_pca_project_matches_the_rendered_pca_plot() -> None:

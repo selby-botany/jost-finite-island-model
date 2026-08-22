@@ -226,8 +226,66 @@ def scatter_panels(
         being `grouped_points`' own list of `{x, y, count, common}`
         entries.
     """
-    points = frequency_points(state)
-    deme_count = state.deme_count
+    return _panels_from_points(
+        frequency_points(state), state.deme_count, pairwise_max_demes
+    )
+
+
+def pooled_scatter_panels(
+    states: Sequence[ModelState],
+    deme_count: int,
+    *,
+    pairwise_max_demes: int = PAIRWISE_MAX_DEMES,
+) -> list[dict[str, object]]:
+    """`scatter_panels`' own layout dispatch, over several pooled states at once.
+
+    The GUI's batch progress/results screens' own data source (design
+    §4.2, §4.4, §7.6): the same direct/pairwise/PCA layout rule
+    `scatter_panels` applies to one state's points applies identically
+    here to `pooled_frequency_points(states)`'s pooled rows —
+    coincidence counting (`grouped_points`) already treats a point
+    shared across replicates exactly like one shared across loci, so
+    layout dispatch needs no special case for "pooled" either.
+
+    Args:
+        states: Every replicate's current (possibly in-flight) final
+            state to pool — see `pooled_frequency_points`'s own
+            docstring. Commonly not every replicate the batch will
+            eventually run: a live batch's own progress screen calls
+            this with whichever replicates have reported at least one
+            generation so far.
+        deme_count: The batch's own `d`, taken as an explicit argument
+            rather than inferred from `states[0]`, since `states` can
+            legitimately be empty (design's own "live, before any
+            replicate has reported a generation yet" case) — an empty
+            `states` still needs a real `deme_count` to answer "would
+            this be a direct, pairwise, or PCA layout," even though the
+            answer is moot once `points` turns out to have zero rows.
+        pairwise_max_demes: Largest `d` rendered as one panel per pair,
+            matching `scatter_panels`' own parameter.
+
+    Returns:
+        `[]` if `states` is empty (nothing to pool yet); otherwise the
+        same `scatter_panels`-shaped panel list, built from the pooled
+        points.
+    """
+    if not states:
+        return []
+    return _panels_from_points(
+        pooled_frequency_points(states), deme_count, pairwise_max_demes
+    )
+
+
+def _panels_from_points(
+    points: FloatArray, deme_count: int, pairwise_max_demes: int
+) -> list[dict[str, object]]:
+    """Share `scatter_panels`/`pooled_scatter_panels`' own layout dispatch.
+
+    `points` is `frequency_points`-shaped either way (one row per
+    (locus, allele) pair, one column per deme) — a single state's own
+    rows for `scatter_panels`, or several states' pooled rows for
+    `pooled_scatter_panels`; this function does not know or care which.
+    """
     if deme_count == DIRECT_2D_DEMES:
         return [_panel(points[:, 0], points[:, 1], "Deme 1", "Deme 2")]
     if deme_count <= pairwise_max_demes:

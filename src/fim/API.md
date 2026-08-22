@@ -254,6 +254,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [grouped\_points](#fim.viz.scatter.grouped_points)
   * [marker\_groups](#fim.viz.scatter.marker_groups)
   * [scatter\_panels](#fim.viz.scatter.scatter_panels)
+  * [pooled\_scatter\_panels](#fim.viz.scatter.pooled_scatter_panels)
   * [pca\_project](#fim.viz.scatter.pca_project)
 
 <a id="fim"></a>
@@ -4871,6 +4872,54 @@ than a second implementation of the same SVD.
   One dict per panel: `{"x_label", "y_label", "points"}`, `points`
   being `grouped_points`' own list of `{x, y, count, common}`
   entries.
+
+<a id="fim.viz.scatter.pooled_scatter_panels"></a>
+
+#### pooled\_scatter\_panels
+
+```python
+def pooled_scatter_panels(
+        states: Sequence[ModelState],
+        deme_count: int,
+        *,
+        pairwise_max_demes: int = PAIRWISE_MAX_DEMES
+) -> list[dict[str, object]]
+```
+
+`scatter_panels`' own layout dispatch, over several pooled states at once.
+
+The GUI's batch progress/results screens' own data source (design
+§4.2, §4.4, §7.6): the same direct/pairwise/PCA layout rule
+`scatter_panels` applies to one state's points applies identically
+here to `pooled_frequency_points(states)`'s pooled rows —
+coincidence counting (`grouped_points`) already treats a point
+shared across replicates exactly like one shared across loci, so
+layout dispatch needs no special case for "pooled" either.
+
+**Arguments**:
+
+- `states` - Every replicate's current (possibly in-flight) final
+  state to pool — see `pooled_frequency_points`'s own
+  docstring. Commonly not every replicate the batch will
+  eventually run: a live batch's own progress screen calls
+  this with whichever replicates have reported at least one
+  generation so far.
+- `deme_count` - The batch's own `d`, taken as an explicit argument
+  rather than inferred from `states[0]`, since `states` can
+  legitimately be empty (design's own "live, before any
+  replicate has reported a generation yet" case) — an empty
+  `states` still needs a real `deme_count` to answer "would
+  this be a direct, pairwise, or PCA layout," even though the
+  answer is moot once `points` turns out to have zero rows.
+- `pairwise_max_demes` - Largest `d` rendered as one panel per pair,
+  matching `scatter_panels`' own parameter.
+
+
+**Returns**:
+
+  `[]` if `states` is empty (nothing to pool yet); otherwise the
+  same `scatter_panels`-shaped panel list, built from the pooled
+  points.
 
 <a id="fim.viz.scatter.pca_project"></a>
 
