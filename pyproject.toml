@@ -33,7 +33,22 @@ dependencies = [
     "numpy>=2.3,<2.6",
     "pyparsing>=3.1,<3.4",
     "PyYAML==6.0.*",
-    "pywebview==6.*",
+    # Linux needs the `[gtk]` extra specifically: `pywebview`'s GTK
+    # backend (`webview/platforms/gtk.py`) imports `gi`
+    # (`PyGObject`) and requires GTK3/WebKit2 4.1/Soup 3.0 GObject
+    # Introspection typelibs, none of which the bare `pywebview`
+    # package pulls in on its own — confirmed by a real, isolated-venv
+    # install on Ubuntu 24.04 (matching `ubuntu-latest`) before this
+    # split was added: `pip install pywebview==6.*` alone leaves
+    # `import webview` succeeding but `import gi` failing outright, a
+    # gap the CI job's own GTK system packages (`.github/workflows/
+    # ci.yml`'s `build` job) cannot paper over by themselves. macOS
+    # (`pyobjc`, a pure-Python wheel) and Windows (`pythonnet`) both
+    # already work with the bare package, so only Linux needs the
+    # extra — design doc `20260821-claude-sonnet-5-graphical-
+    # interface.md` §3.11.
+    "pywebview==6.*; sys_platform != 'linux'",
+    "pywebview[gtk]==6.*; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
