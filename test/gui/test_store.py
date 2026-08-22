@@ -1,17 +1,28 @@
-"""Unit tests for `GuiProgressStore` and `RunCancelledError`.
+"""Unit tests for `GuiProgressStore`, `LiveProgressStore`, and `RunCancelledError`.
 
-No display, no Tk import, no thread — the decorator's contract is
-exercised against an `InMemoryTrajectoryStore` fake, one method call at
-a time (design doc §6.3).
+No display, no Tk import, no thread and no real subprocess — each
+decorator's contract is exercised against an `InMemoryTrajectoryStore`
+fake (or, for `LiveProgressStore`, plain files under `tmp_path`), one
+method call at a time (design doc §6.3; `LiveProgressStore`'s own tests
+per §0.5/§3.4's revision).
 """
 
 from __future__ import annotations
 
+import pickle
 import threading
+from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
-from fim.gui.store import GuiProgressStore, RunCancelledError
+from fim.gui.store import (
+    GuiProgressStore,
+    LiveProgressStore,
+    RunCancelledError,
+    read_progress_sidecar,
+    write_progress_sidecar,
+)
 from fim.persistence.store import InMemoryTrajectoryStore
 
 
@@ -99,3 +110,154 @@ def test_gui_progress_store_read_delegates_to_the_inner_store() -> None:
     )
 
     assert [row["generation"] for row in store.read("run-1")] == [0]
+
+
+def test_live_progress_store_writes_a_progress_sidecar_every_generation(
+    tmp_path: Path,
+) -> None:
+    """Every non-cancelled write updates the sidecar to that generation."""
+    progress_path = tmp_path / ".progress"
+    store = LiveProgressStore(
+        InMemoryTrajectoryStore(),
+        progress_path=progress_path,
+        cancel_path=tmp_path / "cancel",
+    )
+
+    store.write_generation("run-1", 0, _rows(0))
+    first = read_progress_sidecar(progress_path)
+    assert first is not None
+    assert first["generation"] == 0
+    assert "written_at" in first
+
+    store.write_generation("run-1", 1, _rows(1))
+    second = read_progress_sidecar(progress_path)
+    assert second is not None
+    assert second["generation"] == 1
+
+
+def test_live_progress_store_delegates_to_the_inner_store(tmp_path: Path) -> None:
+    """A non-cancelled write reaches the wrapped store, not just the sidecar."""
+    inner = InMemoryTrajectoryStore()
+    store = LiveProgressStore(
+        inner,
+        progress_path=tmp_path / ".progress",
+        cancel_path=tmp_path / "cancel",
+    )
+
+    store.write_generation("run-1", 0, _rows(0))
+
+    assert [row["generation"] for row in inner.read("run-1")] == [0]
+
+
+def test_live_progress_store_raises_when_the_shared_cancel_file_exists(
+    tmp_path: Path,
+) -> None:
+    """A cancel file's mere existence turns the next write into `RunCancelledError`.
+
+    Direct regression test for the cross-process cancellation contract
+    (design §0.5, §3.4): unlike `GuiProgressStore`'s `threading.Event`,
+    the signal here is a plain file another process created — its
+    *content* is never inspected, only whether it exists.
+    """
+    cancel_path = tmp_path / "cancel"
+    cancel_path.touch()
+    store = LiveProgressStore(
+        InMemoryTrajectoryStore(),
+        progress_path=tmp_path / ".progress",
+        cancel_path=cancel_path,
+    )
+
+    with pytest.raises(RunCancelledError) as exc_info:
+        store.write_generation("run-1", 7, _rows(7))
+
+    assert exc_info.value.run_id == "run-1"
+    assert exc_info.value.generation == 7
+
+
+def test_live_progress_store_never_delegates_after_cancellation(
+    tmp_path: Path,
+) -> None:
+    """A cancelled write reaches neither the inner store nor the sidecar."""
+    inner = InMemoryTrajectoryStore()
+    progress_path = tmp_path / ".progress"
+    cancel_path = tmp_path / "cancel"
+    cancel_path.touch()
+    store = LiveProgressStore(
+        inner, progress_path=progress_path, cancel_path=cancel_path
+    )
+
+    with pytest.raises(RunCancelledError):
+        store.write_generation("run-1", 0, _rows(0))
+
+    assert not list(inner.read("run-1"))
+    assert read_progress_sidecar(progress_path) is None
+
+
+def test_live_progress_store_read_delegates_to_the_inner_store(
+    tmp_path: Path,
+) -> None:
+    """`read` is a pure passthrough — nothing about it needs decorating."""
+    inner = InMemoryTrajectoryStore()
+    inner.write_generation("run-1", 0, _rows(0))
+    store = LiveProgressStore(
+        inner, progress_path=tmp_path / ".progress", cancel_path=tmp_path / "cancel"
+    )
+
+    assert [row["generation"] for row in store.read("run-1")] == [0]
+
+
+def test_live_progress_store_is_picklable(tmp_path: Path) -> None:
+    """`LiveProgressStore` survives a real pickle round trip.
+
+    The exact property `fim.engine._require_picklable` checks on a
+    `store_factory` before ever spawning a `ProcessPoolExecutor` worker
+    — a `LiveProgressStore` built inside one worker never itself crosses
+    the process boundary, but this proves the class *could*, and is a
+    much faster, more direct signal than discovering a pickling failure
+    three layers away inside a real subprocess.
+    """
+    store = LiveProgressStore(
+        InMemoryTrajectoryStore(),
+        progress_path=tmp_path / ".progress",
+        cancel_path=tmp_path / "cancel",
+    )
+
+    restored = pickle.loads(pickle.dumps(store))
+
+    restored.write_generation("run-1", 0, _rows(0))
+    assert read_progress_sidecar(tmp_path / ".progress") is not None
+
+
+def test_read_progress_sidecar_returns_none_for_a_missing_file(tmp_path: Path) -> None:
+    """A not-yet-started replicate has no sidecar at all — not an error."""
+    assert read_progress_sidecar(tmp_path / "never-written") is None
+
+
+def test_write_progress_sidecar_records_a_real_wall_clock_timestamp(
+    tmp_path: Path,
+) -> None:
+    """The sidecar's timestamp brackets the actual write, for concurrency proofs.
+
+    Not a race-prone timing assertion (project CLAUDE.md's determinism
+    contract) — a generous bound proving the recorded timestamp is a
+    real observation of *this* write, which is what
+    `test_batch_replicates_actually_run_concurrently`-style tests (design
+    §6.4) rely on to prove real concurrency structurally.
+    """
+    progress_path = tmp_path / ".progress"
+    before = datetime.now(UTC)
+
+    write_progress_sidecar(progress_path, 3)
+
+    after = datetime.now(UTC)
+    sidecar = read_progress_sidecar(progress_path)
+    assert sidecar is not None
+    written_at = sidecar["written_at"]
+    # `datetime.fromisoformat` (not a hand-rolled `%f`-style format
+    # string): `datetime.isoformat()` omits the fractional-second
+    # component entirely when it is exactly zero, so a fixed strptime
+    # format would intermittently fail to parse a genuinely valid
+    # timestamp — the same class of non-determinism this project's own
+    # rules single out.
+    parsed = datetime.fromisoformat(written_at.replace("Z", "+00:00"))
+    assert before <= parsed <= after

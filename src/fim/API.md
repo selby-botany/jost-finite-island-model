@@ -89,6 +89,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.gui.store.GuiProgressStore.__init__)
     * [write\_generation](#fim.gui.store.GuiProgressStore.write_generation)
     * [read](#fim.gui.store.GuiProgressStore.read)
+  * [LiveProgressStore](#fim.gui.store.LiveProgressStore)
+    * [\_\_init\_\_](#fim.gui.store.LiveProgressStore.__init__)
+    * [write\_generation](#fim.gui.store.LiveProgressStore.write_generation)
+    * [read](#fim.gui.store.LiveProgressStore.read)
+  * [write\_progress\_sidecar](#fim.gui.store.write_progress_sidecar)
+  * [read\_progress\_sidecar](#fim.gui.store.read_progress_sidecar)
 * [fim.model](#fim.model)
 * [fim.model.allele](#fim.model.allele)
   * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
@@ -1788,13 +1794,33 @@ Progress reporting and cancellation for a background run (design §3.4).
 typing, not an ABC), and `fim.engine._run_one`'s generation loop already
 calls `store.write_generation(...)` unconditionally, every generation,
 with no `try`/`except` around it — a clean, pre-existing extension point
-`GuiProgressStore` decorates rather than a change to `fim.engine` itself.
+`GuiProgressStore`/`LiveProgressStore` decorate rather than a change to
+`fim.engine` itself.
 
 Named `RunCancelledError`, not the design doc's illustrative
 `RunCancelled` — ruff's `N818` (exception names end in `Error`) is part
 of this project's lint gate; the design's code block is a decision
 sketch, not a literal source requirement (§4's own "wireframes ... not
 final visuals" framing applies here too).
+
+Two decorators live here, for two execution shapes (design
+`20260821-claude-sonnet-5-graphical-interface.md` §0.5, §3.4):
+
+- `GuiProgressStore` — a scalar run, one in-process background thread.
+  Holds a `threading.Event` and a callback closure; both are real
+  Python objects the calling thread can read/write directly, because
+  nothing here ever crosses a process boundary.
+- `LiveProgressStore` — a batch replicate, running inside its own
+  `ProcessPoolExecutor` worker process. A `threading.Event` and a
+  closure cannot be pickled across that boundary, so this decorator
+  holds only plain, picklable `Path`s instead: it *writes* a small
+  progress sidecar file after each generation and *checks* a shared
+  cancellation file before each write, rather than calling back into
+  the parent process directly (which nothing here could safely do).
+  The parent discovers progress by polling the sidecar, and requests
+  cancellation by creating the cancellation file — both plain
+  filesystem operations, needing no cross-process synchronization
+  primitive at all.
 
 <a id="fim.gui.store.RunCancelledError"></a>
 
@@ -1873,6 +1899,115 @@ def read(run_id: str) -> Iterator[TrajectoryRow]
 ```
 
 Delegate straight to the wrapped store; nothing to decorate here.
+
+<a id="fim.gui.store.LiveProgressStore"></a>
+
+## LiveProgressStore Objects
+
+```python
+class LiveProgressStore()
+```
+
+Decorate a `TrajectoryStore` with file-mediated progress and cancellation.
+
+The cross-process counterpart to `GuiProgressStore` (see this
+module's docstring): safe to construct inside a `ProcessPoolExecutor`
+worker because it holds only plain `Path`s, never a `threading.Event`
+or a callback. Structurally satisfies `TrajectoryStore`, exactly like
+`GuiProgressStore` — the run loop cannot tell the difference.
+
+<a id="fim.gui.store.LiveProgressStore.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(inner: TrajectoryStore, *, progress_path: Path,
+             cancel_path: Path) -> None
+```
+
+Wrap `inner`, recording progress in and honoring cancellation from disk.
+
+**Arguments**:
+
+- `inner` - The real store every non-cancelled write delegates to.
+- `progress_path` - Overwritten atomically after each successful
+  delegated write with the generation just written and a
+  wall-clock timestamp (`write_progress_sidecar`). Always
+  inside this replicate's own output directory, so it
+  travels with — and is removed alongside — that
+  replicate's other artifacts once the batch is done with
+  it.
+- `cancel_path` - Checked for existence before every write; one
+  file shared by every replicate in the same batch, so
+  creating it once cancels all of them, matching "Cancel
+  batch" stopping the batch, not one replicate (carried
+  forward from design §4.0 `6`).
+
+<a id="fim.gui.store.LiveProgressStore.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(run_id: str, generation: int,
+                     rows: Iterable[Mapping[str, Any]]) -> None
+```
+
+Delegate one generation's write, or raise `RunCancelledError` instead.
+
+Checked before delegating, not after — the same ordering
+`GuiProgressStore.write_generation` uses, for the same reason: a
+cancellation observed here never reaches the real store at all.
+
+<a id="fim.gui.store.LiveProgressStore.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> Iterator[TrajectoryRow]
+```
+
+Delegate straight to the wrapped store; nothing to decorate here.
+
+<a id="fim.gui.store.write_progress_sidecar"></a>
+
+#### write\_progress\_sidecar
+
+```python
+def write_progress_sidecar(progress_path: Path, generation: int) -> None
+```
+
+Atomically write one replicate's `.progress` sidecar.
+
+**Arguments**:
+
+- `progress_path` - The file to (over)write.
+- `generation` - The generation just persisted.
+
+  A plain JSON object, `{"generation": N, "written_at": "..."}` — the
+  timestamp exists only so a test can prove two replicates' write
+  windows actually overlap in real time (a structural fact, not a
+  timing race — see this module's own test suite), not because the
+  live-polling reader needs it. Written to a temp file in the same
+  directory, then `os.replace`d into place: `os.replace` is atomic on
+  every platform this project ships to, so a concurrent reader always
+  sees either the previous complete sidecar or the new one, never a
+  torn write — no lock needed on either side.
+
+<a id="fim.gui.store.read_progress_sidecar"></a>
+
+#### read\_progress\_sidecar
+
+```python
+def read_progress_sidecar(progress_path: Path) -> dict[str, Any] | None
+```
+
+Read one replicate's `.progress` sidecar, or `None` if it has none yet.
+
+A replicate that has not yet completed its first generation has no
+sidecar at all — a normal, expected state for a just-started
+worker, not an error. `os.replace`'s atomicity (see
+`write_progress_sidecar`) means a sidecar that does exist is always
+a complete, valid write; no partial-read handling is needed here.
 
 <a id="fim.model"></a>
 
