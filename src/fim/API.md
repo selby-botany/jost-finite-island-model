@@ -47,6 +47,27 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [report\_for\_state](#fim.engine.report_for_state)
   * [replicate\_summary](#fim.engine.replicate_summary)
 * [fim.gui](#fim.gui)
+* [fim.gui.config\_form](#fim.gui.config_form)
+  * [FormField](#fim.gui.config_form.FormField)
+  * [TabSpec](#fim.gui.config_form.TabSpec)
+  * [all\_fields](#fim.gui.config_form.all_fields)
+  * [tab\_for\_field](#fim.gui.config_form.tab_for_field)
+  * [tab\_for\_error](#fim.gui.config_form.tab_for_error)
+  * [field\_for\_error](#fim.gui.config_form.field_for_error)
+  * [form\_values\_to\_payload](#fim.gui.config_form.form_values_to_payload)
+  * [m\_to\_payload](#fim.gui.config_form.m_to_payload)
+  * [m\_from\_params](#fim.gui.config_form.m_from_params)
+  * [mu\_to\_payload](#fim.gui.config_form.mu_to_payload)
+  * [mu\_from\_params](#fim.gui.config_form.mu_from_params)
+  * [convergence\_statistic\_to\_payload](#fim.gui.config_form.convergence_statistic_to_payload)
+  * [convergence\_statistic\_from\_params](#fim.gui.config_form.convergence_statistic_from_params)
+  * [p0\_summary\_from\_params](#fim.gui.config_form.p0_summary_from_params)
+  * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
+  * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
+  * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
+* [fim.gui.recent\_runs](#fim.gui.recent_runs)
+  * [RecentRun](#fim.gui.recent_runs.RecentRun)
+  * [list\_recent\_runs](#fim.gui.recent_runs.list_recent_runs)
 * [fim.gui.runner](#fim.gui.runner)
   * [ProgressThrottle](#fim.gui.runner.ProgressThrottle)
     * [\_\_init\_\_](#fim.gui.runner.ProgressThrottle.__init__)
@@ -831,6 +852,532 @@ orchestration (`doc/developer.md`'s architecture table: "GUI: call
 `dev/doc/apps/selby/jost-finite-island-model/
 20260819-claude-sonnet-5-graphical-interface.md` for the full design
 and implementation plan this package follows.
+
+<a id="fim.gui.config_form"></a>
+
+# fim.gui.config\_form
+
+Marshal `SimulationParams` to and from the tabbed model-input screen.
+
+Every function here is a pure, Tk-free transformation between three
+shapes: a `SimulationParams` instance, a `dict[str, str]` of one string
+per form field (what `screens.input_screen.InputScreen` reads from and
+writes to its widgets), and a `dict[str, object]` payload ready for
+`fim.model.params.SimulationParams.from_mapping` — the identical
+validator `fim.cli` already uses (design doc §3.6). Nothing here
+duplicates a validation rule `from_mapping` already enforces: a
+malformed string is only ever coerced to the right Python type before
+being handed to that one validator, never re-checked against a second,
+GUI-local copy of a rule.
+
+`TABS` groups fields the same way
+[configuration.md](../../doc/configuration.md)'s own section
+headings do (design §3.6, §4.0 `1`). §3.6's cardinality rule decides
+what earns a live widget here at all: O(1) and O(d)/O(loci)-sized
+fields do (a comma-separated text field faithfully represents either);
+a `d`-by-`d` migration matrix, an arbitrary sparse map, a per-locus
+`p_0`, and — narrower cases the design doc does not work through in
+the same detail — a genuinely per-locus `mu` or a `loci` list with
+custom `locus_id`s do not (§2.3). `m` and `p_0` get the read-only
+"loaded from file" badge treatment §4.0 `3` describes when a loaded
+configuration actually uses one; `mu`-per-locus and custom-ID `loci`
+instead raise a clear `ValueError` from `params_to_form_values` (the
+same "edit the YAML file directly" pattern this form has always used
+for a construct it cannot represent at all, load-only badge or not) —
+narrower, later-discovered edge cases than the two the design doc's
+own worked examples cover, not a deliberate scope reduction.
+
+<a id="fim.gui.config_form.FormField"></a>
+
+## FormField Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class FormField()
+```
+
+One model-input screen field's config key, label, and value kind.
+
+**Arguments**:
+
+- `name` - The exact `SimulationParams.from_mapping` config key this
+  field edits — also the prefix `field_for_error` matches an
+  error message against, so it must match verbatim.
+- `label` - Human-readable text shown beside the field.
+- `kind` - How the field's text is parsed and, for "choice"/
+  "float_choice", which values are offered. "int_list"
+  accepts either one bare integer or a comma-separated list
+  of them (§3.6's O(d)/O(loci) case: a scalar and a per-
+  deme/per-locus list are both faithfully representable by
+  the same widget). "optional_float" treats an empty string
+  as `None`, matching a field whose `SimulationParams`
+  default is `None` (`replicate_tolerance`). "float_choice"
+  is "choice" restricted to a fixed set of numbers rather
+  than tokens (`replicate_confidence`) — `from_mapping`
+  requires an actual `float`, not its string spelling.
+- `choices` - The fixed option list for a "choice"/"float_choice"
+  field; empty otherwise.
+
+<a id="fim.gui.config_form.TabSpec"></a>
+
+## TabSpec Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TabSpec()
+```
+
+One Screen 1 tab: a name, a display label, and its plain fields.
+
+`m`'s scalar-vs-topology selector is not a `FormField` — it needs
+its own composite widget (a mode radio plus one or two sub-fields,
+§4.1) — and so is marshaled by the dedicated `m_*` functions below
+instead of appearing in any `TabSpec.fields` tuple.
+
+<a id="fim.gui.config_form.all_fields"></a>
+
+#### all\_fields
+
+```python
+def all_fields() -> tuple[FormField, ...]
+```
+
+Return every plain `FormField` across every tab, in tab order.
+
+<a id="fim.gui.config_form.tab_for_field"></a>
+
+#### tab\_for\_field
+
+```python
+def tab_for_field(name: str) -> str | None
+```
+
+Return the `TabSpec.name` holding the given config-key field, if any.
+
+**Arguments**:
+
+- `name` - A `FormField.name`, or one of the composite fields'
+  config keys (`m`, `mu`, `mu_b`, `convergence_statistic`).
+
+
+**Returns**:
+
+  The tab's `TabSpec.name` (`config_form.TABS`'s own identifier,
+  not its display `label`), or `None` if `name` names no field
+  this form exposes at all.
+
+<a id="fim.gui.config_form.tab_for_error"></a>
+
+#### tab\_for\_error
+
+```python
+def tab_for_error(message: str) -> str | None
+```
+
+Return the tab holding the field a validation error message names.
+
+**Arguments**:
+
+- `message` - A `ValueError` message raised by `form_values_to_payload`
+  or `SimulationParams.from_mapping`.
+
+
+**Returns**:
+
+  The offending field's tab (§4.0 `2`: "every tab with an invalid
+  field shows a small error dot" — in practice, the one tab
+  holding whichever single field `SimulationParams.from_mapping`
+  happened to reject first, since it stops validating at the
+  first failure rather than collecting every field's own error
+  independently), or `None` when the message names no field this
+  form can place on any tab (an unknown-key error, for instance)
+  — the caller shows those in the banner alone (design §4.6).
+
+<a id="fim.gui.config_form.field_for_error"></a>
+
+#### field\_for\_error
+
+```python
+def field_for_error(message: str) -> str | None
+```
+
+Return the form field name a validation error message names, if any.
+
+**Arguments**:
+
+- `message` - A `ValueError` message raised by `form_values_to_payload`
+  or `SimulationParams.from_mapping`.
+
+
+**Returns**:
+
+  The matching `FormField.name`, for an inline error placement next
+  to that field, or `None` when the message names no exposed field
+  (an unknown-key error, an `m`/`m.topology`/`m.rate` message —
+  `m` has no single `FormField` of its own — or a construct not
+  yet in scope) — the caller shows those in a banner instead
+  (design §4.6).
+
+<a id="fim.gui.config_form.form_values_to_payload"></a>
+
+#### form\_values\_to\_payload
+
+```python
+def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]
+```
+
+Coerce the form's string values into a `from_mapping`-ready payload.
+
+**Arguments**:
+
+- `values` - One string per `all_fields()` entry, plus the `m_*`
+  selector keys `m_to_payload` reads, keyed by name.
+
+
+**Returns**:
+
+  A mapping ready for `SimulationParams.from_mapping`.
+
+
+**Raises**:
+
+- `ValueError` - If a field's text does not parse as its declared
+  kind. Every message begins with the field's own `name`
+  (or, for `N`'s list form, `name[index]`), matching
+  `SimulationParams.from_mapping`'s own wording, so
+  `field_for_error` and the CLI's error text stay in
+  lockstep.
+
+<a id="fim.gui.config_form.m_to_payload"></a>
+
+#### m\_to\_payload
+
+```python
+def m_to_payload(values: Mapping[str, str]) -> float | dict[str, object]
+```
+
+Build `m`'s payload from the selector's mode and its own sub-fields.
+
+**Arguments**:
+
+- `values` - The full form-values mapping; only `m_mode`, `m_rate`,
+  `m_topology`, and `m_topology_rate` are read.
+
+
+**Returns**:
+
+  A bare scalar rate (`m_mode == "scalar"`), or a `{"topology",
+  "rate"}` mapping (`m_mode == "topology"`) —
+  `fim.model.params._parse_migration` accepts either verbatim.
+
+
+**Raises**:
+
+- `ValueError` - If the active sub-field's text is not a number, if
+  `m_mode == "loaded"` (a loaded matrix/sparse map has no
+  editable representation here at all — §3.6, §4.0 `3`; the
+  screen itself is responsible for re-submitting a loaded,
+  untouched `m` from the `SimulationParams` it was loaded
+  from, rather than asking this function to reconstruct a
+  matrix from a summary string), or `m_mode` is none of the
+  three (a programming error in the caller, not a
+  user-facing validation case).
+
+<a id="fim.gui.config_form.m_from_params"></a>
+
+#### m\_from\_params
+
+```python
+def m_from_params(params: SimulationParams) -> dict[str, str]
+```
+
+Render `params.m` back into the selector's form-value keys.
+
+**Arguments**:
+
+- `params` - A validated configuration.
+
+
+**Returns**:
+
+  `m_mode`/`m_rate`/`m_topology`/`m_topology_rate`/
+  `m_loaded_summary`. A scalar `params.m` renders as `"scalar"`
+  mode. A matrix-shaped `params.m` renders as `"loaded"` mode
+  with a read-only summary (§3.6, §4.0 `3`) — a stepping-stone
+  topology's own `{topology, rate}` sugar expands into a full
+  dense matrix the moment `from_mapping` parses it
+  (`fim.model.params.Migration = float | tuple[tuple[float,
+  ...], ...]`), so there is no way to tell, from the matrix
+  alone, which topology (or none at all, an explicit or sparse-
+  map matrix) produced it — "loaded" is the only honest
+  representation for any matrix-shaped `m`, not only a sparse-
+  map or explicitly-authored one.
+
+<a id="fim.gui.config_form.mu_to_payload"></a>
+
+#### mu\_to\_payload
+
+```python
+def mu_to_payload(values: Mapping[str, str]) -> dict[str, object]
+```
+
+Build `mu`'s or `mu_b`'s payload key from the selector's mode.
+
+**Arguments**:
+
+- `values` - The full form-values mapping; only `mu_mode`,
+  `mu_value`, and `mu_b_value` are read.
+
+
+**Returns**:
+
+- ``{"mu"` - <rate>}` or `{"mu_b": <rate>}` — never both, matching
+  `SimulationParams.from_mapping`'s own mutual-exclusivity rule
+  (§4.0 `4`: the exclusivity is this selector's shape, not a
+  validation message discovered after submitting both).
+
+
+**Raises**:
+
+- `ValueError` - If the active sub-field's text is not a number, or
+  `mu_mode` is neither `"mu"` nor `"mu_b"` (a programming
+  error in the caller).
+
+<a id="fim.gui.config_form.mu_from_params"></a>
+
+#### mu\_from\_params
+
+```python
+def mu_from_params(params: SimulationParams) -> dict[str, str]
+```
+
+Render `params.mu` back into the mu/mu_b selector's form-value keys.
+
+**Arguments**:
+
+- `params` - A validated configuration.
+
+
+**Returns**:
+
+  `mu_mode`/`mu_value`/`mu_b_value`. `SimulationParams.
+  __post_init__` collapses `mu` back to a scalar whenever every
+  locus's rate happens to be equal — whether it came from a
+  scalar `mu`, a per-locus `mu` list whose values all matched, or
+  `mu_b` with equal-length loci — so a scalar `params.mu` is
+  always representable here as `mu_mode="mu"`, exactly
+  reproducing the value actually used regardless of how the
+  loaded config originally spelled it.
+
+
+**Raises**:
+
+- `ValueError` - If `params.mu` is a genuinely per-locus tuple
+  (unequal rates across loci) — narrower than the design
+  doc's own worked "loaded" badge examples (m, p_0); this
+  form has no per-locus mu editor, load-only or otherwise,
+  so the message says to edit the YAML file directly, the
+  same pattern this form already uses for every other
+  construct it cannot represent at all.
+
+<a id="fim.gui.config_form.convergence_statistic_to_payload"></a>
+
+#### convergence\_statistic\_to\_payload
+
+```python
+def convergence_statistic_to_payload(
+        values: Mapping[str, str]) -> str | list[str]
+```
+
+Build `convergence_statistic`'s payload from the multi-select checkboxes.
+
+**Arguments**:
+
+- `values` - The full form-values mapping; only the `cs_<NAME>` keys
+  (one per `CONVERGENCE_STATISTIC_NAMES` entry, `"true"` or
+  `"false"`) are read.
+
+
+**Returns**:
+
+  The one checked name as a bare string (`from_mapping`'s own
+  single-statistic shape), or every checked name as a list, in
+  `CONVERGENCE_STATISTIC_NAMES` order, once two or more are
+  checked.
+
+<a id="fim.gui.config_form.convergence_statistic_from_params"></a>
+
+#### convergence\_statistic\_from\_params
+
+```python
+def convergence_statistic_from_params(
+        params: SimulationParams) -> dict[str, str]
+```
+
+Render `params.convergence_statistic` back into the checkbox keys.
+
+<a id="fim.gui.config_form.p0_summary_from_params"></a>
+
+#### p0\_summary\_from\_params
+
+```python
+def p0_summary_from_params(params: SimulationParams) -> str
+```
+
+Return the Initial conditions tab's read-only `p_0` summary.
+
+**Returns**:
+
+  A description naming the deme and locus counts when
+  `params.initial_frequencies` is set (§2.3: `p_0` is genuinely
+  unbounded and load-only, unlike every other field this
+  revision brings into scope — there is no editable widget for
+  it at all, load-only badge or not), or `""` otherwise.
+
+<a id="fim.gui.config_form.params_to_form_values"></a>
+
+#### params\_to\_form\_values
+
+```python
+def params_to_form_values(params: SimulationParams) -> dict[str, str]
+```
+
+Render a validated `SimulationParams` back into the form's fields.
+
+**Arguments**:
+
+- `params` - A validated configuration, typically loaded from YAML or
+  produced by `starter_form_values`'s own round trip.
+
+
+**Returns**:
+
+  One string per `all_fields()` entry, plus every composite
+  field's own keys (`m_*`, `mu_*`, `cs_*`, `p0_summary`),
+  suitable for `screens.input_screen.InputScreen.set_values`.
+
+
+**Raises**:
+
+- `ValueError` - If `params` uses a construct this form cannot
+  represent at all — a per-locus `mu` (`mu_from_params`), or
+  a `loci` list with custom, non-default-position
+  `locus_id`s (narrower than the design doc's own worked
+  "loaded" badge examples; §2.3 names an explicit `loci` list
+  with custom ordering as load-only, and this form's one
+  `locus_lengths` field cannot express a custom ID either).
+
+<a id="fim.gui.config_form.starter_form_values"></a>
+
+#### starter\_form\_values
+
+```python
+def starter_form_values() -> dict[str, str]
+```
+
+Return the form's default values, from the CLI's own starter config.
+
+**Returns**:
+
+  The same values `params_to_form_values` would compute for
+  `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults"
+  design §3.6 requires, so a fresh form and `fim init` can never
+  drift apart into two documented starting scenarios.
+
+<a id="fim.gui.config_form.payload_to_yaml_text"></a>
+
+#### payload\_to\_yaml\_text
+
+```python
+def payload_to_yaml_text(payload: Mapping[str, object]) -> str
+```
+
+Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
+
+**Arguments**:
+
+- `payload` - A payload already accepted by `SimulationParams.from_mapping`
+  (typically `form_values_to_payload`'s own return value).
+
+
+**Returns**:
+
+  YAML text in `configuration.md`'s own key order (§3.6) — a
+  valid `fim run`/`fim init --force` replacement. Any key not in
+  `_YAML_KEY_ORDER` (none exist today; a defensive fallback
+  against this list drifting out of sync with a future field) is
+  appended afterward rather than silently dropped.
+
+<a id="fim.gui.recent_runs"></a>
+
+# fim.gui.recent\_runs
+
+Scan `results/` for recently completed runs, scalar and batch (design
+doc §4.6).
+
+Screen 6's recent-runs list is populated by scanning
+`fim.paths.results_directory()` for `*/manifest.json`, reading each with
+`fim.persistence.manifest.read_manifest` (scalar) or
+`fim.persistence.manifest.read_batch_manifest` (batch) — the same files
+`fim stats` and `fim run`'s own batch summary default to. A batch's
+manifest is listed but labeled distinctly ("batch (14/20)", design §0,
+§4.0 `9`) rather than treated as something Screen 6 can open directly:
+Screen 4's own "Open replicate" is the path to any one replicate's
+trajectory, since a batch-level manifest has no single trajectory of
+its own to verify or re-analyze (design §3.8, §4.6).
+
+<a id="fim.gui.recent_runs.RecentRun"></a>
+
+## RecentRun Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class RecentRun()
+```
+
+One run — scalar or batch — found under `results/`, ready to list.
+
+**Arguments**:
+
+- `run_id` - The run's identity, from its manifest.
+- `directory` - The run's own output directory — the parent of its
+  `manifest.json`.
+- `ended_at` - ISO-8601 completion timestamp, from the manifest —
+  what `list_recent_runs` sorts by.
+- `label` - The mock's own display text: a scalar run's
+  `stop_reason` (e.g. "converged"), or a batch's
+  "batch (replicate_count/n_replicates)" (design §4.6's own
+  "batch (14/20)").
+- `is_batch` - Distinguishes a `BatchManifest` entry from a
+  `RunManifest` one — Screen 6 uses this to route "Open" to
+  re-analysis for a scalar run, or refuse it for a batch
+  (design §4.0 `9`, §4.6).
+
+<a id="fim.gui.recent_runs.list_recent_runs"></a>
+
+#### list\_recent\_runs
+
+```python
+def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]
+```
+
+Return every run under `results_directory`, newest first.
+
+**Arguments**:
+
+- `results_directory` - Optional override (default:
+  `fim.paths.results_directory()`).
+
+
+**Returns**:
+
+  One `RecentRun` per `*/manifest.json` found one level below
+  `results_directory` that parses as either manifest shape,
+  sorted by `ended_at` descending (an ISO-8601 string, so lexical
+  order already matches chronological order). Any file that
+  fails to parse as either shape is skipped rather than failing
+  the whole scan: one malformed entry should not hide every valid
+  one.
 
 <a id="fim.gui.runner"></a>
 
