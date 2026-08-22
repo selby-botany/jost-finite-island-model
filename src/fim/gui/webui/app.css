@@ -358,3 +358,49 @@ fieldset.composite > label {
     padding: 0.3rem 0.6rem;
     border-bottom: 1px solid var(--fim-border);
 }
+
+/* Screen 5: animated trajectory (design §4.5). */
+#animation-canvas {
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    background: var(--fim-background);
+}
+
+.animation-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+}
+
+.animation-controls input[type="range"] {
+    flex: 1;
+    max-width: 24rem;
+}
+
+/* Screen 6: open an existing run (design §4.6). */
+.open-run-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+}
+
+.open-run-table th,
+.open-run-table td {
+    text-align: left;
+    padding: 0.3rem 0.6rem;
+    border-bottom: 1px solid var(--fim-border);
+}
+
+.open-run-table tbody tr {
+    cursor: pointer;
+}
+
+.open-run-table tbody tr:hover {
+    background: var(--fim-border);
+}
+
+.open-run-table tbody tr.selected {
+    background: var(--fim-accent);
+    color: #ffffff;
+}

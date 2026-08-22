@@ -18,6 +18,7 @@ const runButton = document.getElementById("run-button");
 const runReason = document.getElementById("run-reason");
 const loadButton = document.getElementById("load-yaml-button");
 const saveButton = document.getElementById("save-yaml-button");
+const openRunButton = document.getElementById("open-run-button");
 
 /* Composite/derived fields config_form.py's params_to_form_values
  * returns that have no directly-name-matched form input (read-only
@@ -208,6 +209,9 @@ function wireEvents() {
     runButton.addEventListener("click", onRunClicked);
     loadButton.addEventListener("click", onLoadYamlClicked);
     saveButton.addEventListener("click", onSaveYamlClicked);
+    openRunButton.addEventListener("click", () => {
+        window.fim.showOpenRunScreen();
+    });
 }
 
 async function initializeInputScreen() {

@@ -189,6 +189,7 @@
       <button type="button" id="load-yaml-button">Load YAML…</button>
       <button type="button" id="save-yaml-button">Save YAML…</button>
       <button type="button" id="run-button" disabled>Run simulation</button>
+      <button type="button" id="open-run-button">Open a run…</button>
     </div>
   </section>
 
@@ -216,6 +217,7 @@
         <p class="field-stat" id="stat-K_ST"></p>
         <p class="field-stat" id="stat-H_S"></p>
         <p class="field-stat" id="stat-H_T"></p>
+        <div id="results-differentiation-q" hidden></div>
       </div>
       <canvas id="results-canvas" width="640" height="520"></canvas>
     </div>
@@ -245,6 +247,7 @@
           <th>K_ST</th>
           <th>H_S</th>
           <th>H_T</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="batch-results-table-body"></tbody>
@@ -252,6 +255,73 @@
     <div class="actions">
       <button type="button" id="batch-new-run-button">New run</button>
       <button type="button" id="batch-open-folder-button">Open batch folder</button>
+    </div>
+  </section>
+
+  <section id="screen-animation" class="screen" hidden>
+    <p id="animation-generation-label" class="reason"></p>
+    <canvas id="animation-canvas" width="640" height="520"></canvas>
+    <div class="animation-controls">
+      <button type="button" id="animation-play-button" disabled>Play</button>
+      <input
+        type="range"
+        id="animation-scrubber"
+        min="0"
+        max="0"
+        value="0"
+        step="1"
+        disabled
+      >
+    </div>
+    <div class="actions">
+      <button type="button" id="animation-back-button">Back</button>
+    </div>
+  </section>
+
+  <section id="screen-open-run" class="screen" hidden>
+    <div id="open-run-banner" class="banner" hidden></div>
+    <p>Recent runs (results/*/manifest.json):</p>
+    <table class="open-run-table">
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Ended</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody id="open-run-recent-runs-body"></tbody>
+    </table>
+    <div class="actions">
+      <button type="button" id="browse-trajectory-button">
+        Browse for trajectory.jsonl…
+      </button>
+    </div>
+    <fieldset class="composite">
+      <legend>Generation</legend>
+      <label>
+        <input
+          type="radio"
+          name="open_run_generation_mode"
+          value="final"
+          checked
+        > final
+      </label>
+      <label>
+        <input type="radio" name="open_run_generation_mode" value="choose"> choose
+      </label>
+      <input type="text" id="open-run-generation-value" placeholder="generation">
+    </fieldset>
+    <div class="field">
+      <label for="open-run-differentiation-orders">Differentiation-q sweep</label>
+      <input
+        type="text"
+        id="open-run-differentiation-orders"
+        placeholder="e.g. 0, 1, 2"
+      >
+    </div>
+    <div class="actions">
+      <button type="button" id="open-run-back-button">Back</button>
+      <button type="button" id="open-run-open-button" disabled>Open ▶</button>
     </div>
   </section>
 
@@ -263,5 +333,7 @@
 <script src="screens/progress.js"></script>
 <script src="screens/results.js"></script>
 <script src="screens/batch-results.js"></script>
+<script src="screens/animation.js"></script>
+<script src="screens/open-run.js"></script>
 </body>
 </html>

@@ -18,11 +18,37 @@ const STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"];
 const resultsCanvas = document.getElementById("results-canvas");
 const resultsRunId = document.getElementById("results-run-id");
 const resultsOutcome = document.getElementById("results-outcome");
+const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
 const newRunButton = document.getElementById("new-run-button");
 const animateButton = document.getElementById("animate-button");
 const openFolderButton = document.getElementById("open-folder-button");
 
 let currentOutputDirectory = null;
+
+function renderDifferentiationQ(report) {
+    // Only `Api.open_run`'s own payload can carry this (design §4.6's
+    // q-sweep field) -- a live run's own `"done"` push never does, so
+    // this element stays hidden for the common case.
+    const sweep = report.Differentiation_q;
+    if (!sweep) {
+        resultsDifferentiationQ.hidden = true;
+        resultsDifferentiationQ.replaceChildren();
+        return;
+    }
+    resultsDifferentiationQ.hidden = false;
+    resultsDifferentiationQ.replaceChildren();
+    for (const [order, value] of Object.entries(sweep)) {
+        const line = document.createElement("p");
+        line.className = "field-stat";
+        // `value` is a raw float here (`fim.reanalyze.differentiation_q_
+        // for_state`'s own return type, sent unformatted since only the
+        // six named statistics go through `format_statistic` server-
+        // side) -- `toPrecision` mirrors that same `%.6g`-style rounding
+        // client-side for this one, not-yet-server-formatted field.
+        line.textContent = `q=${order}: ${Number(value).toPrecision(6)}`;
+        resultsDifferentiationQ.appendChild(line);
+    }
+}
 
 window.fim.showResults = function showResults(payload) {
     currentOutputDirectory = payload.outputDirectory;
@@ -34,6 +60,7 @@ window.fim.showResults = function showResults(payload) {
         document.getElementById(`stat-${name}`).textContent =
             `${name} = ${payload.statistics[name]}`;
     }
+    renderDifferentiationQ(report);
     const panels = payload.panels;
     if (panels && panels.length > 0) {
         // Milestone W4 draws only the first panel, the same deliberate
@@ -60,8 +87,8 @@ openFolderButton.addEventListener("click", () => {
     }
 });
 
-// "Animate" is enabled/disabled correctly (`_animate_is_enabled`'s own
-// rule, ported server-side into `generationCount <= 1`), but has no
-// screen to open yet -- Milestone W6 (design §7.7) builds Screen 5 and
-// wires this click to it, the same order the original Tk build's own
-// milestone plan used (G6 after G3).
+animateButton.addEventListener("click", () => {
+    if (currentOutputDirectory !== null) {
+        window.fim.showAnimation(currentOutputDirectory);
+    }
+});

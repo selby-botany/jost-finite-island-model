@@ -127,6 +127,25 @@ function renderTable(replicates) {
             cell.textContent = String(value);
             row.appendChild(cell);
         }
+        // "Open replicate" (design §4.4): the exact same operation as
+        // Screen 6's own "Open" over one replicate's own trajectory --
+        // `replicate.trajectoryPath` is already joined server-side
+        // (`_batch_done_payload`'s own docstring), so this click never
+        // does any path logic of its own.
+        const openCell = document.createElement("td");
+        const openButton = document.createElement("button");
+        openButton.type = "button";
+        openButton.textContent = "Open";
+        openButton.addEventListener("click", async () => {
+            const result = await window.pywebview.api.open_run({
+                trajectoryPath: replicate.trajectoryPath,
+            });
+            if (result.ok) {
+                window.fim.showResults(result);
+            }
+        });
+        openCell.appendChild(openButton);
+        row.appendChild(openCell);
         batchResultsTableBody.appendChild(row);
     }
 }
