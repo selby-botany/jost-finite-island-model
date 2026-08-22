@@ -65,26 +65,48 @@ Public functions require typed signatures and docstrings. Regenerate
 
 ## Release
 
-1. Run `./build --ci` on `dev`.
-2. Move `[Unreleased]` changes into a dated `X.Y.Z` section.
-3. Set the same version in `version.txt`.
-4. Merge or fast-forward the verified commit to `main`.
-5. Tag `vX.Y.Z` from `main` with an **annotated** tag:
-   `git tag -a vX.Y.Z -m "X.Y.Z"`. A bare `git tag vX.Y.Z` (lightweight,
-   no message) is rejected by CI's `verify-tag` job before anything
-   publishes — see below.
-6. Confirm `ci.yml`'s `windows`, `windows-arm64`, and `publish` jobs run and
-   publish both Windows executables, their checksums, the wheel, and the
-   source distribution. `windows` and `windows-arm64` are independent jobs
-   (PyInstaller does not cross-compile, so a native ARM64 executable needs
-   its own ARM64 runner), and neither can start until every `build` matrix
-   leg and `verify-tag` succeed for that exact commit
-   (`needs: [build, verify-tag]`); `publish` cannot start until both have
-   (`needs: [windows, windows-arm64]`). `verify-tag` itself rejects a tag
-   that is not both annotated and an ancestor of `main`.
-7. Download at least one executable matching hardware you have available
-   and independently verify `--version`, `--help`, and one offline tiny
-   run.
+Work promotes through three branches, each with a distinct role — `dev`
+itself never packages or publishes anything:
+
+1. **`dev`** — normal development. Every push runs `ci.yml`'s `build`
+   job (lint, type-check, the full test suite including the
+   `gui`-marked suite under Xvfb). No packaging, no release artifact of
+   any kind comes from `dev` directly.
+2. **`staging`** — the beta stage. Pushing (or merging) verified `dev`
+   work to `staging` triggers `.github/workflows/beta.yml`, a separate
+   workflow from `ci.yml`. It builds and smoke-tests all five platform
+   executables (`windows-beta-x64`, `windows-beta-arm64`,
+   `macos-beta-arm64`, `macos-beta-x64`, `linux-beta-x64`), each
+   stamped with a computed `beta-YYYYMMDD.NN` label rather than
+   `version.txt`'s own value, and `publish-beta` ships them as a GitHub
+   **prerelease** for testers — `workflow_dispatch` triggers the same
+   pipeline manually, without a push. A beta build touches none of
+   `version.txt`, `CHANGELOG.md`, or the `vX.Y.Z` tag namespace.
+3. **`main`** — the real release, once a beta build (or `dev` directly,
+   if skipping the beta stage for a given change) is verified:
+
+   1. Run `./build --ci` on the verified commit.
+   2. Move `[Unreleased]` changes into a dated `X.Y.Z` section in
+      `CHANGELOG.md`.
+   3. Set the same version in `version.txt`.
+   4. Merge or fast-forward the verified commit to `main`.
+   5. Tag `vX.Y.Z` from `main` with an **annotated** tag:
+      `git tag -a vX.Y.Z -m "X.Y.Z"`. A bare `git tag vX.Y.Z`
+      (lightweight, no message) is rejected by CI's `verify-tag` job
+      before anything publishes — see below.
+   6. Confirm `ci.yml`'s `windows`, `windows-arm64`, `macos-arm64`,
+      `macos-x64`, and `linux-x64` jobs all run and `publish` ships
+      every executable (checksummed), the wheel, and the source
+      distribution. Every platform job is independent — PyInstaller
+      never cross-compiles, so each OS/architecture combination needs
+      its own runner — and none can start until every `build` matrix
+      leg and `verify-tag` succeed for that exact commit
+      (`needs: [build, verify-tag]`); `publish` cannot start until
+      every one of them has. `verify-tag` itself rejects a tag that is
+      not both annotated and an ancestor of `main`.
+   7. Download at least one executable matching hardware you have
+      available and independently verify `--version`, `--help`, and
+      one offline tiny run.
 
 `publish` rejects a tag that differs from `version.txt`.
 
