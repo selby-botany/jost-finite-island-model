@@ -44,6 +44,168 @@ body {
     padding: 1rem;
 }
 
-#bridge-status {
+.bridge-status {
     color: var(--fim-muted);
+    font-size: 0.85rem;
+    margin-top: 1.5rem;
+}
+
+/* Screen 1 (design §4.1): six CSS-only radio-driven tabs -- no JS needed
+ * for the tab switch itself, only for field wiring/visibility rules. */
+.tabs input[name="tab"] {
+    display: none;
+}
+
+.tab-panel {
+    display: none;
+    padding: 1rem 0;
+}
+
+#tab-population:checked ~ #panel-population,
+#tab-migration:checked ~ #panel-migration,
+#tab-mutation:checked ~ #panel-mutation,
+#tab-initial_conditions:checked ~ #panel-initial_conditions,
+#tab-convergence:checked ~ #panel-convergence,
+#tab-batch:checked ~ #panel-batch {
+    display: block;
+}
+
+.tab-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--fim-border);
+}
+
+.tab-bar label {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--fim-muted);
+}
+
+#tab-population:checked ~ .tab-bar label[for="tab-population"],
+#tab-migration:checked ~ .tab-bar label[for="tab-migration"],
+#tab-mutation:checked ~ .tab-bar label[for="tab-mutation"],
+#tab-initial_conditions:checked ~ .tab-bar label[for="tab-initial_conditions"],
+#tab-convergence:checked ~ .tab-bar label[for="tab-convergence"],
+#tab-batch:checked ~ .tab-bar label[for="tab-batch"] {
+    color: var(--fim-foreground);
+    border-bottom-color: var(--fim-accent);
+}
+
+.error-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #d64545;
+    margin-left: 0.35rem;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin-bottom: 0.75rem;
+    max-width: 22rem;
+}
+
+.field label {
+    font-size: 0.85rem;
+    color: var(--fim-muted);
+}
+
+.field input[type="text"],
+.field select {
+    font: inherit;
+    color: inherit;
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+}
+
+.field.invalid input[type="text"],
+.field.invalid select {
+    border-color: #d64545;
+}
+
+.field .hint {
+    font-size: 0.75rem;
+    color: var(--fim-muted);
+    margin: 0;
+}
+
+fieldset.composite {
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    max-width: 26rem;
+}
+
+fieldset.composite legend {
+    color: var(--fim-muted);
+    font-size: 0.85rem;
+    padding: 0 0.35rem;
+}
+
+fieldset.composite > label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-right: 1rem;
+}
+
+.loaded-summary {
+    font-style: italic;
+    color: var(--fim-muted);
+}
+
+.reason {
+    color: var(--fim-muted);
+    min-height: 1.2em;
+}
+
+.banner {
+    background: #fdecea;
+    color: #7a1f1f;
+    border: 1px solid #d64545;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    .banner {
+        background: #3a1f1f;
+        color: #f5b8b8;
+    }
+}
+
+.actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.actions button {
+    font: inherit;
+    padding: 0.45rem 0.9rem;
+    border-radius: 4px;
+    border: 1px solid var(--fim-border);
+    background: var(--fim-background);
+    color: var(--fim-foreground);
+    cursor: pointer;
+}
+
+.actions button#run-button {
+    background: var(--fim-accent);
+    color: #ffffff;
+    border-color: var(--fim-accent);
+}
+
+.actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }

@@ -33,8 +33,24 @@ from __future__ import annotations
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import webview
+import yaml
+
+from fim.cli import load_config
+from fim.gui.batch_runner import default_max_workers
+from fim.gui.config_form import (
+    field_for_error,
+    form_values_to_payload,
+    params_to_form_values,
+    payload_to_yaml_text,
+    starter_form_values,
+    tab_for_error,
+)
+from fim.model.params import SimulationParams
+
+_YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
 
 
 class Api:
@@ -47,6 +63,115 @@ class Api:
     `recent_runs`, `animation`) or `fim.viz.scatter`'s public data
     functions, never reimplemented here.
     """
+
+    def get_starter_form(self) -> dict[str, str]:
+        """Return a fresh form's default values (Screen 1, design §3.6, §4.1).
+
+        `config_form.starter_form_values` is the single source of "GUI
+        defaults" — the identical values `fim.cli.STARTER_CONFIG` itself
+        expands to — so this bridge method adds no logic of its own
+        beyond calling it.
+        """
+        return starter_form_values()
+
+    def validate_form(self, values: dict[str, str]) -> dict[str, Any]:
+        """Validate the form exactly as "Run simulation" would (design §3.6, §4.7).
+
+        Args:
+            values: One string per `config_form.all_fields()` entry, plus
+                every composite selector's own keys (`m_*`, `mu_*`,
+                `cs_*`) — `webui/screens/input.js`'s own responsibility
+                to collect from the live form.
+
+        Returns:
+            `{"ok": True}` if `values` parses into a valid
+            `SimulationParams`; otherwise `{"ok": False, "message": ...,
+            "field": ..., "tab": ...}` — `message` is the caught
+            `ValueError`'s own text verbatim (matching the CLI's own
+            wording, design §4.7), `field`/`tab` are `None` when the
+            message names no field this form exposes (an unknown-key
+            error, for instance), for the caller to switch to and
+            highlight (§4.0 #2 of the original design) when they are not.
+        """
+        try:
+            payload = form_values_to_payload(values)
+            SimulationParams.from_mapping(payload)
+        except ValueError as error:
+            message = str(error)
+            return {
+                "ok": False,
+                "message": message,
+                "field": field_for_error(message),
+                "tab": tab_for_error(message),
+            }
+        return {"ok": True}
+
+    def load_yaml(self) -> dict[str, Any]:
+        """Browse for and load a YAML config, returning the form values it renders to.
+
+        Routes through `fim.cli.load_config` — the identical function
+        `fim run` uses (design §3.6) — so a config that runs from the
+        terminal loads identically here, error for error.
+
+        Returns:
+            `{"ok": True, "values": {...}}` on success;
+            `{"ok": False, "message": ""}` if the dialog was cancelled
+            (no banner to show); `{"ok": False, "message": "..."}` on a
+            real load or validation failure.
+        """
+        window = webview.windows[0]
+        selection = window.create_file_dialog(
+            webview.FileDialog.OPEN, file_types=_YAML_FILE_TYPES
+        )
+        if not selection:
+            return {"ok": False, "message": ""}
+        try:
+            params = load_config(Path(selection[0]))
+            values = params_to_form_values(params)
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "values": values}
+
+    def save_yaml(self, values: dict[str, str]) -> dict[str, Any]:
+        """Validate the form, then save it as a `fim run`-compatible YAML file.
+
+        Args:
+            values: The same shape `validate_form` accepts.
+
+        Returns:
+            `{"ok": True, "path": "..."}` on success;
+            `{"ok": False, "message": ""}` if the save dialog was
+            cancelled; `{"ok": False, "message": "..."}` if the form does
+            not currently validate (saving an invalid form is refused,
+            the same as running one) or the write itself failed.
+        """
+        try:
+            payload = form_values_to_payload(values)
+            SimulationParams.from_mapping(payload)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        window = webview.windows[0]
+        selection = window.create_file_dialog(
+            webview.FileDialog.SAVE, save_filename="config.yaml"
+        )
+        if not selection:
+            return {"ok": False, "message": ""}
+        target = Path(selection[0])
+        try:
+            target.write_text(payload_to_yaml_text(payload), encoding="utf-8")
+        except OSError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "path": str(target)}
+
+    def get_default_max_workers(self) -> int:
+        """Return the Batch tab's own default parallel-worker count (design §4.1, H5).
+
+        `max_workers` is not a `SimulationParams` field at all — it
+        never reaches `form_values_to_payload` — so it has no
+        `config_form` entry; this reuses `batch_runner.default_max_
+        workers` directly rather than inventing a second default.
+        """
+        return default_max_workers()
 
     def ping(self) -> str:
         """Prove the basic JS-to-Python bridge round trip (Milestone W1).

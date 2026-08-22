@@ -61,6 +61,7 @@ def drive_and_read(
     trigger: str,
     read: str,
     *,
+    ready: str | None = None,
     is_ready: Callable[[Any], bool] = lambda value: value not in (None, "", {}),
     poll_attempts: int = 250,
     timeout: float = 10.0,
@@ -79,6 +80,23 @@ def drive_and_read(
     short sleep between attempts, to `read` that same location back once
     it has actually been written.
 
+    Every `evaluate_js` call this helper makes evaluates a plain,
+    synchronous expression — never an `async` one containing its own
+    internal `await`/`setTimeout` wait loop. An early version of `ready`
+    support tried exactly that (an async trigger IIFE polling a flag
+    with `await new Promise((r) => setTimeout(r, ...))` internally) and
+    the whole driver thread hung indefinitely: whatever pywebview's
+    `evaluate_js` does internally to hand a synchronous return value back
+    to Python appears to block the page's own JS event loop for the
+    duration of that one call, so a `setTimeout` callback *inside* an
+    in-flight `evaluate_js` call never gets a chance to fire — a
+    deadlock, not a timeout, confirmed by a hang that outlasted every
+    generous bound tried. `ready` is polled the same way `read` is
+    instead: a bare boolean expression, evaluated once per iteration by a
+    fresh `evaluate_js` call that returns immediately either way, with
+    the actual waiting done in this Python loop, never inside the page's
+    own JS.
+
     Args:
         target_window: The window to drive — normally the `window`
             fixture's own window, already built but not yet shown.
@@ -87,14 +105,23 @@ def drive_and_read(
             the page's own script or injected by the caller first).
         read: A JS expression polled after `trigger`, until `is_ready`
             accepts its value.
+        ready: An optional plain (non-`async`) JS boolean expression,
+            polled *before* `trigger` fires, until truthy — for a
+            `trigger` that must not run until the page's own async
+            initialization has finished attaching its event listeners
+            (see `test/gui/test_input_screen.py`'s `window.__fimInput
+            ScreenReady` flag). `None` skips this wait entirely and
+            fires `trigger` immediately, matching every test that does
+            not need it.
         is_ready: Decides whether a polled `read` value is a real result
             worth returning, versus still-unset placeholder state.
             Defaults to "not `None`, not an empty string, not an empty
             object" — right for most DOM-text or plain-value reads;
             override for a call whose real result can legitimately be
             one of those (e.g. an empty string is itself meaningful).
-        poll_attempts: How many times to re-evaluate `read`, each
-            `_POLL_INTERVAL_SECONDS` apart, before giving up.
+        poll_attempts: How many times to re-evaluate `read` (and, if
+            given, `ready`), each `_POLL_INTERVAL_SECONDS` apart, before
+            giving up.
         timeout: Seconds to wait for `webview.start` itself to return
             after the drive callback finishes, before failing loudly
             rather than hanging the test session.
@@ -114,6 +141,11 @@ def drive_and_read(
 
     def _drive() -> None:
         try:
+            if ready is not None:
+                for _ in range(poll_attempts):
+                    if target_window.evaluate_js(ready):
+                        break
+                    time.sleep(_POLL_INTERVAL_SECONDS)
             target_window.evaluate_js(trigger)
             value: Any = None
             for _ in range(poll_attempts):

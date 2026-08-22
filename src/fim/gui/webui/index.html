@@ -8,8 +8,193 @@
 </head>
 <body>
 <div id="app">
-  <p id="bridge-status">Connecting…</p>
+
+  <section id="screen-input">
+    <div id="input-banner" class="banner" hidden></div>
+
+    <form id="input-form" class="tabs">
+      <input type="radio" name="tab" id="tab-population" checked>
+      <input type="radio" name="tab" id="tab-migration">
+      <input type="radio" name="tab" id="tab-mutation">
+      <input type="radio" name="tab" id="tab-initial_conditions">
+      <input type="radio" name="tab" id="tab-convergence">
+      <input type="radio" name="tab" id="tab-batch">
+
+      <nav class="tab-bar">
+        <label for="tab-population" data-tab="population">Population<span class="error-dot" id="dot-population" hidden></span></label>
+        <label for="tab-migration" data-tab="migration">Migration<span class="error-dot" id="dot-migration" hidden></span></label>
+        <label for="tab-mutation" data-tab="mutation">Mutation<span class="error-dot" id="dot-mutation" hidden></span></label>
+        <label for="tab-initial_conditions" data-tab="initial_conditions">Initial conditions<span class="error-dot" id="dot-initial_conditions" hidden></span></label>
+        <label for="tab-convergence" data-tab="convergence">Convergence<span class="error-dot" id="dot-convergence" hidden></span></label>
+        <label for="tab-batch" data-tab="batch">Batch<span class="error-dot" id="dot-batch" hidden></span></label>
+      </nav>
+
+      <section class="tab-panel" id="panel-population">
+        <div class="field">
+          <label for="field-N">N (gene copies/deme)</label>
+          <input type="text" id="field-N" name="N">
+        </div>
+        <div class="field">
+          <label for="field-d">d (demes)</label>
+          <input type="text" id="field-d" name="d">
+        </div>
+        <div class="field">
+          <label for="field-seed">seed</label>
+          <input type="text" id="field-seed" name="seed">
+        </div>
+        <div class="field">
+          <label for="field-deme_weighting">deme weighting</label>
+          <select id="field-deme_weighting" name="deme_weighting">
+            <option value="size">size</option>
+            <option value="equal">equal</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="field-max_generations">max generations</label>
+          <input type="text" id="field-max_generations" name="max_generations">
+        </div>
+      </section>
+
+      <section class="tab-panel" id="panel-migration">
+        <div class="field">
+          <label for="field-migrant_sampling">migrant sampling</label>
+          <select id="field-migrant_sampling" name="migrant_sampling">
+            <option value="continuous">continuous</option>
+            <option value="stochastic">stochastic</option>
+          </select>
+        </div>
+
+        <fieldset class="composite" id="m-selector">
+          <legend>m (migration)</legend>
+          <label><input type="radio" name="m_mode" value="scalar" checked> scalar rate</label>
+          <label><input type="radio" name="m_mode" value="topology"> named topology</label>
+          <div class="field" id="m-scalar-fields">
+            <label for="field-m_rate">rate</label>
+            <input type="text" id="field-m_rate" name="m_rate">
+          </div>
+          <div class="field" id="m-topology-fields" hidden>
+            <label for="field-m_topology">topology</label>
+            <select id="field-m_topology" name="m_topology">
+              <option value="ring">ring</option>
+              <option value="linear">linear</option>
+            </select>
+            <label for="field-m_topology_rate">rate</label>
+            <input type="text" id="field-m_topology_rate" name="m_topology_rate">
+          </div>
+          <p class="loaded-summary" id="m-loaded-summary" hidden></p>
+        </fieldset>
+      </section>
+
+      <section class="tab-panel" id="panel-mutation">
+        <div class="field">
+          <label for="field-mutation_model">mutation model</label>
+          <select id="field-mutation_model" name="mutation_model">
+            <option value="infinite_alleles">infinite_alleles</option>
+            <option value="finite_alleles">finite_alleles</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="field-locus_lengths">locus length(s)</label>
+          <input type="text" id="field-locus_lengths" name="locus_lengths">
+        </div>
+
+        <fieldset class="composite" id="mu-selector">
+          <legend>mu (mutation rate)</legend>
+          <label><input type="radio" name="mu_mode" value="mu" checked> specify mu directly</label>
+          <label><input type="radio" name="mu_mode" value="mu_b"> derive from mu_b</label>
+          <div class="field" id="mu-mu-field">
+            <label for="field-mu_value">mu</label>
+            <input type="text" id="field-mu_value" name="mu_value">
+          </div>
+          <div class="field" id="mu-mu_b-field" hidden>
+            <label for="field-mu_b_value">mu_b</label>
+            <input type="text" id="field-mu_b_value" name="mu_b_value">
+          </div>
+        </fieldset>
+      </section>
+
+      <section class="tab-panel" id="panel-initial_conditions">
+        <div class="field">
+          <label for="field-initial_allele_count">initial allele count</label>
+          <input type="text" id="field-initial_allele_count" name="initial_allele_count">
+        </div>
+        <div class="field">
+          <label for="field-initial_concentration">concentration</label>
+          <input type="text" id="field-initial_concentration" name="initial_concentration">
+        </div>
+        <p class="loaded-summary" id="p0-summary" hidden></p>
+      </section>
+
+      <section class="tab-panel" id="panel-convergence">
+        <fieldset class="composite" id="cs-selector">
+          <legend>convergence statistic(s)</legend>
+          <label><input type="checkbox" name="cs_D" value="true" checked> D</label>
+          <label><input type="checkbox" name="cs_G_ST" value="true"> G_ST</label>
+          <label><input type="checkbox" name="cs_E_ST" value="true"> E_ST</label>
+          <label><input type="checkbox" name="cs_K_ST" value="true"> K_ST</label>
+          <label><input type="checkbox" name="cs_H_S" value="true"> H_S</label>
+          <label><input type="checkbox" name="cs_H_T" value="true"> H_T</label>
+        </fieldset>
+        <div class="field" id="combinator-field" hidden>
+          <label for="field-convergence_combinator">combinator</label>
+          <select id="field-convergence_combinator" name="convergence_combinator">
+            <option value="any">any</option>
+            <option value="all">all</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="field-convergence_window">convergence window</label>
+          <input type="text" id="field-convergence_window" name="convergence_window">
+        </div>
+        <div class="field">
+          <label for="field-convergence_tolerance">tolerance</label>
+          <input type="text" id="field-convergence_tolerance" name="convergence_tolerance">
+        </div>
+      </section>
+
+      <section class="tab-panel" id="panel-batch">
+        <div class="field">
+          <label for="field-n_replicates">n_replicates</label>
+          <input type="text" id="field-n_replicates" name="n_replicates">
+        </div>
+        <div id="batch-only-fields" hidden>
+          <div class="field">
+            <label for="field-replicate_tolerance">replicate tolerance (blank = unset)</label>
+            <input type="text" id="field-replicate_tolerance" name="replicate_tolerance">
+          </div>
+          <div class="field">
+            <label for="field-replicate_minimum">replicate minimum</label>
+            <input type="text" id="field-replicate_minimum" name="replicate_minimum">
+          </div>
+          <div class="field">
+            <label for="field-replicate_confidence">replicate confidence</label>
+            <select id="field-replicate_confidence" name="replicate_confidence">
+              <option value="0.9">0.9</option>
+              <option value="0.95" selected>0.95</option>
+              <option value="0.99">0.99</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="field-max_workers">parallel workers</label>
+            <input type="text" id="field-max_workers" name="max_workers">
+            <p class="hint">Not a `SimulationParams` field — the batch's own worker-process
+            count (design §0.5, H5). Defaults to this machine's own CPU count.</p>
+          </div>
+        </div>
+      </section>
+    </form>
+
+    <p id="run-reason" class="reason"></p>
+    <div class="actions">
+      <button type="button" id="load-yaml-button">Load YAML…</button>
+      <button type="button" id="save-yaml-button">Save YAML…</button>
+      <button type="button" id="run-button" disabled>Run simulation</button>
+    </div>
+  </section>
+
+  <p id="bridge-status" class="bridge-status">Connecting…</p>
 </div>
 <script src="app.js"></script>
+<script src="screens/input.js"></script>
 </body>
 </html>

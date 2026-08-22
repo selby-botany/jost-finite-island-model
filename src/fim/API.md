@@ -53,6 +53,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [select\_sample\_generations](#fim.gui.animation.select_sample_generations)
 * [fim.gui.app](#fim.gui.app)
   * [Api](#fim.gui.app.Api)
+    * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
+    * [validate\_form](#fim.gui.app.Api.validate_form)
+    * [load\_yaml](#fim.gui.app.Api.load_yaml)
+    * [save\_yaml](#fim.gui.app.Api.save_yaml)
+    * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
     * [ping](#fim.gui.app.Api.ping)
     * [ping\_from\_worker](#fim.gui.app.Api.ping_from_worker)
   * [create\_window](#fim.gui.app.create_window)
@@ -1047,6 +1052,109 @@ every real piece of work still routes through `fim.gui`'s existing
 business-logic modules (`config_form`, `runner`, `batch_runner`,
 `recent_runs`, `animation`) or `fim.viz.scatter`'s public data
 functions, never reimplemented here.
+
+<a id="fim.gui.app.Api.get_starter_form"></a>
+
+#### get\_starter\_form
+
+```python
+def get_starter_form() -> dict[str, str]
+```
+
+Return a fresh form's default values (Screen 1, design §3.6, §4.1).
+
+`config_form.starter_form_values` is the single source of "GUI
+defaults" — the identical values `fim.cli.STARTER_CONFIG` itself
+expands to — so this bridge method adds no logic of its own
+beyond calling it.
+
+<a id="fim.gui.app.Api.validate_form"></a>
+
+#### validate\_form
+
+```python
+def validate_form(values: dict[str, str]) -> dict[str, Any]
+```
+
+Validate the form exactly as "Run simulation" would (design §3.6, §4.7).
+
+**Arguments**:
+
+- `values` - One string per `config_form.all_fields()` entry, plus
+  every composite selector's own keys (`m_*`, `mu_*`,
+  `cs_*`) — `webui/screens/input.js`'s own responsibility
+  to collect from the live form.
+
+
+**Returns**:
+
+- ``{"ok"` - True}` if `values` parses into a valid
+  `SimulationParams`; otherwise `{"ok": False, "message": ...,
+- `"field"` - ..., "tab": ...}` — `message` is the caught
+  `ValueError`'s own text verbatim (matching the CLI's own
+  wording, design §4.7), `field`/`tab` are `None` when the
+  message names no field this form exposes (an unknown-key
+  error, for instance), for the caller to switch to and
+  highlight (§4.0 `2` of the original design) when they are not.
+
+<a id="fim.gui.app.Api.load_yaml"></a>
+
+#### load\_yaml
+
+```python
+def load_yaml() -> dict[str, Any]
+```
+
+Browse for and load a YAML config, returning the form values it renders to.
+
+Routes through `fim.cli.load_config` — the identical function
+`fim run` uses (design §3.6) — so a config that runs from the
+terminal loads identically here, error for error.
+
+**Returns**:
+
+- ``{"ok"` - True, "values": {...}}` on success;
+- ``{"ok"` - False, "message": ""}` if the dialog was cancelled
+  (no banner to show); `{"ok": False, "message": "..."}` on a
+  real load or validation failure.
+
+<a id="fim.gui.app.Api.save_yaml"></a>
+
+#### save\_yaml
+
+```python
+def save_yaml(values: dict[str, str]) -> dict[str, Any]
+```
+
+Validate the form, then save it as a `fim run`-compatible YAML file.
+
+**Arguments**:
+
+- `values` - The same shape `validate_form` accepts.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "path": "..."}` on success;
+- ``{"ok"` - False, "message": ""}` if the save dialog was
+  cancelled; `{"ok": False, "message": "..."}` if the form does
+  not currently validate (saving an invalid form is refused,
+  the same as running one) or the write itself failed.
+
+<a id="fim.gui.app.Api.get_default_max_workers"></a>
+
+#### get\_default\_max\_workers
+
+```python
+def get_default_max_workers() -> int
+```
+
+Return the Batch tab's own default parallel-worker count (design §4.1, H5).
+
+`max_workers` is not a `SimulationParams` field at all — it
+never reaches `form_values_to_payload` — so it has no
+`config_form` entry; this reuses `batch_runner.default_max_
+workers` directly rather than inventing a second default.
 
 <a id="fim.gui.app.Api.ping"></a>
 
