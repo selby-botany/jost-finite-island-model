@@ -148,6 +148,17 @@ markers = [
     "slow: long-running simulation horizon",
     "statistical: deterministic, seeded statistical validation",
 ]
+filterwarnings = [
+    # An exception on a real background thread (a `gui` test's own
+    # `pywebview` JS-bridge delivery thread, most concretely) must fail
+    # the run, not surface as a warning easy to miss behind buffered
+    # `-q` output. Found the hard way: a window destroyed while
+    # `Api.list_recent_runs()`'s result was still in flight raised a
+    # `JavascriptException` on pywebview's own delivery thread that
+    # only ever showed up as this warning -- see `open-run.js`'s own
+    # `window.__fimOpenRunRecentRunsLoaded` comment for the real fix.
+    "error::pytest.PytestUnhandledThreadExceptionWarning",
+]
 
 [tool.coverage.run]
 branch = true

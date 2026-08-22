@@ -38,6 +38,60 @@ whichever thread the collision hit. `poll_attempts` in each test
 controls the real wall-clock ceiling this trades against; a slower
 cadence here only costs time in a genuine failure path, not in the
 common (fast, already-converged) case.
+
+A second, distinct hazard, found investigating an intermittent
+multi-minute stall in the *whole* `pytest test/gui/ -m gui` process
+(not any one test): `sample`-ing the stalled process showed the main
+thread parked in `Py_FinalizeEx -> wait_for_thread_shutdown`, all 17
+`gui` tests already finished and passed (confirmed once by letting the
+run finish naturally — `17 passed` did eventually print, ~29 real
+minutes later) — CPython's own interpreter finalizer waiting on a
+leftover OS thread that never signals it is done, not a stuck test.
+Re-running with output written straight to a file (unbuffered, `python
+-u`) rather than through the harness's own pipe-and-tail capture — the
+earlier symptom's whole visible shape, "no output for a very long
+time," was itself partly an artifact of libc's default block-buffering
+of a non-tty stdout, sitting unflushed behind the same stuck
+finalizer — surfaced the real trigger as a `PytestUnhandledThread
+ExceptionWarning`: `webview.errors.JavascriptException` on
+`pywebview`'s own JS-bridge delivery thread (`webview/util.py`'s
+`js_bridge_call._call`), which calls back into a window's JS context
+once a `js_api` method's Python-side call returns. `open-run.js`'s
+`showOpenRunScreen` shows Screen 6 synchronously, then fires its own
+`refreshRecentRuns()` (an async `list_recent_runs()` bridge call)
+*without* awaiting it — deliberately, so a real filesystem scan never
+blocks the screen transition. `test_open_run_screen.py`'s own
+`test_open_a_run_button_reaches_screen_six` used to poll only for
+screen visibility, which the `drive` fixture's own `window.destroy()`
+then acted on immediately — tearing the window down while that
+fire-and-forget call could still be in flight back to pywebview's own
+bridge, on a thread with no way to know the window it was about to call
+into was already gone. Fixed at the source, the same `window.__fim*
+Ready`-flag pattern `test_input_screen.py` already established:
+`open-run.js` now sets `window.__fimOpenRunRecentRunsLoaded` once
+`refreshRecentRuns()` actually settles, and the test polls that
+alongside screen visibility before returning control to `drive`'s own
+teardown. `pyproject.toml`'s `filterwarnings` now also promotes
+`PytestUnhandledThreadExceptionWarning` to a hard test failure
+generally, so any future instance of this shape — a background thread
+throwing after the window/page it depended on is gone — fails loudly
+the moment it happens rather than only ever showing up as an
+easy-to-miss warning line (or, worse, only as an unexplained stall).
+
+That fix measurably reduced how often the stall reproduces (roughly
+1-in-13 attempts afterward, versus a much shorter run of attempts
+before it, in the same investigation), but a single post-fix stall was
+observed once more and was not re-diagnosed to full certainty — it may
+be a lower-frequency instance of the same class from a different
+`gui` test's own fire-and-forget bridge call, or may have been
+coincidental host contention from other tooling running at the same
+time. Recorded here, honestly incomplete, rather than either claimed
+fully fixed or left completely undocumented: if this resurfaces,
+`sample <pid>` a stalled `pytest -m gui` process first (confirms
+whether it is this same finalizer-wait shape at all) before assuming a
+new cause, and prefer a real, unbuffered `python -u ... -v` run over
+the harness's own piped-and-tailed capture when chasing it, since a
+piped run's own buffering can look identical to a genuine hang.
 """
 
 from __future__ import annotations
