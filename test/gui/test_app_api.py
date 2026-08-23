@@ -15,12 +15,13 @@ from __future__ import annotations
 import json
 import time as time_module
 import webbrowser
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import yaml
-from webview.menu import Menu
+from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
 from fim import cli, update
@@ -883,7 +884,7 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
     digit_items = [
         item.title for item in digits_submenu.items if hasattr(item, "title")
     ]
-    assert digit_items == ["2", "3 (default)", "4", "5", "6", "8"]
+    assert digit_items == ["2", "3", "4", "5", "6", "8"]
     help_items = [item.title for item in menus[4].items if hasattr(item, "title")]
     assert help_items == [
         "Usage guide",
@@ -892,6 +893,51 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         "Check for updates",
         "About fim",
     ]
+
+
+def _all_menu_titles(nodes: Sequence[Menu | MenuAction | MenuSeparator]) -> list[str]:
+    """Recursively collect every `Menu`/`MenuAction` title in a menu tree.
+
+    `MenuSeparator` carries no title at all -- skipped, not defaulted
+    to an empty string, the same `hasattr` check every other structural
+    test in this file already uses to tell the three node types apart.
+    A `Menu` contributes both its own title and every title nested
+    inside it, recursively -- the View menu's own "Significant digits"
+    submenu is exactly this shape.
+    """
+    titles: list[str] = []
+    for node in nodes:
+        if not hasattr(node, "title"):
+            continue
+        titles.append(node.title)
+        if isinstance(node, Menu):
+            titles.extend(_all_menu_titles(node.items))
+    return titles
+
+
+def test_no_menu_title_contains_a_paren() -> None:
+    """No `Menu`/`MenuAction` title anywhere contains `(` or `)`.
+
+    A real, confirmed crash, not a hypothetical one: the GTK/Linux
+    pywebview backend derives a native "detailed action name" straight
+    from a menu item's own label text and hands it to `g_menu_item_
+    set_detailed_action`, which parses anything after an opening paren
+    as GVariant target syntax -- `"3 (default)"` (the View menu's own
+    Significant-digits submenu, before this test existed) produced a
+    fatal `GLib-GIO-ERROR` that aborted the whole process outright
+    (`Trace/breakpoint trap (core dumped)`), invisible on macOS/Windows
+    and caught only by CI's own `linux-beta-x64` smoke test. This
+    guards the whole class, not just that one label, against every
+    title anywhere in the tree -- top-level menus, nested submenus, and
+    items alike -- so a future addition fails here, in milliseconds,
+    rather than crashing a real Linux build the same way.
+    """
+    menus = app_module._build_menu(_FakeMenuWindow())  # type: ignore[arg-type]
+
+    titles = _all_menu_titles(menus)
+
+    offenders = [title for title in titles if "(" in title or ")" in title]
+    assert offenders == []
 
 
 def test_open_external_link_opens_the_os_default_browser(

@@ -1433,10 +1433,24 @@ def _build_menu(window: webview.Window) -> list[Menu]:
         ],
     )
     # Literal digit counts, not a live reflection of `Api._significant_
-    # digits` — see `_build_menu`'s own docstring for why. `3` is
-    # `_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS` spelled out rather than
-    # interpolated, so this list reads the same as every other menu
-    # item here: a plain literal, not a runtime-computed label.
+    # digits` — see `_build_menu`'s own docstring for why. `3`
+    # (`_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS`, spelled out rather than
+    # interpolated so this list reads the same as every other menu item
+    # here: a plain literal, not a runtime-computed label) carries no
+    # "(default)" annotation — every title anywhere in this menu tree
+    # must stay free of `(`/`)` (`test_app_api.py`'s own `test_no_menu_
+    # title_contains_a_paren`, added after a real, confirmed crash: the
+    # GTK/Linux pywebview backend derives a native "detailed action
+    # name" straight from a menu item's own label text and hands it to
+    # `g_menu_item_set_detailed_action`, which parses anything after an
+    # opening paren as GVariant target syntax — `"3 (default)"` produced
+    # `g_menu_item_set_detailed_action: ... 'app._View_Significant_
+    # digits_3_(default)' has invalid format: 0-7:unknown keyword`, a
+    # fatal `GLib-GIO-ERROR` that aborted the whole process
+    # (`Trace/breakpoint trap (core dumped)`) — not a Python exception,
+    # not caught by anything, and invisible on macOS/Windows, where
+    # this was written and tested (CI's own `linux-beta-x64` smoke test
+    # is what actually caught it).
     view_menu = Menu(
         "View",
         [
@@ -1444,9 +1458,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
                 "Significant digits",
                 [
                     MenuAction("2", dispatch("fim.menu.setSignificantDigits(2)")),
-                    MenuAction(
-                        "3 (default)", dispatch("fim.menu.setSignificantDigits(3)")
-                    ),
+                    MenuAction("3", dispatch("fim.menu.setSignificantDigits(3)")),
                     MenuAction("4", dispatch("fim.menu.setSignificantDigits(4)")),
                     MenuAction("5", dispatch("fim.menu.setSignificantDigits(5)")),
                     MenuAction("6", dispatch("fim.menu.setSignificantDigits(6)")),
