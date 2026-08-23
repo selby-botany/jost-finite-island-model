@@ -224,8 +224,19 @@ const fim = {
                 window.alert(`Could not change significant digits: ${result.message}`);
             }
         },
-        openExternal(url) {
-            window.pywebview.api.open_external_link(url);
+        async openExternal(url) {
+            // `window.__fimMenuOpenExternalSettled` -- the same settle-
+            // flag fix, and the same reason, as `progress.js`'s own
+            // `cancelButton` handler: see that file for the full hazard
+            // this closes. A separate flag from `help.js`'s own
+            // `__fimHelpExternalLinkSettled` on purpose -- this is an
+            // independent call site (the Help menu's "Documentation on
+            // GitHub" item), not the in-page Help-screen link, so a test
+            // exercising one must not be satisfied by the other having
+            // settled.
+            window.__fimMenuOpenExternalSettled = false;
+            await window.pywebview.api.open_external_link(url);
+            window.__fimMenuOpenExternalSettled = true;
         },
         async checkForUpdates() {
             const result = await window.pywebview.api.check_for_updates();

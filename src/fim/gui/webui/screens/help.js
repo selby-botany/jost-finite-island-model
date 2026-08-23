@@ -53,7 +53,7 @@ helpBackButton.addEventListener("click", () => {
 // so no `<a>` is ever left to native navigation, which inside a
 // pywebview window can otherwise carry the *whole application window*
 // away from `index.html`, not open a new tab.
-helpContent.addEventListener("click", (event) => {
+helpContent.addEventListener("click", async (event) => {
     const link = event.target.closest("a");
     if (link === null) {
         return;
@@ -69,6 +69,11 @@ helpContent.addEventListener("click", (event) => {
         window.fim.showHelp(link.dataset.fimHelp, link.dataset.fimAnchor || undefined);
     } else if (link.dataset.fimExternal) {
         event.preventDefault();
-        window.pywebview.api.open_external_link(link.dataset.fimExternal);
+        // `window.__fimHelpExternalLinkSettled` -- the same settle-flag
+        // fix, and the same reason, as `progress.js`'s own `cancelButton`
+        // handler: see that file for the full hazard this closes.
+        window.__fimHelpExternalLinkSettled = false;
+        await window.pywebview.api.open_external_link(link.dataset.fimExternal);
+        window.__fimHelpExternalLinkSettled = true;
     }
 });

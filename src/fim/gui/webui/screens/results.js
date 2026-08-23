@@ -122,10 +122,19 @@ newRunButton.addEventListener("click", () => {
     window.fim.showScreen("screen-input");
 });
 
-openFolderButton.addEventListener("click", () => {
-    if (currentOutputDirectory !== null) {
-        window.pywebview.api.open_output_folder(currentOutputDirectory);
+openFolderButton.addEventListener("click", async () => {
+    if (currentOutputDirectory === null) {
+        return;
     }
+    // `window.__fimResultsOpenFolderSettled` -- the same settle-flag
+    // fix, and the same reason, as `progress.js`'s own `cancelButton`
+    // handler: a fire-and-forget bridge call left in flight when a
+    // test's window is destroyed can throw on pywebview's own delivery
+    // thread and hang interpreter shutdown, and this button had no
+    // DOM-visible effect at all to (mis-)use as a settle signal.
+    window.__fimResultsOpenFolderSettled = false;
+    await window.pywebview.api.open_output_folder(currentOutputDirectory);
+    window.__fimResultsOpenFolderSettled = true;
 });
 
 animateButton.addEventListener("click", () => {

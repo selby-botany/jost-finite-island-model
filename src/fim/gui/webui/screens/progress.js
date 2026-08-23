@@ -128,7 +128,21 @@ window.fim.onBatchError = function onBatchError(message) {
     cancelButton.disabled = true;
 };
 
-cancelButton.addEventListener("click", () => {
+cancelButton.addEventListener("click", async () => {
     cancelButton.disabled = true;
-    window.pywebview.api.cancel_run();
+    // `window.__fimCancelRunSettled`, not only `cancelButton.disabled`
+    // (which flips synchronously, before this bridge call's own promise
+    // ever resolves): the exact hazard `open-run.js`'s own `refreshRecent
+    // Runs` docstring records -- a test that tears its window down the
+    // instant a DOM-visible effect appears can destroy the window while
+    // `cancel_run()`'s own return value is still in flight back to
+    // pywebview's own JS bridge (`webview/util.py`'s `js_bridge_call`),
+    // throwing on that now-orphaned delivery thread and hanging the whole
+    // interpreter at shutdown (confirmed live: this exact click handler,
+    // racing `test_running_screen.py`'s own `cancelled_event` wait, which
+    // watches a *different* signal -- the real run thread's own
+    // `onRunCancelled` push -- and was not itself waiting on this call).
+    window.__fimCancelRunSettled = false;
+    await window.pywebview.api.cancel_run();
+    window.__fimCancelRunSettled = true;
 });

@@ -142,8 +142,15 @@ batchNewRunButton.addEventListener("click", () => {
     window.fim.showScreen("screen-input");
 });
 
-batchOpenFolderButton.addEventListener("click", () => {
-    if (currentBatchOutputDirectory !== null) {
-        window.pywebview.api.open_output_folder(currentBatchOutputDirectory);
+batchOpenFolderButton.addEventListener("click", async () => {
+    if (currentBatchOutputDirectory === null) {
+        return;
     }
+    // `window.__fimBatchResultsOpenFolderSettled` -- the same settle-
+    // flag fix, and the same reason, as `results.js`'s own identical
+    // button and `progress.js`'s own `cancelButton` handler: see
+    // either for the full hazard this closes.
+    window.__fimBatchResultsOpenFolderSettled = false;
+    await window.pywebview.api.open_output_folder(currentBatchOutputDirectory);
+    window.__fimBatchResultsOpenFolderSettled = true;
 });

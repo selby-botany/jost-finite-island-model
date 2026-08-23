@@ -9,6 +9,7 @@ exactly like the Tk-era suite needed a real Tk display.
 
 from __future__ import annotations
 
+import webbrowser
 from collections.abc import Callable
 from typing import Any
 
@@ -105,6 +106,48 @@ def test_menu_set_significant_digits_calls_the_bridge(
     )
 
     assert result == 4
+
+
+def test_menu_open_external_reaches_the_browser_and_settles(
+    window: webview.Window, drive: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fim.menu.openExternal` (the Help menu's "Documentation on GitHub" item) settles.
+
+    Monkeypatches `webbrowser.open` — the same hook `test_app_api.py`'s
+    own `test_open_external_link_opens_the_os_default_browser` uses as
+    a plain Python call — so this never opens a real browser. The
+    trigger wraps the call in `setTimeout(..., 0)`, matching
+    `fim.gui.app._build_menu`'s own real dispatcher exactly, the same
+    reason `test_menu_set_significant_digits_calls_the_bridge` above
+    does.
+
+    Also proves a real, once-reproduced hang is closed: this menu
+    item's own `openExternal` called `window.pywebview.api.open_
+    external_link(...)` without anything downstream awaiting it, so
+    nothing tied a test's own teardown to that call having actually
+    finished before `app.js`'s own `window.__fimMenuOpenExternal
+    Settled` flag — a separate flag from `screens/help.js`'s own
+    `__fimHelpExternalLinkSettled` on purpose, since this is an
+    independent call site. See `test_running_screen.py`'s own
+    `_wait_for_cancel_run_settled` for the full mechanism, traced there
+    via `sample <pid>` on a `git push`'s own hung pre-push `pytest` run.
+    """
+    opened: list[str] = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+
+    settled = drive(
+        window,
+        trigger=(
+            "setTimeout(() => { "
+            "window.fim.menu.openExternal('https://example.invalid/docs'); "
+            "}, 0);"
+        ),
+        read="window.__fimMenuOpenExternalSettled === true",
+        is_ready=lambda value: value is True,
+    )
+
+    assert settled is True
+    assert opened == ["https://example.invalid/docs"]
 
 
 def test_ping_from_worker_round_trip(

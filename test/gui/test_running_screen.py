@@ -134,6 +134,43 @@ def _wait_for_input_screen_ready(window: webview.Window) -> None:
     )
 
 
+def _wait_for_cancel_run_settled(window: webview.Window) -> None:
+    """Poll until `cancel_run()`'s own fire-and-forget bridge call has resolved.
+
+    Real, previously-reproduced hazard, not a hypothetical one:
+    `screens/progress.js`'s own `cancelButton` click handler calls
+    `window.pywebview.api.cancel_run()`, and `cancelButton.disabled`
+    flips synchronously well before that call's own return value is
+    delivered back to pywebview's own JS bridge — `_drain_run_messages`'s
+    own, entirely separate `onRunCancelled` push (what `cancelled_event`
+    above actually watches) settles first far more often than not, but
+    nothing before this fix ordered the two, so a window destroyed the
+    instant `cancelled_event` fired could still race `cancel_run()`'s own
+    in-flight delivery, throwing on pywebview's own delivery thread and
+    hanging the whole interpreter at shutdown (`test/gui/conftest.py`'s
+    own module docstring records the identical shape from a different
+    call site, `open-run.js`'s `refreshRecentRuns`).
+
+    Safe to poll here for the same reason `_wait_for_input_screen_ready`
+    is: `_drain_run_messages`'s background thread has already returned
+    by the time `cancelled_event` is set (its own `"cancelled"` branch
+    pushes `onRunCancelled` and returns immediately after), so this loop
+    is never a second concurrent `evaluate_js` caller.
+
+    Raises:
+        AssertionError: If the flag never settles — surfaced loudly
+            rather than silently reading stale DOM state.
+    """
+    for _ in range(_READY_POLL_ATTEMPTS):
+        if window.evaluate_js("window.__fimCancelRunSettled === true"):
+            return
+        time.sleep(_READY_POLL_INTERVAL_SECONDS)
+    raise AssertionError(
+        f"cancel_run() did not settle within "
+        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
+    )
+
+
 def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
     """Clicking "Run simulation" with a valid form starts a real background run.
 
@@ -236,6 +273,17 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
     regardless of population size — but a config with no realistic
     chance of finishing on its own remains the more obviously correct
     one to reach for.
+
+    Also waits on `_wait_for_cancel_run_settled` before reading final
+    DOM state — `cancelled_event` alone proved this test's own two
+    outcomes correctly, but this file's own click on `cancel-run-button`
+    fires an un-awaited `cancel_run()` bridge call with no DOM effect of
+    its own tying it to either signal; a real, once-reproduced hang (a
+    `git push`'s own pre-push test run left "HUNG" well after printing
+    "813 passed") traced via `sample <pid>` to this exact call still
+    being in flight — on pywebview's own JS-delivery thread — when this
+    test's own `window.destroy()` ran. See `_wait_for_cancel_run_
+    settled`'s own docstring for the full mechanism.
     """
     started_event = threading.Event()
     cancelled_event = threading.Event()
@@ -262,6 +310,7 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
                     "document.getElementById('cancel-run-button').click();"
                 )
                 if cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                    _wait_for_cancel_run_settled(window)
                     settled = window.evaluate_js(
                         "({"
                         "bannerText: "

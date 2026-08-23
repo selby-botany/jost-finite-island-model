@@ -32,10 +32,13 @@ from __future__ import annotations
 import queue
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
+
+from fim.gui.app import Api, create_window
 
 pytestmark = pytest.mark.gui
 
@@ -240,3 +243,64 @@ def test_new_run_button_switches_back_to_the_input_screen(
     switched = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert switched is True
+
+
+def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
+    """ "Open output folder" reaches the injected opener and settles before teardown.
+
+    Builds its own window (not the shared `window` fixture, which
+    always uses a bare `Api()`) with `open_folder` injected, the same
+    hook `test_app_api.py`'s own `test_open_output_folder_calls_the_
+    injected_opener` uses as a plain Python call — here driven through
+    a real click instead, so a real Finder/Explorer window never opens
+    during this test.
+
+    Also proves the fix for a real, once-reproduced hang: `open-
+    FolderButton`'s click handler calls `window.pywebview.api.open_
+    output_folder(...)` without anything downstream awaiting it, so
+    nothing before `screens/results.js`'s own `window.__fimResults
+    OpenFolderSettled` flag existed tied a test's own teardown to that
+    call having actually finished — the same shape `test_running_
+    screen.py`'s own `_wait_for_cancel_run_settled` closes for `cancel_
+    run()`, traced there via `sample <pid>` on a `git push`'s own
+    hung pre-push `pytest` run. Polling this flag before letting
+    `window.destroy()` run is the actual regression proof; the injected
+    opener's own recorded path is the icing.
+    """
+    opened: list[Path] = []
+    window = create_window(api=Api(open_folder=opened.append), hidden=True)
+    outcome: queue.Queue[Any] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            for _ in range(_POLL_ATTEMPTS):
+                if window.evaluate_js(_INPUT_SCREEN_READY):
+                    break
+                time.sleep(_POLL_INTERVAL_SECONDS)
+            window.evaluate_js(
+                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            )
+            for _ in range(_POLL_ATTEMPTS):
+                if window.evaluate_js(
+                    "!document.getElementById('screen-results').hidden"
+                ):
+                    break
+                time.sleep(_POLL_INTERVAL_SECONDS)
+            window.evaluate_js("document.getElementById('open-folder-button').click();")
+            settled = False
+            for _ in range(_POLL_ATTEMPTS):
+                settled = window.evaluate_js(
+                    "window.__fimResultsOpenFolderSettled === true"
+                )
+                if settled:
+                    break
+                time.sleep(_POLL_INTERVAL_SECONDS)
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is True
+    assert len(opened) == 1

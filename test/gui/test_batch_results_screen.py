@@ -28,6 +28,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -276,3 +277,60 @@ def test_batch_new_run_button_switches_back_to_the_input_screen() -> None:
     switched = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
     assert switched is True
+
+
+def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
+    """ "Open batch folder" reaches the injected opener and settles before teardown.
+
+    The batch-results counterpart to `test_results_screen.py`'s own
+    identically-named test — same injected-`open_folder` hook (so a
+    real Finder/Explorer window never opens here either), same real,
+    once-reproduced hang this closes: `batchOpenFolderButton`'s click
+    handler called `window.pywebview.api.open_output_folder(...)`
+    without anything downstream awaiting it, so nothing tied a test's
+    own teardown to that call having actually finished before
+    `screens/batch-results.js`'s own `window.__fimBatchResultsOpen
+    FolderSettled` flag. See `test_running_screen.py`'s own
+    `_wait_for_cancel_run_settled` for the full mechanism, traced there
+    via `sample <pid>` on a `git push`'s own hung pre-push `pytest` run.
+    """
+    opened: list[Path] = []
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(
+        api=Api(on_message=on_message, open_folder=opened.append), hidden=True
+    )
+    outcome: queue.Queue[Any] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = False
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                window.evaluate_js(
+                    "document.getElementById('batch-open-folder-button').click();"
+                )
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    settled = window.evaluate_js(
+                        "window.__fimBatchResultsOpenFolderSettled === true"
+                    )
+                    if settled:
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is True
+    assert len(opened) == 1

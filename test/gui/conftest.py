@@ -1,4 +1,4 @@
-"""Shared fixtures for `fim.gui` headless functional tests (design doc
+r"""Shared fixtures for `fim.gui` headless functional tests (design doc
 `20260821-claude-sonnet-5-graphical-interface.md` §6.1, §6.4).
 
 Replaces the Tk-era `conftest.py` (session-scoped `tk.Tk()` root, a
@@ -92,6 +92,59 @@ whether it is this same finalizer-wait shape at all) before assuming a
 new cause, and prefer a real, unbuffered `python -u ... -v` run over
 the harness's own piped-and-tailed capture when chasing it, since a
 piped run's own buffering can look identical to a genuine hang.
+
+2026-08-23: this exact shape (`Py_FinalizeEx -> wait_for_thread_
+shutdown`) hung a real `git push`'s own pre-push `pytest -m 'not
+statistical and not slow and not packaging'` run indefinitely — not
+self-resolving, unlike every case above — traced via `sample <pid>` to
+`screens/progress.js`'s own `cancelButton` handler: `window.pywebview.
+api.cancel_run()`, fired without being awaited, with `cancelButton.
+disabled = true` as its only DOM-visible effect, flipping synchronously
+well before that call's own return value is delivered back to
+pywebview's own JS bridge. `test_running_screen.py`'s own `test_cancel_
+button_stops_the_run_and_shows_the_cancelled_banner` was not itself
+waiting on this settling — it watches a *different* signal, the real
+run thread's own separate `onRunCancelled` push — so it could (and,
+that one time, did) destroy the window while `cancel_run()`'s own
+delivery was still in flight. Fixed the same way as `refreshRecentRuns`
+above: `progress.js` now sets `window.__fimCancelRunSettled` around an
+`await`ed `cancel_run()` call, and the test polls it before reading
+final state. The same audit found four more `window.pywebview.api.*`
+calls sharing the identical un-awaited shape with no live-reproduced
+test race (`results.js`/`batch-results.js`'s "Open output folder",
+`help.js`'s external-doc link, `app.js`'s `openExternal` menu dispatch)
+— all five now closed and each has its own regression test proving the
+settle flag actually works, in `test_running_screen.py`,
+`test_results_screen.py`, `test_batch_results_screen.py`,
+`test_help_screen.py`, and `test_app.py` respectively. `grep -n
+"window\.pywebview\.api\." src/fim/gui/webui/ --include='*.js'` is the
+audit command that found all five call sites (filtering out the two
+`bridgeMethod:` callback *definitions* in `results.js`/`batch-
+results.js`, which are already awaited at their own real call site in
+`app.js`'s `wireDemePairSelector`) — worth re-running against any new
+screen before assuming this class is closed for good.
+
+Re-running the full `gui` suite five times in a row immediately after
+that fix (chasing confidence, not a fixed regression count) reproduced
+a *related but distinct* delay once: the same `Py_FinalizeEx` shape,
+but this time a live `sample` showed a different thread blocked in
+`sock_recv_into -> readline` — reading from a socket, not from a JS
+bridge delivery — and, unlike every case above, the process eventually
+exited on its own within roughly a minute rather than hanging
+indefinitely. `ProcessPoolExecutor` is the leading suspect (`engine.py`
+and `app.py`'s own `ping_from_worker` both construct one, always via a
+`with` block, so cleanup should be automatic) rather than a diagnosed
+cause — not chased further, since a self-resolving delay is a
+materially different, lower-severity problem than a true hang, and this
+session's actual, reported failure (the hung `git push`) was already
+traced to the `cancel_run()` race above, confirmed via the same live
+`sample` technique before it was fixed. Recorded here for the same
+reason the note above is: so the next person chasing a `gui`-suite
+stall starts from what is already known instead of re-deriving it, and
+so "read the docstring" does not have to depend on someone remembering
+to during an actual incident — `sample <pid>` first, check whether the
+blocked thread is a JS bridge delivery or a socket read, and only then
+decide which of the two investigations above it continues.
 """
 
 from __future__ import annotations
