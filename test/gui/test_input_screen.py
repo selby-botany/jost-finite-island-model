@@ -291,6 +291,73 @@ def test_every_configure_section_has_its_own_modal(
     assert settled is True
 
 
+def test_menu_set_deme_weighting_updates_the_field_without_a_modal(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`fim.menu.setDemeWeighting` sets the field directly (design §3.1.3)."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="window.fim.menu.setDemeWeighting('equal');",
+        read=(
+            "({"
+            "value: document.getElementById('field-deme_weighting').value, "
+            "modalOpen: document.getElementById('modal-population').open"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("value") == "equal",
+    )
+
+    assert settled["value"] == "equal"
+    assert settled["modalOpen"] is False
+
+
+def test_menu_set_mutation_model_updates_the_field_without_a_modal(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`fim.menu.setMutationModel` sets the field directly (design §3.1.3)."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="window.fim.menu.setMutationModel('finite_alleles');",
+        read="document.getElementById('field-mutation_model').value",
+        is_ready=lambda value: value == "finite_alleles",
+    )
+
+    assert settled == "finite_alleles"
+
+
+def test_menu_toggle_convergence_statistic_adds_to_the_set(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`fim.menu.toggleConvergenceStatistic` adds a statistic, not replaces it.
+
+    The starter form has only `cs_D` checked. Toggling `cs_G_ST` on must
+    leave `cs_D` checked too — an exclusive pick here would silently
+    discard whatever combination was already configured (design §3.1.3,
+    `app.py`'s own `_build_menu` docstring has the full reasoning) — and
+    checking two statistics is exactly what makes the combinator field
+    appear, proving `syncConditionalVisibility` ran as a side effect too.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="window.fim.menu.toggleConvergenceStatistic('cs_G_ST');",
+        read=(
+            "({"
+            "d: document.querySelector('input[name=\"cs_D\"]').checked, "
+            "gSt: document.querySelector('input[name=\"cs_G_ST\"]').checked, "
+            "combinatorHidden: document.getElementById('combinator-field').hidden"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("gSt") is True,
+    )
+
+    assert settled["d"] is True
+    assert settled["gSt"] is True
+    assert settled["combinatorHidden"] is False
+
+
 def test_configure_population_opens_a_modal_without_navigating_away(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

@@ -272,6 +272,61 @@ window.fim.menu.configureTab = async function configureTab(tabName) {
     window.fim.openConfigModal(tabName);
 };
 
+/**
+ * Set one field directly to a literal value, without opening its own
+ * modal -- the shared plumbing behind every Configure value-selector
+ * leaf (design §3.1.3): the same re-sync/re-validate a real edit
+ * already triggers (`wireEvents`'s own delegated listener), run once
+ * here since a menu click never fires a real DOM `input`/`change`
+ * event for `document`-level delegation to catch.
+ * @param {string} name
+ * @param {string} value
+ */
+function setSingleFieldValue(name, value) {
+    setFieldValue(name, value);
+    syncConditionalVisibility();
+    revalidate();
+}
+
+/**
+ * Configure > Deme weighting (design §3.1.3) -- a genuinely categorical
+ * field, one `MenuAction` per legal value.
+ * @param {string} value
+ */
+window.fim.menu.setDemeWeighting = function setDemeWeighting(value) {
+    setSingleFieldValue("deme_weighting", value);
+};
+
+/**
+ * Configure > Mutation model (design §3.1.3) -- the same shape as
+ * Deme weighting above.
+ * @param {string} value
+ */
+window.fim.menu.setMutationModel = function setMutationModel(value) {
+    setSingleFieldValue("mutation_model", value);
+};
+
+/**
+ * Configure > Convergence statistic (design §3.1.3) -- *toggles* one
+ * statistic's own checkbox rather than selecting it exclusively: the
+ * field is a set (any combination of the six, `app.py`'s own
+ * `_build_menu` docstring has the full reasoning), so an exclusive pick
+ * here would silently discard whatever multi-statistic combination the
+ * Convergence modal already has configured.
+ * @param {string} checkboxName - e.g. `"cs_G_ST"`.
+ */
+window.fim.menu.toggleConvergenceStatistic = function toggleConvergenceStatistic(
+    checkboxName
+) {
+    const field = form.elements.namedItem(checkboxName);
+    if (field === null) {
+        return;
+    }
+    field.checked = !field.checked;
+    syncConditionalVisibility();
+    revalidate();
+};
+
 // `whenApiReady` itself is `app.js`'s own top-level function, not
 // redeclared here -- a real, found-live duplicate definition (identical
 // body, this file's own local copy) silently overwrote whichever one

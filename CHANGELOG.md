@@ -56,6 +56,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   over whatever screen is currently showing, instead of switching the
   whole window to the Model input screen — including the auto-jump to
   an invalid field's own section on "Run simulation".
+- Configure also gains three direct value-selector submenus that set a
+  field immediately, no dialog: Deme weighting, Mutation model, and
+  Convergence statistic — the last one adds or removes one statistic
+  from the active set on each click, rather than replacing the whole
+  selection, so it can never silently discard a multi-statistic
+  combination already configured in the Convergence dialog.
 
 ### Changed
 

@@ -1050,7 +1050,27 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         "Initial conditions",
         "Convergence",
         "Batch",
+        "Deme weighting",
+        "Mutation model",
+        "Convergence statistic",
     ]
+    deme_weighting_submenu = menus[1].items[7]
+    assert isinstance(deme_weighting_submenu, Menu)
+    assert [
+        item.title for item in deme_weighting_submenu.items if hasattr(item, "title")
+    ] == ["size", "equal"]
+    mutation_model_submenu = menus[1].items[8]
+    assert isinstance(mutation_model_submenu, Menu)
+    assert [
+        item.title for item in mutation_model_submenu.items if hasattr(item, "title")
+    ] == ["infinite_alleles", "finite_alleles"]
+    convergence_statistic_submenu = menus[1].items[9]
+    assert isinstance(convergence_statistic_submenu, Menu)
+    assert [
+        item.title
+        for item in convergence_statistic_submenu.items
+        if hasattr(item, "title")
+    ] == ["D", "Gₛₜ", "Eₛₜ", "Kₛₜ", "Hₛ", "Hₜ"]
     run_items = [item.title for item in menus[2].items if hasattr(item, "title")]
     assert run_items == ["Run simulation", "Cancel run", "Animate"]
     view_items = [item.title for item in menus[3].items if hasattr(item, "title")]
@@ -1069,6 +1089,22 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         "Check for updates",
         "About fim",
     ]
+
+
+def test_statistic_menu_label_renders_true_unicode_subscripts() -> None:
+    """`_statistic_menu_label` matches every `CONVERGENCE_STATISTIC_NAMES` entry.
+
+    Direct, focused coverage of the small pure function behind the
+    Convergence statistic submenu's own labels (design §3.1.3) — native
+    menu items are plain text, so this is the closest equivalent to the
+    `<sub>`-tagged labels `index.html`'s own static markup uses.
+    """
+    assert app_module._statistic_menu_label("D") == "D"
+    assert app_module._statistic_menu_label("G_ST") == "Gₛₜ"
+    assert app_module._statistic_menu_label("E_ST") == "Eₛₜ"
+    assert app_module._statistic_menu_label("K_ST") == "Kₛₜ"
+    assert app_module._statistic_menu_label("H_S") == "Hₛ"
+    assert app_module._statistic_menu_label("H_T") == "Hₜ"
 
 
 def _all_menu_titles(nodes: Sequence[Menu | MenuAction | MenuSeparator]) -> list[str]:

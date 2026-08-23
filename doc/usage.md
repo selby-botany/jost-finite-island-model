@@ -378,8 +378,14 @@ including mid-run. File covers configuration/run file-system actions
 Configure jumps straight to any one of six configuration sections
 (Population/Migration/Mutation/Initial conditions/Convergence/Batch), each
 opening as a small dialog over whatever screen is currently showing,
-without navigating away from it. Run covers the simulation lifecycle (Run
-simulation, Cancel run,
+without navigating away from it; three fields that are quick, meaningful
+choices on their own get a direct submenu instead — no dialog at all —
+that sets the field immediately: Deme weighting (size/equal), Mutation
+model (infinite_alleles/finite_alleles), and Convergence statistic, which
+*adds or removes* one statistic from the active set on each click rather
+than replacing the whole selection (checking two or more is exactly what
+turns on the "combinator" choice in the Convergence dialog). Run covers the
+simulation lifecycle (Run simulation, Cancel run,
 Animate); View holds a Significant digits submenu (2/3/4/5/6/8, default 3)
 that changes how many digits every displayed statistic rounds to — cosmetic
 only, `trajectory.jsonl`/`report.json`/`manifest.json` always keep full
