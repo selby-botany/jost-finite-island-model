@@ -25,31 +25,6 @@ const openRunButton = document.getElementById("open-run-button");
  * summaries, shown as plain text instead). */
 const SUMMARY_ONLY_KEYS = ["m_loaded_summary", "p0_summary"];
 
-/* The (now hidden, `app.css`'s `.tab-bar { display: none; }`) tab
- * bar's own six labels, keyed by the same `data-tab` name `_build_
- * menu`'s Configure menu items pass to `configureTab` -- the visible
- * navigation moved to that native menu (visualization-and-config-
- * editors design), but `current-tab-heading` still needs the same
- * human-readable text the old tab labels showed, so this map is kept
- * rather than reading text out of the now-hidden DOM it used to live
- * in. */
-const TAB_LABELS = {
-    population: "Population",
-    migration: "Migration",
-    mutation: "Mutation",
-    initial_conditions: "Initial conditions",
-    convergence: "Convergence",
-    batch: "Batch",
-};
-
-const currentTabHeading = document.getElementById("current-tab-heading");
-
-/* Sections already converted from a tab-panel to a Configure modal
- * (unified-run-view design §3.1, §8 Phase A/B) -- grows to all six as
- * Phase B converts the rest; `switchToTab`/`configureTab` below check
- * this set once rather than duplicating the dispatch. */
-const CONFIG_MODAL_TAB_NAMES = ["population"];
-
 function setFieldValue(name, value) {
     const field = form.elements.namedItem(name);
     if (field === null) {
@@ -171,24 +146,10 @@ function showBanner(message) {
     banner.textContent = message;
 }
 
-async function switchToTab(tabName) {
-    if (CONFIG_MODAL_TAB_NAMES.includes(tabName)) {
-        window.fim.openConfigModal(tabName);
-        return;
-    }
-    const radio = document.getElementById(`tab-${tabName}`);
-    if (radio !== null) {
-        radio.checked = true;
-    }
-    if (currentTabHeading !== null) {
-        currentTabHeading.textContent = TAB_LABELS[tabName] || "";
-    }
-}
-
 async function onRunClicked() {
     const result = await revalidate();
     if (!result.ok) {
-        await switchToTab(result.tab);
+        window.fim.openConfigModal(result.tab);
         return;
     }
     const values = collectFormValues();
@@ -300,26 +261,15 @@ window.fim.menu.newConfiguration = async function newConfiguration() {
 };
 
 /**
- * `_build_menu`'s Configure menu -- for a section already converted to
- * a modal (`CONFIG_MODAL_TAB_NAMES`, design §3.1/§8 Phase A/B), opens it
- * over whatever the run view currently shows, no navigation at all. For
- * a section not yet converted, falls back to the original behavior:
- * navigate to Screen 1 on the requested tab, leaving whatever is
- * already in the form alone. Either way this never resets a field, the
- * same distinction `newConfiguration` above draws against the "New run"
- * buttons.
+ * `_build_menu`'s Configure menu -- opens the named section's own modal
+ * over whatever the run view currently shows (design §3.1, §8 Phase
+ * A/B), no navigation at all: the whole point is that opening a config
+ * section no longer discards whatever the user was looking at (a live
+ * run, a completed result). Never resets a field, the same distinction
+ * `newConfiguration` above draws against the "New run" buttons.
  */
 window.fim.menu.configureTab = async function configureTab(tabName) {
-    if (CONFIG_MODAL_TAB_NAMES.includes(tabName)) {
-        // Floats a modal over whatever the run view already shows --
-        // the whole point of §3.1: no more navigating away from a live
-        // run just to open Population. The remaining five tabs still
-        // navigate to Screen 1 until Phase B converts them too.
-        window.fim.openConfigModal(tabName);
-        return;
-    }
-    window.fim.showScreen("screen-input");
-    await switchToTab(tabName);
+    window.fim.openConfigModal(tabName);
 };
 
 // `whenApiReady` itself is `app.js`'s own top-level function, not

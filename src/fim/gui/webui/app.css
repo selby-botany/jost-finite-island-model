@@ -56,37 +56,19 @@ body {
     display: none;
 }
 
-.tab-panel {
-    display: none;
-    padding: 1rem 0;
-}
-
-#tab-migration:checked ~ #panel-migration,
-#tab-mutation:checked ~ #panel-mutation,
-#tab-initial_conditions:checked ~ #panel-initial_conditions,
-#tab-convergence:checked ~ #panel-convergence,
-#tab-batch:checked ~ #panel-batch {
-    display: block;
-}
-
 /* Decluttered off the input screen's own canvas (visualization-and-
  * config-editors design): navigation moved to the native Configure
- * menu (`fim.gui.app._build_menu`). The bar itself, its labels, and
- * its error dots stay in the DOM rather than being deleted -- `input.
- * js`'s own `markTabError`/`clearTabErrorDots` still target them by
- * id -- `display: none` is enough to remove them from what the user
- * sees without touching that machinery. */
+ * menu (`fim.gui.app._build_menu`), and every section is now a modal
+ * (unified-run-view design §3.1/§8 Phase A/B) rather than a tab-panel
+ * -- `.tab-panel`/the six `#tab-X:checked ~ #panel-X` display rules
+ * that used to show one at a time no longer have anything to select,
+ * removed. The bar itself, its labels, and its error dots stay in the
+ * DOM rather than being deleted -- `input.js`'s own `markTabError`/
+ * `clearTabErrorDots` still target the dots by id -- `display: none`
+ * is enough to remove them from what the user sees without touching
+ * that machinery. */
 .tab-bar {
     display: none;
-}
-
-#current-tab-heading {
-    margin: 0 0 0.75rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--fim-border);
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--fim-foreground);
 }
 
 .tab-bar label {

@@ -51,10 +51,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tick), for both a scalar run's own generations and a batch's own
   pooled replicates. "Show overview" reverts instantly, from whichever
   view the screen already had on hand.
-- Configure > Population now opens as a small dialog floating over
-  whatever screen is currently showing, instead of switching the whole
-  window to the Model input screen — the first of six sections to move;
-  the other five still navigate to Model input for now.
+- Every Configure section (Population, Migration, Mutation, Initial
+  conditions, Convergence, Batch) now opens as a small dialog floating
+  over whatever screen is currently showing, instead of switching the
+  whole window to the Model input screen — including the auto-jump to
+  an invalid field's own section on "Run simulation".
 
 ### Changed
 

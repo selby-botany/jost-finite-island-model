@@ -1595,9 +1595,11 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     # `(tab id, menu label)` pairs, in the exact order `index.html`'s
     # own (now-hidden) tab bar used — one native `MenuAction` per
     # section, each just asking `fim.menu.configureTab` (`screens/
-    # input.js`) to check the matching hidden radio input directly, the
-    # same one `switchToTab` already flips for the "jump to the invalid
-    # tab" case (design §4.0 #2) — no second, menu-only navigation path.
+    # input.js`) to open that section's own `modal-<id>` dialog over
+    # whatever the run view currently shows (unified-run-view design
+    # §3.1) — the same modal an invalid field on "Run simulation" opens
+    # for the "jump to the invalid section" case (design §4.0 #2) — no
+    # second, menu-only navigation path.
     configure_tabs = (
         ("population", "Population"),
         ("migration", "Migration"),

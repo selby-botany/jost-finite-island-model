@@ -138,16 +138,17 @@ def test_input_screen_invalid_value_disables_the_run_button(
 def test_input_screen_switches_to_the_tab_with_an_invalid_field(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Clicking "Run simulation" with an invalid Migration field switches to that tab.
+    """Clicking "Run simulation" with an invalid Migration field opens that modal.
 
     Direct regression test for design §4.0 #2 ("every tab with an
     invalid field shows a small error dot... the disabled Run button
-    always shows a one-line reason") — the tab-switch specifically, since
-    `test_app_api.py` already proves the bridge's own `tab`/`field`
-    values are correct. No `input` event needs dispatching first:
-    `onRunClicked` calls `revalidate()` itself, which reads the field's
-    *current* value straight off the live DOM via `FormData` — it does
-    not depend on an `input` event ever having fired.
+    always shows a one-line reason") — the modal-opening specifically
+    (design §3.1/§8 Phase B: Migration is now a `<dialog>`, not a
+    tab-panel), since `test_app_api.py` already proves the bridge's own
+    `tab`/`field` values are correct. No `input` event needs dispatching
+    first: `onRunClicked` calls `revalidate()` itself, which reads the
+    field's *current* value straight off the live DOM via `FormData` —
+    it does not depend on an `input` event ever having fired.
     """
     settled = drive(
         window,
@@ -158,15 +159,15 @@ def test_input_screen_switches_to_the_tab_with_an_invalid_field(
         ),
         read=(
             "({"
-            "checked: document.getElementById('tab-migration').checked, "
+            "modalOpen: document.getElementById('modal-migration').open, "
             "dotHidden: document.getElementById('dot-migration').hidden"
             "})"
         ),
-        is_ready=lambda value: value is not None and value.get("checked") is True,
+        is_ready=lambda value: value is not None and value.get("modalOpen") is True,
         poll_attempts=500,
     )
 
-    assert settled["checked"] is True
+    assert settled["modalOpen"] is True
     assert settled["dotHidden"] is False
 
 
@@ -226,17 +227,14 @@ def test_menu_new_configuration_resets_an_edited_field(
 def test_menu_configure_tab_switches_tabs_without_resetting_the_form(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """`fim.menu.configureTab` (the native Configure menu, design §4.5) navigates only.
+    """`fim.menu.configureTab` (the native Configure menu) opens a modal, no reset.
 
-    The declutter this menu exists for (visualization-and-config-editors
-    design): the on-canvas tab bar itself is now hidden (`app.css`'s
-    `.tab-bar { display: none; }`), so this is the only way left to
-    reach a tab other than an invalid-field auto-jump — checked here
-    both for the tab switch itself (the hidden radio still flips, and
-    `current-tab-heading` still shows the right name for a user with no
-    visible tab bar to read instead) and for the one behavioral contract
-    that distinguishes it from `newConfiguration`: an edited field
-    survives the switch, unlike a real reset.
+    Every section is now a `<dialog>`, not a tab-panel (design §3.1,
+    §8 Phase A/B) — `test_configure_population_opens_a_modal_without_
+    navigating_away` already proves the modal opens without navigating
+    away; this test's own remaining job is the one behavioral contract
+    that distinguishes `configureTab` from `newConfiguration`: an edited
+    field survives the call, unlike a real reset.
 
     The trigger wraps the call in `setTimeout(..., 0)`, matching
     `fim.gui.app._build_menu`'s own real dispatcher exactly — the same
@@ -253,17 +251,44 @@ def test_menu_configure_tab_switches_tabs_without_resetting_the_form(
         read=(
             "({"
             "fieldN: document.getElementById('field-N').value, "
-            "migrationChecked: document.getElementById('tab-migration').checked, "
-            "heading: document.getElementById('current-tab-heading').textContent"
+            "modalOpen: document.getElementById('modal-migration').open"
             "})"
         ),
-        is_ready=lambda value: (
-            value is not None and value.get("migrationChecked") is True
-        ),
+        is_ready=lambda value: value is not None and value.get("modalOpen") is True,
     )
 
     assert value["fieldN"] == "999999"
-    assert value["heading"] == "Migration"
+
+
+def test_every_configure_section_has_its_own_modal(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """All six sections open their own `modal-<name>` dialog (design §8 Phase B).
+
+    Population and Migration each already have their own dedicated test
+    above; this one instead sweeps all six in a single `drive()` call
+    (native `<dialog>`s stack -- opening one does not close another),
+    proving every `configureTab` name resolves to a real, distinct modal
+    rather than checking only the two that happen to have other tests.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "["
+            "'population', 'migration', 'mutation', "
+            "'initial_conditions', 'convergence', 'batch'"
+            "].forEach((name) => window.fim.menu.configureTab(name)); "
+            "window.__fimAllModalsOpened = ["
+            "'population', 'migration', 'mutation', "
+            "'initial_conditions', 'convergence', 'batch'"
+            "].every((name) => document.getElementById(`modal-${name}`).open);"
+        ),
+        read="window.__fimAllModalsOpened",
+        is_ready=lambda value: value is not None,
+    )
+
+    assert settled is True
 
 
 def test_configure_population_opens_a_modal_without_navigating_away(

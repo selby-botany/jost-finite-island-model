@@ -36,135 +36,6 @@
         <label for="tab-convergence" data-tab="convergence">Convergence<span class="error-dot" id="dot-convergence" hidden></span></label>
         <label for="tab-batch" data-tab="batch">Batch<span class="error-dot" id="dot-batch" hidden></span></label>
       </nav>
-      <h2 id="current-tab-heading">Population</h2>
-
-      <section class="tab-panel" id="panel-migration">
-        <div class="field">
-          <label for="field-migrant_sampling">migrant sampling</label>
-          <select id="field-migrant_sampling" name="migrant_sampling">
-            <option value="continuous">continuous</option>
-            <option value="stochastic">stochastic</option>
-          </select>
-        </div>
-
-        <fieldset class="composite" id="m-selector">
-          <legend>m (migration)</legend>
-          <label><input type="radio" name="m_mode" value="scalar" checked> scalar rate</label>
-          <label><input type="radio" name="m_mode" value="topology"> named topology</label>
-          <div class="field" id="m-scalar-fields">
-            <label for="field-m_rate">rate</label>
-            <input type="text" id="field-m_rate" name="m_rate">
-          </div>
-          <div class="field" id="m-topology-fields" hidden>
-            <label for="field-m_topology">topology</label>
-            <select id="field-m_topology" name="m_topology">
-              <option value="ring">ring</option>
-              <option value="linear">linear</option>
-            </select>
-            <label for="field-m_topology_rate">rate</label>
-            <input type="text" id="field-m_topology_rate" name="m_topology_rate">
-          </div>
-          <p class="loaded-summary" id="m-loaded-summary" hidden></p>
-        </fieldset>
-      </section>
-
-      <section class="tab-panel" id="panel-mutation">
-        <div class="field">
-          <label for="field-mutation_model">mutation model</label>
-          <select id="field-mutation_model" name="mutation_model">
-            <option value="infinite_alleles">infinite_alleles</option>
-            <option value="finite_alleles">finite_alleles</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="field-locus_lengths">locus length(s)</label>
-          <input type="text" id="field-locus_lengths" name="locus_lengths">
-        </div>
-
-        <fieldset class="composite" id="mu-selector">
-          <legend>μ (mutation rate)</legend>
-          <label><input type="radio" name="mu_mode" value="mu" checked> specify μ directly</label>
-          <label><input type="radio" name="mu_mode" value="mu_b"> derive from μ<sub>b</sub></label>
-          <div class="field" id="mu-mu-field">
-            <label for="field-mu_value">μ</label>
-            <input type="text" id="field-mu_value" name="mu_value">
-          </div>
-          <div class="field" id="mu-mu_b-field" hidden>
-            <label for="field-mu_b_value">μ<sub>b</sub></label>
-            <input type="text" id="field-mu_b_value" name="mu_b_value">
-          </div>
-        </fieldset>
-      </section>
-
-      <section class="tab-panel" id="panel-initial_conditions">
-        <div class="field">
-          <label for="field-initial_allele_count">initial allele count</label>
-          <input type="text" id="field-initial_allele_count" name="initial_allele_count">
-        </div>
-        <div class="field">
-          <label for="field-initial_concentration">concentration</label>
-          <input type="text" id="field-initial_concentration" name="initial_concentration">
-        </div>
-        <p class="loaded-summary" id="p0-summary" hidden></p>
-      </section>
-
-      <section class="tab-panel" id="panel-convergence">
-        <fieldset class="composite" id="cs-selector">
-          <legend>convergence statistic(s)</legend>
-          <label><input type="checkbox" name="cs_D" value="true" checked> D</label>
-          <label><input type="checkbox" name="cs_G_ST" value="true"> G<sub>ST</sub></label>
-          <label><input type="checkbox" name="cs_E_ST" value="true"> E<sub>ST</sub></label>
-          <label><input type="checkbox" name="cs_K_ST" value="true"> K<sub>ST</sub></label>
-          <label><input type="checkbox" name="cs_H_S" value="true"> H<sub>S</sub></label>
-          <label><input type="checkbox" name="cs_H_T" value="true"> H<sub>T</sub></label>
-        </fieldset>
-        <div class="field" id="combinator-field" hidden>
-          <label for="field-convergence_combinator">combinator</label>
-          <select id="field-convergence_combinator" name="convergence_combinator">
-            <option value="any">any</option>
-            <option value="all">all</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="field-convergence_window">convergence window</label>
-          <input type="text" id="field-convergence_window" name="convergence_window">
-        </div>
-        <div class="field">
-          <label for="field-convergence_tolerance">tolerance</label>
-          <input type="text" id="field-convergence_tolerance" name="convergence_tolerance">
-        </div>
-      </section>
-
-      <section class="tab-panel" id="panel-batch">
-        <div class="field">
-          <label for="field-n_replicates">n_replicates</label>
-          <input type="text" id="field-n_replicates" name="n_replicates">
-        </div>
-        <div id="batch-only-fields" hidden>
-          <div class="field">
-            <label for="field-replicate_tolerance">replicate tolerance (blank = unset)</label>
-            <input type="text" id="field-replicate_tolerance" name="replicate_tolerance">
-          </div>
-          <div class="field">
-            <label for="field-replicate_minimum">replicate minimum</label>
-            <input type="text" id="field-replicate_minimum" name="replicate_minimum">
-          </div>
-          <div class="field">
-            <label for="field-replicate_confidence">replicate confidence</label>
-            <select id="field-replicate_confidence" name="replicate_confidence">
-              <option value="0.9">0.9</option>
-              <option value="0.95" selected>0.95</option>
-              <option value="0.99">0.99</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="field-max_workers">parallel workers</label>
-            <input type="text" id="field-max_workers" name="max_workers">
-            <p class="hint">Not a `SimulationParams` field — the batch's own worker-process
-            count (design §0.5, H5). Defaults to this machine's own CPU count.</p>
-          </div>
-        </div>
-      </section>
     </form>
 
     <p id="run-reason" class="reason"></p>
@@ -388,6 +259,144 @@
     <div class="field">
       <label for="field-max_generations">max generations</label>
       <input type="text" id="field-max_generations" name="max_generations" form="input-form">
+    </div>
+    <button type="button" class="modal-close" data-modal-close>Close</button>
+  </dialog>
+
+  <dialog class="config-modal" id="modal-migration">
+    <h2>Migration</h2>
+    <div class="field">
+      <label for="field-migrant_sampling">migrant sampling</label>
+      <select id="field-migrant_sampling" name="migrant_sampling" form="input-form">
+        <option value="continuous">continuous</option>
+        <option value="stochastic">stochastic</option>
+      </select>
+    </div>
+
+    <fieldset class="composite" id="m-selector">
+      <legend>m (migration)</legend>
+      <label><input type="radio" name="m_mode" value="scalar" checked form="input-form"> scalar rate</label>
+      <label><input type="radio" name="m_mode" value="topology" form="input-form"> named topology</label>
+      <div class="field" id="m-scalar-fields">
+        <label for="field-m_rate">rate</label>
+        <input type="text" id="field-m_rate" name="m_rate" form="input-form">
+      </div>
+      <div class="field" id="m-topology-fields" hidden>
+        <label for="field-m_topology">topology</label>
+        <select id="field-m_topology" name="m_topology" form="input-form">
+          <option value="ring">ring</option>
+          <option value="linear">linear</option>
+        </select>
+        <label for="field-m_topology_rate">rate</label>
+        <input type="text" id="field-m_topology_rate" name="m_topology_rate" form="input-form">
+      </div>
+      <p class="loaded-summary" id="m-loaded-summary" hidden></p>
+    </fieldset>
+    <button type="button" class="modal-close" data-modal-close>Close</button>
+  </dialog>
+
+  <dialog class="config-modal" id="modal-mutation">
+    <h2>Mutation</h2>
+    <div class="field">
+      <label for="field-mutation_model">mutation model</label>
+      <select id="field-mutation_model" name="mutation_model" form="input-form">
+        <option value="infinite_alleles">infinite_alleles</option>
+        <option value="finite_alleles">finite_alleles</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="field-locus_lengths">locus length(s)</label>
+      <input type="text" id="field-locus_lengths" name="locus_lengths" form="input-form">
+    </div>
+
+    <fieldset class="composite" id="mu-selector">
+      <legend>μ (mutation rate)</legend>
+      <label><input type="radio" name="mu_mode" value="mu" checked form="input-form"> specify μ directly</label>
+      <label><input type="radio" name="mu_mode" value="mu_b" form="input-form"> derive from μ<sub>b</sub></label>
+      <div class="field" id="mu-mu-field">
+        <label for="field-mu_value">μ</label>
+        <input type="text" id="field-mu_value" name="mu_value" form="input-form">
+      </div>
+      <div class="field" id="mu-mu_b-field" hidden>
+        <label for="field-mu_b_value">μ<sub>b</sub></label>
+        <input type="text" id="field-mu_b_value" name="mu_b_value" form="input-form">
+      </div>
+    </fieldset>
+    <button type="button" class="modal-close" data-modal-close>Close</button>
+  </dialog>
+
+  <dialog class="config-modal" id="modal-initial_conditions">
+    <h2>Initial conditions</h2>
+    <div class="field">
+      <label for="field-initial_allele_count">initial allele count</label>
+      <input type="text" id="field-initial_allele_count" name="initial_allele_count" form="input-form">
+    </div>
+    <div class="field">
+      <label for="field-initial_concentration">concentration</label>
+      <input type="text" id="field-initial_concentration" name="initial_concentration" form="input-form">
+    </div>
+    <p class="loaded-summary" id="p0-summary" hidden></p>
+    <button type="button" class="modal-close" data-modal-close>Close</button>
+  </dialog>
+
+  <dialog class="config-modal" id="modal-convergence">
+    <h2>Convergence</h2>
+    <fieldset class="composite" id="cs-selector">
+      <legend>convergence statistic(s)</legend>
+      <label><input type="checkbox" name="cs_D" value="true" checked form="input-form"> D</label>
+      <label><input type="checkbox" name="cs_G_ST" value="true" form="input-form"> G<sub>ST</sub></label>
+      <label><input type="checkbox" name="cs_E_ST" value="true" form="input-form"> E<sub>ST</sub></label>
+      <label><input type="checkbox" name="cs_K_ST" value="true" form="input-form"> K<sub>ST</sub></label>
+      <label><input type="checkbox" name="cs_H_S" value="true" form="input-form"> H<sub>S</sub></label>
+      <label><input type="checkbox" name="cs_H_T" value="true" form="input-form"> H<sub>T</sub></label>
+    </fieldset>
+    <div class="field" id="combinator-field" hidden>
+      <label for="field-convergence_combinator">combinator</label>
+      <select id="field-convergence_combinator" name="convergence_combinator" form="input-form">
+        <option value="any">any</option>
+        <option value="all">all</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="field-convergence_window">convergence window</label>
+      <input type="text" id="field-convergence_window" name="convergence_window" form="input-form">
+    </div>
+    <div class="field">
+      <label for="field-convergence_tolerance">tolerance</label>
+      <input type="text" id="field-convergence_tolerance" name="convergence_tolerance" form="input-form">
+    </div>
+    <button type="button" class="modal-close" data-modal-close>Close</button>
+  </dialog>
+
+  <dialog class="config-modal" id="modal-batch">
+    <h2>Batch</h2>
+    <div class="field">
+      <label for="field-n_replicates">n_replicates</label>
+      <input type="text" id="field-n_replicates" name="n_replicates" form="input-form">
+    </div>
+    <div id="batch-only-fields" hidden>
+      <div class="field">
+        <label for="field-replicate_tolerance">replicate tolerance (blank = unset)</label>
+        <input type="text" id="field-replicate_tolerance" name="replicate_tolerance" form="input-form">
+      </div>
+      <div class="field">
+        <label for="field-replicate_minimum">replicate minimum</label>
+        <input type="text" id="field-replicate_minimum" name="replicate_minimum" form="input-form">
+      </div>
+      <div class="field">
+        <label for="field-replicate_confidence">replicate confidence</label>
+        <select id="field-replicate_confidence" name="replicate_confidence" form="input-form">
+          <option value="0.9">0.9</option>
+          <option value="0.95" selected>0.95</option>
+          <option value="0.99">0.99</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="field-max_workers">parallel workers</label>
+        <input type="text" id="field-max_workers" name="max_workers" form="input-form">
+        <p class="hint">Not a `SimulationParams` field — the batch's own worker-process
+        count (design §0.5, H5). Defaults to this machine's own CPU count.</p>
+      </div>
     </div>
     <button type="button" class="modal-close" data-modal-close>Close</button>
   </dialog>

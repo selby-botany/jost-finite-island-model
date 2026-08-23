@@ -376,10 +376,9 @@ A native File/Configure/Run/View/Help menu bar is available from any screen,
 including mid-run. File covers configuration/run file-system actions
 (New/Open/Save configuration, Open run…, Reveal output folder, Quit);
 Configure jumps straight to any one of six configuration sections
-(Population/Migration/Mutation/Initial conditions/Convergence/Batch);
-Population opens as a small dialog over whatever screen is currently
-showing, without navigating away from it — the other five still switch to
-the Model input screen for now. Run covers the simulation lifecycle (Run
+(Population/Migration/Mutation/Initial conditions/Convergence/Batch), each
+opening as a small dialog over whatever screen is currently showing,
+without navigating away from it. Run covers the simulation lifecycle (Run
 simulation, Cancel run,
 Animate); View holds a Significant digits submenu (2/3/4/5/6/8, default 3)
 that changes how many digits every displayed statistic rounds to — cosmetic
@@ -394,7 +393,7 @@ where they are first, rather than doing nothing.
 
 | Screen | What it does | Same as |
 |---|---|---|
-| Model input | Build and validate a full configuration from six sections (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one per [configuration reference](configuration.md) section), reached from the Configure menu (above) rather than an on-screen tab strip; "Load YAML…"/"Save YAML…" read and write the exact file format above; "Open a run…" reaches the Open a run screen | [Create a configuration](#create-a-configuration) |
+| Model input | Build and validate a full configuration from six sections (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one per [configuration reference](configuration.md) section), each opened as its own dialog from the Configure menu (above) rather than an on-screen tab strip; "Load YAML…"/"Save YAML…" read and write the exact file format above; "Open a run…" reaches the Open a run screen | [Create a configuration](#create-a-configuration) |
 | Running | A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout; the same "Compare demes directly" pair selector as the Results/Batch results/Animated trajectory screens, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot | `run`'s own progress/error output, on one screen instead of terminal lines |
 | Results | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot — every deme pair at once as a small-multiples grid once `d` is 3 or more (up to 6 demes; a PCA projection above that), each panel with a labeled, numbered `0.0`-`1.0` probability scale on both axes; "Compare demes directly" (two dropdowns plus "Show pair"/"Show overview") swaps to any two chosen demes' own raw frequencies at full size and back, most useful once the default view is a PCA projection rather than a direct pair; "Open output folder" reveals the same four artifacts; "Animate" plays back the persisted trajectory (disabled for a single-generation run, which has nothing to animate) | [Output schemas](#output-schemas) |
 | Batch results | A pooled scatter across every replicate's final state — the same small-multiples grid the Results screen uses once `d` is 3 or more — beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter; the same "Compare demes directly" pair selector as the Results screen, pooled across every replicate; each row's own "Open" button reaches the Results screen for that one replicate; "Open batch folder" reveals `summary.json` and every replicate subdirectory | [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
