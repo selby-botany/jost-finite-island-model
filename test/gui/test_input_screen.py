@@ -158,6 +158,18 @@ def test_menu_new_configuration_resets_an_edited_field(
     `evaluate_js` expression deadlocks — confirmed live building this
     test — the same pywebview behavior `conftest.py`'s own `drive_and_
     read` docstring already documents for its `ready`-polling case.
+
+    Polls for `window.__fimInputScreenReady` alongside the field's own
+    value, not the field alone: `newConfiguration` cycles that flag
+    false-then-true around the whole reset, and `field-N` already shows
+    the new value while `resetInputForm` still has two more real bridge
+    calls in flight (`get_default_max_workers`, `revalidate`) — reading
+    only the field risked `drive`'s own window teardown racing those,
+    the same class of failure `test_open_run_screen.py`'s own
+    `window.__fimOpenRunRecentRunsLoaded` flag exists to prevent for
+    `refreshRecentRuns`, confirmed as a real, reproducible
+    `JavascriptException` (not merely theoretical) against a `results/`
+    directory large enough for the bridge call it raced to take real time.
     """
     starter_n = starter_form_values()["N"]
 
@@ -168,9 +180,14 @@ def test_menu_new_configuration_resets_an_edited_field(
             "document.getElementById('field-N').value = '999999'; "
             "setTimeout(() => { window.fim.menu.newConfiguration(); }, 0);"
         ),
-        read="document.getElementById('field-N').value",
-        is_ready=lambda value: value == starter_n,
+        read=(
+            "({"
+            "fieldN: document.getElementById('field-N').value, "
+            "ready: window.__fimInputScreenReady === true"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("ready") is True,
         poll_attempts=500,
     )
 
-    assert value == starter_n
+    assert value["fieldN"] == starter_n

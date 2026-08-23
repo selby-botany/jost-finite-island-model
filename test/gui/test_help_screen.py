@@ -101,8 +101,22 @@ def test_help_screen_returns_to_results_when_opened_from_there(
             # Show any other screen first -- Screen 6 (open a run) needs
             # no completed run to reach, unlike Results/Batch results.
             window.evaluate_js("window.fim.showOpenRunScreen();")
+            # Waits for `window.__fimOpenRunRecentRunsLoaded`, not only
+            # screen visibility -- `showOpenRunScreen` shows the screen
+            # synchronously and fires its own `refreshRecentRuns()` (an
+            # async `list_recent_runs()` bridge call) without awaiting it
+            # (`open-run.js`'s own comment on that flag explains why;
+            # `test_open_run_screen.py::test_open_a_run_button_reaches_
+            # screen_six` already established this exact pattern). On a
+            # `results/` directory with hundreds of real runs, that call
+            # takes real time -- proceeding to destroy the window before
+            # it settles is a real, reproducible `JavascriptException`
+            # (`_returnValuesCallbacks[...] is not a function`) once the
+            # background thread tries to deliver its answer to a window
+            # already gone, not merely a theoretical race.
             _poll_until(
-                "!document.getElementById('screen-open-run').hidden",
+                "!document.getElementById('screen-open-run').hidden "
+                "&& window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
             window.evaluate_js("window.fim.showHelp('configuration');")

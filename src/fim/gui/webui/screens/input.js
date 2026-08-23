@@ -240,7 +240,18 @@ async function initializeInputScreen() {
 
 window.fim.menu.newConfiguration = async function newConfiguration() {
     window.fim.showScreen("screen-input");
+    // Cycled false-then-true around the reset, the same flag
+    // `initializeInputScreen` sets once at first load -- reused, not
+    // duplicated, so a test (or anything else) waiting for "the input
+    // screen's form is in a fully settled state" has one reliable
+    // signal for both the initial load and a later reset, instead of
+    // racing a DOM value change alone: `resetInputForm` still has two
+    // more real bridge calls in flight (`get_default_max_workers`,
+    // `revalidate`'s own `validate_form`) after `field-N` itself
+    // already shows the new value.
+    window.__fimInputScreenReady = false;
     await resetInputForm();
+    window.__fimInputScreenReady = true;
 };
 
 function whenApiReady(callback) {
