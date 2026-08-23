@@ -14,13 +14,15 @@ from __future__ import annotations
 
 import json
 import time as time_module
+import webbrowser
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import yaml
 
-from fim import cli
+from fim import __version__ as fim_version
+from fim import cli, update
 from fim import paths as paths_module
 from fim.engine import RunResult, deterministic_run_id, replicate_summary
 from fim.engine import fim as engine_fim
@@ -737,3 +739,118 @@ def test_get_batch_deme_pair_panel_reports_no_replicates_without_raising(
 
     assert result["ok"] is False
     assert "message" in result
+
+
+class _FakeMenuWindow:
+    """Minimal `webview.Window` stand-in for `_build_menu`'s own structural test.
+
+    `_build_menu` only ever captures `window.evaluate_js` inside a
+    closure (never calling it during construction itself) and reads
+    `window.destroy` as a bare, uncalled attribute — a real `webview.
+    Window` is not needed to prove the menu's own shape, matching this
+    file's own established "exercised as plain Python calls" precedent
+    for bridge logic that does not actually touch a live window.
+    """
+
+    def evaluate_js(self, script: str) -> None:  # noqa: ARG002 - duck-typed stand-in
+        return None
+
+    def destroy(self) -> None:
+        return None
+
+
+def test_build_menu_has_file_run_and_help() -> None:
+    """The menu bar has exactly the three menus in-app help design §4.5 specifies."""
+    menus = app_module._build_menu(_FakeMenuWindow())  # type: ignore[arg-type]
+
+    assert [menu.title for menu in menus] == ["File", "Run", "Help"]
+    file_items = [item.title for item in menus[0].items if hasattr(item, "title")]
+    assert file_items == [
+        "New configuration",
+        "Open configuration…",
+        "Save configuration…",
+        "Open run…",
+        "Reveal output folder",
+        "Quit fim",
+    ]
+    run_items = [item.title for item in menus[1].items if hasattr(item, "title")]
+    assert run_items == ["Run simulation", "Cancel run", "Animate"]
+    help_items = [item.title for item in menus[2].items if hasattr(item, "title")]
+    assert help_items == [
+        "Usage guide",
+        "Configuration reference",
+        "Documentation on GitHub",
+        "Check for updates",
+        "About fim",
+    ]
+
+
+def test_open_external_link_opens_the_os_default_browser(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`open_external_link` is a thin `webbrowser.open` call, nothing more.
+
+    The same `_reveal_in_file_browser` precedent this module already
+    follows for OS-dispatched actions — no real browser opens in a test.
+    """
+    opened: list[str] = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+
+    Api().open_external_link("https://example.invalid/path")
+
+    assert opened == ["https://example.invalid/path"]
+
+
+def test_check_for_updates_reports_a_newer_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        update,
+        "latest_release",
+        lambda: ("v99.0.0", "https://example.invalid/releases/v99.0.0"),
+    )
+
+    result = Api().check_for_updates()
+
+    assert result["ok"] is True
+    assert result["available"] is True
+    assert result["latest"] == "99.0.0"
+    assert result["url"] == "https://example.invalid/releases/v99.0.0"
+
+
+def test_check_for_updates_reports_current_when_not_newer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        update,
+        "latest_release",
+        lambda: (f"v{fim_version}", "https://example.invalid/current"),
+    )
+
+    result = Api().check_for_updates()
+
+    assert result["ok"] is True
+    assert result["available"] is False
+    assert result["current"] == fim_version
+
+
+def test_check_for_updates_reports_a_failed_check_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise() -> tuple[str, str]:
+        raise RuntimeError("update check failed: no network")
+
+    monkeypatch.setattr(update, "latest_release", _raise)
+
+    result = Api().check_for_updates()
+
+    assert result["ok"] is False
+    assert "no network" in result["message"]
+
+
+def test_get_about_info_names_the_installed_version() -> None:
+    info = Api().get_about_info()
+
+    assert info["version"] == fim_version
+    assert "selby-botany/jost-finite-island-model" in info["repository"]
+    assert "AGPL" in info["license"]

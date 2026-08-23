@@ -36,6 +36,7 @@ import subprocess
 import sys
 import threading
 import time
+import webbrowser
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -43,8 +44,10 @@ from typing import Any, Final, Protocol, cast
 
 import webview
 import yaml
+from webview.menu import Menu, MenuAction, MenuSeparator
 
-from fim import paths
+from fim import __version__ as fim_version
+from fim import paths, update
 from fim.cli import load_config
 from fim.engine import RunResult, deterministic_run_id, replicate_summary
 from fim.gui import batch_runner, recent_runs, runner
@@ -73,6 +76,13 @@ from fim.viz.scatter import (
 
 _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
 _TRAJECTORY_FILE_TYPES = ("trajectory.jsonl files (*.jsonl)", "All files (*.*)")
+
+# The existing `pyproject.toml` `[project.urls] Documentation` value,
+# reused rather than invented (in-app help design §3.2) -- the Help
+# menu's own "Documentation on GitHub" item, and `get_about_info`'s own
+# repository link, both point here.
+_REPOSITORY_URL = "https://github.com/selby-botany/jost-finite-island-model"
+_DOCUMENTATION_URL = f"{_REPOSITORY_URL}#readme"
 
 
 class _EvaluatesJs(Protocol):
@@ -759,6 +769,67 @@ class Api:
         with ProcessPoolExecutor(max_workers=1) as executor:
             return executor.submit(_worker_ping).result()
 
+    def open_external_link(self, url: str) -> None:
+        """Open `url` in the OS default browser (in-app help design §4.3).
+
+        Every Tier 2 doc link and every bare `http(s)://` link inside a
+        Tier 1 doc routes here, never to native `<a>` navigation — an
+        unhandled link click inside a pywebview window can navigate the
+        *whole application window* away from `index.html`, not open a
+        new tab. `webbrowser.open`, best-effort, no return value the
+        caller needs — the same `_reveal_in_file_browser` precedent this
+        module already follows for another OS-dispatched action.
+        """
+        webbrowser.open(url)
+
+    def check_for_updates(self) -> dict[str, Any]:
+        """Perform the same opt-in GitHub release check `fim update --check` does.
+
+        Reuses `fim.update` directly (that module's own docstring: "so
+        `fim.gui`'s 'Check for updates' action performs exactly the same
+        GitHub Releases lookup and version comparison... rather than a
+        second implementation") — this bridge method is the first real
+        caller of that promise from the pywebview build; the Tk build's
+        own equivalent action called the same module the same way.
+
+        Returns:
+            `{"ok": True, "available": bool, "current": str, "latest":
+            str, "url": str}` on a successful check (`available` is
+            whether `latest` is newer than `current` — `fim update
+            --check`'s own three-way `comparison`, collapsed to the one
+            boolean the page actually needs to decide whether to show a
+            "download" link); `{"ok": False, "message": ...}` if the
+            network call itself fails (`fim.update.latest_release`'s own
+            documented `RuntimeError` — a failed opt-in check, not an
+            application error).
+        """
+        try:
+            latest_tag, release_url = update.latest_release()
+        except RuntimeError as error:
+            return {"ok": False, "message": str(error)}
+        latest_version = latest_tag.removeprefix("v")
+        comparison = update.compare_versions(fim_version, latest_version)
+        return {
+            "ok": True,
+            "available": comparison < 0,
+            "current": fim_version,
+            "latest": latest_version,
+            "url": release_url,
+        }
+
+    def get_about_info(self) -> dict[str, str]:
+        """Return the static "About fim" facts the Help menu shows (design §4.5).
+
+        No bridge state, no network call — `fim.__version__` and the
+        project's own already-declared URLs, the same values `pyproject.
+        toml`'s `[project.urls]` and `fim --version` already report.
+        """
+        return {
+            "version": fim_version,
+            "repository": _REPOSITORY_URL,
+            "license": "GNU Affero General Public License v3 or later (AGPLv3+)",
+        }
+
 
 def _drain_run_messages(
     window: _EvaluatesJs,
@@ -1152,6 +1223,96 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     return created
 
 
+def _build_menu(window: webview.Window) -> list[Menu]:
+    """Build the native File/Run/Help menu bar (in-app help design §4.5).
+
+    Three menus, not the conventional File/Edit/View/Window/Help
+    skeleton — Edit/View/Window are deliberately left out (design §4.5's
+    own "considered, deferred": every text field already gets native
+    Cut/Copy/Paste from the WebView engine itself, nothing in this app
+    needs a View toggle, and a Window menu has no app-specific value for
+    a single-window tool).
+
+    Every item except Quit is a thin closure calling `window.evaluate_js(
+    "fim.menu.X()")` — the identical "no-op stub, overridden by whichever
+    screen owns the real behavior" convention `app.js` already
+    established for `onRunProgress`/`onBatchDone`/etc., extended to a
+    `fim.menu` namespace so no new Python business logic exists anywhere
+    in this menu: every item reuses an `Api` method or JS-side screen
+    state a screen already tracks (design §4.5's own "the menu is a
+    second entry point into logic that exists, not new logic"). Quit
+    alone needs no JS round trip — `window.destroy()` is a window-level
+    call, not app state.
+    """
+
+    def dispatch(script: str) -> Callable[[], None]:
+        def call_into_page() -> None:
+            # `setTimeout(..., 0)`, not a bare `script` expression: calling
+            # an `async` `fim.menu.*` function (`newConfiguration`,
+            # `checkForUpdates`, `about` — every one that itself `await`s a
+            # real `window.pywebview.api.*` bridge call) directly as the
+            # `evaluate_js` expression deadlocks — confirmed live, not
+            # theoretical: `conftest.py`'s own `drive_and_read` docstring
+            # already documents the exact same pywebview behavior for the
+            # test harness's own `ready` polling ("whatever `evaluate_js`
+            # does internally... appears to block the page's own JS event
+            # loop for the duration of that one call," starving any
+            # microtask the awaited call needs to ever resolve). Wrapping
+            # every dispatch in `setTimeout` — not only the `async` ones,
+            # so this dispatcher never has to know or track which
+            # `fim.menu.*` methods happen to be `async` today — makes the
+            # outer `evaluate_js` expression itself a plain, synchronous
+            # `setTimeout` call (returns a timer id immediately), with the
+            # real work deferred to the page's own next event-loop tick,
+            # fully decoupled from this call's own return.
+            window.evaluate_js(f"setTimeout(() => {{ {script} }}, 0);")
+
+        return call_into_page
+
+    file_menu = Menu(
+        "File",
+        [
+            MenuAction("New configuration", dispatch("fim.menu.newConfiguration()")),
+            MenuAction("Open configuration…", dispatch("fim.menu.openConfiguration()")),
+            MenuAction("Save configuration…", dispatch("fim.menu.saveConfiguration()")),
+            MenuSeparator(),
+            MenuAction("Open run…", dispatch("fim.menu.openRun()")),
+            MenuAction(
+                "Reveal output folder", dispatch("fim.menu.revealOutputFolder()")
+            ),
+            MenuSeparator(),
+            MenuAction("Quit fim", window.destroy),
+        ],
+    )
+    run_menu = Menu(
+        "Run",
+        [
+            MenuAction("Run simulation", dispatch("fim.menu.runSimulation()")),
+            MenuAction("Cancel run", dispatch("fim.menu.cancelRun()")),
+            MenuSeparator(),
+            MenuAction("Animate", dispatch("fim.menu.animate()")),
+        ],
+    )
+    help_menu = Menu(
+        "Help",
+        [
+            MenuAction("Usage guide", dispatch("fim.menu.help('usage')")),
+            MenuAction(
+                "Configuration reference", dispatch("fim.menu.help('configuration')")
+            ),
+            MenuSeparator(),
+            MenuAction(
+                "Documentation on GitHub",
+                dispatch(f"fim.menu.openExternal({json.dumps(_DOCUMENTATION_URL)})"),
+            ),
+            MenuSeparator(),
+            MenuAction("Check for updates", dispatch("fim.menu.checkForUpdates()")),
+            MenuAction("About fim", dispatch("fim.menu.about()")),
+        ],
+    )
+    return [file_menu, run_menu, help_menu]
+
+
 def main() -> int:
     """Launch the GUI and block until the window closes.
 
@@ -1159,8 +1320,8 @@ def main() -> int:
         0 always — `webview.start()` returning means the user closed the
         window, not an error condition to report differently.
     """
-    create_window()
-    webview.start()
+    window = create_window()
+    webview.start(menu=_build_menu(window))
     return 0
 
 

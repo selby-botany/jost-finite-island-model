@@ -1,0 +1,95 @@
+/* The Help screen's own content styling (in-app help design §4.4).
+ *
+ * Built entirely from `app.css`'s own `--fim-*` custom properties, not a
+ * second, hand-picked palette -- rendered help content reads as part of
+ * this app's own theme (light/dark included, for free) rather than a
+ * pasted foreign document. A small, screen-scoped stylesheet, not rules
+ * added to `app.css` itself -- `app.css`'s own docstring already
+ * anticipates this ("or a small screen-scoped stylesheet if one
+ * screen's rules grow large enough to warrant it").
+ */
+
+#screen-help {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.help-content {
+    overflow-y: auto;
+    max-width: 52rem;
+    line-height: 1.5;
+}
+
+.help-content h1,
+.help-content h2,
+.help-content h3,
+.help-content h4 {
+    color: var(--fim-foreground);
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.help-content h1:first-child {
+    margin-top: 0;
+}
+
+.help-content p,
+.help-content ul,
+.help-content ol {
+    margin: 0.5rem 0;
+}
+
+.help-content code,
+.help-content pre {
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    font-size: 0.9em;
+}
+
+.help-content code {
+    background: var(--fim-border);
+    border-radius: 3px;
+    padding: 0.1em 0.3em;
+}
+
+.help-content pre {
+    background: var(--fim-border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    overflow-x: auto;
+}
+
+.help-content pre code {
+    background: none;
+    padding: 0;
+}
+
+.help-content .math-expr {
+    font-style: normal;
+}
+
+.help-content var {
+    font-style: italic;
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+}
+
+.help-content a {
+    color: var(--fim-accent);
+}
+
+.help-content table {
+    border-collapse: collapse;
+    margin: 0.75rem 0;
+    width: 100%;
+}
+
+.help-content th,
+.help-content td {
+    text-align: left;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--fim-border);
+}
+
+.help-content th {
+    background: var(--fim-border);
+}

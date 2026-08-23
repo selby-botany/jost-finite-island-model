@@ -214,18 +214,34 @@ function wireEvents() {
     });
 }
 
-async function initializeInputScreen() {
+/**
+ * Reset the form to fresh starter values -- the fetch-and-apply half of
+ * `initializeInputScreen`, factored out so it can run a second time
+ * (`fim.menu.newConfiguration`, visualization-and-config-editors design
+ * §4.5) without also re-running `wireEvents()`, which would otherwise
+ * double-bind every listener on the form a second call would add.
+ */
+async function resetInputForm() {
     const values = await window.pywebview.api.get_starter_form();
     applyFormValues(values);
     const defaultWorkers = await window.pywebview.api.get_default_max_workers();
     form.elements.namedItem("max_workers").value = String(defaultWorkers);
-    wireEvents();
     await revalidate();
+}
+
+async function initializeInputScreen() {
+    await resetInputForm();
+    wireEvents();
     // Set only once every async step above has settled and event
     // listeners are attached -- tests poll this rather than racing a
     // synthetic DOM event against `wireEvents()` not having run yet.
     window.__fimInputScreenReady = true;
 }
+
+window.fim.menu.newConfiguration = async function newConfiguration() {
+    window.fim.showScreen("screen-input");
+    await resetInputForm();
+};
 
 function whenApiReady(callback) {
     if (window.pywebview && window.pywebview.api) {

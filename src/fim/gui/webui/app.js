@@ -154,6 +154,81 @@ const fim = {
             drawOverview();
         };
     },
+
+    /**
+     * The native File/Run/Help menu bar's own dispatch target (in-app
+     * help design §4.5) -- every native `MenuAction` callback in
+     * `fim.gui.app._build_menu` calls exactly one `fim.menu.*` method
+     * here via `window.evaluate_js`, the same "no-op stub, overridden by
+     * whichever screen owns the real behavior" shape `onRunProgress`/
+     * `onBatchDone`/etc. above already established. No item is ever
+     * disabled natively (pywebview's own dynamic per-item enable/disable
+     * support is unconfirmed): every item stays clickable from any
+     * screen, and each method here decides what "clickable" means --
+     * navigate-then-act for an always-meaningful item, a plain no-op for
+     * a data-dependent one with nothing to act on from the current
+     * screen (the same tolerance `cancel-run-button` already has,
+     * design §4.5's own table).
+     */
+    menu: {
+        newConfiguration() {
+            // Overridden by screens/input.js.
+        },
+        openConfiguration() {
+            window.fim.showScreen("screen-input");
+            document.getElementById("load-yaml-button").click();
+        },
+        saveConfiguration() {
+            window.fim.showScreen("screen-input");
+            document.getElementById("save-yaml-button").click();
+        },
+        runSimulation() {
+            window.fim.showScreen("screen-input");
+            document.getElementById("run-button").click();
+        },
+        openRun() {
+            window.fim.showOpenRunScreen();
+        },
+        cancelRun() {
+            document.getElementById("cancel-run-button").click();
+        },
+        revealOutputFolder() {
+            if (!document.getElementById("screen-batch-results").hidden) {
+                document.getElementById("batch-open-folder-button").click();
+            } else if (!document.getElementById("screen-results").hidden) {
+                document.getElementById("open-folder-button").click();
+            }
+            // Otherwise: no completed run's output folder to reveal from
+            // whatever screen is currently showing -- a silent no-op.
+        },
+        animate() {
+            if (!document.getElementById("screen-results").hidden) {
+                document.getElementById("animate-button").click();
+            }
+        },
+        help(topic) {
+            window.fim.showHelp(topic);
+        },
+        openExternal(url) {
+            window.pywebview.api.open_external_link(url);
+        },
+        async checkForUpdates() {
+            const result = await window.pywebview.api.check_for_updates();
+            if (!result.ok) {
+                window.alert(`Update check failed: ${result.message}`);
+            } else if (result.available) {
+                window.alert(
+                    `A newer fim release is available: ${result.latest}\n${result.url}`
+                );
+            } else {
+                window.alert(`fim ${result.current} is current.`);
+            }
+        },
+        async about() {
+            const info = await window.pywebview.api.get_about_info();
+            window.alert(`fim ${info.version}\n${info.license}\n${info.repository}`);
+        },
+    },
 };
 
 window.fim = fim;

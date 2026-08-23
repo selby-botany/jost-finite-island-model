@@ -138,3 +138,39 @@ def test_input_screen_switches_to_the_tab_with_an_invalid_field(
 
     assert settled["checked"] is True
     assert settled["dotHidden"] is False
+
+
+def test_menu_new_configuration_resets_an_edited_field(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`fim.menu.newConfiguration` resets the form to starter values.
+
+    The one behavioral difference from the existing "New run" buttons
+    (in-app help design §4.5): those only navigate back to Screen 1,
+    leaving whatever was already in the form; the menu's own "New
+    configuration" genuinely resets it, the same way a fresh app
+    launch's own `initializeInputScreen` does — this test exists
+    specifically to keep that distinction honest.
+
+    The trigger wraps the call in `setTimeout(..., 0)`, matching
+    `fim.gui.app._build_menu`'s own real dispatcher exactly (not a test
+    convenience): calling an `async` `fim.menu.*` method directly as an
+    `evaluate_js` expression deadlocks — confirmed live building this
+    test — the same pywebview behavior `conftest.py`'s own `drive_and_
+    read` docstring already documents for its `ready`-polling case.
+    """
+    starter_n = starter_form_values()["N"]
+
+    value = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "document.getElementById('field-N').value = '999999'; "
+            "setTimeout(() => { window.fim.menu.newConfiguration(); }, 0);"
+        ),
+        read="document.getElementById('field-N').value",
+        is_ready=lambda value: value == starter_n,
+        poll_attempts=500,
+    )
+
+    assert value == starter_n

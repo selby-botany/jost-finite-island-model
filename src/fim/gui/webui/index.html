@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>fim</title>
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="help/help.css">
 </head>
 <body>
 <div id="app">
@@ -344,6 +345,13 @@
     </div>
   </section>
 
+  <section id="screen-help" class="screen" hidden>
+    <div class="actions">
+      <button type="button" id="help-back-button">Back</button>
+    </div>
+    <div id="help-content" class="help-content"></div>
+  </section>
+
   <p id="bridge-status" class="bridge-status">Connecting…</p>
 </div>
 <script src="app.js"></script>
@@ -355,5 +363,6 @@
 <script src="screens/batch-results.js"></script>
 <script src="screens/animation.js"></script>
 <script src="screens/open-run.js"></script>
+<script src="screens/help.js"></script>
 </body>
 </html>
