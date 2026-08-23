@@ -375,9 +375,12 @@ implementation:
 A native File/Configure/Run/View/Help menu bar is available from any screen,
 including mid-run. File covers configuration/run file-system actions
 (New/Open/Save configuration, Open run…, Reveal output folder, Quit);
-Configure jumps straight to any one of the model input screen's own six
-sections (Population/Migration/Mutation/Initial conditions/Convergence/
-Batch); Run covers the simulation lifecycle (Run simulation, Cancel run,
+Configure jumps straight to any one of six configuration sections
+(Population/Migration/Mutation/Initial conditions/Convergence/Batch);
+Population opens as a small dialog over whatever screen is currently
+showing, without navigating away from it — the other five still switch to
+the Model input screen for now. Run covers the simulation lifecycle (Run
+simulation, Cancel run,
 Animate); View holds a Significant digits submenu (2/3/4/5/6/8, default 3)
 that changes how many digits every displayed statistic rounds to — cosmetic
 only, `trajectory.jsonl`/`report.json`/`manifest.json` always keep full

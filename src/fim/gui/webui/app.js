@@ -139,6 +139,52 @@ const fim = {
     },
 
     /**
+     * Wire one Configure modal's own close affordances (unified-run-view
+     * design §3.1.1) the first time it is opened: a native `<dialog>`
+     * already gives focus-trapping and Escape-to-close for free once
+     * shown via `showModal()`, but backdrop-click-to-close is not
+     * automatic -- a click that lands on the dialog element itself
+     * (rather than on any of its content) is exactly a click on the
+     * `::backdrop`, since the content box is what the content elements
+     * themselves absorb the click on. Idempotent (`dataset.fimWired`)
+     * so a modal reopened many times only gets one set of listeners.
+     * @param {string} dialogId
+     */
+    wireModal(dialogId) {
+        const dialog = document.getElementById(dialogId);
+        if (dialog === null || dialog.dataset.fimWired === "true") {
+            return;
+        }
+        dialog.dataset.fimWired = "true";
+        dialog.addEventListener("click", (event) => {
+            if (event.target === dialog) {
+                dialog.close();
+            }
+        });
+        const closeButton = dialog.querySelector("[data-modal-close]");
+        if (closeButton !== null) {
+            closeButton.addEventListener("click", () => dialog.close());
+        }
+    },
+
+    /**
+     * Open one Configure section's modal by name (`modal-<name>`),
+     * wiring its close behavior on first use. The Configure menu's own
+     * dispatch target for every section §3.1.3 has not promoted to a
+     * direct value-selector leaf, and `screens/input.js`'s own error-
+     * routing (an invalid field on "Run simulation") for the same set.
+     * @param {string} name
+     */
+    openConfigModal(name) {
+        const dialogId = `modal-${name}`;
+        window.fim.wireModal(dialogId);
+        const dialog = document.getElementById(dialogId);
+        if (dialog !== null) {
+            dialog.showModal();
+        }
+    },
+
+    /**
      * The native File/Run/Help menu bar's own dispatch target (in-app
      * help design §4.5) -- every native `MenuAction` callback in
      * `fim.gui.app._build_menu` calls exactly one `fim.menu.*` method

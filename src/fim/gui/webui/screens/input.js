@@ -44,6 +44,12 @@ const TAB_LABELS = {
 
 const currentTabHeading = document.getElementById("current-tab-heading");
 
+/* Sections already converted from a tab-panel to a Configure modal
+ * (unified-run-view design §3.1, §8 Phase A/B) -- grows to all six as
+ * Phase B converts the rest; `switchToTab`/`configureTab` below check
+ * this set once rather than duplicating the dispatch. */
+const CONFIG_MODAL_TAB_NAMES = ["population"];
+
 function setFieldValue(name, value) {
     const field = form.elements.namedItem(name);
     if (field === null) {
@@ -166,6 +172,10 @@ function showBanner(message) {
 }
 
 async function switchToTab(tabName) {
+    if (CONFIG_MODAL_TAB_NAMES.includes(tabName)) {
+        window.fim.openConfigModal(tabName);
+        return;
+    }
     const radio = document.getElementById(`tab-${tabName}`);
     if (radio !== null) {
         radio.checked = true;
@@ -221,14 +231,26 @@ async function onSaveYamlClicked() {
 }
 
 function wireEvents() {
-    form.addEventListener("input", () => {
-        syncConditionalVisibility();
-        revalidate();
-    });
-    form.addEventListener("change", () => {
-        syncConditionalVisibility();
-        revalidate();
-    });
+    // Delegated at `document`, not `form` -- confirmed live (design §3.1,
+    // §8 Phase A): a field inside a Configure modal is `form="input-
+    // form"` rather than a DOM descendant of `#input-form` (a `<dialog>`
+    // must live outside every `.screen` section to render at all when
+    // shown while a different screen is hidden, §6's own live-validation
+    // note), so its `input`/`change` events bubble through the dialog and
+    // `#app`, never through the form element itself -- a listener on
+    // `form` silently stops firing for it. `event.target.form` is the
+    // browser's own authoritative form-owner resolution (respects both
+    // DOM containment and `form=""` identically), so filtering on it
+    // here catches every field either way and ignores every field that
+    // is not this form's own, without re-deriving that logic by hand.
+    const revalidateIfOwnField = (event) => {
+        if (event.target && event.target.form === form) {
+            syncConditionalVisibility();
+            revalidate();
+        }
+    };
+    document.addEventListener("input", revalidateIfOwnField);
+    document.addEventListener("change", revalidateIfOwnField);
     runButton.addEventListener("click", onRunClicked);
     loadButton.addEventListener("click", onLoadYamlClicked);
     saveButton.addEventListener("click", onSaveYamlClicked);
@@ -278,15 +300,24 @@ window.fim.menu.newConfiguration = async function newConfiguration() {
 };
 
 /**
- * `_build_menu`'s Configure menu -- navigate to Screen 1, on the
- * requested tab, leaving whatever is already in the form alone. The
- * one behavioral difference from `newConfiguration` above: this never
- * resets a field, the same distinction that method's own docstring
- * draws against the "New run" buttons -- `configureTab` is pure
- * navigation, matching what clicking an old, now-hidden tab label
- * itself used to do.
+ * `_build_menu`'s Configure menu -- for a section already converted to
+ * a modal (`CONFIG_MODAL_TAB_NAMES`, design §3.1/§8 Phase A/B), opens it
+ * over whatever the run view currently shows, no navigation at all. For
+ * a section not yet converted, falls back to the original behavior:
+ * navigate to Screen 1 on the requested tab, leaving whatever is
+ * already in the form alone. Either way this never resets a field, the
+ * same distinction `newConfiguration` above draws against the "New run"
+ * buttons.
  */
 window.fim.menu.configureTab = async function configureTab(tabName) {
+    if (CONFIG_MODAL_TAB_NAMES.includes(tabName)) {
+        // Floats a modal over whatever the run view already shows --
+        // the whole point of §3.1: no more navigating away from a live
+        // run just to open Population. The remaining five tabs still
+        // navigate to Screen 1 until Phase B converts them too.
+        window.fim.openConfigModal(tabName);
+        return;
+    }
     window.fim.showScreen("screen-input");
     await switchToTab(tabName);
 };

@@ -38,32 +38,6 @@
       </nav>
       <h2 id="current-tab-heading">Population</h2>
 
-      <section class="tab-panel" id="panel-population">
-        <div class="field">
-          <label for="field-N">N (gene copies/deme)</label>
-          <input type="text" id="field-N" name="N">
-        </div>
-        <div class="field">
-          <label for="field-d">d (demes)</label>
-          <input type="text" id="field-d" name="d">
-        </div>
-        <div class="field">
-          <label for="field-seed">seed</label>
-          <input type="text" id="field-seed" name="seed">
-        </div>
-        <div class="field">
-          <label for="field-deme_weighting">deme weighting</label>
-          <select id="field-deme_weighting" name="deme_weighting">
-            <option value="size">size</option>
-            <option value="equal">equal</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="field-max_generations">max generations</label>
-          <input type="text" id="field-max_generations" name="max_generations">
-        </div>
-      </section>
-
       <section class="tab-panel" id="panel-migration">
         <div class="field">
           <label for="field-migrant_sampling">migrant sampling</label>
@@ -377,6 +351,46 @@
     </div>
     <div id="help-content" class="help-content"></div>
   </section>
+
+  <!-- Configure modals (unified-run-view design §3.1): live outside
+       every .screen section on purpose, confirmed live rather than
+       assumed -- a <dialog> nested inside a `hidden` ancestor still
+       reports `open === true` and `display: block` from showModal(),
+       but its box has zero width/height (a hidden ancestor's own
+       `display: none` suppresses box generation for the whole subtree,
+       top layer or not); a sibling of the .screen sections is
+       unaffected by any of them being hidden. Each field below is
+       `form="input-form"` rather than a DOM descendant of that form --
+       FormData(form) collects it identically either way (confirmed
+       live too), which is what keeps `screens/input.js`'s own
+       validation/collection code completely unchanged by this move. -->
+  <dialog class="config-modal" id="modal-population">
+    <h2>Population</h2>
+    <div class="field">
+      <label for="field-N">N (gene copies/deme)</label>
+      <input type="text" id="field-N" name="N" form="input-form">
+    </div>
+    <div class="field">
+      <label for="field-d">d (demes)</label>
+      <input type="text" id="field-d" name="d" form="input-form">
+    </div>
+    <div class="field">
+      <label for="field-seed">seed</label>
+      <input type="text" id="field-seed" name="seed" form="input-form">
+    </div>
+    <div class="field">
+      <label for="field-deme_weighting">deme weighting</label>
+      <select id="field-deme_weighting" name="deme_weighting" form="input-form">
+        <option value="size">size</option>
+        <option value="equal">equal</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="field-max_generations">max generations</label>
+      <input type="text" id="field-max_generations" name="max_generations" form="input-form">
+    </div>
+    <button type="button" class="modal-close" data-modal-close>Close</button>
+  </dialog>
 
   <p id="bridge-status" class="bridge-status">Connecting…</p>
 </div>

@@ -266,6 +266,75 @@ def test_menu_configure_tab_switches_tabs_without_resetting_the_form(
     assert value["heading"] == "Migration"
 
 
+def test_configure_population_opens_a_modal_without_navigating_away(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Configure > Population floats a modal over the screen (design §3.1/§8 Phase A).
+
+    The Phase A proof-of-concept this test exists for: Population is the
+    first (of eventually six, §8 Phase B) tab-panel converted to a native
+    `<dialog>`. Driven from Screen 2 rather than Screen 1 specifically,
+    because the bug this whole redesign responds to only shows up from a
+    screen other than Input -- the old `configureTab` always called
+    `showScreen("screen-input")` first, discarding whatever the user was
+    looking at; the new one must not.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.showScreen('screen-progress'); "
+            "setTimeout(() => { window.fim.menu.configureTab('population'); }, 0);"
+        ),
+        read=(
+            "({"
+            "modalOpen: document.getElementById('modal-population').open, "
+            "progressHidden: document.getElementById('screen-progress').hidden"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("modalOpen") is True,
+    )
+
+    assert settled["progressHidden"] is False
+
+
+def test_configure_population_modal_close_button_closes_it(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The modal's own close button closes it (design §3.1.1's backdrop/close wiring).
+
+    Escape and backdrop-click are the browser's own native `<dialog>`
+    behavior (not exercised here — a synthetic, untrusted `keydown` does
+    not reliably trigger a real close-watcher in every engine); the
+    explicit close button is this app's own code (`fim.wireModal`), and
+    is what this test actually proves.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.menu.configureTab('population'); "
+            "window.__fimModalWasOpened = "
+            "document.getElementById('modal-population').open; "
+            "setTimeout(() => { "
+            "document.querySelector('#modal-population [data-modal-close]').click(); "
+            "window.__fimModalCloseClicked = true; "
+            "}, 50);"
+        ),
+        read=(
+            "({"
+            "opened: window.__fimModalWasOpened === true, "
+            "closed: document.getElementById('modal-population').open === false, "
+            "done: window.__fimModalCloseClicked === true"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("done") is True,
+    )
+
+    assert settled["opened"] is True
+    assert settled["closed"] is True
+
+
 def test_batch_progress_display_never_regresses(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
