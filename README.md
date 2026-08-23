@@ -102,6 +102,13 @@ macOS Gatekeeper may warn that this unsigned research application is from an
 unidentified developer; verify the checksum, then allow it via **System
 Settings → Privacy & Security**.
 
+The first launch after installing can take noticeably longer than every
+launch after it — macOS validates every file in the (unsigned) app bundle
+before running it, and the graphical toolkit builds a one-time system font
+index. Both results are cached, so if the window opens blank at first, leave
+it open rather than force-quitting; it fills in once that one-time work
+finishes.
+
 ### Linux release
 
 Install with one command — downloads, verifies, and installs `fim` and
