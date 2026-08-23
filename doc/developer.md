@@ -186,3 +186,17 @@ Run `dev/bin/check-doc-links` after moving headings or files. The pre-commit
 hook refreshes API docs, the pre-push hook checks freshness, and CI repeats
 both checks. See [source-tree orientation](../src/README.md) and
 [repository-managed hooks](../dev/git-hooks/README.md).
+
+After changing `doc/usage.md` or `doc/configuration.md`, regenerate the
+GUI's Help screen content the same way:
+
+```console
+dev/bin/generate-help-html
+```
+
+The pre-commit hook refreshes it automatically when either source doc (or
+the generator itself) is staged; the pre-push hook and CI verify freshness
+the same way they do for the API reference above. `anchor_for` in
+`dev/lib/docslug.py` is the one GitHub-compatible heading-anchor slugger
+both this generator and `check-doc-links` share — change it there, not in
+either caller.
