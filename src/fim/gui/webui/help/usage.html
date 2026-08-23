@@ -279,18 +279,29 @@ offline.</p>
 <h2 id="desktop-gui-fim-gui">Desktop GUI (<code>fim-gui</code>)</h2>
 <pre><code class="language-console">fim-gui
 </code></pre>
-<p>A desktop application — six screens over a small, static local web page
+<p>A desktop application — seven screens over a small, static local web page
 (<code>fim</code>'s own bundled <code>webview</code> renderer, the OS's native web view; no
-browser, no server, no network) — that runs the same simulations and reads
-the same <code>results/</code> folder as the commands above. Install it alongside
-<code>fim</code> (<code>python -m pip install .</code> already provides both console scripts), or
-launch it from a packaged executable by opening it with no arguments — for
-example by double-clicking <code>fim-windows-x64.exe</code>/<code>fim.app</code>, or running
-<code>fim-gui</code>/<code>fim --graphical</code> from a Linux install. <code>n_replicates</code> in the
-configuration is the only thing that decides whether a run goes through the
-scalar or the batch path — there is no separate &quot;batch mode&quot; toggle. Every
-screen calls the identical underlying function this guide already
-documents; nothing here is a second implementation:</p>
+browser, no server beyond the one opt-in release check below) — that runs
+the same simulations and reads the same <code>results/</code> folder as the commands
+above. Install it alongside <code>fim</code> (<code>python -m pip install .</code> already
+provides both console scripts), or launch it from a packaged executable by
+opening it with no arguments — for example by double-clicking
+<code>fim-windows-x64.exe</code>/<code>fim.app</code>, or running <code>fim-gui</code>/<code>fim --graphical</code> from
+a Linux install. <code>n_replicates</code> in the configuration is the only thing that
+decides whether a run goes through the scalar or the batch path — there is
+no separate &quot;batch mode&quot; toggle. Every screen calls the identical underlying
+function this guide already documents; nothing here is a second
+implementation:</p>
+<p>A native File/Run/Help menu bar is available from any screen, including
+mid-run. File covers configuration/run file-system actions (New/Open/Save
+configuration, Open run…, Reveal output folder, Quit); Run covers the
+simulation lifecycle (Run simulation, Cancel run, Animate); Help covers this
+guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> (rendered
+in-app — see the Help screen row below), a link to the full documentation
+on GitHub, Check for updates, and About. Every menu item reuses the exact
+same action the matching button already performs; File/Run items invoked
+from a screen where they are not immediately actionable navigate to the
+screen where they are first, rather than doing nothing.</p>
 <table>
 <thead>
 <tr>
@@ -330,14 +341,18 @@ documents; nothing here is a second implementation:</p>
 <td>Play back a completed run's persisted generations as a scatter animation, with a play/pause button and a scrub slider</td>
 <td>No CLI equivalent — a GUI-only bonus view</td>
 </tr>
+<tr>
+<td>Help</td>
+<td>This guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>, rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the Help menu (above) from any screen; &quot;Back&quot; returns to whichever screen was showing, not a fixed default</td>
+<td>No CLI equivalent — the terminal reads these same two files directly</td>
+</tr>
 </tbody>
 </table>
 <p>A GUI-authored run with the same parameters and seed produces byte-identical
 <code>trajectory.jsonl</code>/<code>report.json</code> to the same configuration run from the
-terminal — see <a href="#reproduce-a-run">Reproduce a run</a>. The GUI itself performs
-no network access at all; unlike the terminal's <code>fim update --check</code>, the
-GUI has no update-check feature of its own — check for a newer release from
-the command line, or the project's GitHub Releases page, instead.</p>
+terminal — see <a href="#reproduce-a-run">Reproduce a run</a>. The GUI performs network
+access only for the same explicit, opt-in release check the terminal's <code>fim update --check</code> performs (Help menu → &quot;Check for updates&quot;) — otherwise, like
+the CLI, none at all.</p>
 <p>On Linux, the GUI needs WebKitGTK, a system package most desktop
 distributions already have installed — see
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/install/README.md">installation alternatives</a> if <code>fim-gui</code> reports it

@@ -358,18 +358,30 @@ offline.
 fim-gui
 ```
 
-A desktop application — six screens over a small, static local web page
+A desktop application — seven screens over a small, static local web page
 (`fim`'s own bundled `webview` renderer, the OS's native web view; no
-browser, no server, no network) — that runs the same simulations and reads
-the same `results/` folder as the commands above. Install it alongside
-`fim` (`python -m pip install .` already provides both console scripts), or
-launch it from a packaged executable by opening it with no arguments — for
-example by double-clicking `fim-windows-x64.exe`/`fim.app`, or running
-`fim-gui`/`fim --graphical` from a Linux install. `n_replicates` in the
-configuration is the only thing that decides whether a run goes through the
-scalar or the batch path — there is no separate "batch mode" toggle. Every
-screen calls the identical underlying function this guide already
-documents; nothing here is a second implementation:
+browser, no server beyond the one opt-in release check below) — that runs
+the same simulations and reads the same `results/` folder as the commands
+above. Install it alongside `fim` (`python -m pip install .` already
+provides both console scripts), or launch it from a packaged executable by
+opening it with no arguments — for example by double-clicking
+`fim-windows-x64.exe`/`fim.app`, or running `fim-gui`/`fim --graphical` from
+a Linux install. `n_replicates` in the configuration is the only thing that
+decides whether a run goes through the scalar or the batch path — there is
+no separate "batch mode" toggle. Every screen calls the identical underlying
+function this guide already documents; nothing here is a second
+implementation:
+
+A native File/Run/Help menu bar is available from any screen, including
+mid-run. File covers configuration/run file-system actions (New/Open/Save
+configuration, Open run…, Reveal output folder, Quit); Run covers the
+simulation lifecycle (Run simulation, Cancel run, Animate); Help covers this
+guide and the [configuration reference](configuration.md) (rendered
+in-app — see the Help screen row below), a link to the full documentation
+on GitHub, Check for updates, and About. Every menu item reuses the exact
+same action the matching button already performs; File/Run items invoked
+from a screen where they are not immediately actionable navigate to the
+screen where they are first, rather than doing nothing.
 
 | Screen | What it does | Same as |
 |---|---|---|
@@ -379,13 +391,14 @@ documents; nothing here is a second implementation:
 | Batch results | A pooled scatter across every replicate's final state — the same small-multiples grid the Results screen uses once `d` is 3 or more — beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter; the same "Compare demes directly" pair selector as the Results screen, pooled across every replicate; each row's own "Open" button reaches the Results screen for that one replicate; "Open batch folder" reveals `summary.json` and every replicate subdirectory | [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
 | Open a run | Pick a previous run from a recent-runs list — a batch entry is labeled distinctly and opened one replicate at a time from its own Batch results screen, not from here — or browse for a `trajectory.jsonl` directly, then re-render its summary and scatter at any persisted generation, with the same optional differentiation-`q` sweep | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
 | Animated trajectory | Play back a completed run's persisted generations as a scatter animation, with a play/pause button and a scrub slider | No CLI equivalent — a GUI-only bonus view |
+| Help | This guide and the [configuration reference](configuration.md), rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the Help menu (above) from any screen; "Back" returns to whichever screen was showing, not a fixed default | No CLI equivalent — the terminal reads these same two files directly |
 
 A GUI-authored run with the same parameters and seed produces byte-identical
 `trajectory.jsonl`/`report.json` to the same configuration run from the
-terminal — see [Reproduce a run](#reproduce-a-run). The GUI itself performs
-no network access at all; unlike the terminal's `fim update --check`, the
-GUI has no update-check feature of its own — check for a newer release from
-the command line, or the project's GitHub Releases page, instead.
+terminal — see [Reproduce a run](#reproduce-a-run). The GUI performs network
+access only for the same explicit, opt-in release check the terminal's `fim
+update --check` performs (Help menu → "Check for updates") — otherwise, like
+the CLI, none at all.
 
 On Linux, the GUI needs WebKitGTK, a system package most desktop
 distributions already have installed — see
