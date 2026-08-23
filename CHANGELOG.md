@@ -6,6 +6,28 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A native File/Run/Help menu bar in the desktop GUI, reachable from
+  every screen (including mid-run): File covers configuration/run
+  file-system actions (New/Open/Save configuration, Open run…, Reveal
+  output folder, Quit); Run covers the simulation lifecycle (Run
+  simulation, Cancel run, Animate); Help opens a new in-app Help screen
+  rendering the [usage guide](doc/usage.md) and
+  [configuration reference](doc/configuration.md) with working
+  cross-links, links out to the full documentation on GitHub, and adds
+  "Check for updates" — the same opt-in GitHub Releases check `fim
+  update --check` already performs from the command line, now also
+  reachable from the GUI.
+- The Results and Batch results screens now show every deme-pair panel
+  at once, as a small-multiples grid, once `d` is 3 or more (previously
+  only the first pair was ever drawn, even though the data for every
+  pair was already computed); every scatter panel gains a labeled,
+  numbered `0.0`–`1.0` probability scale on both axes, matching the
+  reference visualization's own figures. Every named statistic — a
+  scalar run's own six, and the batch confidence intervals — now
+  renders through the same meter widget.
+
 ## [1.2.0] - 2026-08-22
 
 ### Added
