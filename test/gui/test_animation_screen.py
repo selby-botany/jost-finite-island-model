@@ -44,11 +44,11 @@ _POLL_ATTEMPTS = 300
 _DRIVE_TIMEOUT_SECONDS = 4 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
 
 
-def _write_run(tmp_path: Path) -> Path:
+def _write_run(tmp_path: Path, *, d: int = 2) -> Path:
     """Write a real completed run with several generations, real frames to sample."""
     config = {
         "N": 20,
-        "d": 2,
+        "d": d,
         "m": 0.1,
         "mu": 0.01,
         "seed": 1,
@@ -174,3 +174,96 @@ def test_animate_button_plays_real_frames_and_back_returns_to_results(
     assert int(settled["afterClick"]["scrubberMax"]) >= 1
     assert settled["expectedFrameText"] in settled["afterScrubLabel"]
     assert settled["back"] is True
+
+
+def test_deme_pair_selector_switches_animation_frames_and_back(
+    tmp_path: Path,
+) -> None:
+    """ "Show pair"/"Show overview" swap the whole animated frame set and back.
+
+    `d=4` (past the `d=2` case above's own single, unavoidable panel)
+    so "Show pair" (Deme 1 vs Deme 3) draws a genuinely different
+    picture than the default small-multiples grid — proving the
+    whole-trajectory frame-set swap `animation.js`'s own `onShowPair`
+    performs (`Api.get_animation_deme_pair_frames`, one call for every
+    sampled frame at once), not just that clicking the button does
+    something. `canvas.toDataURL()` snapshots prove both the change and
+    the exact-match revert, the same technique `test_results_screen.py`
+    already uses for the single-state case.
+    """
+    output = _write_run(tmp_path, d=4)
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "(async () => {"
+                "window.__fimOpenResult = await window.pywebview.api.open_run("
+                f"{{trajectoryPath: {str(output / 'trajectory.jsonl')!r}}}"
+                ");"
+                "if (window.__fimOpenResult.ok) {"
+                "window.fim.showResults(window.__fimOpenResult);"
+                "}"
+                "})();"
+            )
+            opened = _poll_until(
+                window, "window.__fimOpenResult", lambda value: value is not None
+            )
+            settled = None
+            if opened is not None and opened.get("ok"):
+                window.evaluate_js("document.getElementById('animate-button').click();")
+                after_click = _poll_until(
+                    window,
+                    "({"
+                    "screenVisible: "
+                    "!document.getElementById('screen-animation').hidden, "
+                    "selectorHidden: "
+                    "document.getElementById("
+                    "'animation-deme-pair-selector').hidden"
+                    "})",
+                    lambda value: value is not None and value.get("screenVisible"),
+                )
+                if after_click.get("screenVisible"):
+                    overview_snapshot = window.evaluate_js(
+                        "document.getElementById('animation-canvas').toDataURL()"
+                    )
+                    window.evaluate_js(
+                        "document.getElementById('animation-x-deme').value = '1';"
+                        "document.getElementById('animation-y-deme').value = '3';"
+                        "document.getElementById("
+                        "'animation-show-pair-button').click();"
+                    )
+                    pair_snapshot = _poll_until(
+                        window,
+                        "document.getElementById('animation-canvas').toDataURL()",
+                        lambda value: value != overview_snapshot,
+                    )
+                    window.evaluate_js(
+                        "document.getElementById("
+                        "'animation-show-overview-button').click();"
+                    )
+                    reverted_snapshot = _poll_until(
+                        window,
+                        "document.getElementById('animation-canvas').toDataURL()",
+                        lambda value: value == overview_snapshot,
+                    )
+                    settled = {
+                        "selectorHidden": after_click["selectorHidden"],
+                        "pairDiffersFromOverview": (pair_snapshot != overview_snapshot),
+                        "revertedMatchesOverview": (
+                            reverted_snapshot == overview_snapshot
+                        ),
+                    }
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None, "Screen 5's deme-pair selector was never reached"
+    assert settled["selectorHidden"] is False
+    assert settled["pairDiffersFromOverview"] is True
+    assert settled["revertedMatchesOverview"] is True

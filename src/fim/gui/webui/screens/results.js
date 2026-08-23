@@ -91,17 +91,26 @@ window.fim.showResults = function showResults(payload) {
         };
         drawOverview();
         window.fim.wireDemePairSelector({
-            canvas: resultsCanvas,
             xSelect: resultsXDeme,
             ySelect: resultsYDeme,
             showPairButton: resultsShowPairButton,
             showOverviewButton: resultsShowOverviewButton,
             container: resultsDemePairSelector,
             demeCount: payload.demeCount,
-            drawOverview,
-            getOutputDirectory: () => currentOutputDirectory,
-            bridgeMethod: (outputDirectory, x, y) =>
-                window.pywebview.api.get_deme_pair_panel(outputDirectory, x, y),
+            onShowPair: async (x, y) => {
+                if (currentOutputDirectory === null) {
+                    return;
+                }
+                const result = await window.pywebview.api.get_deme_pair_panel(
+                    currentOutputDirectory,
+                    x,
+                    y
+                );
+                if (result.ok) {
+                    drawScatter(resultsCanvas, result.panel);
+                }
+            },
+            onShowOverview: drawOverview,
         });
     }
     animateButton.disabled = payload.generationCount <= 1;

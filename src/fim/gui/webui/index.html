@@ -289,6 +289,15 @@
   <section id="screen-animation" class="screen" hidden>
     <p id="animation-generation-label" class="reason"></p>
     <canvas id="animation-canvas" width="640" height="520"></canvas>
+    <fieldset class="composite" id="animation-deme-pair-selector" hidden>
+      <legend>Compare demes directly</legend>
+      <label for="animation-x-deme">X</label>
+      <select id="animation-x-deme"></select>
+      <label for="animation-y-deme">Y</label>
+      <select id="animation-y-deme"></select>
+      <button type="button" id="animation-show-pair-button">Show pair</button>
+      <button type="button" id="animation-show-overview-button">Show overview</button>
+    </fieldset>
     <div class="animation-controls">
       <button type="button" id="animation-play-button" disabled>Play</button>
       <input

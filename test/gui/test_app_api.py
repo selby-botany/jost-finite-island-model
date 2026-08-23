@@ -723,6 +723,7 @@ def test_get_animation_frames_ships_client_ready_panels(tmp_path: Path) -> None:
     result = Api().get_animation_frames(str(output))
 
     assert result["ok"] is True
+    assert result["demeCount"] == 2
     frames = result["frames"]
     assert isinstance(frames, list)
     assert len(frames) >= 2
@@ -738,6 +739,66 @@ def test_get_animation_frames_reports_a_missing_run_without_raising(
     tmp_path: Path,
 ) -> None:
     result = Api().get_animation_frames(str(tmp_path / "never-written"))
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_get_animation_deme_pair_frames_names_the_pair_in_every_frame(
+    tmp_path: Path,
+) -> None:
+    """The Animation screen's own pair view names its axes the same way, per frame.
+
+    `d=4` past `scatter.PAIRWISE_MAX_DEMES`'s own small-`d` case would
+    not matter here — this bridge method exists specifically for a
+    caller-chosen pair regardless of `d` — but matches `test_get_deme_
+    pair_panel_names_the_requested_pair`'s own choice for a direct,
+    easy comparison between the two.
+    """
+    output = _write_run(tmp_path, d=4)
+
+    default = Api().get_animation_frames(str(output))
+    result = Api().get_animation_deme_pair_frames(
+        str(output), first_deme=2, second_deme=4
+    )
+
+    assert result["ok"] is True
+    frames = result["frames"]
+    assert isinstance(frames, list)
+    # `pre_render_frames` samples identically both times (same
+    # trajectory, same `max_frames` default) — the two calls' own
+    # generation lists agree exactly, the invariant `animation.js`'s
+    # own frame-set swap relies on to keep `currentIndex` meaningful
+    # across a "Show pair"/"Show overview" switch.
+    assert [frame["generation"] for frame in frames] == [
+        frame["generation"] for frame in default["frames"]
+    ]
+    for frame in frames:
+        panel = frame["panel"]
+        assert panel["x_label"] == "Deme 2"
+        assert panel["y_label"] == "Deme 4"
+        assert isinstance(panel["points"], list)
+
+
+def test_get_animation_deme_pair_frames_rejects_an_out_of_range_deme(
+    tmp_path: Path,
+) -> None:
+    output = _write_run(tmp_path, d=4)
+
+    result = Api().get_animation_deme_pair_frames(
+        str(output), first_deme=1, second_deme=5
+    )
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_get_animation_deme_pair_frames_reports_a_missing_run_without_raising(
+    tmp_path: Path,
+) -> None:
+    result = Api().get_animation_deme_pair_frames(
+        str(tmp_path / "never-written"), first_deme=1, second_deme=2
+    )
 
     assert result["ok"] is False
     assert "message" in result

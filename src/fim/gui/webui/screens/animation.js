@@ -13,6 +13,16 @@
  * since Screen 6 (`open-run.js`) always routes through `fim.showResults`
  * first (design §4.6's own "opening a run re-renders Screen 3... Screen 3
  * is what actually offers Animate), so "Back" always returns there.
+ *
+ * Screens 3/4's own "Compare demes directly" choice -- the default
+ * pairwise-grid-or-PCA view versus one explicit raw deme pair -- extends
+ * here too (`app.js`'s shared `wireDemePairSelector`), across the whole
+ * animated trajectory rather than one static state: picking a pair fires
+ * exactly one more bridge call (`get_animation_deme_pair_frames`, the
+ * whole sampled set for that one pair, all at once), after which
+ * play/pause/scrub stay exactly as call-free as the default view already
+ * was. "Show overview" needs no bridge call at all -- the default view's
+ * own frames are kept on hand (`defaultFrames`) for exactly that.
  */
 
 // A watchable cadence: fast enough to read as motion rather than a
@@ -36,7 +46,27 @@ const animationGenerationLabel = document.getElementById(
 const playButton = document.getElementById("animation-play-button");
 const scrubber = document.getElementById("animation-scrubber");
 const backButton = document.getElementById("animation-back-button");
+const animationDemePairSelector = document.getElementById(
+    "animation-deme-pair-selector"
+);
+const animationXDeme = document.getElementById("animation-x-deme");
+const animationYDeme = document.getElementById("animation-y-deme");
+const animationShowPairButton = document.getElementById(
+    "animation-show-pair-button"
+);
+const animationShowOverviewButton = document.getElementById(
+    "animation-show-overview-button"
+);
 
+let animationOutputDirectory = null;
+// The default view's own frames (`panels_from_points`' own automatic
+// dispatch: the pairwise grid for `d <= scatter.PAIRWISE_MAX_DEMES`, one
+// PCA panel above it) -- kept separately from `frames` (whichever set is
+// actually being played/scrubbed right now) so "Show overview" can
+// switch straight back with no further bridge call, the same "no second
+// bridge call needed for that direction" guarantee Screens 3/4's own
+// identical selector already gives (`app.js`'s `wireDemePairSelector`).
+let defaultFrames = [];
 let frames = [];
 let currentIndex = 0;
 let playIntervalId = null;
@@ -102,19 +132,67 @@ backButton.addEventListener("click", () => {
 
 window.fim.showAnimation = async function showAnimation(outputDirectory) {
     stopPlaying();
+    animationOutputDirectory = outputDirectory;
     const result = await window.pywebview.api.get_animation_frames(outputDirectory);
     window.fim.showScreen("screen-animation");
     if (!result.ok || result.frames.length === 0) {
         animationGenerationLabel.textContent = result.message || "No frames to animate";
         playButton.disabled = true;
         scrubber.disabled = true;
+        defaultFrames = [];
         frames = [];
+        animationDemePairSelector.hidden = true;
         return;
     }
-    frames = result.frames;
+    defaultFrames = result.frames;
+    frames = defaultFrames;
     const canAnimate = frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
     playButton.disabled = !canAnimate;
     scrubber.disabled = !canAnimate;
     scrubber.max = String(frames.length - 1);
     setCurrentIndex(0);
+    // A fresh run/replicate every call -- never left showing a stale
+    // pair selection (or a stale X/Y choice) from whichever animation
+    // was open before this one, the same reason `resetInputForm`
+    // (design §4.5) exists rather than trusting a screen to still be in
+    // a sane state from its own last use.
+    window.fim.wireDemePairSelector({
+        xSelect: animationXDeme,
+        ySelect: animationYDeme,
+        showPairButton: animationShowPairButton,
+        showOverviewButton: animationShowOverviewButton,
+        container: animationDemePairSelector,
+        demeCount: result.demeCount,
+        onShowPair: async (x, y) => {
+            if (animationOutputDirectory === null) {
+                return;
+            }
+            const pairResult =
+                await window.pywebview.api.get_animation_deme_pair_frames(
+                    animationOutputDirectory,
+                    x,
+                    y
+                );
+            if (!pairResult.ok) {
+                return;
+            }
+            stopPlaying();
+            // `pre_render_frames` samples identically both times (same
+            // trajectory, same `max_frames` default -- `Api.get_
+            // animation_deme_pair_frames`'s own docstring), so this set
+            // is always the same length as `defaultFrames`; `currentIndex`
+            // carries over unchanged, redrawing the same generation
+            // under the new view rather than jumping back to frame 0.
+            frames = pairResult.frames.map((frame) => ({
+                generation: frame.generation,
+                panels: [frame.panel],
+            }));
+            drawCurrentFrame();
+        },
+        onShowOverview: () => {
+            stopPlaying();
+            frames = defaultFrames;
+            drawCurrentFrame();
+        },
+    });
 };

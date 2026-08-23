@@ -291,12 +291,17 @@ window.fim.menu.configureTab = async function configureTab(tabName) {
     await switchToTab(tabName);
 };
 
-function whenApiReady(callback) {
-    if (window.pywebview && window.pywebview.api) {
-        callback();
-        return;
-    }
-    window.addEventListener("pywebviewready", callback, { once: true });
-}
-
+// `whenApiReady` itself is `app.js`'s own top-level function, not
+// redeclared here -- a real, found-live duplicate definition (identical
+// body, this file's own local copy) silently overwrote whichever one
+// loaded second, a legal-but-fragile `SyntaxError`-free redeclaration
+// classic scripts sharing one global scope allow for `function`
+// (unlike `let`/`const`, which throw outright — the sharper version of
+// this same hazard `test_no_top_level_identifier_is_declared_in_more_
+// than_one_script` now guards against for every declaration kind).
+// Worked only by execution-order luck (`app.js` loads first and calls
+// its own copy before `input.js`'s own redeclaration ever ran), not by
+// design -- removed here, this file now calls the one shared
+// definition directly, matching how it already calls `drawScatter`/
+// `drawScatterGrid` from `scatter.js` with no `window.fim.` prefix.
 whenApiReady(initializeInputScreen);

@@ -147,17 +147,26 @@ window.fim.showBatchResults = function showBatchResults(payload) {
         };
         drawOverview();
         window.fim.wireDemePairSelector({
-            canvas: batchResultsCanvas,
             xSelect: batchResultsXDeme,
             ySelect: batchResultsYDeme,
             showPairButton: batchResultsShowPairButton,
             showOverviewButton: batchResultsShowOverviewButton,
             container: batchResultsDemePairSelector,
             demeCount: payload.demeCount,
-            drawOverview,
-            getOutputDirectory: () => currentBatchOutputDirectory,
-            bridgeMethod: (outputDirectory, x, y) =>
-                window.pywebview.api.get_batch_deme_pair_panel(outputDirectory, x, y),
+            onShowPair: async (x, y) => {
+                if (currentBatchOutputDirectory === null) {
+                    return;
+                }
+                const result = await window.pywebview.api.get_batch_deme_pair_panel(
+                    currentBatchOutputDirectory,
+                    x,
+                    y
+                );
+                if (result.ok) {
+                    drawScatter(batchResultsCanvas, result.panel);
+                }
+            },
+            onShowOverview: drawOverview,
         });
     }
     window.fim.showScreen("screen-batch-results");

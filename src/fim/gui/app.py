@@ -719,13 +719,17 @@ class Api:
                 push or `open_run`'s own return value).
 
         Returns:
-            `{"ok": True, "frames": [{"generation", "panels"}, ...]}`
-            — one entry per sampled generation, each `panels` already
-            in `scatter_panels`' own client-ready shape
+            `{"ok": True, "demeCount": ..., "frames": [{"generation",
+            "panels"}, ...]}` — one entry per sampled generation, each
+            `panels` already in `scatter_panels`' own client-ready shape
             (`fim.viz.scatter.panels_from_points`, design §3.8: "whoever
             renders this... is responsible for any further reduction a
-            high deme count needs"). `{"ok": False, "message": ...}` if
-            the trajectory or its manifest cannot be read.
+            high deme count needs"). `demeCount` rides along for the
+            same reason `onRunDone`/`onBatchDone`'s own payloads carry
+            it — `animation.js`'s own deme-pair selector needs it to
+            populate its two axis dropdowns, exactly like Screens 3/4's
+            identical selector already does. `{"ok": False, "message":
+            ...}` if the trajectory or its manifest cannot be read.
         """
         directory = Path(output_directory)
         try:
@@ -738,6 +742,7 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {
             "ok": True,
+            "demeCount": params.d,
             "frames": [
                 {
                     "generation": frame.generation,
@@ -746,6 +751,61 @@ class Api:
                 for frame in frames
             ],
         }
+
+    def get_animation_deme_pair_frames(
+        self, output_directory: str, first_deme: int, second_deme: int
+    ) -> dict[str, Any]:
+        """Recompute one explicit deme-pair panel for every sampled animation frame.
+
+        `get_animation_frames`'s own "Compare demes directly" counterpart
+        (design §3.8, §4.5) — the same choice Screens 3/4 already offer
+        between the default view (a small-multiples pairwise grid for
+        `d <= scatter.PAIRWISE_MAX_DEMES`, one PCA panel above it) and
+        one explicit raw deme pair, extended to the whole animated
+        trajectory rather than one static state. Still just one call:
+        `webui/screens/animation.js` fires this once, when the user
+        picks a pair, not once per frame or once per playback tick —
+        design §3.8's own "zero further Python calls... during
+        playback" holds exactly as it does for `get_animation_frames`
+        itself, since the whole sampled set for that one pair comes
+        back together, the same shape the default view's own frames
+        already arrived in.
+
+        Args:
+            output_directory: The run's own artifact directory.
+            first_deme: 1-based deme number for the X axis, matching
+                every panel's own "Deme N" label convention.
+            second_deme: 1-based deme number for the Y axis.
+
+        Returns:
+            `{"ok": True, "frames": [{"generation", "panel"}, ...]}` —
+            one entry per sampled generation, in the same order `get_
+            animation_frames` already returns them (`pre_render_frames`
+            re-samples identically both times — same trajectory, same
+            `max_frames` default — so the two calls' own generation
+            lists always agree). `{"ok": False, "message": ...}` if the
+            trajectory or its manifest cannot be read, or the requested
+            demes are out of range or identical.
+        """
+        directory = Path(output_directory)
+        try:
+            manifest = read_manifest(directory / "manifest.json")
+            params = manifest.params()
+            frames = pre_render_frames(
+                directory / "trajectory.jsonl", params, manifest.run_id
+            )
+            panel_frames = [
+                {
+                    "generation": frame.generation,
+                    "panel": deme_pair_panel(
+                        frame.points, first_deme - 1, second_deme - 1
+                    ),
+                }
+                for frame in frames
+            ]
+        except (OSError, ValueError, KeyError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "frames": panel_frames}
 
     def get_deme_pair_panel(
         self, output_directory: str, first_deme: int, second_deme: int

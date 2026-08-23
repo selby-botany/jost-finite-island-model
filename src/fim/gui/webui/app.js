@@ -61,22 +61,20 @@ const fim = {
     },
 
     /**
-     * Wire a "compare two demes directly" selector onto a results-style
-     * canvas -- Screens 3 and 4's own shared answer to a large-`d` run's
-     * PCA overview (`fim.viz.scatter.panels_from_points`' own PCA
-     * fallback once `d` exceeds `PAIRWISE_MAX_DEMES`) not showing any one
-     * deme pair directly. Two axis dropdowns, a "Show pair" button that
-     * asks Python for that one explicit pair on demand (unbounded `d`
-     * makes precomputing every `C(d, 2)` pair up front the wrong
-     * default, unlike the small-`d` case `panels_from_points` already
-     * handles automatically), and a "Show overview" button that redraws
-     * whatever the screen's own default view already is -- one panel or
-     * the small-multiples grid of every pair (visualization-and-config-
-     * editors design §3.1) -- from data already on hand, no second
-     * bridge call needed for that direction.
+     * Wire a "compare two demes directly" selector -- Screens 3 and 4's
+     * own shared answer to a large-`d` run's PCA overview (`fim.viz.
+     * scatter.panels_from_points`' own PCA fallback once `d` exceeds
+     * `PAIRWISE_MAX_DEMES`) not showing any one deme pair directly, and
+     * Screen 5's own identical choice extended across a whole animated
+     * trajectory rather than one static state. Two axis dropdowns and a
+     * "Show pair"/"Show overview" pair of buttons -- what each one
+     * *does* is entirely up to the caller's own `onShowPair`/`onShow
+     * Overview` (a single-panel redraw for Screens 3/4, a whole-
+     * trajectory frame-set swap for Screen 5); this function owns only
+     * the dropdown population and the "X and Y cannot match" enable/
+     * disable rule every caller shares.
      *
      * @param {Object} config
-     * @param {HTMLCanvasElement} config.canvas
      * @param {HTMLSelectElement} config.xSelect
      * @param {HTMLSelectElement} config.ySelect
      * @param {HTMLButtonElement} config.showPairButton
@@ -84,29 +82,22 @@ const fim = {
      * @param {HTMLElement} config.container - Hidden entirely when
      *     `demeCount < 2` (a scatter needs two distinct demes).
      * @param {number} config.demeCount
-     * @param {() => void} config.drawOverview - Redraws whatever
-     *     "overview" already means for this screen's own canvas --
-     *     `drawScatter` of the one panel already on hand when there is
-     *     only one, `drawScatterGrid` of every panel when there is more
-     *     than one (visualization-and-config-editors design §3.1) --
-     *     with no further bridge call either way.
-     * @param {() => (string|null)} config.getOutputDirectory
-     * @param {(outputDirectory: string, x: number, y: number) =>
-     *     Promise<Object>} config.bridgeMethod - `window.pywebview.api.
-     *     get_deme_pair_panel` or `.get_batch_deme_pair_panel`.
+     * @param {(x: number, y: number) => (void|Promise<void>)}
+     *     config.onShowPair - Called with the two chosen 1-based deme
+     *     numbers on "Show pair" click; may be `async`.
+     * @param {() => void} config.onShowOverview - Called on "Show
+     *     overview" click.
      */
     wireDemePairSelector(config) {
         const {
-            canvas,
             xSelect,
             ySelect,
             showPairButton,
             showOverviewButton,
             container,
             demeCount,
-            drawOverview,
-            getOutputDirectory,
-            bridgeMethod,
+            onShowPair,
+            onShowOverview,
         } = config;
         if (!demeCount || demeCount < 2) {
             container.hidden = true;
@@ -133,22 +124,11 @@ const fim = {
         updateShowPairEnabled();
 
         showPairButton.onclick = async () => {
-            const outputDirectory = getOutputDirectory();
-            if (outputDirectory === null) {
-                return;
-            }
-            const result = await bridgeMethod(
-                outputDirectory,
-                Number(xSelect.value),
-                Number(ySelect.value)
-            );
-            if (result.ok) {
-                drawScatter(canvas, result.panel);
-            }
+            await onShowPair(Number(xSelect.value), Number(ySelect.value));
         };
 
         showOverviewButton.onclick = () => {
-            drawOverview();
+            onShowOverview();
         };
     },
 

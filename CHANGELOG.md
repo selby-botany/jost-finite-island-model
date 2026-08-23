@@ -36,6 +36,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reference visualization's own figures. Every named statistic — a
   scalar run's own six, and the batch confidence intervals — now
   renders through the same meter widget.
+- The Animated trajectory screen gains the same "Compare demes
+  directly" pair selector the Results and Batch results screens
+  already have — choose one explicit deme pair to watch throughout the
+  whole animation instead of only the default pairwise-grid-or-PCA
+  view, with no bridge call per frame or per playback tick: picking a
+  pair fetches every sampled frame's own panel for it once, up front,
+  the same "load everything, then play/pause/scrub for free" design
+  the screen already used for its default view.
 
 ### Changed
 
