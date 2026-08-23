@@ -3,6 +3,7 @@ atomic-publish resolution."""
 
 from __future__ import annotations
 
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -37,6 +38,41 @@ def test_project_root_falls_back_to_working_directory(
     )
 
     assert paths.project_root() == working_directory
+
+
+def test_project_root_falls_back_to_home_when_frozen_and_uninstalled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A packaged GUI never inherits `cwd()` -- it has no real one.
+
+    Regression test for the real "[Errno 30] Read-only file system:
+    '/results'" failure hit on first GUI use: a Finder-launched macOS
+    `.app` starts with `cwd() == "/"`, so the pre-fix fallback built an
+    unwritable default results directory straight from the filesystem
+    root. `sys.frozen` (PyInstaller's own flag, already checked
+    elsewhere in this codebase -- `fim.launcher`, `fim.gui.app.
+    _webui_directory`) is the signal used here instead of trusting
+    whatever the OS happened to set `cwd()` to.
+
+    `cwd()` is deliberately set to somewhere *other* than home, and
+    still must not appear in the result -- proving the frozen branch
+    really ignores it rather than merely happening to agree with it.
+    """
+    home_directory = tmp_path / "home"
+    home_directory.mkdir()
+    working_directory = tmp_path / "elsewhere"
+    working_directory.mkdir()
+    monkeypatch.chdir(working_directory)
+    monkeypatch.setattr(Path, "home", lambda: home_directory)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        fim,
+        "__file__",
+        str(tmp_path / "fim.app" / "Contents" / "Frameworks" / "fim" / "__init__.py"),
+    )
+
+    assert paths.project_root() == home_directory / "fim"
 
 
 def test_project_root_finds_the_real_checkout() -> None:

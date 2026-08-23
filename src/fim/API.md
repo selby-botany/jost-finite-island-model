@@ -3840,14 +3840,27 @@ Return a timestamped output folder without affecting run data.
 def project_root() -> Path
 ```
 
-Return the source checkout root, falling back to the working directory.
+Return the source checkout root, falling back to a writable default.
 
 **Returns**:
 
   The checkout root containing `pyproject.toml`, if one is found
-  above the installed `fim` package; otherwise the current working
-  directory — the same fallback an installed or PyInstaller-frozen
-  application needs, since it has no source checkout to find.
+  above the installed `fim` package; otherwise `Path.home() / "fim"`
+  for a packaged (`sys.frozen`) build, or the current working
+  directory for a plain `pip install` run from a terminal.
+
+  The frozen case cannot fall back to `Path.cwd()`: a packaged GUI
+  has no terminal, and therefore no user-chosen working directory
+  to inherit — the OS picks one instead, and on macOS a
+  Finder-launched `.app` gets `cwd() == "/"`, the read-only
+  filesystem root. `results_directory()` built straight from that
+  (`/results`) failed outright with "[Errno 30] Read-only file
+  system" on first real GUI use. A frozen CLI invocation (the same
+  binary run from an actual terminal) loses nothing here either:
+  every documented `fim run` example passes `--output` explicitly,
+  never relying on this default. `Path.cwd()` remains correct for
+  the non-frozen, no-checkout case (`pip install fim` run from a
+- `terminal)` - there, cwd is a real, user-chosen directory.
 
 <a id="fim.paths.results_directory"></a>
 
