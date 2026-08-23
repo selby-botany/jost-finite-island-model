@@ -8,12 +8,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- A native File/Run/Help menu bar in the desktop GUI, reachable from
-  every screen (including mid-run): File covers configuration/run
+- A native File/Run/View/Help menu bar in the desktop GUI, reachable
+  from every screen (including mid-run): File covers configuration/run
   file-system actions (New/Open/Save configuration, Open run…, Reveal
   output folder, Quit); Run covers the simulation lifecycle (Run
-  simulation, Cancel run, Animate); Help opens a new in-app Help screen
-  rendering the [usage guide](doc/usage.md) and
+  simulation, Cancel run, Animate); View holds a "Significant digits"
+  submenu (2/3/4/5/6/8, default 3) that changes how many digits every
+  displayed statistic rounds to — cosmetic only, never touching the
+  full-precision values every run's own `report.json`/`manifest.json`
+  still records; Help opens a new in-app Help screen rendering the
+  [usage guide](doc/usage.md) and
   [configuration reference](doc/configuration.md) with working
   cross-links, links out to the full documentation on GitHub, and adds
   "Check for updates" — the same opt-in GitHub Releases check `fim
@@ -27,6 +31,28 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reference visualization's own figures. Every named statistic — a
   scalar run's own six, and the batch confidence intervals — now
   renders through the same meter widget.
+
+### Fixed
+
+- A large-`d` run's scatter (the PCA fallback for `d > 6`) no longer
+  plots its genuinely unbounded, signed coordinates through the same
+  `[0, 1]` probability-scale frame every other panel uses — that frame
+  was clipping and mis-scaling real points, some of which have a
+  negative coordinate on one or both axes by construction (a PCA
+  projection is not a probability). PCA panels now auto-scale to their
+  own actual coordinate range, with plain numeric ticks instead of a
+  probability scale, and each axis is labeled with its own explained
+  variance and top-loading demes (e.g. "Principal component 1 (57% of
+  variance; demes 2, 11, 4)") instead of a bare, uninterpretable
+  "Component 1"/"Component 2".
+- A batch run's live progress bar no longer visibly regresses late in
+  a run with an adaptive `replicate_tolerance` stop set. The replicate
+  count itself was never wrong — a worker that overshoots the
+  triggering replicate can still be mid-run when the stop is decided,
+  and its now-orphaned directory is pruned a moment later, so the very
+  next poll legitimately sees fewer valid replicates than before — but
+  the displayed count now tracks a high-water mark instead of the raw
+  reported figure, so the bar only ever moves forward.
 
 ## [1.2.0] - 2026-08-22
 

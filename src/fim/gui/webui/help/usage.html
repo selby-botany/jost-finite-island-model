@@ -292,16 +292,20 @@ decides whether a run goes through the scalar or the batch path — there is
 no separate &quot;batch mode&quot; toggle. Every screen calls the identical underlying
 function this guide already documents; nothing here is a second
 implementation:</p>
-<p>A native File/Run/Help menu bar is available from any screen, including
+<p>A native File/Run/View/Help menu bar is available from any screen, including
 mid-run. File covers configuration/run file-system actions (New/Open/Save
 configuration, Open run…, Reveal output folder, Quit); Run covers the
-simulation lifecycle (Run simulation, Cancel run, Animate); Help covers this
-guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> (rendered
-in-app — see the Help screen row below), a link to the full documentation
-on GitHub, Check for updates, and About. Every menu item reuses the exact
-same action the matching button already performs; File/Run items invoked
-from a screen where they are not immediately actionable navigate to the
-screen where they are first, rather than doing nothing.</p>
+simulation lifecycle (Run simulation, Cancel run, Animate); View holds a
+Significant digits submenu (2/3/4/5/6/8, default 3) that changes how many
+digits every displayed statistic rounds to — cosmetic only,
+<code>trajectory.jsonl</code>/<code>report.json</code>/<code>manifest.json</code> always keep full precision
+regardless of this setting; Help covers this guide and the
+<a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> (rendered in-app — see the Help
+screen row below), a link to the full documentation on GitHub, Check for
+updates, and About. Every menu item reuses the exact same action the
+matching button already performs; File/Run items invoked from a screen
+where they are not immediately actionable navigate to the screen where they
+are first, rather than doing nothing.</p>
 <table>
 <thead>
 <tr>

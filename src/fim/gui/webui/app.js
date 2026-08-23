@@ -206,6 +206,21 @@ const fim = {
         help(topic) {
             window.fim.showHelp(topic);
         },
+        async setSignificantDigits(digits) {
+            // Screen-agnostic (design §4.5's own "always clickable"
+            // table), unlike `configureTab`/`newConfiguration`: no
+            // screen owns "how many digits does the GUI display", so
+            // this calls the bridge directly rather than delegating to
+            // whichever screen is currently showing. Purely cosmetic
+            // and forward-looking (`Api.set_significant_digits`'s own
+            // docstring: "no record" — nothing on disk changes, and an
+            // already-open Screen 3/4 is not retroactively reformatted,
+            // only the next run's own results).
+            const result = await window.pywebview.api.set_significant_digits(digits);
+            if (!result.ok) {
+                window.alert(`Could not change significant digits: ${result.message}`);
+            }
+        },
         openExternal(url) {
             window.pywebview.api.open_external_link(url);
         },

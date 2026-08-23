@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from webview.menu import Menu
 
 from fim import __version__ as fim_version
 from fim import cli, update
@@ -103,6 +104,59 @@ def test_format_statistic_matches_the_cli_own_format_optional() -> None:
     assert format_statistic(None) == "undefined"
     assert format_statistic(0.123456789) == "0.123457"
     assert format_statistic(1.0) == "1"
+
+
+def test_format_statistic_honors_an_explicit_digits_count() -> None:
+    """`digits` overrides the CLI-parity default the test above pins.
+
+    The GUI's own configured precision (`Api._significant_digits`,
+    `_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS`) is always passed explicitly
+    by a real caller — this is the same rounding a fresh `Api()`
+    actually produces for every displayed statistic today.
+    """
+    assert format_statistic(0.123456789, 3) == "0.123"
+    assert format_statistic(None, 3) == "undefined"
+
+
+def test_api_starts_with_the_default_significant_digits() -> None:
+    """A fresh `Api()` starts at the GUI's own default, not the CLI's own six."""
+    api = Api()
+
+    assert (
+        api.get_significant_digits() == app_module._DEFAULT_DISPLAY_SIGNIFICANT_DIGITS
+    )
+
+
+def test_set_significant_digits_changes_what_get_significant_digits_returns() -> None:
+    """A valid `digits` value is accepted and immediately reflected back."""
+    api = Api()
+
+    result = api.set_significant_digits(5)
+
+    assert result == {"ok": True, "digits": 5}
+    assert api.get_significant_digits() == 5
+
+
+@pytest.mark.parametrize("digits", [0, -1, 18, 100])
+def test_set_significant_digits_rejects_values_outside_the_valid_range(
+    digits: int,
+) -> None:
+    """Outside the valid digit range, `set_significant_digits` leaves it unchanged.
+
+    `_MAX_SIGNIFICANT_DIGITS` (17) is not an arbitrary round number: a
+    double-precision float carries roughly that many significant
+    decimal digits, so anything past it would print noise a real
+    `FinalReport` statistic never actually carries.
+    """
+    api = Api()
+
+    result = api.set_significant_digits(digits)
+
+    assert result["ok"] is False
+    assert "message" in result
+    assert (
+        api.get_significant_digits() == app_module._DEFAULT_DISPLAY_SIGNIFICANT_DIGITS
+    )
 
 
 def test_open_output_folder_calls_the_injected_opener(tmp_path: Path) -> None:
@@ -332,6 +386,32 @@ def test_batch_done_payload_pools_every_replicate_final_state(
         [result.final_state for result in batch_results], batch_params.d
     )
     assert payload["panels"] == expected
+
+
+def test_batch_done_payload_honors_an_explicit_digits_count(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+    batch_results: tuple[RunResult, ...],
+) -> None:
+    """`digits`, `_start_batch_run`'s own snapshot of `Api._significant_digits`,
+    reaches every formatted statistic in both `replicates` and `summary` —
+    not only the bare-call default the tests above exercise.
+    """
+    run_id = deterministic_run_id(batch_params)
+
+    payload = app_module._batch_done_payload(
+        batch_params, run_id, tmp_path, batch_results, 2
+    )
+
+    replicates = payload["replicates"]
+    assert isinstance(replicates, list)
+    for row, result in zip(replicates, batch_results, strict=True):
+        assert row["statistics"]["D"] == format_statistic(result.report["D"], 2)
+    expected_summary = replicate_summary(batch_results)
+    summary = payload["summary"]
+    assert isinstance(summary, dict)
+    for name, interval in expected_summary.items():
+        assert summary[name]["mean"] == format_statistic(interval["mean"], 2)
 
 
 class _FakeWindow:
@@ -759,11 +839,17 @@ class _FakeMenuWindow:
         return None
 
 
-def test_build_menu_has_file_run_and_help() -> None:
-    """The menu bar has exactly the three menus in-app help design §4.5 specifies."""
+def test_build_menu_has_file_run_view_and_help() -> None:
+    """The menu bar has exactly the four menus this design specifies.
+
+    View is new alongside the long-standing File/Run/Help (the
+    significant-digits display preference) — this test's own name and
+    assertions were updated alongside it rather than left describing a
+    menu bar that no longer matches `_build_menu`'s real shape.
+    """
     menus = app_module._build_menu(_FakeMenuWindow())  # type: ignore[arg-type]
 
-    assert [menu.title for menu in menus] == ["File", "Run", "Help"]
+    assert [menu.title for menu in menus] == ["File", "Run", "View", "Help"]
     file_items = [item.title for item in menus[0].items if hasattr(item, "title")]
     assert file_items == [
         "New configuration",
@@ -775,7 +861,15 @@ def test_build_menu_has_file_run_and_help() -> None:
     ]
     run_items = [item.title for item in menus[1].items if hasattr(item, "title")]
     assert run_items == ["Run simulation", "Cancel run", "Animate"]
-    help_items = [item.title for item in menus[2].items if hasattr(item, "title")]
+    view_items = [item.title for item in menus[2].items if hasattr(item, "title")]
+    assert view_items == ["Significant digits"]
+    digits_submenu = menus[2].items[0]
+    assert isinstance(digits_submenu, Menu)
+    digit_items = [
+        item.title for item in digits_submenu.items if hasattr(item, "title")
+    ]
+    assert digit_items == ["2", "3 (default)", "4", "5", "6", "8"]
+    help_items = [item.title for item in menus[3].items if hasattr(item, "title")]
     assert help_items == [
         "Usage guide",
         "Configuration reference",

@@ -54,6 +54,59 @@ def test_ping_round_trip(window: webview.Window, drive: Callable[..., Any]) -> N
     assert result == "pong"
 
 
+def test_set_significant_digits_round_trip(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`set_significant_digits`/`get_significant_digits`, round-tripped
+    through the bridge."""
+    result = drive(
+        window,
+        trigger=(
+            "(async () => { "
+            "await window.pywebview.api.set_significant_digits(5); "
+            "window.__fimTestResult = "
+            "await window.pywebview.api.get_significant_digits(); "
+            "})()"
+        ),
+        read="window.__fimTestResult",
+    )
+
+    assert result == 5
+
+
+def test_menu_set_significant_digits_calls_the_bridge(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`fim.menu.setSignificantDigits` (the View menu's dispatch target) reaches `Api`.
+
+    The trigger wraps the whole thing in `setTimeout(..., 0)`, matching
+    `fim.gui.app._build_menu`'s own real dispatcher exactly (not a test
+    convenience) — see `test_input_screen.py`'s `test_menu_new_
+    configuration_resets_an_edited_field` for why a bare `evaluate_js`
+    call on an `async` `fim.menu.*` method deadlocks instead. The
+    settled value is written to `window.__fimTestResult` rather than
+    read back from a second `get_significant_digits()` call inside
+    `read` itself — the same "trigger awaits and writes, read polls a
+    plain value" split `test_ping_round_trip` above already
+    establishes: `read` is re-evaluated synchronously on every poll,
+    and a bare Promise-returning expression there would only ever see
+    `{}` (this module's own docstring on `evaluate_js`).
+    """
+    result = drive(
+        window,
+        trigger=(
+            "setTimeout(() => { (async () => { "
+            "await window.fim.menu.setSignificantDigits(4); "
+            "window.__fimTestResult = "
+            "await window.pywebview.api.get_significant_digits(); "
+            "})(); }, 0);"
+        ),
+        read="window.__fimTestResult",
+    )
+
+    assert result == 4
+
+
 def test_ping_from_worker_round_trip(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

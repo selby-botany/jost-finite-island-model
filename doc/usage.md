@@ -372,16 +372,20 @@ no separate "batch mode" toggle. Every screen calls the identical underlying
 function this guide already documents; nothing here is a second
 implementation:
 
-A native File/Run/Help menu bar is available from any screen, including
+A native File/Run/View/Help menu bar is available from any screen, including
 mid-run. File covers configuration/run file-system actions (New/Open/Save
 configuration, Open run…, Reveal output folder, Quit); Run covers the
-simulation lifecycle (Run simulation, Cancel run, Animate); Help covers this
-guide and the [configuration reference](configuration.md) (rendered
-in-app — see the Help screen row below), a link to the full documentation
-on GitHub, Check for updates, and About. Every menu item reuses the exact
-same action the matching button already performs; File/Run items invoked
-from a screen where they are not immediately actionable navigate to the
-screen where they are first, rather than doing nothing.
+simulation lifecycle (Run simulation, Cancel run, Animate); View holds a
+Significant digits submenu (2/3/4/5/6/8, default 3) that changes how many
+digits every displayed statistic rounds to — cosmetic only,
+`trajectory.jsonl`/`report.json`/`manifest.json` always keep full precision
+regardless of this setting; Help covers this guide and the
+[configuration reference](configuration.md) (rendered in-app — see the Help
+screen row below), a link to the full documentation on GitHub, Check for
+updates, and About. Every menu item reuses the exact same action the
+matching button already performs; File/Run items invoked from a screen
+where they are not immediately actionable navigate to the screen where they
+are first, rather than doing nothing.
 
 | Screen | What it does | Same as |
 |---|---|---|

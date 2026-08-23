@@ -63,6 +63,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
+    * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
+    * [set\_significant\_digits](#fim.gui.app.Api.set_significant_digits)
     * [list\_recent\_runs](#fim.gui.app.Api.list_recent_runs)
     * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
@@ -1065,7 +1067,8 @@ after the `await` resolves.
 #### format\_statistic
 
 ```python
-def format_statistic(value: float | None) -> str
+def format_statistic(value: float | None,
+                     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS) -> str
 ```
 
 Format one `FinalReport` statistic for display (Screen 3, design §4.3).
@@ -1076,7 +1079,11 @@ per this package's established front-end-boundary convention
 than in `webui/screens/results.js` so the six statistics reach the
 page as ready-to-show strings: one formatting rule in Python beats
 the same rule reimplemented a second time in JavaScript, with the
-two silently drifting apart later.
+two silently drifting apart later. `digits` is always passed
+explicitly by a real caller (`Api._significant_digits`, the View
+menu's own "Significant digits" submenu) — see `_FORMAT_STATISTIC_
+DEFAULT_DIGITS`'s own comment for why the default here stays at
+six regardless of that configurable value's own default.
 
 <a id="fim.gui.app.Api"></a>
 
@@ -1323,6 +1330,50 @@ Return the Batch tab's own default parallel-worker count (design §4.1, H5).
 never reaches `form_values_to_payload` — so it has no
 `config_form` entry; this reuses `batch_runner.default_max_
 workers` directly rather than inventing a second default.
+
+<a id="fim.gui.app.Api.get_significant_digits"></a>
+
+#### get\_significant\_digits
+
+```python
+def get_significant_digits() -> int
+```
+
+Return the GUI's current display-rounding precision.
+
+Mirrors `get_default_max_workers`'s own "let the page ask
+rather than duplicate a default" shape — nothing today calls
+this outside a test, since the View menu's own items each
+carry a fixed literal digit count rather than reflecting the
+current selection (`_build_menu`'s own comment on why: native
+menu items here have no dynamic-checkmark support to reflect
+back).
+
+<a id="fim.gui.app.Api.set_significant_digits"></a>
+
+#### set\_significant\_digits
+
+```python
+def set_significant_digits(digits: int) -> dict[str, Any]
+```
+
+Change the GUI's display-rounding precision (View menu, design §4.5).
+
+Purely cosmetic and "no record": every persisted artifact keeps
+full float precision regardless of this value (`_DEFAULT_
+DISPLAY_SIGNIFICANT_DIGITS`'s own comment). Takes effect
+starting with the next `format_statistic` call a running or
+future screen makes — an already-open Screen 3/4 was formatted
+once, at push time, and is not retroactively reformatted.
+
+**Returns**:
+
+- ``{"ok"` - True, "digits": digits}` on success; `{"ok": False,
+- `"message"` - ...}` if `digits` falls outside `[_MIN_
+  SIGNIFICANT_DIGITS, _MAX_SIGNIFICANT_DIGITS]` — double-
+  precision floats carry roughly seventeen significant
+  decimal digits, so anything past that bound would just
+  print noise, not real information.
 
 <a id="fim.gui.app.Api.list_recent_runs"></a>
 

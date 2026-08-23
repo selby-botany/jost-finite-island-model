@@ -132,8 +132,33 @@ _BATCH_POLL_INTERVAL_SECONDS: Final = 0.5
 # names exactly these six, so `H_ST` stays out of the results screen.
 _RESULT_STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T")
 
+# `format_statistic`'s own bare-call default — `cli._format_optional`'s
+# `.6g`, preserved unchanged so `test_format_statistic_matches_the_cli_
+# own_format_optional` keeps proving genuine CLI/GUI parity at this one
+# value. Real GUI display never reaches this default: every call site
+# below (`Api.reanalyze_trajectory`, `_drain_run_messages`, `_batch_
+# done_payload`) always passes `digits` explicitly, threaded from `Api.
+# _significant_digits` — this constant only matters to a bare, direct
+# call, the way the parity test above makes one.
+_FORMAT_STATISTIC_DEFAULT_DIGITS: Final = 6
 
-def format_statistic(value: float | None) -> str:
+# The GUI's own, separately configurable display precision (View menu's
+# "Significant digits" submenu, `Api.set_significant_digits`) — purely
+# cosmetic ("no record"): every persisted artifact (`fim.persistence.
+# report.write_report`, `fim.persistence.manifest.write_manifest`) is
+# written with full float precision regardless of this value, and
+# nothing here ever touches what lands on disk. Starts lower than
+# `_FORMAT_STATISTIC_DEFAULT_DIGITS` on purpose — three significant
+# digits is plenty to read a scatter or a results table at a glance,
+# where `.6g`'s extra digits mostly added noise.
+_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS: Final = 3
+_MIN_SIGNIFICANT_DIGITS: Final = 1
+_MAX_SIGNIFICANT_DIGITS: Final = 17
+
+
+def format_statistic(
+    value: float | None, digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS
+) -> str:
     """Format one `FinalReport` statistic for display (Screen 3, design §4.3).
 
     A direct parallel to `cli._format_optional` — not a shared import,
@@ -142,9 +167,13 @@ def format_statistic(value: float | None) -> str:
     than in `webui/screens/results.js` so the six statistics reach the
     page as ready-to-show strings: one formatting rule in Python beats
     the same rule reimplemented a second time in JavaScript, with the
-    two silently drifting apart later.
+    two silently drifting apart later. `digits` is always passed
+    explicitly by a real caller (`Api._significant_digits`, the View
+    menu's own "Significant digits" submenu) — see `_FORMAT_STATISTIC_
+    DEFAULT_DIGITS`'s own comment for why the default here stays at
+    six regardless of that configurable value's own default.
     """
-    return "undefined" if value is None else f"{value:.6g}"
+    return "undefined" if value is None else f"{value:.{digits}g}"
 
 
 def _resolve_available_output_directory() -> Path:
@@ -249,6 +278,14 @@ class Api:
         self._open_folder = open_folder
         self._on_run_started = on_run_started
         self._on_message = on_message
+        # The View menu's own "Significant digits" submenu (`set_
+        # significant_digits`) mutates this directly; every real
+        # `format_statistic` call site below reads it fresh at the
+        # moment a screen is populated, so a change here takes effect
+        # starting with the next run's own results — an already-open
+        # Screen 3/4 was formatted once, at push time, and is not
+        # retroactively reformatted.
+        self._significant_digits: int = _DEFAULT_DISPLAY_SIGNIFICANT_DIGITS
 
     def start_run(self, values: dict[str, str]) -> dict[str, Any]:
         """Validate the form, then start a run pushing live progress to the page.
@@ -315,6 +352,7 @@ class Api:
                 params.max_generations,
                 params.d,
                 output_directory,
+                self._significant_digits,
                 self._on_message,
             ),
             daemon=True,
@@ -354,6 +392,7 @@ class Api:
                 params,
                 run_id,
                 output_directory,
+                self._significant_digits,
                 self._on_message,
             ),
             daemon=True,
@@ -493,6 +532,48 @@ class Api:
         """
         return batch_runner.default_max_workers()
 
+    def get_significant_digits(self) -> int:
+        """Return the GUI's current display-rounding precision.
+
+        Mirrors `get_default_max_workers`'s own "let the page ask
+        rather than duplicate a default" shape — nothing today calls
+        this outside a test, since the View menu's own items each
+        carry a fixed literal digit count rather than reflecting the
+        current selection (`_build_menu`'s own comment on why: native
+        menu items here have no dynamic-checkmark support to reflect
+        back).
+        """
+        return self._significant_digits
+
+    def set_significant_digits(self, digits: int) -> dict[str, Any]:
+        """Change the GUI's display-rounding precision (View menu, design §4.5).
+
+        Purely cosmetic and "no record": every persisted artifact keeps
+        full float precision regardless of this value (`_DEFAULT_
+        DISPLAY_SIGNIFICANT_DIGITS`'s own comment). Takes effect
+        starting with the next `format_statistic` call a running or
+        future screen makes — an already-open Screen 3/4 was formatted
+        once, at push time, and is not retroactively reformatted.
+
+        Returns:
+            `{"ok": True, "digits": digits}` on success; `{"ok": False,
+            "message": ...}` if `digits` falls outside `[_MIN_
+            SIGNIFICANT_DIGITS, _MAX_SIGNIFICANT_DIGITS]` — double-
+            precision floats carry roughly seventeen significant
+            decimal digits, so anything past that bound would just
+            print noise, not real information.
+        """
+        if not _MIN_SIGNIFICANT_DIGITS <= digits <= _MAX_SIGNIFICANT_DIGITS:
+            return {
+                "ok": False,
+                "message": (
+                    "significant digits must be between "
+                    f"{_MIN_SIGNIFICANT_DIGITS} and {_MAX_SIGNIFICANT_DIGITS}"
+                ),
+            }
+        self._significant_digits = digits
+        return {"ok": True, "digits": digits}
+
     def list_recent_runs(self) -> list[dict[str, Any]]:
         """List every run under `results/`, newest first (Screen 6, design §4.6).
 
@@ -612,7 +693,9 @@ class Api:
             "report": report,
             "panels": scatter_panels(reanalyzed.state),
             "statistics": {
-                name: format_statistic(cast("float | None", report[name]))
+                name: format_statistic(
+                    cast("float | None", report[name]), self._significant_digits
+                )
                 for name in _RESULT_STATISTIC_NAMES
             },
             "outputDirectory": str(trajectory_path.parent),
@@ -837,6 +920,7 @@ def _drain_run_messages(
     max_generations: int,
     deme_count: int,
     output_directory: Path,
+    digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
     on_message: Callable[[runner.RunMessage], None] | None = None,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
@@ -864,6 +948,11 @@ def _drain_run_messages(
     `demeCount` field — `results.js`'s large-`d` deme-pair selector
     needs it to populate its two axis dropdowns; nothing here computes
     with it directly.
+
+    `digits` is `_start_scalar_run`'s own snapshot of `Api._significant_
+    digits` at the moment this thread was started, not a live read of
+    it later — a change made mid-run via the View menu applies starting
+    with the *next* run's own thread, not this one already in flight.
     """
     while True:
         # Indexed access under an `if` on `message[0]`, not a tuple-
@@ -891,7 +980,7 @@ def _drain_run_messages(
                 "report": result.report,
                 "panels": scatter_panels(result.final_state),
                 "statistics": {
-                    name: format_statistic(result.report[name])
+                    name: format_statistic(result.report[name], digits)
                     for name in _RESULT_STATISTIC_NAMES
                 },
                 "outputDirectory": str(output_directory),
@@ -1035,6 +1124,7 @@ def _batch_done_payload(
     run_id: str,
     output_directory: Path,
     results: tuple[RunResult, ...],
+    digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
 ) -> dict[str, Any]:
     """Build `fim.onBatchDone`'s own payload from a batch's final results (design §4.4).
 
@@ -1057,6 +1147,11 @@ def _batch_done_payload(
     an interval from, its own documented `ValueError` case, not
     something this bridge treats as a real error partway through an
     otherwise-successful batch.
+
+    `digits` is `_drain_batch_messages`'s own snapshot of `Api.
+    _significant_digits`, taken when the batch's own background thread
+    started — matching `_drain_run_messages`'s identical "started, not
+    live" scope for the same View-menu setting.
     """
     replicates = [
         {
@@ -1066,7 +1161,7 @@ def _batch_done_payload(
             "converged": result.report["converged"],
             "reason": result.report["reason"],
             "statistics": {
-                name: format_statistic(result.report[name])
+                name: format_statistic(result.report[name], digits)
                 for name in _RESULT_STATISTIC_NAMES
             },
             "trajectoryPath": str(
@@ -1084,9 +1179,9 @@ def _batch_done_payload(
         raw_summary = {}
     summary = {
         name: {
-            "mean": format_statistic(interval["mean"]),
-            "low": format_statistic(interval["low"]),
-            "high": format_statistic(interval["high"]),
+            "mean": format_statistic(interval["mean"], digits),
+            "low": format_statistic(interval["low"], digits),
+            "high": format_statistic(interval["high"], digits),
             "sampleCount": interval["sample_count"],
         }
         for name, interval in raw_summary.items()
@@ -1109,6 +1204,7 @@ def _drain_batch_messages(
     params: SimulationParams,
     run_id: str,
     output_directory: Path,
+    digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
     on_message: Callable[[batch_runner.BatchMessage], None] | None = None,
 ) -> None:
     """Push every `batch_runner.BatchMessage`, polling live progress between them.
@@ -1128,6 +1224,10 @@ def _drain_batch_messages(
     at all — so this thread blocks for it specifically before its own
     poll loop starts: nothing here is possible without knowing where
     the batch's replicates are actually writing.
+
+    `digits` rides along only to hand to `_batch_done_payload` once the
+    batch's own `"done"` message arrives — this thread does no
+    statistic formatting of its own before that point.
     """
     started = message_queue.get()
     if started[0] != "started":
@@ -1148,7 +1248,9 @@ def _drain_batch_messages(
             _push_batch_progress(window, params, run_id, working_directory)
             continue
         if message[0] == "done":
-            payload = _batch_done_payload(params, run_id, output_directory, message[1])
+            payload = _batch_done_payload(
+                params, run_id, output_directory, message[1], digits
+            )
             window.evaluate_js(f"fim.onBatchDone({json.dumps(payload)})")
         elif message[0] == "cancelled":
             cancelled_payload = {"replicateIndex": message[1], "generation": message[2]}
@@ -1224,14 +1326,14 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
 
 
 def _build_menu(window: webview.Window) -> list[Menu]:
-    """Build the native File/Run/Help menu bar (in-app help design §4.5).
+    """Build the native File/Run/View/Help menu bar (design §4.5).
 
-    Three menus, not the conventional File/Edit/View/Window/Help
-    skeleton — Edit/View/Window are deliberately left out (design §4.5's
-    own "considered, deferred": every text field already gets native
-    Cut/Copy/Paste from the WebView engine itself, nothing in this app
-    needs a View toggle, and a Window menu has no app-specific value for
-    a single-window tool).
+    Edit and Window are still left out (design §4.5's own "considered,
+    deferred": every text field already gets native Cut/Copy/Paste from
+    the WebView engine itself, and a Window menu has no app-specific
+    value for a single-window tool) — but View is not deferred any
+    longer: "significant digits to display" is a genuine display
+    toggle, unlike anything on offer when that call was first made.
 
     Every item except Quit is a thin closure calling `window.evaluate_js(
     "fim.menu.X()")` — the identical "no-op stub, overridden by whichever
@@ -1243,6 +1345,15 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     second entry point into logic that exists, not new logic"). Quit
     alone needs no JS round trip — `window.destroy()` is a window-level
     call, not app state.
+
+    The View menu's own "Significant digits" submenu is the one
+    exception to "no new Python business logic": each item is a fixed
+    literal digit count (`Api.set_significant_digits`), not a reflection
+    of whatever is currently selected — pywebview's own `MenuAction` has
+    no portable, dynamic checkmark/label-update support to show that
+    back, so this menu (unlike every other item here) cannot indicate
+    the current choice; the setting itself is still fully real, only its
+    on-menu display is not.
     """
 
     def dispatch(script: str) -> Callable[[], None]:
@@ -1293,6 +1404,29 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             MenuAction("Animate", dispatch("fim.menu.animate()")),
         ],
     )
+    # Literal digit counts, not a live reflection of `Api._significant_
+    # digits` — see `_build_menu`'s own docstring for why. `3` is
+    # `_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS` spelled out rather than
+    # interpolated, so this list reads the same as every other menu
+    # item here: a plain literal, not a runtime-computed label.
+    view_menu = Menu(
+        "View",
+        [
+            Menu(
+                "Significant digits",
+                [
+                    MenuAction("2", dispatch("fim.menu.setSignificantDigits(2)")),
+                    MenuAction(
+                        "3 (default)", dispatch("fim.menu.setSignificantDigits(3)")
+                    ),
+                    MenuAction("4", dispatch("fim.menu.setSignificantDigits(4)")),
+                    MenuAction("5", dispatch("fim.menu.setSignificantDigits(5)")),
+                    MenuAction("6", dispatch("fim.menu.setSignificantDigits(6)")),
+                    MenuAction("8", dispatch("fim.menu.setSignificantDigits(8)")),
+                ],
+            ),
+        ],
+    )
     help_menu = Menu(
         "Help",
         [
@@ -1310,7 +1444,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             MenuAction("About fim", dispatch("fim.menu.about()")),
         ],
     )
-    return [file_menu, run_menu, help_menu]
+    return [file_menu, run_menu, view_menu, help_menu]
 
 
 def main() -> int:
