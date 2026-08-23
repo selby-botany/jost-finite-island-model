@@ -67,6 +67,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
     * [get\_animation\_frames](#fim.gui.app.Api.get_animation_frames)
+    * [get\_deme\_pair\_panel](#fim.gui.app.Api.get_deme_pair_panel)
+    * [get\_batch\_deme\_pair\_panel](#fim.gui.app.Api.get_batch_deme_pair_panel)
     * [ping](#fim.gui.app.Api.ping)
     * [ping\_from\_worker](#fim.gui.app.Api.ping_from_worker)
   * [create\_window](#fim.gui.app.create_window)
@@ -261,6 +263,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [scatter\_panels](#fim.viz.scatter.scatter_panels)
   * [pooled\_scatter\_panels](#fim.viz.scatter.pooled_scatter_panels)
   * [panels\_from\_points](#fim.viz.scatter.panels_from_points)
+  * [deme\_pair\_panel](#fim.viz.scatter.deme_pair_panel)
   * [pca\_project](#fim.viz.scatter.pca_project)
 
 <a id="fim"></a>
@@ -1394,9 +1397,9 @@ realized here as literal reuse, not a second rendering path.
 **Returns**:
 
 - ``{"ok"` - True, "runId", "report", "panels", "statistics",
-  "outputDirectory", "generationCount"}` on success;
-- ``{"ok"` - False, "message": ...}` if no trajectory was given,
-  the generation/q-sweep fields do not parse, or `fim.
+  "outputDirectory", "generationCount", "demeCount"}` on
+  success; `{"ok": False, "message": ...}` if no trajectory
+  was given, the generation/q-sweep fields do not parse, or `fim.
   reanalyze.reanalyze_trajectory` itself raises (a
   trajectory-integrity failure, an edited file, or a
   generation that does not exist — design §4.7's "shown
@@ -1435,6 +1438,82 @@ any kind during playback.
   renders this... is responsible for any further reduction a
   high deme count needs"). `{"ok": False, "message": ...}` if
   the trajectory or its manifest cannot be read.
+
+<a id="fim.gui.app.Api.get_deme_pair_panel"></a>
+
+#### get\_deme\_pair\_panel
+
+```python
+def get_deme_pair_panel(output_directory: str, first_deme: int,
+                        second_deme: int) -> dict[str, Any]
+```
+
+Recompute one explicit deme-pair 2-D panel for a completed run (Screen 3).
+
+The large-`d` counterpart to Screen 3's own PCA panel
+(`showResults`'s own `panels[0]`, drawn by default whenever
+`d > scatter.PAIRWISE_MAX_DEMES`): PCA stays the page's default
+view, and this bridge method lets the user switch to one
+specific raw deme pair instead, on demand, rather than the
+page ever computing or requesting every `C(d, 2)` pair up
+front (unbounded in `d`, unlike the direct/pairwise layout
+`panels_from_points` already handles automatically for small
+`d`).
+
+**Arguments**:
+
+- `output_directory` - The run's own artifact directory (Screen
+  3's `outputDirectory`, already on hand from whichever
+  bridge call last raised it — `start_run`'s `"done"`
+  push or `open_run`'s own return value).
+- `first_deme` - 1-based deme number for the X axis, matching
+  every panel's own "Deme N" label convention.
+- `second_deme` - 1-based deme number for the Y axis.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "panel": ...}`, `panel` being one
+  `deme_pair_panel`-shaped entry. `{"ok": False, "message":
+  ...}` if the trajectory cannot be read, or the requested
+  demes are out of range or identical.
+
+<a id="fim.gui.app.Api.get_batch_deme_pair_panel"></a>
+
+#### get\_batch\_deme\_pair\_panel
+
+```python
+def get_batch_deme_pair_panel(output_directory: str, first_deme: int,
+                              second_deme: int) -> dict[str, Any]
+```
+
+Recompute one explicit deme-pair pooled 2-D panel for a completed batch.
+
+`get_deme_pair_panel`'s own counterpart for a batch's pooled
+scatter (`onBatchDone`'s own `panels[0]`, `_batch_done_payload`
+below): every published replicate's own final state is
+rediscovered from disk by directory name
+(`batch_runner.replicate_output_directory`'s own `replicate-
+NNN` naming), not passed in from the page — the same "read the
+published, atomic artifacts on disk" source of truth `list_
+recent_runs` and `open_run` already use, rather than the page
+tracking and forwarding every replicate's own trajectory path
+itself.
+
+**Arguments**:
+
+- `output_directory` - The batch's own top-level artifact
+  directory (Screen 4's `outputDirectory`).
+- `first_deme` - 1-based deme number for the X axis.
+- `second_deme` - 1-based deme number for the Y axis.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "panel": ...}` on success; `{"ok": False,
+- `"message"` - ...}` if no replicate trajectory can be found or
+  read, or the requested demes are out of range or
+  identical.
 
 <a id="fim.gui.app.Api.ping"></a>
 
@@ -5153,6 +5232,48 @@ its own docstring — so the GUI bridge (`Api.get_animation_frames`)
 calls this directly, once per frame, to ship the page already-2-D
 points for any `d`, the same "the client never does linear algebra"
 rule `scatter_panels` itself exists to uphold.
+
+<a id="fim.viz.scatter.deme_pair_panel"></a>
+
+#### deme\_pair\_panel
+
+```python
+def deme_pair_panel(points: FloatArray, first: int,
+                    second: int) -> dict[str, object]
+```
+
+Return one explicit deme-pair 2-D panel, chosen by index rather than by layout.
+
+The on-demand counterpart to `panels_from_points`'s own automatic
+dispatch (GUI Screens 3/4's "large-d deme-pair selector"): once `d`
+exceeds `pairwise_max_demes`, `panels_from_points` returns only a
+PCA panel, with no way to ask for one specific raw pair instead --
+this function is that specific-pair escape hatch, built from the
+same `_panel` construction every other panel in this module uses,
+so its `points`/label shape is identical either way. Not folded
+into `panels_from_points` itself: that function's whole contract is
+"decide the layout automatically from `deme_count` alone," and a
+caller-chosen pair is a different question with a different
+(always exactly one panel) answer.
+
+**Arguments**:
+
+- `points` - `frequency_points`/`pooled_frequency_points`-shaped:
+  one row per (locus, allele) pair, one column per deme.
+- `first` - Zero-based index of the deme to plot on the X axis.
+- `second` - Zero-based index of the deme to plot on the Y axis.
+
+
+**Returns**:
+
+  The same `{"x_label", "y_label", "points"}` shape every other
+  panel in this module returns.
+
+
+**Raises**:
+
+- `ValueError` - If `first`/`second` are out of range for `points`'
+  own deme count, or name the same deme twice.
 
 <a id="fim.viz.scatter.pca_project"></a>
 

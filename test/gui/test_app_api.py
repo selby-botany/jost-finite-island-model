@@ -658,3 +658,82 @@ def test_get_animation_frames_reports_a_missing_run_without_raising(
 
     assert result["ok"] is False
     assert "message" in result
+
+
+def test_get_deme_pair_panel_names_the_requested_pair(tmp_path: Path) -> None:
+    """The Screen 3 on-demand pair view names its axes by 1-based deme number."""
+    output = _write_run(tmp_path, d=4)
+
+    result = Api().get_deme_pair_panel(str(output), first_deme=2, second_deme=4)
+
+    assert result["ok"] is True
+    panel = result["panel"]
+    assert panel["x_label"] == "Deme 2"
+    assert panel["y_label"] == "Deme 4"
+    assert isinstance(panel["points"], list)
+
+
+def test_get_deme_pair_panel_rejects_an_out_of_range_deme(tmp_path: Path) -> None:
+    output = _write_run(tmp_path, d=4)
+
+    result = Api().get_deme_pair_panel(str(output), first_deme=1, second_deme=5)
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_get_deme_pair_panel_reports_a_missing_run_without_raising(
+    tmp_path: Path,
+) -> None:
+    result = Api().get_deme_pair_panel(
+        str(tmp_path / "never-written"), first_deme=1, second_deme=2
+    )
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_get_batch_deme_pair_panel_pools_every_replicate(tmp_path: Path) -> None:
+    """The large-`d` Screen 4 on-demand pair view pools every published replicate.
+
+    `d=4` keeps `_write_run`'s own real `cli.main(["run", ...])` batch
+    dispatch fast; `deme_pair_panel` itself does not care whether `d`
+    is above or below `scatter.PAIRWISE_MAX_DEMES` -- this bridge
+    method exists specifically for the case where it is, so the point
+    is proving the pooling and directory-rediscovery, not `d`'s own
+    size.
+    """
+    output = _write_run(tmp_path, d=4, n_replicates=3)
+
+    result = Api().get_batch_deme_pair_panel(str(output), first_deme=1, second_deme=3)
+
+    assert result["ok"] is True
+    panel = result["panel"]
+    assert panel["x_label"] == "Deme 1"
+    assert panel["y_label"] == "Deme 3"
+    assert isinstance(panel["points"], list)
+
+
+def test_get_batch_deme_pair_panel_rejects_an_out_of_range_deme(
+    tmp_path: Path,
+) -> None:
+    output = _write_run(tmp_path, d=4, n_replicates=3)
+
+    result = Api().get_batch_deme_pair_panel(str(output), first_deme=1, second_deme=5)
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_get_batch_deme_pair_panel_reports_no_replicates_without_raising(
+    tmp_path: Path,
+) -> None:
+    empty_directory = tmp_path / "no-replicates-here"
+    empty_directory.mkdir()
+
+    result = Api().get_batch_deme_pair_panel(
+        str(empty_directory), first_deme=1, second_deme=2
+    )
+
+    assert result["ok"] is False
+    assert "message" in result

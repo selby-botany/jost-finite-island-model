@@ -105,6 +105,95 @@ def test_a_completed_run_renders_the_results_screen(
     assert settled["animateDisabled"] is False
 
 
+def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
+    window: webview.Window,
+) -> None:
+    """ "Show pair"/"Show overview" round-trip through the real bridge and back.
+
+    `d=3` (one deme past the overview's own default "Deme 1 vs Deme 2"
+    pairwise panel — `scatter.PAIRWISE_MAX_DEMES`'s own small-`d`
+    dispatch, not the PCA fallback this selector exists for at large
+    `d`; the selector itself does not care which layout produced the
+    overview panel, so this smaller, faster configuration exercises
+    the same bridge round trip a `d=20` run would): "Show pair"
+    (Deme 1 vs Deme 3) redraws the canvas via a real `Api.get_deme_
+    pair_panel` call, and "Show overview" redraws it back to the exact
+    original panel with no further bridge call — `canvas.toDataURL()`
+    snapshots prove both the change and the exact-match revert,
+    without needing to read pixel data or canvas internals directly.
+
+    Drives the window manually (not via the `drive` fixture, the same
+    reason `test_new_run_button_switches_back_to_the_input_screen`
+    does): three sequential trigger-then-poll stages against one live
+    window.
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+    set_fields = _SET_TINY_FIELDS.replace("setField('d', '2');", "setField('d', '3');")
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                set_fields + "document.getElementById('run-button').click();"
+            )
+            _poll_until(
+                "!document.getElementById('screen-results').hidden",
+                lambda value: value is True,
+            )
+            selector_state = window.evaluate_js(
+                "({"
+                "hidden: document.getElementById('results-deme-pair-selector').hidden, "
+                "optionCount: document.getElementById('results-x-deme').options.length"
+                "})"
+            )
+            overview_snapshot = window.evaluate_js(
+                "document.getElementById('results-canvas').toDataURL()"
+            )
+            window.evaluate_js(
+                "document.getElementById('results-x-deme').value = '1';"
+                "document.getElementById('results-y-deme').value = '3';"
+                "document.getElementById('results-show-pair-button').click();"
+            )
+            pair_snapshot = _poll_until(
+                "document.getElementById('results-canvas').toDataURL()",
+                lambda value: value != overview_snapshot,
+            )
+            window.evaluate_js(
+                "document.getElementById('results-show-overview-button').click();"
+            )
+            reverted_snapshot = _poll_until(
+                "document.getElementById('results-canvas').toDataURL()",
+                lambda value: value == overview_snapshot,
+            )
+            outcome.put(
+                {
+                    "selectorHidden": selector_state["hidden"],
+                    "optionCount": selector_state["optionCount"],
+                    "pairDiffersFromOverview": pair_snapshot != overview_snapshot,
+                    "revertedMatchesOverview": reverted_snapshot == overview_snapshot,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled["selectorHidden"] is False
+    assert settled["optionCount"] == 3
+    assert settled["pairDiffersFromOverview"] is True
+    assert settled["revertedMatchesOverview"] is True
+
+
 def test_new_run_button_switches_back_to_the_input_screen(
     window: webview.Window,
 ) -> None:

@@ -321,6 +321,48 @@ def panels_from_points(
     ]
 
 
+def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, object]:
+    """Return one explicit deme-pair 2-D panel, chosen by index rather than by layout.
+
+    The on-demand counterpart to `panels_from_points`'s own automatic
+    dispatch (GUI Screens 3/4's "large-d deme-pair selector"): once `d`
+    exceeds `pairwise_max_demes`, `panels_from_points` returns only a
+    PCA panel, with no way to ask for one specific raw pair instead --
+    this function is that specific-pair escape hatch, built from the
+    same `_panel` construction every other panel in this module uses,
+    so its `points`/label shape is identical either way. Not folded
+    into `panels_from_points` itself: that function's whole contract is
+    "decide the layout automatically from `deme_count` alone," and a
+    caller-chosen pair is a different question with a different
+    (always exactly one panel) answer.
+
+    Args:
+        points: `frequency_points`/`pooled_frequency_points`-shaped:
+            one row per (locus, allele) pair, one column per deme.
+        first: Zero-based index of the deme to plot on the X axis.
+        second: Zero-based index of the deme to plot on the Y axis.
+
+    Returns:
+        The same `{"x_label", "y_label", "points"}` shape every other
+        panel in this module returns.
+
+    Raises:
+        ValueError: If `first`/`second` are out of range for `points`'
+            own deme count, or name the same deme twice.
+    """
+    deme_count = points.shape[1]
+    for index, which in ((first, "first"), (second, "second")):
+        if not 0 <= index < deme_count:
+            raise ValueError(
+                f"{which} deme index {index} is out of range for {deme_count} deme(s)"
+            )
+    if first == second:
+        raise ValueError("first and second must name different demes")
+    return _panel(
+        points[:, first], points[:, second], f"Deme {first + 1}", f"Deme {second + 1}"
+    )
+
+
 def _panel(
     horizontal: FloatArray, vertical: FloatArray, x_label: str, y_label: str
 ) -> dict[str, object]:

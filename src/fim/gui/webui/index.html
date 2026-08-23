@@ -221,6 +221,15 @@
       </div>
       <canvas id="results-canvas" width="640" height="520"></canvas>
     </div>
+    <fieldset class="composite" id="results-deme-pair-selector" hidden>
+      <legend>Compare demes directly</legend>
+      <label for="results-x-deme">X</label>
+      <select id="results-x-deme"></select>
+      <label for="results-y-deme">Y</label>
+      <select id="results-y-deme"></select>
+      <button type="button" id="results-show-pair-button">Show pair</button>
+      <button type="button" id="results-show-overview-button">Show overview</button>
+    </fieldset>
     <div class="actions">
       <button type="button" id="new-run-button">New run</button>
       <button type="button" id="animate-button" disabled>Animate</button>
@@ -234,6 +243,15 @@
       <canvas id="batch-results-canvas" width="640" height="520"></canvas>
       <div class="batch-results-summary" id="batch-results-summary"></div>
     </div>
+    <fieldset class="composite" id="batch-results-deme-pair-selector" hidden>
+      <legend>Compare demes directly</legend>
+      <label for="batch-results-x-deme">X</label>
+      <select id="batch-results-x-deme"></select>
+      <label for="batch-results-y-deme">Y</label>
+      <select id="batch-results-y-deme"></select>
+      <button type="button" id="batch-results-show-pair-button">Show pair</button>
+      <button type="button" id="batch-results-show-overview-button">Show overview</button>
+    </fieldset>
     <table class="batch-results-table">
       <thead>
         <tr>

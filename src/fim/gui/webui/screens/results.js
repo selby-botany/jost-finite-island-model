@@ -22,6 +22,13 @@ const resultsDifferentiationQ = document.getElementById("results-differentiation
 const newRunButton = document.getElementById("new-run-button");
 const animateButton = document.getElementById("animate-button");
 const openFolderButton = document.getElementById("open-folder-button");
+const resultsDemePairSelector = document.getElementById("results-deme-pair-selector");
+const resultsXDeme = document.getElementById("results-x-deme");
+const resultsYDeme = document.getElementById("results-y-deme");
+const resultsShowPairButton = document.getElementById("results-show-pair-button");
+const resultsShowOverviewButton = document.getElementById(
+    "results-show-overview-button"
+);
 
 let currentOutputDirectory = null;
 
@@ -71,6 +78,19 @@ window.fim.showResults = function showResults(payload) {
         drawScatter(resultsCanvas, panel.points, {
             xLabel: panel.x_label,
             yLabel: panel.y_label,
+        });
+        window.fim.wireDemePairSelector({
+            canvas: resultsCanvas,
+            xSelect: resultsXDeme,
+            ySelect: resultsYDeme,
+            showPairButton: resultsShowPairButton,
+            showOverviewButton: resultsShowOverviewButton,
+            container: resultsDemePairSelector,
+            demeCount: payload.demeCount,
+            overviewPanel: panel,
+            getOutputDirectory: () => currentOutputDirectory,
+            bridgeMethod: (outputDirectory, x, y) =>
+                window.pywebview.api.get_deme_pair_panel(outputDirectory, x, y),
         });
     }
     animateButton.disabled = payload.generationCount <= 1;

@@ -62,7 +62,14 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.manifest import read_manifest
 from fim.reanalyze import reanalyze_trajectory
-from fim.viz.scatter import panels_from_points, pooled_scatter_panels, scatter_panels
+from fim.viz.scatter import (
+    deme_pair_panel,
+    frequency_points,
+    panels_from_points,
+    pooled_frequency_points,
+    pooled_scatter_panels,
+    scatter_panels,
+)
 
 _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
 _TRAJECTORY_FILE_TYPES = ("trajectory.jsonl files (*.jsonl)", "All files (*.*)")
@@ -296,6 +303,7 @@ class Api:
                 window,
                 message_queue,
                 params.max_generations,
+                params.d,
                 output_directory,
                 self._on_message,
             ),
@@ -551,9 +559,9 @@ class Api:
 
         Returns:
             `{"ok": True, "runId", "report", "panels", "statistics",
-            "outputDirectory", "generationCount"}` on success;
-            `{"ok": False, "message": ...}` if no trajectory was given,
-            the generation/q-sweep fields do not parse, or `fim.
+            "outputDirectory", "generationCount", "demeCount"}` on
+            success; `{"ok": False, "message": ...}` if no trajectory
+            was given, the generation/q-sweep fields do not parse, or `fim.
             reanalyze.reanalyze_trajectory` itself raises (a
             trajectory-integrity failure, an edited file, or a
             generation that does not exist — design §4.7's "shown
@@ -599,6 +607,7 @@ class Api:
             },
             "outputDirectory": str(trajectory_path.parent),
             "generationCount": reanalyzed.manifest.generation_count,
+            "demeCount": reanalyzed.params.d,
         }
 
     def get_animation_frames(self, output_directory: str) -> dict[str, Any]:
@@ -645,6 +654,87 @@ class Api:
             ],
         }
 
+    def get_deme_pair_panel(
+        self, output_directory: str, first_deme: int, second_deme: int
+    ) -> dict[str, Any]:
+        """Recompute one explicit deme-pair 2-D panel for a completed run (Screen 3).
+
+        The large-`d` counterpart to Screen 3's own PCA panel
+        (`showResults`'s own `panels[0]`, drawn by default whenever
+        `d > scatter.PAIRWISE_MAX_DEMES`): PCA stays the page's default
+        view, and this bridge method lets the user switch to one
+        specific raw deme pair instead, on demand, rather than the
+        page ever computing or requesting every `C(d, 2)` pair up
+        front (unbounded in `d`, unlike the direct/pairwise layout
+        `panels_from_points` already handles automatically for small
+        `d`).
+
+        Args:
+            output_directory: The run's own artifact directory (Screen
+                3's `outputDirectory`, already on hand from whichever
+                bridge call last raised it — `start_run`'s `"done"`
+                push or `open_run`'s own return value).
+            first_deme: 1-based deme number for the X axis, matching
+                every panel's own "Deme N" label convention.
+            second_deme: 1-based deme number for the Y axis.
+
+        Returns:
+            `{"ok": True, "panel": ...}`, `panel` being one
+            `deme_pair_panel`-shaped entry. `{"ok": False, "message":
+            ...}` if the trajectory cannot be read, or the requested
+            demes are out of range or identical.
+        """
+        trajectory_path = Path(output_directory) / "trajectory.jsonl"
+        try:
+            state = reanalyze_trajectory(trajectory_path).state
+            panel = deme_pair_panel(
+                frequency_points(state), first_deme - 1, second_deme - 1
+            )
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "panel": panel}
+
+    def get_batch_deme_pair_panel(
+        self, output_directory: str, first_deme: int, second_deme: int
+    ) -> dict[str, Any]:
+        """Recompute one explicit deme-pair pooled 2-D panel for a completed batch.
+
+        `get_deme_pair_panel`'s own counterpart for a batch's pooled
+        scatter (`onBatchDone`'s own `panels[0]`, `_batch_done_payload`
+        below): every published replicate's own final state is
+        rediscovered from disk by directory name
+        (`batch_runner.replicate_output_directory`'s own `replicate-
+        NNN` naming), not passed in from the page — the same "read the
+        published, atomic artifacts on disk" source of truth `list_
+        recent_runs` and `open_run` already use, rather than the page
+        tracking and forwarding every replicate's own trajectory path
+        itself.
+
+        Args:
+            output_directory: The batch's own top-level artifact
+                directory (Screen 4's `outputDirectory`).
+            first_deme: 1-based deme number for the X axis.
+            second_deme: 1-based deme number for the Y axis.
+
+        Returns:
+            `{"ok": True, "panel": ...}` on success; `{"ok": False,
+            "message": ...}` if no replicate trajectory can be found or
+            read, or the requested demes are out of range or
+            identical.
+        """
+        directory = Path(output_directory)
+        trajectory_paths = sorted(directory.glob("replicate-*/trajectory.jsonl"))
+        if not trajectory_paths:
+            return {"ok": False, "message": f"no replicates found under {directory}"}
+        try:
+            states = [reanalyze_trajectory(path).state for path in trajectory_paths]
+            panel = deme_pair_panel(
+                pooled_frequency_points(states), first_deme - 1, second_deme - 1
+            )
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "panel": panel}
+
     def ping(self) -> str:
         """Prove the basic JS-to-Python bridge round trip (Milestone W1).
 
@@ -674,6 +764,7 @@ def _drain_run_messages(
     window: _EvaluatesJs,
     message_queue: queue.Queue[runner.RunMessage],
     max_generations: int,
+    deme_count: int,
     output_directory: Path,
     on_message: Callable[[runner.RunMessage], None] | None = None,
 ) -> None:
@@ -697,6 +788,11 @@ def _drain_run_messages(
     this thread is still the only one calling `evaluate_js` at that
     point, so a test's own hook firing here never becomes a second
     concurrent caller the way a test-side polling loop would.
+
+    `deme_count` rides along only for the `"done"` payload's own
+    `demeCount` field — `results.js`'s large-`d` deme-pair selector
+    needs it to populate its two axis dropdowns; nothing here computes
+    with it directly.
     """
     while True:
         # Indexed access under an `if` on `message[0]`, not a tuple-
@@ -729,6 +825,7 @@ def _drain_run_messages(
                 },
                 "outputDirectory": str(output_directory),
                 "generationCount": result.manifest.generation_count,
+                "demeCount": deme_count,
             }
             window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")
             if on_message is not None:
@@ -931,6 +1028,7 @@ def _batch_done_payload(
         ),
         "replicates": replicates,
         "summary": summary,
+        "demeCount": params.d,
     }
 
 

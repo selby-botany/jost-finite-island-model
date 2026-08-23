@@ -144,6 +144,97 @@ def test_a_completed_batch_renders_the_batch_results_screen() -> None:
     assert settled["ciBarCount"] == 6
 
 
+def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
+    """ "Show pair"/"Show overview" round-trip through the real batch bridge and back.
+
+    The batch counterpart to `test_results_screen.py`'s own identically
+    named scalar-run test — `d=3` past the overview's default "Deme 1
+    vs Deme 2" pairwise panel, "Show pair" (Deme 1 vs Deme 3) redraws
+    the canvas via a real `Api.get_batch_deme_pair_panel` call (pooled
+    across both replicates, `deme_pair_panel`'s own docstring), and
+    "Show overview" redraws it back to the exact original panel with
+    no further bridge call.
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+    set_fields = _SET_TINY_BATCH_FIELDS.replace(
+        "setField('d', '2');", "setField('d', '3');"
+    )
+
+    def _poll_until(script: str, predicate: Any) -> Any:
+        value = None
+        for _ in range(_READY_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_READY_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                set_fields + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                selector_state = window.evaluate_js(
+                    "({"
+                    "hidden: document.getElementById("
+                    "'batch-results-deme-pair-selector').hidden, "
+                    "optionCount: document.getElementById("
+                    "'batch-results-x-deme').options.length"
+                    "})"
+                )
+                overview_snapshot = window.evaluate_js(
+                    "document.getElementById('batch-results-canvas').toDataURL()"
+                )
+                window.evaluate_js(
+                    "document.getElementById('batch-results-x-deme').value = '1';"
+                    "document.getElementById('batch-results-y-deme').value = '3';"
+                    "document.getElementById("
+                    "'batch-results-show-pair-button').click();"
+                )
+                pair_snapshot = _poll_until(
+                    "document.getElementById('batch-results-canvas').toDataURL()",
+                    lambda value: value != overview_snapshot,
+                )
+                window.evaluate_js(
+                    "document.getElementById("
+                    "'batch-results-show-overview-button').click();"
+                )
+                reverted_snapshot = _poll_until(
+                    "document.getElementById('batch-results-canvas').toDataURL()",
+                    lambda value: value == overview_snapshot,
+                )
+                settled = {
+                    "selectorHidden": selector_state["hidden"],
+                    "optionCount": selector_state["optionCount"],
+                    "pairDiffersFromOverview": pair_snapshot != overview_snapshot,
+                    "revertedMatchesOverview": reverted_snapshot == overview_snapshot,
+                }
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, (
+        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s"
+    )
+    assert settled["selectorHidden"] is False
+    assert settled["optionCount"] == 3
+    assert settled["pairDiffersFromOverview"] is True
+    assert settled["revertedMatchesOverview"] is True
+
+
 def test_batch_new_run_button_switches_back_to_the_input_screen() -> None:
     """ "New run" returns to Screen 1 without needing another bridge call.
 

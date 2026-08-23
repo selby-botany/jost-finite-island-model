@@ -31,6 +31,17 @@ const batchResultsSummary = document.getElementById("batch-results-summary");
 const batchResultsTableBody = document.getElementById("batch-results-table-body");
 const batchNewRunButton = document.getElementById("batch-new-run-button");
 const batchOpenFolderButton = document.getElementById("batch-open-folder-button");
+const batchResultsDemePairSelector = document.getElementById(
+    "batch-results-deme-pair-selector"
+);
+const batchResultsXDeme = document.getElementById("batch-results-x-deme");
+const batchResultsYDeme = document.getElementById("batch-results-y-deme");
+const batchResultsShowPairButton = document.getElementById(
+    "batch-results-show-pair-button"
+);
+const batchResultsShowOverviewButton = document.getElementById(
+    "batch-results-show-overview-button"
+);
 
 let currentBatchOutputDirectory = null;
 
@@ -163,6 +174,19 @@ window.fim.showBatchResults = function showBatchResults(payload) {
         drawScatter(batchResultsCanvas, panel.points, {
             xLabel: panel.x_label,
             yLabel: panel.y_label,
+        });
+        window.fim.wireDemePairSelector({
+            canvas: batchResultsCanvas,
+            xSelect: batchResultsXDeme,
+            ySelect: batchResultsYDeme,
+            showPairButton: batchResultsShowPairButton,
+            showOverviewButton: batchResultsShowOverviewButton,
+            container: batchResultsDemePairSelector,
+            demeCount: payload.demeCount,
+            overviewPanel: panel,
+            getOutputDirectory: () => currentBatchOutputDirectory,
+            bridgeMethod: (outputDirectory, x, y) =>
+                window.pywebview.api.get_batch_deme_pair_panel(outputDirectory, x, y),
         });
     }
     window.fim.showScreen("screen-batch-results");

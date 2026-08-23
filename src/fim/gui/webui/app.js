@@ -59,6 +59,98 @@ const fim = {
     onBatchError() {
         // Overridden once the batch progress screen extension exists.
     },
+
+    /**
+     * Wire a "compare two demes directly" selector onto a results-style
+     * canvas -- Screens 3 and 4's own shared answer to a large-`d` run's
+     * PCA overview (`fim.viz.scatter.panels_from_points`' own PCA
+     * fallback once `d` exceeds `PAIRWISE_MAX_DEMES`) not showing any one
+     * deme pair directly. Two axis dropdowns, a "Show pair" button that
+     * asks Python for that one explicit pair on demand (unbounded `d`
+     * makes precomputing every `C(d, 2)` pair up front the wrong
+     * default, unlike the small-`d` case `panels_from_points` already
+     * handles automatically), and a "Show overview" button that redraws
+     * the original panel already on hand from the page's own initial
+     * payload -- no second bridge call needed for that direction.
+     *
+     * @param {Object} config
+     * @param {HTMLCanvasElement} config.canvas
+     * @param {HTMLSelectElement} config.xSelect
+     * @param {HTMLSelectElement} config.ySelect
+     * @param {HTMLButtonElement} config.showPairButton
+     * @param {HTMLButtonElement} config.showOverviewButton
+     * @param {HTMLElement} config.container - Hidden entirely when
+     *     `demeCount < 2` (a scatter needs two distinct demes).
+     * @param {number} config.demeCount
+     * @param {Object} config.overviewPanel - The panel already drawn
+     *     before this call -- `{points, x_label, y_label}`.
+     * @param {() => (string|null)} config.getOutputDirectory
+     * @param {(outputDirectory: string, x: number, y: number) =>
+     *     Promise<Object>} config.bridgeMethod - `window.pywebview.api.
+     *     get_deme_pair_panel` or `.get_batch_deme_pair_panel`.
+     */
+    wireDemePairSelector(config) {
+        const {
+            canvas,
+            xSelect,
+            ySelect,
+            showPairButton,
+            showOverviewButton,
+            container,
+            demeCount,
+            overviewPanel,
+            getOutputDirectory,
+            bridgeMethod,
+        } = config;
+        if (!demeCount || demeCount < 2) {
+            container.hidden = true;
+            return;
+        }
+        container.hidden = false;
+        xSelect.replaceChildren();
+        ySelect.replaceChildren();
+        for (let deme = 1; deme <= demeCount; deme += 1) {
+            const xOption = document.createElement("option");
+            xOption.value = String(deme);
+            xOption.textContent = `Deme ${deme}`;
+            xSelect.appendChild(xOption);
+            ySelect.appendChild(xOption.cloneNode(true));
+        }
+        xSelect.value = "1";
+        ySelect.value = "2";
+
+        function updateShowPairEnabled() {
+            showPairButton.disabled = xSelect.value === ySelect.value;
+        }
+        xSelect.onchange = updateShowPairEnabled;
+        ySelect.onchange = updateShowPairEnabled;
+        updateShowPairEnabled();
+
+        showPairButton.onclick = async () => {
+            const outputDirectory = getOutputDirectory();
+            if (outputDirectory === null) {
+                return;
+            }
+            const result = await bridgeMethod(
+                outputDirectory,
+                Number(xSelect.value),
+                Number(ySelect.value)
+            );
+            if (result.ok) {
+                drawScatter(canvas, result.panel.points, {
+                    xLabel: result.panel.x_label,
+                    yLabel: result.panel.y_label,
+                });
+            }
+        };
+
+        showOverviewButton.onclick = () => {
+            drawScatter(canvas, overviewPanel.points, {
+                xLabel: overviewPanel.x_label,
+                yLabel: overviewPanel.y_label,
+            });
+        };
+    },
 };
 
 window.fim = fim;

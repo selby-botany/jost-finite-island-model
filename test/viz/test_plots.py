@@ -18,6 +18,7 @@ from fim.viz.diagnostics import (
     plot_frequency_bars,
 )
 from fim.viz.scatter import (
+    deme_pair_panel,
     frequency_points,
     grouped_points,
     marker_groups,
@@ -455,6 +456,55 @@ def test_pooled_scatter_panels_dispatches_layout_by_deme_count() -> None:
 
     assert len(panels) == 1
     assert panels[0]["x_label"] == "Principal component 1"
+
+
+def test_deme_pair_panel_names_the_requested_pair() -> None:
+    """A caller-chosen pair labels its axes by 1-based deme number."""
+    points = frequency_points(_state(20))
+
+    panel = deme_pair_panel(points, first=2, second=9)
+
+    assert panel["x_label"] == "Deme 3"
+    assert panel["y_label"] == "Deme 10"
+
+
+def test_deme_pair_panel_matches_panels_from_points_own_pairwise_output() -> None:
+    """A caller-chosen pair reproduces exactly the panel `panels_from_points`
+    already builds for that same pair, at a `d` small enough for it to
+    compute every pair itself -- the on-demand path and the automatic
+    pairwise-dispatch path share the same underlying `_panel` call, so
+    picking one pair out of the full set this way is a direct
+    equality check, not a separately reimplemented one."""
+    state = _state(4)
+    points = frequency_points(state)
+    all_pairs = panels_from_points(points, state.deme_count)
+    expected = next(
+        panel
+        for panel in all_pairs
+        if (panel["x_label"], panel["y_label"]) == ("Deme 2", "Deme 4")
+    )
+
+    assert deme_pair_panel(points, first=1, second=3) == expected
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "match"),
+    [
+        (-1, 5, "first deme index -1"),
+        (20, 5, "first deme index 20"),
+        (5, -1, "second deme index -1"),
+        (5, 20, "second deme index 20"),
+        (5, 5, "must name different demes"),
+    ],
+)
+def test_deme_pair_panel_rejects_invalid_indices(
+    first: int, second: int, match: str
+) -> None:
+    """Out-of-range or identical indices fail loudly, not with a silent misread."""
+    points = frequency_points(_state(20))
+
+    with pytest.raises(ValueError, match=match):
+        deme_pair_panel(points, first, second)
 
 
 def test_pca_project_matches_the_rendered_pca_plot() -> None:
