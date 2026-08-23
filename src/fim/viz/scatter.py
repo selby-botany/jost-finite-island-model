@@ -6,7 +6,7 @@ import math
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypeAlias, cast
+from typing import Any, TypeAlias, TypedDict, cast
 
 import matplotlib
 
@@ -24,11 +24,21 @@ from fim.model.state import ModelState
 
 FloatArray: TypeAlias = NDArray[np.float64]
 
+
+class PcaSummary(TypedDict):
+    """`pca_summary`'s own return shape -- see that function's docstring."""
+
+    explained_variance: tuple[float, ...]
+    top_demes: tuple[tuple[int, ...], ...]
+
+
 PAIRWISE_MAX_DEMES = 6
 COMMON_ALLELE_THRESHOLD = 0.05
 DIRECT_2D_DEMES = 2
 DIRECT_3D_DEMES = 3
 MINIMUM_PAIRWISE_MAX_DEMES = 4
+PCA_COMPONENTS_SHOWN = 2
+PCA_TOP_LOADING_DEMES = 3
 
 
 def plot_frequency_scatter(
@@ -222,9 +232,10 @@ def scatter_panels(
             matching `plot_frequency_scatter`'s own parameter.
 
     Returns:
-        One dict per panel: `{"x_label", "y_label", "points"}`, `points`
-        being `grouped_points`' own list of `{x, y, count, common}`
-        entries.
+        One dict per panel: `{"x_label", "y_label", "points", "kind"}`,
+        `points` being `grouped_points`' own list of `{x, y, count,
+        common}` entries, `kind` `"frequency"` or `"pca"` (`_panel`'s
+        own docstring).
     """
     return panels_from_points(
         frequency_points(state), state.deme_count, pairwise_max_demes
@@ -311,14 +322,8 @@ def panels_from_points(
             for second in range(first + 1, deme_count)
         ]
     projected = pca_project(points)
-    return [
-        _panel(
-            projected[:, 0],
-            projected[:, 1],
-            "Principal component 1",
-            "Principal component 2",
-        )
-    ]
+    x_label, y_label = pca_axis_labels(points)
+    return [_panel(projected[:, 0], projected[:, 1], x_label, y_label, kind="pca")]
 
 
 def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, object]:
@@ -343,7 +348,7 @@ def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, ob
         second: Zero-based index of the deme to plot on the Y axis.
 
     Returns:
-        The same `{"x_label", "y_label", "points"}` shape every other
+        The same `{"x_label", "y_label", "points", "kind"}` shape every other
         panel in this module returns.
 
     Raises:
@@ -364,9 +369,29 @@ def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, ob
 
 
 def _panel(
-    horizontal: FloatArray, vertical: FloatArray, x_label: str, y_label: str
+    horizontal: FloatArray,
+    vertical: FloatArray,
+    x_label: str,
+    y_label: str,
+    *,
+    kind: str = "frequency",
 ) -> dict[str, object]:
-    """Build one `scatter_panels` entry from a pair of coordinate columns."""
+    """Build one `scatter_panels` entry from a pair of coordinate columns.
+
+    Args:
+        kind: `"frequency"` (the default) for a genuine deme-vs-deme
+            allele-frequency panel — bounded to `[0, 1]` by construction,
+            an `x=y` diagonal is meaningful (same allele, two demes).
+            `"pca"` for a principal-component projection — unbounded,
+            no meaningful diagonal, an axis-scale/rendering distinction
+            `webui/scatter.js`'s own `drawScatterCell` needs to draw
+            either one correctly (visualization-and-config-editors
+            design's own follow-up: a PCA panel was being drawn with the
+            same fixed `[0, 1]` probability scale and diagonal reference
+            a frequency panel gets, which is simply wrong for PCA's own
+            unbounded coordinates — real points render as if they carried
+            "negative probability").
+    """
     coordinates = tuple(
         (float(x), float(y)) for x, y in zip(horizontal, vertical, strict=True)
     )
@@ -374,6 +399,7 @@ def _panel(
         "x_label": x_label,
         "y_label": y_label,
         "points": grouped_points(coordinates),
+        "kind": kind,
     }
 
 
@@ -394,6 +420,80 @@ def pca_project(points: FloatArray) -> FloatArray:
     projected = np.zeros((len(points), 2), dtype=np.float64)
     projected[:, :dimensions] = left[:, :dimensions] * singular_values[:dimensions]
     return projected
+
+
+def pca_summary(points: FloatArray) -> PcaSummary:
+    """Return each shown principal component's own explained variance and top demes.
+
+    A PCA scatter's bare "Principal component 1"/"2" axis titles give no
+    way to judge what the plot actually shows — the request that
+    prompted this function named it directly: "plotted PCA without
+    saying anything about the D combinations (the eigenvectors,
+    basically), so interpreting the plot is tough." Reuses `pca_project`'s
+    own SVD rather than a second one: `right`'s rows are each principal
+    axis's own weight on every original deme dimension (`numpy.linalg.
+    svd`'s own `Vh`/`right` return, discarded by `pca_project` today).
+
+    Returns:
+        `{"explained_variance": (ratio, ratio), "top_demes": (demes,
+        demes)}` — one entry per shown component (`PCA_COMPONENTS_
+        SHOWN`). `explained_variance` is each component's own share of
+        total variance in `[0, 1]`. `top_demes` is each component's
+        `PCA_TOP_LOADING_DEMES` largest-magnitude-loading demes, as
+        1-based deme numbers, ranked by `|loading|` descending. Both
+        default to all-zero/all-empty for a degenerate input (a single
+        point, or fewer real dimensions than components requested) —
+        `pca_project` itself already returns an all-zero projection for
+        that same case, so the labels stay consistent with the plot.
+    """
+    if len(points) <= 1:
+        return {
+            "explained_variance": (0.0,) * PCA_COMPONENTS_SHOWN,
+            "top_demes": ((),) * PCA_COMPONENTS_SHOWN,
+        }
+    centered = points - points.mean(axis=0, keepdims=True)
+    _left, singular_values, right = np.linalg.svd(centered, full_matrices=False)
+    total_variance = float(np.sum(singular_values**2))
+    available = right.shape[0]
+    explained_variance: list[float] = []
+    top_demes: list[tuple[int, ...]] = []
+    for component in range(PCA_COMPONENTS_SHOWN):
+        if component >= available:
+            explained_variance.append(0.0)
+            top_demes.append(())
+            continue
+        ratio = (
+            float(singular_values[component] ** 2 / total_variance)
+            if total_variance > 0
+            else 0.0
+        )
+        explained_variance.append(ratio)
+        loadings = right[component]
+        order = np.argsort(-np.abs(loadings))[:PCA_TOP_LOADING_DEMES]
+        top_demes.append(tuple(int(index) + 1 for index in order))
+    return {
+        "explained_variance": tuple(explained_variance),
+        "top_demes": tuple(top_demes),
+    }
+
+
+def pca_axis_labels(points: FloatArray) -> tuple[str, str]:
+    """Return the two PCA axis titles `pca_summary`'s own diagnostics produce.
+
+    One formatting rule, shared by `panels_from_points`' own client-ready
+    label and `_plot_pca`'s matplotlib title — never two.
+    """
+    summary = pca_summary(points)
+    labels = []
+    for component in range(PCA_COMPONENTS_SHOWN):
+        ratio = summary["explained_variance"][component]
+        demes = summary["top_demes"][component]
+        deme_text = ", ".join(str(deme) for deme in demes) if demes else "none"
+        labels.append(
+            f"Principal component {component + 1} "
+            f"({ratio:.0%} of variance; demes {deme_text})"
+        )
+    return labels[0], labels[1]
 
 
 def _plot_pairwise(points: FloatArray, deme_count: int) -> Figure:
@@ -423,10 +523,11 @@ def _plot_pairwise(points: FloatArray, deme_count: int) -> Figure:
 def _plot_pca(points: FloatArray) -> Figure:
     """Render a labeled two-dimensional principal-component projection."""
     projected = pca_project(points)
+    x_label, y_label = pca_axis_labels(points)
     figure, axis = plt.subplots(figsize=(7, 6))
     _scatter_on_axis(axis, projected[:, 0], projected[:, 1], reference=False)
-    axis.set_xlabel("Principal component 1")
-    axis.set_ylabel("Principal component 2")
+    axis.set_xlabel(x_label)
+    axis.set_ylabel(y_label)
     axis.set_title("2-D PCA projection of deme-frequency coordinates")
     return figure
 

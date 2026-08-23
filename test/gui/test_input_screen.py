@@ -191,3 +191,45 @@ def test_menu_new_configuration_resets_an_edited_field(
     )
 
     assert value["fieldN"] == starter_n
+
+
+def test_batch_progress_display_never_regresses(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`onBatchProgress` shows a high-water mark, not the raw reported count.
+
+    Real, reported behavior, not a hypothetical one: an adaptive
+    `replicate_tolerance` stop is only decided after a whole concurrent
+    worker wave completes, so a worker beyond the replicate that
+    triggered it can still be mid-run -- and counted by a live poll --
+    when the decision lands; once that now-orphaned replicate's
+    directory is pruned, the very next poll legitimately reports fewer
+    valid replicates than a moment before ("the generation tracking bar
+    jumps around during the last ~20%"). Fired here as two synthetic
+    `fim.onBatchProgress` calls (5 reporting, then 3) rather than
+    orchestrating a real batch that actually overshoots and prunes --
+    this is `screens/progress.js`'s own display logic under test, not
+    the batch-execution timing that triggers it.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.resetBatchProgress();"
+            "window.fim.onBatchProgress("
+            "{replicateCount: 10, reportedReplicateCount: 5, panels: []});"
+            "window.fim.onBatchProgress("
+            "{replicateCount: 10, reportedReplicateCount: 3, panels: []});"
+        ),
+        read=(
+            "({"
+            "barValue: document.getElementById('progress-generation').value, "
+            "labelText: "
+            "document.getElementById('progress-generation-label').textContent"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("barValue") != 0,
+    )
+
+    assert settled["barValue"] == 5
+    assert settled["labelText"] == "5 / 10 replicates reporting"

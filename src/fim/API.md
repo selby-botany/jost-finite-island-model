@@ -258,6 +258,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [plot\_convergence\_trace](#fim.viz.diagnostics.plot_convergence_trace)
   * [plot\_frequency\_bars](#fim.viz.diagnostics.plot_frequency_bars)
 * [fim.viz.scatter](#fim.viz.scatter)
+  * [PcaSummary](#fim.viz.scatter.PcaSummary)
   * [plot\_frequency\_scatter](#fim.viz.scatter.plot_frequency_scatter)
   * [frequency\_points](#fim.viz.scatter.frequency_points)
   * [pooled\_frequency\_points](#fim.viz.scatter.pooled_frequency_points)
@@ -268,6 +269,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [panels\_from\_points](#fim.viz.scatter.panels_from_points)
   * [deme\_pair\_panel](#fim.viz.scatter.deme_pair_panel)
   * [pca\_project](#fim.viz.scatter.pca_project)
+  * [pca\_summary](#fim.viz.scatter.pca_summary)
+  * [pca\_axis\_labels](#fim.viz.scatter.pca_axis_labels)
 
 <a id="fim"></a>
 
@@ -5061,6 +5064,16 @@ Plot a STRUCTURE-style stacked frequency bar for every deme.
 
 Canonical deme-coordinate allele-frequency scatter plots.
 
+<a id="fim.viz.scatter.PcaSummary"></a>
+
+## PcaSummary Objects
+
+```python
+class PcaSummary(TypedDict)
+```
+
+`pca_summary`'s own return shape -- see that function's docstring.
+
 <a id="fim.viz.scatter.plot_frequency_scatter"></a>
 
 #### plot\_frequency\_scatter
@@ -5217,9 +5230,10 @@ than a second implementation of the same SVD.
 
 **Returns**:
 
-  One dict per panel: `{"x_label", "y_label", "points"}`, `points`
-  being `grouped_points`' own list of `{x, y, count, common}`
-  entries.
+  One dict per panel: `{"x_label", "y_label", "points", "kind"}`,
+  `points` being `grouped_points`' own list of `{x, y, count,
+  common}` entries, `kind` `"frequency"` or `"pca"` (`_panel`'s
+  own docstring).
 
 <a id="fim.viz.scatter.pooled_scatter_panels"></a>
 
@@ -5330,7 +5344,7 @@ caller-chosen pair is a different question with a different
 
 **Returns**:
 
-  The same `{"x_label", "y_label", "points"}` shape every other
+  The same `{"x_label", "y_label", "points", "kind"}` shape every other
   panel in this module returns.
 
 
@@ -5354,4 +5368,49 @@ projection `_plot_pca` renders as a `Figure`, factored out so
 `scatter_panels` can reuse the identical math for the data-only
 path rather than a second SVD implementation. `_plot_pca` itself now
 calls this too — one implementation, two consumers.
+
+<a id="fim.viz.scatter.pca_summary"></a>
+
+#### pca\_summary
+
+```python
+def pca_summary(points: FloatArray) -> PcaSummary
+```
+
+Return each shown principal component's own explained variance and top demes.
+
+A PCA scatter's bare "Principal component 1"/"2" axis titles give no
+way to judge what the plot actually shows — the request that
+prompted this function named it directly: "plotted PCA without
+saying anything about the D combinations (the eigenvectors,
+basically), so interpreting the plot is tough." Reuses `pca_project`'s
+own SVD rather than a second one: `right`'s rows are each principal
+axis's own weight on every original deme dimension (`numpy.linalg.
+svd`'s own `Vh`/`right` return, discarded by `pca_project` today).
+
+**Returns**:
+
+- ``{"explained_variance"` - (ratio, ratio), "top_demes": (demes,
+  demes)}` — one entry per shown component (`PCA_COMPONENTS_
+  SHOWN`). `explained_variance` is each component's own share of
+  total variance in `[0, 1]`. `top_demes` is each component's
+  `PCA_TOP_LOADING_DEMES` largest-magnitude-loading demes, as
+  1-based deme numbers, ranked by `|loading|` descending. Both
+  default to all-zero/all-empty for a degenerate input (a single
+  point, or fewer real dimensions than components requested) —
+  `pca_project` itself already returns an all-zero projection for
+  that same case, so the labels stay consistent with the plot.
+
+<a id="fim.viz.scatter.pca_axis_labels"></a>
+
+#### pca\_axis\_labels
+
+```python
+def pca_axis_labels(points: FloatArray) -> tuple[str, str]
+```
+
+Return the two PCA axis titles `pca_summary`'s own diagnostics produce.
+
+One formatting rule, shared by `panels_from_points`' own client-ready
+label and `_plot_pca`'s matplotlib title — never two.
 

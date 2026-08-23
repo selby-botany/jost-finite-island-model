@@ -30,6 +30,19 @@ const progressLabel = document.getElementById("progress-generation-label");
 const progressBanner = document.getElementById("progress-banner");
 const cancelButton = document.getElementById("cancel-run-button");
 
+// The displayed batch-progress count, tracked separately from whatever
+// `onBatchProgress` last reported -- see that handler's own comment for
+// why the raw reported count can legitimately regress mid-batch, and
+// `screens/input.js`'s `onRunClicked` (which resets this to 0 for every
+// new run, the same place it already resets the shared progress bar's
+// own DOM value) for why this is safe to track as simple module state
+// rather than something scoped per run.
+let batchProgressHighWaterMark = 0;
+
+window.fim.resetBatchProgress = function resetBatchProgress() {
+    batchProgressHighWaterMark = 0;
+};
+
 function showProgressBanner(message) {
     if (!message) {
         progressBanner.hidden = true;
@@ -45,10 +58,7 @@ function drawProgressPanels(panels) {
         return;
     }
     if (panels.length === 1) {
-        drawScatter(progressCanvas, panels[0].points, {
-            xLabel: panels[0].x_label,
-            yLabel: panels[0].y_label,
-        });
+        drawScatter(progressCanvas, panels[0]);
     } else {
         drawScatterGrid(progressCanvas, panels);
     }
@@ -77,10 +87,26 @@ window.fim.onRunError = function onRunError(message) {
 };
 
 window.fim.onBatchProgress = function onBatchProgress(payload) {
+    // `payload.reportedReplicateCount` can legitimately regress between
+    // two ticks, late in a batch with an adaptive `replicate_tolerance`
+    // stop set: that stop is only decided after a whole concurrent
+    // worker wave completes (`fim.engine._run_batch_parallel`), so a
+    // worker beyond the replicate that triggered it can still be
+    // mid-run -- and counted by this same poll -- when the decision
+    // lands. Once the batch prunes that now-orphaned replicate's
+    // directory (`cli._prune_orphan_replicate_directories`'s own
+    // docstring), the very next poll sees one fewer valid replicate
+    // than a moment before. Real, reported behavior ("the generation
+    // tracking bar jumps around during the last ~20%"), not a
+    // hypothetical -- the displayed count only ever moves forward.
+    batchProgressHighWaterMark = Math.max(
+        batchProgressHighWaterMark,
+        payload.reportedReplicateCount
+    );
     progressBar.max = payload.replicateCount;
-    progressBar.value = payload.reportedReplicateCount;
+    progressBar.value = batchProgressHighWaterMark;
     progressLabel.textContent =
-        `${payload.reportedReplicateCount} / ${payload.replicateCount} replicates reporting`;
+        `${batchProgressHighWaterMark} / ${payload.replicateCount} replicates reporting`;
     drawProgressPanels(payload.panels);
 };
 

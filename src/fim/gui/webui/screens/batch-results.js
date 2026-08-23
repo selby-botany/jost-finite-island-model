@@ -115,10 +115,7 @@ window.fim.showBatchResults = function showBatchResults(payload) {
         // supersedes the prior deliberate first-panel-only scope line.
         const drawOverview = () => {
             if (panels.length === 1) {
-                drawScatter(batchResultsCanvas, panels[0].points, {
-                    xLabel: panels[0].x_label,
-                    yLabel: panels[0].y_label,
-                });
+                drawScatter(batchResultsCanvas, panels[0]);
             } else {
                 drawScatterGrid(batchResultsCanvas, panels);
             }
