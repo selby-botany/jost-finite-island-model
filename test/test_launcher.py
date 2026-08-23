@@ -25,6 +25,8 @@ against.
 from __future__ import annotations
 
 import ctypes
+import multiprocessing
+import runpy
 import subprocess
 from collections.abc import Sequence
 
@@ -254,6 +256,64 @@ def test_launcher_dispatches_nonempty_sys_argv_to_cli_main_unchanged(
 
     assert status == 0
     assert received == [["run", "config.yaml"]]
+
+
+# `runpy`'s own documented caveat: `fim.launcher` is already imported
+# under its normal name above (`from fim import launcher`), so
+# re-running it as `__main__` warns about the module being reloaded --
+# expected here, not a sign anything is wrong with the test itself.
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
+def test_module_main_guard_calls_freeze_support_before_dispatching(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`python -m fim.launcher`'s real `__main__` guard calls `freeze_support()` first.
+
+    Regression test for a real, live-reproduced failure: every
+    `ProcessPoolExecutor` worker (and the `resource_tracker` helper) in
+    a frozen (PyInstaller) build is a re-exec of this exact `fim`
+    binary, passed a `--multiprocessing-fork ...` sentinel argv
+    (`multiprocessing.spawn.get_command_line`'s own frozen-build
+    branch). Without `multiprocessing.freeze_support()` running before
+    `main()`'s own dispatch, that argv falls through to the unmodified
+    `fim.cli` parser instead, which rejects it outright -- confirmed
+    against a real local `.app` build, where every `n_replicates > 1`
+    batch failed instantly with `concurrent.futures.process.
+    BrokenProcessPool` ("terminated abruptly") both from the CLI and
+    the GUI (`fim.gui.batch_runner` shares the identical
+    `ProcessPoolExecutor` machinery, `fim.engine.fim`).
+
+    Exercises the real `if __name__ == "__main__":` guard via
+    `runpy.run_module` (in-process, no subprocess and no real
+    PyInstaller build -- this file's own stated boundary) rather than
+    `launcher.main` directly, since `main` itself is exactly the
+    function this guard must call *after* `freeze_support`, not the
+    thing under test. `multiprocessing.freeze_support` is patched to
+    raise a sentinel exception instead of running for real: reaching
+    that exception at all proves the guard calls it unconditionally,
+    before `main()`'s own dispatch ever runs (`fim.cli.main`/`fim.gui.
+    app.main` are stubbed to fail the test if reached, so a call order
+    bug -- `main()` first -- would be caught either way).
+    """
+
+    class _FreezeSupportCalledError(Exception):
+        pass
+
+    def fake_freeze_support() -> None:
+        raise _FreezeSupportCalledError
+
+    def fail_if_cli_main_called(argv: Sequence[str] | None = None) -> int:
+        pytest.fail("cli.main was called before freeze_support")
+
+    def fail_if_gui_main_called() -> int:
+        pytest.fail("gui.app.main was called before freeze_support")
+
+    monkeypatch.setattr(multiprocessing, "freeze_support", fake_freeze_support)
+    monkeypatch.setattr(fim.cli, "main", fail_if_cli_main_called)
+    monkeypatch.setattr(fim.gui.app, "main", fail_if_gui_main_called)
+    monkeypatch.setattr("sys.argv", ["fim", "--multiprocessing-fork", "tracker_fd=99"])
+
+    with pytest.raises(_FreezeSupportCalledError):
+        runpy.run_module("fim.launcher", run_name="__main__")
 
 
 def test_launcher_frees_the_console_only_on_win32(

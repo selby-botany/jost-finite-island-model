@@ -15,6 +15,7 @@ command still reaches the unmodified CLI parser.
 
 from __future__ import annotations
 
+import multiprocessing
 import sys
 from collections.abc import Sequence
 
@@ -138,4 +139,24 @@ def _launch_gui(*, detach: bool) -> int:
 
 
 if __name__ == "__main__":
+    # Required for `multiprocessing`'s 'spawn' start method (macOS's and
+    # Windows's own default) to work at all in a frozen build: every
+    # worker/resource-tracker process is a re-exec of this exact `fim`
+    # binary (`sys.executable` *is* the frozen executable here), passed
+    # a `--multiprocessing-fork ...` sentinel argv
+    # (`multiprocessing.spawn.get_command_line`'s own frozen-build
+    # branch). Without this call, that argv falls straight through to
+    # `main()`'s own dispatch above -- none of its branches recognize
+    # it, so it lands on the unmodified `fim.cli` parser and fails
+    # immediately with "invalid choice: 'tracker_fd=...'" instead of
+    # ever running the worker's actual payload. `freeze_support()`
+    # detects exactly this argv shape and takes over before any of
+    # `main()`'s own logic runs; for every other invocation (a real
+    # user launch) it is a documented no-op. Confirmed against a real
+    # local `.app` build: every `n_replicates > 1` batch failed
+    # instantly with `concurrent.futures.process.BrokenProcessPool`
+    # ("terminated abruptly") before this fix, both from the CLI and
+    # the GUI, since both share the identical `ProcessPoolExecutor`
+    # machinery (`fim.engine.fim`).
+    multiprocessing.freeze_support()
     raise SystemExit(main())
