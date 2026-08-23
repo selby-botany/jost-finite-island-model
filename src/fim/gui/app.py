@@ -835,9 +835,10 @@ class Api:
         `get_animation_frames`'s own "Compare demes directly" counterpart
         (design §3.8, §4.5) — the same choice Screens 3/4 already offer
         between the default view (a small-multiples pairwise grid for
-        `d <= scatter.PAIRWISE_MAX_DEMES`, one PCA panel above it) and
-        one explicit raw deme pair, extended to the whole animated
-        trajectory rather than one static state. Still just one call:
+        `d <= scatter.PAIRWISE_MAX_DEMES`, one Deme-1-vs-Deme-2 panel
+        above it, unified-run-view design §3.6) and one explicit raw
+        deme pair, extended to the whole animated trajectory rather
+        than one static state. Still just one call:
         `webui/screens/animation.js` fires this once, when the user
         picks a pair, not once per frame or once per playback tick —
         design §3.8's own "zero further Python calls... during
@@ -887,15 +888,15 @@ class Api:
     ) -> dict[str, Any]:
         """Recompute one explicit deme-pair 2-D panel for a completed run (Screen 3).
 
-        The large-`d` counterpart to Screen 3's own PCA panel
-        (`showResults`'s own `panels[0]`, drawn by default whenever
-        `d > scatter.PAIRWISE_MAX_DEMES`): PCA stays the page's default
-        view, and this bridge method lets the user switch to one
-        specific raw deme pair instead, on demand, rather than the
-        page ever computing or requesting every `C(d, 2)` pair up
-        front (unbounded in `d`, unlike the direct/pairwise layout
-        `panels_from_points` already handles automatically for small
-        `d`).
+        The large-`d` counterpart to Screen 3's own default panel
+        (`showResults`'s own `panels[0]`, drawn whenever `d >
+        scatter.PAIRWISE_MAX_DEMES` — Deme 1 vs. Deme 2 by default,
+        unified-run-view design §3.6): this bridge method lets the user
+        switch to any other specific raw deme pair instead, on demand,
+        rather than the page ever computing or requesting every `C(d,
+        2)` pair up front (unbounded in `d`, unlike the direct/pairwise
+        layout `panels_from_points` already handles automatically for
+        small `d`).
 
         Args:
             output_directory: The run's own artifact directory (Screen

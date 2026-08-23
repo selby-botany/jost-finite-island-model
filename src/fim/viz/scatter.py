@@ -71,7 +71,16 @@ def plot_frequency_scatter(
     elif state.deme_count <= pairwise_max_demes:
         figure = _plot_pairwise(points, state.deme_count)
     else:
-        figure = _plot_pca(points)
+        # First pair, not PCA (unified-run-view design §3.6) -- the same
+        # default-projection change `panels_from_points` makes for the
+        # GUI, applied identically here for consistency: neither the
+        # eigenvector-instability argument (moot for one static image)
+        # nor the speed argument (measured, never a real constraint) is
+        # why this changed -- the interpretability argument and the
+        # reference visualization's own complete absence of PCA at any
+        # `d` both apply just as much to a static PNG as to a live view.
+        # `_plot_pca` stays, reachable directly for whoever wants it.
+        figure = _plot_deme_pair(points, 0, 1)
     figure.suptitle(_title(params))
     figure.tight_layout()
     if path is not None:
@@ -222,9 +231,13 @@ def scatter_panels(
       instead — a deliberate difference from the CLI's own `scatter.png`
       for this one case, named as worth reconsidering in the migration
       design's own open questions rather than silently diverging.
-    - `d > pairwise_max_demes`: one panel, PCA-projected — the same
-      projection `_plot_pca` renders, reused via `pca_project` rather
-      than a second implementation of the same SVD.
+    - `d > pairwise_max_demes`: one panel, the first deme pair (demes 1
+      and 2) — not a PCA projection (unified-run-view design §3.6: an
+      independently-refit-per-call PCA has no cross-call alignment, and
+      the reference visualization this module targets never uses PCA at
+      any `d`). `pca_project`/`pca_summary`/`kind: "pca"` all remain
+      directly callable for an explicit exploratory view; this dispatch
+      just no longer reaches them automatically.
 
     Args:
         state: State to visualize.
@@ -234,8 +247,12 @@ def scatter_panels(
     Returns:
         One dict per panel: `{"x_label", "y_label", "points", "kind"}`,
         `points` being `grouped_points`' own list of `{x, y, count,
-        common}` entries, `kind` `"frequency"` or `"pca"` (`_panel`'s
-        own docstring).
+        common}` entries. `kind` is always `"frequency"` from this
+        function now — `"pca"` (`_panel`'s own docstring) is still a
+        legal panel `kind` `webui/scatter.js` knows how to draw, for
+        whichever future caller reaches it directly (a labeled "PCA
+        (exploratory)" choice, per the unified-run-view design's own
+        plan — not yet built).
     """
     return panels_from_points(
         frequency_points(state), state.deme_count, pairwise_max_demes
@@ -251,7 +268,7 @@ def pooled_scatter_panels(
     """`scatter_panels`' own layout dispatch, over several pooled states at once.
 
     The GUI's batch progress/results screens' own data source (design
-    §4.2, §4.4, §7.6): the same direct/pairwise/PCA layout rule
+    §4.2, §4.4, §7.6): the same direct/pairwise/first-pair layout rule
     `scatter_panels` applies to one state's points applies identically
     here to `pooled_frequency_points(states)`'s pooled rows —
     coincidence counting (`grouped_points`) already treats a point
@@ -321,9 +338,19 @@ def panels_from_points(
             for first in range(deme_count)
             for second in range(first + 1, deme_count)
         ]
-    projected = pca_project(points)
-    x_label, y_label = pca_axis_labels(points)
-    return [_panel(projected[:, 0], projected[:, 1], x_label, y_label, kind="pca")]
+    # First pair (demes 0/1), not a PCA projection (unified-run-view
+    # design §3.6): re-fitting PCA independently per call has no
+    # cross-call alignment (a sign flip or axis swap between two calls
+    # is indistinguishable from real change), the reference visualization
+    # this whole module targets never uses PCA at any `d` -- always an
+    # explicit pair -- and "53% of variance, mainly demes 2/11/4" answers
+    # a different question than any of this project's own named
+    # differentiation statistics ask. `deme_pair_panel` is the existing,
+    # tested single-panel builder for exactly this case; `pca_project`/
+    # `pca_summary`/`kind: "pca"` all stay, reachable directly by a
+    # caller that wants the exploratory view, just no longer the
+    # automatic dispatch target.
+    return [deme_pair_panel(points, 0, 1)]
 
 
 def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, object]:
@@ -494,6 +521,21 @@ def pca_axis_labels(points: FloatArray) -> tuple[str, str]:
             f"({ratio:.0%} of variance; demes {deme_text})"
         )
     return labels[0], labels[1]
+
+
+def _plot_deme_pair(points: FloatArray, first: int, second: int) -> Figure:
+    """Render one caller-chosen pair of deme dimensions.
+
+    `_plot_two_dimensional`, generalized to any pair rather than the
+    fixed `d == 2` case (unified-run-view design §3.6): `plot_frequency_
+    scatter`'s own `d > pairwise_max_demes` branch calls this with
+    `(0, 1)` as its new default projection, in place of `_plot_pca`.
+    """
+    figure, axis = plt.subplots(figsize=(7, 6))
+    _scatter_on_axis(axis, points[:, first], points[:, second])
+    axis.set_xlabel(f"Deme {first + 1}")
+    axis.set_ylabel(f"Deme {second + 1}")
+    return figure
 
 
 def _plot_pairwise(points: FloatArray, deme_count: int) -> Figure:

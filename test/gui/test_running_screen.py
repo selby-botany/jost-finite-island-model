@@ -338,9 +338,10 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
     """ "Show pair" swaps the live progress canvas mid-run to a different view.
 
     Same starter-defaults setup as the Cancel test above (`d=20`, past
-    `scatter.PAIRWISE_MAX_DEMES`, so the default live view is one PCA
-    panel — "Show pair" (Deme 1 vs Deme 3) should look nothing like it)
-    and the same reasoning for using it: no dependence on how long the
+    `scatter.PAIRWISE_MAX_DEMES`, so the default live view is one
+    Deme-1-vs-Deme-2 panel, unified-run-view design §3.6 — "Show pair"
+    (Deme 1 vs Deme 3) should still look different from it) and the
+    same reasoning for using it: no dependence on how long the
     run can run for, `started_event` alone deciding when it is safe to
     interact, Cancel ending the test rather than waiting the run out.
 

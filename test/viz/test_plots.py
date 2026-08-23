@@ -12,6 +12,7 @@ from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
+from fim.viz import scatter as scatter_module
 from fim.viz.diagnostics import (
     MAX_LEGEND_ALLELES,
     plot_convergence_trace,
@@ -134,9 +135,34 @@ def test_three_demes_render_direct_three_dimensional_axes() -> None:
     plt.close(figure)
 
 
-def test_large_dimensions_render_labeled_pca_projection() -> None:
-    """Large d falls back to an explicitly labeled projection."""
+def test_large_dimensions_default_to_the_first_deme_pair() -> None:
+    """Large `d` defaults to one explicit pair, not a PCA projection.
+
+    Unified-run-view design §3.6: dropped as the CLI's own default for
+    the same reasons `panels_from_points` dropped it as the GUI's —
+    `_plot_pca` itself is unchanged and still directly reachable, see
+    `test_pca_is_still_directly_reachable_for_a_large_dimension` below.
+    """
     figure = plot_frequency_scatter(_state(7), _params(7))
+    axis = figure.axes[0]
+
+    assert len(figure.axes) == 1
+    assert axis.get_xlabel() == "Deme 1"
+    assert axis.get_ylabel() == "Deme 2"
+    plt.close(figure)
+
+
+def test_pca_is_still_directly_reachable_for_a_large_dimension() -> None:
+    """`_plot_pca` itself is unchanged — no longer the CLI's default, still callable.
+
+    Direct regression proof for the "PCA is not deleted, only demoted"
+    half of design §3.6's decision: calling it directly on the same
+    seven-deme points `plot_frequency_scatter` no longer routes there
+    reproduces exactly what that branch used to render.
+    """
+    points = frequency_points(_state(7))
+
+    figure = scatter_module._plot_pca(points)
 
     assert len(figure.axes) == 1
     assert "PCA projection" in figure.axes[0].get_title()
@@ -148,9 +174,11 @@ def test_pca_projection_handles_a_single_point_without_svd() -> None:
 
     `numpy.linalg.svd` is not called at all when there is only one
     (locus, allele) point to project — `_plot_pca` special-cases it to
-    avoid a degenerate decomposition. Seven demes keeps this in the PCA
-    branch (`d > PAIRWISE_MAX_DEMES`); fixing every deme for the same
-    single allele collapses the whole state to exactly one point.
+    avoid a degenerate decomposition. Called directly (design §3.6:
+    `plot_frequency_scatter` no longer reaches `_plot_pca` for any `d`),
+    matching `test_pca_is_still_directly_reachable_for_a_large_dimension`
+    above; fixing every deme for the same single allele collapses the
+    whole state to exactly one point.
     """
     loci = (LocusSpec(1, 100),)
     state = ModelState(
@@ -158,7 +186,7 @@ def test_pca_projection_handles_a_single_point_without_svd() -> None:
         frequencies=tuple(({AlleleId(0): 1.0},) for _ in range(7)),
     )
 
-    figure = plot_frequency_scatter(state, _params(7))
+    figure = scatter_module._plot_pca(frequency_points(state))
 
     assert len(figure.axes) == 1
     markers = figure.axes[0].collections[0]
@@ -409,23 +437,21 @@ def test_scatter_panels_four_demes_is_one_panel_per_pair() -> None:
     assert ("Deme 3", "Deme 4") in labels
 
 
-def test_scatter_panels_large_d_is_one_pca_panel() -> None:
-    """`d > pairwise_max_demes` produces one PCA-projected, unbounded panel.
+def test_scatter_panels_large_d_defaults_to_the_first_deme_pair() -> None:
+    """`d > pairwise_max_demes` produces one frequency panel, demes 1 and 2.
 
-    Axis titles carry the explained-variance/top-loading-demes suffix
-    `pca_axis_labels` builds (checked precisely in `test_pca_axis_labels_
-    names_the_explained_variance_and_top_demes` below) -- only the
-    stable prefix and `kind` are asserted here.
+    Not a PCA projection (unified-run-view design §3.6) — `pca_project`/
+    `pca_summary`/`pca_axis_labels` are unchanged and still directly
+    testable (`test_pca_project_matches_the_rendered_pca_plot` and the
+    `pca_summary`/`pca_axis_labels` tests below); only this dispatch's
+    own default no longer reaches them automatically.
     """
     panels = scatter_panels(_state(7))
 
     assert len(panels) == 1
-    x_label, y_label = panels[0]["x_label"], panels[0]["y_label"]
-    assert isinstance(x_label, str)
-    assert isinstance(y_label, str)
-    assert x_label.startswith("Principal component 1")
-    assert y_label.startswith("Principal component 2")
-    assert panels[0]["kind"] == "pca"
+    assert panels[0]["x_label"] == "Deme 1"
+    assert panels[0]["y_label"] == "Deme 2"
+    assert panels[0]["kind"] == "frequency"
 
 
 def test_pooled_scatter_panels_of_no_states_is_empty() -> None:
@@ -462,16 +488,15 @@ def test_pooled_scatter_panels_pools_coincident_points_across_states() -> None:
 
 
 def test_pooled_scatter_panels_dispatches_layout_by_deme_count() -> None:
-    """`deme_count` alone decides direct/pairwise/PCA, matching `scatter_panels`."""
+    """`deme_count` decides direct/pairwise/first-pair, matching `scatter_panels`."""
     states = [_state(7), _state(7)]
 
     panels = pooled_scatter_panels(states, deme_count=7)
 
     assert len(panels) == 1
-    x_label = panels[0]["x_label"]
-    assert isinstance(x_label, str)
-    assert x_label.startswith("Principal component 1")
-    assert panels[0]["kind"] == "pca"
+    assert panels[0]["x_label"] == "Deme 1"
+    assert panels[0]["y_label"] == "Deme 2"
+    assert panels[0]["kind"] == "frequency"
 
 
 def test_deme_pair_panel_names_the_requested_pair() -> None:
@@ -589,13 +614,15 @@ def test_pca_project_matches_the_rendered_pca_plot() -> None:
 
     Direct regression test that factoring the SVD out of `_plot_pca` and
     into `pca_project` (graphical-interface migration §3.5) changed
-    nothing about the rendered figure.
+    nothing about the rendered figure. Calls `_plot_pca` directly rather
+    than through `plot_frequency_scatter` (unified-run-view design §3.6:
+    that dispatch no longer reaches PCA for any `d`).
     """
     state = _state(7)
     points = frequency_points(state)
 
     projected = pca_project(points)
-    figure = plot_frequency_scatter(state, _params(7))
+    figure = scatter_module._plot_pca(points)
     markers = figure.axes[0].collections[0]
     assert isinstance(markers, PathCollection)
     rendered = np.asarray(markers.get_offsets())

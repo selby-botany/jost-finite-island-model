@@ -337,7 +337,7 @@ where they are first, rather than doing nothing.</p>
 </tr>
 <tr>
 <td>Results</td>
-<td>A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same <code>[0, 1]</code> scale the confidence-interval bars below use) beside the canonical scatter plot — every deme pair at once as a small-multiples grid once <code>d</code> is 3 or more (up to 6 demes; a PCA projection above that), each panel with a labeled, numbered <code>0.0</code>-<code>1.0</code> probability scale on both axes; &quot;Compare demes directly&quot; (two dropdowns plus &quot;Show pair&quot;/&quot;Show overview&quot;) swaps to any two chosen demes' own raw frequencies at full size and back, most useful once the default view is a PCA projection rather than a direct pair; &quot;Open output folder&quot; reveals the same four artifacts; &quot;Animate&quot; plays back the persisted trajectory (disabled for a single-generation run, which has nothing to animate)</td>
+<td>A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same <code>[0, 1]</code> scale the confidence-interval bars below use) beside the canonical scatter plot — every deme pair at once as a small-multiples grid once <code>d</code> is 3 or more up to 6 demes, one panel (Deme 1 vs. Deme 2 by default) above that, each panel with a labeled, numbered <code>0.0</code>-<code>1.0</code> probability scale on both axes; &quot;Compare demes directly&quot; (two dropdowns plus &quot;Show pair&quot;/&quot;Show overview&quot;) swaps to any two chosen demes' own raw frequencies at full size and back, most useful once <code>d</code> is large enough that the default view no longer shows every pair; &quot;Open output folder&quot; reveals the same four artifacts; &quot;Animate&quot; plays back the persisted trajectory (disabled for a single-generation run, which has nothing to animate)</td>
 <td><a href="#output-schemas">Output schemas</a></td>
 </tr>
 <tr>
@@ -479,8 +479,8 @@ weighting. <code>deme_weighting</code> affects <var>E</var><sub>ST</sub>.</p>
 <li><code class="math-expr">d = 2</code>: direct Deme 1 versus Deme 2 scatter with a diagonal reference.</li>
 <li><code class="math-expr">d = 3</code>: direct three-dimensional scatter.</li>
 <li><code class="math-expr">4 &lt;= d &lt;= 6</code>: every pairwise deme projection.</li>
-<li><code class="math-expr">d &gt; 6</code>: a single plot explicitly labeled as a two-dimensional PCA
-projection.</li>
+<li><code class="math-expr">d &gt; 6</code>: direct Deme 1 versus Deme 2 scatter, same as <code class="math-expr">d = 2</code> — not a
+PCA projection.</li>
 </ul>
 <p>One point represents one <code class="math-expr">(locus, allele)</code> pair. Coincident points are enlarged
 and annotated.</p>

@@ -122,10 +122,11 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
 
     `d=3` (one deme past the overview's own default "Deme 1 vs Deme 2"
     pairwise panel — `scatter.PAIRWISE_MAX_DEMES`'s own small-`d`
-    dispatch, not the PCA fallback this selector exists for at large
-    `d`; the selector itself does not care which layout produced the
-    overview panel, so this smaller, faster configuration exercises
-    the same bridge round trip a `d=20` run would): "Show pair"
+    dispatch; large `d` also defaults to a Deme-1-vs-Deme-2 panel now
+    (unified-run-view design §3.6), but the selector itself does not
+    care which layout produced the overview panel, so this smaller,
+    faster configuration exercises the same bridge round trip a `d=20`
+    run would): "Show pair"
     (Deme 1 vs Deme 3) redraws the canvas via a real `Api.get_deme_
     pair_panel` call, and "Show overview" redraws it back to the exact
     original panel with no further bridge call — `canvas.toDataURL()`

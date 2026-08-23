@@ -62,10 +62,12 @@ const fim = {
 
     /**
      * Wire a "compare two demes directly" selector -- Screens 3 and 4's
-     * own shared answer to a large-`d` run's PCA overview (`fim.viz.
-     * scatter.panels_from_points`' own PCA fallback once `d` exceeds
-     * `PAIRWISE_MAX_DEMES`) not showing any one deme pair directly,
-     * Screen 5's own identical choice extended across a whole animated
+     * own shared answer to a large-`d` run's default overview (`fim.
+     * viz.scatter.panels_from_points`' own arbitrary "first pair" once
+     * `d` exceeds `PAIRWISE_MAX_DEMES`, unified-run-view design §3.6)
+     * not necessarily showing the one meaningful deme pair a researcher
+     * actually wants, Screen 5's own identical choice extended across a
+     * whole animated
      * trajectory rather than one static state, and Screen 2's own
      * *live* counterpart (`screens/progress.js`) -- the one case where
      * the underlying data itself is still changing, not a fixed

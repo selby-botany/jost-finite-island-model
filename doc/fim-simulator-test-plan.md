@@ -817,8 +817,12 @@ are headless and reproducible.
   versions; structural assertions plus a pinned Matplotlib (detailed design
   §4) give reproducibility without fragility.
 - `d ≤ 3` renders the direct scatter; `d > 3` dispatches to the pairwise
-  matrix (moderate `d`) or the labeled PCA projection (large `d`), and the
-  projection is explicitly labeled as such (design §8).
+  matrix (moderate `d`) or one explicit deme pair, Deme 1 vs. Deme 2 by
+  default (large `d` — design §8, corrected in that document's own
+  revision history: an earlier version of this dispatch used a PCA
+  projection instead). `_plot_pca` itself is unchanged and directly
+  tested, just no longer reached automatically by `plot_frequency_
+  scatter` at any `d`.
 - Coincidence-count marker scaling and common/rare coloring appear when many
   points coincide (design §8).
 - Diagnostics: the convergence-trace series has one point per recorded
@@ -829,9 +833,11 @@ are headless and reproducible.
   convergence trace, an out-of-range `locus_index`) is asserted by
   name; both diagnostic views are confirmed to actually write a
   non-empty PNG when given a `path` (previously untested for either);
-  the pairwise matrix's unused-grid-cell hiding and the PCA
-  projection's single-point special case (skipping `numpy.linalg.svd`
-  entirely) are each exercised at the specific `d` that reaches them;
+  the pairwise matrix's unused-grid-cell hiding is exercised at the
+  specific `d` that reaches it; the PCA projection's single-point
+  special case (skipping `numpy.linalg.svd` entirely) is exercised by
+  calling the module-private projection function directly, since no
+  public dispatch reaches it automatically at any `d` any longer;
   a locus with more alleles than `MAX_LEGEND_ALLELES` renders without
   a legend. One guard in `_frequency_points` (an empty point matrix)
   is unreachable through any validly constructed `ModelState` — marked
@@ -1010,5 +1016,20 @@ generator-version: Claude Opus 5
 generator-model-token: claude-opus-5
 generator-provider: Anthropic
 generation-date: 2026-08-18
+generator-responsibility: revision
+```
+
+Corrected §9's own scatter-plot description to match design §8's own
+correction: large-`d` no longer dispatches to a PCA projection by
+default, and the single-point SVD-skip test now calls the projection
+function directly rather than relying on a public dispatch path that no
+longer reaches it.
+
+```text
+generator-name: Claude Code
+generator-version: Claude Sonnet 5
+generator-model-token: claude-sonnet-5
+generator-provider: Anthropic
+generation-date: 2026-08-23
 generator-responsibility: revision
 ```

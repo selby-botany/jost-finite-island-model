@@ -39,8 +39,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Animated trajectory screen gains the same "Compare demes
   directly" pair selector the Results and Batch results screens
   already have — choose one explicit deme pair to watch throughout the
-  whole animation instead of only the default pairwise-grid-or-PCA
-  view, with no bridge call per frame or per playback tick: picking a
+  whole animation instead of only the default view, with no bridge
+  call per frame or per playback tick: picking a
   pair fetches every sampled frame's own panel for it once, up front,
   the same "load everything, then play/pause/scrub for free" design
   the screen already used for its default view.
@@ -83,6 +83,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   restated the same word a second time; a non-converged replicate keeps
   its own reason (e.g. "Not converged (hit the cap)"), which still adds
   real information.
+- A run with more than six demes no longer defaults to a PCA
+  projection, in either the GUI or `fim run`'s own `scatter.png` — both
+  now default to one explicit pair (Deme 1 vs. Deme 2), matching every
+  smaller-`d` panel's own bounded `[0, 1]` frequency axes and the
+  reference visualization's own figures, which never use PCA at any
+  `d`. PCA rendering itself is unchanged and still directly reachable
+  for whoever wants that exploratory view; it is no longer chosen
+  automatically.
 
 ### Fixed
 

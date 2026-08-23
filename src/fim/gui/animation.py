@@ -52,9 +52,9 @@ class AnimationFrame:
             (locus, allele) pair, one column per deme. Whoever renders
             this (the GUI bridge, §3.5) is responsible for any further
             reduction a high deme count needs (the pairwise-grid or
-            PCA-projection cases `plot_frequency_scatter` itself
-            handles) and for the client-side Canvas draw itself; this
-            module never touches either.
+            first-deme-pair cases `panels_from_points` itself handles,
+            unified-run-view design §3.6) and for the client-side
+            Canvas draw itself; this module never touches either.
     """
 
     generation: int

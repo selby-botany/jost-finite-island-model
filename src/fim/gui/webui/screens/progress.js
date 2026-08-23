@@ -66,10 +66,11 @@ let batchProgressHighWaterMark = 0;
 // picked; wiring once, on the first push a fresh run makes, is enough
 // (`demeCount` is the same for every push within one run).
 let liveDemeSelectorWired = false;
-// Whether the canvas is currently showing `pairPanel` (one explicit
-// deme pair) rather than `panels` (the default pairwise-grid-or-PCA
-// view) -- `onShowPair`/`onShowOverview` below flip this; every push's
-// own handler reads it to decide which of the two to draw.
+// Whether the canvas is currently showing `pairPanel` (one explicit,
+// user-chosen deme pair) rather than `panels` (the default pairwise-
+// grid-or-first-pair view, unified-run-view design §3.6) --
+// `onShowPair`/`onShowOverview` below flip this; every push's own
+// handler reads it to decide which of the two to draw.
 let showingLiveDemePair = false;
 // The most recent push this run has made, kept only so "Show overview"
 // can redraw instantly from data already on hand -- the same "no

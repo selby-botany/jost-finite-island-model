@@ -15,8 +15,9 @@
  * is what actually offers Animate), so "Back" always returns there.
  *
  * Screens 3/4's own "Compare demes directly" choice -- the default
- * pairwise-grid-or-PCA view versus one explicit raw deme pair -- extends
- * here too (`app.js`'s shared `wireDemePairSelector`), across the whole
+ * pairwise-grid-or-first-pair view (unified-run-view design §3.6)
+ * versus a different explicit raw deme pair -- extends here too
+ * (`app.js`'s shared `wireDemePairSelector`), across the whole
  * animated trajectory rather than one static state: picking a pair fires
  * exactly one more bridge call (`get_animation_deme_pair_frames`, the
  * whole sampled set for that one pair, all at once), after which
@@ -61,7 +62,8 @@ const animationShowOverviewButton = document.getElementById(
 let animationOutputDirectory = null;
 // The default view's own frames (`panels_from_points`' own automatic
 // dispatch: the pairwise grid for `d <= scatter.PAIRWISE_MAX_DEMES`, one
-// PCA panel above it) -- kept separately from `frames` (whichever set is
+// Deme-1-vs-Deme-2 panel above it -- unified-run-view design §3.6) --
+// kept separately from `frames` (whichever set is
 // actually being played/scrubbed right now) so "Show overview" can
 // switch straight back with no further bridge call, the same "no second
 // bridge call needed for that direction" guarantee Screens 3/4's own

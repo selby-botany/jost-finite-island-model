@@ -77,8 +77,9 @@ window.fim.showResults = function showResults(payload) {
     const panels = payload.panels;
     if (panels && panels.length > 0) {
         // Every panel `scatter_panels` computed is drawn -- one panel
-        // fills the canvas (`d <= 2` or the `d > 6` PCA fallback), more
-        // than one draws as a small-multiples grid (the `3 <= d <= 6`
+        // fills the canvas (`d <= 2`, or the `d > 6` default first-pair
+        // panel -- unified-run-view design §3.6), more than one draws
+        // as a small-multiples grid (the `3 <= d <= 6`
         // pairwise case: visualization-and-config-editors design §3.1;
         // superseded Milestone W4's own "draws only the first panel"
         // scope line).

@@ -964,9 +964,9 @@ One sampled animation frame's raw scatter coordinates.
   (locus, allele) pair, one column per deme. Whoever renders
   this (the GUI bridge, §3.5) is responsible for any further
   reduction a high deme count needs (the pairwise-grid or
-  PCA-projection cases `plot_frequency_scatter` itself
-  handles) and for the client-side Canvas draw itself; this
-  module never touches either.
+  first-deme-pair cases `panels_from_points` itself handles,
+  unified-run-view design §3.6) and for the client-side
+  Canvas draw itself; this module never touches either.
 
 <a id="fim.gui.animation.pre_render_frames"></a>
 
@@ -1579,9 +1579,10 @@ Recompute one explicit deme-pair panel for every sampled animation frame.
 `get_animation_frames`'s own "Compare demes directly" counterpart
 (design §3.8, §4.5) — the same choice Screens 3/4 already offer
 between the default view (a small-multiples pairwise grid for
-`d <= scatter.PAIRWISE_MAX_DEMES`, one PCA panel above it) and
-one explicit raw deme pair, extended to the whole animated
-trajectory rather than one static state. Still just one call:
+`d <= scatter.PAIRWISE_MAX_DEMES`, one Deme-1-vs-Deme-2 panel
+above it, unified-run-view design §3.6) and one explicit raw
+deme pair, extended to the whole animated trajectory rather
+than one static state. Still just one call:
 `webui/screens/animation.js` fires this once, when the user
 picks a pair, not once per frame or once per playback tick —
 design §3.8's own "zero further Python calls... during
@@ -1620,15 +1621,15 @@ def get_deme_pair_panel(output_directory: str, first_deme: int,
 
 Recompute one explicit deme-pair 2-D panel for a completed run (Screen 3).
 
-The large-`d` counterpart to Screen 3's own PCA panel
-(`showResults`'s own `panels[0]`, drawn by default whenever
-`d > scatter.PAIRWISE_MAX_DEMES`): PCA stays the page's default
-view, and this bridge method lets the user switch to one
-specific raw deme pair instead, on demand, rather than the
-page ever computing or requesting every `C(d, 2)` pair up
-front (unbounded in `d`, unlike the direct/pairwise layout
-`panels_from_points` already handles automatically for small
-`d`).
+The large-`d` counterpart to Screen 3's own default panel
+(`showResults`'s own `panels[0]`, drawn whenever `d >
+scatter.PAIRWISE_MAX_DEMES` — Deme 1 vs. Deme 2 by default,
+unified-run-view design §3.6): this bridge method lets the user
+switch to any other specific raw deme pair instead, on demand,
+rather than the page ever computing or requesting every `C(d,
+2)` pair up front (unbounded in `d`, unlike the direct/pairwise
+layout `panels_from_points` already handles automatically for
+small `d`).
 
 **Arguments**:
 
@@ -5381,9 +5382,13 @@ draw into, so `d == 3` is treated as three pairwise panels here
 instead — a deliberate difference from the CLI's own `scatter.png`
 for this one case, named as worth reconsidering in the migration
 design's own open questions rather than silently diverging.
-- `d > pairwise_max_demes`: one panel, PCA-projected — the same
-projection `_plot_pca` renders, reused via `pca_project` rather
-than a second implementation of the same SVD.
+- `d > pairwise_max_demes`: one panel, the first deme pair (demes 1
+and 2) — not a PCA projection (unified-run-view design §3.6: an
+independently-refit-per-call PCA has no cross-call alignment, and
+the reference visualization this module targets never uses PCA at
+any `d`). `pca_project`/`pca_summary`/`kind: "pca"` all remain
+directly callable for an explicit exploratory view; this dispatch
+just no longer reaches them automatically.
 
 **Arguments**:
 
@@ -5396,8 +5401,12 @@ than a second implementation of the same SVD.
 
   One dict per panel: `{"x_label", "y_label", "points", "kind"}`,
   `points` being `grouped_points`' own list of `{x, y, count,
-  common}` entries, `kind` `"frequency"` or `"pca"` (`_panel`'s
-  own docstring).
+  common}` entries. `kind` is always `"frequency"` from this
+  function now — `"pca"` (`_panel`'s own docstring) is still a
+  legal panel `kind` `webui/scatter.js` knows how to draw, for
+  whichever future caller reaches it directly (a labeled "PCA
+  (exploratory)" choice, per the unified-run-view design's own
+  plan — not yet built).
 
 <a id="fim.viz.scatter.pooled_scatter_panels"></a>
 
@@ -5415,7 +5424,7 @@ def pooled_scatter_panels(
 `scatter_panels`' own layout dispatch, over several pooled states at once.
 
 The GUI's batch progress/results screens' own data source (design
-§4.2, §4.4, §7.6): the same direct/pairwise/PCA layout rule
+§4.2, §4.4, §7.6): the same direct/pairwise/first-pair layout rule
 `scatter_panels` applies to one state's points applies identically
 here to `pooled_frequency_points(states)`'s pooled rows —
 coincidence counting (`grouped_points`) already treats a point
