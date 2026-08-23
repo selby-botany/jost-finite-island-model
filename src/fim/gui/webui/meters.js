@@ -37,6 +37,28 @@ function percentageWithin(value, min, max) {
 }
 
 /**
+ * Render a statistic name's own `_`-suffix as a real subscript -- `"G_ST"`
+ * becomes `G<sub>ST</sub>` (TeX's own `_` subscript convention, not a
+ * literal underscore character on screen), `"D"` (no `_`) is returned
+ * unchanged. Every statistic name reaching this function comes from a
+ * fixed, hardcoded set (`results.js`'s/`batch-results.js`'s own
+ * `STATISTIC_NAMES`), never user input, so returning HTML for a caller
+ * to assign via `innerHTML` is safe here.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function formatStatisticLabel(name) {
+    const underscoreIndex = name.indexOf("_");
+    if (underscoreIndex === -1) {
+        return name;
+    }
+    const base = name.slice(0, underscoreIndex);
+    const subscript = name.slice(underscoreIndex + 1);
+    return `${base}<sub>${subscript}</sub>`;
+}
+
+/**
  * Build one meter row for a statistic with no defined interval to show.
  *
  * @param {string} name
@@ -48,7 +70,7 @@ function buildOmittedMeter(name, omittedText) {
     row.className = "ci-bar";
     const label = document.createElement("span");
     label.className = "ci-bar-label";
-    label.textContent = name;
+    label.innerHTML = formatStatisticLabel(name);
     row.appendChild(label);
     const omitted = document.createElement("span");
     omitted.className = "ci-bar-omitted";
@@ -81,7 +103,7 @@ function buildCiMeter(name, interval) {
 
     const label = document.createElement("span");
     label.className = "ci-bar-label";
-    label.textContent = name;
+    label.innerHTML = formatStatisticLabel(name);
     row.appendChild(label);
 
     const track = document.createElement("div");
@@ -111,22 +133,27 @@ function buildCiMeter(name, interval) {
  * statistic (design §3.3's "point only" mode): a mean tick with no
  * shaded interval, since a single run has no confidence interval to show.
  *
- * No separate `.ci-bar-label` element: `text` already carries the
- * statistic's own name (`"D = 0.0421"`, the exact `"<name> = <value>"`
- * convention Screen 3's plain-text stats always used), so `#stat-D`'s
- * own aggregate `textContent` is unchanged from before this meter
- * existed -- `test/gui/test_results_screen.py`'s own `startswith("D = ")`
- * assertion keeps working without modification, a deliberate choice, not
- * an oversight (a redundant `<span>D</span>D = 0.0421` would be a
- * regression, not a richer view).
+ * No separate `.ci-bar-label` element: the one `.ci-bar-value` span
+ * carries `"<name> = <value>"` (`name` run through `formatStatisticLabel`
+ * for its own `_`-suffix, e.g. `"G<sub>ST</sub> = 0.456"`), the exact
+ * convention Screen 3's plain-text stats always used, extended to render
+ * the subscript rather than a literal underscore. `test/gui/
+ * test_results_screen.py`'s own `startswith("D = ")` assertion still
+ * passes unmodified for `D` (no `_`, `formatStatisticLabel` returns it
+ * as-is) -- a name that *does* have one now reads back through
+ * `.textContent` without its underscore at all (`"GST = ..."`, not
+ * `"G_ST = ..."`), since `<sub>` renders visually but contributes no
+ * text of its own to close the gap the underscore used to fill; any
+ * assertion against an underscore-bearing name's own `.textContent` was
+ * updated alongside this change, not left to drift.
  *
- * @param {string} text - The full `"<name> = <value>"` string to show.
+ * @param {string} name - The statistic's own name (`"D"`, `"G_ST"`, ...).
  * @param {string} formattedValue - The bare, already `format_statistic`-
  *     formatted value, parsed only to place the mean tick -- never
  *     reformatted or shown a second time.
  * @returns {HTMLDivElement}
  */
-function buildPointMeter(text, formattedValue) {
+function buildPointMeter(name, formattedValue) {
     const row = document.createElement("div");
     row.className = "ci-bar";
 
@@ -144,7 +171,7 @@ function buildPointMeter(text, formattedValue) {
 
     const value = document.createElement("span");
     value.className = "ci-bar-value";
-    value.textContent = text;
+    value.innerHTML = `${formatStatisticLabel(name)} = ${formattedValue}`;
     row.appendChild(value);
 
     return row;

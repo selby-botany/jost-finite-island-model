@@ -46,6 +46,36 @@ def test_input_screen_loads_starter_values(
     assert value == expected
 
 
+def test_mutation_tab_renders_mu_as_the_greek_letter(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The Mutation tab's own labels show `μ`, not the literal word "mu".
+
+    Static markup, not JS-generated — `field-mu_value`/`field-mu_b_value`'s
+    own `<label>`s in `index.html` — but the `field-*`/`name=`/`value=`
+    attributes those labels are `for=` (and every field `input.js` reads
+    by name) stay plain ASCII `mu`/`mu_b`: only the human-visible text
+    changed, not anything `config_form.py`'s own field mapping depends on.
+    """
+    labels = drive(
+        window,
+        trigger="null",
+        read=(
+            "({"
+            "mu: document.querySelector('label[for=\"field-mu_value\"]')"
+            ".textContent, "
+            "muB: document.querySelector('label[for=\"field-mu_b_value\"]')"
+            ".innerHTML"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("mu") == "μ",
+        poll_attempts=500,
+    )
+
+    assert labels["mu"] == "μ"
+    assert labels["muB"] == "μ<sub>b</sub>"
+
+
 def test_input_screen_run_button_enabled_for_the_valid_starter_form(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

@@ -49,6 +49,26 @@ let currentBatchOutputDirectory = null;
 // entirely rather than raising, since a single point has no interval."
 const OMITTED_SUMMARY_TEXT = "omitted (fewer than two defined replicates)";
 
+/**
+ * Shorten one replicate's own run id for the table's own "Run ID"
+ * column -- `deterministic_run_id(params)` names the whole batch
+ * (already shown, in full, above the table, `batchResultsRunId`'s own
+ * textContent), and every replicate's own id is that same string plus
+ * a `-r{index:03}` suffix (`fim.gui.app._batch_done_payload`'s own
+ * docstring: `f"{batch_run_id}-r{index:03}"`) -- repeating the whole
+ * batch id on every row added nothing a reader could not already see
+ * once, above the table. Falls back to the full id unchanged if it
+ * ever does not end in that exact shape, rather than showing a
+ * misleadingly truncated fragment.
+ *
+ * @param {string} runId
+ * @returns {string}
+ */
+function shortReplicateId(runId) {
+    const match = runId.match(/-r\d+$/);
+    return match ? match[0].slice(1) : runId;
+}
+
 function renderSummary(summary) {
     batchResultsSummary.replaceChildren();
     for (const name of STATISTIC_NAMES) {
@@ -65,12 +85,17 @@ function renderTable(replicates) {
     batchResultsTableBody.replaceChildren();
     for (const replicate of replicates) {
         const row = document.createElement("tr");
+        // `replicate.reason` is always exactly `"statistic converged"`
+        // when `converged` is true (`StopReason`'s own two-value enum) --
+        // showing it alongside "Converged" said the same thing twice.
+        // The `false` case keeps its own reason (`"hit the cap"`), which
+        // adds real information "Not converged" alone does not carry.
         const outcome = replicate.converged
-            ? `Converged (${replicate.reason})`
+            ? "Converged"
             : `Not converged (${replicate.reason})`;
         const cells = [
             replicate.index,
-            replicate.runId,
+            shortReplicateId(replicate.runId),
             replicate.generation,
             outcome,
             ...STATISTIC_NAMES.map((name) => replicate.statistics[name]),

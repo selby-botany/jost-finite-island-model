@@ -71,7 +71,7 @@ window.fim.showResults = function showResults(payload) {
     for (const name of STATISTIC_NAMES) {
         const value = payload.statistics[name];
         const element = document.getElementById(`stat-${name}`);
-        element.replaceChildren(buildPointMeter(`${name} = ${value}`, value));
+        element.replaceChildren(buildPointMeter(name, value));
     }
     renderDifferentiationQ(report);
     const panels = payload.panels;

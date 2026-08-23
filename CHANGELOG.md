@@ -37,6 +37,27 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   scalar run's own six, and the batch confidence intervals — now
   renders through the same meter widget.
 
+### Changed
+
+- Every named statistic's own `_`-suffix (`G_ST`, `E_ST`, `K_ST`, `H_S`,
+  `H_T`) now renders as a real subscript (`G`, then a smaller, lowered
+  `ST`) everywhere it appears as a label — the Results and Batch results
+  screens' own meters, the Batch results table's column headers, and the
+  Convergence tab's own statistic checkboxes — instead of a literal
+  underscore character. `μ` (mutation rate) replaces the literal word
+  "mu" throughout the Mutation tab's own labels for the same reason;
+  every field's own name/id (what `config_form.py` and `input.js` key
+  off of) is unchanged, only the human-visible text.
+- A batch replicate's own "Run ID" table column now shows just its own
+  `rNNN` suffix (e.g. `r001`), not the whole batch id repeated on every
+  row — that id is already shown once, in full, directly above the
+  table.
+- A converged replicate's own Status column now reads "Converged"
+  instead of "Converged (statistic converged)" — the parenthetical
+  restated the same word a second time; a non-converged replicate keeps
+  its own reason (e.g. "Not converged (hit the cap)"), which still adds
+  real information.
+
 ### Fixed
 
 - A large-`d` run's scatter (the PCA fallback for `d > 6`) no longer

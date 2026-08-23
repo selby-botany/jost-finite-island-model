@@ -86,6 +86,7 @@ def test_a_completed_run_renders_the_results_screen(
             "outcome: document.getElementById('results-outcome').textContent, "
             "statD: document.getElementById('stat-D').textContent, "
             "statGST: document.getElementById('stat-G_ST').textContent, "
+            "statGSTHtml: document.getElementById('stat-G_ST').innerHTML, "
             "animateDisabled: document.getElementById('animate-button').disabled"
             "})"
         ),
@@ -99,7 +100,13 @@ def test_a_completed_run_renders_the_results_screen(
     assert settled["runId"].startswith("run-")
     assert "generation" in settled["outcome"]
     assert settled["statD"].startswith("D = ")
-    assert settled["statGST"].startswith("G_ST = ")
+    # Not "G_ST = " -- `meters.js`'s own `formatStatisticLabel` renders
+    # the statistic's `_`-suffix as a real `<sub>`, not a literal
+    # underscore character; `.textContent` on that element reads back
+    # with the subscript's own text ("ST") immediately following "G",
+    # no separator, since the underscore itself was never a text node.
+    assert settled["statGST"].startswith("GST = ")
+    assert "<sub>ST</sub>" in settled["statGSTHtml"]
     # `tiny_params`-scale runs always persist more than one generation
     # (`convergence_window`'s own minimum of 2 forces at least one step
     # past generation 0 before stability can first be evaluated — the
