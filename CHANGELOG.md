@@ -94,6 +94,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The live Running screen's "Compare demes directly" selector could,
+  under real system load, still show the overview for one more tick
+  than necessary after clicking "Show pair" — the client-side flag
+  deciding which one to draw used to flip only after the full
+  bridge round trip resolved, which is later than the moment the pair
+  itself was actually selected. It now flips immediately, so a chosen
+  pair is never delayed behind an in-flight bridge call.
 - A large-`d` run's scatter (the PCA fallback for `d > 6`) no longer
   plots its genuinely unbounded, signed coordinates through the same
   `[0, 1]` probability-scale frame every other panel uses — that frame

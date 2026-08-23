@@ -133,18 +133,37 @@ function wireLiveDemePairSelector(demeCount) {
         container: progressDemePairSelector,
         demeCount,
         onShowPair: async (x, y) => {
-            // Tells the *running* simulation's own background thread
-            // which pair to start including in every subsequent push
-            // (`Api.set_live_deme_pair`) -- unlike Screens 3/4/5's own
-            // `onShowPair`, there is no already-computed panel to draw
-            // immediately: the canvas updates on the next push, the
-            // same "near-instant, not literally instant" cadence
+            // Set *before* awaiting the bridge call, not after it
+            // resolves -- a real, confirmed-live timing bug, not a
+            // style preference. `self._live_deme_pair` (the Python-side
+            // state `_drain_run_messages` reads) becomes non-`None` the
+            // instant `Api.set_live_deme_pair` executes; the old
+            // ordering here set this flag only once the *full*
+            // JS-await-Python-JS round trip completed, which is
+            // strictly later. A tick processed in that gap already has
+            // no `pairPanel` to draw regardless of this flag's own
+            // value (`drawProgressPanels`'s own comment covers that
+            // separate, already-accepted case) -- so setting it first
+            // changes nothing about that outcome, it only removes the
+            // *later* gap where the payload genuinely does carry
+            // `pairPanel` but this flag had not caught up yet to draw
+            // it. Tells the *running* simulation's own background
+            // thread which pair to start including in every subsequent
+            // push (`Api.set_live_deme_pair`) -- unlike Screens 3/4/5's
+            // own `onShowPair`, there is no already-computed panel to
+            // draw immediately: the canvas updates on the next push,
+            // the same "near-instant, not literally instant" cadence
             // `progressBar`/`progressLabel` above already have.
-            await window.pywebview.api.set_live_deme_pair(x, y);
             showingLiveDemePair = true;
+            await window.pywebview.api.set_live_deme_pair(x, y);
         },
         onShowOverview: async () => {
-            await window.pywebview.api.set_live_deme_pair(null, null);
+            // Same reordering, same reason -- and here it is doubly
+            // correct: a tick processed before the bridge call's own
+            // Python-side state actually clears would otherwise still
+            // carry a *stale* `pairPanel`, which this flag flipping
+            // first now correctly overrides in favor of the overview,
+            // exactly what "Show overview" asked for.
             showingLiveDemePair = false;
             // Unlike "Show pair", the default view's own `panels` is
             // always present in every push already received -- redraw
@@ -153,6 +172,7 @@ function wireLiveDemePairSelector(demeCount) {
             if (lastProgressPayload) {
                 drawProgressPanels(lastProgressPayload);
             }
+            await window.pywebview.api.set_live_deme_pair(null, null);
         },
     });
 }

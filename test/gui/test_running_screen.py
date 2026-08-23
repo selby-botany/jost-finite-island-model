@@ -134,29 +134,6 @@ def _wait_for_input_screen_ready(window: webview.Window) -> None:
     )
 
 
-def _canvas_eventually_differs(
-    window: webview.Window, element_id: str, baseline: object
-) -> bool:
-    """Poll one `<canvas>`'s own `toDataURL()` until it differs from `baseline`.
-
-    The robust half of `test_live_deme_pair_selector_shows_a_chosen_
-    pair_during_a_real_run`'s own fix (see that test's docstring): waits
-    on the literal rendered content the assertion cares about, not on a
-    proxy signal (a progress-message count, a bridge-side flag) merely
-    believed to imply it has changed by the time it is observed.
-
-    Returns:
-        `True` as soon as a poll observes a different value; `False` if
-        every attempt still matches `baseline`.
-    """
-    script = f"document.getElementById('{element_id}').toDataURL();"
-    for _ in range(_READY_POLL_ATTEMPTS):
-        if window.evaluate_js(script) != baseline:
-            return True
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
-    return False
-
-
 def _wait_for_cancel_run_settled(window: webview.Window) -> None:
     """Poll until `cancel_run()`'s own fire-and-forget bridge call has resolved.
 
@@ -383,22 +360,33 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
     project's own house rule on non-deterministic tests warns a guess
     like that will: passing most runs, timing out once in three under
     real, if unremarkable, system load. Waiting on `api.get_live_deme_
-    pair()` closed that gap, but not the whole class: `self._live_deme_
-    pair` (the Python-side state that getter reads) becomes non-`None`
-    the instant `Api.set_live_deme_pair` executes, which is *earlier*
-    than the moment `progress.js`'s own `showingLiveDemePair` flag
-    becomes `true` on the JS side — that flag only flips once the full
-    JS-await-Python-JS round trip completes and the click handler's own
-    continuation actually runs, a distinct, later event. A tick drawn
-    in that gap carries `pairPanel` in its payload but is still drawn as
-    the overview, because the *client-side* flag deciding which one to
-    draw has not caught up yet — a second, subtler instance of exactly
-    the same "waited on a proxy signal, not the state the assertion
-    itself depends on" mistake the first fix already named. Closed for
-    real this time by polling the canvas's own rendered content
-    directly, in a bounded retry loop, until it actually differs from
-    the overview snapshot — the literal condition the final assertion
-    checks, not a stand-in believed to imply it.
+    pair()` instead — the Python-side state a tick's own `live_
+    deme_pair()` call reads before deciding whether to compute
+    `pairPanel` — closes that gap for good: once it returns the
+    selected pair, the very next progress message is *guaranteed*, by
+    construction, to carry `pairPanel`.
+
+    A second, subtler version of the same mistake surfaced later,
+    diagnosed and fixed at its actual source rather than papered over
+    here: `progress.js`'s own `showingLiveDemePair` flag — the
+    *client-side* switch `drawProgressPanels` reads to decide which of
+    `panels`/`pairPanel` to draw — used to flip only after `onShowPair`
+    finished *awaiting* the bridge call, a full JS-await-Python-JS round
+    trip later than `self._live_deme_pair` itself (which becomes
+    non-`None` the instant the Python side executes). A tick processed
+    in that narrower gap already carried `pairPanel` but was still drawn
+    as the overview, because the flag telling the client which one to
+    draw had not caught up yet. Fixed in `progress.js` itself: the flag
+    now flips synchronously, before the bridge call is even awaited, so
+    it is never later than the click. With that fixed, waiting for one
+    more `progress_count` tick after the round trip lands and reading
+    the canvas once is correct again — no retry loop of `evaluate_js`
+    calls competing with the background thread's own concurrent pushes,
+    exactly the shape this file's own module docstring already spent a
+    real investigation establishing as the right one; an intermediate
+    version of this test introduced such a loop instead, diagnosed the
+    symptom (needs more margin) without finding this cause, and made
+    the test slower without actually closing the gap.
     """
     started_event = threading.Event()
     cancelled_event = threading.Event()
@@ -451,18 +439,16 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
                         break
                     time.sleep(_READY_POLL_INTERVAL_SECONDS)
                 if progress_count_when_pair_landed is not None:
-                    # Poll the canvas's own rendered content directly
-                    # until it actually differs from the overview
-                    # snapshot, rather than a single read after waiting
-                    # for one more progress tick — see this test's own
-                    # docstring for why that one-shot read is not
-                    # sufficient, even after the bridge round trip has
-                    # genuinely landed.
+                    for _ in range(_READY_POLL_ATTEMPTS):
+                        if progress_count > progress_count_when_pair_landed:
+                            break
+                        time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                    pair_snapshot = window.evaluate_js(
+                        "document.getElementById('progress-canvas').toDataURL()"
+                    )
                     settled = {
                         "selectorHidden": selector_hidden,
-                        "pairDiffersFromOverview": _canvas_eventually_differs(
-                            window, "progress-canvas", overview_snapshot
-                        ),
+                        "pairDiffersFromOverview": (pair_snapshot != overview_snapshot),
                     }
                 window.evaluate_js(
                     "document.getElementById('cancel-run-button').click();"
