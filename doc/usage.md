@@ -372,24 +372,26 @@ no separate "batch mode" toggle. Every screen calls the identical underlying
 function this guide already documents; nothing here is a second
 implementation:
 
-A native File/Run/View/Help menu bar is available from any screen, including
-mid-run. File covers configuration/run file-system actions (New/Open/Save
-configuration, Open run…, Reveal output folder, Quit); Run covers the
-simulation lifecycle (Run simulation, Cancel run, Animate); View holds a
-Significant digits submenu (2/3/4/5/6/8, default 3) that changes how many
-digits every displayed statistic rounds to — cosmetic only,
-`trajectory.jsonl`/`report.json`/`manifest.json` always keep full precision
-regardless of this setting; Help covers this guide and the
+A native File/Configure/Run/View/Help menu bar is available from any screen,
+including mid-run. File covers configuration/run file-system actions
+(New/Open/Save configuration, Open run…, Reveal output folder, Quit);
+Configure jumps straight to any one of the model input screen's own six
+sections (Population/Migration/Mutation/Initial conditions/Convergence/
+Batch); Run covers the simulation lifecycle (Run simulation, Cancel run,
+Animate); View holds a Significant digits submenu (2/3/4/5/6/8, default 3)
+that changes how many digits every displayed statistic rounds to — cosmetic
+only, `trajectory.jsonl`/`report.json`/`manifest.json` always keep full
+precision regardless of this setting; Help covers this guide and the
 [configuration reference](configuration.md) (rendered in-app — see the Help
 screen row below), a link to the full documentation on GitHub, Check for
 updates, and About. Every menu item reuses the exact same action the
-matching button already performs; File/Run items invoked from a screen
-where they are not immediately actionable navigate to the screen where they
-are first, rather than doing nothing.
+matching button already performs; File/Configure/Run items invoked from a
+screen where they are not immediately actionable navigate to the screen
+where they are first, rather than doing nothing.
 
 | Screen | What it does | Same as |
 |---|---|---|
-| Model input | Build and validate a full configuration from a tabbed form (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one tab per [configuration reference](configuration.md) section); "Load YAML…"/"Save YAML…" read and write the exact file format above; "Open a run…" reaches the Open a run screen | [Create a configuration](#create-a-configuration) |
+| Model input | Build and validate a full configuration from six sections (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one per [configuration reference](configuration.md) section), reached from the Configure menu (above) rather than an on-screen tab strip; "Load YAML…"/"Save YAML…" read and write the exact file format above; "Open a run…" reaches the Open a run screen | [Create a configuration](#create-a-configuration) |
 | Running | A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout | `run`'s own progress/error output, on one screen instead of terminal lines |
 | Results | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot — every deme pair at once as a small-multiples grid once `d` is 3 or more (up to 6 demes; a PCA projection above that), each panel with a labeled, numbered `0.0`-`1.0` probability scale on both axes; "Compare demes directly" (two dropdowns plus "Show pair"/"Show overview") swaps to any two chosen demes' own raw frequencies at full size and back, most useful once the default view is a PCA projection rather than a direct pair; "Open output folder" reveals the same four artifacts; "Animate" plays back the persisted trajectory (disabled for a single-generation run, which has nothing to animate) | [Output schemas](#output-schemas) |
 | Batch results | A pooled scatter across every replicate's final state — the same small-multiples grid the Results screen uses once `d` is 3 or more — beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter; the same "Compare demes directly" pair selector as the Results screen, pooled across every replicate; each row's own "Open" button reaches the Results screen for that one replicate; "Open batch folder" reveals `summary.json` and every replicate subdirectory | [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |

@@ -292,20 +292,22 @@ decides whether a run goes through the scalar or the batch path — there is
 no separate &quot;batch mode&quot; toggle. Every screen calls the identical underlying
 function this guide already documents; nothing here is a second
 implementation:</p>
-<p>A native File/Run/View/Help menu bar is available from any screen, including
-mid-run. File covers configuration/run file-system actions (New/Open/Save
-configuration, Open run…, Reveal output folder, Quit); Run covers the
-simulation lifecycle (Run simulation, Cancel run, Animate); View holds a
-Significant digits submenu (2/3/4/5/6/8, default 3) that changes how many
-digits every displayed statistic rounds to — cosmetic only,
-<code>trajectory.jsonl</code>/<code>report.json</code>/<code>manifest.json</code> always keep full precision
-regardless of this setting; Help covers this guide and the
+<p>A native File/Configure/Run/View/Help menu bar is available from any screen,
+including mid-run. File covers configuration/run file-system actions
+(New/Open/Save configuration, Open run…, Reveal output folder, Quit);
+Configure jumps straight to any one of the model input screen's own six
+sections (Population/Migration/Mutation/Initial conditions/Convergence/
+Batch); Run covers the simulation lifecycle (Run simulation, Cancel run,
+Animate); View holds a Significant digits submenu (2/3/4/5/6/8, default 3)
+that changes how many digits every displayed statistic rounds to — cosmetic
+only, <code>trajectory.jsonl</code>/<code>report.json</code>/<code>manifest.json</code> always keep full
+precision regardless of this setting; Help covers this guide and the
 <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> (rendered in-app — see the Help
 screen row below), a link to the full documentation on GitHub, Check for
 updates, and About. Every menu item reuses the exact same action the
-matching button already performs; File/Run items invoked from a screen
-where they are not immediately actionable navigate to the screen where they
-are first, rather than doing nothing.</p>
+matching button already performs; File/Configure/Run items invoked from a
+screen where they are not immediately actionable navigate to the screen
+where they are first, rather than doing nothing.</p>
 <table>
 <thead>
 <tr>
@@ -317,7 +319,7 @@ are first, rather than doing nothing.</p>
 <tbody>
 <tr>
 <td>Model input</td>
-<td>Build and validate a full configuration from a tabbed form (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one tab per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section); &quot;Load YAML…&quot;/&quot;Save YAML…&quot; read and write the exact file format above; &quot;Open a run…&quot; reaches the Open a run screen</td>
+<td>Build and validate a full configuration from six sections (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section), reached from the Configure menu (above) rather than an on-screen tab strip; &quot;Load YAML…&quot;/&quot;Save YAML…&quot; read and write the exact file format above; &quot;Open a run…&quot; reaches the Open a run screen</td>
 <td><a href="#create-a-configuration">Create a configuration</a></td>
 </tr>
 <tr>

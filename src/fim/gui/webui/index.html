@@ -21,6 +21,13 @@
       <input type="radio" name="tab" id="tab-convergence">
       <input type="radio" name="tab" id="tab-batch">
 
+      <!-- Visible navigation moved to the native Configure menu
+           (`fim.gui.app._build_menu`); this bar's own labels/dots stay
+           in the DOM (hidden via app.css's `.tab-bar { display: none;
+           }`) rather than being deleted -- `markTabError`/`clearTabError
+           Dots` in this file still target them by id, unchanged, and
+           `test_input_screen_switches_to_the_tab_with_an_invalid_field`
+           still asserts against `dot-migration` directly. -->
       <nav class="tab-bar">
         <label for="tab-population" data-tab="population">Population<span class="error-dot" id="dot-population" hidden></span></label>
         <label for="tab-migration" data-tab="migration">Migration<span class="error-dot" id="dot-migration" hidden></span></label>
@@ -29,6 +36,7 @@
         <label for="tab-convergence" data-tab="convergence">Convergence<span class="error-dot" id="dot-convergence" hidden></span></label>
         <label for="tab-batch" data-tab="batch">Batch<span class="error-dot" id="dot-batch" hidden></span></label>
       </nav>
+      <h2 id="current-tab-heading">Population</h2>
 
       <section class="tab-panel" id="panel-population">
         <div class="field">

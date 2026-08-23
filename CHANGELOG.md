@@ -8,16 +8,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- A native File/Run/View/Help menu bar in the desktop GUI, reachable
-  from every screen (including mid-run): File covers configuration/run
-  file-system actions (New/Open/Save configuration, Open run…, Reveal
-  output folder, Quit); Run covers the simulation lifecycle (Run
-  simulation, Cancel run, Animate); View holds a "Significant digits"
-  submenu (2/3/4/5/6/8, default 3) that changes how many digits every
-  displayed statistic rounds to — cosmetic only, never touching the
-  full-precision values every run's own `report.json`/`manifest.json`
-  still records; Help opens a new in-app Help screen rendering the
-  [usage guide](doc/usage.md) and
+- A native File/Configure/Run/View/Help menu bar in the desktop GUI,
+  reachable from every screen (including mid-run): File covers
+  configuration/run file-system actions (New/Open/Save configuration,
+  Open run…, Reveal output folder, Quit); Configure jumps straight to
+  any one of the model input screen's own six sections
+  (Population/Migration/Mutation/Initial conditions/Convergence/Batch),
+  now the only visible navigation for them — the on-canvas tab bar that
+  used to be the sole way there is hidden, decluttering the input
+  screen down to just the current section's own fields; Run covers the
+  simulation lifecycle (Run simulation, Cancel run, Animate); View
+  holds a "Significant digits" submenu (2/3/4/5/6/8, default 3) that
+  changes how many digits every displayed statistic rounds to — cosmetic
+  only, never touching the full-precision values every run's own
+  `report.json`/`manifest.json` still records; Help opens a new in-app
+  Help screen rendering the [usage guide](doc/usage.md) and
   [configuration reference](doc/configuration.md) with working
   cross-links, links out to the full documentation on GitHub, and adds
   "Check for updates" — the same opt-in GitHub Releases check `fim

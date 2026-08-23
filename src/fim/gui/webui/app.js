@@ -171,6 +171,9 @@ const fim = {
         newConfiguration() {
             // Overridden by screens/input.js.
         },
+        configureTab() {
+            // Overridden by screens/input.js.
+        },
         openConfiguration() {
             window.fim.showScreen("screen-input");
             document.getElementById("load-yaml-button").click();

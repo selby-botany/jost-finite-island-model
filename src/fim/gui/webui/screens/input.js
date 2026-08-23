@@ -25,6 +25,25 @@ const openRunButton = document.getElementById("open-run-button");
  * summaries, shown as plain text instead). */
 const SUMMARY_ONLY_KEYS = ["m_loaded_summary", "p0_summary"];
 
+/* The (now hidden, `app.css`'s `.tab-bar { display: none; }`) tab
+ * bar's own six labels, keyed by the same `data-tab` name `_build_
+ * menu`'s Configure menu items pass to `configureTab` -- the visible
+ * navigation moved to that native menu (visualization-and-config-
+ * editors design), but `current-tab-heading` still needs the same
+ * human-readable text the old tab labels showed, so this map is kept
+ * rather than reading text out of the now-hidden DOM it used to live
+ * in. */
+const TAB_LABELS = {
+    population: "Population",
+    migration: "Migration",
+    mutation: "Mutation",
+    initial_conditions: "Initial conditions",
+    convergence: "Convergence",
+    batch: "Batch",
+};
+
+const currentTabHeading = document.getElementById("current-tab-heading");
+
 function setFieldValue(name, value) {
     const field = form.elements.namedItem(name);
     if (field === null) {
@@ -151,6 +170,9 @@ async function switchToTab(tabName) {
     if (radio !== null) {
         radio.checked = true;
     }
+    if (currentTabHeading !== null) {
+        currentTabHeading.textContent = TAB_LABELS[tabName] || "";
+    }
 }
 
 async function onRunClicked() {
@@ -253,6 +275,20 @@ window.fim.menu.newConfiguration = async function newConfiguration() {
     window.__fimInputScreenReady = false;
     await resetInputForm();
     window.__fimInputScreenReady = true;
+};
+
+/**
+ * `_build_menu`'s Configure menu -- navigate to Screen 1, on the
+ * requested tab, leaving whatever is already in the form alone. The
+ * one behavioral difference from `newConfiguration` above: this never
+ * resets a field, the same distinction that method's own docstring
+ * draws against the "New run" buttons -- `configureTab` is pure
+ * navigation, matching what clicking an old, now-hidden tab label
+ * itself used to do.
+ */
+window.fim.menu.configureTab = async function configureTab(tabName) {
+    window.fim.showScreen("screen-input");
+    await switchToTab(tabName);
 };
 
 function whenApiReady(callback) {

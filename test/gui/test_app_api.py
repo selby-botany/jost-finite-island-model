@@ -839,17 +839,23 @@ class _FakeMenuWindow:
         return None
 
 
-def test_build_menu_has_file_run_view_and_help() -> None:
-    """The menu bar has exactly the four menus this design specifies.
+def test_build_menu_has_file_configure_run_view_and_help() -> None:
+    """The menu bar has exactly the five menus this design specifies.
 
-    View is new alongside the long-standing File/Run/Help (the
-    significant-digits display preference) — this test's own name and
+    Configure is new alongside File/Run/View/Help (the input screen's
+    own six-tab bar moving off-canvas) — this test's own name and
     assertions were updated alongside it rather than left describing a
     menu bar that no longer matches `_build_menu`'s real shape.
     """
     menus = app_module._build_menu(_FakeMenuWindow())  # type: ignore[arg-type]
 
-    assert [menu.title for menu in menus] == ["File", "Run", "View", "Help"]
+    assert [menu.title for menu in menus] == [
+        "File",
+        "Configure",
+        "Run",
+        "View",
+        "Help",
+    ]
     file_items = [item.title for item in menus[0].items if hasattr(item, "title")]
     assert file_items == [
         "New configuration",
@@ -859,17 +865,26 @@ def test_build_menu_has_file_run_view_and_help() -> None:
         "Reveal output folder",
         "Quit fim",
     ]
-    run_items = [item.title for item in menus[1].items if hasattr(item, "title")]
+    configure_items = [item.title for item in menus[1].items if hasattr(item, "title")]
+    assert configure_items == [
+        "Population",
+        "Migration",
+        "Mutation",
+        "Initial conditions",
+        "Convergence",
+        "Batch",
+    ]
+    run_items = [item.title for item in menus[2].items if hasattr(item, "title")]
     assert run_items == ["Run simulation", "Cancel run", "Animate"]
-    view_items = [item.title for item in menus[2].items if hasattr(item, "title")]
+    view_items = [item.title for item in menus[3].items if hasattr(item, "title")]
     assert view_items == ["Significant digits"]
-    digits_submenu = menus[2].items[0]
+    digits_submenu = menus[3].items[0]
     assert isinstance(digits_submenu, Menu)
     digit_items = [
         item.title for item in digits_submenu.items if hasattr(item, "title")
     ]
     assert digit_items == ["2", "3 (default)", "4", "5", "6", "8"]
-    help_items = [item.title for item in menus[3].items if hasattr(item, "title")]
+    help_items = [item.title for item in menus[4].items if hasattr(item, "title")]
     assert help_items == [
         "Usage guide",
         "Configuration reference",

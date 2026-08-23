@@ -193,6 +193,49 @@ def test_menu_new_configuration_resets_an_edited_field(
     assert value["fieldN"] == starter_n
 
 
+def test_menu_configure_tab_switches_tabs_without_resetting_the_form(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`fim.menu.configureTab` (the native Configure menu, design §4.5) navigates only.
+
+    The declutter this menu exists for (visualization-and-config-editors
+    design): the on-canvas tab bar itself is now hidden (`app.css`'s
+    `.tab-bar { display: none; }`), so this is the only way left to
+    reach a tab other than an invalid-field auto-jump — checked here
+    both for the tab switch itself (the hidden radio still flips, and
+    `current-tab-heading` still shows the right name for a user with no
+    visible tab bar to read instead) and for the one behavioral contract
+    that distinguishes it from `newConfiguration`: an edited field
+    survives the switch, unlike a real reset.
+
+    The trigger wraps the call in `setTimeout(..., 0)`, matching
+    `fim.gui.app._build_menu`'s own real dispatcher exactly — the same
+    reason `test_menu_new_configuration_resets_an_edited_field` above
+    does, and for the identical, confirmed-live deadlock this avoids.
+    """
+    value = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "document.getElementById('field-N').value = '999999'; "
+            "setTimeout(() => { window.fim.menu.configureTab('migration'); }, 0);"
+        ),
+        read=(
+            "({"
+            "fieldN: document.getElementById('field-N').value, "
+            "migrationChecked: document.getElementById('tab-migration').checked, "
+            "heading: document.getElementById('current-tab-heading').textContent"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None and value.get("migrationChecked") is True
+        ),
+    )
+
+    assert value["fieldN"] == "999999"
+    assert value["heading"] == "Migration"
+
+
 def test_batch_progress_display_never_regresses(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

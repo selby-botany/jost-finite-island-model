@@ -70,11 +70,24 @@ body {
     display: block;
 }
 
+/* Decluttered off the input screen's own canvas (visualization-and-
+ * config-editors design): navigation moved to the native Configure
+ * menu (`fim.gui.app._build_menu`). The bar itself, its labels, and
+ * its error dots stay in the DOM rather than being deleted -- `input.
+ * js`'s own `markTabError`/`clearTabErrorDots` still target them by
+ * id -- `display: none` is enough to remove them from what the user
+ * sees without touching that machinery. */
 .tab-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
+    display: none;
+}
+
+#current-tab-heading {
+    margin: 0 0 0.75rem;
+    padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--fim-border);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--fim-foreground);
 }
 
 .tab-bar label {

@@ -1326,7 +1326,7 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
 
 
 def _build_menu(window: webview.Window) -> list[Menu]:
-    """Build the native File/Run/View/Help menu bar (design §4.5).
+    """Build the native File/Configure/Run/View/Help menu bar (design §4.5).
 
     Edit and Window are still left out (design §4.5's own "considered,
     deferred": every text field already gets native Cut/Copy/Paste from
@@ -1334,6 +1334,13 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     value for a single-window tool) — but View is not deferred any
     longer: "significant digits to display" is a genuine display
     toggle, unlike anything on offer when that call was first made.
+    Configure is new too, for a different reason — decluttering the
+    input screen's own canvas: the six-tab bar (design §4.1) that used
+    to be the only way to reach Population/Migration/Mutation/Initial
+    conditions/Convergence/Batch is now hidden (`app.css`'s own `.tab-
+    bar { display: none; }`), with this menu as the replacement entry
+    point — the tabs, panels, and every field inside them are otherwise
+    completely unchanged; only how you get to one is different.
 
     Every item except Quit is a thin closure calling `window.evaluate_js(
     "fim.menu.X()")` — the identical "no-op stub, overridden by whichever
@@ -1395,6 +1402,27 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             MenuAction("Quit fim", window.destroy),
         ],
     )
+    # `(tab id, menu label)` pairs, in the exact order `index.html`'s
+    # own (now-hidden) tab bar used — one native `MenuAction` per
+    # section, each just asking `fim.menu.configureTab` (`screens/
+    # input.js`) to check the matching hidden radio input directly, the
+    # same one `switchToTab` already flips for the "jump to the invalid
+    # tab" case (design §4.0 #2) — no second, menu-only navigation path.
+    configure_tabs = (
+        ("population", "Population"),
+        ("migration", "Migration"),
+        ("mutation", "Mutation"),
+        ("initial_conditions", "Initial conditions"),
+        ("convergence", "Convergence"),
+        ("batch", "Batch"),
+    )
+    configure_menu = Menu(
+        "Configure",
+        [
+            MenuAction(label, dispatch(f"fim.menu.configureTab({json.dumps(tab_id)})"))
+            for tab_id, label in configure_tabs
+        ],
+    )
     run_menu = Menu(
         "Run",
         [
@@ -1444,7 +1472,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             MenuAction("About fim", dispatch("fim.menu.about()")),
         ],
     )
-    return [file_menu, run_menu, view_menu, help_menu]
+    return [file_menu, configure_menu, run_menu, view_menu, help_menu]
 
 
 def main() -> int:
