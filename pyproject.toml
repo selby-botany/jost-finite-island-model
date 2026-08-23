@@ -56,6 +56,13 @@ dev = [
     "build>=1.2,<1.6",
     "coverage[toml]==7.*",
     "hypothesis==6.*",
+    # `dev/bin/generate-help-html`'s own Markdown renderer (design doc
+    # `20260822-claude-sonnet-5-in-app-help-design.md` §4.1) -- a dev-only
+    # dependency, never shipped in a packaged build: it renders
+    # `doc/usage.md`/`doc/configuration.md` to committed HTML fragments
+    # once at commit time, the same way `pydoc-markdown` below renders
+    # `src/fim/API.md` and never ships either.
+    "markdown-it-py==4.*",
     "mypy>=1.11,<2.4",
     "pydoc-markdown==4.*",
     "pyinstaller==6.*",

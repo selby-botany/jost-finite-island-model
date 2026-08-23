@@ -39,6 +39,30 @@ if ((${#python_files[@]})); then
     fi
 fi
 
+# Refresh the Help screen's generated HTML whenever a Tier 1 source doc,
+# or the generator itself, is staged (design doc
+# `20260822-claude-sonnet-5-in-app-help-design.md` §4.1's own freshness
+# discipline, mirroring the API-doc refresh above).
+help_sources_staged=false
+while IFS= read -r -d '' path; do
+    case "${path}" in
+        doc/usage.md | doc/configuration.md \
+            | dev/bin/generate-help-html | dev/lib/docslug.py)
+            help_sources_staged=true
+            ;;
+    esac
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if "${help_sources_staged}"; then
+    if [[ -x dev/bin/generate-help-html ]] \
+        && python3 -c 'import markdown_it' >/dev/null 2>&1; then
+        dev/bin/generate-help-html
+        git add -- src/fim/gui/webui/help
+    else
+        printf 'pre-commit: help-HTML generator unavailable; refresh skipped\n'
+    fi
+fi
+
 # Reject newly added filenames that are not portable across supported systems.
 ascii_check='import sys; data = sys.stdin.buffer.read().split(b"\0"); raise SystemExit(any(name and not name.isascii() for name in data))'
 if ! git diff --cached --name-only --diff-filter=A -z \

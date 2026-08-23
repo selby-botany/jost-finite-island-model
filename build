@@ -96,7 +96,10 @@ if ! "${dry_run}"; then
         "${coverage}" \
             && required_modules[${#required_modules[@]}]=pytest_cov
     fi
-    "${run_docs}" && required_modules[${#required_modules[@]}]=pydoc_markdown
+    if "${run_docs}"; then
+        required_modules[${#required_modules[@]}]=pydoc_markdown
+        required_modules[${#required_modules[@]}]=markdown_it
+    fi
     "${run_package}" && required_modules[${#required_modules[@]}]=build
 
     if ! missing_modules=$(
@@ -127,12 +130,12 @@ PY
 fi
 
 if "${run_lint}"; then
-    run "${python}" -m ruff check src test \
+    run "${python}" -m ruff check src test dev/lib \
         dev/bin/check-doc-links dev/bin/extract-release-notes \
-        dev/bin/calibrate-statistical-bands
-    run "${python}" -m ruff format --check src test \
+        dev/bin/calibrate-statistical-bands dev/bin/generate-help-html
+    run "${python}" -m ruff format --check src test dev/lib \
         dev/bin/check-doc-links dev/bin/extract-release-notes \
-        dev/bin/calibrate-statistical-bands
+        dev/bin/calibrate-statistical-bands dev/bin/generate-help-html
 fi
 
 # No positional arguments: `[tool.mypy]` in pyproject.toml already sets
@@ -173,6 +176,22 @@ if "${run_docs}"; then
         run dev/bin/generate-api-docs
     fi
     run dev/bin/check-doc-links
+
+    # `dev/bin/generate-help-html`'s own committed-output freshness check,
+    # the identical shape as `generate-api-docs` above (design doc
+    # `20260822-claude-sonnet-5-in-app-help-design.md` §4.1): regenerate
+    # into a scratch directory, diff every file against the committed
+    # `webui/help/` tree, verify nothing was left behind either direction.
+    if "${ci}"; then
+        help_temporary=$(mktemp -d "${TMPDIR:-/tmp}/fim-help.XXXXXX")
+        trap 'rm -rf -- "${help_temporary}"' EXIT
+        run dev/bin/generate-help-html --output-dir "${help_temporary}"
+        run diff -rq -- src/fim/gui/webui/help "${help_temporary}"
+        rm -rf -- "${help_temporary}"
+        trap - EXIT
+    else
+        run dev/bin/generate-help-html
+    fi
 fi
 
 if "${run_package}"; then

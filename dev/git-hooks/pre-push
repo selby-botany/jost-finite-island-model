@@ -54,4 +54,17 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
     else
         printf 'pre-push: API generator unavailable; docs skipped\n'
     fi
+
+    if [[ -x dev/bin/generate-help-html ]] \
+        && python3 -c 'import markdown_it' >/dev/null 2>&1
+    then
+        help_temporary=$(mktemp -d "${TMPDIR:-/tmp}/fim-help.XXXXXX")
+        trap 'rm -rf -- "${help_temporary}"' EXIT
+        dev/bin/generate-help-html --output-dir "${help_temporary}"
+        diff -rq -- src/fim/gui/webui/help "${help_temporary}"
+        rm -rf -- "${help_temporary}"
+        trap - EXIT
+    else
+        printf 'pre-push: help-HTML generator unavailable; docs skipped\n'
+    fi
 fi
