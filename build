@@ -180,13 +180,20 @@ if "${run_docs}"; then
     # `dev/bin/generate-help-html`'s own committed-output freshness check,
     # the identical shape as `generate-api-docs` above (design doc
     # `20260822-claude-sonnet-5-in-app-help-design.md` §4.1): regenerate
-    # into a scratch directory, diff every file against the committed
-    # `webui/help/` tree, verify nothing was left behind either direction.
+    # into a scratch directory, diff each *generated* file against the
+    # committed `webui/help/` tree. Compares the two generated files by
+    # name, not the whole directory (`diff -rq` on the directory itself
+    # would always report `help.css` as "only in" the committed tree --
+    # it is hand-written, never generated, and rightly has no counterpart
+    # in the scratch directory at all).
     if "${ci}"; then
         help_temporary=$(mktemp -d "${TMPDIR:-/tmp}/fim-help.XXXXXX")
         trap 'rm -rf -- "${help_temporary}"' EXIT
         run dev/bin/generate-help-html --output-dir "${help_temporary}"
-        run diff -rq -- src/fim/gui/webui/help "${help_temporary}"
+        for generated in "${help_temporary}"/*.html; do
+            run diff -u -- "src/fim/gui/webui/help/$(basename -- "${generated}")" \
+                "${generated}"
+        done
         rm -rf -- "${help_temporary}"
         trap - EXIT
     else

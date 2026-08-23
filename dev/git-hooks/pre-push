@@ -61,7 +61,15 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
         help_temporary=$(mktemp -d "${TMPDIR:-/tmp}/fim-help.XXXXXX")
         trap 'rm -rf -- "${help_temporary}"' EXIT
         dev/bin/generate-help-html --output-dir "${help_temporary}"
-        diff -rq -- src/fim/gui/webui/help "${help_temporary}"
+        # Compares each *generated* file by name, not the whole directory:
+        # `diff -rq` on the directory itself would always report the
+        # hand-written `help.css` as "only in" the committed tree, since
+        # it is never generated and rightly has no scratch-directory
+        # counterpart at all.
+        for generated in "${help_temporary}"/*.html; do
+            diff -u -- "src/fim/gui/webui/help/$(basename -- "${generated}")" \
+                "${generated}"
+        done
         rm -rf -- "${help_temporary}"
         trap - EXIT
     else
