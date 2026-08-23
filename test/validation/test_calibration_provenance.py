@@ -35,14 +35,14 @@ def test_calibration_script_is_not_wired_into_the_deterministic_gate() -> None:
     # `build` -- never a `run dev/bin/calibrate-statistical-bands`
     # execution line.
     assert (
-        "ruff check src test \\\n"
+        "ruff check src test dev/lib \\\n"
         "        dev/bin/check-doc-links dev/bin/extract-release-notes \\\n"
-        "        dev/bin/calibrate-statistical-bands\n"
+        "        dev/bin/calibrate-statistical-bands dev/bin/generate-help-html\n"
     ) in build_script
     assert (
-        "ruff format --check src test \\\n"
+        "ruff format --check src test dev/lib \\\n"
         "        dev/bin/check-doc-links dev/bin/extract-release-notes \\\n"
-        "        dev/bin/calibrate-statistical-bands\n"
+        "        dev/bin/calibrate-statistical-bands dev/bin/generate-help-html\n"
     ) in build_script
     assert "run dev/bin/calibrate-statistical-bands" not in build_script
 

@@ -9,13 +9,26 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CHECKER = PROJECT_ROOT / "dev" / "bin" / "check-doc-links"
+DOCSLUG = PROJECT_ROOT / "dev" / "lib" / "docslug.py"
 
 
 def _run_checker(root: Path) -> subprocess.CompletedProcess[str]:
-    """Copy and run the checker against an isolated documentation tree."""
+    """Copy and run the checker against an isolated documentation tree.
+
+    `dev/lib/docslug.py` is copied alongside it, mirroring the real
+    repository layout: `check-doc-links` imports `anchor_for` from
+    there via a `sys.path` entry relative to its own `__file__`
+    (in-app help design doc `20260822-claude-sonnet-5-in-app-help-
+    design.md` §4.1's own shared-slugger extraction) — the checker is
+    no longer a single self-contained file, so a copy of just the one
+    script is no longer enough to run it in isolation.
+    """
     checker = root / "dev" / "bin" / "check-doc-links"
     checker.parent.mkdir(parents=True)
     shutil.copy2(CHECKER, checker)
+    docslug = root / "dev" / "lib" / "docslug.py"
+    docslug.parent.mkdir(parents=True)
+    shutil.copy2(DOCSLUG, docslug)
     return subprocess.run(
         [sys.executable, str(checker)],
         cwd=root,

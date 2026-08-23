@@ -71,6 +71,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_batch\_deme\_pair\_panel](#fim.gui.app.Api.get_batch_deme_pair_panel)
     * [ping](#fim.gui.app.Api.ping)
     * [ping\_from\_worker](#fim.gui.app.Api.ping_from_worker)
+    * [open\_external\_link](#fim.gui.app.Api.open_external_link)
+    * [check\_for\_updates](#fim.gui.app.Api.check_for_updates)
+    * [get\_about\_info](#fim.gui.app.Api.get_about_info)
   * [create\_window](#fim.gui.app.create_window)
   * [main](#fim.gui.app.main)
 * [fim.gui.batch\_runner](#fim.gui.batch_runner)
@@ -1547,6 +1550,67 @@ working at all from inside a GUI application process, not just
 from a plain CLI process, is an assumption worth its own direct
 check rather than only discovering a failure three layers away
 inside a real batch run.
+
+<a id="fim.gui.app.Api.open_external_link"></a>
+
+#### open\_external\_link
+
+```python
+def open_external_link(url: str) -> None
+```
+
+Open `url` in the OS default browser (in-app help design §4.3).
+
+Every Tier 2 doc link and every bare `http(s)://` link inside a
+Tier 1 doc routes here, never to native `<a>` navigation — an
+unhandled link click inside a pywebview window can navigate the
+*whole application window* away from `index.html`, not open a
+new tab. `webbrowser.open`, best-effort, no return value the
+caller needs — the same `_reveal_in_file_browser` precedent this
+module already follows for another OS-dispatched action.
+
+<a id="fim.gui.app.Api.check_for_updates"></a>
+
+#### check\_for\_updates
+
+```python
+def check_for_updates() -> dict[str, Any]
+```
+
+Perform the same opt-in GitHub release check `fim update --check` does.
+
+Reuses `fim.update` directly (that module's own docstring: "so
+`fim.gui`'s 'Check for updates' action performs exactly the same
+GitHub Releases lookup and version comparison... rather than a
+second implementation") — this bridge method is the first real
+caller of that promise from the pywebview build; the Tk build's
+own equivalent action called the same module the same way.
+
+**Returns**:
+
+- ``{"ok"` - True, "available": bool, "current": str, "latest":
+  str, "url": str}` on a successful check (`available` is
+  whether `latest` is newer than `current` — `fim update
+  --check`'s own three-way `comparison`, collapsed to the one
+  boolean the page actually needs to decide whether to show a
+  "download" link); `{"ok": False, "message": ...}` if the
+  network call itself fails (`fim.update.latest_release`'s own
+  documented `RuntimeError` — a failed opt-in check, not an
+  application error).
+
+<a id="fim.gui.app.Api.get_about_info"></a>
+
+#### get\_about\_info
+
+```python
+def get_about_info() -> dict[str, str]
+```
+
+Return the static "About fim" facts the Help menu shows (design §4.5).
+
+No bridge state, no network call — `fim.__version__` and the
+project's own already-declared URLs, the same values `pyproject.
+toml`'s `[project.urls]` and `fim --version` already report.
 
 <a id="fim.gui.app.create_window"></a>
 
