@@ -143,10 +143,7 @@ const fim = {
                 Number(ySelect.value)
             );
             if (result.ok) {
-                drawScatter(canvas, result.panel.points, {
-                    xLabel: result.panel.x_label,
-                    yLabel: result.panel.y_label,
-                });
+                drawScatter(canvas, result.panel);
             }
         };
 

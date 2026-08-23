@@ -23,7 +23,9 @@ from fim.viz.scatter import (
     grouped_points,
     marker_groups,
     panels_from_points,
+    pca_axis_labels,
     pca_project,
+    pca_summary,
     plot_frequency_scatter,
     pooled_frequency_points,
     pooled_scatter_panels,
@@ -391,6 +393,7 @@ def test_scatter_panels_two_demes_is_one_direct_panel() -> None:
     assert len(panels) == 1
     assert panels[0]["x_label"] == "Deme 1"
     assert panels[0]["y_label"] == "Deme 2"
+    assert panels[0]["kind"] == "frequency"
     points = panels[0]["points"]
     assert isinstance(points, list)
     assert len(points) == 2
@@ -407,12 +410,22 @@ def test_scatter_panels_four_demes_is_one_panel_per_pair() -> None:
 
 
 def test_scatter_panels_large_d_is_one_pca_panel() -> None:
-    """`d > pairwise_max_demes` produces one PCA-projected panel."""
+    """`d > pairwise_max_demes` produces one PCA-projected, unbounded panel.
+
+    Axis titles carry the explained-variance/top-loading-demes suffix
+    `pca_axis_labels` builds (checked precisely in `test_pca_axis_labels_
+    names_the_explained_variance_and_top_demes` below) -- only the
+    stable prefix and `kind` are asserted here.
+    """
     panels = scatter_panels(_state(7))
 
     assert len(panels) == 1
-    assert panels[0]["x_label"] == "Principal component 1"
-    assert panels[0]["y_label"] == "Principal component 2"
+    x_label, y_label = panels[0]["x_label"], panels[0]["y_label"]
+    assert isinstance(x_label, str)
+    assert isinstance(y_label, str)
+    assert x_label.startswith("Principal component 1")
+    assert y_label.startswith("Principal component 2")
+    assert panels[0]["kind"] == "pca"
 
 
 def test_pooled_scatter_panels_of_no_states_is_empty() -> None:
@@ -455,7 +468,10 @@ def test_pooled_scatter_panels_dispatches_layout_by_deme_count() -> None:
     panels = pooled_scatter_panels(states, deme_count=7)
 
     assert len(panels) == 1
-    assert panels[0]["x_label"] == "Principal component 1"
+    x_label = panels[0]["x_label"]
+    assert isinstance(x_label, str)
+    assert x_label.startswith("Principal component 1")
+    assert panels[0]["kind"] == "pca"
 
 
 def test_deme_pair_panel_names_the_requested_pair() -> None:
@@ -466,6 +482,67 @@ def test_deme_pair_panel_names_the_requested_pair() -> None:
 
     assert panel["x_label"] == "Deme 3"
     assert panel["y_label"] == "Deme 10"
+    assert panel["kind"] == "frequency"
+
+
+# A hand-constructed, rank-2 input: deme 3 is constant (contributes no
+# variance at all), deme 2 alone drives the top-variance direction, deme 1
+# the second. Exact golden values below were computed once directly
+# (`numpy.linalg.svd` against this same array) and asserted verbatim --
+# this project's own "exact golden values for formulas" testing rule
+# (`doc/developer.md`), not a looser approximate check.
+_PCA_GOLDEN_POINTS = np.array(
+    [
+        [0.0, 0.0, 0.5],
+        [1.0, 0.0, 0.5],
+        [0.5, 1.0, 0.5],
+    ],
+    dtype=np.float64,
+)
+
+
+def test_pca_summary_names_the_explained_variance_and_top_loading_demes() -> None:
+    """`pca_summary` reproduces a hand-verified SVD exactly, not approximately."""
+    summary = pca_summary(_PCA_GOLDEN_POINTS)
+
+    variance = summary["explained_variance"]
+    assert variance[0] == pytest.approx(4 / 7)
+    assert variance[1] == pytest.approx(3 / 7)
+    assert summary["top_demes"][0][0] == 2
+    assert summary["top_demes"][1][0] == 1
+
+
+def test_pca_summary_top_demes_never_exceeds_the_configured_count() -> None:
+    """`PCA_TOP_LOADING_DEMES` caps the list even when every deme has a real loading."""
+    points = frequency_points(_state(20))
+
+    summary = pca_summary(points)
+
+    for demes in summary["top_demes"]:
+        assert len(demes) <= 3
+
+
+def test_pca_summary_of_a_single_point_is_all_zero() -> None:
+    """A degenerate one-row input matches `pca_project`'s own all-zero case."""
+    summary = pca_summary(np.array([[0.2, 0.3, 0.5]], dtype=np.float64))
+
+    assert summary["explained_variance"] == (0.0, 0.0)
+    assert summary["top_demes"] == ((), ())
+
+
+def test_pca_axis_labels_name_the_explained_variance_and_top_demes() -> None:
+    """The client-ready axis title carries `pca_summary`'s own diagnostics.
+
+    Only the dominant deme is asserted, not the full three-deme list
+    (`_PCA_GOLDEN_POINTS` has exactly `PCA_TOP_LOADING_DEMES` demes, so
+    every one appears) — the trailing two are ordered by a floating-point
+    tie-break among near-zero loadings, not a meaningful ranking worth
+    pinning exactly.
+    """
+    x_label, y_label = pca_axis_labels(_PCA_GOLDEN_POINTS)
+
+    assert x_label.startswith("Principal component 1 (57% of variance; demes 2")
+    assert y_label.startswith("Principal component 2 (43% of variance; demes 1")
 
 
 def test_deme_pair_panel_matches_panels_from_points_own_pairwise_output() -> None:

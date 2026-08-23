@@ -84,10 +84,7 @@ window.fim.showResults = function showResults(payload) {
         // scope line).
         const drawOverview = () => {
             if (panels.length === 1) {
-                drawScatter(resultsCanvas, panels[0].points, {
-                    xLabel: panels[0].x_label,
-                    yLabel: panels[0].y_label,
-                });
+                drawScatter(resultsCanvas, panels[0]);
             } else {
                 drawScatterGrid(resultsCanvas, panels);
             }

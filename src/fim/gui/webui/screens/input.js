@@ -168,6 +168,7 @@ async function onRunClicked() {
     showBanner("");
     document.getElementById("progress-generation").value = 0;
     document.getElementById("cancel-run-button").disabled = false;
+    window.fim.resetBatchProgress();
     window.fim.showScreen("screen-progress");
 }
 
