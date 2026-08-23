@@ -108,7 +108,7 @@ def test_start_run_writes_the_four_documented_artifacts_on_success(
     # direct panel per message, never empty. The `if` (not a bare
     # `assert message[0] == ...` followed by indexing) is what lets
     # mypy narrow `message` from the full `RunMessage` union down to
-    # `ProgressMessage` before `message[2]` is indexed.
+    # `ProgressMessage` before `message[2]`/`message[3]` is indexed.
     checked = 0
     for message in progress_messages:
         assert message[0] == "progress"
@@ -116,6 +116,13 @@ def test_start_run_writes_the_four_documented_artifacts_on_success(
             panels = message[2]
             assert len(panels) == 1
             assert panels[0]["points"]
+            # `points` (design's own live "Compare demes directly"
+            # selector, `fim.gui.app._drain_run_messages`'s own
+            # `deme_pair_panel(message[3], ...)` call): the same raw,
+            # not-yet-reduced array `panels` was itself built from, one
+            # column per deme.
+            points = message[3]
+            assert points.shape[1] == 2
             checked += 1
     assert checked == len(progress_messages)
 

@@ -65,6 +65,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
     * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
     * [set\_significant\_digits](#fim.gui.app.Api.set_significant_digits)
+    * [get\_live\_deme\_pair](#fim.gui.app.Api.get_live_deme_pair)
+    * [set\_live\_deme\_pair](#fim.gui.app.Api.set_live_deme_pair)
     * [list\_recent\_runs](#fim.gui.app.Api.list_recent_runs)
     * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
@@ -1375,6 +1377,68 @@ once, at push time, and is not retroactively reformatted.
   precision floats carry roughly seventeen significant
   decimal digits, so anything past that bound would just
   print noise, not real information.
+
+<a id="fim.gui.app.Api.get_live_deme_pair"></a>
+
+#### get\_live\_deme\_pair
+
+```python
+def get_live_deme_pair() -> tuple[int, int] | None
+```
+
+Return the deme pair the Progress screen's live selector wants, or `None`.
+
+A bound-method reference to *this*, not a snapshot of its
+return value, is what `_start_scalar_run`/`_start_batch_run`
+actually thread into `_drain_run_messages`/`_drain_batch_
+messages` — each background thread calls it fresh on every
+tick, so a selection (or a "Show overview" clear) made mid-run
+affects the very next push, unlike `_significant_digits`'s own
+thread-start snapshot.
+
+<a id="fim.gui.app.Api.set_live_deme_pair"></a>
+
+#### set\_live\_deme\_pair
+
+```python
+def set_live_deme_pair(first_deme: int | None,
+                       second_deme: int | None) -> dict[str, Any]
+```
+
+Set (or clear) the deme pair a running simulation's progress pushes include.
+
+The Progress screen's own live counterpart to Screens 3/4/5's
+"Compare demes directly" selector (`get_deme_pair_panel`/`get_
+batch_deme_pair_panel`/`get_animation_deme_pair_frames`) —
+those each recompute one already-*completed* run's own pair on
+demand; this instead tells a *currently running* simulation's
+own background thread which pair to keep including in every
+subsequent push, since polling a static trajectory on demand
+makes no sense for one still being written.
+
+No range/distinctness validation here (unlike `set_significant_
+digits`'s own bounds check) — this setter has no `d` or points
+on hand to validate against, and `screens/progress.js`'s own
+selector already disables "Show pair" whenever `first_deme ==
+second_deme` (`app.js`'s shared `wireDemePairSelector`). An
+out-of-range or identical pair reaching a push anyway is caught
+per-tick instead, where real data exists to catch it against
+(`_drain_run_messages`/`_push_batch_progress`'s own `deme_pair_
+panel` call, wrapped to skip that one tick's `pairPanel` rather
+than crash the whole push).
+
+**Arguments**:
+
+- `first_deme` - 1-based deme number for the X axis, or `None`
+  (with `second_deme` also `None`) to clear the selection
+  — "Show overview".
+- `second_deme` - 1-based deme number for the Y axis, or `None`.
+
+
+**Returns**:
+
+- ``{"ok"` - True}` always — nothing here can fail validation on
+  its own terms; see the docstring above for why.
 
 <a id="fim.gui.app.Api.list_recent_runs"></a>
 

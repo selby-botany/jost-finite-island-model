@@ -30,6 +30,7 @@ after the `await` resolves.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import queue
 import subprocess
@@ -286,6 +287,16 @@ class Api:
         # Screen 3/4 was formatted once, at push time, and is not
         # retroactively reformatted.
         self._significant_digits: int = _DEFAULT_DISPLAY_SIGNIFICANT_DIGITS
+        # The Progress screen's own live "Compare demes directly"
+        # selector (`set_live_deme_pair`) mutates this directly; unlike
+        # `_significant_digits` above, a background run's own thread
+        # reads it fresh on *every* tick, not once at thread-start
+        # (`get_live_deme_pair`, threaded into `_drain_run_messages`/
+        # `_drain_batch_messages` as a bound-method callable rather than
+        # a snapshotted value) — the whole point of a *live* selector is
+        # that picking a pair mid-run affects the very next push, not
+        # only a future run the way `_significant_digits` does.
+        self._live_deme_pair: tuple[int, int] | None = None
 
     def start_run(self, values: dict[str, str]) -> dict[str, Any]:
         """Validate the form, then start a run pushing live progress to the page.
@@ -341,6 +352,11 @@ class Api:
         except FileExistsError as error:
             return {"ok": False, "message": str(error)}
         self._cancel_event = cancel_event
+        # A fresh run never inherits a previous run's own live pair
+        # selection — the same "never left showing stale state from
+        # whichever screen used it last" reasoning `animation.js`'s own
+        # `showAnimation` documents for its identical selector.
+        self._live_deme_pair = None
         if self._on_run_started is not None:
             self._on_run_started()
         window = webview.windows[0]
@@ -353,6 +369,7 @@ class Api:
                 params.d,
                 output_directory,
                 self._significant_digits,
+                self.get_live_deme_pair,
                 self._on_message,
             ),
             daemon=True,
@@ -381,6 +398,8 @@ class Api:
         except FileExistsError as error:
             return {"ok": False, "message": str(error)}
         self._cancel_event = cancel_event
+        # See `_start_scalar_run`'s identical reset for why.
+        self._live_deme_pair = None
         if self._on_run_started is not None:
             self._on_run_started()
         window = webview.windows[0]
@@ -393,6 +412,7 @@ class Api:
                 run_id,
                 output_directory,
                 self._significant_digits,
+                self.get_live_deme_pair,
                 self._on_message,
             ),
             daemon=True,
@@ -573,6 +593,60 @@ class Api:
             }
         self._significant_digits = digits
         return {"ok": True, "digits": digits}
+
+    def get_live_deme_pair(self) -> tuple[int, int] | None:
+        """Return the deme pair the Progress screen's live selector wants, or `None`.
+
+        A bound-method reference to *this*, not a snapshot of its
+        return value, is what `_start_scalar_run`/`_start_batch_run`
+        actually thread into `_drain_run_messages`/`_drain_batch_
+        messages` — each background thread calls it fresh on every
+        tick, so a selection (or a "Show overview" clear) made mid-run
+        affects the very next push, unlike `_significant_digits`'s own
+        thread-start snapshot.
+        """
+        return self._live_deme_pair
+
+    def set_live_deme_pair(
+        self, first_deme: int | None, second_deme: int | None
+    ) -> dict[str, Any]:
+        """Set (or clear) the deme pair a running simulation's progress pushes include.
+
+        The Progress screen's own live counterpart to Screens 3/4/5's
+        "Compare demes directly" selector (`get_deme_pair_panel`/`get_
+        batch_deme_pair_panel`/`get_animation_deme_pair_frames`) —
+        those each recompute one already-*completed* run's own pair on
+        demand; this instead tells a *currently running* simulation's
+        own background thread which pair to keep including in every
+        subsequent push, since polling a static trajectory on demand
+        makes no sense for one still being written.
+
+        No range/distinctness validation here (unlike `set_significant_
+        digits`'s own bounds check) — this setter has no `d` or points
+        on hand to validate against, and `screens/progress.js`'s own
+        selector already disables "Show pair" whenever `first_deme ==
+        second_deme` (`app.js`'s shared `wireDemePairSelector`). An
+        out-of-range or identical pair reaching a push anyway is caught
+        per-tick instead, where real data exists to catch it against
+        (`_drain_run_messages`/`_push_batch_progress`'s own `deme_pair_
+        panel` call, wrapped to skip that one tick's `pairPanel` rather
+        than crash the whole push).
+
+        Args:
+            first_deme: 1-based deme number for the X axis, or `None`
+                (with `second_deme` also `None`) to clear the selection
+                — "Show overview".
+            second_deme: 1-based deme number for the Y axis, or `None`.
+
+        Returns:
+            `{"ok": True}` always — nothing here can fail validation on
+            its own terms; see the docstring above for why.
+        """
+        if first_deme is None or second_deme is None:
+            self._live_deme_pair = None
+        else:
+            self._live_deme_pair = (first_deme, second_deme)
+        return {"ok": True}
 
     def list_recent_runs(self) -> list[dict[str, Any]]:
         """List every run under `results/`, newest first (Screen 6, design §4.6).
@@ -981,6 +1055,7 @@ def _drain_run_messages(
     deme_count: int,
     output_directory: Path,
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
+    live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
     on_message: Callable[[runner.RunMessage], None] | None = None,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
@@ -1004,15 +1079,26 @@ def _drain_run_messages(
     point, so a test's own hook firing here never becomes a second
     concurrent caller the way a test-side polling loop would.
 
-    `deme_count` rides along only for the `"done"` payload's own
-    `demeCount` field — `results.js`'s large-`d` deme-pair selector
-    needs it to populate its two axis dropdowns; nothing here computes
-    with it directly.
+    `deme_count` rides along for both the `"done"` payload's own
+    `demeCount` field (`results.js`'s large-`d` deme-pair selector) and
+    every `"progress"` push's own `demeCount` (`screens/progress.js`'s
+    identical *live* selector, wired once the first push a fresh run
+    makes carries it); nothing here computes with it directly either
+    way.
 
     `digits` is `_start_scalar_run`'s own snapshot of `Api._significant_
     digits` at the moment this thread was started, not a live read of
     it later — a change made mid-run via the View menu applies starting
     with the *next* run's own thread, not this one already in flight.
+    `live_deme_pair`, by contrast, *is* read fresh on every `"progress"`
+    tick (`Api.get_live_deme_pair`, a bound-method reference, not a
+    snapshotted value) — the Progress screen's own live "Compare demes
+    directly" selector needs a pair picked mid-run to affect the very
+    next push, unlike `digits`. Defaults to a no-op returning `None`,
+    matching every other optional parameter here (`digits`, `on_
+    message`) — nothing calls this function directly today (always via
+    `_start_scalar_run`'s own thread), but a future direct call needs
+    no new argument to keep working.
     """
     while True:
         # Indexed access under an `if` on `message[0]`, not a tuple-
@@ -1025,11 +1111,25 @@ def _drain_run_messages(
         # directly rather than rediscovering it.
         message = message_queue.get()
         if message[0] == "progress":
-            progress_payload = {
+            progress_payload: dict[str, object] = {
                 "generation": message[1],
                 "maxGenerations": max_generations,
                 "panels": message[2],
+                "demeCount": deme_count,
             }
+            pair = live_deme_pair()
+            if pair is not None:
+                first_deme, second_deme = pair
+                # Out of range for this run's own `d`, or the two demes
+                # match: `screens/progress.js`'s own selector already
+                # keeps "Show pair" disabled whenever X equals Y, so
+                # this is a defensive fallback, not an expected path —
+                # skip this one tick's `pairPanel` rather than drop the
+                # whole progress push over it.
+                with contextlib.suppress(ValueError):
+                    progress_payload["pairPanel"] = deme_pair_panel(
+                        message[3], first_deme - 1, second_deme - 1
+                    )
             window.evaluate_js(f"fim.onRunProgress({json.dumps(progress_payload)})")
             if on_message is not None:
                 on_message(message)
@@ -1144,6 +1244,7 @@ def _push_batch_progress(
     params: SimulationParams,
     run_id: str,
     working_directory: Path,
+    live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
 ) -> None:
     """Read every currently-reporting replicate's live state, push a pooled scatter.
 
@@ -1153,6 +1254,13 @@ def _push_batch_progress(
     `None` — a transient race, not an error; see its own docstring) is
     silently skipped for *this* tick, not treated as a failure: the
     next tick, `_BATCH_POLL_INTERVAL_SECONDS` later, tries again.
+
+    `live_deme_pair` (`Api.get_live_deme_pair`, a bound-method
+    reference read fresh every tick — see `_drain_run_messages`'s own
+    identical parameter for the full reasoning) computes one more
+    panel for the Progress screen's own live "Compare demes directly"
+    selector, reusing this tick's own already-pooled points rather than
+    re-reading every replicate's trajectory a second time.
     """
     states: list[ModelState] = []
     for index in range(1, params.n_replicates + 1):
@@ -1171,11 +1279,26 @@ def _push_batch_progress(
         )
         if state is not None:
             states.append(state)
-    progress_payload = {
+    pooled_points = pooled_frequency_points(states) if states else None
+    panels = (
+        panels_from_points(pooled_points, params.d) if pooled_points is not None else []
+    )
+    progress_payload: dict[str, object] = {
         "replicateCount": params.n_replicates,
         "reportedReplicateCount": len(states),
-        "panels": pooled_scatter_panels(states, params.d),
+        "panels": panels,
+        "demeCount": params.d,
     }
+    pair = live_deme_pair()
+    if pair is not None and pooled_points is not None:
+        first_deme, second_deme = pair
+        # Same defensive fallback as `_drain_run_messages`'s own
+        # identical case: out of range for this batch's own `d`, or
+        # the two demes match.
+        with contextlib.suppress(ValueError):
+            progress_payload["pairPanel"] = deme_pair_panel(
+                pooled_points, first_deme - 1, second_deme - 1
+            )
     window.evaluate_js(f"fim.onBatchProgress({json.dumps(progress_payload)})")
 
 
@@ -1265,6 +1388,7 @@ def _drain_batch_messages(
     run_id: str,
     output_directory: Path,
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
+    live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
     on_message: Callable[[batch_runner.BatchMessage], None] | None = None,
 ) -> None:
     """Push every `batch_runner.BatchMessage`, polling live progress between them.
@@ -1287,7 +1411,11 @@ def _drain_batch_messages(
 
     `digits` rides along only to hand to `_batch_done_payload` once the
     batch's own `"done"` message arrives — this thread does no
-    statistic formatting of its own before that point.
+    statistic formatting of its own before that point. `live_deme_pair`
+    rides along the opposite way — read on every poll tick, handed
+    straight to `_push_batch_progress` (see its own docstring), never
+    to `_batch_done_payload` (Screen 4's own completed-batch selector
+    is a separate, on-demand mechanism, `get_batch_deme_pair_panel`).
     """
     started = message_queue.get()
     if started[0] != "started":
@@ -1305,7 +1433,9 @@ def _drain_batch_messages(
         try:
             message = message_queue.get(timeout=_BATCH_POLL_INTERVAL_SECONDS)
         except queue.Empty:
-            _push_batch_progress(window, params, run_id, working_directory)
+            _push_batch_progress(
+                window, params, run_id, working_directory, live_deme_pair
+            )
             continue
         if message[0] == "done":
             payload = _batch_done_payload(

@@ -44,6 +44,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pair fetches every sampled frame's own panel for it once, up front,
   the same "load everything, then play/pause/scrub for free" design
   the screen already used for its default view.
+- The live Running screen gains the same "Compare demes directly" pair
+  selector too, live: picking a pair tells the in-progress simulation's
+  own background thread to start including that pair's own panel in
+  every subsequent push (one bridge call per selection, not one per
+  tick), for both a scalar run's own generations and a batch's own
+  pooled replicates. "Show overview" reverts instantly, from whichever
+  view the screen already had on hand.
 
 ### Changed
 

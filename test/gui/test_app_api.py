@@ -13,6 +13,7 @@ dialog) and are covered instead in `test/gui/test_app.py`, marked `gui`.
 from __future__ import annotations
 
 import json
+import queue
 import time as time_module
 import webbrowser
 from collections.abc import Sequence
@@ -31,6 +32,7 @@ from fim.engine import fim as engine_fim
 from fim.gui import app as app_module
 from fim.gui import batch_runner
 from fim.gui import recent_runs as recent_runs_module
+from fim.gui import runner as runner_module
 from fim.gui.app import Api, format_statistic
 from fim.gui.batch_runner import default_max_workers
 from fim.gui.config_form import starter_form_values
@@ -42,7 +44,7 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import read_manifest
-from fim.viz.scatter import pooled_scatter_panels
+from fim.viz.scatter import frequency_points, pooled_scatter_panels
 
 
 def test_get_starter_form_matches_config_form_directly() -> None:
@@ -158,6 +160,34 @@ def test_set_significant_digits_rejects_values_outside_the_valid_range(
     assert (
         api.get_significant_digits() == app_module._DEFAULT_DISPLAY_SIGNIFICANT_DIGITS
     )
+
+
+def test_api_starts_with_no_live_deme_pair_selected() -> None:
+    """A fresh `Api()` starts with the Progress screen's own selector cleared."""
+    api = Api()
+
+    assert api.get_live_deme_pair() is None
+
+
+def test_set_live_deme_pair_changes_what_get_live_deme_pair_returns() -> None:
+    """A selected pair is reflected back immediately."""
+    api = Api()
+
+    result = api.set_live_deme_pair(2, 4)
+
+    assert result == {"ok": True}
+    assert api.get_live_deme_pair() == (2, 4)
+
+
+def test_set_live_deme_pair_none_clears_the_selection() -> None:
+    """ "Show overview" (`None, None`) clears back to no selection."""
+    api = Api()
+    api.set_live_deme_pair(2, 4)
+
+    result = api.set_live_deme_pair(None, None)
+
+    assert result == {"ok": True}
+    assert api.get_live_deme_pair() is None
 
 
 def test_open_output_folder_calls_the_injected_opener(tmp_path: Path) -> None:
@@ -506,6 +536,91 @@ def test_push_batch_progress_reports_nothing_before_any_replicate_starts(
     assert payload["replicateCount"] == 2
     assert payload["reportedReplicateCount"] == 0
     assert payload["panels"] == []
+
+
+def test_push_batch_progress_includes_a_live_deme_pair_panel_when_selected(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+) -> None:
+    """The Progress screen's own live selector reaches a real batch's own push.
+
+    Same real sidecar/trajectory setup as `test_push_batch_progress_
+    pushes_a_pooled_scatter_from_real_sidecars` above, plus a
+    `live_deme_pair` that always returns one pair — the same bound-
+    method shape `Api.get_live_deme_pair` gives a real background
+    thread, here a plain `lambda` standing in for it.
+    """
+    params = replace(tiny_params, n_replicates=2)
+    run_id = "batch-run-1"
+    replicate_run_id = f"{run_id}-r001"
+    directory = batch_runner.replicate_output_directory(
+        tmp_path, run_id, replicate_run_id
+    )
+    directory.mkdir(parents=True)
+    store = LiveProgressStore(
+        JSONLTrajectoryStore(directory / "trajectory.jsonl"),
+        progress_path=directory / ".progress",
+        cancel_path=tmp_path / "cancel",
+    )
+    state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(0): 0.25, AlleleId(1): 0.75},),
+        ),
+    )
+    store.write_generation(replicate_run_id, 0, state.to_rows(replicate_run_id))
+    window = _FakeWindow()
+
+    app_module._push_batch_progress(window, params, run_id, tmp_path, lambda: (1, 2))
+
+    payload = _one_call_payload(window, "onBatchProgress")
+    pair_panel = payload["pairPanel"]
+    assert isinstance(pair_panel, dict)
+    assert pair_panel["x_label"] == "Deme 1"
+    assert pair_panel["y_label"] == "Deme 2"
+
+
+def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> None:
+    """A `"progress"` push includes `pairPanel` once a live pair is selected.
+
+    No test calls `_drain_run_messages` directly elsewhere in this file
+    (its own docstring already notes why: production only ever reaches
+    it via `_start_scalar_run`'s own thread) — this is the first, added
+    specifically to prove the new `live_deme_pair` parameter without
+    needing a real background thread or a `gui` marker.
+    """
+    state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(0): 0.25, AlleleId(1): 0.75},),
+            ({AlleleId(0): 0.1, AlleleId(1): 0.9},),
+        ),
+    )
+    points = frequency_points(state)
+    message_queue: queue.Queue[runner_module.RunMessage] = queue.Queue()
+    message_queue.put(("progress", 3, [], points))
+    # A terminal message right behind it: `_drain_run_messages`'s own
+    # `while True` loop only returns once it sees one, and this test
+    # cares only about the "progress" push's own first `evaluate_js`
+    # call, not about how the (here, arbitrary) run actually ends.
+    message_queue.put(("cancelled", 3))
+    window = _FakeWindow()
+
+    app_module._drain_run_messages(
+        window,
+        message_queue,
+        max_generations=10,
+        deme_count=3,
+        output_directory=Path("/unused"),
+        live_deme_pair=lambda: (1, 3),
+    )
+
+    progress_payload = json.loads(window.scripts[0][len("fim.onRunProgress(") : -1])
+    pair_panel = progress_payload["pairPanel"]
+    assert pair_panel["x_label"] == "Deme 1"
+    assert pair_panel["y_label"] == "Deme 3"
 
 
 def _write_run(tmp_path: Path, **overrides: object) -> Path:

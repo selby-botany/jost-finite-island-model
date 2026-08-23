@@ -22,6 +22,17 @@
  * small-multiples grid when there is more than one
  * (visualization-and-config-editors design §3.1; supersedes Milestone
  * W3's own "draws only the first panel" scope line).
+ *
+ * Screens 3/4/5's own "Compare demes directly" choice extends here too
+ * (`app.js`'s shared `wireDemePairSelector`), the one case where the
+ * data is still live rather than a fixed completed/sampled set:
+ * `Api.set_live_deme_pair` tells the running simulation's own
+ * background thread which pair to start including in every subsequent
+ * push (`pairPanel`, alongside the existing `panels`), and this file
+ * decides which of the two to draw (`showingLiveDemePair`) -- no
+ * per-tick or per-frame bridge call, only one bridge call per
+ * selection change, the same shape every other screen's own selector
+ * already uses.
  */
 
 const progressCanvas = document.getElementById("progress-canvas");
@@ -29,6 +40,17 @@ const progressBar = document.getElementById("progress-generation");
 const progressLabel = document.getElementById("progress-generation-label");
 const progressBanner = document.getElementById("progress-banner");
 const cancelButton = document.getElementById("cancel-run-button");
+const progressDemePairSelector = document.getElementById(
+    "progress-deme-pair-selector"
+);
+const progressXDeme = document.getElementById("progress-x-deme");
+const progressYDeme = document.getElementById("progress-y-deme");
+const progressShowPairButton = document.getElementById(
+    "progress-show-pair-button"
+);
+const progressShowOverviewButton = document.getElementById(
+    "progress-show-overview-button"
+);
 
 // The displayed batch-progress count, tracked separately from whatever
 // `onBatchProgress` last reported -- see that handler's own comment for
@@ -38,9 +60,28 @@ const cancelButton = document.getElementById("cancel-run-button");
 // own DOM value) for why this is safe to track as simple module state
 // rather than something scoped per run.
 let batchProgressHighWaterMark = 0;
+// Whether the selector below has been wired for *this* run yet --
+// re-wiring on every single push (they can arrive many times a second)
+// would rebuild the dropdowns and reset whatever pair the user already
+// picked; wiring once, on the first push a fresh run makes, is enough
+// (`demeCount` is the same for every push within one run).
+let liveDemeSelectorWired = false;
+// Whether the canvas is currently showing `pairPanel` (one explicit
+// deme pair) rather than `panels` (the default pairwise-grid-or-PCA
+// view) -- `onShowPair`/`onShowOverview` below flip this; every push's
+// own handler reads it to decide which of the two to draw.
+let showingLiveDemePair = false;
+// The most recent push this run has made, kept only so "Show overview"
+// can redraw instantly from data already on hand -- the same "no
+// second bridge call needed for that direction" guarantee Screens 3/4/5's
+// own identical selector already gives, extended here to a live stream.
+let lastProgressPayload = null;
 
 window.fim.resetBatchProgress = function resetBatchProgress() {
     batchProgressHighWaterMark = 0;
+    liveDemeSelectorWired = false;
+    showingLiveDemePair = false;
+    lastProgressPayload = null;
 };
 
 function showProgressBanner(message) {
@@ -53,7 +94,18 @@ function showProgressBanner(message) {
     progressBanner.textContent = message;
 }
 
-function drawProgressPanels(panels) {
+function drawProgressPanels(payload) {
+    // `pairPanel` is only ever present once a live pair has been
+    // selected (`Api._drain_run_messages`/`_push_batch_progress` only
+    // compute it then) -- `showingLiveDemePair` alone is not enough to
+    // draw from it, since the very first push after "Show pair" is
+    // clicked can still land before the *next* one carries a fresh
+    // `pairPanel` for it.
+    if (showingLiveDemePair && payload.pairPanel) {
+        drawScatter(progressCanvas, payload.pairPanel);
+        return;
+    }
+    const panels = payload.panels;
     if (!panels || panels.length === 0) {
         return;
     }
@@ -64,11 +116,56 @@ function drawProgressPanels(panels) {
     }
 }
 
+/**
+ * Wire the live "Compare demes directly" selector once, the first time
+ * a fresh run's own progress push carries a `demeCount` -- see
+ * `liveDemeSelectorWired`'s own comment for why only once per run.
+ *
+ * @param {number} demeCount
+ */
+function wireLiveDemePairSelector(demeCount) {
+    window.fim.wireDemePairSelector({
+        xSelect: progressXDeme,
+        ySelect: progressYDeme,
+        showPairButton: progressShowPairButton,
+        showOverviewButton: progressShowOverviewButton,
+        container: progressDemePairSelector,
+        demeCount,
+        onShowPair: async (x, y) => {
+            // Tells the *running* simulation's own background thread
+            // which pair to start including in every subsequent push
+            // (`Api.set_live_deme_pair`) -- unlike Screens 3/4/5's own
+            // `onShowPair`, there is no already-computed panel to draw
+            // immediately: the canvas updates on the next push, the
+            // same "near-instant, not literally instant" cadence
+            // `progressBar`/`progressLabel` above already have.
+            await window.pywebview.api.set_live_deme_pair(x, y);
+            showingLiveDemePair = true;
+        },
+        onShowOverview: async () => {
+            await window.pywebview.api.set_live_deme_pair(null, null);
+            showingLiveDemePair = false;
+            // Unlike "Show pair", the default view's own `panels` is
+            // always present in every push already received -- redraw
+            // immediately from the last one, no need to wait for the
+            // next tick.
+            if (lastProgressPayload) {
+                drawProgressPanels(lastProgressPayload);
+            }
+        },
+    });
+}
+
 window.fim.onRunProgress = function onRunProgress(payload) {
     progressBar.max = payload.maxGenerations;
     progressBar.value = payload.generation;
     progressLabel.textContent = `${payload.generation} / ${payload.maxGenerations}`;
-    drawProgressPanels(payload.panels);
+    if (!liveDemeSelectorWired) {
+        wireLiveDemePairSelector(payload.demeCount);
+        liveDemeSelectorWired = true;
+    }
+    lastProgressPayload = payload;
+    drawProgressPanels(payload);
 };
 
 window.fim.onRunDone = function onRunDone(payload) {
@@ -107,7 +204,12 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
     progressBar.value = batchProgressHighWaterMark;
     progressLabel.textContent =
         `${batchProgressHighWaterMark} / ${payload.replicateCount} replicates reporting`;
-    drawProgressPanels(payload.panels);
+    if (!liveDemeSelectorWired) {
+        wireLiveDemePairSelector(payload.demeCount);
+        liveDemeSelectorWired = true;
+    }
+    lastProgressPayload = payload;
+    drawProgressPanels(payload);
 };
 
 window.fim.onBatchDone = function onBatchDone(payload) {

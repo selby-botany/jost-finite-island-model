@@ -47,7 +47,12 @@ from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, write_manifest
 from fim.persistence.report import write_report
-from fim.viz.scatter import plot_frequency_scatter, scatter_panels
+from fim.viz.scatter import (
+    FloatArray,
+    frequency_points,
+    panels_from_points,
+    plot_frequency_scatter,
+)
 
 # The wall-clock throttle interval design §3.4 names ("skip posting if
 # under ~50 ms since the last post").
@@ -67,7 +72,7 @@ _EXPECTED_ENGINE_ERRORS: Final = (
     ValueError,
 )
 
-ProgressMessage = tuple[Literal["progress"], int, list[dict[str, object]]]
+ProgressMessage = tuple[Literal["progress"], int, list[dict[str, object]], FloatArray]
 DoneMessage = tuple[Literal["done"], RunResult]
 CancelledMessage = tuple[Literal["cancelled"], int]
 ErrorMessage = tuple[Literal["error"], str]
@@ -203,7 +208,17 @@ def _run_worker(
     def on_generation(generation: int, rows: list[Mapping[str, Any]]) -> None:
         if throttle.should_report(generation, params.max_generations):
             state = ModelState.from_rows(rows, params.loci)
-            message_queue.put(("progress", generation, scatter_panels(state)))
+            # `points` rides along raw (not only the already-reduced
+            # `panels`) so `fim.gui.app._drain_run_messages` can compute
+            # one caller-chosen deme-pair panel per tick too, for the
+            # Progress screen's own live "Compare demes directly"
+            # selector — `scatter_panels(state)`'s own body is exactly
+            # this same `frequency_points` then `panels_from_points`
+            # pair, computed here directly instead so `points` is not
+            # thrown away after producing `panels`.
+            points = frequency_points(state)
+            panels = panels_from_points(points, state.deme_count)
+            message_queue.put(("progress", generation, panels, points))
 
     try:
         with paths.atomic_directory(output_directory) as working_directory:

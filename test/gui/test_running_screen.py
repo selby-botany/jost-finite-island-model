@@ -332,3 +332,119 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
     )
     assert "cancelled" in settled["bannerText"]
     assert settled["cancelDisabled"] is True
+
+
+def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None:
+    """ "Show pair" swaps the live progress canvas mid-run to a different view.
+
+    Same starter-defaults setup as the Cancel test above (`d=20`, past
+    `scatter.PAIRWISE_MAX_DEMES`, so the default live view is one PCA
+    panel — "Show pair" (Deme 1 vs Deme 3) should look nothing like it)
+    and the same reasoning for using it: no dependence on how long the
+    run can run for, `started_event` alone deciding when it is safe to
+    interact, Cancel ending the test rather than waiting the run out.
+
+    Waits for real progress via `on_message`'s own `progress_count`,
+    never by polling the DOM with `evaluate_js` while the background
+    thread is still pushing — this file's own module docstring records
+    at length why a concurrent DOM-polling loop during a live run is
+    the wrong tool here; each `evaluate_js` call below is a single,
+    one-off read or click, the same shape the Cancel test's own
+    mid-run `cancel-run-button` click already establishes as safe.
+
+    An earlier version of this test waited for a fixed count of
+    progress messages after the click ("surely three ticks is enough
+    margin for `Api.set_live_deme_pair`'s own bridge round trip to
+    land") — a wall-clock guess, and it failed exactly the way this
+    project's own house rule on non-deterministic tests warns a guess
+    like that will: passing most runs, timing out once in three under
+    real, if unremarkable, system load. Waiting on `api.get_live_deme_
+    pair()` directly instead — the *exact* state `_drain_run_messages`
+    itself reads each tick — removes the guess entirely: once it
+    returns the selected pair, the round trip has genuinely completed,
+    and the very next progress message is *guaranteed* (not merely
+    likely) to carry `pairPanel`, by construction, since that state is
+    what a tick's own `live_deme_pair()` call reads before deciding
+    whether to compute one.
+    """
+    started_event = threading.Event()
+    cancelled_event = threading.Event()
+    progress_count = 0
+    progress_count_when_pair_landed: int | None = None
+
+    def on_run_started() -> None:
+        started_event.set()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        nonlocal progress_count
+        if message[0] == "progress":
+            progress_count += 1
+        elif message[0] == "cancelled":
+            cancelled_event.set()
+
+    api = Api(on_run_started=on_run_started, on_message=on_message)
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        nonlocal progress_count_when_pair_landed
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js("document.getElementById('run-button').click();")
+            settled = None
+            if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    if progress_count >= 1:
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                overview_snapshot = window.evaluate_js(
+                    "document.getElementById('progress-canvas').toDataURL()"
+                )
+                selector_hidden = window.evaluate_js(
+                    "document.getElementById('progress-deme-pair-selector').hidden"
+                )
+                window.evaluate_js(
+                    "document.getElementById('progress-x-deme').value = '1';"
+                    "document.getElementById('progress-y-deme').value = '3';"
+                    "document.getElementById("
+                    "'progress-show-pair-button').click();"
+                )
+                # Wait for the bridge round trip itself to land, not
+                # for an arbitrary number of ticks — see this test's
+                # own docstring for why.
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    if api.get_live_deme_pair() is not None:
+                        progress_count_when_pair_landed = progress_count
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                if progress_count_when_pair_landed is not None:
+                    for _ in range(_READY_POLL_ATTEMPTS):
+                        if progress_count > progress_count_when_pair_landed:
+                            break
+                        time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                    pair_snapshot = window.evaluate_js(
+                        "document.getElementById('progress-canvas').toDataURL()"
+                    )
+                    settled = {
+                        "selectorHidden": selector_hidden,
+                        "pairDiffersFromOverview": (pair_snapshot != overview_snapshot),
+                    }
+                window.evaluate_js(
+                    "document.getElementById('cancel-run-button').click();"
+                )
+                cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, (
+        "started_event, the first progress push, or set_live_deme_pair's own "
+        "bridge round trip was never observed in time "
+        f"(progress messages seen: {progress_count}, pair landed at: "
+        f"{progress_count_when_pair_landed})"
+    )
+    assert settled["selectorHidden"] is False
+    assert settled["pairDiffersFromOverview"] is True

@@ -64,15 +64,19 @@ const fim = {
      * Wire a "compare two demes directly" selector -- Screens 3 and 4's
      * own shared answer to a large-`d` run's PCA overview (`fim.viz.
      * scatter.panels_from_points`' own PCA fallback once `d` exceeds
-     * `PAIRWISE_MAX_DEMES`) not showing any one deme pair directly, and
+     * `PAIRWISE_MAX_DEMES`) not showing any one deme pair directly,
      * Screen 5's own identical choice extended across a whole animated
-     * trajectory rather than one static state. Two axis dropdowns and a
-     * "Show pair"/"Show overview" pair of buttons -- what each one
-     * *does* is entirely up to the caller's own `onShowPair`/`onShow
-     * Overview` (a single-panel redraw for Screens 3/4, a whole-
-     * trajectory frame-set swap for Screen 5); this function owns only
-     * the dropdown population and the "X and Y cannot match" enable/
-     * disable rule every caller shares.
+     * trajectory rather than one static state, and Screen 2's own
+     * *live* counterpart (`screens/progress.js`) -- the one case where
+     * the underlying data itself is still changing, not a fixed
+     * completed/sampled set. Two axis dropdowns and a "Show pair"/"Show
+     * overview" pair of buttons -- what each one *does* is entirely up
+     * to the caller's own `onShowPair`/`onShowOverview` (a single-panel
+     * redraw for Screens 3/4, a whole-trajectory frame-set swap for
+     * Screen 5, a `set_live_deme_pair` bridge call plus a local display
+     * flag for Screen 2); this function owns only the dropdown
+     * population and the "X and Y cannot match" enable/disable rule
+     * every caller shares.
      *
      * @param {Object} config
      * @param {HTMLSelectElement} config.xSelect
@@ -85,8 +89,10 @@ const fim = {
      * @param {(x: number, y: number) => (void|Promise<void>)}
      *     config.onShowPair - Called with the two chosen 1-based deme
      *     numbers on "Show pair" click; may be `async`.
-     * @param {() => void} config.onShowOverview - Called on "Show
-     *     overview" click.
+     * @param {() => (void|Promise<void>)} config.onShowOverview -
+     *     Called on "Show overview" click; may be `async` (`screens/
+     *     progress.js`'s own live selector makes a real bridge call
+     *     here, unlike Screens 3/4/5's purely local redraw).
      */
     wireDemePairSelector(config) {
         const {
@@ -127,8 +133,8 @@ const fim = {
             await onShowPair(Number(xSelect.value), Number(ySelect.value));
         };
 
-        showOverviewButton.onclick = () => {
-            onShowOverview();
+        showOverviewButton.onclick = async () => {
+            await onShowOverview();
         };
     },
 
