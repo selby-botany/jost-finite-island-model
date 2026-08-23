@@ -211,12 +211,12 @@
     <p id="results-outcome" class="results-outcome"></p>
     <div class="results-body">
       <div class="results-stats">
-        <p class="field-stat" id="stat-D"></p>
-        <p class="field-stat" id="stat-G_ST"></p>
-        <p class="field-stat" id="stat-E_ST"></p>
-        <p class="field-stat" id="stat-K_ST"></p>
-        <p class="field-stat" id="stat-H_S"></p>
-        <p class="field-stat" id="stat-H_T"></p>
+        <div class="field-stat" id="stat-D"></div>
+        <div class="field-stat" id="stat-G_ST"></div>
+        <div class="field-stat" id="stat-E_ST"></div>
+        <div class="field-stat" id="stat-K_ST"></div>
+        <div class="field-stat" id="stat-H_S"></div>
+        <div class="field-stat" id="stat-H_T"></div>
         <div id="results-differentiation-q" hidden></div>
       </div>
       <canvas id="results-canvas" width="640" height="520"></canvas>
@@ -230,6 +230,7 @@
       <button type="button" id="results-show-pair-button">Show pair</button>
       <button type="button" id="results-show-overview-button">Show overview</button>
     </fieldset>
+    <p id="results-generation-count" class="reason" hidden></p>
     <div class="actions">
       <button type="button" id="new-run-button">New run</button>
       <button type="button" id="animate-button" disabled>Animate</button>
@@ -347,6 +348,7 @@
 </div>
 <script src="app.js"></script>
 <script src="scatter.js"></script>
+<script src="meters.js"></script>
 <script src="screens/input.js"></script>
 <script src="screens/progress.js"></script>
 <script src="screens/results.js"></script>

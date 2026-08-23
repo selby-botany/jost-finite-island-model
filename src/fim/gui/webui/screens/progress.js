@@ -18,12 +18,10 @@
  *
  * `panels` (from `fim.viz.scatter.scatter_panels`/`pooled_scatter_
  * panels`, design §3.5) can hold more than one 2-D panel for
- * `3 <= d <= 6` (one per deme pair) -- this screen draws only the first
- * panel onto its one `<canvas>` for now, a deliberate scope line for
- * Milestone W3 (the common case, `d == 2` or `d > 6`, both already draw
- * everything the panel list returns) -- a multi-panel grid is a
- * follow-up, not silently dropped data (every panel is still present in
- * `panels`, just not all rendered yet).
+ * `3 <= d <= 6` (one per deme pair) -- every panel is drawn, as a
+ * small-multiples grid when there is more than one
+ * (visualization-and-config-editors design §3.1; supersedes Milestone
+ * W3's own "draws only the first panel" scope line).
  */
 
 const progressCanvas = document.getElementById("progress-canvas");
@@ -42,22 +40,25 @@ function showProgressBanner(message) {
     progressBanner.textContent = message;
 }
 
-function drawFirstPanel(panels) {
+function drawProgressPanels(panels) {
     if (!panels || panels.length === 0) {
         return;
     }
-    const panel = panels[0];
-    drawScatter(progressCanvas, panel.points, {
-        xLabel: panel.x_label,
-        yLabel: panel.y_label,
-    });
+    if (panels.length === 1) {
+        drawScatter(progressCanvas, panels[0].points, {
+            xLabel: panels[0].x_label,
+            yLabel: panels[0].y_label,
+        });
+    } else {
+        drawScatterGrid(progressCanvas, panels);
+    }
 }
 
 window.fim.onRunProgress = function onRunProgress(payload) {
     progressBar.max = payload.maxGenerations;
     progressBar.value = payload.generation;
     progressLabel.textContent = `${payload.generation} / ${payload.maxGenerations}`;
-    drawFirstPanel(payload.panels);
+    drawProgressPanels(payload.panels);
 };
 
 window.fim.onRunDone = function onRunDone(payload) {
@@ -80,7 +81,7 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
     progressBar.value = payload.reportedReplicateCount;
     progressLabel.textContent =
         `${payload.reportedReplicateCount} / ${payload.replicateCount} replicates reporting`;
-    drawFirstPanel(payload.panels);
+    drawProgressPanels(payload.panels);
 };
 
 window.fim.onBatchDone = function onBatchDone(payload) {

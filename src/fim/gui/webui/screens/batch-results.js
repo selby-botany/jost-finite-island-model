@@ -15,15 +15,12 @@
  * classic, non-module scripts sharing one global scope (`index.html`
  * has no `type="module"` on either `<script>` tag), so a second
  * `const STATISTIC_NAMES` here would be a `SyntaxError`, not a shadow.
+ * The confidence-interval meter itself (`buildCiMeter`/
+ * `buildOmittedMeter`) now lives in the shared `meters.js`
+ * (visualization-and-config-editors design §3.3) -- extracted from here
+ * unchanged, so `results.js`'s own scalar statistics can use the
+ * identical widget.
  */
-
-// D/G_ST/E_ST/K_ST/H_S/H_T are every named differentiation/heterozygosity
-// statistic this project reports, and each is naturally bounded to
-// [0, 1] by construction (Jost's D, Nei's G_ST, and the heterozygosities
-// alike) -- the one fixed scale every confidence-interval bar below is
-// drawn against, with no per-statistic dynamic scaling needed.
-const CI_BAR_MIN = 0.0;
-const CI_BAR_MAX = 1.0;
 
 const batchResultsCanvas = document.getElementById("batch-results-canvas");
 const batchResultsRunId = document.getElementById("batch-results-run-id");
@@ -45,77 +42,22 @@ const batchResultsShowOverviewButton = document.getElementById(
 
 let currentBatchOutputDirectory = null;
 
-function percentageWithin(value, min, max) {
-    const clamped = Math.min(Math.max(value, min), max);
-    return ((clamped - min) / (max - min)) * 100;
-}
-
-function buildOmittedCiBar(name) {
-    const row = document.createElement("div");
-    row.className = "ci-bar";
-    const label = document.createElement("span");
-    label.className = "ci-bar-label";
-    label.textContent = name;
-    row.appendChild(label);
-    const omitted = document.createElement("span");
-    omitted.className = "ci-bar-omitted";
-    // Design §4.4: "a statistic omitted from summary.json still renders
-    // as explicitly omitted, not blank" -- `_batch_done_payload` leaves
-    // `name` out of `summary` entirely rather than sending a null/undefined
-    // placeholder, matching `replicate_summary`'s own documented "omitted
-    // entirely rather than raising, since a single point has no interval."
-    omitted.textContent = "omitted (fewer than two defined replicates)";
-    row.appendChild(omitted);
-    return row;
-}
-
-function buildCiBar(name, interval) {
-    if (interval === undefined) {
-        return buildOmittedCiBar(name);
-    }
-    // `interval.mean`/`.low`/`.high` arrive pre-formatted for display
-    // (`format_statistic`, a `%.6g`-style string) -- parsed back into a
-    // number here only to compute bar *geometry*, never to reformat the
-    // label text itself, so this is not a second, client-side
-    // implementation of the same display-formatting rule.
-    const low = percentageWithin(Number(interval.low), CI_BAR_MIN, CI_BAR_MAX);
-    const high = percentageWithin(Number(interval.high), CI_BAR_MIN, CI_BAR_MAX);
-    const mean = percentageWithin(Number(interval.mean), CI_BAR_MIN, CI_BAR_MAX);
-
-    const row = document.createElement("div");
-    row.className = "ci-bar";
-
-    const label = document.createElement("span");
-    label.className = "ci-bar-label";
-    label.textContent = name;
-    row.appendChild(label);
-
-    const track = document.createElement("div");
-    track.className = "ci-bar-track";
-    const fill = document.createElement("div");
-    fill.className = "ci-bar-fill";
-    fill.style.left = `${low}%`;
-    fill.style.width = `${Math.max(high - low, 0)}%`;
-    track.appendChild(fill);
-    const meanMark = document.createElement("div");
-    meanMark.className = "ci-bar-mean";
-    meanMark.style.left = `${mean}%`;
-    track.appendChild(meanMark);
-    row.appendChild(track);
-
-    const value = document.createElement("span");
-    value.className = "ci-bar-value";
-    value.textContent =
-        `${interval.mean} [${interval.low}, ${interval.high}] (n=${interval.sampleCount})`;
-    row.appendChild(value);
-
-    return row;
-}
+// Design §4.4: "a statistic omitted from summary.json still renders as
+// explicitly omitted, not blank" -- `_batch_done_payload` leaves `name`
+// out of `summary` entirely rather than sending a null/undefined
+// placeholder, matching `replicate_summary`'s own documented "omitted
+// entirely rather than raising, since a single point has no interval."
+const OMITTED_SUMMARY_TEXT = "omitted (fewer than two defined replicates)";
 
 function renderSummary(summary) {
     batchResultsSummary.replaceChildren();
     for (const name of STATISTIC_NAMES) {
-        batchResultsSummary.appendChild(buildCiBar(name, summary[name]));
+        const interval = summary[name];
+        const meter =
+            interval === undefined
+                ? buildOmittedMeter(name, OMITTED_SUMMARY_TEXT)
+                : buildCiMeter(name, interval);
+        batchResultsSummary.appendChild(meter);
     }
 }
 
@@ -168,13 +110,20 @@ window.fim.showBatchResults = function showBatchResults(payload) {
     renderTable(payload.replicates);
     const panels = payload.panels;
     if (panels && panels.length > 0) {
-        // Same deliberate first-panel-only scope line `results.js`'s own
-        // `showResults` documents for the `3 <= d <= 6` pairwise case.
-        const panel = panels[0];
-        drawScatter(batchResultsCanvas, panel.points, {
-            xLabel: panel.x_label,
-            yLabel: panel.y_label,
-        });
+        // Same "draw every panel" rule `results.js`'s own `showResults`
+        // documents (visualization-and-config-editors design §3.1) --
+        // supersedes the prior deliberate first-panel-only scope line.
+        const drawOverview = () => {
+            if (panels.length === 1) {
+                drawScatter(batchResultsCanvas, panels[0].points, {
+                    xLabel: panels[0].x_label,
+                    yLabel: panels[0].y_label,
+                });
+            } else {
+                drawScatterGrid(batchResultsCanvas, panels);
+            }
+        };
+        drawOverview();
         window.fim.wireDemePairSelector({
             canvas: batchResultsCanvas,
             xSelect: batchResultsXDeme,
@@ -183,7 +132,7 @@ window.fim.showBatchResults = function showBatchResults(payload) {
             showOverviewButton: batchResultsShowOverviewButton,
             container: batchResultsDemePairSelector,
             demeCount: payload.demeCount,
-            overviewPanel: panel,
+            drawOverview,
             getOutputDirectory: () => currentBatchOutputDirectory,
             bridgeMethod: (outputDirectory, x, y) =>
                 window.pywebview.api.get_batch_deme_pair_panel(outputDirectory, x, y),

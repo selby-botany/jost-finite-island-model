@@ -55,14 +55,16 @@ function drawCurrentFrame() {
         `Generation ${frame.generation} (frame ${currentIndex + 1} / ${frames.length})`;
     scrubber.value = String(currentIndex);
     const panels = frame.panels;
-    if (panels && panels.length > 0) {
-        // Same first-panel-only scope line every other screen's own
-        // scatter draw already documents.
-        const panel = panels[0];
-        drawScatter(animationCanvas, panel.points, {
-            xLabel: panel.x_label,
-            yLabel: panel.y_label,
+    if (panels && panels.length === 1) {
+        drawScatter(animationCanvas, panels[0].points, {
+            xLabel: panels[0].x_label,
+            yLabel: panels[0].y_label,
         });
+    } else if (panels && panels.length > 1) {
+        // Same "draw every panel" rule `results.js`'s own `showResults`
+        // documents (visualization-and-config-editors design §3.1) --
+        // supersedes the prior first-panel-only scope line.
+        drawScatterGrid(animationCanvas, panels);
     }
 }
 

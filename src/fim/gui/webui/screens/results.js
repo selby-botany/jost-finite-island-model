@@ -10,7 +10,11 @@
  * (`format_statistic`, matching `cli._format_optional`), so this file
  * does no numeric formatting of its own (design §3.5's "the client
  * never does linear algebra" extended here to "the client never
- * reimplements Python's own display formatting either").
+ * reimplements Python's own display formatting either"). Each statistic
+ * renders through `meters.js`'s shared `buildPointMeter` (visualization-
+ * and-config-editors design §3.3) -- the same meter widget Screen 4's
+ * own confidence-interval bars use, in a "point only" mode with no
+ * shaded interval, since a single run has none to show.
  */
 
 const STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"];
@@ -19,6 +23,7 @@ const resultsCanvas = document.getElementById("results-canvas");
 const resultsRunId = document.getElementById("results-run-id");
 const resultsOutcome = document.getElementById("results-outcome");
 const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
+const resultsGenerationCount = document.getElementById("results-generation-count");
 const newRunButton = document.getElementById("new-run-button");
 const animateButton = document.getElementById("animate-button");
 const openFolderButton = document.getElementById("open-folder-button");
@@ -64,21 +69,30 @@ window.fim.showResults = function showResults(payload) {
     const reason = report.reason.charAt(0).toUpperCase() + report.reason.slice(1);
     resultsOutcome.textContent = `${reason}: generation ${report.generation}`;
     for (const name of STATISTIC_NAMES) {
-        document.getElementById(`stat-${name}`).textContent =
-            `${name} = ${payload.statistics[name]}`;
+        const value = payload.statistics[name];
+        const element = document.getElementById(`stat-${name}`);
+        element.replaceChildren(buildPointMeter(`${name} = ${value}`, value));
     }
     renderDifferentiationQ(report);
     const panels = payload.panels;
     if (panels && panels.length > 0) {
-        // Milestone W4 draws only the first panel, the same deliberate
-        // scope line `progress.js`'s `drawFirstPanel` already documents
-        // for the `3 <= d <= 6` pairwise case -- every panel is still
-        // present in `panels`, just not all rendered yet.
-        const panel = panels[0];
-        drawScatter(resultsCanvas, panel.points, {
-            xLabel: panel.x_label,
-            yLabel: panel.y_label,
-        });
+        // Every panel `scatter_panels` computed is drawn -- one panel
+        // fills the canvas (`d <= 2` or the `d > 6` PCA fallback), more
+        // than one draws as a small-multiples grid (the `3 <= d <= 6`
+        // pairwise case: visualization-and-config-editors design §3.1;
+        // superseded Milestone W4's own "draws only the first panel"
+        // scope line).
+        const drawOverview = () => {
+            if (panels.length === 1) {
+                drawScatter(resultsCanvas, panels[0].points, {
+                    xLabel: panels[0].x_label,
+                    yLabel: panels[0].y_label,
+                });
+            } else {
+                drawScatterGrid(resultsCanvas, panels);
+            }
+        };
+        drawOverview();
         window.fim.wireDemePairSelector({
             canvas: resultsCanvas,
             xSelect: resultsXDeme,
@@ -87,13 +101,23 @@ window.fim.showResults = function showResults(payload) {
             showOverviewButton: resultsShowOverviewButton,
             container: resultsDemePairSelector,
             demeCount: payload.demeCount,
-            overviewPanel: panel,
+            drawOverview,
             getOutputDirectory: () => currentOutputDirectory,
             bridgeMethod: (outputDirectory, x, y) =>
                 window.pywebview.api.get_deme_pair_panel(outputDirectory, x, y),
         });
     }
     animateButton.disabled = payload.generationCount <= 1;
+    // Visualization-and-config-editors design §3.4: enough to answer "is
+    // there a trajectory here worth navigating" without a screen switch
+    // -- the real scrubber stays on Screen 5, reached via "Animate".
+    if (payload.generationCount > 1) {
+        resultsGenerationCount.hidden = false;
+        resultsGenerationCount.textContent =
+            `Trajectory: ${payload.generationCount} generations recorded`;
+    } else {
+        resultsGenerationCount.hidden = true;
+    }
     window.fim.showScreen("screen-results");
 };
 

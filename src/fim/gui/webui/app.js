@@ -70,8 +70,10 @@ const fim = {
      * makes precomputing every `C(d, 2)` pair up front the wrong
      * default, unlike the small-`d` case `panels_from_points` already
      * handles automatically), and a "Show overview" button that redraws
-     * the original panel already on hand from the page's own initial
-     * payload -- no second bridge call needed for that direction.
+     * whatever the screen's own default view already is -- one panel or
+     * the small-multiples grid of every pair (visualization-and-config-
+     * editors design §3.1) -- from data already on hand, no second
+     * bridge call needed for that direction.
      *
      * @param {Object} config
      * @param {HTMLCanvasElement} config.canvas
@@ -82,8 +84,12 @@ const fim = {
      * @param {HTMLElement} config.container - Hidden entirely when
      *     `demeCount < 2` (a scatter needs two distinct demes).
      * @param {number} config.demeCount
-     * @param {Object} config.overviewPanel - The panel already drawn
-     *     before this call -- `{points, x_label, y_label}`.
+     * @param {() => void} config.drawOverview - Redraws whatever
+     *     "overview" already means for this screen's own canvas --
+     *     `drawScatter` of the one panel already on hand when there is
+     *     only one, `drawScatterGrid` of every panel when there is more
+     *     than one (visualization-and-config-editors design §3.1) --
+     *     with no further bridge call either way.
      * @param {() => (string|null)} config.getOutputDirectory
      * @param {(outputDirectory: string, x: number, y: number) =>
      *     Promise<Object>} config.bridgeMethod - `window.pywebview.api.
@@ -98,7 +104,7 @@ const fim = {
             showOverviewButton,
             container,
             demeCount,
-            overviewPanel,
+            drawOverview,
             getOutputDirectory,
             bridgeMethod,
         } = config;
@@ -145,10 +151,7 @@ const fim = {
         };
 
         showOverviewButton.onclick = () => {
-            drawScatter(canvas, overviewPanel.points, {
-                xLabel: overviewPanel.x_label,
-                yLabel: overviewPanel.y_label,
-            });
+            drawOverview();
         };
     },
 };
