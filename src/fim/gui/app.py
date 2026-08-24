@@ -577,6 +577,7 @@ class Api:
             "maxGenerations": params.max_generations,
         }
 
+    def load_yaml(self) -> dict[str, Any]:
         """Browse for and load a YAML config, returning the form values it renders to.
 
         Routes through `fim.cli.load_config` — the identical function

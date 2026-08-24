@@ -61,6 +61,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
     * [validate\_form](#fim.gui.app.Api.validate_form)
     * [get\_initial\_state\_panels](#fim.gui.app.Api.get_initial_state_panels)
+    * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
     * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
@@ -1305,6 +1306,27 @@ state would show at generation 0.
   `SimulationParams` (the caller silently leaves the canvas
   blank — invalid form values are already reported through the
   normal validation path).
+
+<a id="fim.gui.app.Api.load_yaml"></a>
+
+#### load\_yaml
+
+```python
+def load_yaml() -> dict[str, Any]
+```
+
+Browse for and load a YAML config, returning the form values it renders to.
+
+Routes through `fim.cli.load_config` — the identical function
+`fim run` uses (design §3.6) — so a config that runs from the
+terminal loads identically here, error for error.
+
+**Returns**:
+
+- ``{"ok"` - True, "values": {...}}` on success;
+- ``{"ok"` - False, "message": ""}` if the dialog was cancelled
+  (no banner to show); `{"ok": False, "message": "..."}` on a
+  real load or validation failure.
 
 <a id="fim.gui.app.Api.save_yaml"></a>
 
