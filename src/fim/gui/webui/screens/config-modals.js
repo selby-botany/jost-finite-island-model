@@ -176,7 +176,20 @@ function wireConfigModalEvents() {
     const revalidateIfOwnField = (event) => {
         if (event.target && event.target.form === form) {
             syncConditionalVisibility();
-            revalidate();
+            // Re-render the `initial` state's own p_0 preview after
+            // validation settles, so it tracks the field the visitor
+            // is actually editing instead of only ever reflecting
+            // whatever values were on hand at the moment `initial` was
+            // entered. `renderInitialPreview` already re-collects form
+            // values itself and silently no-ops both when the form is
+            // not currently valid and when a different state is
+            // showing by the time it runs, so calling it unconditionally
+            // here is safe.
+            revalidate().then(() => {
+                if (window.fim.getRunViewState() === "initial") {
+                    window.fim.renderInitialPreview();
+                }
+            });
         }
     };
     document.addEventListener("input", revalidateIfOwnField);

@@ -134,7 +134,7 @@ function enterInitialState() {
     cancelButton.disabled = true;
     openFolderButton.hidden = true;
     if (runPlotTitle) {
-        runPlotTitle.textContent = "Initial conditions (p₀)";
+        runPlotTitle.textContent = "FIM simulation — initial conditions (p₀)";
     }
     // `resultsBackButton` is declared in run-view-completed.js (loads
     // after this file) but always present by the time any user event
@@ -171,12 +171,26 @@ window.fim.menu.newConfiguration = async function newConfiguration() {
     window.__fimRunViewReady = false;
     enterInitialState();
     await resetInputForm();
+    // `enterInitialState`'s own `renderInitialPreview()` call already
+    // fired above, but before `resetInputForm` had applied real
+    // starter values -- `collectFormValues()` inside it reads
+    // whatever the fields held at that instant, synchronously, before
+    // any await, so that first call raced the reset and snapshotted
+    // stale/empty fields. A confirmed-live bug, not hypothetical: the
+    // bridge call it makes then fails validation and returns `!ok`,
+    // which leaves the canvas, statistics, and progress bar all blank
+    // with nothing ever re-triggering a redraw. Render again now that
+    // the form genuinely holds starter values.
+    await renderInitialPreview();
     window.__fimRunViewReady = true;
 };
 
 async function initializeRunView() {
     enterInitialState();
     await resetInputForm();
+    // See the identical comment in `newConfiguration` above -- the
+    // same race exists here, on cold start.
+    await renderInitialPreview();
     window.__fimRunViewReady = true;
 }
 

@@ -32,6 +32,25 @@
     box-sizing: border-box;
 }
 
+/* An author-origin `display` declaration on an element's own class
+ * (e.g. `.results-stats-row { display: flex; }` below) always beats
+ * the browser's default `[hidden] { display: none }` UA rule once both
+ * match -- author styles outrank UA styles regardless of selector
+ * specificity, `!important` or not. Any element this page toggles via
+ * the plain `hidden` attribute needs that restored, so this is done
+ * once, globally, rather than re-adding `&[hidden] { display: none; }`
+ * to every class that happens to also declare its own `display`.
+ * Confirmed live as the root cause of two real, reported bugs:
+ * `.results-stats-row` and `.batch-results-summary` both rendering at
+ * once on the completed screen (one of them stale), and
+ * `.scrubber-controls` staying visible -- disabled, but visible --
+ * through a batch's own completed view despite `hidden` being set
+ * correctly in JS the whole time.
+ */
+[hidden] {
+    display: none !important;
+}
+
 body {
     margin: 0;
     font-family: var(--fim-font);

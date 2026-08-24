@@ -239,7 +239,9 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         initialStats.hidden = true;
     }
     if (runPlotTitle) {
-        runPlotTitle.textContent = payload.runId || "Completed run";
+        runPlotTitle.textContent = payload.runId
+            ? `FIM simulation — ${payload.runId}`
+            : "FIM simulation — completed";
     }
     runCompleted.hidden = false;
     cancelButton.disabled = true;

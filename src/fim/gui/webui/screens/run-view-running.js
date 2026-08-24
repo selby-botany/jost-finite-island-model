@@ -101,7 +101,7 @@ function enterRunningState() {
         initialStats.hidden = true;
     }
     if (runPlotTitle) {
-        runPlotTitle.textContent = "Simulation in progress";
+        runPlotTitle.textContent = "FIM simulation — in progress";
     }
     runCompleted.hidden = true;
     batchResultsTable.hidden = true;

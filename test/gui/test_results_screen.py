@@ -201,7 +201,7 @@ def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
             value is not None
             and value.get("runViewState") == "initial"
             and value.get("titleAboveCanvas") is True
-            and value.get("titleText") == "Initial conditions (p₀)"
+            and value.get("titleText") == "FIM simulation — initial conditions (p₀)"
             and value.get("initialHidden") is False
             and value.get("backHidden") is True
         ),
@@ -209,7 +209,7 @@ def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
     )
 
     assert settled["runViewState"] == "initial"
-    assert settled["titleText"] == "Initial conditions (p₀)"
+    assert settled["titleText"] == "FIM simulation — initial conditions (p₀)"
     assert settled["titleAboveCanvas"] is True
     assert settled["initialHidden"] is False
     assert settled["backHidden"] is True
