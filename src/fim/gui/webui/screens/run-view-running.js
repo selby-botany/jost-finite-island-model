@@ -56,10 +56,10 @@
  * state's own selector already uses.
  */
 
-const progressBar = document.getElementById("progress-generation");
-const progressLabel = document.getElementById("progress-generation-label");
+// `progressBar` and `progressLabel` are declared in run-view-initial.js
+// (loads first) and shared via the page's one global scope.
 
-// The displayed batch-progress count, tracked separately from whatever
+// Whether the selector below has been wired for *this* run yet --
 // `onBatchProgress` last reported -- see that handler's own comment for
 // why the raw reported count can legitimately regress mid-batch.
 let batchProgressHighWaterMark = 0;
@@ -97,12 +97,16 @@ function enterRunningState() {
     lastProgressPayload = null;
     progressBar.value = 0;
     runProgress.hidden = false;
+    if (initialStats) {
+        initialStats.hidden = true;
+    }
     runCompleted.hidden = true;
     batchResultsTable.hidden = true;
     scrubberControls.hidden = true;
     runDemePairSelector.hidden = true;
     cancelButton.disabled = false;
     openFolderButton.hidden = true;
+    resultsBackButton.hidden = true;
     window.fim.resetScrubber();
     clearRunCanvas();
 }

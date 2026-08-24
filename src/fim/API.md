@@ -60,7 +60,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [open\_output\_folder](#fim.gui.app.Api.open_output_folder)
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
     * [validate\_form](#fim.gui.app.Api.validate_form)
-    * [load\_yaml](#fim.gui.app.Api.load_yaml)
+    * [get\_initial\_state\_panels](#fim.gui.app.Api.get_initial_state_panels)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
     * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
@@ -1275,26 +1275,36 @@ Validate the form exactly as "Run simulation" would (design §3.6, §4.7).
   error, for instance), for the caller to switch to and
   highlight (§4.0 `2` of the original design) when they are not.
 
-<a id="fim.gui.app.Api.load_yaml"></a>
+<a id="fim.gui.app.Api.get_initial_state_panels"></a>
 
-#### load\_yaml
+#### get\_initial\_state\_panels
 
 ```python
-def load_yaml() -> dict[str, Any]
+def get_initial_state_panels(values: dict[str, str]) -> dict[str, Any]
 ```
 
-Browse for and load a YAML config, returning the form values it renders to.
+Compute scatter panels and statistics for the configured p_0 state.
 
-Routes through `fim.cli.load_config` — the identical function
-`fim run` uses (design §3.6) — so a config that runs from the
-terminal loads identically here, error for error.
+Called by `webui/screens/run-view-initial.js` on entry to the
+`initial` state (and on form-value changes in a future phase) so
+the canvas is never blank at startup — the user sees the starting
+frequency distribution immediately, the same scatter the running
+state would show at generation 0.
+
+**Arguments**:
+
+- `values` - The same shape `validate_form` / `start_run` accept.
+
 
 **Returns**:
 
-- ``{"ok"` - True, "values": {...}}` on success;
-- ``{"ok"` - False, "message": ""}` if the dialog was cancelled
-  (no banner to show); `{"ok": False, "message": "..."}` on a
-  real load or validation failure.
+- ``{"ok"` - True, "panels": [...], "demeCount": d,
+- `"statistics"` - {...}, "generation": 0,
+- `"maxGenerations"` - max_generations}` on success;
+- ``{"ok"` - False}` if `values` does not parse to a valid
+  `SimulationParams` (the caller silently leaves the canvas
+  blank — invalid form values are already reported through the
+  normal validation path).
 
 <a id="fim.gui.app.Api.save_yaml"></a>
 

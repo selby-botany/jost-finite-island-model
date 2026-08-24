@@ -48,6 +48,7 @@ const resultsStats = document.getElementById("results-stats");
 const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
 const batchResultsSummary = document.getElementById("batch-results-summary");
 const batchResultsTableBody = document.getElementById("batch-results-table-body");
+const resultsBackButton = document.getElementById("results-back-button");
 
 // Design §4.4's own "a statistic omitted from summary.json still
 // renders as explicitly omitted, not blank" -- `_batch_done_payload`
@@ -234,9 +235,13 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     window.fim.setRunViewState("completed");
     window.fim.setCompletedOutputDirectory(payload.outputDirectory);
     runProgress.hidden = true;
+    if (initialStats) {
+        initialStats.hidden = true;
+    }
     runCompleted.hidden = false;
     cancelButton.disabled = true;
     openFolderButton.hidden = false;
+    resultsBackButton.hidden = false;
     resultsStats.hidden = isBatch;
     batchResultsSummary.hidden = !isBatch;
     batchResultsTable.hidden = !isBatch;
@@ -304,3 +309,11 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
 
     window.fim.showScreen("screen-run");
 };
+
+// Wire the Back button once on load -- navigates from `completed` back
+// to `initial` (p_0 preview), the same as clicking "Run simulation"
+// would do for a fresh start but without actually starting a run.
+resultsBackButton.addEventListener("click", () => {
+    resultsBackButton.hidden = true;
+    window.fim.enterInitialState();
+});

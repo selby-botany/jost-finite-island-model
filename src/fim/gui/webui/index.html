@@ -48,15 +48,28 @@
       </div>
     </div>
 
-    <!-- `completed`-only: the finished run's own summary, flexed
-         beside the shared canvas below -- scalar and batch each show
-         only their own stats block (`run-view-completed.js` branches
-         on which kind of "done" payload arrived, design §3.2.5's "one
-         state model, not two" applied to this merge too) -- never both
-         at once. Hiding this one element (rather than the canvas'
-         whole row) is enough: a single remaining flex child simply
-         takes the full row alone during `running`/`initial`. -->
+      <!-- `completed`-only: the finished run's own summary, flexed
+           beside the shared canvas below -- scalar and batch each show
+           only their own stats block (`run-view-completed.js` branches
+           on which kind of "done" payload arrived, design §3.2.5's "one
+           state model, not two" applied to this merge too) -- never both
+           at once. Hiding this one element (rather than the canvas'
+           whole row) is enough: a single remaining flex child simply
+           takes the full row alone during `running`/`initial`. -->
     <div class="run-body">
+      <!-- `initial`-only: p_0 statistics shown before any run starts
+           (Phase F: `run-view-initial.js` populates these via
+           `Api.get_initial_state_panels`). Same meter slots as
+           `results-stats` but keyed by `data-stat` so the initial
+           rendering path can find them without id collisions. -->
+      <div id="initial-stats" class="results-stats" hidden>
+        <div class="field-stat" data-stat="D"></div>
+        <div class="field-stat" data-stat="G_ST"></div>
+        <div class="field-stat" data-stat="E_ST"></div>
+        <div class="field-stat" data-stat="K_ST"></div>
+        <div class="field-stat" data-stat="H_S"></div>
+        <div class="field-stat" data-stat="H_T"></div>
+      </div>
       <div id="run-completed" hidden>
         <p id="results-run-id" class="results-run-id"></p>
         <p id="results-outcome" class="results-outcome"></p>
@@ -73,8 +86,7 @@
       </div>
 
       <!-- Shared across all three states: `running`/`completed` draw
-           into it today; `initial` starts blank this phase (design §8
-           Phase F adds its own content). -->
+           into it; `initial` now draws the p_0 scatter (Phase F). -->
       <canvas id="run-canvas" width="640" height="520"></canvas>
     </div>
     <fieldset class="composite" id="run-deme-pair-selector" hidden>
@@ -136,6 +148,10 @@
       <button type="button" id="cancel-run-button" disabled>Cancel</button>
       <button type="button" id="open-run-button">Open a run…</button>
       <button type="button" id="open-folder-button" hidden>Open output folder</button>
+      <!-- `completed`-only: return to the `initial` state (and p_0
+           preview) without starting a new run. Hidden in `initial`/
+           `running`; `run-view-completed.js` shows and wires it. -->
+      <button type="button" id="results-back-button" hidden>Back</button>
     </div>
   </section>
 

@@ -50,7 +50,12 @@ from webview.menu import Menu, MenuAction, MenuSeparator
 from fim import __version__ as fim_version
 from fim import paths, update
 from fim.cli import load_config
-from fim.engine import RunResult, deterministic_run_id, replicate_summary
+from fim.engine import (
+    RunResult,
+    deterministic_run_id,
+    replicate_summary,
+    report_for_state,
+)
 from fim.gui import batch_runner, recent_runs, runner
 from fim.gui.animation import pre_render_frames
 from fim.gui.config_form import (
@@ -63,6 +68,7 @@ from fim.gui.config_form import (
     tab_for_error,
 )
 from fim.gui.store import read_live_state, read_progress_sidecar
+from fim.model.initial import generate_initial_state
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.manifest import read_manifest
@@ -524,7 +530,53 @@ class Api:
             }
         return {"ok": True}
 
-    def load_yaml(self) -> dict[str, Any]:
+    def get_initial_state_panels(self, values: dict[str, str]) -> dict[str, Any]:
+        """Compute scatter panels and statistics for the configured p_0 state.
+
+        Called by `webui/screens/run-view-initial.js` on entry to the
+        `initial` state (and on form-value changes in a future phase) so
+        the canvas is never blank at startup — the user sees the starting
+        frequency distribution immediately, the same scatter the running
+        state would show at generation 0.
+
+        Args:
+            values: The same shape `validate_form` / `start_run` accept.
+
+        Returns:
+            `{"ok": True, "panels": [...], "demeCount": d,
+            "statistics": {...}, "generation": 0,
+            "maxGenerations": max_generations}` on success;
+            `{"ok": False}` if `values` does not parse to a valid
+            `SimulationParams` (the caller silently leaves the canvas
+            blank — invalid form values are already reported through the
+            normal validation path).
+        """
+        try:
+            payload = form_values_to_payload(values)
+            params = SimulationParams.from_mapping(payload)
+        except ValueError:
+            return {"ok": False}
+        state = generate_initial_state(params)
+        report = report_for_state(
+            state,
+            params,
+            run_id="p_0",
+            converged=False,
+            reason="initial conditions",
+        )
+        statistics = {
+            name: format_statistic(report[name], self._significant_digits)
+            for name in _RESULT_STATISTIC_NAMES
+        }
+        return {
+            "ok": True,
+            "panels": scatter_panels(state),
+            "demeCount": params.d,
+            "statistics": statistics,
+            "generation": 0,
+            "maxGenerations": params.max_generations,
+        }
+
         """Browse for and load a YAML config, returning the form values it renders to.
 
         Routes through `fim.cli.load_config` — the identical function

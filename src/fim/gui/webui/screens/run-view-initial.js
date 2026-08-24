@@ -1,11 +1,10 @@
 "use strict";
 
 /* The unified run view's `initial` state (unified-run-view design
- * §3.2.1, §3.2.2, §8 Phase E) -- deliberately thin this phase: no `p_0`
- * preview yet (design §8 Phase F adds `Api.get_initial_state_panels`
- * and live field-change re-rendering), only the state transition itself
- * and the one-time/`newConfiguration` form reset that used to live in
- * the now-retired `screens/input.js`.
+ * §3.2.1, §3.2.2, §8 Phase E/F) -- renders the p_0 scatter, axis
+ * labels, six statistics, and a generation-0 progress bar as soon as
+ * the form has valid values (Phase F: `Api.get_initial_state_panels`),
+ * so the canvas is never blank at startup or after a reset.
  */
 
 // Declared here, not in `run-view-running.js`/`run-view-completed.js`
@@ -26,28 +25,126 @@ const runYDeme = document.getElementById("run-y-deme");
 const runShowPairButton = document.getElementById("run-show-pair-button");
 const runShowOverviewButton = document.getElementById("run-show-overview-button");
 
+// The progress bar / label elements (declared in run-view-running.js
+// but needed here too -- run-view-initial.js loads before run-view-
+// running.js, so these declarations must live here). Run-view-running.js
+// reads these by bare name without re-declaring them.
+const progressBar = document.getElementById("progress-generation");
+const progressLabel = document.getElementById("progress-generation-label");
+
+// The p_0 statistics panel: a `<div>` inside `run-completed` whose
+// six `[data-stat]` children are the same meter slots the completed
+// state uses, reused here to show gen-0 statistics without duplicating
+// the meter markup.
+const initialStats = document.getElementById("initial-stats");
+
 function clearRunCanvas() {
     runCanvas.getContext("2d").clearRect(0, 0, runCanvas.width, runCanvas.height);
 }
 
 /**
+ * Render the p_0 scatter and decorations (Phase F).
+ *
+ * Fetches `Api.get_initial_state_panels` with the current form values,
+ * then draws panels, statistics, and the gen-0 progress bar. Silently
+ * leaves everything blank if the form does not yet have valid values.
+ */
+async function renderInitialPreview() {
+    const values = collectFormValues();
+    const result = await window.pywebview.api.get_initial_state_panels(values);
+    // State may have changed while the bridge call was in flight --
+    // only draw if still in `initial`.
+    if (window.fim.getRunViewState() !== "initial") {
+        return;
+    }
+    if (!result.ok) {
+        return;
+    }
+    // Progress bar at generation 0.
+    runProgress.hidden = false;
+    progressBar.max = result.maxGenerations;
+    progressBar.value = 0;
+    progressLabel.textContent = `0 / ${result.maxGenerations}`;
+
+    // Six statistics for p_0.
+    if (initialStats) {
+        initialStats.hidden = false;
+        for (const name of ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"]) {
+            const value = result.statistics[name];
+            const slot = initialStats.querySelector(`[data-stat="${name}"]`);
+            if (slot) {
+                slot.replaceChildren(buildPointMeter(name, value));
+            }
+        }
+    }
+
+    // Scatter panels.
+    const panels = result.panels;
+    if (panels && panels.length > 0) {
+        if (panels.length === 1) {
+            drawScatter(runCanvas, panels[0]);
+        } else {
+            drawScatterGrid(runCanvas, panels);
+        }
+    }
+
+    // Deme-pair selector -- static view only in `initial` (no live
+    // bridge call, only a local redraw from already-fetched panels).
+    runDemePairSelector.hidden = !panels || result.demeCount < 2;
+    if (panels && panels.length > 0 && result.demeCount >= 2) {
+        window.fim.wireDemePairSelector({
+            xSelect: runXDeme,
+            ySelect: runYDeme,
+            showPairButton: runShowPairButton,
+            showOverviewButton: runShowOverviewButton,
+            container: runDemePairSelector,
+            demeCount: result.demeCount,
+            onShowPair: (_x, _y) => {
+                // Static redraw only in `initial` -- no live pair
+                // bridge call until a run is actually running.
+            },
+            onShowOverview: () => {
+                if (panels.length === 1) {
+                    drawScatter(runCanvas, panels[0]);
+                } else {
+                    drawScatterGrid(runCanvas, panels);
+                }
+            },
+        });
+    }
+}
+
+window.fim.renderInitialPreview = renderInitialPreview;
+
+/**
  * Enter `initial`: hide every other state's own content, disable the
- * controls only `running`/`completed` make sense for, and leave the
- * shared canvas blank -- this phase's own scope stops there (design §8
- * Phase F is what actually renders something here).
+ * controls only `running`/`completed` make sense for, and render the
+ * p_0 preview (Phase F: scatter, statistics, gen-0 progress bar).
  */
 function enterInitialState() {
     window.fim.setRunViewState("initial");
     window.fim.setCompletedOutputDirectory(null);
-    runProgress.hidden = true;
     runCompleted.hidden = true;
     batchResultsTable.hidden = true;
     scrubberControls.hidden = true;
     runDemePairSelector.hidden = true;
+    runProgress.hidden = true;
     cancelButton.disabled = true;
     openFolderButton.hidden = true;
+    // `resultsBackButton` is declared in run-view-completed.js (loads
+    // after this file) but always present by the time any user event
+    // or `whenApiReady` callback fires.
+    if (typeof resultsBackButton !== "undefined") {
+        resultsBackButton.hidden = true;
+    }
+    if (initialStats) {
+        initialStats.hidden = true;
+    }
     window.fim.resetScrubber();
     clearRunCanvas();
+    // Render p_0 preview asynchronously -- do not await here since
+    // `enterInitialState` is called synchronously from many sites.
+    renderInitialPreview();
 }
 
 window.fim.enterInitialState = enterInitialState;
