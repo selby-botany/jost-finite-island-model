@@ -238,6 +238,9 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     if (initialStats) {
         initialStats.hidden = true;
     }
+    if (runPlotTitle) {
+        runPlotTitle.textContent = payload.runId || "Completed run";
+    }
     runCompleted.hidden = false;
     cancelButton.disabled = true;
     openFolderButton.hidden = false;
@@ -310,10 +313,15 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     window.fim.showScreen("screen-run");
 };
 
+window.fim.returnToInitialState = function returnToInitialState() {
+    resultsBackButton.hidden = true;
+    window.fim.showScreen("screen-run");
+    window.fim.enterInitialState();
+};
+
 // Wire the Back button once on load -- navigates from `completed` back
 // to `initial` (p_0 preview), the same as clicking "Run simulation"
 // would do for a fresh start but without actually starting a run.
 resultsBackButton.addEventListener("click", () => {
-    resultsBackButton.hidden = true;
-    window.fim.enterInitialState();
+    window.fim.returnToInitialState();
 });

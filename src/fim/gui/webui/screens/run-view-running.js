@@ -100,6 +100,9 @@ function enterRunningState() {
     if (initialStats) {
         initialStats.hidden = true;
     }
+    if (runPlotTitle) {
+        runPlotTitle.textContent = "Simulation in progress";
+    }
     runCompleted.hidden = true;
     batchResultsTable.hidden = true;
     scrubberControls.hidden = true;

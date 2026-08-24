@@ -164,6 +164,57 @@ def test_a_completed_run_renders_the_run_view(
     assert settled["scrubberPlayDisabled"] is False
 
 
+def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The run title sits above the plot and the Back action returns to p_0."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const pollCompleted = () => { "
+            + "if (window.fim.getRunViewState() === 'completed') { "
+            + "const title = document.getElementById('run-plot-title'); "
+            + "const canvas = document.getElementById('run-canvas'); "
+            + "window.__fimCompletedTitleAboveCanvas = !!("
+            + "title.compareDocumentPosition(canvas) & "
+            + "Node.DOCUMENT_POSITION_FOLLOWING); "
+            + "document.getElementById('results-back-button').click(); "
+            + "return; "
+            + "} "
+            + "setTimeout(pollCompleted, 50); "
+            + "}; "
+            + "setTimeout(pollCompleted, 50);"
+        ),
+        read=(
+            "({"
+            "runViewState: window.fim.getRunViewState(), "
+            "titleText: document.getElementById('run-plot-title').textContent, "
+            "titleAboveCanvas: !!window.__fimCompletedTitleAboveCanvas, "
+            "initialHidden: document.getElementById('initial-stats').hidden, "
+            "backHidden: document.getElementById('results-back-button').hidden"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("runViewState") == "initial"
+            and value.get("titleAboveCanvas") is True
+            and value.get("titleText") == "Initial conditions (p₀)"
+            and value.get("initialHidden") is False
+            and value.get("backHidden") is True
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["runViewState"] == "initial"
+    assert settled["titleText"] == "Initial conditions (p₀)"
+    assert settled["titleAboveCanvas"] is True
+    assert settled["initialHidden"] is False
+    assert settled["backHidden"] is True
+
+
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
     window: webview.Window,
 ) -> None:
