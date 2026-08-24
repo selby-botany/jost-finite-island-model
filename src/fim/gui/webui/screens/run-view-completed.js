@@ -83,7 +83,6 @@ function renderDifferentiationQ(report) {
     }
 }
 
-/**
 function renderBatchSummary(summary) {
     batchResultsSummary.replaceChildren();
     for (const name of STATISTIC_NAMES) {

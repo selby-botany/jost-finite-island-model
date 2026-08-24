@@ -97,12 +97,21 @@ def test_a_completed_run_renders_the_run_view(
             "runViewState: window.fim.getRunViewState(), "
             "runId: document.getElementById('results-run-id').textContent, "
             "outcome: document.getElementById('results-outcome').textContent, "
-            "statDTitle: document.getElementById('stat-D')"
-            ".querySelector('.ci-bar-track').title, "
-            "statGSTLabel: document.getElementById('stat-G_ST')"
-            ".querySelector('.ci-bar-label').innerHTML, "
-            "statGSTTrackTitle: document.getElementById('stat-G_ST')"
-            ".querySelector('.ci-bar-track').title, "
+            "statDTitle: (() => {"
+            "const statD = document.getElementById('stat-D');"
+            "const track = statD && statD.querySelector('.ci-bar-track');"
+            "return track ? track.title : null;"
+            "})(), "
+            "statGSTLabel: (() => {"
+            "const stat = document.getElementById('stat-G_ST');"
+            "const label = stat && stat.querySelector('.ci-bar-label');"
+            "return label ? label.innerHTML : null;"
+            "})(), "
+            "statGSTTrackTitle: (() => {"
+            "const stat = document.getElementById('stat-G_ST');"
+            "const track = stat && stat.querySelector('.ci-bar-track');"
+            "return track ? track.title : null;"
+            "})(), "
             "scrubberHidden: document.getElementById('scrubber-controls').hidden, "
             "scrubberPlayDisabled: "
             "document.getElementById('scrubber-play-button').disabled, "
@@ -126,6 +135,9 @@ def test_a_completed_run_renders_the_run_view(
             value is not None
             and value.get("runViewState") == "completed"
             and value.get("scrubberPending") == 0
+            and value.get("statDTitle") is not None
+            and value.get("statGSTLabel") is not None
+            and value.get("statGSTTrackTitle") is not None
         ),
         poll_attempts=_POLL_ATTEMPTS,
     )
