@@ -8,11 +8,32 @@
  * ...)")` from a background thread whenever a run reports progress --
  * that call needs a stable, always-present global to land on regardless
  * of which screen happens to be showing, so `showScreen`/`onRun*` live
- * here rather than inside `screens/progress.js` itself (which only
- * *implements* what `onRunProgress` etc. actually do once Screen 2
- * exists -- see that file). Screens not yet built register no-op
- * handlers here implicitly, by simply not overriding them.
+ * here rather than inside `screens/run-view-running.js` itself (which
+ * only *implements* what `onRunProgress` etc. actually do). `showScreen`
+ * itself now toggles among only three top-level screens (`screen-run`,
+ * `screen-open-run`, `screen-help`, unified-run-view design §3.2/§8
+ * Phase E) rather than the six it originally did -- the run view's own
+ * three *states* (`getRunViewState`/`setRunViewState` below) are a
+ * separate, narrower concept from which top-level screen is showing.
  */
+
+// `initial` | `running` | `completed` (design §3.2.1) -- which of
+// `run-view-initial.js`/`run-view-running.js`/`run-view-completed.js`
+// currently owns `screen-run`'s own state-conditional content. Each of
+// those files' own `enterXState()` function is what actually flips
+// this (and the DOM to match); nothing here decides transitions on its
+// own, this is only the one shared place every file can both set and
+// read it.
+let runViewState = "initial";
+
+// The most recently completed run's own output directory, `null` until
+// one exists -- `run-view-completed.js`'s own `enterCompletedState`
+// sets this; `run-view-controls.js`'s "Open output folder" button and
+// `fim.menu.revealOutputFolder` both read it via the getter below,
+// rather than each screen tracking its own copy the way `results.js`/
+// `batch-results.js` used to (one state model, not two, design §3.2.5,
+// applied here too).
+let completedOutputDirectory = null;
 
 const fim = {
     /**
@@ -25,60 +46,71 @@ const fim = {
         }
     },
 
+    /** @returns {"initial"|"running"|"completed"} */
+    getRunViewState() {
+        return runViewState;
+    },
+
+    /** @param {"initial"|"running"|"completed"} state */
+    setRunViewState(state) {
+        runViewState = state;
+    },
+
+    /** @returns {string|null} */
+    getCompletedOutputDirectory() {
+        return completedOutputDirectory;
+    },
+
+    /** @param {string|null} outputDirectory */
+    setCompletedOutputDirectory(outputDirectory) {
+        completedOutputDirectory = outputDirectory;
+    },
+
     onRunProgress() {
-        // Overridden once Screen 2 (screens/progress.js) exists.
+        // Overridden by screens/run-view-running.js.
     },
     onRunDone() {
-        // Overridden once Screen 2 (screens/progress.js) exists.
+        // Overridden by screens/run-view-running.js.
     },
     onRunCancelled() {
-        // Overridden once Screen 2 (screens/progress.js) exists.
+        // Overridden by screens/run-view-running.js.
     },
     onRunError() {
-        // Overridden once Screen 2 (screens/progress.js) exists.
+        // Overridden by screens/run-view-running.js.
     },
 
     // The batch (`n_replicates > 1`) counterparts `Api._start_batch_run`
     // pushes instead (design §4.1's "n_replicates *is* the toggle" —
-    // the same one `start_run` call, a different message shape). No-op
-    // stubs for now, matching the scalar handlers' own walking-skeleton
-    // precedent above: `fim.gui.app._drain_batch_messages` already
-    // calls these for real (Milestone W5's backend half), so a real
-    // batch run does not throw a `JavascriptException` calling an
-    // undefined function — Screen 2/4's own batch-aware rendering is
-    // Milestone W5's remaining, frontend half.
+    // the same one `start_run` call, a different message shape).
     onBatchProgress() {
-        // Overridden once the batch progress screen extension exists.
+        // Overridden by screens/run-view-running.js.
     },
     onBatchDone() {
-        // Overridden once Screen 4 (screens/batch-results.js) exists.
+        // Overridden by screens/run-view-running.js.
     },
     onBatchCancelled() {
-        // Overridden once the batch progress screen extension exists.
+        // Overridden by screens/run-view-running.js.
     },
     onBatchError() {
-        // Overridden once the batch progress screen extension exists.
+        // Overridden by screens/run-view-running.js.
     },
 
     /**
-     * Wire a "compare two demes directly" selector -- Screens 3 and 4's
-     * own shared answer to a large-`d` run's default overview (`fim.
-     * viz.scatter.panels_from_points`' own arbitrary "first pair" once
-     * `d` exceeds `PAIRWISE_MAX_DEMES`, unified-run-view design §3.6)
-     * not necessarily showing the one meaningful deme pair a researcher
-     * actually wants, Screen 5's own identical choice extended across a
-     * whole animated
-     * trajectory rather than one static state, and Screen 2's own
-     * *live* counterpart (`screens/progress.js`) -- the one case where
-     * the underlying data itself is still changing, not a fixed
-     * completed/sampled set. Two axis dropdowns and a "Show pair"/"Show
-     * overview" pair of buttons -- what each one *does* is entirely up
-     * to the caller's own `onShowPair`/`onShowOverview` (a single-panel
-     * redraw for Screens 3/4, a whole-trajectory frame-set swap for
-     * Screen 5, a `set_live_deme_pair` bridge call plus a local display
-     * flag for Screen 2); this function owns only the dropdown
-     * population and the "X and Y cannot match" enable/disable rule
-     * every caller shares.
+     * Wire a "compare two demes directly" selector -- the run view's
+     * shared answer to a large-`d` run's default overview (`fim.viz.
+     * scatter.panels_from_points`' own arbitrary "first pair" once `d`
+     * exceeds `PAIRWISE_MAX_DEMES`, unified-run-view design §3.6) not
+     * necessarily showing the one meaningful deme pair a researcher
+     * actually wants -- used identically by `completed` (a single-panel
+     * redraw, `run-view-completed.js`) and `running` (a `set_live_deme_
+     * pair` bridge call plus a local display flag, `run-view-
+     * running.js`, the one case where the underlying data itself is
+     * still changing rather than a fixed completed/sampled set). Two
+     * axis dropdowns and a "Show pair"/"Show overview" pair of buttons
+     * -- what each one *does* is entirely up to the caller's own
+     * `onShowPair`/`onShowOverview`; this function owns only the
+     * dropdown population and the "X and Y cannot match" enable/disable
+     * rule every caller shares.
      *
      * @param {Object} config
      * @param {HTMLSelectElement} config.xSelect
@@ -173,8 +205,9 @@ const fim = {
      * Open one Configure section's modal by name (`modal-<name>`),
      * wiring its close behavior on first use. The Configure menu's own
      * dispatch target for every section §3.1.3 has not promoted to a
-     * direct value-selector leaf, and `screens/input.js`'s own error-
-     * routing (an invalid field on "Run simulation") for the same set.
+     * direct value-selector leaf, and `screens/run-view-controls.js`'s
+     * own error-routing (an invalid field on "Run simulation") for the
+     * same set.
      * @param {string} name
      */
     openConfigModal(name) {
@@ -203,21 +236,21 @@ const fim = {
      */
     menu: {
         newConfiguration() {
-            // Overridden by screens/input.js.
+            // Overridden by screens/run-view-initial.js.
         },
         configureTab() {
-            // Overridden by screens/input.js.
+            // Overridden by screens/config-modals.js.
         },
         openConfiguration() {
-            window.fim.showScreen("screen-input");
+            window.fim.showScreen("screen-run");
             document.getElementById("load-yaml-button").click();
         },
         saveConfiguration() {
-            window.fim.showScreen("screen-input");
+            window.fim.showScreen("screen-run");
             document.getElementById("save-yaml-button").click();
         },
         runSimulation() {
-            window.fim.showScreen("screen-input");
+            window.fim.showScreen("screen-run");
             document.getElementById("run-button").click();
         },
         openRun() {
@@ -227,18 +260,12 @@ const fim = {
             document.getElementById("cancel-run-button").click();
         },
         revealOutputFolder() {
-            if (!document.getElementById("screen-batch-results").hidden) {
-                document.getElementById("batch-open-folder-button").click();
-            } else if (!document.getElementById("screen-results").hidden) {
-                document.getElementById("open-folder-button").click();
-            }
-            // Otherwise: no completed run's output folder to reveal from
-            // whatever screen is currently showing -- a silent no-op.
-        },
-        animate() {
-            if (!document.getElementById("screen-results").hidden) {
-                document.getElementById("animate-button").click();
-            }
+            // One button now, regardless of scalar/batch (design §8
+            // Phase E): `onOpenFolderClicked`'s own no-op-if-nothing-
+            // completed-yet check already covers "no completed run's
+            // output folder to reveal" -- no screen/state check needed
+            // here at all.
+            document.getElementById("open-folder-button").click();
         },
         help(topic) {
             window.fim.showHelp(topic);
@@ -251,8 +278,8 @@ const fim = {
             // whichever screen is currently showing. Purely cosmetic
             // and forward-looking (`Api.set_significant_digits`'s own
             // docstring: "no record" — nothing on disk changes, and an
-            // already-open Screen 3/4 is not retroactively reformatted,
-            // only the next run's own results).
+            // already-showing `completed` view is not retroactively
+            // reformatted, only the next run's own results).
             const result = await window.pywebview.api.set_significant_digits(digits);
             if (!result.ok) {
                 window.alert(`Could not change significant digits: ${result.message}`);

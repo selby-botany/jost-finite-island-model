@@ -10,113 +10,86 @@
 <body>
 <div id="app">
 
-  <section id="screen-input" class="screen">
-    <div id="input-banner" class="banner" hidden></div>
+  <!-- The unified run view (unified-run-view design §3.2, §8 Phase E):
+       one screen, one shared canvas/selector/scrubber, in exactly one
+       of three states (`initial`/`running`/`completed`, `run-view-
+       controls.js`'s own `runViewState`) at a time -- replaces the five
+       screens (Model input, Running, Results, Batch results, Animated
+       trajectory) that used to be five separate `.screen` sections
+       reached by full-window navigation. Only the always-present
+       controls at the very end and the six Configure modals (still
+       below, unchanged) are not state-conditional. -->
+  <section id="screen-run" class="screen">
+    <div id="run-banner" class="banner" hidden></div>
 
-    <form id="input-form" class="tabs">
-      <input type="radio" name="tab" id="tab-population" checked>
-      <input type="radio" name="tab" id="tab-migration">
-      <input type="radio" name="tab" id="tab-mutation">
-      <input type="radio" name="tab" id="tab-initial_conditions">
-      <input type="radio" name="tab" id="tab-convergence">
-      <input type="radio" name="tab" id="tab-batch">
-
-      <!-- Visible navigation moved to the native Configure menu
-           (`fim.gui.app._build_menu`); this bar's own labels/dots stay
-           in the DOM (hidden via app.css's `.tab-bar { display: none;
-           }`) rather than being deleted -- `markTabError`/`clearTabError
-           Dots` in this file still target them by id, unchanged, and
-           `test_input_screen_switches_to_the_tab_with_an_invalid_field`
-           still asserts against `dot-migration` directly. -->
-      <nav class="tab-bar">
-        <label for="tab-population" data-tab="population">Population<span class="error-dot" id="dot-population" hidden></span></label>
-        <label for="tab-migration" data-tab="migration">Migration<span class="error-dot" id="dot-migration" hidden></span></label>
-        <label for="tab-mutation" data-tab="mutation">Mutation<span class="error-dot" id="dot-mutation" hidden></span></label>
-        <label for="tab-initial_conditions" data-tab="initial_conditions">Initial conditions<span class="error-dot" id="dot-initial_conditions" hidden></span></label>
-        <label for="tab-convergence" data-tab="convergence">Convergence<span class="error-dot" id="dot-convergence" hidden></span></label>
-        <label for="tab-batch" data-tab="batch">Batch<span class="error-dot" id="dot-batch" hidden></span></label>
-      </nav>
-    </form>
-
-    <p id="run-reason" class="reason"></p>
-    <div class="actions">
-      <button type="button" id="load-yaml-button">Load YAML…</button>
-      <button type="button" id="save-yaml-button">Save YAML…</button>
-      <button type="button" id="run-button" disabled>Run simulation</button>
-      <button type="button" id="open-run-button">Open a run…</button>
+    <!-- Error dots (design §3.1's own six modals) -- no longer inside
+         a tab bar (fully retired this phase, along with the six radio
+         inputs and CSS-only tab switch it used to drive: nothing has
+         read a `tab-X` radio's own `.checked` state since Phase B).
+         `markTabError`/`clearTabErrorDots` (`config-modals.js`) still
+         target these by id; kept invisible via `app.css`'s own rule,
+         the same "still functional, not still shown" precedent the
+         tab bar itself established. -->
+    <div class="error-dots" hidden>
+      <span class="error-dot" id="dot-population" hidden></span>
+      <span class="error-dot" id="dot-migration" hidden></span>
+      <span class="error-dot" id="dot-mutation" hidden></span>
+      <span class="error-dot" id="dot-initial_conditions" hidden></span>
+      <span class="error-dot" id="dot-convergence" hidden></span>
+      <span class="error-dot" id="dot-batch" hidden></span>
     </div>
-  </section>
 
-  <section id="screen-progress" class="screen" hidden>
-    <div id="progress-banner" class="banner" hidden></div>
-    <div class="progress-bars">
-      <label for="progress-generation">Generation</label>
-      <progress id="progress-generation" max="1" value="0"></progress>
-      <span id="progress-generation-label"></span>
-    </div>
-    <canvas id="progress-canvas" width="640" height="520"></canvas>
-    <fieldset class="composite" id="progress-deme-pair-selector" hidden>
-      <legend>Compare demes directly</legend>
-      <label for="progress-x-deme">X</label>
-      <select id="progress-x-deme"></select>
-      <label for="progress-y-deme">Y</label>
-      <select id="progress-y-deme"></select>
-      <button type="button" id="progress-show-pair-button">Show pair</button>
-      <button type="button" id="progress-show-overview-button">Show overview</button>
-    </fieldset>
-    <div class="actions">
-      <button type="button" id="cancel-run-button">Cancel</button>
-    </div>
-  </section>
-
-  <section id="screen-results" class="screen" hidden>
-    <p id="results-run-id" class="results-run-id"></p>
-    <p id="results-outcome" class="results-outcome"></p>
-    <div class="results-body">
-      <div class="results-stats">
-        <div class="field-stat" id="stat-D"></div>
-        <div class="field-stat" id="stat-G_ST"></div>
-        <div class="field-stat" id="stat-E_ST"></div>
-        <div class="field-stat" id="stat-K_ST"></div>
-        <div class="field-stat" id="stat-H_S"></div>
-        <div class="field-stat" id="stat-H_T"></div>
-        <div id="results-differentiation-q" hidden></div>
+    <!-- `running`-only: the generation/replicate progress indicator. -->
+    <div id="run-progress" hidden>
+      <div class="progress-bars">
+        <label for="progress-generation">Generation</label>
+        <progress id="progress-generation" max="1" value="0"></progress>
+        <span id="progress-generation-label"></span>
       </div>
-      <canvas id="results-canvas" width="640" height="520"></canvas>
     </div>
-    <fieldset class="composite" id="results-deme-pair-selector" hidden>
-      <legend>Compare demes directly</legend>
-      <label for="results-x-deme">X</label>
-      <select id="results-x-deme"></select>
-      <label for="results-y-deme">Y</label>
-      <select id="results-y-deme"></select>
-      <button type="button" id="results-show-pair-button">Show pair</button>
-      <button type="button" id="results-show-overview-button">Show overview</button>
-    </fieldset>
-    <p id="results-generation-count" class="reason" hidden></p>
-    <div class="actions">
-      <button type="button" id="new-run-button">New run</button>
-      <button type="button" id="animate-button" disabled>Animate</button>
-      <button type="button" id="open-folder-button">Open output folder</button>
-    </div>
-  </section>
 
-  <section id="screen-batch-results" class="screen" hidden>
-    <p id="batch-results-run-id" class="results-run-id"></p>
-    <div class="batch-results-body">
-      <canvas id="batch-results-canvas" width="640" height="520"></canvas>
-      <div class="batch-results-summary" id="batch-results-summary"></div>
+    <!-- `completed`-only: the finished run's own summary, flexed
+         beside the shared canvas below -- scalar and batch each show
+         only their own stats block (`run-view-completed.js` branches
+         on which kind of "done" payload arrived, design §3.2.5's "one
+         state model, not two" applied to this merge too) -- never both
+         at once. Hiding this one element (rather than the canvas'
+         whole row) is enough: a single remaining flex child simply
+         takes the full row alone during `running`/`initial`. -->
+    <div class="run-body">
+      <div id="run-completed" hidden>
+        <p id="results-run-id" class="results-run-id"></p>
+        <p id="results-outcome" class="results-outcome"></p>
+        <div class="results-stats" id="results-stats">
+          <div class="field-stat" id="stat-D"></div>
+          <div class="field-stat" id="stat-G_ST"></div>
+          <div class="field-stat" id="stat-E_ST"></div>
+          <div class="field-stat" id="stat-K_ST"></div>
+          <div class="field-stat" id="stat-H_S"></div>
+          <div class="field-stat" id="stat-H_T"></div>
+          <div id="results-differentiation-q" hidden></div>
+        </div>
+        <div class="batch-results-summary" id="batch-results-summary" hidden></div>
+      </div>
+
+      <!-- Shared across all three states: `running`/`completed` draw
+           into it today; `initial` starts blank this phase (design §8
+           Phase F adds its own content). -->
+      <canvas id="run-canvas" width="640" height="520"></canvas>
     </div>
-    <fieldset class="composite" id="batch-results-deme-pair-selector" hidden>
+    <fieldset class="composite" id="run-deme-pair-selector" hidden>
       <legend>Compare demes directly</legend>
-      <label for="batch-results-x-deme">X</label>
-      <select id="batch-results-x-deme"></select>
-      <label for="batch-results-y-deme">Y</label>
-      <select id="batch-results-y-deme"></select>
-      <button type="button" id="batch-results-show-pair-button">Show pair</button>
-      <button type="button" id="batch-results-show-overview-button">Show overview</button>
+      <label for="run-x-deme">X</label>
+      <select id="run-x-deme"></select>
+      <label for="run-y-deme">Y</label>
+      <select id="run-y-deme"></select>
+      <button type="button" id="run-show-pair-button">Show pair</button>
+      <button type="button" id="run-show-overview-button">Show overview</button>
     </fieldset>
-    <table class="batch-results-table">
+
+    <!-- Batch `completed`-only: the replicate table, full width below
+         the flex row above rather than squeezed into it. -->
+    <table class="batch-results-table" id="batch-results-table" hidden>
       <thead>
         <tr>
           <th>#</th>
@@ -134,40 +107,44 @@
       </thead>
       <tbody id="batch-results-table-body"></tbody>
     </table>
-    <div class="actions">
-      <button type="button" id="batch-new-run-button">New run</button>
-      <button type="button" id="batch-open-folder-button">Open batch folder</button>
-    </div>
-  </section>
 
-  <section id="screen-animation" class="screen" hidden>
-    <p id="animation-generation-label" class="reason"></p>
-    <canvas id="animation-canvas" width="640" height="520"></canvas>
-    <fieldset class="composite" id="animation-deme-pair-selector" hidden>
-      <legend>Compare demes directly</legend>
-      <label for="animation-x-deme">X</label>
-      <select id="animation-x-deme"></select>
-      <label for="animation-y-deme">Y</label>
-      <select id="animation-y-deme"></select>
-      <button type="button" id="animation-show-pair-button">Show pair</button>
-      <button type="button" id="animation-show-overview-button">Show overview</button>
-    </fieldset>
-    <div class="animation-controls">
-      <button type="button" id="animation-play-button" disabled>Play</button>
+    <!-- `completed`-only this phase (design §3.2.4: no separate
+         "Animate" button anywhere -- the scrubber is simply part of
+         `completed`'s own view). Design §8 Phase F extends this same
+         element to `running` too, pointed at a live/growing ceiling
+         (§3.3) instead of a fixed one. -->
+    <div class="scrubber-controls" id="scrubber-controls" hidden>
+      <button type="button" id="scrubber-play-button" disabled>Play</button>
       <input
         type="range"
-        id="animation-scrubber"
+        id="scrubber-range"
         min="0"
         max="0"
         value="0"
         step="1"
         disabled
       >
+      <span id="scrubber-label"></span>
     </div>
+
+    <!-- Always present, regardless of state (design §3.1.4). -->
+    <p id="run-reason" class="reason"></p>
     <div class="actions">
-      <button type="button" id="animation-back-button">Back</button>
+      <button type="button" id="load-yaml-button">Load YAML…</button>
+      <button type="button" id="save-yaml-button">Save YAML…</button>
+      <button type="button" id="run-button" disabled>Run simulation</button>
+      <button type="button" id="cancel-run-button" disabled>Cancel</button>
+      <button type="button" id="open-run-button">Open a run…</button>
+      <button type="button" id="open-folder-button" hidden>Open output folder</button>
     </div>
   </section>
+
+  <!-- Every configuration field still lives here, in one shared
+       `<form>`, exactly as before (design §3.1.2) -- each Configure
+       modal's own fields are `form="input-form"`, not DOM descendants
+       of it, so this element's own visibility never matters to
+       `FormData(form)`/`form.elements`. -->
+  <form id="input-form"></form>
 
   <section id="screen-open-run" class="screen" hidden>
     <div id="open-run-banner" class="banner" hidden></div>
@@ -233,7 +210,7 @@
        unaffected by any of them being hidden. Each field below is
        `form="input-form"` rather than a DOM descendant of that form --
        FormData(form) collects it identically either way (confirmed
-       live too), which is what keeps `screens/input.js`'s own
+       live too), which is what keeps `screens/config-modals.js`'s own
        validation/collection code completely unchanged by this move. -->
   <dialog class="config-modal" id="modal-population">
     <h2>Population</h2>
@@ -406,11 +383,12 @@
 <script src="app.js"></script>
 <script src="scatter.js"></script>
 <script src="meters.js"></script>
-<script src="screens/input.js"></script>
-<script src="screens/progress.js"></script>
-<script src="screens/results.js"></script>
-<script src="screens/batch-results.js"></script>
-<script src="screens/animation.js"></script>
+<script src="scrubber.js"></script>
+<script src="screens/config-modals.js"></script>
+<script src="screens/run-view-controls.js"></script>
+<script src="screens/run-view-initial.js"></script>
+<script src="screens/run-view-running.js"></script>
+<script src="screens/run-view-completed.js"></script>
 <script src="screens/open-run.js"></script>
 <script src="screens/help.js"></script>
 </body>

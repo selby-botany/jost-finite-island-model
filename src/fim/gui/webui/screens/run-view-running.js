@@ -1,64 +1,67 @@
 "use strict";
 
-/* Screen 2: running, as a live scatter (design doc §0.5, §4.2) -- the
- * direct answer to "the botanists want to see scatterplots... live".
+/* The unified run view's `running` state (unified-run-view design
+ * §3.2.1, §3.2.3, §3.7, §8 Phase E) -- a live scatter (design doc §0.5,
+ * §4.2's original "the botanists want to see scatterplots... live"),
+ * folded out of the retired `screens/progress.js` into this state-
+ * scoped file with no behavioral change beyond the merge itself
+ * (design §8 Phase G adds the live table/statistics-with-CIs this
+ * state does not have yet).
  *
  * `Api.start_run` pushes `fim.onRunProgress`/`onRunDone`/`onRunCancelled`/
  * `onRunError` (scalar) or `onBatchProgress`/`onBatchDone`/
  * `onBatchCancelled`/`onBatchError` (batch -- design §4.1's "n_replicates
  * *is* the toggle") from a background thread as a run proceeds (design
  * §3.4); this file's only job is reacting to those pushes -- it never
- * calls into the bridge itself except to fire "Cancel". One screen, one
- * set of DOM elements, either way (design §4.4's "the same screen, not
- * two different ones" principle, applied here too): the batch handlers
+ * calls into the bridge itself except to set a live deme pair. One
+ * shared canvas either way (design §4.4's "the same screen, not two
+ * different ones" principle, applied here too): the batch handlers
  * repurpose the same progress bar/label/canvas the scalar ones use,
  * showing replicate-reporting progress and a *pooled* scatter
  * (`fim.viz.scatter.pooled_scatter_panels`) instead of one run's own
  * generation and single-state scatter.
  *
+ * Three real regressions were found and fixed while writing this
+ * screen's own predecessor file, all instances of "same commit,
+ * different result" -- the exact defect this project's own testing
+ * discipline forbids re-running into a pass rather than fixing. Two
+ * were assertion bugs; the third (a background thread left alive past
+ * a test's own return, hanging the whole interpreter at shutdown) took
+ * real, methodical root-causing to pin down, traced to `fim.paths.
+ * default_output_directory()` naming its directory by the current
+ * wall-clock *second* and two runs landing in the same one -- fixed at
+ * the source, `fim.gui.app._resolve_available_output_directory`, not
+ * here. `Api.__init__`'s own `on_run_started`/`on_message` test hooks
+ * exist because of that investigation.
+ *
+ * A second, later regression of the identical *shape* -- a genuine
+ * background thread left alive, this time from `Api.cancel_run()`'s own
+ * fire-and-forget bridge call racing a test's window teardown -- is
+ * what `run-view-controls.js`'s own `onCancelClicked` and its
+ * `window.__fimCancelRunSettled` flag guard against.
+ *
  * `panels` (from `fim.viz.scatter.scatter_panels`/`pooled_scatter_
  * panels`, design §3.5) can hold more than one 2-D panel for
  * `3 <= d <= 6` (one per deme pair) -- every panel is drawn, as a
- * small-multiples grid when there is more than one
- * (visualization-and-config-editors design §3.1; supersedes Milestone
- * W3's own "draws only the first panel" scope line).
+ * small-multiples grid when there is more than one.
  *
- * Screens 3/4/5's own "Compare demes directly" choice extends here too
- * (`app.js`'s shared `wireDemePairSelector`), the one case where the
- * data is still live rather than a fixed completed/sampled set:
- * `Api.set_live_deme_pair` tells the running simulation's own
- * background thread which pair to start including in every subsequent
- * push (`pairPanel`, alongside the existing `panels`), and this file
- * decides which of the two to draw (`showingLiveDemePair`) -- no
- * per-tick or per-frame bridge call, only one bridge call per
- * selection change, the same shape every other screen's own selector
- * already uses.
+ * The "Compare demes directly" choice (`app.js`'s shared `wireDemePair
+ * Selector`) is the one case where the data is still live rather than a
+ * fixed completed/sampled set: `Api.set_live_deme_pair` tells the
+ * running simulation's own background thread which pair to start
+ * including in every subsequent push (`pairPanel`, alongside the
+ * existing `panels`), and this file decides which of the two to draw
+ * (`showingLiveDemePair`) -- no per-tick or per-frame bridge call, only
+ * one bridge call per selection change, the same shape every other
+ * state's own selector already uses.
  */
 
-const progressCanvas = document.getElementById("progress-canvas");
 const progressBar = document.getElementById("progress-generation");
 const progressLabel = document.getElementById("progress-generation-label");
-const progressBanner = document.getElementById("progress-banner");
-const cancelButton = document.getElementById("cancel-run-button");
-const progressDemePairSelector = document.getElementById(
-    "progress-deme-pair-selector"
-);
-const progressXDeme = document.getElementById("progress-x-deme");
-const progressYDeme = document.getElementById("progress-y-deme");
-const progressShowPairButton = document.getElementById(
-    "progress-show-pair-button"
-);
-const progressShowOverviewButton = document.getElementById(
-    "progress-show-overview-button"
-);
 
 // The displayed batch-progress count, tracked separately from whatever
 // `onBatchProgress` last reported -- see that handler's own comment for
-// why the raw reported count can legitimately regress mid-batch, and
-// `screens/input.js`'s `onRunClicked` (which resets this to 0 for every
-// new run, the same place it already resets the shared progress bar's
-// own DOM value) for why this is safe to track as simple module state
-// rather than something scoped per run.
+// why the raw reported count can legitimately regress mid-batch.
 let batchProgressHighWaterMark = 0;
 // Whether the selector below has been wired for *this* run yet --
 // re-wiring on every single push (they can arrive many times a second)
@@ -74,26 +77,37 @@ let liveDemeSelectorWired = false;
 let showingLiveDemePair = false;
 // The most recent push this run has made, kept only so "Show overview"
 // can redraw instantly from data already on hand -- the same "no
-// second bridge call needed for that direction" guarantee Screens 3/4/5's
-// own identical selector already gives, extended here to a live stream.
+// second bridge call needed for that direction" guarantee every other
+// state's own identical selector already gives, extended here to a
+// live stream.
 let lastProgressPayload = null;
 
-window.fim.resetBatchProgress = function resetBatchProgress() {
+/**
+ * Enter `running`: reset every per-run tracking variable above, show
+ * the progress indicator, hide `completed`'s own content, and enable
+ * Cancel -- the shared entry point `run-view-controls.js`'s own
+ * `onRunClicked` calls once `Api.start_run` confirms a run has
+ * genuinely started.
+ */
+function enterRunningState() {
+    window.fim.setRunViewState("running");
     batchProgressHighWaterMark = 0;
     liveDemeSelectorWired = false;
     showingLiveDemePair = false;
     lastProgressPayload = null;
-};
-
-function showProgressBanner(message) {
-    if (!message) {
-        progressBanner.hidden = true;
-        progressBanner.textContent = "";
-        return;
-    }
-    progressBanner.hidden = false;
-    progressBanner.textContent = message;
+    progressBar.value = 0;
+    runProgress.hidden = false;
+    runCompleted.hidden = true;
+    batchResultsTable.hidden = true;
+    scrubberControls.hidden = true;
+    runDemePairSelector.hidden = true;
+    cancelButton.disabled = false;
+    openFolderButton.hidden = true;
+    window.fim.resetScrubber();
+    clearRunCanvas();
 }
+
+window.fim.enterRunningState = enterRunningState;
 
 function drawProgressPanels(payload) {
     // `pairPanel` is only ever present once a live pair has been
@@ -103,7 +117,7 @@ function drawProgressPanels(payload) {
     // clicked can still land before the *next* one carries a fresh
     // `pairPanel` for it.
     if (showingLiveDemePair && payload.pairPanel) {
-        drawScatter(progressCanvas, payload.pairPanel);
+        drawScatter(runCanvas, payload.pairPanel);
         return;
     }
     const panels = payload.panels;
@@ -111,9 +125,9 @@ function drawProgressPanels(payload) {
         return;
     }
     if (panels.length === 1) {
-        drawScatter(progressCanvas, panels[0]);
+        drawScatter(runCanvas, panels[0]);
     } else {
-        drawScatterGrid(progressCanvas, panels);
+        drawScatterGrid(runCanvas, panels);
     }
 }
 
@@ -125,35 +139,24 @@ function drawProgressPanels(payload) {
  * @param {number} demeCount
  */
 function wireLiveDemePairSelector(demeCount) {
+    runDemePairSelector.hidden = demeCount < 2;
     window.fim.wireDemePairSelector({
-        xSelect: progressXDeme,
-        ySelect: progressYDeme,
-        showPairButton: progressShowPairButton,
-        showOverviewButton: progressShowOverviewButton,
-        container: progressDemePairSelector,
+        xSelect: runXDeme,
+        ySelect: runYDeme,
+        showPairButton: runShowPairButton,
+        showOverviewButton: runShowOverviewButton,
+        container: runDemePairSelector,
         demeCount,
         onShowPair: async (x, y) => {
             // Set *before* awaiting the bridge call, not after it
             // resolves -- a real, confirmed-live timing bug, not a
             // style preference. `self._live_deme_pair` (the Python-side
             // state `_drain_run_messages` reads) becomes non-`None` the
-            // instant `Api.set_live_deme_pair` executes; the old
-            // ordering here set this flag only once the *full*
-            // JS-await-Python-JS round trip completed, which is
-            // strictly later. A tick processed in that gap already has
-            // no `pairPanel` to draw regardless of this flag's own
-            // value (`drawProgressPanels`'s own comment covers that
-            // separate, already-accepted case) -- so setting it first
-            // changes nothing about that outcome, it only removes the
-            // *later* gap where the payload genuinely does carry
-            // `pairPanel` but this flag had not caught up yet to draw
-            // it. Tells the *running* simulation's own background
-            // thread which pair to start including in every subsequent
-            // push (`Api.set_live_deme_pair`) -- unlike Screens 3/4/5's
-            // own `onShowPair`, there is no already-computed panel to
-            // draw immediately: the canvas updates on the next push,
-            // the same "near-instant, not literally instant" cadence
-            // `progressBar`/`progressLabel` above already have.
+            // instant `Api.set_live_deme_pair` executes; setting this
+            // flag only once the *full* JS-await-Python-JS round trip
+            // completed was strictly later, and let a tick whose own
+            // payload genuinely carried `pairPanel` still draw as the
+            // overview because the flag itself had not caught up yet.
             showingLiveDemePair = true;
             await window.pywebview.api.set_live_deme_pair(x, y);
         },
@@ -191,16 +194,21 @@ window.fim.onRunProgress = function onRunProgress(payload) {
 
 window.fim.onRunDone = function onRunDone(payload) {
     cancelButton.disabled = true;
-    window.fim.showResults(payload);
+    window.fim.enterCompletedState(payload, false);
 };
 
 window.fim.onRunCancelled = function onRunCancelled(generation) {
-    showProgressBanner(`Run cancelled at generation ${generation}; no artifacts were written.`);
+    // Interruption is not a state transition (design §3.2.1): the
+    // scatter/progress indicator simply stop updating and stay exactly
+    // as they last rendered, with a banner overlaid on top.
+    window.fim.showRunBanner(
+        `Run cancelled at generation ${generation}; no artifacts were written.`
+    );
     cancelButton.disabled = true;
 };
 
 window.fim.onRunError = function onRunError(message) {
-    showProgressBanner(message);
+    window.fim.showRunBanner(message);
     cancelButton.disabled = true;
 };
 
@@ -235,11 +243,11 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
 
 window.fim.onBatchDone = function onBatchDone(payload) {
     cancelButton.disabled = true;
-    window.fim.showBatchResults(payload);
+    window.fim.enterCompletedState(payload, true);
 };
 
 window.fim.onBatchCancelled = function onBatchCancelled(payload) {
-    showProgressBanner(
+    window.fim.showRunBanner(
         `Batch cancelled (replicate ${payload.replicateIndex}, ` +
             `generation ${payload.generation}); no artifacts were written.`
     );
@@ -247,25 +255,6 @@ window.fim.onBatchCancelled = function onBatchCancelled(payload) {
 };
 
 window.fim.onBatchError = function onBatchError(message) {
-    showProgressBanner(message);
+    window.fim.showRunBanner(message);
     cancelButton.disabled = true;
 };
-
-cancelButton.addEventListener("click", async () => {
-    cancelButton.disabled = true;
-    // `window.__fimCancelRunSettled`, not only `cancelButton.disabled`
-    // (which flips synchronously, before this bridge call's own promise
-    // ever resolves): the exact hazard `open-run.js`'s own `refreshRecent
-    // Runs` docstring records -- a test that tears its window down the
-    // instant a DOM-visible effect appears can destroy the window while
-    // `cancel_run()`'s own return value is still in flight back to
-    // pywebview's own JS bridge (`webview/util.py`'s `js_bridge_call`),
-    // throwing on that now-orphaned delivery thread and hanging the whole
-    // interpreter at shutdown (confirmed live: this exact click handler,
-    // racing `test_running_screen.py`'s own `cancelled_event` wait, which
-    // watches a *different* signal -- the real run thread's own
-    // `onRunCancelled` push -- and was not itself waiting on this call).
-    window.__fimCancelRunSettled = false;
-    await window.pywebview.api.cancel_run();
-    window.__fimCancelRunSettled = true;
-});

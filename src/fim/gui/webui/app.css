@@ -50,44 +50,14 @@ body {
     margin-top: 1.5rem;
 }
 
-/* Screen 1 (design §4.1): six CSS-only radio-driven tabs -- no JS needed
- * for the tab switch itself, only for field wiring/visibility rules. */
-.tabs input[name="tab"] {
-    display: none;
-}
-
-/* Decluttered off the input screen's own canvas (visualization-and-
- * config-editors design): navigation moved to the native Configure
- * menu (`fim.gui.app._build_menu`), and every section is now a modal
- * (unified-run-view design §3.1/§8 Phase A/B) rather than a tab-panel
- * -- `.tab-panel`/the six `#tab-X:checked ~ #panel-X` display rules
- * that used to show one at a time no longer have anything to select,
- * removed. The bar itself, its labels, and its error dots stay in the
- * DOM rather than being deleted -- `input.js`'s own `markTabError`/
- * `clearTabErrorDots` still target the dots by id -- `display: none`
- * is enough to remove them from what the user sees without touching
- * that machinery. */
-.tab-bar {
-    display: none;
-}
-
-.tab-bar label {
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    color: var(--fim-muted);
-}
-
-#tab-population:checked ~ .tab-bar label[for="tab-population"],
-#tab-migration:checked ~ .tab-bar label[for="tab-migration"],
-#tab-mutation:checked ~ .tab-bar label[for="tab-mutation"],
-#tab-initial_conditions:checked ~ .tab-bar label[for="tab-initial_conditions"],
-#tab-convergence:checked ~ .tab-bar label[for="tab-convergence"],
-#tab-batch:checked ~ .tab-bar label[for="tab-batch"] {
-    color: var(--fim-foreground);
-    border-bottom-color: var(--fim-accent);
-}
-
+/* The six Configure-modal error dots (design §3.1) -- `hidden` on their
+ * own `.error-dots` wrapper in `index.html` is enough to keep them out
+ * of sight (the same "still functional, not still shown" precedent the
+ * now-fully-retired tab bar established, design §8 Phase E: nothing has
+ * read a tab radio's own `.checked` state since Phase B, so the radios,
+ * labels, and CSS-only tab switch they used to drive are gone, not just
+ * hidden, along with them); `config-modals.js`'s own `markTabError`/
+ * `clearTabErrorDots` still target the dots themselves by id. */
 .error-dot {
     display: inline-block;
     width: 0.5rem;
@@ -241,7 +211,10 @@ fieldset.composite > label {
     cursor: not-allowed;
 }
 
-/* Screen 2: running, as a live scatter (design §4.2). */
+/* The unified run view (design §3.2, §8 Phase E) -- one shared canvas
+ * and one flex layout for whichever state currently has content beside
+ * it (`.run-body`'s own doc comment in `index.html` explains why a
+ * single hideable flex child is enough). */
 .progress-bars {
     display: flex;
     align-items: center;
@@ -261,13 +234,19 @@ fieldset.composite > label {
     min-width: 5rem;
 }
 
-#progress-canvas {
+.run-body {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+#run-canvas {
     border: 1px solid var(--fim-border);
     border-radius: 4px;
     background: var(--fim-background);
+    flex-shrink: 0;
 }
 
-/* Screen 3: results (design §4.3). */
 .results-run-id {
     font-weight: 600;
 }
@@ -277,12 +256,6 @@ fieldset.composite > label {
     margin-top: -0.5rem;
 }
 
-.results-body {
-    display: flex;
-    gap: 1.5rem;
-    align-items: flex-start;
-}
-
 .results-stats {
     min-width: 12rem;
 }
@@ -290,29 +263,6 @@ fieldset.composite > label {
 .results-stats .field-stat {
     margin: 0 0 0.35rem;
     font-variant-numeric: tabular-nums;
-}
-
-#results-canvas {
-    border: 1px solid var(--fim-border);
-    border-radius: 4px;
-    background: var(--fim-background);
-}
-
-/* Screen 4: batch results (design §4.4). `.results-run-id` is reused
- * as-is for `#batch-results-run-id` -- the same visual role, one run
- * id string, no batch-specific styling needed for it. */
-.batch-results-body {
-    display: flex;
-    gap: 1.5rem;
-    align-items: flex-start;
-    margin-bottom: 1rem;
-}
-
-#batch-results-canvas {
-    border: 1px solid var(--fim-border);
-    border-radius: 4px;
-    background: var(--fim-background);
-    flex-shrink: 0;
 }
 
 .batch-results-summary {
@@ -390,23 +340,24 @@ fieldset.composite > label {
     border-bottom: 1px solid var(--fim-border);
 }
 
-/* Screen 5: animated trajectory (design §4.5). */
-#animation-canvas {
-    border: 1px solid var(--fim-border);
-    border-radius: 4px;
-    background: var(--fim-background);
-}
-
-.animation-controls {
+/* The scrubber (design §3.2.4/§3.3): `completed`-only this phase, no
+ * separate "Animate" screen or button -- draws into the same
+ * `#run-canvas` above via `scrubber.js`. */
+.scrubber-controls {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     margin: 0.75rem 0;
 }
 
-.animation-controls input[type="range"] {
+.scrubber-controls input[type="range"] {
     flex: 1;
     max-width: 24rem;
+}
+
+.scrubber-controls #scrubber-label {
+    color: var(--fim-muted);
+    font-size: 0.85rem;
 }
 
 /* Screen 6: open an existing run (design §4.6). */

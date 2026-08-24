@@ -18,7 +18,7 @@
 const helpContent = document.getElementById("help-content");
 const helpBackButton = document.getElementById("help-back-button");
 
-let returnScreen = "screen-input";
+let returnScreen = "screen-run";
 
 /**
  * Show one embedded doc's rendered HTML, recording the screen shown
@@ -70,8 +70,9 @@ helpContent.addEventListener("click", async (event) => {
     } else if (link.dataset.fimExternal) {
         event.preventDefault();
         // `window.__fimHelpExternalLinkSettled` -- the same settle-flag
-        // fix, and the same reason, as `progress.js`'s own `cancelButton`
-        // handler: see that file for the full hazard this closes.
+        // fix, and the same reason, as `run-view-controls.js`'s own
+        // `onCancelClicked`: see that file for the full hazard this
+        // closes.
         window.__fimHelpExternalLinkSettled = false;
         await window.pywebview.api.open_external_link(link.dataset.fimExternal);
         window.__fimHelpExternalLinkSettled = true;

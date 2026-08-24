@@ -203,6 +203,32 @@ def _resolve_available_output_directory() -> Path:
     return output_directory
 
 
+def _active_window() -> webview.Window | None:
+    """Return the app's own single window, or `None` if it no longer exists.
+
+    Every bridge method below assumes exactly one window
+    (`webview.windows[0]` — this app never opens a second one) and, until
+    this function existed, indexed that assumption directly and
+    unconditionally. That is correct for the entire lifetime of a real
+    run of the app, but a bridge call already dispatched to a background
+    thread by pywebview's own JS delivery mechanism (`webview/util.py`'s
+    `_call`) can still reach here after the window it was headed for is
+    gone — closing the app the instant a click fires, in production; a
+    fresh pytest window replacing a just-destroyed one is the only
+    concrete way this has been reproduced (a low-frequency, whole-
+    session-only flake in `test/gui/test_results_screen.py`, not
+    isolatable to any two tests run alone — see that module's own
+    history). Either way nothing is listening for a bridge method's
+    return value once its own window is gone, so there is nothing a
+    caller can usefully do except decline gracefully instead of
+    indexing an empty list and crashing pywebview's own delivery
+    thread with an unhandled `IndexError` — promoted to a hard test
+    failure here by `pyproject.toml`'s `filterwarnings`, and in a real
+    build just an ugly, unnecessary traceback in the log.
+    """
+    return webview.windows[0] if webview.windows else None
+
+
 def _reveal_in_file_browser(directory: Path) -> None:
     """Open `directory` in the platform's file browser.
 
@@ -346,6 +372,15 @@ class Api:
         self, params: SimulationParams, output_directory: Path
     ) -> dict[str, Any]:
         """The `n_replicates == 1` half of `start_run` (`fim.gui.runner`, unchanged)."""
+        # Checked before starting anything with a side effect (`_active_
+        # window`'s own docstring): a run started with no window left to
+        # report to would run to completion with nobody ever draining
+        # its message queue — an orphaned background thread and an
+        # output directory nobody's UI ever shows, worse than simply
+        # declining up front.
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
         message_queue: queue.Queue[runner.RunMessage] = queue.Queue()
         cancel_event = threading.Event()
         try:
@@ -360,7 +395,6 @@ class Api:
         self._live_deme_pair = None
         if self._on_run_started is not None:
             self._on_run_started()
-        window = webview.windows[0]
         threading.Thread(
             target=_drain_run_messages,
             args=(
@@ -384,6 +418,11 @@ class Api:
         values: dict[str, str],
     ) -> dict[str, Any]:
         """The `n_replicates > 1` half of `start_run` (`fim.gui.batch_runner`, §7.6)."""
+        # See `_start_scalar_run`'s identical check for why this comes
+        # first, before any side effect.
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
         max_workers = _parse_max_workers(values.get("max_workers", ""))
         run_id = deterministic_run_id(params)
         message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
@@ -403,7 +442,6 @@ class Api:
         self._live_deme_pair = None
         if self._on_run_started is not None:
             self._on_run_started()
-        window = webview.windows[0]
         threading.Thread(
             target=_drain_batch_messages,
             args=(
@@ -499,7 +537,9 @@ class Api:
             (no banner to show); `{"ok": False, "message": "..."}` on a
             real load or validation failure.
         """
-        window = webview.windows[0]
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
         selection = window.create_file_dialog(
             webview.FileDialog.OPEN, file_types=_YAML_FILE_TYPES
         )
@@ -530,7 +570,9 @@ class Api:
             SimulationParams.from_mapping(payload)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        window = webview.windows[0]
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "message": "no active window"}
         selection = window.create_file_dialog(
             webview.FileDialog.SAVE, save_filename="config.yaml"
         )
@@ -692,7 +734,9 @@ class Api:
             the established convention every dialog-backed bridge
             method here follows.
         """
-        window = webview.windows[0]
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "path": ""}
         selection = window.create_file_dialog(
             webview.FileDialog.OPEN, file_types=_TRAJECTORY_FILE_TYPES
         )
@@ -1699,13 +1743,14 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             ),
         ],
     )
+    # No "Animate" item (unified-run-view design §3.2.4, §8 Phase E): the
+    # time slider is simply part of `completed`'s own view now, not a
+    # second trigger reachable from a menu.
     run_menu = Menu(
         "Run",
         [
             MenuAction("Run simulation", dispatch("fim.menu.runSimulation()")),
             MenuAction("Cancel run", dispatch("fim.menu.cancelRun()")),
-            MenuSeparator(),
-            MenuAction("Animate", dispatch("fim.menu.animate()")),
         ],
     )
     # Literal digit counts, not a live reflection of `Api._significant_

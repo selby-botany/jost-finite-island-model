@@ -3,11 +3,12 @@
 /* Screen 6: open an existing run (design doc §4.6) -- pick a persisted
  * trajectory and generation, then re-analyze it, matching `fim stats`.
  *
- * Reached from Screen 1's own "Open a run…" button (`input.js`). Opening
- * succeeds by handing `Api.open_run`'s own Screen-3-shaped payload
- * straight to `window.fim.showResults` -- design §4.6's "opening a run
- * re-renders Screen 3... unchanged" realized as literal reuse, not a
- * second rendering path.
+ * Reached from the unified run view's own "Open a run…" button
+ * (`run-view-controls.js`). Opening succeeds by handing `Api.open_run`'s
+ * own `completed`-shaped payload straight to `window.fim.
+ * enterCompletedState`, landing directly in that state (unified-run-view
+ * design §3.2.1) -- literal reuse of the same rendering path a live
+ * run's own `onRunDone` already uses, not a second one.
  */
 
 const openRunBanner = document.getElementById("open-run-banner");
@@ -120,11 +121,11 @@ openButton.addEventListener("click", async () => {
         return;
     }
     showOpenRunBanner("");
-    window.fim.showResults(result);
+    window.fim.enterCompletedState(result, false);
 });
 
 openRunBackButton.addEventListener("click", () => {
-    window.fim.showScreen("screen-input");
+    window.fim.showScreen("screen-run");
 });
 
 window.fim.showOpenRunScreen = function showOpenRunScreen() {
