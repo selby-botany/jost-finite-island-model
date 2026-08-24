@@ -40,6 +40,7 @@ const progressLabel = document.getElementById("progress-generation-label");
 const initialStats = document.getElementById("initial-stats");
 
 function clearRunCanvas() {
+    _currentPanels = null;
     runCanvas.getContext("2d").clearRect(0, 0, runCanvas.width, runCanvas.height);
 }
 

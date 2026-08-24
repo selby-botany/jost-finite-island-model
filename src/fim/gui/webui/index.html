@@ -59,8 +59,10 @@
     <div class="run-body">
       <div id="run-plot-title" class="run-plot-title" aria-live="polite"></div>
       <!-- Shared across all three states: `running`/`completed` draw
-           into it; `initial` now draws the p_0 scatter (Phase F). -->
-      <canvas id="run-canvas" width="640" height="520"></canvas>
+           into it; `initial` now draws the p_0 scatter (Phase F).
+           No width/height attributes -- sized entirely by CSS so the
+           plot fills the available space and resizes with the window. -->
+      <canvas id="run-canvas"></canvas>
 
       <!-- `initial`-only: p_0 statistics shown before any run starts
            (Phase F: `run-view-initial.js` populates these via
@@ -76,7 +78,10 @@
         <div class="field-stat" data-stat="H_T"></div>
       </div>
       <div id="run-completed" hidden>
-        <p id="results-run-id" class="results-run-id"></p>
+        <!-- run-plot-title (above the canvas) already shows the run ID
+             in completed state; this element is kept for test compatibility
+             but not displayed. -->
+        <p id="results-run-id" class="results-run-id" hidden></p>
         <p id="results-outcome" class="results-outcome"></p>
         <div class="results-stats-row" id="results-stats">
           <div class="field-stat" id="stat-D"></div>

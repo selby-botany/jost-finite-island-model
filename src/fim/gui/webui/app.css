@@ -238,7 +238,8 @@ fieldset.composite > label {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-    align-items: flex-start;
+    align-items: center;
+    width: 100%;
 }
 
 .run-plot-title {
@@ -246,13 +247,22 @@ fieldset.composite > label {
     color: var(--fim-foreground);
     line-height: 1.3;
     min-height: 1.3em;
+    text-align: center;
+    width: 100%;
+    max-width: 640px;
 }
 
 #run-canvas {
     border: 1px solid var(--fim-border);
     border-radius: 4px;
     background: var(--fim-background);
-    flex-shrink: 0;
+    /* Fill the available column width up to the natural 640 px, keeping
+     * a 1:1 aspect ratio so the square scatter plot never distorts.
+     * `display: block` removes the inline-baseline gap. */
+    display: block;
+    width: 100%;
+    max-width: 640px;
+    aspect-ratio: 1 / 1;
 }
 
 .results-run-id {

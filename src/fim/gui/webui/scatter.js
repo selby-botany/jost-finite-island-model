@@ -43,6 +43,46 @@ const MARKER_COUNT_SCALE = 1.6;
 const COLOR_COMMON = "#1f6fb2";
 const COLOR_RARE = "#d97a26";
 
+// The panels most recently drawn to `runCanvas`. `syncCanvasSize`
+// reads these to redraw after a resize without a second bridge call.
+let _currentPanels = null;
+
+/**
+ * Update `canvas.width`/`canvas.height` to match the element's current
+ * CSS layout size and redraw the stored panels.
+ *
+ * Canvas HTML attributes define the drawing-buffer resolution
+ * independently of the CSS layout size.  Keeping them in sync ensures
+ * drawings are never stretched or clipped as the window resizes.
+ * Called once at startup and then by the ResizeObserver below.
+ */
+function syncCanvasSize() {
+    const cssW = runCanvas.clientWidth;
+    const cssH = runCanvas.clientHeight;
+    if (cssW === 0 || cssH === 0) {
+        return;
+    }
+    runCanvas.width = cssW;
+    runCanvas.height = cssH;
+    if (_currentPanels && _currentPanels.length > 0) {
+        if (_currentPanels.length === 1) {
+            drawScatter(runCanvas, _currentPanels[0]);
+        } else {
+            drawScatterGrid(runCanvas, _currentPanels);
+        }
+    }
+}
+
+// Wire the ResizeObserver after the state scripts have declared
+// `runCanvas` (scatter.js loads before them, so the `load` event is
+// the earliest safe attachment point).
+window.addEventListener("load", () => {
+    if (typeof runCanvas !== "undefined" && runCanvas) {
+        syncCanvasSize();
+        new ResizeObserver(syncCanvasSize).observe(runCanvas);
+    }
+});
+
 // A single panel filling the whole canvas gets generous room for tick
 // labels and an axis title on every side; a small-multiples grid cell
 // (`drawScatterGrid`) is a fraction of that size, so its own padding and
@@ -88,6 +128,7 @@ const DOMAIN_PADDING_FRACTION = 0.08;
  *     points: Array<{x: number, y: number, count: number, common: boolean}>}} panel
  */
 function drawScatter(canvas, panel) {
+    _currentPanels = [panel];
     const context = canvas.getContext("2d");
     context.clearRect(0, 0, canvas.width, canvas.height);
     drawScatterCell(
@@ -116,6 +157,7 @@ function drawScatter(canvas, panel) {
  *     points: Array<{x: number, y: number, count: number, common: boolean}>}>} panels
  */
 function drawScatterGrid(canvas, panels) {
+    _currentPanels = panels;
     const context = canvas.getContext("2d");
     context.clearRect(0, 0, canvas.width, canvas.height);
     const columns = Math.min(GRID_COLUMNS_MAX, panels.length);
