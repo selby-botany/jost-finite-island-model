@@ -1072,7 +1072,11 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         if hasattr(item, "title")
     ] == ["D", "Gₛₜ", "Eₛₜ", "Kₛₜ", "Hₛ", "Hₜ"]
     run_items = [item.title for item in menus[2].items if hasattr(item, "title")]
-    assert run_items == ["Run simulation", "Cancel run", "Animate"]
+    # No "Animate" item (unified-run-view design §3.2.4, §8 Phase E): the
+    # time slider is simply part of `completed`'s own view now, not a
+    # second trigger reachable from a menu -- see `_build_menu`'s own
+    # comment on the Run menu.
+    assert run_items == ["Run simulation", "Cancel run"]
     view_items = [item.title for item in menus[3].items if hasattr(item, "title")]
     assert view_items == ["Significant digits"]
     digits_submenu = menus[3].items[0]

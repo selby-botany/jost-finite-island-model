@@ -42,7 +42,7 @@ _READY_POLL_ATTEMPTS = 200
 _EVENT_WAIT_TIMEOUT_SECONDS = 30.0
 _OUTCOME_TIMEOUT_SECONDS = 40.0
 
-_INPUT_SCREEN_READY = "window.__fimInputScreenReady === true"
+_INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # A small, fast, two-replicate batch — the same tiny-scale values `test/
 # gui/test_running_screen.py`'s own `_SET_TINY_FIELDS` uses for a scalar

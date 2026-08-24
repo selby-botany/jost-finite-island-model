@@ -1,12 +1,13 @@
-"""Headless functional tests for Screen 3, the results screen (design doc
-§4.3, §6.4).
+"""Headless functional tests for the unified run view's own `completed`
+state, scalar case (design doc §4.3, §6.4; unified-run-view design
+§3.2.4, §8 Phase E).
 
 Real DOM-driven proof that a completed scalar run actually reaches
-`fim.showResults` (`webui/screens/results.js`) and renders the run's own
-summary and scatter — `test/gui/test_app_api.py` already proves
-`format_statistic`/`open_output_folder` independently as plain Python
-calls; these tests prove the page's own JavaScript displays what
-`_drain_run_messages`'s `"done"` payload actually carries.
+`fim.enterCompletedState` (`webui/screens/run-view-completed.js`) and
+renders the run's own summary and scatter — `test/gui/test_app_api.py`
+already proves `format_statistic`/`open_output_folder` independently as
+plain Python calls; these tests prove the page's own JavaScript displays
+what `_drain_run_messages`'s `"done"` payload actually carries.
 
 Drives a small, fast-converging configuration through the real form (the
 same values `test/conftest.py`'s `tiny_params` fixture uses, entered as
@@ -44,11 +45,11 @@ pytestmark = pytest.mark.gui
 
 _POLL_INTERVAL_SECONDS = 0.1
 _POLL_ATTEMPTS = 600
-# Generous margin over the "New run" test's own three sequential poll
-# stages, each individually bounded by `_POLL_ATTEMPTS`.
+# Generous margin over the largest test's own sequential poll stages,
+# each individually bounded by `_POLL_ATTEMPTS`.
 _DRIVE_TIMEOUT_SECONDS = 3 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
 
-_INPUT_SCREEN_READY = "window.__fimInputScreenReady === true"
+_INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # Mirrors `test/conftest.py`'s `tiny_params` fixture field for field, so
 # the run converges (or hits its own small generation cap) almost
@@ -71,7 +72,19 @@ setField('max_generations', '10');
 """
 
 
-def test_a_completed_run_renders_the_results_screen(
+def _poll_until(
+    window: webview.Window, script: str, predicate: Callable[[Any], bool]
+) -> Any:
+    value = None
+    for _ in range(_POLL_ATTEMPTS):
+        value = window.evaluate_js(script)
+        if predicate(value):
+            return value
+        time.sleep(_POLL_INTERVAL_SECONDS)
+    return value
+
+
+def test_a_completed_run_renders_the_run_view(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
     """A finished run shows its run id, outcome, all six statistics, and a scatter."""
@@ -81,22 +94,40 @@ def test_a_completed_run_renders_the_results_screen(
         trigger=(_SET_TINY_FIELDS + "document.getElementById('run-button').click();"),
         read=(
             "({"
-            "resultsVisible: !document.getElementById('screen-results').hidden, "
+            "runViewState: window.fim.getRunViewState(), "
             "runId: document.getElementById('results-run-id').textContent, "
             "outcome: document.getElementById('results-outcome').textContent, "
             "statD: document.getElementById('stat-D').textContent, "
             "statGST: document.getElementById('stat-G_ST').textContent, "
             "statGSTHtml: document.getElementById('stat-G_ST').innerHTML, "
-            "animateDisabled: document.getElementById('animate-button').disabled"
+            "scrubberHidden: document.getElementById('scrubber-controls').hidden, "
+            "scrubberPlayDisabled: "
+            "document.getElementById('scrubber-play-button').disabled, "
+            "scrubberPending: window.__fimScrubberPending"
             "})"
         ),
+        # `runViewState` flips to "completed" synchronously, but the
+        # scrubber's own frames load via a separate, later-resolving
+        # `Api.get_animation_frames` bridge call (`wireCompletedScrubber`,
+        # `screens/run-view-completed.js`) that `enterCompletedState`
+        # kicks off and does not wait on -- deliberately, so the run's
+        # own final view never blocks on it (`scrubber.js`'s own fix for
+        # the reverse hazard: loading frames must not repaint the
+        # canvas). `window.__fimScrubberPending` is that call's own
+        # settled signal (0 = nothing in flight); waiting on it too, not
+        # just `runViewState`, is what actually proves the scrubber has
+        # finished loading before the assertions below read it -- and
+        # before `drive`'s own teardown destroys the window out from
+        # under a still-in-flight bridge call.
         is_ready=lambda value: (
-            value is not None and value.get("resultsVisible") is True
+            value is not None
+            and value.get("runViewState") == "completed"
+            and value.get("scrubberPending") == 0
         ),
         poll_attempts=_POLL_ATTEMPTS,
     )
 
-    assert settled["resultsVisible"] is True
+    assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
     assert "generation" in settled["outcome"]
     assert settled["statD"].startswith("D = ")
@@ -109,10 +140,12 @@ def test_a_completed_run_renders_the_results_screen(
     assert "<sub>ST</sub>" in settled["statGSTHtml"]
     # `tiny_params`-scale runs always persist more than one generation
     # (`convergence_window`'s own minimum of 2 forces at least one step
-    # past generation 0 before stability can first be evaluated — the
-    # same guarantee `_animate_is_enabled`'s own docstring in the
-    # Tk-era `results_screen.py` names), so "Animate" is enabled here.
-    assert settled["animateDisabled"] is False
+    # past generation 0 before stability can first be evaluated), so the
+    # scrubber (design §3.2.4: no separate "Animate" button, this is the
+    # same time slider `completed` shows directly) is populated and
+    # enabled here, not just present.
+    assert settled["scrubberHidden"] is False
+    assert settled["scrubberPlayDisabled"] is False
 
 
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
@@ -134,55 +167,61 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
     without needing to read pixel data or canvas internals directly.
 
     Drives the window manually (not via the `drive` fixture, the same
-    reason `test_new_run_button_switches_back_to_the_input_screen`
-    does): three sequential trigger-then-poll stages against one live
-    window.
+    reason `test_running_simulation_again_from_completed_starts_a_new_
+    run` does): three sequential trigger-then-poll stages against one
+    live window.
     """
     outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
     set_fields = _SET_TINY_FIELDS.replace("setField('d', '2');", "setField('d', '3');")
 
-    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
-        value = None
-        for _ in range(_POLL_ATTEMPTS):
-            value = window.evaluate_js(script)
-            if predicate(value):
-                return value
-            time.sleep(_POLL_INTERVAL_SECONDS)
-        return value
-
     def _drive() -> None:
         try:
-            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 set_fields + "document.getElementById('run-button').click();"
             )
             _poll_until(
-                "!document.getElementById('screen-results').hidden",
-                lambda value: value is True,
+                window,
+                "window.fim.getRunViewState()",
+                lambda value: value == "completed",
+            )
+            # `enterCompletedState` kicks off `wireCompletedScrubber`'s
+            # own `get_animation_frames` fetch without waiting on it
+            # (`scrubber.js`'s own fix: loading frames must not repaint
+            # the canvas) -- wait for it to settle before this test does
+            # its *own* canvas snapshotting below, and before `finally`
+            # destroys the window out from under a still-in-flight
+            # bridge call.
+            _poll_until(
+                window,
+                "window.__fimScrubberPending",
+                lambda value: value == 0,
             )
             selector_state = window.evaluate_js(
                 "({"
-                "hidden: document.getElementById('results-deme-pair-selector').hidden, "
-                "optionCount: document.getElementById('results-x-deme').options.length"
+                "hidden: document.getElementById('run-deme-pair-selector').hidden, "
+                "optionCount: document.getElementById('run-x-deme').options.length"
                 "})"
             )
             overview_snapshot = window.evaluate_js(
-                "document.getElementById('results-canvas').toDataURL()"
+                "document.getElementById('run-canvas').toDataURL()"
             )
             window.evaluate_js(
-                "document.getElementById('results-x-deme').value = '1';"
-                "document.getElementById('results-y-deme').value = '3';"
-                "document.getElementById('results-show-pair-button').click();"
+                "document.getElementById('run-x-deme').value = '1';"
+                "document.getElementById('run-y-deme').value = '3';"
+                "document.getElementById('run-show-pair-button').click();"
             )
             pair_snapshot = _poll_until(
-                "document.getElementById('results-canvas').toDataURL()",
+                window,
+                "document.getElementById('run-canvas').toDataURL()",
                 lambda value: value != overview_snapshot,
             )
             window.evaluate_js(
-                "document.getElementById('results-show-overview-button').click();"
+                "document.getElementById('run-show-overview-button').click();"
             )
             reverted_snapshot = _poll_until(
-                "document.getElementById('results-canvas').toDataURL()",
+                window,
+                "document.getElementById('run-canvas').toDataURL()",
                 lambda value: value == overview_snapshot,
             )
             outcome.put(
@@ -205,52 +244,100 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
     assert settled["revertedMatchesOverview"] is True
 
 
-def test_new_run_button_switches_back_to_the_input_screen(
+def test_running_simulation_again_from_completed_starts_a_new_run(
     window: webview.Window,
 ) -> None:
-    """ "New run" returns to Screen 1 without needing another bridge call.
+    """ "Run simulation," clicked again from `completed`, starts a genuinely new run.
+
+    Design §3.2.1's own `completed → initial → running` transition: a
+    fresh "Run simulation" click reuses the current form values with no
+    separate "New run"/reset step needed (retired this phase, design
+    §8 Phase E — the shared controls are always present, so the same
+    button that started the first run is already right there). Proven
+    by the *output directory* changing between the two completed views,
+    not just by `completed` being reached again — a stale DOM left over
+    from the first run would otherwise look identical to a real second
+    one. The run id itself is `deterministic_run_id(params)` (see
+    `src/fim/engine.py`) — deliberately the *same* string for two runs
+    of identical form values, so it cannot serve as this test's proof;
+    the output directory embeds a wall-clock timestamp and so genuinely
+    differs between the two invocations even though the run id does
+    not.
 
     Drives the window directly (not via the `drive` fixture): this test
     needs two sequential trigger-then-poll stages against the *same*
-    live window (finish a run, only then click "New run") —
-    `conftest.py`'s `drive_and_read` destroys the window in its own
+    live window (finish a run, only then click "Run simulation" again)
+    — `conftest.py`'s `drive_and_read` destroys the window in its own
     `finally` block after one such stage, the same reason
     `test/gui/test_running_screen.py`'s own cancel test drives directly.
     """
-    outcome: queue.Queue[bool] = queue.Queue(maxsize=1)
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
     def _drive() -> None:
         try:
-            for _ in range(_POLL_ATTEMPTS):
-                if window.evaluate_js(_INPUT_SCREEN_READY):
-                    break
-                time.sleep(_POLL_INTERVAL_SECONDS)
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            for _ in range(_POLL_ATTEMPTS):
-                if window.evaluate_js(
-                    "!document.getElementById('screen-results').hidden"
-                ):
-                    break
-                time.sleep(_POLL_INTERVAL_SECONDS)
-            window.evaluate_js("document.getElementById('new-run-button').click();")
-            switched = False
-            for _ in range(_POLL_ATTEMPTS):
-                switched = window.evaluate_js(
-                    "!document.getElementById('screen-input').hidden"
-                )
-                if switched:
-                    break
-                time.sleep(_POLL_INTERVAL_SECONDS)
-            outcome.put(switched)
+            _poll_until(
+                window,
+                "window.fim.getRunViewState()",
+                lambda value: value == "completed",
+            )
+            first_run_id = window.evaluate_js(
+                "document.getElementById('results-run-id').textContent"
+            )
+            first_output_directory = window.evaluate_js(
+                "window.fim.getCompletedOutputDirectory()"
+            )
+            # A fresh click reuses whatever the form already has -- no
+            # field needs re-setting, and no "New run"/reset step comes
+            # first.
+            window.evaluate_js("document.getElementById('run-button').click();")
+            second_run_id = _poll_until(
+                window,
+                "window.fim.getRunViewState() === 'completed' ? "
+                "document.getElementById('results-run-id').textContent : null",
+                lambda value: value is not None,
+            )
+            second_output_directory = window.evaluate_js(
+                "window.fim.getCompletedOutputDirectory()"
+            )
+            # Both this run's own `wireCompletedScrubber` fetch and (if
+            # it was somehow still running) the first run's own can be
+            # in flight here -- `window.__fimScrubberPending` is a
+            # counter for exactly this reason (see that function's own
+            # comment). Wait for it to reach zero before `finally`
+            # destroys the window out from under a still-in-flight
+            # bridge call.
+            _poll_until(
+                window,
+                "window.__fimScrubberPending",
+                lambda value: value == 0,
+            )
+            outcome.put(
+                {
+                    "firstRunId": first_run_id,
+                    "secondRunId": second_run_id,
+                    "firstOutputDirectory": first_output_directory,
+                    "secondOutputDirectory": second_output_directory,
+                }
+            )
         finally:
             window.destroy()
 
     webview.start(_drive)
-    switched = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
-    assert switched is True
+    assert settled["firstRunId"].startswith("run-")
+    assert settled["secondRunId"].startswith("run-")
+    # Same form values -> the deterministic run id is legitimately
+    # identical both times; the output directory (a wall-clock
+    # timestamp embedded in the path) is what actually distinguishes
+    # a genuine second run from a stale first-run DOM.
+    assert settled["firstOutputDirectory"]
+    assert settled["secondOutputDirectory"]
+    assert settled["secondOutputDirectory"] != settled["firstOutputDirectory"]
 
 
 def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
@@ -266,14 +353,14 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
     Also proves the fix for a real, once-reproduced hang: `open-
     FolderButton`'s click handler calls `window.pywebview.api.open_
     output_folder(...)` without anything downstream awaiting it, so
-    nothing before `screens/results.js`'s own `window.__fimResults
-    OpenFolderSettled` flag existed tied a test's own teardown to that
-    call having actually finished — the same shape `test_running_
-    screen.py`'s own `_wait_for_cancel_run_settled` closes for `cancel_
-    run()`, traced there via `sample <pid>` on a `git push`'s own
-    hung pre-push `pytest` run. Polling this flag before letting
-    `window.destroy()` run is the actual regression proof; the injected
-    opener's own recorded path is the icing.
+    nothing before `run-view-controls.js`'s own `window.__fimOpenFolder
+    Settled` flag existed tied a test's own teardown to that call having
+    actually finished — the same shape `test_running_screen.py`'s own
+    `_wait_for_cancel_run_settled` closes for `cancel_run()`, traced
+    there via `sample <pid>` on a `git push`'s own hung pre-push
+    `pytest` run. Polling this flag before letting `window.destroy()`
+    run is the actual regression proof; the injected opener's own
+    recorded path is the icing.
     """
     opened: list[Path] = []
     window = create_window(api=Api(open_folder=opened.append), hidden=True)
@@ -281,28 +368,31 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
 
     def _drive() -> None:
         try:
-            for _ in range(_POLL_ATTEMPTS):
-                if window.evaluate_js(_INPUT_SCREEN_READY):
-                    break
-                time.sleep(_POLL_INTERVAL_SECONDS)
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
             )
-            for _ in range(_POLL_ATTEMPTS):
-                if window.evaluate_js(
-                    "!document.getElementById('screen-results').hidden"
-                ):
-                    break
-                time.sleep(_POLL_INTERVAL_SECONDS)
+            _poll_until(
+                window,
+                "window.fim.getRunViewState()",
+                lambda value: value == "completed",
+            )
+            # `enterCompletedState` also kicks off `wireCompletedScrubber`'s
+            # own un-awaited `get_animation_frames` fetch (see that
+            # function's own comment on `window.__fimScrubberPending`) --
+            # wait for it too, not just `__fimOpenFolderSettled` below,
+            # before `finally` destroys the window.
+            _poll_until(
+                window,
+                "window.__fimScrubberPending",
+                lambda value: value == 0,
+            )
             window.evaluate_js("document.getElementById('open-folder-button').click();")
-            settled = False
-            for _ in range(_POLL_ATTEMPTS):
-                settled = window.evaluate_js(
-                    "window.__fimResultsOpenFolderSettled === true"
-                )
-                if settled:
-                    break
-                time.sleep(_POLL_INTERVAL_SECONDS)
+            settled = _poll_until(
+                window,
+                "window.__fimOpenFolderSettled === true",
+                lambda value: value is True,
+            )
             outcome.put(settled)
         finally:
             window.destroy()

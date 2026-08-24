@@ -15,7 +15,7 @@ pytestmark = pytest.mark.gui
 
 _POLL_ATTEMPTS = 100
 _POLL_INTERVAL_SECONDS = 0.1
-_INPUT_SCREEN_READY = "window.__fimInputScreenReady === true"
+_INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
 def test_help_screen_shows_usage_and_back_returns_to_the_prior_screen(
@@ -55,7 +55,7 @@ def test_help_screen_shows_usage_and_back_returns_to_the_prior_screen(
             )
             window.evaluate_js("document.getElementById('help-back-button').click();")
             back_visible = _poll_until(
-                "!document.getElementById('screen-input').hidden",
+                "!document.getElementById('screen-run').hidden",
                 lambda value: value is True,
             )
             outcome.put(

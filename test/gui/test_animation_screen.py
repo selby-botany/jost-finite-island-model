@@ -1,25 +1,48 @@
-"""Headless functional tests for Screen 5, the animated trajectory player
-(design doc §3.8, §4.5, §7.7).
+"""Headless functional tests for the unified run view's own scrubber,
+reached by opening a persisted run (design doc §3.8, §4.5, §7.7;
+unified-run-view design §3.2.4, §8 Phase E).
 
-Real DOM-driven proof that Screen 3's "Animate" button reaches Screen 5,
-that `Api.get_animation_frames`' real sampled frames render onto the
-canvas, and that scrubbing moves the displayed frame and "Back" returns
-to Screen 3 — `test/gui/test_app_api.py`'s own tests already prove
-`Api.get_animation_frames` correct as a plain Python call; this file
-proves the page's own JavaScript (`webui/screens/animation.js`) plays
-back what it returns, which no Python-only test can check.
+The separate "Animate" button and its own screen (`webui/screens/
+animation.js`) are retired this phase: there is no longer anything to
+navigate to. Opening a run (`Api.open_run`, the same call `test/gui/
+test_open_run_screen.py` drives) reaches `completed` directly
+(`window.fim.enterCompletedState`), and `wireCompletedScrubber` (`webui/
+screens/run-view-completed.js`) auto-populates the scrubber in the
+background for any scalar run with more than one persisted generation —
+no second click needed. `test/gui/test_results_screen.py`'s own `test_a_
+completed_run_renders_the_run_view` already proves this for a *live*
+run's own completion; this file proves the same scrubber for a
+*re-opened* one, and that scrubbing actually moves the displayed frame
+(real sampled frames, not just that the controls become enabled) —
+`test/gui/test_app_api.py`'s own tests already prove `Api.get_animation_
+frames` correct as a plain Python call, so this file's own job is
+proving the page's own JavaScript plays back what it returns, which no
+Python-only test can check.
 
-Reaches Screen 3 via `Api.open_run` directly (a plain, synchronous
+The old animation screen's own deme-pair selector swapped the *entire*
+animated frame set (`Api.get_animation_deme_pair_frames`, one call for
+every sampled frame at once) — that capability has no reachable UI path
+this phase (`run-view-completed.js`'s own comment: "deliberately not
+pair-aware for this phase... this phase's own 'no new capabilities'
+scope does not need to answer yet"); `get_animation_deme_pair_frames`
+itself still exists and is still covered by `test_app_api.py` as a plain
+Python call, just unreachable from any button today. The *static*-frame
+deme-pair selector this phase actually ships (`run-x-deme`/`run-show-
+pair-button`, affecting only the currently-drawn frame, never future
+scrubbing) is already covered by `test/gui/test_results_screen.py`'s own
+`test_deme_pair_selector_switches_a_chosen_pair_and_back` — nothing here
+duplicates it.
+
+Reaches `completed` via `Api.open_run` directly (a plain, synchronous
 request/response bridge call — the same shortcut `test/gui/
-test_open_run_screen.py` uses to reach it, bypassing Screen 6's own UI),
-rather than running a real scalar simulation through Screen 1/2 first:
-this file's own concern is Screen 5, not proving Screen 1-3's wiring
-again. Drives its window directly (not via the shared `drive` fixture,
-which destroys its window after one trigger/read stage): reaching Screen
-5 and then scrubbing/going back needs several sequential stages against
-the *same* live window, every wait Python-side polling of a real
-`window.evaluate_js` read, never a `setTimeout` loop inside a trigger —
-see `test/gui/conftest.py`'s own module docstring for why.
+test_open_run_screen.py` uses), rather than running a real scalar
+simulation first: this file's own concern is the scrubber, not proving
+the run-view's own wiring again. Drives its window directly (not via the
+shared `drive` fixture, which destroys its window after one trigger/read
+stage): scrubbing needs several sequential stages against the *same*
+live window, every wait Python-side polling of a real `window.
+evaluate_js` read, never a `setTimeout` loop inside a trigger — see
+`test/gui/conftest.py`'s own module docstring for why.
 """
 
 from __future__ import annotations
@@ -38,7 +61,7 @@ from fim.gui.app import create_window
 
 pytestmark = pytest.mark.gui
 
-_INPUT_SCREEN_READY = "window.__fimInputScreenReady === true"
+_INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 _POLL_INTERVAL_SECONDS = 0.1
 _POLL_ATTEMPTS = 300
 _DRIVE_TIMEOUT_SECONDS = 4 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
@@ -81,10 +104,33 @@ def _poll_until(window: webview.Window, script: str, is_ready: Any) -> Any:
     return value
 
 
-def test_animate_button_plays_real_frames_and_back_returns_to_results(
+def _open_run(window: webview.Window, trajectory_path: Path) -> Any:
+    """Open a persisted run through the real bridge and enter `completed`.
+
+    Mirrors `open-run.js`'s own click handler exactly: `Api.open_run`
+    only ever returns data, it never enters `completed` itself — the
+    caller is responsible for handing a successful result to `window.
+    fim.enterCompletedState`.
+    """
+    window.evaluate_js(
+        "(async () => {"
+        "window.__fimOpenResult = await window.pywebview.api.open_run("
+        f"{{trajectoryPath: {str(trajectory_path)!r}}}"
+        ");"
+        "if (window.__fimOpenResult.ok) {"
+        "window.fim.enterCompletedState(window.__fimOpenResult, false);"
+        "}"
+        "})();"
+    )
+    return _poll_until(
+        window, "window.__fimOpenResult", lambda value: value is not None
+    )
+
+
+def test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame(
     tmp_path: Path,
 ) -> None:
-    """A real multi-generation run animates, scrubs, and "Back" returns cleanly."""
+    """Re-opening a multi-generation run auto-populates and scrubs the scrubber."""
     output = _write_run(tmp_path)
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -92,48 +138,42 @@ def test_animate_button_plays_real_frames_and_back_returns_to_results(
     def _drive() -> None:
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.evaluate_js(
-                "(async () => {"
-                "window.__fimOpenResult = await window.pywebview.api.open_run("
-                f"{{trajectoryPath: {str(output / 'trajectory.jsonl')!r}}}"
-                ");"
-                # Matches `open-run.js`'s own click handler exactly:
-                # `Api.open_run` only ever returns data, it never
-                # switches screens itself -- the caller is responsible
-                # for handing a successful result to `showResults`.
-                "if (window.__fimOpenResult.ok) {"
-                "window.fim.showResults(window.__fimOpenResult);"
-                "}"
-                "})();"
-            )
-            opened = _poll_until(
-                window, "window.__fimOpenResult", lambda value: value is not None
-            )
+            opened = _open_run(window, output / "trajectory.jsonl")
             settled = None
             if opened is not None and opened.get("ok"):
-                window.evaluate_js("document.getElementById('animate-button').click();")
-                after_click = _poll_until(
+                # `wireCompletedScrubber`'s own fetch is async and not
+                # awaited by `enterCompletedState` (`scrubber.js`'s own
+                # fix: loading frames must not repaint the canvas) --
+                # `window.__fimScrubberPending` is its settled signal.
+                after_load = _poll_until(
                     window,
                     "({"
-                    "screenVisible: "
-                    "!document.getElementById('screen-animation').hidden, "
+                    "runViewState: window.fim.getRunViewState(), "
+                    "scrubberPending: window.__fimScrubberPending, "
+                    "scrubberHidden: "
+                    "document.getElementById('scrubber-controls').hidden, "
                     "playDisabled: "
-                    "document.getElementById('animation-play-button').disabled, "
+                    "document.getElementById('scrubber-play-button')"
+                    ".disabled, "
                     "scrubberMax: "
-                    "document.getElementById('animation-scrubber').max"
+                    "document.getElementById('scrubber-range').max"
                     "})",
-                    lambda value: value is not None and value.get("screenVisible"),
+                    lambda value: (
+                        value is not None
+                        and value.get("runViewState") == "completed"
+                        and value.get("scrubberPending") == 0
+                    ),
                 )
-                if after_click.get("screenVisible"):
+                if not after_load["scrubberHidden"]:
                     # Scrub to the last frame (index == scrubberMax) and
                     # confirm the label's own "(frame N / total)" text
                     # updates to match -- direct proof the scrub input
                     # actually moved the displayed frame, not just that
-                    # the screen switched.
-                    scrubber_max = int(after_click["scrubberMax"])
+                    # the controls became enabled.
+                    scrubber_max = int(after_load["scrubberMax"])
                     window.evaluate_js(
                         "const scrubber = "
-                        "document.getElementById('animation-scrubber');"
+                        "document.getElementById('scrubber-range');"
                         f"scrubber.value = '{scrubber_max}';"
                         "scrubber.dispatchEvent("
                         "new Event('input', {bubbles: true}));"
@@ -141,25 +181,15 @@ def test_animate_button_plays_real_frames_and_back_returns_to_results(
                     expected_frame_text = f"frame {scrubber_max + 1} /"
                     after_scrub = _poll_until(
                         window,
-                        "document.getElementById('animation-generation-label')"
-                        ".textContent",
+                        "document.getElementById('scrubber-label').textContent",
                         lambda value: (
                             value is not None and expected_frame_text in value
                         ),
                     )
-                    window.evaluate_js(
-                        "document.getElementById('animation-back-button').click();"
-                    )
-                    back = _poll_until(
-                        window,
-                        "!document.getElementById('screen-results').hidden",
-                        lambda value: value is True,
-                    )
                     settled = {
-                        "afterClick": after_click,
+                        "afterLoad": after_load,
                         "afterScrubLabel": after_scrub,
                         "expectedFrameText": expected_frame_text,
-                        "back": back,
                     }
             outcome.put(settled)
         finally:
@@ -168,102 +198,8 @@ def test_animate_button_plays_real_frames_and_back_returns_to_results(
     webview.start(_drive)
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
-    assert settled is not None, "Screen 5 was never reached"
-    assert settled["afterClick"]["screenVisible"] is True
-    assert settled["afterClick"]["playDisabled"] is False
-    assert int(settled["afterClick"]["scrubberMax"]) >= 1
+    assert settled is not None, "the scrubber was never populated"
+    assert settled["afterLoad"]["scrubberHidden"] is False
+    assert settled["afterLoad"]["playDisabled"] is False
+    assert int(settled["afterLoad"]["scrubberMax"]) >= 1
     assert settled["expectedFrameText"] in settled["afterScrubLabel"]
-    assert settled["back"] is True
-
-
-def test_deme_pair_selector_switches_animation_frames_and_back(
-    tmp_path: Path,
-) -> None:
-    """ "Show pair"/"Show overview" swap the whole animated frame set and back.
-
-    `d=4` (past the `d=2` case above's own single, unavoidable panel)
-    so "Show pair" (Deme 1 vs Deme 3) draws a genuinely different
-    picture than the default small-multiples grid — proving the
-    whole-trajectory frame-set swap `animation.js`'s own `onShowPair`
-    performs (`Api.get_animation_deme_pair_frames`, one call for every
-    sampled frame at once), not just that clicking the button does
-    something. `canvas.toDataURL()` snapshots prove both the change and
-    the exact-match revert, the same technique `test_results_screen.py`
-    already uses for the single-state case.
-    """
-    output = _write_run(tmp_path, d=4)
-    window = create_window(hidden=True)
-    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
-
-    def _drive() -> None:
-        try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.evaluate_js(
-                "(async () => {"
-                "window.__fimOpenResult = await window.pywebview.api.open_run("
-                f"{{trajectoryPath: {str(output / 'trajectory.jsonl')!r}}}"
-                ");"
-                "if (window.__fimOpenResult.ok) {"
-                "window.fim.showResults(window.__fimOpenResult);"
-                "}"
-                "})();"
-            )
-            opened = _poll_until(
-                window, "window.__fimOpenResult", lambda value: value is not None
-            )
-            settled = None
-            if opened is not None and opened.get("ok"):
-                window.evaluate_js("document.getElementById('animate-button').click();")
-                after_click = _poll_until(
-                    window,
-                    "({"
-                    "screenVisible: "
-                    "!document.getElementById('screen-animation').hidden, "
-                    "selectorHidden: "
-                    "document.getElementById("
-                    "'animation-deme-pair-selector').hidden"
-                    "})",
-                    lambda value: value is not None and value.get("screenVisible"),
-                )
-                if after_click.get("screenVisible"):
-                    overview_snapshot = window.evaluate_js(
-                        "document.getElementById('animation-canvas').toDataURL()"
-                    )
-                    window.evaluate_js(
-                        "document.getElementById('animation-x-deme').value = '1';"
-                        "document.getElementById('animation-y-deme').value = '3';"
-                        "document.getElementById("
-                        "'animation-show-pair-button').click();"
-                    )
-                    pair_snapshot = _poll_until(
-                        window,
-                        "document.getElementById('animation-canvas').toDataURL()",
-                        lambda value: value != overview_snapshot,
-                    )
-                    window.evaluate_js(
-                        "document.getElementById("
-                        "'animation-show-overview-button').click();"
-                    )
-                    reverted_snapshot = _poll_until(
-                        window,
-                        "document.getElementById('animation-canvas').toDataURL()",
-                        lambda value: value == overview_snapshot,
-                    )
-                    settled = {
-                        "selectorHidden": after_click["selectorHidden"],
-                        "pairDiffersFromOverview": (pair_snapshot != overview_snapshot),
-                        "revertedMatchesOverview": (
-                            reverted_snapshot == overview_snapshot
-                        ),
-                    }
-            outcome.put(settled)
-        finally:
-            window.destroy()
-
-    webview.start(_drive)
-    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
-
-    assert settled is not None, "Screen 5's deme-pair selector was never reached"
-    assert settled["selectorHidden"] is False
-    assert settled["pairDiffersFromOverview"] is True
-    assert settled["revertedMatchesOverview"] is True

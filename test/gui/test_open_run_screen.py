@@ -43,7 +43,7 @@ from fim.gui.app import create_window
 
 pytestmark = pytest.mark.gui
 
-_INPUT_SCREEN_READY = "window.__fimInputScreenReady === true"
+_INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 _POLL_INTERVAL_SECONDS = 0.1
 _POLL_ATTEMPTS = 300
 # Generous margin over the raw-driven test's own three sequential poll
@@ -164,12 +164,13 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
                 settled = _poll_until(
                     window,
                     "({"
-                    "screenVisible: "
-                    "!document.getElementById('screen-results').hidden, "
+                    "runViewState: window.fim.getRunViewState(), "
                     "runId: "
                     "document.getElementById('results-run-id').textContent"
                     "})",
-                    lambda value: value is not None and value.get("screenVisible"),
+                    lambda value: (
+                        value is not None and value.get("runViewState") == "completed"
+                    ),
                 )
             outcome.put(settled)
         finally:
@@ -178,7 +179,7 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     webview.start(_drive)
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
-    assert settled is not None, "Screen 3 never became visible after opening the run"
-    assert settled["screenVisible"] is True
+    assert settled is not None, "`completed` was never reached after opening the run"
+    assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
     assert output.exists()

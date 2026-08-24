@@ -4,8 +4,8 @@
 Real DOM-driven proof that clicking "Run simulation" actually starts a
 real background run (`fim.gui.runner.start_run`, unchanged from the
 Tk-era build) and that the page's own `fim.onRunProgress`/`onRunDone`/
-`onRunCancelled` handlers (`webui/screens/progress.js`) react correctly
-as messages arrive — `test/gui/test_app_api.py` and `test/gui/
+`onRunCancelled` handlers (`webui/screens/run-view-running.js`) react
+correctly as messages arrive — `test/gui/test_app_api.py` and `test/gui/
 test_runner.py` already prove the bridge and business logic
 independently; these tests prove the two are actually wired together
 correctly end to end, which no Python-only test can check.
@@ -90,7 +90,7 @@ _READY_POLL_ATTEMPTS = 200
 _EVENT_WAIT_TIMEOUT_SECONDS = 30.0
 _OUTCOME_TIMEOUT_SECONDS = 40.0
 
-_INPUT_SCREEN_READY = "window.__fimInputScreenReady === true"
+_INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # Mirrors `test/gui/test_results_screen.py`'s own `_SET_TINY_FIELDS`
 # (itself mirroring `test/conftest.py`'s `tiny_params` fixture).
@@ -109,6 +109,35 @@ setField('locus_lengths', '200');
 setField('convergence_window', '4');
 setField('convergence_tolerance', '1.0');
 setField('max_generations', '10');
+"""
+
+# A real, previously-reproduced defect this constant exists to close:
+# the starter form's own defaults (`d=20`) were assumed, in an earlier
+# version of both tests below, to have "no realistic chance of
+# finishing on its own" within a test's own timeframe -- false on a
+# fast-enough or lightly-loaded machine, confirmed live by watching the
+# starter-default run reach `"done"` in under two seconds. An
+# impossibly tight `convergence_tolerance` was tried first and was
+# *still* probabilistic, not a real fix: `fim.convergence.criteria.
+# trailing_window_stable` compares two *half-window means*, not an
+# absolute statistic value, so an extremely small but nonzero tolerance
+# can still legitimately be satisfied if the two halves happen to
+# average out close enough — confirmed live, failing 2 of 3 repeat
+# runs even with `tolerance = 1e-12`. `trailing_window_stable` itself
+# has one real, *structural* guarantee instead: `len(history) < window`
+# always returns `False`, unconditionally, before that comparison is
+# ever made. Setting `convergence_window` to the same value as `max_
+# generations` (never rejected -- validation only rejects a window
+# *greater* than `max_generations + 1`) means convergence can never
+# even be evaluated, let alone satisfied, until the run reaches the
+# generation cap itself -- forcing the full ~16-second-plus run
+# `max_generations=10000` at this project's own measured per-generation
+# cost implies, by construction, not by hoping a delta stays above
+# whatever tolerance was chosen.
+_SET_UNREACHABLE_CONVERGENCE = """
+document.getElementById('field-convergence_window').value = '10000';
+document.getElementById('field-convergence_window')
+    .dispatchEvent(new Event('input', {bubbles: true}));
 """
 
 
@@ -138,7 +167,7 @@ def _wait_for_cancel_run_settled(window: webview.Window) -> None:
     """Poll until `cancel_run()`'s own fire-and-forget bridge call has resolved.
 
     Real, previously-reproduced hazard, not a hypothetical one:
-    `screens/progress.js`'s own `cancelButton` click handler calls
+    `screens/run-view-controls.js`'s own `onCancelClicked` handler calls
     `window.pywebview.api.cancel_run()`, and `cancelButton.disabled`
     flips synchronously well before that call's own return value is
     delivered back to pywebview's own JS bridge — `_drain_run_messages`'s
@@ -223,8 +252,7 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
             if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 settled = window.evaluate_js(
                     "({"
-                    "resultsScreenVisible: "
-                    "!document.getElementById('screen-results').hidden, "
+                    "runViewState: window.fim.getRunViewState(), "
                     "generationLabel: "
                     "document.getElementById('progress-generation-label')"
                     ".textContent"
@@ -242,7 +270,7 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
         f"(start_run called: {started_event.is_set()}, "
         f"messages received: {messages!r})"
     )
-    assert settled["resultsScreenVisible"] is True
+    assert settled["runViewState"] == "completed"
     assert settled["generationLabel"] != ""
 
 
@@ -265,14 +293,18 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
     correct moment to click Cancel and one with no polling loop involved
     to collide with `_drain_run_messages`'s own `evaluate_js` calls.
 
-    Deliberately uses the starter form's own (large, slow-to-converge)
-    defaults, not `_SET_TINY_FIELDS`: nothing here depends on how long
-    the run can run for (unlike an earlier, poll-based version of this
-    test, where a run that could finish unassisted could race past
-    Cancel) — `started_event` alone decides when it is safe to cancel,
-    regardless of population size — but a config with no realistic
-    chance of finishing on its own remains the more obviously correct
-    one to reach for.
+    Deliberately uses the starter form's own (large) `d`/`N`, not
+    `_SET_TINY_FIELDS`, plus `_SET_UNREACHABLE_CONVERGENCE` on top — not
+    the starter defaults' own `convergence_tolerance` alone, which a
+    real, once-reproduced regression showed can legitimately converge
+    in well under two seconds on a fast-enough or lightly-loaded
+    machine, racing past Cancel and never firing `cancelled_event` at
+    all (that constant's own comment has the full story, including why
+    an unreachable *tolerance* alone was tried and rejected too).
+    `started_event` alone still decides when it is safe to cancel,
+    regardless of population size — the widened `convergence_window` is
+    what structurally guarantees there is still a run left to cancel by
+    the time it does.
 
     Also waits on `_wait_for_cancel_run_settled` before reading final
     DOM state — `cancelled_event` alone proved this test's own two
@@ -303,9 +335,39 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
     def _drive() -> None:
         try:
             _wait_for_input_screen_ready(window)
-            window.evaluate_js("document.getElementById('run-button').click();")
+            window.evaluate_js(
+                _SET_UNREACHABLE_CONVERGENCE
+                + "document.getElementById('run-button').click();"
+            )
             settled = None
             if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                # `started_event` fires from *inside* `Api.start_run`,
+                # synchronously, before that call even returns to JS --
+                # a real, confirmed-live race, not a hypothetical one:
+                # `cancel-run-button` stays disabled (`onRunClicked`'s
+                # own continuation, which enables it, only runs once
+                # the *full* round trip resolves) at the exact instant
+                # this event fires, every time, measured directly.
+                # Clicking it that early is silently swallowed (a
+                # disabled button fires no click listener), so `Api.
+                # cancel_run()` is never called and `cancelled_event`
+                # never fires either -- indistinguishable, from this
+                # test's own vantage point, from a genuinely stuck run.
+                # A short poll for the actual DOM state the click
+                # depends on closes it: safe this early specifically
+                # because `_drain_run_messages`'s own background thread
+                # (the one whose concurrent `evaluate_js` calls this
+                # file's own module docstring warns against racing) has
+                # not even started yet at this point -- it is spawned
+                # after `Api.start_run` already returns, later than
+                # `on_run_started` fires.
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    if window.evaluate_js(
+                        "document.getElementById('cancel-run-button').disabled === "
+                        "false"
+                    ):
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
                 window.evaluate_js(
                     "document.getElementById('cancel-run-button').click();"
                 )
@@ -314,7 +376,7 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
                     settled = window.evaluate_js(
                         "({"
                         "bannerText: "
-                        "document.getElementById('progress-banner').textContent, "
+                        "document.getElementById('run-banner').textContent, "
                         "cancelDisabled: "
                         "document.getElementById('cancel-run-button').disabled"
                         "})"
@@ -337,13 +399,18 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
 def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None:
     """ "Show pair" swaps the live progress canvas mid-run to a different view.
 
-    Same starter-defaults setup as the Cancel test above (`d=20`, past
-    `scatter.PAIRWISE_MAX_DEMES`, so the default live view is one
-    Deme-1-vs-Deme-2 panel, unified-run-view design §3.6 — "Show pair"
-    (Deme 1 vs Deme 3) should still look different from it) and the
-    same reasoning for using it: no dependence on how long the
-    run can run for, `started_event` alone deciding when it is safe to
-    interact, Cancel ending the test rather than waiting the run out.
+    Same starter-`d`-plus-`_SET_UNREACHABLE_CONVERGENCE` setup as the
+    Cancel test above (`d=20`, past `scatter.PAIRWISE_MAX_DEMES`, so the
+    default live view is one Deme-1-vs-Deme-2 panel, unified-run-view
+    design §3.6 — "Show pair" (Deme 1 vs Deme 3) should still look
+    different from it) and the same reasoning for using it: that
+    constant's own comment records a real, confirmed defect an earlier
+    version of this test could have hit too (the starter form's own
+    `convergence_tolerance` alone can converge in well under two
+    seconds on a fast-enough machine) even though it was not the one
+    that actually surfaced it. `started_event` alone still decides when
+    it is safe to interact, Cancel ending the test rather than waiting
+    the run out.
 
     Waits for real progress via `on_message`'s own `progress_count`,
     never by polling the DOM with `evaluate_js` while the background
@@ -368,7 +435,7 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
 
     A second, subtler version of the same mistake surfaced later,
     diagnosed and fixed at its actual source rather than papered over
-    here: `progress.js`'s own `showingLiveDemePair` flag — the
+    here: `run-view-running.js`'s own `showingLiveDemePair` flag — the
     *client-side* switch `drawProgressPanels` reads to decide which of
     `panels`/`pairPanel` to draw — used to flip only after `onShowPair`
     finished *awaiting* the bridge call, a full JS-await-Python-JS round
@@ -376,7 +443,7 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
     non-`None` the instant the Python side executes). A tick processed
     in that narrower gap already carried `pairPanel` but was still drawn
     as the overview, because the flag telling the client which one to
-    draw had not caught up yet. Fixed in `progress.js` itself: the flag
+    draw had not caught up yet. Fixed at that same source: the flag
     now flips synchronously, before the bridge call is even awaited, so
     it is never later than the click. With that fixed, waiting for one
     more `progress_count` tick after the round trip lands and reading
@@ -411,7 +478,10 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
         nonlocal progress_count_when_pair_landed
         try:
             _wait_for_input_screen_ready(window)
-            window.evaluate_js("document.getElementById('run-button').click();")
+            window.evaluate_js(
+                _SET_UNREACHABLE_CONVERGENCE
+                + "document.getElementById('run-button').click();"
+            )
             settled = None
             if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 for _ in range(_READY_POLL_ATTEMPTS):
@@ -419,16 +489,16 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
                         break
                     time.sleep(_READY_POLL_INTERVAL_SECONDS)
                 overview_snapshot = window.evaluate_js(
-                    "document.getElementById('progress-canvas').toDataURL()"
+                    "document.getElementById('run-canvas').toDataURL()"
                 )
                 selector_hidden = window.evaluate_js(
-                    "document.getElementById('progress-deme-pair-selector').hidden"
+                    "document.getElementById('run-deme-pair-selector').hidden"
                 )
                 window.evaluate_js(
-                    "document.getElementById('progress-x-deme').value = '1';"
-                    "document.getElementById('progress-y-deme').value = '3';"
+                    "document.getElementById('run-x-deme').value = '1';"
+                    "document.getElementById('run-y-deme').value = '3';"
                     "document.getElementById("
-                    "'progress-show-pair-button').click();"
+                    "'run-show-pair-button').click();"
                 )
                 # Wait for the bridge round trip itself to land, not
                 # for an arbitrary number of ticks — see this test's
@@ -444,7 +514,7 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
                             break
                         time.sleep(_READY_POLL_INTERVAL_SECONDS)
                     pair_snapshot = window.evaluate_js(
-                        "document.getElementById('progress-canvas').toDataURL()"
+                        "document.getElementById('run-canvas').toDataURL()"
                     )
                     settled = {
                         "selectorHidden": selector_hidden,

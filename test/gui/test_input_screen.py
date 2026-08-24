@@ -1,10 +1,14 @@
-"""Headless functional tests for Screen 1 (design doc §4.1, §6.4).
+"""Headless functional tests for the unified run view's own configuration
+side -- the Configure menu's modals/value-selectors and the always-
+present controls (design doc §4.1, §6.4; unified-run-view design §3.1,
+§8 Phase E).
 
-Real DOM-driven proof that `webui/screens/input.js` actually wires the
-page correctly — `test/gui/test_app_api.py` already proves the bridge
-methods themselves are correct as plain Python calls; these tests prove
-the page's own JavaScript calls them at the right moments and updates
-the right elements, which no Python-only test can check.
+Real DOM-driven proof that `webui/screens/config-modals.js`/`run-view-
+controls.js`/`run-view-initial.js` actually wire the page correctly —
+`test/gui/test_app_api.py` already proves the bridge methods themselves
+are correct as plain Python calls; these tests prove the page's own
+JavaScript calls them at the right moments and updates the right
+elements, which no Python-only test can check.
 """
 
 from __future__ import annotations
@@ -26,7 +30,7 @@ pytestmark = pytest.mark.gui
 # calls before `trigger` ever fires -- `conftest.py`'s own `drive_and_
 # read` docstring records why an async, `setTimeout`-polling trigger
 # hangs the driver thread indefinitely instead.
-_INPUT_SCREEN_READY = "window.__fimInputScreenReady === true"
+_INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 
 def test_input_screen_loads_starter_values(
@@ -81,7 +85,7 @@ def test_input_screen_run_button_enabled_for_the_valid_starter_form(
 ) -> None:
     """The starter form validates on load, so "Run simulation" starts enabled.
 
-    Polls `window.__fimInputScreenReady`, not the field's own value:
+    Polls `window.__fimRunViewReady`, not the field's own value:
     `applyFormValues` (which sets the field) runs *before* `wireEvents`/
     `revalidate` (which resolves the button's `disabled` state) inside
     `initializeInputScreen`, so polling the field alone risks reading
@@ -93,7 +97,7 @@ def test_input_screen_run_button_enabled_for_the_valid_starter_form(
         window,
         trigger="null",
         read=(
-            "window.__fimInputScreenReady ? ({"
+            "window.__fimRunViewReady ? ({"
             "n: document.getElementById('field-N').value, "
             "disabled: document.getElementById('run-button').disabled"
             "}) : null"
@@ -190,7 +194,7 @@ def test_menu_new_configuration_resets_an_edited_field(
     test — the same pywebview behavior `conftest.py`'s own `drive_and_
     read` docstring already documents for its `ready`-polling case.
 
-    Polls for `window.__fimInputScreenReady` alongside the field's own
+    Polls for `window.__fimRunViewReady` alongside the field's own
     value, not the field alone: `newConfiguration` cycles that flag
     false-then-true around the whole reset, and `field-N` already shows
     the new value while `resetInputForm` still has two more real bridge
@@ -214,7 +218,7 @@ def test_menu_new_configuration_resets_an_edited_field(
         read=(
             "({"
             "fieldN: document.getElementById('field-N').value, "
-            "ready: window.__fimInputScreenReady === true"
+            "ready: window.__fimRunViewReady === true"
             "})"
         ),
         is_ready=lambda value: value is not None and value.get("ready") is True,
@@ -361,33 +365,37 @@ def test_menu_toggle_convergence_statistic_adds_to_the_set(
 def test_configure_population_opens_a_modal_without_navigating_away(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Configure > Population floats a modal over the screen (design §3.1/§8 Phase A).
+    """Configure > Population floats a modal over the run view (design §3.1/§8 Phase A).
 
     The Phase A proof-of-concept this test exists for: Population is the
     first (of eventually six, §8 Phase B) tab-panel converted to a native
-    `<dialog>`. Driven from Screen 2 rather than Screen 1 specifically,
-    because the bug this whole redesign responds to only shows up from a
-    screen other than Input -- the old `configureTab` always called
-    `showScreen("screen-input")` first, discarding whatever the user was
-    looking at; the new one must not.
+    `<dialog>`. Asserted against `runViewState` staying untouched, not
+    just `screen-run` staying visible -- the bug this whole redesign
+    responds to was the old `configureTab` calling `showScreen(
+    "screen-input")` first, discarding whatever the user was looking at
+    (a live run, a completed result); the merged run view (design §8
+    Phase E) makes "which screen is visible" trivially true on its own
+    (there is only one to navigate away from), so the state itself is
+    the assertion that still has teeth.
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
         trigger=(
-            "window.fim.showScreen('screen-progress'); "
             "setTimeout(() => { window.fim.menu.configureTab('population'); }, 0);"
         ),
         read=(
             "({"
             "modalOpen: document.getElementById('modal-population').open, "
-            "progressHidden: document.getElementById('screen-progress').hidden"
+            "runViewHidden: document.getElementById('screen-run').hidden, "
+            "runViewState: window.fim.getRunViewState()"
             "})"
         ),
         is_ready=lambda value: value is not None and value.get("modalOpen") is True,
     )
 
-    assert settled["progressHidden"] is False
+    assert settled["runViewHidden"] is False
+    assert settled["runViewState"] == "initial"
 
 
 def test_configure_population_modal_close_button_closes_it(
@@ -442,14 +450,16 @@ def test_batch_progress_display_never_regresses(
     jumps around during the last ~20%"). Fired here as two synthetic
     `fim.onBatchProgress` calls (5 reporting, then 3) rather than
     orchestrating a real batch that actually overshoots and prunes --
-    this is `screens/progress.js`'s own display logic under test, not
-    the batch-execution timing that triggers it.
+    this is `screens/run-view-running.js`'s own display logic under
+    test, not the batch-execution timing that triggers it. No explicit
+    reset call needed first: every test gets a fresh page load of its
+    own, so the module-scoped high-water mark this proves already
+    starts at its own initial `0` regardless.
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
         trigger=(
-            "window.fim.resetBatchProgress();"
             "window.fim.onBatchProgress("
             "{replicateCount: 10, reportedReplicateCount: 5, panels: []});"
             "window.fim.onBatchProgress("
