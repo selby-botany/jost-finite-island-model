@@ -347,7 +347,19 @@ def test_batch_done_payload_carries_one_replicate_row_per_result(
     batch_params: SimulationParams,
     batch_results: tuple[RunResult, ...],
 ) -> None:
-    """`replicates` rows per result; formatted stats; no `index`/`runId` fields."""
+    """`replicates` rows per result; formatted stats; no `index`/`runId` fields.
+
+    `replicateId` (`result.run_id` verbatim) is the one deliberate
+    exception to that "no per-replicate identifier" policy, added after
+    this test was first written: multiple replicates legitimately
+    converging at the same generation are indistinguishable in the
+    table without it (a real, reported gap, not the same "confusing
+    run-numbering" concern `index`/`runId` were originally removed
+    for -- `webui/screens/run-view-completed.js`'s own `replicateLabel`
+    only ever surfaces a compact `#NNN` badge derived from it, never
+    the raw id string, and it answers "which of this batch's own
+    replicates is this row" rather than any global run-ordering claim).
+    """
     # The real batch's own deterministic run_id, not an arbitrary
     # literal: `_batch_done_payload` uses this same value both as the
     # payload's own `"runId"` label and, via `replicate_output_
@@ -378,6 +390,7 @@ def test_batch_done_payload_carries_one_replicate_row_per_result(
             tmp_path, run_id, result.run_id
         )
         assert row["trajectoryPath"] == str(expected_directory / "trajectory.jsonl")
+        assert row["replicateId"] == result.run_id
 
 
 def test_batch_done_payload_carries_p0_statistics(

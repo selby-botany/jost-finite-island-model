@@ -1455,6 +1455,14 @@ def _batch_done_payload(
                 )
                 / "trajectory.jsonl"
             ),
+            # `result.run_id` (`"{run_id}-r{index:03}"`, `batch_runner.
+            # replicate_output_directory`'s own naming convention) --
+            # `webui/screens/run-view-completed.js`'s own `replicateLabel`
+            # extracts the short `#NNN` suffix for display. Multiple
+            # replicates legitimately converging at the same generation
+            # is unremarkable, not a bug, so the table needs this to
+            # tell those rows apart.
+            "replicateId": result.run_id,
         }
         for result in results
     ]

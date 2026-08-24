@@ -95,6 +95,23 @@ function renderBatchSummary(summary) {
     }
 }
 
+/**
+ * Extract a short, human-readable replicate label from its full
+ * `replicateId` (`"{run_id}-r{index:03}"`, `batch_runner.
+ * replicate_output_directory`'s own naming convention). Multiple
+ * replicates can legitimately share the same "Generation" value --
+ * independent replicates converging at the same generation is
+ * unremarkable, not a bug -- so the table needs something else to
+ * tell those rows apart. Falls back to the id unchanged if it does not
+ * match the expected suffix shape, rather than guessing.
+ *
+ * @param {string} replicateId
+ */
+function replicateLabel(replicateId) {
+    const match = /-r(\d+)$/.exec(replicateId || "");
+    return match ? `#${Number(match[1])}` : replicateId || "";
+}
+
 function renderBatchTable(replicates, p0Statistics) {
     batchResultsTableBody.replaceChildren();
     // p_0 baseline row — the initial conditions the entire batch shared.
@@ -111,7 +128,10 @@ function renderBatchTable(replicates, p0Statistics) {
             cell.textContent = String(value);
             baseRow.appendChild(cell);
         }
-        // Placeholder empty cell for the "Open" column.
+        // Placeholder empty cells for the "Replicate" and "Open"
+        // columns -- the baseline is shared by the whole batch, not
+        // any one replicate.
+        baseRow.appendChild(document.createElement("td"));
         baseRow.appendChild(document.createElement("td"));
         batchResultsTableBody.appendChild(baseRow);
     }
@@ -139,6 +159,9 @@ function renderBatchTable(replicates, p0Statistics) {
             cell.textContent = String(value);
             row.appendChild(cell);
         }
+        const replicateCell = document.createElement("td");
+        replicateCell.textContent = replicateLabel(replicate.replicateId);
+        row.appendChild(replicateCell);
         // "Open replicate" (design §4.4): the exact same operation as
         // "Open a run…" over one replicate's own trajectory --
         // `replicate.trajectoryPath` is already joined server-side
