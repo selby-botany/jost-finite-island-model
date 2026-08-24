@@ -17,7 +17,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   now the only visible navigation for them — the on-canvas tab bar that
   used to be the sole way there is hidden, decluttering the input
   screen down to just the current section's own fields; Run covers the
-  simulation lifecycle (Run simulation, Cancel run, Animate); View
+  simulation lifecycle (Run simulation, Cancel run); View
   holds a "Significant digits" submenu (2/3/4/5/6/8, default 3) that
   changes how many digits every displayed statistic rounds to — cosmetic
   only, never touching the full-precision values every run's own
@@ -36,14 +36,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reference visualization's own figures. Every named statistic — a
   scalar run's own six, and the batch confidence intervals — now
   renders through the same meter widget.
-- The Animated trajectory screen gains the same "Compare demes
-  directly" pair selector the Results and Batch results screens
-  already have — choose one explicit deme pair to watch throughout the
-  whole animation instead of only the default view, with no bridge
-  call per frame or per playback tick: picking a
-  pair fetches every sampled frame's own panel for it once, up front,
-  the same "load everything, then play/pause/scrub for free" design
-  the screen already used for its default view.
+- The five separate screens (Model input, Running, Results, Batch
+  results, Animated trajectory) are now one unified run view, in
+  exactly one of three states — `initial` (an editable form, nothing
+  run yet), `running` (live progress), `completed` (a finished run's
+  own summary) — at a time, reached by "Run simulation" from wherever
+  it is clicked and never a full-window navigation. Interrupting a run
+  (Cancel, or an error) freezes the view exactly as it last rendered,
+  with a banner overlaid, rather than switching anywhere. There is no
+  longer a separate "Animate" trigger: any scalar run with more than
+  one persisted generation — freshly finished, or re-opened later —
+  auto-populates the same time slider directly within its own
+  `completed` view, in the background, without blocking that view's
+  own display of the run's final state. Re-running from `completed`
+  reuses the same "Run simulation" control that started the first run,
+  with no separate "New run"/reset step.
 - The live Running screen gains the same "Compare demes directly" pair
   selector too, live: picking a pair tells the in-progress simulation's
   own background thread to start including that pair's own panel in
@@ -120,6 +127,23 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   next poll legitimately sees fewer valid replicates than before — but
   the displayed count now tracks a high-water mark instead of the raw
   reported figure, so the bar only ever moves forward.
+- Clicking "Run simulation" again from `completed` no longer leaves the
+  just-finished run's own summary showing, unresponsively, for the
+  full round trip of starting the next one — the view now clears to
+  `running` the instant the click is accepted, not only once the
+  bridge call that starts the run has returned.
+- The scrubber auto-populating within `completed` no longer risks
+  silently repainting the canvas over whatever "Show pair"/"Show
+  overview" (or a fresh run started while the previous one's own
+  frames were still loading) had just drawn — loading a frame set no
+  longer draws anything on its own; only an explicit scrub or Play
+  does.
+- Closing the app (or, in this project's own test suite, a background
+  bridge call outliving the specific window it was headed for) while a
+  "Run simulation"/"Load configuration"/"Save configuration"/"Open a
+  run…" click is still in flight no longer risks an unhandled crash —
+  every bridge method that needs the app's own window now declines
+  gracefully instead of indexing an empty window list.
 
 ## [1.2.0] - 2026-08-22
 

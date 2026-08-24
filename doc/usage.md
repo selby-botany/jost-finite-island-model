@@ -358,7 +358,7 @@ offline.
 fim-gui
 ```
 
-A desktop application — seven screens over a small, static local web page
+A desktop application — three screens over a small, static local web page
 (`fim`'s own bundled `webview` renderer, the OS's native web view; no
 browser, no server beyond the one opt-in release check below) — that runs
 the same simulations and reads the same `results/` folder as the commands
@@ -370,7 +370,19 @@ a Linux install. n<sub>replicates</sub> in the configuration is the only thing t
 decides whether a run goes through the scalar or the batch path — there is
 no separate "batch mode" toggle. Every screen calls the identical underlying
 function this guide already documents; nothing here is a second
-implementation:
+implementation.
+
+The run view — where a configuration is built, a run proceeds, and its
+result is shown — is one screen in exactly one of three states at a time,
+not three separate screens reached by navigating away from each other:
+building/editing a configuration ("initial"), a run in progress
+("running"), and a finished run's own summary ("completed"). "Run
+simulation" moves from initial to running from wherever it is clicked,
+including straight from a previous run's own completed view — the same
+button starts the next run, reusing whatever the form already holds, with
+no separate "New run" step. Cancelling a run, or a run ending in an error,
+freezes the view exactly as it last rendered, with a banner on top,
+rather than switching anywhere else:
 
 A native File/Configure/Run/View/Help menu bar is available from any screen,
 including mid-run. File covers configuration/run file-system actions
@@ -385,8 +397,8 @@ model (infinite_alleles/finite_alleles), and Convergence statistic, which
 *adds or removes* one statistic from the active set on each click rather
 than replacing the whole selection (checking two or more is exactly what
 turns on the "combinator" choice in the Convergence dialog). Run covers the
-simulation lifecycle (Run simulation, Cancel run,
-Animate); View holds a Significant digits submenu (2/3/4/5/6/8, default 3)
+simulation lifecycle (Run simulation, Cancel run); View holds a
+Significant digits submenu (2/3/4/5/6/8, default 3)
 that changes how many digits every displayed statistic rounds to — cosmetic
 only, `trajectory.jsonl`/`report.json`/`manifest.json` always keep full
 precision regardless of this setting; Help covers this guide and the
@@ -397,14 +409,12 @@ matching button already performs; File/Configure/Run items invoked from a
 screen where they are not immediately actionable navigate to the screen
 where they are first, rather than doing nothing.
 
-| Screen | What it does | Same as |
+| Screen/state | What it does | Same as |
 |---|---|---|
-| Model input | Build and validate a full configuration from six sections (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one per [configuration reference](configuration.md) section), each opened as its own dialog from the Configure menu (above) rather than an on-screen tab strip; "Load YAML…"/"Save YAML…" read and write the exact file format above; "Open a run…" reaches the Open a run screen | [Create a configuration](#create-a-configuration) |
-| Running | A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout; the same "Compare demes directly" pair selector as the Results/Batch results/Animated trajectory screens, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot | `run`'s own progress/error output, on one screen instead of terminal lines |
-| Results | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot — every deme pair at once as a small-multiples grid once `d` is 3 or more up to 6 demes, one panel (Deme 1 vs. Deme 2 by default) above that, each panel with a labeled, numbered `0.0`-`1.0` probability scale on both axes; "Compare demes directly" (two dropdowns plus "Show pair"/"Show overview") swaps to any two chosen demes' own raw frequencies at full size and back, most useful once `d` is large enough that the default view no longer shows every pair; "Open output folder" reveals the same four artifacts; "Animate" plays back the persisted trajectory (disabled for a single-generation run, which has nothing to animate) | [Output schemas](#output-schemas) |
-| Batch results | A pooled scatter across every replicate's final state — the same small-multiples grid the Results screen uses once `d` is 3 or more — beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter; the same "Compare demes directly" pair selector as the Results screen, pooled across every replicate; each row's own "Open" button reaches the Results screen for that one replicate; "Open batch folder" reveals `summary.json` and every replicate subdirectory | [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
-| Open a run | Pick a previous run from a recent-runs list — a batch entry is labeled distinctly and opened one replicate at a time from its own Batch results screen, not from here — or browse for a `trajectory.jsonl` directly, then re-render its summary and scatter at any persisted generation, with the same optional differentiation-`q` sweep | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
-| Animated trajectory | Play back a completed run's persisted generations as a scatter animation, with a play/pause button and a scrub slider; the same "Compare demes directly" pair selector as the Results/Batch results screens, applied across the whole animation rather than one static state | No CLI equivalent — a GUI-only bonus view |
+| Run view — initial | Build and validate a full configuration from six sections (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one per [configuration reference](configuration.md) section), each opened as its own dialog from the Configure menu (above) rather than an on-screen tab strip; "Load YAML…"/"Save YAML…" read and write the exact file format above; "Open a run…" reaches the Open a run screen | [Create a configuration](#create-a-configuration) |
+| Run view — running | A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout; the same "Compare demes directly" pair selector `completed` (below) also has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top | `run`'s own progress/error output, on one screen instead of terminal lines |
+| Run view — completed | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot, or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter; either way, every deme pair at once as a small-multiples grid once `d` is 3 or more up to 6 demes, one panel (Deme 1 vs. Deme 2 by default) above that, each panel with a labeled, numbered `0.0`-`1.0` probability scale on both axes; "Compare demes directly" (two dropdowns plus "Show pair"/"Show overview") swaps to any two chosen demes' own raw frequencies at full size and back, most useful once `d` is large enough that the default view no longer shows every pair; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own "Open" button reaches this same view for that one replicate; "Open output folder" reveals the run's own artifacts (a batch's own `summary.json` and every replicate subdirectory, for a batch) | [Output schemas](#output-schemas), [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
+| Open a run | Pick a previous run from a recent-runs list — a batch entry is labeled distinctly and opened one replicate at a time from its own completed batch view, not from here — or browse for a `trajectory.jsonl` directly, then re-render its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-`q` sweep | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
 | Help | This guide and the [configuration reference](configuration.md), rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the Help menu (above) from any screen; "Back" returns to whichever screen was showing, not a fixed default | No CLI equivalent — the terminal reads these same two files directly |
 
 A GUI-authored run with the same parameters and seed produces byte-identical
