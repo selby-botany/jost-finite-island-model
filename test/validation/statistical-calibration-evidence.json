@@ -1,0 +1,68 @@
+{
+  "analytic_bound_note": "Not currently available. The per-replicate G_ST/D estimate is a ratio-of-means statistic over heterozygosities sampled from a multi-generation Migrate -> Mutate -> Drift recursion; a closed-form variance would need delta-method propagation through that recursion's higher moments, which has not been derived.",
+  "environment": {
+    "machine": "arm64",
+    "matplotlib_version": "3.11.1",
+    "numpy_version": "2.5.2",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "python_version": "3.12.11"
+  },
+  "fim_version": "1.2.0",
+  "generator": {
+    "generation_date": "2026-08-24",
+    "model_token": "claude-sonnet-5",
+    "name": "Claude Code",
+    "provider": "Anthropic",
+    "responsibility": "other",
+    "script": "dev/bin/calibrate-statistical-bands",
+    "version": "Claude Sonnet 5"
+  },
+  "scenarios": {
+    "dear_nolan_high": {
+      "assertion_sigma_d": 0.006,
+      "assertion_sigma_g": 0.0006,
+      "d_values": [],
+      "elapsed_seconds": 2711.0,
+      "empirical_sigma_d": 0.003953,
+      "empirical_sigma_g": 0.00033,
+      "g_st_values": [],
+      "mean_d": 0.909489,
+      "mean_g_st": 0.021996,
+      "recommended_sigma_d": 0.00475,
+      "recommended_sigma_g": 0.00039600000000000003,
+      "replicates": 100,
+      "seed": 602000
+    },
+    "dear_nolan_low": {
+      "assertion_sigma_d": 0.005,
+      "assertion_sigma_g": 0.065,
+      "d_values": [],
+      "elapsed_seconds": 74.6,
+      "empirical_sigma_d": 0.001834,
+      "empirical_sigma_g": 0.047378,
+      "g_st_values": [],
+      "mean_d": 0.038065,
+      "mean_g_st": 0.970454,
+      "recommended_sigma_d": 0.00221,
+      "recommended_sigma_g": 0.056900000000000006,
+      "replicates": 100,
+      "seed": 601000
+    },
+    "part_vi": {
+      "assertion_sigma_d": 0.09,
+      "assertion_sigma_g": 0.0257,
+      "d_values": [],
+      "elapsed_seconds": 669.3,
+      "empirical_sigma_d": 0.065813,
+      "empirical_sigma_g": 0.021374,
+      "g_st_values": [],
+      "mean_d": 0.603904,
+      "mean_g_st": 0.175765,
+      "recommended_sigma_d": 0.079,
+      "recommended_sigma_g": 0.0257,
+      "replicates": 100,
+      "seed": 600000
+    }
+  },
+  "schema_version": 1
+}

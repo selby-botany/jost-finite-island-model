@@ -35,7 +35,7 @@ questions a first-time reader usually has:
   novel alleles. An opt-in `migrant_sampling: stochastic` setting adds a
   fourth random process — how many gene copies migrate, not just how many
   drift or mutate — for studies that want that source of variation counted
-  explicitly; see the [configuration reference](doc/configuration.md#migrant_sampling).
+  explicitly; see the [configuration reference](doc/configuration.md#migrantsampling).
 
 The [finite island model introduction](doc/finite-island-model-introduction.md)
 is the full plain-language walkthrough — no genetics, statistics, or

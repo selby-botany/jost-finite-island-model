@@ -43,7 +43,7 @@ The characterization pass behind every ``_SIGMA_*`` constant is versioned
 committed -- gitignored review material): the program is
 :mod:`dev/bin/calibrate-statistical-bands`, and its raw output, seeds, and
 environment fingerprint are retained in
-``doc/statistical-calibration-evidence.md``, not merely summarized here in
+``test/validation/statistical-calibration-evidence.json``, not merely summarized here in
 a comment. An analytic bound was considered and is not currently available
 (see that document's "Analytic bound" section) -- the per-replicate
 ``G_ST``/``D`` estimate is a ratio-of-means statistic sampled from a
@@ -58,9 +58,11 @@ stochastic by design, so it stays out of the deterministic PR gate.
 
 from __future__ import annotations
 
+import json
 import math
 import statistics
 from collections.abc import Iterable, Iterator, Mapping
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -81,26 +83,37 @@ _BAND_SIGMA = 5.0
 # most ~0.0034 for the smallest scenario (N=100, d=4).
 _ONE_OVER_N_TOL = 0.005
 
-# Per-replicate standard deviations from the versioned characterization pass
-# (see the module docstring), rounded up. Bands are
-# _BAND_SIGMA * sigma / sqrt(replicates). Deriving the band from a fixed
-# characterized spread (not from the tested draw) keeps the band a
-# pre-registered scientific margin rather than a fit to the seed.
-#
-# Part VI: characterization seed 600000, 30 replicates found
-# sigma_G ~= 0.0179, sigma_D ~= 0.0727.
-_SIGMA_PART_VI_G = 0.022
-_SIGMA_PART_VI_D = 0.09
-# Low-migration bands are for the derived 26-locus equilibrium start (horizon
-# 100, 12 replicates). Characterization seed 601000, 40 replicates found
-# sigma_G ~= 0.0543, sigma_D ~= 0.0022.
-_SIGMA_DEAR_NOLAN_LOW_G = 0.065
-_SIGMA_DEAR_NOLAN_LOW_D = 0.005
-# High-migration bands are for the derived near-equilibrium start (horizon 30,
-# 5 replicates). Characterization seed 602000, 20 replicates found
-# sigma_G ~= 0.00031, sigma_D ~= 0.0040.
-_SIGMA_DEAR_NOLAN_HIGH_G = 0.0006
-_SIGMA_DEAR_NOLAN_HIGH_D = 0.006
+_CALIBRATION_DATA_PATH = Path(__file__).with_name(
+    "statistical-calibration-evidence.json"
+)
+
+
+def _load_sigma_constants() -> dict[str, tuple[float, float]]:
+    """Load assertion sigma constants from the generated calibration artifact."""
+    payload = json.loads(_CALIBRATION_DATA_PATH.read_text(encoding="utf-8"))
+    scenarios = payload["scenarios"]
+    required = ("part_vi", "dear_nolan_low", "dear_nolan_high")
+    sigmas: dict[str, tuple[float, float]] = {}
+    for scenario_name in required:
+        scenario = scenarios[scenario_name]
+        sigma_g = float(scenario["assertion_sigma_g"])
+        sigma_d = float(scenario["assertion_sigma_d"])
+        sigmas[scenario_name] = (sigma_g, sigma_d)
+    return sigmas
+
+
+try:
+    _SIGMA_CONSTANTS = _load_sigma_constants()
+except Exception as exc:  # pragma: no cover - hard failure before tests run
+    raise RuntimeError(
+        "Missing or invalid calibration artifact at "
+        f"{_CALIBRATION_DATA_PATH}; regenerate with "
+        "dev/bin/calibrate-statistical-bands"
+    ) from exc
+
+_SIGMA_PART_VI_G, _SIGMA_PART_VI_D = _SIGMA_CONSTANTS["part_vi"]
+_SIGMA_DEAR_NOLAN_LOW_G, _SIGMA_DEAR_NOLAN_LOW_D = _SIGMA_CONSTANTS["dear_nolan_low"]
+_SIGMA_DEAR_NOLAN_HIGH_G, _SIGMA_DEAR_NOLAN_HIGH_D = _SIGMA_CONSTANTS["dear_nolan_high"]
 
 
 class _DiscardingStore:
@@ -676,10 +689,9 @@ def test_engine_reproduces_part_vi_equilibrium() -> None:
     Configuration: 8 loci, 6 replicates, horizon 1000 generations (the
     between-deme identity equilibrates by ~500), base seed 707000. Runtime is
     ~60 s. Band derivation (before seed selection, from the versioned
-    characterization pass -- module docstring, ``doc/statistical-
-    calibration-evidence.md``): per-replicate spread ``sigma_G ~= 0.022``,
-    ``sigma_D ~= 0.09``; band ``= 5 * sigma / sqrt(6)``, i.e. ~0.045 for
-    ``G_ST`` and ~0.184 for ``D``.
+    characterization pass -- module docstring,
+    ``test/validation/statistical-calibration-evidence.json``): per-replicate
+    spread from ``assertion_sigma_*`` and band ``= 5 * sigma / sqrt(6)``.
     """
     replicates = 6
     g_values, d_values = _run_engine_pooled(
@@ -731,9 +743,9 @@ def test_dear_nolan_low_migration_scenario_via_engine() -> None:
     stationarity check that a biased operator fails.
 
     Band derivation before seed selection (versioned characterization pass
-    -- module docstring, ``doc/statistical-calibration-evidence.md``):
-    ``sigma_G ~= 0.065`` and ``sigma_D ~= 0.005``. The band is
-    ``5 * sigma / sqrt(12)``, about 0.094 for ``G_ST`` and 0.0072 for ``D``.
+    -- module docstring, ``test/validation/statistical-calibration-evidence.json``):
+    ``assertion_sigma_*`` values loaded from
+    ``test/validation/statistical-calibration-evidence.json``.
     """
     replicates = 12
     d = 5
@@ -811,10 +823,11 @@ def test_dear_nolan_high_migration_scenario_via_engine() -> None:
     Configuration: 1 locus (``d=100`` already self-averages), 5 replicates,
     horizon 30, base seed 992000. Runtime ~130 s. Band derivation (before
     seed selection, from the versioned characterization pass -- module
-    docstring, ``doc/statistical-calibration-evidence.md``, characterization
-    seed 602000): per-replicate ``sigma_G ~= 0.00031``, ``sigma_D ~= 0.0040``,
-    rounded up to the deployed constants; band ``= 5 * sigma / sqrt(5)`` ~
-    0.00134 (``G_ST``) and ~0.01342 (``D``).
+    docstring, ``test/validation/statistical-calibration-evidence.json``,
+    characterization
+    seed 602000): per-replicate spread from the generated
+    ``assertion_sigma_*`` values in
+    ``test/validation/statistical-calibration-evidence.json``.
     """
     replicates = 5
     d = 100

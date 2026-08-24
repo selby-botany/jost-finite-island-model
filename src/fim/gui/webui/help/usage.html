@@ -37,7 +37,7 @@ name the offending key or value and return status 2. A run that reaches
 max_generations also returns status 0 because it is a valid, inspectable
 non-converged result.</p>
 <h3 id="batches-nreplicates-greater-than-one">Batches (n<sub>replicates</sub> greater than one)</h3>
-<p>A config's n<sub>replicates</sub> (see <a href="#" data-fim-help="configuration" data-fim-anchor="n%3Csub%3Ereplicates%3C/sub%3E">configuration.md</a>)
+<p>A config's n<sub>replicates</sub> (see <a href="#" data-fim-help="configuration" data-fim-anchor="nreplicates">configuration.md</a>)
 controls whether one run or a whole batch executes:</p>
 <ul>
 <li><strong>n<sub>replicates</sub>: 1</strong> (the default): the four-file scalar-run contract
@@ -55,7 +55,7 @@ affects only how long the batch takes.</p>
 <p>With replicate_tolerance unset in the config, exactly n<sub>replicates</sub>
 replicates run. With it set, the batch can stop earlier, once every watched
 statistic's across-replicate confidence interval has tightened enough (see
-<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">configuration.md</a>) — the number of
+<a href="#" data-fim-help="configuration" data-fim-anchor="replicatetolerance">configuration.md</a>) — the number of
 <code>replicate-NNN/</code> subdirectories written can then be less than n<sub>replicates</sub>.</p>
 <h2 id="worked-examples">Worked examples</h2>
 <p>Each example below is a complete config and the command that runs it: save
@@ -169,7 +169,7 @@ max_generations: 500
 <pre><code class="language-console">fim run finite-alleles.yaml --output results/finite-alleles --quiet
 </code></pre>
 <p>Converges at generation 12 with D \sim 0.207. See
-<a href="#" data-fim-help="configuration" data-fim-anchor="mutation_model">configuration.md</a> for how this differs
+<a href="#" data-fim-help="configuration" data-fim-anchor="mutationmodel">configuration.md</a> for how this differs
 from a distance-based (stepwise) mutation model, which <code>fim</code> does not
 implement.</p>
 <h3 id="per-base-mutation-rate-across-unequal-locus-lengths">Per-base mutation rate across unequal locus lengths</h3>
@@ -224,7 +224,7 @@ stabilize first.</p>
 <h3 id="an-adaptive-replicate-batch-with-a-confidence-interval">An adaptive replicate batch with a confidence interval</h3>
 <p>Rather than guessing how many replicate runs a confidence interval needs,
 set n<sub>replicates</sub> well above the plausible requirement and let
-<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">replicate_tolerance</a> decide when
+<a href="#" data-fim-help="configuration" data-fim-anchor="replicatetolerance">replicate_tolerance</a> decide when
 enough have run:</p>
 <pre><code class="language-yaml">N: 100
 d: 5
@@ -252,7 +252,7 @@ interval; <code>results/adaptive-batch/replicate-001/</code> through <code>repli
 each hold the ordinary four-file scalar-run contract for that one
 replicate. Drop <code>--sequential</code> to run the same batch across a worker
 process per CPU instead — the computed numbers are identical either way
-(see <a href="#batches-n%3Csub%3Ereplicates%3C/sub%3E-greater-than-one">Batches</a>); only the wall-clock
+(see <a href="#batches-nreplicates-greater-than-one">Batches</a>); only the wall-clock
 time differs.</p>
 <h2 id="re-analyze-a-trajectory">Re-analyze a trajectory</h2>
 <pre><code class="language-console">fim stats TRAJECTORY [--manifest PATH] [--generation N]

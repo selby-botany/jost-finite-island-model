@@ -224,7 +224,7 @@ the stepping-stone topology mapping), to_dict()/`manifest.json` always
 record the expanded `mu`, never μ<sub>b</sub> itself.
 
 By default, every mutation produces a globally novel allele identity; see
-[mutation_model](#mutation_model) below for the opt-in alternative.
+[mutation_model](#mutationmodel) below for the opt-in alternative.
 
 ### `seed`
 

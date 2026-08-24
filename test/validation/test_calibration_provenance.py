@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BUILD_SCRIPT = PROJECT_ROOT / "build"
 CI_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
 CALIBRATION_SCRIPT = PROJECT_ROOT / "dev" / "bin" / "calibrate-statistical-bands"
+EVIDENCE_DATA = (
+    PROJECT_ROOT / "test" / "validation" / "statistical-calibration-evidence.json"
+)
 EVIDENCE_DOC = PROJECT_ROOT / "doc" / "statistical-calibration-evidence.md"
 
 
@@ -49,31 +53,36 @@ def test_calibration_script_is_not_wired_into_the_deterministic_gate() -> None:
     assert "calibrate-statistical-bands" not in CI_WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_calibration_evidence_is_retained_and_versioned() -> None:
-    """The characterization pass's raw output is a real, structured document.
+def test_calibration_evidence_data_is_retained_and_versioned() -> None:
+    """The characterization pass's generated data is retained and versioned.
 
     Regression guard for R18: the `_SIGMA_*` constants in
     `test_simulator_equilibrium.py` previously came from "an independent
     characterization pass" named only in a code comment -- no program,
     seeds, raw output, or environment fingerprint was ever retained. This
-    checks the replacement evidence document actually carries that
+    checks the replacement generated evidence artifact carries that
     content, not just a placeholder file.
     """
+    assert EVIDENCE_DATA.is_file()
+    evidence = json.loads(EVIDENCE_DATA.read_text(encoding="utf-8"))
+    assert evidence["schema_version"] == 1
+    assert evidence["generator"]["script"] == "dev/bin/calibrate-statistical-bands"
+    assert "python_version" in evidence["environment"]
+
+    scenarios = evidence["scenarios"]
+    for scenario_name in ("part_vi", "dear_nolan_low", "dear_nolan_high"):
+        scenario = scenarios[scenario_name]
+        assert scenario["replicates"] >= 2
+        assert scenario["empirical_sigma_g"] > 0.0
+        assert scenario["empirical_sigma_d"] > 0.0
+        assert scenario["assertion_sigma_g"] > 0.0
+        assert scenario["assertion_sigma_d"] > 0.0
+
+
+def test_user_facing_calibration_doc_is_present() -> None:
+    """The user-facing calibration document is retained and script-linked."""
     assert EVIDENCE_DOC.is_file()
-    evidence = EVIDENCE_DOC.read_text(encoding="utf-8")
+    doc = EVIDENCE_DOC.read_text(encoding="utf-8")
 
-    for scenario in ("part_vi", "dear_nolan_low", "dear_nolan_high"):
-        assert f"### {scenario}" in evidence
-    for required_field in (
-        "Characterization seed",
-        "Replicates",
-        "Empirical `sigma_G`",
-        "Empirical `sigma_D`",
-    ):
-        assert required_field in evidence
-
-    assert "## Environment" in evidence
-    assert "python_version" in evidence
-    assert "## Analytic bound" in evidence
-    assert "## Metadata" in evidence
-    assert "generator-model-token" in evidence
+    assert "_SIGMA_" in doc
+    assert "dev/bin/calibrate-statistical-bands" in doc

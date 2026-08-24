@@ -352,7 +352,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   never silently drift from what is actually tested) at a distinct seed
   and a larger replicate count, and writes its raw per-replicate output,
   seeds, and environment fingerprint to
-  `doc/statistical-calibration-evidence.md`. An analytic bound was
+  `test/validation/statistical-calibration-evidence.json`. An analytic bound was
   considered (the per-replicate `G_ST`/`D` estimate is a ratio-of-means
   statistic sampled from a multi-generation stochastic recursion; a
   closed-form variance would need delta-method propagation through that

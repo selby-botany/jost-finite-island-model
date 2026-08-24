@@ -934,7 +934,8 @@ no wall-clock, fully reproducible.
   to appear in `build` only inside the lint stage's static-analysis
   invocations, never as an executed step, and nowhere in `ci.yml` — the
   structural guarantee behind "characterization stays out of the
-  deterministic PR gate." `doc/statistical-calibration-evidence.md` is
+  deterministic PR gate."
+  `test/validation/statistical-calibration-evidence.json` is
   checked to actually carry the retained evidence (every scenario's
   section, seed, replicate count, empirical sigma, environment, and the
   generator metadata block), not merely exist as an empty placeholder.

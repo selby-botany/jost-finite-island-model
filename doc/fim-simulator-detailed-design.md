@@ -756,7 +756,7 @@ program, deliberately not wired into `build` or `ci.yml` — a
 characterization pass is itself stochastic by design, so it stays out of
 the deterministic gate the rest of this section describes. Its raw
 output (seeds, per-replicate values, environment fingerprint) is retained
-in `doc/statistical-calibration-evidence.md` rather than only summarized
+in `test/validation/statistical-calibration-evidence.json` rather than only summarized
 in a code comment, replacing an earlier, unretained characterization pass
 whose program and evidence were never recorded.
 
