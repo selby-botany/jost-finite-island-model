@@ -1433,11 +1433,14 @@ def _batch_done_payload(
     _significant_digits`, taken when the batch's own background thread
     started — matching `_drain_run_messages`'s identical "started, not
     live" scope for the same View-menu setting.
+
+    `p0Statistics` carries the six named statistics for the seeded
+    generation-0 state, pre-formatted like every other statistic this
+    bridge sends — giving the table a baseline row the researcher can
+    compare every replicate against.
     """
     replicates = [
         {
-            "index": index,
-            "runId": result.run_id,
             "generation": result.report["generation"],
             "converged": result.report["converged"],
             "reason": result.report["reason"],
@@ -1452,7 +1455,7 @@ def _batch_done_payload(
                 / "trajectory.jsonl"
             ),
         }
-        for index, result in enumerate(results, start=1)
+        for result in results
     ]
     try:
         raw_summary = replicate_summary(results)
@@ -1467,6 +1470,18 @@ def _batch_done_payload(
         }
         for name, interval in raw_summary.items()
     }
+    p0_state = generate_initial_state(params)
+    p0_report = report_for_state(
+        p0_state,
+        params,
+        run_id=run_id,
+        converged=False,
+        reason="initial conditions",
+    )
+    p0_statistics = {
+        name: format_statistic(p0_report[name], digits)
+        for name in _RESULT_STATISTIC_NAMES
+    }
     return {
         "runId": run_id,
         "outputDirectory": str(output_directory),
@@ -1476,6 +1491,7 @@ def _batch_done_payload(
         "replicates": replicates,
         "summary": summary,
         "demeCount": params.d,
+        "p0Statistics": p0_statistics,
     }
 
 

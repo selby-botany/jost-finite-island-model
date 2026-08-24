@@ -84,25 +84,6 @@ function renderDifferentiationQ(report) {
 }
 
 /**
- * Shorten one replicate's own run id for the table's own "Run ID"
- * column -- `deterministic_run_id(params)` names the whole batch
- * (already shown, in full, above the table, `resultsRunId`'s own
- * textContent), and every replicate's own id is that same string plus
- * a `-r{index:03}` suffix (`fim.gui.app._batch_done_payload`'s own
- * docstring: `f"{batch_run_id}-r{index:03}"`) -- repeating the whole
- * batch id on every row added nothing a reader could not already see
- * once, above the table. Falls back to the full id unchanged if it
- * ever does not end in that exact shape, rather than showing a
- * misleadingly truncated fragment.
- *
- * @param {string} runId
- * @returns {string}
- */
-function shortReplicateId(runId) {
-    const match = runId.match(/-r\d+$/);
-    return match ? match[0].slice(1) : runId;
-}
-
 function renderBatchSummary(summary) {
     batchResultsSummary.replaceChildren();
     for (const name of STATISTIC_NAMES) {
@@ -115,9 +96,31 @@ function renderBatchSummary(summary) {
     }
 }
 
-function renderBatchTable(replicates) {
+function renderBatchTable(replicates, p0Statistics) {
     batchResultsTableBody.replaceChildren();
-    for (const replicate of replicates) {
+    // p_0 baseline row — the initial conditions the entire batch shared.
+    if (p0Statistics) {
+        const baseRow = document.createElement("tr");
+        baseRow.classList.add("p0-row");
+        const baseCells = [
+            0,
+            "initial",
+            ...STATISTIC_NAMES.map((name) => p0Statistics[name]),
+        ];
+        for (const value of baseCells) {
+            const cell = document.createElement("td");
+            cell.textContent = String(value);
+            baseRow.appendChild(cell);
+        }
+        // Placeholder empty cell for the "Open" column.
+        baseRow.appendChild(document.createElement("td"));
+        batchResultsTableBody.appendChild(baseRow);
+    }
+    // Sort replicates by generation ascending (lowest generation first).
+    const sorted = [...replicates].sort(
+        (a, b) => a.generation - b.generation
+    );
+    for (const replicate of sorted) {
         const row = document.createElement("tr");
         // `replicate.reason` is always exactly `"statistic converged"`
         // when `converged` is true (`StopReason`'s own two-value enum) --
@@ -128,8 +131,6 @@ function renderBatchTable(replicates) {
             ? "Converged"
             : `Not converged (${replicate.reason})`;
         const cells = [
-            replicate.index,
-            shortReplicateId(replicate.runId),
             replicate.generation,
             outcome,
             ...STATISTIC_NAMES.map((name) => replicate.statistics[name]),
@@ -261,7 +262,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     if (isBatch) {
         resultsOutcome.textContent = "";
         renderBatchSummary(payload.summary);
-        renderBatchTable(payload.replicates);
+        renderBatchTable(payload.replicates, payload.p0Statistics);
         scrubberControls.hidden = true;
         window.fim.resetScrubber();
     } else {

@@ -1,14 +1,11 @@
 "use strict";
 
 /* Shared statistic meter (visualization-and-config-editors design §3.3) --
- * a horizontal `[0, 1]` track with a mean tick and, when there is a real
- * confidence interval to show, a shaded low-to-high fill. Extracted
- * unchanged from `screens/batch-results.js`'s own original `percentage
- * Within`/`buildCiBar`/`buildOmittedCiBar` (a pure refactor, not a
- * redesign) so `screens/results.js`'s scalar Screen 3 can show its six
- * statistics through the identical widget instead of plain text --
- * "one consistent way this app shows where a number sits on `[0, 1]`,"
- * not two (design §3.3).
+ * a compact "dot + error bar" widget: a thin horizontal [0, 1] track with
+ * a dot at the mean and vertical whisker caps at the CI low/high bounds.
+ * Hover shows the exact values. Extracted from `screens/batch-results.js`'s
+ * original `percentageWithin`/`buildCiBar`/`buildOmittedCiBar` and later
+ * redesigned for compactness.
  *
  * A classic, non-module script sharing the page's one global scope
  * (`index.html` has no `type="module"` on any `<script>` tag), the same
@@ -80,14 +77,15 @@ function buildOmittedMeter(name, omittedText) {
 }
 
 /**
- * Build one meter row for a statistic with a real confidence interval.
+ * Build a compact dot+error-bar meter for a statistic with a CI.
+ *
+ * A thin horizontal track spans [0, 1]. A filled dot marks the mean.
+ * Vertical whisker caps mark low and high. Hovering the track shows
+ * `"mean [low, high]"` — no separate text row below.
  *
  * `interval.mean`/`.low`/`.high` arrive pre-formatted for display
  * (`format_statistic`, a `%.6g`-style string) -- parsed back into a
- * number here only to compute bar *geometry*, never to reformat the
- * label text itself (design §3.3's own "the client never reimplements
- * Python's own display formatting" rule, carried over unchanged from
- * this function's own pre-extraction form).
+ * number here only to compute geometry, never reformatted.
  *
  * @param {string} name
  * @param {{mean: string, low: string, high: string, sampleCount: number}} interval
@@ -106,73 +104,67 @@ function buildCiMeter(name, interval) {
     label.innerHTML = formatStatisticLabel(name);
     row.appendChild(label);
 
+    // Track wrapper holds all geometric elements and carries the tooltip.
     const track = document.createElement("div");
     track.className = "ci-bar-track";
-    const fill = document.createElement("div");
-    fill.className = "ci-bar-fill";
-    fill.style.left = `${low}%`;
-    fill.style.width = `${Math.max(high - low, 0)}%`;
-    track.appendChild(fill);
-    const meanMark = document.createElement("div");
-    meanMark.className = "ci-bar-mean";
-    meanMark.style.left = `${mean}%`;
-    track.appendChild(meanMark);
+    track.title = `${interval.mean} [${interval.low}, ${interval.high}]`;
+
+    const whiskerLow = document.createElement("div");
+    whiskerLow.className = "ci-bar-whisker";
+    whiskerLow.style.left = `${low}%`;
+    track.appendChild(whiskerLow);
+
+    const whiskerHigh = document.createElement("div");
+    whiskerHigh.className = "ci-bar-whisker";
+    whiskerHigh.style.left = `${high}%`;
+    track.appendChild(whiskerHigh);
+
+    const dot = document.createElement("div");
+    dot.className = "ci-bar-dot";
+    dot.style.left = `${mean}%`;
+    track.appendChild(dot);
+
     row.appendChild(track);
-
-    const value = document.createElement("span");
-    value.className = "ci-bar-value";
-    value.textContent =
-        `${interval.mean} [${interval.low}, ${interval.high}] (n=${interval.sampleCount})`;
-    row.appendChild(value);
-
     return row;
 }
 
 /**
- * Build one meter row for a single point value -- a scalar run's own
- * statistic (design §3.3's "point only" mode): a mean tick with no
- * shaded interval, since a single run has no confidence interval to show.
+ * Build a compact dot meter for a single point value (scalar run).
  *
- * No separate `.ci-bar-label` element: the one `.ci-bar-value` span
- * carries `"<name> = <value>"` (`name` run through `formatStatisticLabel`
- * for its own `_`-suffix, e.g. `"G<sub>ST</sub> = 0.456"`), the exact
- * convention Screen 3's plain-text stats always used, extended to render
- * the subscript rather than a literal underscore. `test/gui/
- * test_results_screen.py`'s own `startswith("D = ")` assertion still
- * passes unmodified for `D` (no `_`, `formatStatisticLabel` returns it
- * as-is) -- a name that *does* have one now reads back through
- * `.textContent` without its underscore at all (`"GST = ..."`, not
- * `"G_ST = ..."`), since `<sub>` renders visually but contributes no
- * text of its own to close the gap the underscore used to fill; any
- * assertion against an underscore-bearing name's own `.textContent` was
- * updated alongside this change, not left to drift.
+ * A filled dot on the track marks the mean; no CI interval to show.
+ * Hovering shows `"Name = value"`. No separate text row below.
+ *
+ * No separate `.ci-bar-label` element: the label is shown only in the
+ * tooltip, and the row carries just label + track (same grid shape as
+ * `buildCiMeter`).
  *
  * @param {string} name - The statistic's own name (`"D"`, `"G_ST"`, ...).
- * @param {string} formattedValue - The bare, already `format_statistic`-
- *     formatted value, parsed only to place the mean tick -- never
- *     reformatted or shown a second time.
+ * @param {string} formattedValue - The already `format_statistic`-formatted
+ *     value, parsed only to place the dot -- never reformatted.
  * @returns {HTMLDivElement}
  */
 function buildPointMeter(name, formattedValue) {
     const row = document.createElement("div");
     row.className = "ci-bar";
 
+    const label = document.createElement("span");
+    label.className = "ci-bar-label";
+    label.innerHTML = formatStatisticLabel(name);
+    row.appendChild(label);
+
     const track = document.createElement("div");
     track.className = "ci-bar-track";
+    track.title = `${formatStatisticLabel(name).replace(/<[^>]*>/g, "")} = ${formattedValue}`;
+
     const parsed = Number(formattedValue);
     if (Number.isFinite(parsed)) {
         const position = percentageWithin(parsed, METER_MIN, METER_MAX);
-        const mark = document.createElement("div");
-        mark.className = "ci-bar-mean";
-        mark.style.left = `${position}%`;
-        track.appendChild(mark);
+        const dot = document.createElement("div");
+        dot.className = "ci-bar-dot";
+        dot.style.left = `${position}%`;
+        track.appendChild(dot);
     }
     row.appendChild(track);
-
-    const value = document.createElement("span");
-    value.className = "ci-bar-value";
-    value.innerHTML = `${formatStatisticLabel(name)} = ${formattedValue}`;
-    row.appendChild(value);
 
     return row;
 }

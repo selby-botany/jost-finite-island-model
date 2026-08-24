@@ -97,9 +97,12 @@ def test_a_completed_run_renders_the_run_view(
             "runViewState: window.fim.getRunViewState(), "
             "runId: document.getElementById('results-run-id').textContent, "
             "outcome: document.getElementById('results-outcome').textContent, "
-            "statD: document.getElementById('stat-D').textContent, "
-            "statGST: document.getElementById('stat-G_ST').textContent, "
-            "statGSTHtml: document.getElementById('stat-G_ST').innerHTML, "
+            "statDTitle: document.getElementById('stat-D')"
+            ".querySelector('.ci-bar-track').title, "
+            "statGSTLabel: document.getElementById('stat-G_ST')"
+            ".querySelector('.ci-bar-label').innerHTML, "
+            "statGSTTrackTitle: document.getElementById('stat-G_ST')"
+            ".querySelector('.ci-bar-track').title, "
             "scrubberHidden: document.getElementById('scrubber-controls').hidden, "
             "scrubberPlayDisabled: "
             "document.getElementById('scrubber-play-button').disabled, "
@@ -130,14 +133,15 @@ def test_a_completed_run_renders_the_run_view(
     assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
     assert "generation" in settled["outcome"]
-    assert settled["statD"].startswith("D = ")
-    # Not "G_ST = " -- `meters.js`'s own `formatStatisticLabel` renders
-    # the statistic's `_`-suffix as a real `<sub>`, not a literal
-    # underscore character; `.textContent` on that element reads back
-    # with the subscript's own text ("ST") immediately following "G",
-    # no separator, since the underscore itself was never a text node.
-    assert settled["statGST"].startswith("GST = ")
-    assert "<sub>ST</sub>" in settled["statGSTHtml"]
+    # The new compact meter places the value in the track's `title` attribute
+    # (hover tooltip). For `buildPointMeter`, the title is "D = <value>".
+    assert settled["statDTitle"].startswith("D = ")
+    # `formatStatisticLabel` renders `_`-suffix as a real `<sub>` in the
+    # label element's innerHTML.
+    assert "<sub>ST</sub>" in settled["statGSTLabel"]
+    # The track title for G_ST is "GST = <value>" (strip-tag form used in
+    # `buildPointMeter`'s own title construction).
+    assert settled["statGSTTrackTitle"].startswith("GST = ")
     # `tiny_params`-scale runs always persist more than one generation
     # (`convergence_window`'s own minimum of 2 forces at least one step
     # past generation 0 before stability can first be evaluated), so the

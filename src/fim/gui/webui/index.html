@@ -57,12 +57,16 @@
            whole row) is enough: a single remaining flex child simply
            takes the full row alone during `running`/`initial`. -->
     <div class="run-body">
+      <!-- Shared across all three states: `running`/`completed` draw
+           into it; `initial` now draws the p_0 scatter (Phase F). -->
+      <canvas id="run-canvas" width="640" height="520"></canvas>
+
       <!-- `initial`-only: p_0 statistics shown before any run starts
            (Phase F: `run-view-initial.js` populates these via
            `Api.get_initial_state_panels`). Same meter slots as
            `results-stats` but keyed by `data-stat` so the initial
            rendering path can find them without id collisions. -->
-      <div id="initial-stats" class="results-stats" hidden>
+      <div id="initial-stats" class="results-stats-row" hidden>
         <div class="field-stat" data-stat="D"></div>
         <div class="field-stat" data-stat="G_ST"></div>
         <div class="field-stat" data-stat="E_ST"></div>
@@ -73,7 +77,7 @@
       <div id="run-completed" hidden>
         <p id="results-run-id" class="results-run-id"></p>
         <p id="results-outcome" class="results-outcome"></p>
-        <div class="results-stats" id="results-stats">
+        <div class="results-stats-row" id="results-stats">
           <div class="field-stat" id="stat-D"></div>
           <div class="field-stat" id="stat-G_ST"></div>
           <div class="field-stat" id="stat-E_ST"></div>
@@ -84,10 +88,6 @@
         </div>
         <div class="batch-results-summary" id="batch-results-summary" hidden></div>
       </div>
-
-      <!-- Shared across all three states: `running`/`completed` draw
-           into it; `initial` now draws the p_0 scatter (Phase F). -->
-      <canvas id="run-canvas" width="640" height="520"></canvas>
     </div>
     <fieldset class="composite" id="run-deme-pair-selector" hidden>
       <legend>Compare demes directly</legend>
@@ -104,8 +104,6 @@
     <table class="batch-results-table" id="batch-results-table" hidden>
       <thead>
         <tr>
-          <th>#</th>
-          <th>Run ID</th>
           <th>Generation</th>
           <th>Outcome</th>
           <th>D</th>

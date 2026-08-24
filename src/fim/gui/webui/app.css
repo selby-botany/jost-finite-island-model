@@ -236,7 +236,8 @@ fieldset.composite > label {
 
 .run-body {
     display: flex;
-    gap: 1.5rem;
+    flex-direction: column;
+    gap: 0;
     align-items: flex-start;
 }
 
@@ -265,62 +266,82 @@ fieldset.composite > label {
     font-variant-numeric: tabular-nums;
 }
 
+/* Stats panel (CI meters) placed below the canvas in a compact row. */
 .batch-results-summary {
     display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    min-width: 20rem;
+    flex-wrap: wrap;
+    flex-direction: row;
+    gap: 0.6rem 1.2rem;
+    margin-top: 0.75rem;
 }
 
+/* Individual `.results-stats` block below canvas also uses row layout. */
+.results-stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+    gap: 0.6rem 1.2rem;
+    margin-top: 0.75rem;
+}
+
+/* Compact dot + error bar widget.  One row only: label + track. */
 .ci-bar {
     display: grid;
-    grid-template-columns: 3.5rem 1fr;
-    grid-template-areas: "label track" ". value";
+    grid-template-columns: 2.8rem 1fr;
     align-items: center;
-    column-gap: 0.6rem;
-    row-gap: 0.15rem;
+    column-gap: 0.5rem;
+    min-width: 9rem;
 }
 
 .ci-bar-label {
-    grid-area: label;
     font-weight: 600;
+    font-size: 0.85rem;
+    white-space: nowrap;
 }
 
+/* Thin horizontal axis line; hover cursor invites the tooltip. */
 .ci-bar-track {
-    grid-area: track;
     position: relative;
-    height: 0.6rem;
+    height: 1.2rem;      /* tall hit-target for hover */
+    cursor: default;
+}
+
+/* The thin axis line rendered as a pseudo-element so the hit target
+ * can remain tall without making the visible line tall. */
+.ci-bar-track::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
     background: var(--fim-border);
-    border-radius: 3px;
+    transform: translateY(-50%);
 }
 
-.ci-bar-fill {
+/* Vertical whisker cap at low / high CI bound. */
+.ci-bar-whisker {
     position: absolute;
-    top: 0;
-    bottom: 0;
-    background: var(--fim-accent);
-    opacity: 0.4;
-    border-radius: 3px;
-}
-
-.ci-bar-mean {
-    position: absolute;
-    top: -0.15rem;
-    bottom: -0.15rem;
+    top: 20%;
+    bottom: 20%;
     width: 2px;
     background: var(--fim-accent);
     transform: translateX(-1px);
 }
 
-.ci-bar-value {
-    grid-area: value;
-    color: var(--fim-muted);
-    font-size: 0.8rem;
-    font-variant-numeric: tabular-nums;
+/* Filled dot at the mean. */
+.ci-bar-dot {
+    position: absolute;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--fim-accent);
+    transform: translate(-50%, -50%);
 }
 
 .ci-bar-omitted {
-    grid-area: track / track / value / value;
+    grid-column: 2;
     color: var(--fim-muted);
     font-style: italic;
     font-size: 0.85rem;

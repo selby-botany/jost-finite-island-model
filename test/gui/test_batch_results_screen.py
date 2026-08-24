@@ -138,6 +138,10 @@ def test_a_completed_batch_renders_the_run_view() -> None:
                     "firstRowCells: Array.from("
                     "document.getElementById('batch-results-table-body')"
                     ".children[0].children"
+                    ").map((cell) => cell.textContent), "
+                    "secondRowCells: Array.from("
+                    "document.getElementById('batch-results-table-body')"
+                    ".children[1].children"
                     ").map((cell) => cell.textContent)"
                     "})"
                 )
@@ -154,19 +158,20 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     )
     assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
-    assert settled["rowCount"] == 2
+    # Row 0 is the p_0 baseline; rows 1 and 2 are the two replicates.
+    assert settled["rowCount"] == 3
     assert settled["ciBarCount"] == 6
-    # `shortReplicateId` (`run-view-completed.js`): the row's own "Run ID"
-    # cell is just `r001`, not the batch id repeated on every row (that
-    # id is already shown once, in full, above the table -- `settled
-    # ["runId"]`, asserted above).
+    # p_0 row: generation=0, outcome="initial".
     first_row = settled["firstRowCells"]
-    assert first_row[1] == "r001"
+    assert first_row[0] == "0"
+    assert first_row[1] == "initial"
+    # Second row is the first replicate. Columns: Generation | Outcome | ...
     # "Converged", not "Converged (statistic converged)" -- `replicate.
     # reason` is redundant with `converged` in the true case (`StopReason`
     # only ever pairs them one way), so the parenthetical said nothing a
     # reader did not already know.
-    assert first_row[3] == "Converged"
+    second_row = settled["secondRowCells"]
+    assert second_row[1] == "Converged"
 
 
 def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:

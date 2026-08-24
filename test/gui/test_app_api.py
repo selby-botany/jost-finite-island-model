@@ -347,7 +347,7 @@ def test_batch_done_payload_carries_one_replicate_row_per_result(
     batch_params: SimulationParams,
     batch_results: tuple[RunResult, ...],
 ) -> None:
-    """`replicates` has one row per published result, 1-indexed, stats formatted."""
+    """`replicates` rows per result; formatted stats; no `index`/`runId` fields."""
     # The real batch's own deterministic run_id, not an arbitrary
     # literal: `_batch_done_payload` uses this same value both as the
     # payload's own `"runId"` label and, via `replicate_output_
@@ -364,15 +364,40 @@ def test_batch_done_payload_carries_one_replicate_row_per_result(
     assert payload["outputDirectory"] == str(tmp_path)
     replicates = payload["replicates"]
     assert isinstance(replicates, list)
-    assert [row["index"] for row in replicates] == [1, 2, 3]
+    assert len(replicates) == len(batch_results)
+    # `index` and `runId` are no longer sent to the client (internal state
+    # that added nothing user-facing and raised confusing questions about
+    # run numbering).
+    for row in replicates:
+        assert "index" not in row
+        assert "runId" not in row
     for row, result in zip(replicates, batch_results, strict=True):
-        assert row["runId"] == result.run_id
         assert row["generation"] == result.report["generation"]
         assert row["statistics"]["D"] == format_statistic(result.report["D"])
         expected_directory = batch_runner.replicate_output_directory(
             tmp_path, run_id, result.run_id
         )
         assert row["trajectoryPath"] == str(expected_directory / "trajectory.jsonl")
+
+
+def test_batch_done_payload_carries_p0_statistics(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+    batch_results: tuple[RunResult, ...],
+) -> None:
+    """`p0Statistics` carries the six seeded generation-0 statistics, formatted."""
+    run_id = deterministic_run_id(batch_params)
+
+    payload = app_module._batch_done_payload(
+        batch_params, run_id, tmp_path, batch_results
+    )
+
+    p0 = payload["p0Statistics"]
+    assert isinstance(p0, dict)
+    assert set(p0) == set(app_module._RESULT_STATISTIC_NAMES)
+    # Each value is a pre-formatted string (format_statistic), not a float.
+    for name in app_module._RESULT_STATISTIC_NAMES:
+        assert isinstance(p0[name], str)
 
 
 def test_batch_done_payload_summary_matches_replicate_summary(
