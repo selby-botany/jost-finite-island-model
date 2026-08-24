@@ -50,7 +50,7 @@ The supported maintainer environment is Unix-like and requires:
 - Python 3.12 or newer
 
 The root `build` script and Git hooks assume Unix paths. They use Bash arrays,
-`[[ ... ]]`, and `BASH_SOURCE`, so plain POSIX `sh` is not sufficient, but
+`[[ ... ]]`, and BASH<sub>SOURCE</sub>, so plain POSIX `sh` is not sufficient, but
 they avoid modern-only Bash features and work with the Bash 3.2 bundled with
 macOS. The Python build itself does not need Docker.
 
@@ -58,7 +58,7 @@ Create `.venv` with Python 3.12 or newer and install `.[dev]`. Shell activation
 is optional: `build`, the Git hooks, and the commands in `bin/` automatically
 select `.venv/bin/python`. A versioned `.venv-*` is accepted as a fallback.
 `PYTHON=/path/to/python` overrides build selection, while
-`FIM_PYTHON=/path/to/python` overrides the local command wrappers. Source
+FIM<sub>PYTHON</sub>=/path/to/python overrides the local command wrappers. Source
 `include/dot-bashrc` to make those wrappers available as direct commands.
 
 Docker Engine is required for the complete repository-file checks. It runs the
@@ -82,9 +82,9 @@ and smoke-tested by the tag-driven GitHub Actions release workflow.
    row-stochastic matrix.
 2. **Mutation:** a binomial number of gene copies mutate at each locus's
    own rate (`mu`: a shared scalar, an explicit per-locus list, or one
-   derived per locus from a per-base rate, `mu_b`). By default
-   (`mutation_model: infinite_alleles`) each mutating copy receives a
-   globally novel ID; under the opt-in `finite_alleles` model, its target
+   derived per locus from a per-base rate, μ<sub>b</sub>). By default
+   (mutation_model: infinite_alleles) each mutating copy receives a
+   globally novel ID; under the opt-in finite_alleles model, its target
    is drawn from its own locus's bounded state space and can recur.
 3. **Drift:** each deme/locus is multinomially resampled to exactly `N` gene
    copies.
@@ -104,7 +104,7 @@ deme/locus.
 - Keep timestamps in manifest metadata and default directory names only.
 - A replicate batch's `seed + i` derivation, and each replicate's own PCG64
   generator, are unaffected by execution order or worker count: opt-in
-  parallel replicate execution (`fim`'s `max_workers`) runs each replicate
+  parallel replicate execution (`fim`'s max_workers) runs each replicate
   in its own worker process, computes exactly the same result as running it
   alone, and only its own `RunResult`'s wall-clock timestamps can vary.
 
@@ -115,17 +115,17 @@ tolerances are derived from sample size before a seed is selected.
 
 `TrajectoryStore` is the public backend contract:
 
-- `write_generation(run_id, generation, rows)`
-- `read(run_id)`
+- write_generation(run_id, generation, rows)
+- read(run_id)
 
 Add a new backend under `fim.persistence` without changing the engine,
 statistics, or visualizations. The JSON Lines backend flushes each
 generation so an interrupted file retains every complete line.
 
 A replicate batch needs one store *per replicate*, not one shared instance —
-mandatory once `max_workers` is set, since a single store object cannot
-cross a worker-process boundary. `fim`'s `store_factory` builds one given a
-replicate's `run_id`; it must itself be picklable under `max_workers` (a
+mandatory once max_workers is set, since a single store object cannot
+cross a worker-process boundary. `fim`'s store_factory builds one given a
+replicate's run_id; it must itself be picklable under max_workers (a
 module-level function, or `functools.partial` over one — never a closure or
 lambda), which is exactly how the CLI wires each replicate to its own real
 `replicate-NNN/trajectory.jsonl`.
@@ -138,18 +138,18 @@ adding engine state.
 
 | Requested change | Extension point |
 |---|---|
-| Unequal deme size | Pass per-deme `N`; operators and `E_ST` support it |
+| Unequal deme size | Pass per-deme `N`; operators and E<sub>ST</sub> support it |
 | Asymmetric migration | Pass a validated `d` by `d` matrix |
 | Stepping-stone topology (1D) | `fim.model.topology`: `m: {topology: ring\|linear, rate}` or a hand-written sparse map |
 | Spatial migration beyond 1D or a fixed matrix | 2D lattice topology, or a `MigrantPoolStrategy` interface — neither built yet |
-| Random, rather than fixed, migrant counts | `migrant_sampling: stochastic`; `migrate()` accepts `rng` and draws `Binomial(N_i, rate)` |
-| Per-locus mutation rate from length | `mu_b` (a per-base rate) derives each locus's own `mu` from its `length`; or pass `mu` as an explicit per-locus list directly |
-| Finite-length alleles (remove infinite-length artifacts) | `mutation_model: finite_alleles`; `LocusSpec.length` bounds each locus to `4 ** length` states, and mutation can recur |
+| Random, rather than fixed, migrant counts | migrant_sampling: stochastic; `migrate()` accepts `rng` and draws Binomial(N<sub>i</sub>, rate) |
+| Per-locus mutation rate from length | μ<sub>b</sub> (a per-base rate) derives each locus's own `mu` from its `length`; or pass `mu` as an explicit per-locus list directly |
+| Finite-length alleles (remove infinite-length artifacts) | mutation_model: finite_alleles; `LocusSpec.length` bounds each locus to `4 ** length` states, and mutation can recur |
 | Selection | Add a pure `select` operator before drift |
 | Stepwise (distance-based) mutation, e.g. for microsatellites | Add a strategy behind mutation identity assignment — a different, still-unbuilt model from the row above (§3.2 of the design doc explains why) |
-| Several convergence statistics | Pass a list for `convergence_statistic` plus `convergence_combinator` |
-| How many replicate runs give a confidence interval | `replicate_tolerance` stops a batch once every watched statistic's across-replicate CI tightens to it, instead of a hand-guessed `n_replicates`; `fim.engine.replicate_summary` / the CLI's `summary.json` report the realized interval |
-| Faster replicate batches | `max_workers` (library) / `--workers`, `--sequential` (CLI): one worker process per replicate batch-slot, opt-in, changes nothing about what is computed |
+| Several convergence statistics | Pass a list for convergence_statistic plus convergence_combinator |
+| How many replicate runs give a confidence interval | replicate_tolerance stops a batch once every watched statistic's across-replicate CI tightens to it, instead of a hand-guessed n<sub>replicates</sub>; fim.engine.replicate_summary / the CLI's `summary.json` report the realized interval |
+| Faster replicate batches | max_workers (library) / `--workers`, `--sequential` (CLI): one worker process per replicate batch-slot, opt-in, changes nothing about what is computed |
 | Large trajectories | Implement another `TrajectoryStore` |
 | GUI | Call `fim.engine.fim`; do not duplicate model logic |
 
@@ -196,7 +196,7 @@ dev/bin/generate-help-html
 
 The pre-commit hook refreshes it automatically when either source doc (or
 the generator itself) is staged; the pre-push hook and CI verify freshness
-the same way they do for the API reference above. `anchor_for` in
+the same way they do for the API reference above. anchor_for in
 `dev/lib/docslug.py` is the one GitHub-compatible heading-anchor slugger
 both this generator and `check-doc-links` share — change it there, not in
 either caller.

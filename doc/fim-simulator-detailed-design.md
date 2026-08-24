@@ -81,7 +81,7 @@ Two ground rules shape everything below and are worth stating once:
 ## 2. Engineering decisions
 
 The design document settles the model, statistics, and architecture
-(Python, NumPy, JSONL, ploidy-neutral $N$, and so on). This section records
+(Python, NumPy, JSONL, ploidy-neutral `N`, and so on). This section records
 the engineering decisions on top of that: the concrete runtime,
 distribution, and reproducibility choices a maintainer needs to know.
 
@@ -151,7 +151,7 @@ codebase obeys:
    initial-condition generator as an argument. No module ever calls the
    global NumPy RNG, `random`, or reseeds mid-run. Given a seed, a run is
    byte-for-byte reproducible, which is what makes the manifest's "hand a
-   collaborator a `run_id` and reproduce the trajectory" promise (design
+   collaborator a run_id and reproduce the trajectory" promise (design
    §6) true.
 2. **No wall-clock or environment in logic.** Timestamps appear only in the
    manifest and in output *filenames*, never in a value that a statistic,
@@ -379,7 +379,7 @@ with no extra instrumentation; each `timeout-minutes` is a hard budget
 enforced by the runner itself rather than a wall-clock assertion inside
 the test run, which machine-speed variance would make a non-deterministic
 pass/fail signal (the same commit reporting differently only because of
-runner load). `test/validation/test_ci_runtime_budget.py` statically
+runner load). test/validation/test_ci_runtime_budget.py statically
 checks both steps stay present, correctly ordered, and budgeted.
 
 `--ci` itself runs these stages in order (§7 gives the flag surface):
@@ -390,7 +390,7 @@ checks both steps stay present, correctly ordered, and budgeted.
    `files = ["src", "test"]` are the single source of truth for scope; an
    explicit positional argument here would silently narrow it back to
    `src` alone and drop `test` from the checked set — the exact
-   regression `test/test_mypy_scope.py` guards against).
+   regression test/test_mypy_scope.py guards against).
 3. `pytest` with branch coverage and no marker exclusion at all — so the
    authoritative gate runs every layer the fast default invocation skips
    for local iteration speed (`statistical`, `slow`, and `packaging` —
@@ -428,10 +428,10 @@ dependency structural rather than advisory:
 1. **`verify-tag` (`if: startsWith(github.ref, 'refs/tags/v')`, runs
    alongside `build` rather than after it — cheap, and independent of
    source).** A full-history checkout, then: `git rev-parse --verify
-   "$GITHUB_REF_NAME^{tag}"` must succeed, which is only true for an
-   *annotated* tag (a lightweight tag has no tag object for `^{tag}` to
+   "$GITHUB<sub>REF</sub>_NAME<sup>tag</sup>"` must succeed, which is only true for an
+   *annotated* tag (a lightweight tag has no tag object for ^{tag} to
    resolve) — rejecting a `git tag v1.2.3` shorthand that skipped a
-   message entirely; then `git merge-base --is-ancestor "$GITHUB_SHA"
+   message entirely; then `git merge-base --is-ancestor "$GITHUB<sub>SHA</sub>"
    origin/main` must hold, rejecting a tag pushed from a commit `main`
    has never merged.
 2. **`windows` (`needs: [build, verify-tag]`, runs-on
@@ -468,7 +468,7 @@ Every `uses:` reference in both workflow files (§5.2–§5.4) names a full
 silently repoint it at different, unreviewed content at any time, the same
 risk this project's own `bin/` wrappers already avoid by pinning Docker
 images to a digest rather than a floating tag. A trailing `# vN` comment
-keeps the pin human-readable; `test/validation/test_workflow_pins.py`
+keeps the pin human-readable; test/validation/test_workflow_pins.py
 parses every workflow file and fails if any reference is not a full SHA.
 
 `.github/dependabot.yml` tracks both ecosystems that need to move forward
@@ -666,8 +666,8 @@ Three hooks:
   `ruff check src test`, bare `mypy`, the `pytest` subset excluding
   the `statistical`, `slow`, and `packaging` markers, and the API-doc
   freshness check (§8.1). Each gate is bypassable in a genuine emergency
-  through `PRE_PUSH_SKIP_LINT`, `PRE_PUSH_SKIP_TYPE`, `PRE_PUSH_SKIP_TEST`,
-  and `PRE_PUSH_SKIP_DOCS`.
+  through PRE<sub>PUSH</sub>_SKIP<sub>LINT</sub>, PRE<sub>PUSH</sub>_SKIP<sub>TYPE</sub>, PRE<sub>PUSH</sub>_SKIP<sub>TEST</sub>,
+  and PRE<sub>PUSH</sub>_SKIP<sub>DOCS</sub>.
 
 **Graceful degradation is a design requirement, not a nicety.** Each hook
 no-ops with an informational message when its tool or `pyproject.toml` is

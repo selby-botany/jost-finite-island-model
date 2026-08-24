@@ -33,40 +33,40 @@ max_generations: 10000
 n_replicates: 1
 </code></pre>
 <h2 id="required-model-keys">Required model keys</h2>
-<h3 id="n"><var>N</var></h3>
+<h3 id="n"><code>N</code></h3>
 <ul>
-<li><strong>Type:</strong> positive integer, or a list of <var>d</var> positive integers</li>
+<li><strong>Type:</strong> positive integer, or a list of <code>d</code> positive integers</li>
 <li><strong>Required:</strong> yes</li>
 <li><strong>Meaning:</strong> gene copies per deme</li>
 </ul>
-<p><var>N</var> is deliberately ploidy-neutral. Pass <code class="math-expr">2 * individuals</code> for a diploid
+<p><code>N</code> is deliberately ploidy-neutral. Pass <code>2 * individuals</code> for a diploid
 autosomal locus and pass census individuals unchanged for a haploid locus.
 Per-deme lists model unequal island sizes: every stage of the update
 pipeline (<code>migrate</code>, <code>mutate</code>, <code>drift</code>), the founding-allele-count bound
-(checked against the smallest <var>N</var><sub>i</sub>), and <code>deme_weighting: size</code> all use
+(checked against the smallest N<sub>i</sub>), and deme_weighting: size all use
 each deme's own configured gene-copy count.</p>
 <pre><code class="language-yaml">N: [120, 450, 60]   # three demes, unequal gene-copy counts
 d: 3
 </code></pre>
-<p>A scalar <var>N</var> and a list of <var>d</var> equal values are numerically identical;
+<p>A scalar <code>N</code> and a list of <code>d</code> equal values are numerically identical;
 prefer the scalar form when every deme is the same size.</p>
-<h3 id="d"><var>d</var></h3>
+<h3 id="d"><code>d</code></h3>
 <ul>
 <li><strong>Type:</strong> integer at least 2</li>
 <li><strong>Required:</strong> yes</li>
 <li><strong>Meaning:</strong> number of demes</li>
 </ul>
-<h3 id="m"><var>m</var></h3>
+<h3 id="m"><code>m</code></h3>
 <ul>
-<li><strong>Type:</strong> number in <code class="math-expr">[0, 1]</code>, or a <var>d</var> by <var>d</var> row-stochastic matrix</li>
+<li><strong>Type:</strong> number in <code>[0, 1]</code>, or a <code>d</code> by <code>d</code> row-stochastic matrix</li>
 <li><strong>Required:</strong> yes</li>
 <li><strong>Meaning:</strong> migration rate or complete migration weights</li>
 </ul>
-<p>A scalar uses the symmetric finite island model: each deme retains <code class="math-expr">1 - m</code> of
-its frequency vector and receives <var>m</var> from the size-weighted average of all
+<p>A scalar uses the symmetric finite island model: each deme retains <code>1 - m</code> of
+its frequency vector and receives <code>m</code> from the size-weighted average of all
 other demes. Matrix rows must each sum to 1.</p>
-<p>A full matrix models asymmetric migration — row <var>k</var> gives destination deme
-<var>k</var>'s exact source weights, and row <var>k</var>'s weights need not equal row <var>j</var>'s.
+<p>A full matrix models asymmetric migration — row <code>k</code> gives destination deme
+<code>k</code>'s exact source weights, and row <code>k</code>'s weights need not equal row <code>j</code>'s.
 Every row is independently configurable, including rows that are not
 symmetric with any other row.</p>
 <pre><code class="language-yaml">m:
@@ -79,30 +79,30 @@ d: 3
 case:</p>
 <ul>
 <li><strong>A matrix's rows are the authoritative weights — they are not scaled by
-<var>N</var>.</strong> The scalar path automatically derives a size-weighted migrant pool
+<code>N</code>.</strong> The scalar path automatically derives a size-weighted migrant pool
 from each deme's own gene-copy count; a matrix already states each
-destination's exact source mix, so <var>N</var> (scalar or per-deme) has nothing
+destination's exact source mix, so <code>N</code> (scalar or per-deme) has nothing
 left to contribute to migration and does not change the result. If unequal
 deme sizes should also drive migration weighting, build that weighting into
-the matrix itself. (This describes the default <code>migrant_sampling: continuous</code> blend. Under the opt-in <code>migrant_sampling: stochastic</code>, below,
-<var>N</var> re-enters the picture — not to change the mean, but to set how much a
+the matrix itself. (This describes the default <code>migrant_sampling: continuous</code> blend. Under the opt-in migrant_sampling: stochastic, below,
+<code>N</code> re-enters the picture — not to change the mean, but to set how much a
 given generation's actual migrant count can vary around it.)</li>
 <li><strong>The scalar form is the matrix's symmetric special case, not a different
-mechanism.</strong> For equal-size demes, a scalar rate <var>m</var> is numerically
-identical to the full matrix with <code class="math-expr">1 - m</code> on the diagonal and <code class="math-expr">m / (d - 1)</code>
+mechanism.</strong> For equal-size demes, a scalar rate <code>m</code> is numerically
+identical to the full matrix with <code>1 - m</code> on the diagonal and <code>m / (d - 1)</code>
 on every off-diagonal entry — prefer the scalar form when migration truly
 is symmetric and every deme is the same size; reach for a matrix only when
 it is not.</li>
 </ul>
 <h4 id="sparse-and-spatial-stepping-stone-migration">Sparse and spatial (stepping-stone) migration</h4>
-<p>Writing out a <var>d</var> by <var>d</var> matrix by hand stops being realistic once <var>d</var> grows
+<p>Writing out a <code>d</code> by <code>d</code> matrix by hand stops being realistic once <code>d</code> grows
 past a handful of demes, and it is actively the wrong shape for a spatial
-topology, where almost every entry is <code class="math-expr">0</code> — each deme migrates only with a
+topology, where almost every entry is <code>0</code> — each deme migrates only with a
 couple of neighbors, not the whole population. Two compact alternatives to
 the dense matrix cover this:</p>
 <p><strong>A sparse neighbor map.</strong> Give only the nonzero off-diagonal weights, keyed
 by deme (one-based) and neighbor (one-based); each deme's self-retention is
-implied as <code class="math-expr">1</code> minus its listed weights, exactly like the scalar case. A
+implied as <code>1</code> minus its listed weights, exactly like the scalar case. A
 deme absent from the map migrates with nobody.</p>
 <pre><code class="language-yaml">m:
   1: {2: 0.01}
@@ -125,28 +125,29 @@ locally instead of globally.</p>
 d: 100
 </code></pre>
 <ul>
-<li><code>ring</code> — a circular chain; deme <var>d</var>'s next neighbor wraps back to deme
-<code class="math-expr">1</code>. Every deme has exactly two neighbors. Requires <var>d</var> at least <code class="math-expr">3</code>.</li>
+<li><code>ring</code> — a circular chain; deme <code>d</code>'s next neighbor wraps back to deme
+<code>1</code>. Every deme has exactly two neighbors. Requires <code>d</code> at least <code>3</code>.</li>
 <li><code>linear</code> — a bounded chain, no wraparound. The two end demes have one
 neighbor instead of two, so an end deme's entire <code>rate</code> goes to its
 single neighbor rather than being split.</li>
 </ul>
 <p>Both the sparse map and the topology sugar are config-file conveniences:
 they expand to the ordinary dense matrix at load time (visible as such in
-<code>report.json</code>/<code>manifest.json</code> and in <code>to_dict()</code>), so nothing downstream —
+<code>report.json</code>/<code>manifest.json</code> and in to_dict()), so nothing downstream —
 <code>migrate()</code>, statistics, persistence — needs to know a sparse form was ever
 involved. Building a <code>SimulationParams</code> directly in Python (bypassing
-<code>from_mapping</code>) still needs an already-dense matrix; call
-<code>fim.model.topology.stepping_stone_neighbors</code> and
-<code>fim.model.topology.dense_matrix_from_neighbors</code> yourself to get one.</p>
+from_mapping) still needs an already-dense matrix; call
+fim.model.topology.stepping_stone_neighbors and
+fim.model.topology.dense_matrix_from_neighbors yourself to get one.</p>
 <p>Migration topologies that no fixed matrix can express — a 2D lattice, or
 neighbor selection that changes over a run — are outside the current
 configuration surface. Both have named landing spots in the design
 document (§9.2, §11); neither is silently missing.</p>
 <h3 id="mu"><code>mu</code></h3>
 <ul>
-<li><strong>Type:</strong> number in <code class="math-expr">[0, 1]</code>, or a list of exactly one rate per locus</li>
-<li><strong>Required:</strong> yes, unless <var>mu</var><sub>b</sub> is given instead (the two are mutually
+<li><strong>Type:</strong> number in <code>[0, 1]</code>, or a list of exactly one rate per locus</li>
+<li><strong>Required:</strong> yes, unless μ<sub>b</sub> (<code>μ&lt;sub&gt;b&lt;/sub&gt;</code>) is given instead (the
+two are mutually
 exclusive)</li>
 <li><strong>Meaning:</strong> per-gene-copy mutation probability per generation</li>
 </ul>
@@ -161,16 +162,17 @@ loci:
   - locus_id: 2
     length: 500
 </code></pre>
-<h4 id="deriving-mu-from-a-per-base-rate">Deriving <var>mu</var> from a per-base rate</h4>
-<p>Configuring <var>mu</var> directly means picking one number per locus by hand, with
+<h4 id="deriving-mu-from-a-per-base-rate">Deriving <code>mu</code> from a per-base rate</h4>
+<p>Configuring <code>mu</code> directly means picking one number per locus by hand, with
 no built-in relationship to that locus's <code>length</code> — nothing stops two
-loci of very different lengths from sharing an identical <var>mu</var>, which
+loci of very different lengths from sharing an identical <code>mu</code>, which
 contradicts the model's own reasoning for why longer loci should mutate
 more often (more sites for a copying error to land on).</p>
-<p><var>mu</var><sub>b</sub> is the alternative: a single per-base-pair mutation probability,
+<p>μ<sub>b</sub> (<code>μ&lt;sub&gt;b&lt;/sub&gt;</code>) is the alternative: a single per-base-pair mutation
+probability,
 from which each locus's own rate is derived using its own <code>length</code>,
 following the differentiation-measures guide's Eq. 5 relation exactly
-(not its linear <code class="math-expr">mu_{b} * length</code> approximation):</p>
+(not its linear <code>μ&lt;sub&gt;b&lt;/sub&gt; * length</code> approximation):</p>
 <pre><code class="language-math">\mathit{mu} = 1 - (1 - \mathit{mu\_b})^{\mathit{length}}
 </code></pre>
 <pre><code class="language-yaml">mu_b: 0.00003
@@ -180,10 +182,11 @@ loci:
   - locus_id: 2
     length: 8000      # mu ≈ 0.216 here — the same mu_b, a much higher mu
 </code></pre>
-<p><var>mu</var><sub>b</sub> is a config-file convenience, expanded to an explicit per-locus
-<var>mu</var> at load time — like every other shorthand in this reference (the
-compact $n_loci/locus_lengths<code>locus form, the migration sparse map, the stepping-stone topology mapping),</code>to_dict()<code>/</code>manifest.json` always
-record the expanded $mu$, never $mu_{b}$ itself.</p>
+<p>μ<sub>b</sub> is a config-file convenience, expanded to an explicit per-locus
+<code>mu</code> at load time — like every other shorthand in this reference (the
+compact n<sub>loci</sub>/locus_lengths locus form, the migration sparse map,
+the stepping-stone topology mapping), to_dict()/<code>manifest.json</code> always
+record the expanded <code>mu</code>, never μ<sub>b</sub> itself.</p>
 <p>By default, every mutation produces a globally novel allele identity; see
 <a href="#mutation_model">mutation_model</a> below for the opt-in alternative.</p>
 <h3 id="seed"><code>seed</code></h3>
@@ -198,15 +201,15 @@ reject against in turn, so non-negativity is the entire legal range.</p>
 <h3 id="loci-1"><code>loci</code></h3>
 <ul>
 <li><strong>Type:</strong> nonempty list of mappings</li>
-<li><strong>Default:</strong> one locus with <code>locus_id: 1</code> and <code>length: 200</code></li>
+<li><strong>Default:</strong> one locus with locus_id: 1 and <code>length: 200</code></li>
 </ul>
-<p>Each entry has a positive <code>length</code> and an optional positive <code>locus_id</code> that
+<p>Each entry has a positive <code>length</code> and an optional positive locus_id that
 defaults to its one-based position. IDs must be unique.</p>
 <p>As an alternative to <code>loci</code>, use:</p>
 <ul>
-<li><code>n_loci</code> — positive locus count, default <code>1</code>;</li>
-<li><code>locus_lengths</code> — one positive integer shared by all loci, or exactly
-<code>n_loci</code> integers, default <code>200</code>.</li>
+<li>n<sub>loci</sub> — positive locus count, default <code>1</code>;</li>
+<li>locus_lengths — one positive integer shared by all loci, or exactly
+n<sub>loci</sub> integers, default <code>200</code>.</li>
 </ul>
 <p>Do not combine the two forms. Differentiation statistics never read
 <code>length</code> directly; it acts only through the mutation model, below.</p>
@@ -223,25 +226,25 @@ one value.</p>
 locus_lengths: [50, 8000]
 </code></pre>
 <h2 id="mutation-model">Mutation model</h2>
-<h3 id="mutationmodel"><code>mutation_model</code></h3>
+<h3 id="mutationmodel">mutation_model</h3>
 <ul>
-<li><strong>Type:</strong> <code>infinite_alleles</code> or <code>finite_alleles</code></li>
-<li><strong>Default:</strong> <code>infinite_alleles</code></li>
+<li><strong>Type:</strong> infinite_alleles or finite_alleles</li>
+<li><strong>Default:</strong> infinite_alleles</li>
 </ul>
 <p>Controls what a mutation event turns an allele <em>into</em>, independently of
 <code>mu</code> (which controls how <em>often</em> one happens).</p>
 <ul>
-<li><code>infinite_alleles</code> (the default): every mutation event produces a label
+<li>infinite_alleles (the default): every mutation event produces a label
 never seen before, anywhere, ever. A good approximation once a locus
 spans many base pairs — see
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/jost-differentiation-measures.md#distance-between-alleles-is-a-different-model">the differentiation-measures guide</a> —
 but increasingly unrealistic for a short locus, where the same state
 can plausibly arise more than once by chance (a <em>recurrence</em>).</li>
-<li><code>finite_alleles</code>: each locus gets a bounded state space of exactly
-<code class="math-expr">4^{length}</code> possible states (the differentiation-measures guide's own
+<li>finite_alleles: each locus gets a bounded state space of exactly
+4<sup>length</sup> possible states (the differentiation-measures guide's own
 worked reasoning: &quot;a single-character locus admits at most four
 alleles&quot;). A mutation event's target is drawn uniformly from the other
-<code class="math-expr">capacity - 1</code> states — never its own current state, but possibly one
+<code>capacity - 1</code> states — never its own current state, but possibly one
 already present elsewhere in the run. This still imposes no ordering or
 distance between alleles; it only gives the label space a ceiling. See
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#32-alleles-loci-and-identity">the simulator design, §3.2 and §9</a>
@@ -254,42 +257,42 @@ loci:
   - locus_id: 1
     length: 1     # capacity 4 — recurrence becomes likely quickly
 </code></pre>
-<p><code>finite_alleles</code> interacts with <code>length</code>, <code>initial_allele_count</code>, and
-<code>p_0</code>: every locus's starting allele IDs — the founding range
-<code>0 .. initial_allele_count - 1</code>, or an explicit <code>p_0</code>'s specific IDs —
-must fit inside that locus's own <code class="math-expr">4^{length}</code> capacity, checked
+<p>finite_alleles interacts with <code>length</code>, initial_allele_count, and
+p<sub>0</sub>: every locus's starting allele IDs — the founding range
+0 .. initial_allele_count - 1, or an explicit p<sub>0</sub>'s specific IDs —
+must fit inside that locus's own 4<sup>length</sup> capacity, checked
 independently per locus. A locus this short with the library default
-<code>initial_allele_count: 2</code> always fits (capacity is at least 4); it is
-easiest to violate by combining a short <code>length</code> with an explicit <code>p_0</code>
+initial_allele_count: 2 always fits (capacity is at least 4); it is
+easiest to violate by combining a short <code>length</code> with an explicit p<sub>0</sub>
 using IDs that were only ever meant for a longer locus.</p>
 <h2 id="initial-conditions">Initial conditions</h2>
-<p>Generation 0 — whether drawn from <code>initial_concentration</code> or supplied
-explicitly via <code>p_0</code> — is a continuous prior, not a state the run's <var>N</var>
+<p>Generation 0 — whether drawn from initial_concentration or supplied
+explicitly via p<sub>0</sub> — is a continuous prior, not a state the run's <code>N</code>
 gene copies could themselves produce; only generation 1 onward, once
-<var>drift</var> has resampled at <var>N</var> gene copies, lands on that discrete
-<code class="math-expr">1/N</code> lattice. See the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md#model-contract">model contract</a>
+<code>drift</code> has resampled at <code>N</code> gene copies, lands on that discrete
+<code>1/N</code> lattice. See the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md#model-contract">model contract</a>
 and <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#33-initial-conditions">simulator design §3.3</a>.</p>
-<h3 id="initialallelecount"><code>initial_allele_count</code></h3>
+<h3 id="initialallelecount">initial_allele_count</h3>
 <ul>
-<li><strong>Type:</strong> positive integer no larger than the smallest <var>N</var></li>
-<li><strong>Default:</strong> <code class="math-expr">2</code></li>
+<li><strong>Type:</strong> positive integer no larger than the smallest <code>N</code></li>
+<li><strong>Default:</strong> <code>2</code></li>
 </ul>
-<p>Founding IDs are locus-relative <code class="math-expr">0</code> through <code class="math-expr">initial_allele_count - 1</code>.</p>
-<h3 id="initialconcentration"><code>initial_concentration</code></h3>
+<p>Founding IDs are locus-relative <code>0</code> through initial_allele_count - 1.</p>
+<h3 id="initialconcentration">initial_concentration</h3>
 <ul>
 <li><strong>Type:</strong> positive number</li>
 <li><strong>Default:</strong> <code>1.0</code></li>
 </ul>
 <p>The random default draws each deme/locus frequency vector independently from a
 symmetric Dirichlet distribution. Smaller values are more uneven.</p>
-<h3 id="p0"><code>p_0</code></h3>
+<h3 id="p0">p<sub>0</sub></h3>
 <ul>
-<li><strong>Type:</strong> optional nested list: <var>d</var> demes, each containing one mapping per
+<li><strong>Type:</strong> optional nested list: <code>d</code> demes, each containing one mapping per
 configured locus</li>
 <li><strong>Default:</strong> absent</li>
 </ul>
 <p>Allele keys are integer IDs and each mapping must sum to 1. When present,
-<code>p_0</code> is used verbatim instead of a Dirichlet draw. Newly mutated allele IDs
+p<sub>0</sub> is used verbatim instead of a Dirichlet draw. Newly mutated allele IDs
 are allocated above both the reserved mutation range and the highest supplied
 ID, so they cannot collide with explicit labels.</p>
 <pre><code class="language-yaml">p_0:
@@ -299,51 +302,51 @@ ID, so they cannot collide with explicit labels.</p>
       1: 0.90
 </code></pre>
 <h2 id="convergence">Convergence</h2>
-<h3 id="convergencestatistic"><code>convergence_statistic</code></h3>
+<h3 id="convergencestatistic">convergence_statistic</h3>
 <ul>
-<li><strong>Type:</strong> one of <code>D</code>, <code>G_ST</code>, <code>E_ST</code>, <code>K_ST</code>, <code>H_S</code>, <code>H_T</code>, or a list of
+<li><strong>Type:</strong> one of <code>D</code>, G<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, or a list of
 several of them</li>
 <li><strong>Default:</strong> <code>D</code></li>
 </ul>
 <p>A list watches several statistics at once — each keeps its own independent
-trailing-window history against the same <code>convergence_window</code> and
-<code>convergence_tolerance</code> — combined by <code>convergence_combinator</code>. A name may
+trailing-window history against the same convergence_window and
+convergence_tolerance — combined by convergence_combinator. A name may
 not repeat.</p>
 <pre><code class="language-yaml">convergence_statistic: [D, G_ST]
 convergence_combinator: any   # stop once either statistic settles
 </code></pre>
-<h3 id="convergencecombinator"><code>convergence_combinator</code></h3>
+<h3 id="convergencecombinator">convergence_combinator</h3>
 <ul>
 <li><strong>Type:</strong> <code>all</code> or <code>any</code></li>
 <li><strong>Default:</strong> <code>all</code></li>
 </ul>
-<p>Only meaningful when <code>convergence_statistic</code> is a list: <code>all</code> requires every
+<p>Only meaningful when convergence_statistic is a list: <code>all</code> requires every
 watched statistic to be simultaneously stable before stopping (a strict
 reading of &quot;several statistics need to agree&quot;); <code>any</code> stops as soon as one
 of them is. With a single statistic — the default — the two are the same
 value by construction, so this key has no effect and needs no attention.</p>
-<h3 id="convergencewindow"><code>convergence_window</code></h3>
+<h3 id="convergencewindow">convergence_window</h3>
 <ul>
 <li><strong>Type:</strong> integer at least 2</li>
 <li><strong>Default:</strong> <code>50</code></li>
 </ul>
 <p>The monitor compares the means of the first and second halves of the trailing
-window. An odd window splits as <code class="math-expr">\lfloor{window / 2\rfloor</code> observations in the first half
-and one more in the second (a window of <code class="math-expr">5</code> compares <code class="math-expr">2</code> against <code class="math-expr">3</code>) — legal,
+window. An odd window splits as \lfloor{window / 2\rfloor observations in the first half
+and one more in the second (a window of <code>5</code> compares <code>2</code> against <code>3</code>) — legal,
 but the two halves are then unevenly sized, unlike an even window. Rejected
-if it exceeds <code class="math-expr">max_generations + 1</code> — generation 0 is
+if it exceeds max_generations + 1 — generation 0 is
 always recorded before the run loop's first step, so a run watching
-<code>max_generations</code> records at most that many generations; a window
+max_generations records at most that many generations; a window
 larger than that could never fill before the hard cap stops the run,
 so convergence could never be detected.</p>
-<h3 id="convergencetolerance"><code>convergence_tolerance</code></h3>
+<h3 id="convergencetolerance">convergence_tolerance</h3>
 <ul>
 <li><strong>Type:</strong> non-negative finite number</li>
 <li><strong>Default:</strong> <code>0.01</code></li>
 </ul>
 <p>The statistic converges when the half-window mean difference is at most this
 value.</p>
-<h3 id="maxgenerations"><code>max_generations</code></h3>
+<h3 id="maxgenerations">max_generations</h3>
 <ul>
 <li><strong>Type:</strong> positive integer</li>
 <li><strong>Default:</strong> <code>10000</code></li>
@@ -351,69 +354,69 @@ value.</p>
 <p>This safety cap always ends a run. Reaching it is reported as a valid
 non-converged outcome.</p>
 <h2 id="analysis-and-execution">Analysis and execution</h2>
-<h3 id="demeweighting"><code>deme_weighting</code></h3>
+<h3 id="demeweighting">deme_weighting</h3>
 <ul>
 <li><strong>Type:</strong> <code>size</code> or <code>equal</code></li>
 <li><strong>Default:</strong> <code>size</code></li>
 </ul>
-<p>This setting controls <var>E</var><sub>ST</sub>. Jost's <var>D</var> and <var>K</var><sub>ST</sub> use equal deme weighting by
+<p>This setting controls E<sub>ST</sub>. Jost's <code>D</code> and K<sub>ST</sub> use equal deme weighting by
 definition. When every deme is the same size, both settings produce the same
-<var>E</var><sub>ST</sub>.</p>
-<h3 id="nreplicates"><code>n_replicates</code></h3>
+E<sub>ST</sub>.</p>
+<h3 id="nreplicates">n<sub>replicates</sub></h3>
 <ul>
 <li><strong>Type:</strong> positive integer</li>
 <li><strong>Default:</strong> <code>1</code></li>
 </ul>
-<p><code>n_replicates</code> runs that many independently seeded scalar runs — seeds
-<var>seed</var>, <code class="math-expr">seed + 1</code>, and so on — through both the library API
+<p>n<sub>replicates</sub> runs that many independently seeded scalar runs — seeds
+<code>seed</code>, <code>seed + 1</code>, and so on — through both the library API
 (<code>fim.engine.fim</code>, returning one <code>RunResult</code> per replicate) and the CLI
 (<code>fim run</code>, writing one <code>replicate-NNN/</code> subdirectory per replicate; see
-<a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation">Using <code>fim</code></a>). With <code>replicate_tolerance</code> unset
-(the default), exactly <code>n_replicates</code> run. With it set, <code>n_replicates</code>
-instead becomes the hard cap on an adaptive stop — see <code>replicate_tolerance</code>
+<a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation">Using <code>fim</code></a>). With replicate_tolerance unset
+(the default), exactly n<sub>replicates</sub> run. With it set, n<sub>replicates</sub>
+instead becomes the hard cap on an adaptive stop — see replicate_tolerance
 below.</p>
-<h3 id="replicatetolerance"><code>replicate_tolerance</code></h3>
+<h3 id="replicatetolerance">replicate_tolerance</h3>
 <ul>
 <li><strong>Type:</strong> non-negative finite number, or omitted</li>
-<li><strong>Default:</strong> unset (fixed-count batching; see <code>n_replicates</code>)</li>
+<li><strong>Default:</strong> unset (fixed-count batching; see n<sub>replicates</sub>)</li>
 </ul>
-<p>Opt-in early stopping for a replicate batch (<code>n_replicates</code> greater than
-one): once at least <code>replicate_minimum</code> replicates have run, stop as soon
-as every statistic named in <code>convergence_statistic</code> has an across-replicate
+<p>Opt-in early stopping for a replicate batch (n<sub>replicates</sub> greater than
+one): once at least replicate_minimum replicates have run, stop as soon
+as every statistic named in convergence_statistic has an across-replicate
 Student's-t confidence interval (mean of that statistic's own final value
-across replicates so far) with a half-width at most <code>replicate_tolerance</code>
-— combined across several watched statistics by <code>convergence_combinator</code>,
-exactly like within-run convergence. <code>n_replicates</code> is still the hard cap:
+across replicates so far) with a half-width at most replicate_tolerance
+— combined across several watched statistics by convergence_combinator,
+exactly like within-run convergence. n<sub>replicates</sub> is still the hard cap:
 reaching it without tightening ends the batch anyway, a valid,
 non-adaptively-stopped result. This is the mechanism that answers &quot;how many
 replicate runs are needed for a confidence interval&quot; without guessing a
 fixed count in advance — see each statistic's realized interval in
-<code>summary.json</code> (CLI) or <code>fim.engine.replicate_summary</code> (library).</p>
+<code>summary.json</code> (CLI) or fim.engine.replicate_summary (library).</p>
 <pre><code class="language-yaml">n_replicates: 200          # hard cap
 replicate_tolerance: 0.02  # stop once every watched statistic is this tight
 replicate_minimum: 20
 </code></pre>
-<h3 id="replicateminimum"><code>replicate_minimum</code></h3>
+<h3 id="replicateminimum">replicate_minimum</h3>
 <ul>
 <li><strong>Type:</strong> integer at least 2</li>
 <li><strong>Default:</strong> <code>10</code></li>
 </ul>
-<p>The fewest replicates before <code>replicate_tolerance</code> is even checked — the
-replicate-layer analog of <code>convergence_window</code>, guarding against a
+<p>The fewest replicates before replicate_tolerance is even checked — the
+replicate-layer analog of convergence_window, guarding against a
 lucky-early-tight fluke from too small a sample. Only meaningful when
-<code>replicate_tolerance</code> is set. Whenever it is set together with
-<code>n_replicates</code> greater than one, <code>replicate_minimum</code> is rejected if it
-exceeds <code>n_replicates</code>: adaptive stopping could never be evaluated
+replicate_tolerance is set. Whenever it is set together with
+n<sub>replicates</sub> greater than one, replicate_minimum is rejected if it
+exceeds n<sub>replicates</sub>: adaptive stopping could never be evaluated
 before the replicate cap ends the batch.</p>
-<h3 id="replicateconfidence"><code>replicate_confidence</code></h3>
+<h3 id="replicateconfidence">replicate_confidence</h3>
 <ul>
 <li><strong>Type:</strong> <code>0.90</code>, <code>0.95</code>, or <code>0.99</code></li>
 <li><strong>Default:</strong> <code>0.95</code></li>
 </ul>
-<p>The two-tailed confidence level used by <code>replicate_tolerance</code>'s interval,
-and by <code>summary.json</code>/<code>replicate_summary</code>'s reported intervals. Only
-meaningful when <code>replicate_tolerance</code> is set.</p>
-<h3 id="migrantsampling"><code>migrant_sampling</code></h3>
+<p>The two-tailed confidence level used by replicate_tolerance's interval,
+and by <code>summary.json</code>/replicate_summary's reported intervals. Only
+meaningful when replicate_tolerance is set.</p>
+<h3 id="migrantsampling">migrant_sampling</h3>
 <ul>
 <li><strong>Type:</strong> <code>continuous</code> or <code>stochastic</code></li>
 <li><strong>Default:</strong> <code>continuous</code></li>
@@ -422,16 +425,16 @@ meaningful when <code>replicate_tolerance</code> is set.</p>
 which <code>m</code> shape is configured above.</p>
 <ul>
 <li><code>continuous</code> (the default): each deme's migrant count is exactly
-<code class="math-expr">N_{i} * rate</code>
-(or, for a matrix row, <var>N</var><sub>i</sub> times that row's non-self weight) — a fixed
+N<sub>i</sub> * rate
+(or, for a matrix row, N<sub>i</sub> times that row's non-self weight) — a fixed
 fraction, not a random draw.</li>
 <li><code>stochastic</code>: each deme's migrant count is instead drawn fresh every
-generation from <code class="math-expr">Binomial(N_{i}, rate)</code> — mean <code class="math-expr">N_{i} * rate</code>, matching the
+generation from Binomial(N<sub>i</sub>, rate) — mean N<sub>i</sub> * rate, matching the
 continuous case in expectation, but varying generation to generation.
 Migrant <em>composition</em> is unaffected either way: migrants still carry
 exactly the deterministic, weighted pool average. Requires a concrete
-<var>N</var> (always true for a CLI run; a direct <code>fim.model.operators.migrate</code>
-call needs <code>population_size</code>).</li>
+<code>N</code> (always true for a CLI run; a direct <code>fim.model.operators.migrate</code>
+call needs population_size).</li>
 </ul>
 <pre><code class="language-yaml">migrant_sampling: stochastic
 </code></pre>
@@ -453,15 +456,15 @@ for why the two don't compound.</p>
 </thead>
 <tbody>
 <tr>
-<td><code class="math-expr">N &lt; 1</code>, <code class="math-expr">d &lt; 2</code></td>
+<td><code>N &lt; 1</code>, <code>d &lt; 2</code></td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><var>m</var> or <var>mu</var> outside <code class="math-expr">[0, 1]</code></td>
+<td><code>m</code> or <code>mu</code> outside <code>[0, 1]</code></td>
 <td>rejected</td>
 </tr>
 <tr>
-<td>missing <var>seed</var>, or <code class="math-expr">seed &lt; 0</code></td>
+<td>missing <code>seed</code>, or <code>seed &lt; 0</code></td>
 <td>rejected</td>
 </tr>
 <tr>
@@ -477,67 +480,67 @@ for why the two don't compound.</p>
 <td>rejected by name</td>
 </tr>
 <tr>
-<td>matrix/list shape not matching <var>d</var></td>
+<td>matrix/list shape not matching <code>d</code></td>
 <td>rejected</td>
 </tr>
 <tr>
-<td>unrecognized or repeated <code>convergence_statistic</code> entry</td>
+<td>unrecognized or repeated convergence_statistic entry</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><var>m</var> sparse-map deme/neighbor id outside <code class="math-expr">[1..d]</code>, a self-loop, or weights summing past <code class="math-expr">1</code></td>
+<td><code>m</code> sparse-map deme/neighbor id outside <code>[1..d]</code>, a self-loop, or weights summing past <code>1</code></td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><var>m</var> topology mapping missing <code>topology</code>/<code>rate</code>, an unknown key, or an unrecognized topology name</td>
+<td><code>m</code> topology mapping missing <code>topology</code>/<code>rate</code>, an unknown key, or an unrecognized topology name</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><var>m</var> ring topology with <code class="math-expr">d &lt; 3</code></td>
+<td><code>m</code> ring topology with <code>d &lt; 3</code></td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><code>migrant_sampling</code> not <code>continuous</code> or <code>stochastic</code></td>
+<td>migrant_sampling not <code>continuous</code> or <code>stochastic</code></td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><code>mutation_model</code> not <code>infinite_alleles</code> or <code>finite_alleles</code></td>
+<td>mutation_model not infinite_alleles or finite_alleles</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><code>finite_alleles</code> with a locus's starting allele IDs exceeding its <code class="math-expr">4^{length}</code> capacity</td>
+<td>finite_alleles with a locus's starting allele IDs exceeding its 4<sup>length</sup> capacity</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td>both <var>mu</var> and <var>mu</var><sub>b</sub> given, or neither</td>
+<td>both <code>mu</code> and μ<sub>b</sub> given, or neither</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><var>mu</var> list length not matching the locus count</td>
+<td><code>mu</code> list length not matching the locus count</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><var>mu</var><sub>b</sub> outside <code class="math-expr">[0, 1]</code></td>
+<td>μ<sub>b</sub> outside <code>[0, 1]</code></td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><code>replicate_tolerance</code> negative or non-finite</td>
+<td>replicate_tolerance negative or non-finite</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><code>replicate_minimum</code> less than 2</td>
+<td>replicate_minimum less than 2</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><code>convergence_window</code> greater than <code class="math-expr">max_generations + 1</code></td>
+<td>convergence_window greater than max_generations + 1</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><code>replicate_minimum</code> greater than <code>n_replicates</code> (with <code>replicate_tolerance</code> set and <code class="math-expr">n_replicates &gt; 1</code>)</td>
+<td>replicate_minimum greater than n<sub>replicates</sub> (with replicate_tolerance set and n<sub>replicates</sub> &gt; 1)</td>
 <td>rejected</td>
 </tr>
 <tr>
-<td><code>replicate_confidence</code> not <code>0.90</code>, <code>0.95</code>, or <code>0.99</code></td>
+<td>replicate_confidence not <code>0.90</code>, <code>0.95</code>, or <code>0.99</code></td>
 <td>rejected</td>
 </tr>
 </tbody>

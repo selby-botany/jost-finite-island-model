@@ -83,8 +83,8 @@ answer "what is the equilibrium statistic?", not "show me every
 generation's allele frequencies" — and per-generation history is exactly
 what this project exists to keep.
 
-The core is a single, symmetric-island model ($N$, $m$, $\mu$ shared across
-demes by default; one allele length $L$ shared across loci by default)
+The core is a single, symmetric-island model (`N`, `m`, μ shared across
+demes by default; one allele length `L` shared across loci by default)
 built so that further variations are extensions of the parameter set and
 the update pipeline rather than rewrites of it. Section §9 maps every
 "what if" this way, and separates the variations the simulator already
@@ -98,14 +98,14 @@ deferred (§11).
 
 The simulator's functional requirements, restated for reference:
 
-1. Simulate the FIM: $fim(N, m, \mu, d; 𝖯) ⇒ {\psi_{k,t} : k \in [1..d], t \in  \mathbb{Z}+}$.
-   $N$, $m$, $\mu$, $d$ are named inputs; $𝖯$ is an open, untyped bag of
-   further parameters. $\psi_{k,t}$ is the state of deme $k$ at generation $t$.
+1. Simulate the FIM: fim(N, m, μ, d; 𝖯) ⇒ {\psi<sub>k,t</sub> : k ∈ [1..d], t ∈  ℤ+}.
+   `N`, `m`, μ, `d` are named inputs; `𝖯` is an open, untyped bag of
+   further parameters. \psi<sub>k,t</sub> is the state of deme `k` at generation `t`.
    The run ends when a selected population statistic converges.
-2. Alleles are an unordered, countably infinite set ${a_{k} : k \in \mathbb{Z}+}$ with
-   identity comparison $same(a_{j}, a_{k}) = (j \equiv k)$ and no other structure
+2. Alleles are an unordered, countably infinite set {a<sub>k</sub> : k ∈ ℤ+} with
+   identity comparison same(a<sub>j</sub>, a<sub>k</sub>) = (j \equiv k) and no other structure
    — no ordering, no distance, no similarity.
-3. Each allele has a locus $l \in \mathbb{Z}+$ and a length $L \in \mathbb{Z}+$. $L$ may vary
+3. Each allele has a locus l ∈ ℤ+ and a length L ∈ ℤ+. `L` may vary
    independently per locus.
 4. Initial allele-frequency distributions per deme may be random; the
    model is asserted to converge analytically for any starting
@@ -114,7 +114,7 @@ The simulator's functional requirements, restated for reference:
    final state is reported.
 6. Botanist-facing output is (a) final population-differentiation metrics
    (scalars) and (b) per-deme allele-frequency distributions, with a
-   canonical visual of a scatter plot of allele frequency in $d$-dimensional
+   canonical visual of a scatter plot of allele frequency in `d`-dimensional
    space.
 
 Two places in this list carry real ambiguity, worth naming rather than
@@ -123,10 +123,10 @@ silently resolving:
 - **"Locus" vs. "allele" as the length-bearer** (item 3). The companion
   differentiation-measures document (Part I) defines length as a property
   of the **locus** (the interval), not the allele (the value found there):
-  $\mu \approx \mu_{b} · L$ for a per-base-pair rate $\mu_{b}$. §3.2 below follows that
-  document, treating $L$ as a `LocusSpec` field.
+  μ ≈ μ<sub>b</sub> · L for a per-base-pair rate μ<sub>b</sub>. §3.2 below follows that
+  document, treating `L` as a `LocusSpec` field.
 - **"Converges" applied to a stochastic process that has no fixed point**
-  (item 1, item 4). Under the finite island model with $\mu > 0$, no state
+  (item 1, item 4). Under the finite island model with μ > 0, no state
   is absorbing — allele frequencies keep moving forever, and the system
   settles into a *stochastic equilibrium*: the **distribution** of a
   summary statistic stabilizes, not the state itself. §3.5 makes this
@@ -143,7 +143,7 @@ adds up to in practice.*
 \mathrm{fim}(N, m, \mu, d;\, \mathsf{P}) \;\Rightarrow\; \{\psi_{k,t} : k \in [1..d],\ t \in \mathbf{Z}^+\}
 ```
 
-`\psi_k,t` is deme `k`'s complete state at generation `t`: one allele-frequency
+\psi_k,t is deme `k`'s complete state at generation `t`: one allele-frequency
 vector per tracked locus.
 
 ```math
@@ -154,36 +154,36 @@ p_{k,t,l} : \text{Allele} \to [0, 1],
 \sum_{a} p_{k,t,l}(a) = 1
 ```
 
-`p_{k,t,l}` is a probability vector over whatever alleles are actually
-present at locus $l$ in deme $k$ at generation $t$ — not over the whole
+p<sub>k,t,l</sub> is a probability vector over whatever alleles are actually
+present at locus `l` in deme `k` at generation `t` — not over the whole
 infinite allele universe. This is the load-bearing representational choice
-(§3.2): the universe is unbounded, but the *support* of $p_{k,t,l}$ is
-never larger than $N$ (there are only $N$ gene copies at that locus in
+(§3.2): the universe is unbounded, but the *support* of p<sub>k,t,l</sub> is
+never larger than `N` (there are only `N` gene copies at that locus in
 that deme to be one allele or another — see the ploidy note directly
 below), so the state is finite and small at every instant even though the
 label space it draws from is not.
 
-**$N$ is a gene-copy count, not an individual count — deliberately
-ploidy-neutral.** The companion introduction document frames $N$ as
-"diploid individuals per deme," i.e. $2N$ gene copies, which is the
+**`N` is a gene-copy count, not an individual count — deliberately
+ploidy-neutral.** The companion introduction document frames `N` as
+"diploid individuals per deme," i.e. `2N` gene copies, which is the
 standard convention for autosomal nuclear markers and is what most of that
 document's exposition assumes. Jost's own worked examples (the "Dear
-Nolan" letter — §4.3, §8) are explicitly **haploid**: $N$ there already
+Nolan" letter — §4.3, §8) are explicitly **haploid**: `N` there already
 *is* the gene-copy count. Rather than bake in a ploidy assumption and
-special-case haploid markers later, `fim`'s $N$ is defined here as the
-gene-copy count directly, and `drift` (§3.4, §5) draws $N$ copies, not
-$2N$. A caller modeling diploid autosomal individuals passes $N = 2 ×
-(census individuals)$; a caller modeling a haploid marker (mitochondrial
+special-case haploid markers later, `fim`'s `N` is defined here as the
+gene-copy count directly, and `drift` (§3.4, §5) draws `N` copies, not
+`2N`. A caller modeling diploid autosomal individuals passes `N = 2 ×
+(census individuals)`; a caller modeling a haploid marker (mitochondrial
 DNA, a Y-chromosome locus, an organelle genome) passes census individuals
 directly, unchanged. This is strictly more general — it covers both cases
 with one parameter and no ploidy flag — and it is what makes Jost's own
-example parameters ($N = 100$, $N = 2000$) usable as §4.3's default
+example parameters (`N = 100`, `N = 2000`) usable as §4.3's default
 scenarios without a conversion.
 
 ### 3.2 Alleles, loci, and identity
 
-An allele is an opaque label with exactly one operation: $same(a_{j}, a_{k}) =
-(j \equiv k)$. No ordering, no metric, no structure — this is deliberate (the
+An allele is an opaque label with exactly one operation: `same(a<sub>j</sub>, a<sub>k</sub>) =
+(j \equiv k)`. No ordering, no metric, no structure — this is deliberate (the
 differentiation-measures guide, "Distance between alleles is a different
 model," is explicit that imposing a metric on alleles answers a different
 question than the one this model and Jost's statistics are built for).
@@ -196,55 +196,55 @@ default (every mutation event produces a label never seen before — a good
 approximation once a locus spans "many base pairs," per the
 differentiation-measures guide). A single global `AlleleRegistry` hands out
 the next unused integer on every mutation event across the whole run,
-guaranteeing $same()$ is exactly integer equality with no risk of two
+guaranteeing `same()` is exactly integer equality with no risk of two
 independent mutations colliding on the same label.
 
-An opt-in finite-alleles ($K$-allele) model (§9) relaxes that assumption for
+An opt-in finite-alleles (`K`-allele) model (§9) relaxes that assumption for
 loci short enough that it stops holding: each locus gets a bounded state
-space of $4 ** L$ possible states, and a mutation event can *recur* to a
+space of `4 ** L` possible states, and a mutation event can *recur* to a
 state already present elsewhere in the run rather than always minting
 fresh. This still imposes no ordering or metric on
-alleles — a K-allele target is chosen uniformly among the other $K - 1$
+alleles — a K-allele target is chosen uniformly among the other `K - 1`
 states, with no notion of one being "closer" to another — so it stays
 inside the same distance-free identity model as the paragraph above, only
 with a ceiling.
 
 A locus is a separate concept from an allele: it names *where* to look,
-carrying its own identity $l \in \mathbb{Z}+$ and length $L \in \mathbb{Z}+$. $L$ matters
-through the mutation rate ($\mu \approx \mu_{b} · L$, per the differentiation-measures
+carrying its own identity l ∈ ℤ+ and length L ∈ ℤ+. `L` matters
+through the mutation rate (μ ≈ μ<sub>b</sub> · L, per the differentiation-measures
 guide) and, under the finite-alleles model only, through that state-space
 ceiling; it plays no role in any statistic computed from a frequency
-vector. It is represented as a `LocusSpec(locus_id, length)` value object,
+vector. It is represented as a LocusSpec(locus_id, length) value object,
 with every run configuration providing one `LocusSpec` per tracked locus.
 `length` may be equal across loci (the common case) or vary per locus
 (§9); either way it is a data change, never a schema change.
 
 ### 3.3 Initial conditions
 
-The per-deme, per-locus initial frequency vector $p_{k,0,l}$ is generated,
+The per-deme, per-locus initial frequency vector p<sub>k,0,l</sub> is generated,
 not hand-specified, by default: an i.i.d. symmetric Dirichlet draw over a
-starting allele set, one draw per $(deme, locus)$ pair, seeded from the
+starting allele set, one draw per `(deme, locus)` pair, seeded from the
 run's RNG seed for exact reproducibility. Concentration parameter and
 starting allele count live in `𝖯` (§4.3), not as hardcoded constants —
 different concentration values produce visibly different starting
 "evenness," which is itself a useful knob for a botanist probing the
-model. An explicit, user-supplied `p_0` is also accepted as an alternative
+model. An explicit, user-supplied p<sub>0</sub> is also accepted as an alternative
 initial-condition source, for reproducing a specific published scenario or
 a real allele-frequency survey as a starting point.
 
 **Generation 0 is a continuous prior, not a state on the model's own
-$1/N$ lattice.** Every generation from 1 onward is produced by `drift`
-(§3.4), a multinomial resample at exactly $N$ gene copies, so every
+`1/N` lattice.** Every generation from 1 onward is produced by `drift`
+(§3.4), a multinomial resample at exactly `N` gene copies, so every
 frequency at generation 1 or later is a ratio of integers with
-denominator $N$ — the only values $N$ gene copies can actually realize.
+denominator `N` — the only values `N` gene copies can actually realize.
 `DirichletInitialCondition`'s draw has no such constraint: a symmetric
 Dirichlet distribution is continuous, so generation 0's frequencies
 almost surely do *not* land on that lattice (an explicit, user-supplied
-`p_0` is not bound by it either). This is deliberate, not an oversight —
+p<sub>0</sub> is not bound by it either). This is deliberate, not an oversight —
 generation 0 represents the *belief* a starting frequency is drawn from,
 not a sampled population state, and `drift`'s first application (to
 produce generation 1) is what turns that belief into the model's first
-actual $N$-gene-copy realization. A statistic computed at generation 0
+actual `N`-gene-copy realization. A statistic computed at generation 0
 (`fim stats --generation 0`) describes this continuous prior, not a
 population; treat it accordingly rather than assuming it is comparable,
 lattice-for-lattice, to every later generation.
@@ -259,8 +259,8 @@ operational: detect, empirically, when a chosen statistic has stopped
 moving (§3.5).
 
 One labeling detail worth being deliberate about: the founding allele set
-at $t = 0$ for each locus is assigned small, **locus-relative** IDs ($0,
-1, …$ up to $initial_allele_count - 1$) rather than draws from the same
+at `t = 0` for each locus is assigned small, **locus-relative** IDs (`0,
+1, …` up to initial_allele_count - 1) rather than draws from the same
 global `AlleleRegistry` counter used for mutations. This is what keeps a
 question like "did locus 1 and locus 2 fix on the same starting allele"
 well-defined and cheap to answer — it reduces to comparing two small
@@ -299,14 +299,14 @@ step, is what makes both halves easy to verify independently.
 
 ### 3.5 What "converges" means here
 
-There is no state to converge to once $\mu > 0$ — frequencies keep moving
+There is no state to converge to once μ > 0 — frequencies keep moving
 forever. What the requirement means, operationally, is: **the value of a
 chosen population statistic, tracked generation over generation, stops
 changing beyond a tolerance, over a trailing window of generations.** That
-is a statement about the statistic's trajectory, not about $\psi$ itself, and
+is a statement about the statistic's trajectory, not about \psi itself, and
 it is what `ConvergenceMonitor` (§5) actually implements.
 
-Degenerate case worth naming: if $\mu = 0$ exactly, the whole system *is*
+Degenerate case worth naming: if μ = 0 exactly, the whole system *is*
 eventually absorbed (every deme fixed for a single shared allele, per the
 finite-island-model introduction §2.2) — a literal fixed point. The
 monitor should detect that case as a special, faster-converging instance
@@ -358,16 +358,16 @@ trajectory should never require re-running the simulation.
 
 ### 4.2 Data flow
 
-1. `SimulationParams` (validated) plus a seed produce an initial $\psi_{0}$ via
+1. `SimulationParams` (validated) plus a seed produce an initial \psi_0 via
    the initial-condition generator (§3.3).
-2. The run loop writes $\psi_{0}$ to the `TrajectoryStore`, then repeatedly
-   applies the update pipeline (§3.4), writing each $\psi_{t}$ as it is
-   produced, and feeding the chosen statistic's value at $\psi_{t}$ to the
+2. The run loop writes \psi_0 to the `TrajectoryStore`, then repeatedly
+   applies the update pipeline (§3.4), writing each \psi_t as it is
+   produced, and feeding the chosen statistic's value at \psi_t to the
    `ConvergenceMonitor`.
 3. When the monitor signals stop (statistic converged) or a hard
    generation cap is hit (safety valve — see §5), the loop ends.
 4. The statistics module computes the full final-generation report from
-   $\psi_{T}$.
+   \psi<sub>T</sub>.
 5. The visualization module reads from the `TrajectoryStore` (for the
    canonical scatter and any diagnostic plots) and from the final report.
 
@@ -388,17 +388,17 @@ that has to change when a key is added.
 | Key | Meaning | Default |
 |---|---|---|
 | `seed` | RNG seed for the whole run | required, no default |
-| `n_loci` | number of independent loci tracked | `1` |
-| `locus_lengths` | `LocusSpec.length` per locus | one shared constant |
-| `initial_allele_count` | starting allele count per locus | `2` (biallelic/SNP-like) |
-| `initial_concentration` | Dirichlet concentration for random start | `1.0` (uniform) |
-| `deme_weighting` | `"equal"` or `"size"` — used only by $E_{ST}$; every other reported statistic ($D$, $G_{ST}$, $K_{ST}$, $H_{S}$, $H_{T}$, $H_{ST}$) always uses equal deme weighting regardless of this setting | `"size"` |
-| `convergence_statistic` | which statistic(s) the monitor watches | $D$ |
-| `convergence_window` | trailing-window length, generations | `50` |
-| `convergence_tolerance` | stability tolerance on that window | `0.01` |
-| `max_generations` | hard safety cap | `10000` |
+| n<sub>loci</sub> | number of independent loci tracked | `1` |
+| locus_lengths | `LocusSpec.length` per locus | one shared constant |
+| initial_allele_count | starting allele count per locus | `2` (biallelic/SNP-like) |
+| initial_concentration | Dirichlet concentration for random start | `1.0` (uniform) |
+| deme_weighting | `"equal"` or `"size"` — used only by E<sub>ST</sub>; every other reported statistic (`D`, G<sub>ST</sub>, K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>) always uses equal deme weighting regardless of this setting | `"size"` |
+| convergence_statistic | which statistic(s) the monitor watches | `D` |
+| convergence_window | trailing-window length, generations | `50` |
+| convergence_tolerance | stability tolerance on that window | `0.01` |
+| max_generations | hard safety cap | `10000` |
 
-$N$ and $m$ each accept either a scalar (the symmetric case) or an
+`N` and `m` each accept either a scalar (the symmetric case) or an
 array/matrix (per-deme size, full or sparse migration matrix) — see §9.
 Passing a richer value for either is a config change, not a new code path
 threaded through the operators.
@@ -407,47 +407,47 @@ threaded through the operators.
 more general case — it is well-defined and correct whether or not deme
 sizes actually differ — while `"equal"` is only correct in the special
 case they don't. The two weighting choices are numerically identical only
-when every deme's $N_{i}$ happens to be equal; with unequal deme sizes (§9)
-they diverge, and `"size"` is the correct one. $D$ remains defined with
+when every deme's N<sub>i</sub> happens to be equal; with unequal deme sizes (§9)
+they diverge, and `"size"` is the correct one. `D` remains defined with
 equal deme weighting by construction regardless of this setting (§7); so
-do $G_{ST}$, $K_{ST}$, $H_{S}$, $H_{T}$, and $H_{ST}$ — the `deme_weighting` key
-governs $E_{ST}$ alone (`fim.statistics.differentiation.statistics_report`)
-and nothing else, so setting `convergence_statistic` to anything other
-than $E_{ST}$ makes this key a no-op for that run.
+do G<sub>ST</sub>, K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, and H<sub>ST</sub> — the deme_weighting key
+governs E<sub>ST</sub> alone (fim.statistics.differentiation.statistics_report)
+and nothing else, so setting convergence_statistic to anything other
+than E<sub>ST</sub> makes this key a no-op for that run.
 
-**Default values.** `convergence_window` and `convergence_tolerance` have
+**Default values.** convergence_window and convergence_tolerance have
 no botanically-derived default — the values above (`50` generations,
 `0.01`) are generic stability-detection defaults, not a claim about what a
-real study needs; a real study should tune them. For $N$, $m$, $\mu$, and
-$d$ themselves, Jost's own "Dear Nolan" letter (identified above; see
+real study needs; a real study should tune them. For `N`, `m`, μ, and
+`d` themselves, Jost's own "Dear Nolan" letter (identified above; see
 [§8](#8-visualization-module) and [§10](#10-validation-and-test-strategy)
 for how it is used there) gives two concrete, real worked scenarios —
 run by Jost's colleagues Anne Chao and T. C. Hsieh specifically to test
 the finite island model at equilibrium — which are a far better source for a
 starting scenario than an arbitrary guess:
 
-| Scenario | $N$ | $d$ | $m$ | $\mu$ | $Nm$ | expected $G_{ST}$ | expected $D$ |
+| Scenario | `N` | `d` | `m` | μ | `Nm` | expected G<sub>ST</sub> | expected `D` |
 |---|---|---|---|---|---|---|---|
 | Low migration, low mutation | `100` | `5` | `0.0001` | `0.000001` | `0.01` | `0.97` | `0.04` |
 | Higher migration, higher mutation | `2000` | `100` | `0.01` | `0.001` | `20` | `0.02` | `0.91` |
 
 **A stopping rule must be reachable, not just well-typed.**
-`convergence_window` and `replicate_minimum` are each individually
+convergence_window and replicate_minimum are each individually
 bounds-checked (above; §9), but a value can pass that check and still
-describe a rule the engine could never satisfy: a `convergence_window`
-larger than `max_generations + 1` (the most generations a run can ever
-record — generation 0 plus `max_generations` steps) can never fill
-before the generation cap ends the run, and a `replicate_minimum`
-larger than `n_replicates` can never be reached before the batch's own
-replicate cap ends it. `SimulationParams.__post_init__` rejects both
+describe a rule the engine could never satisfy: a convergence_window
+larger than max_generations + 1 (the most generations a run can ever
+record — generation 0 plus max_generations steps) can never fill
+before the generation cap ends the run, and a replicate_minimum
+larger than n<sub>replicates</sub> can never be reached before the batch's own
+replicate cap ends it. SimulationParams.__post_init__ rejects both
 at construction rather than letting the run complete and report an
 ordinary-looking capped result with no indication the configured
 stopping rule was unreachable from the start.
 
 Both scenarios are explicitly **haploid** in the letter ("`N=100` haploid
 reproductive individuals," "`100` demes of `2000` haploid reproductive
-individuals") — i.e. $N$ there already is the gene-copy count, which is
-exactly the ploidy-neutral convention §3.1 adopts for `fim`'s own $N$, so
+individuals") — i.e. `N` there already is the gene-copy count, which is
+exactly the ploidy-neutral convention §3.1 adopts for `fim`'s own `N`, so
 these two scenarios plug in directly with no conversion. (Mean *observed*
 values from the letter's own simulations agree closely with the expected
 values shown above — `0.04` observed vs. `0.04` expected `D` for the
@@ -456,14 +456,14 @@ which is itself a small piece of corroborating evidence that the letter's
 worked examples are internally consistent.)
 
 These two points sit at opposite ends of the interesting range — one
-nearly fully fixed ($G_{ST}$ near its ceiling, $D$ near zero — the demes
+nearly fully fixed (G<sub>ST</sub> near its ceiling, `D` near zero — the demes
 agree because everything has drifted to one shared allele), the other
-strongly allelically differentiated ($D$ near one) while barely departing
-from fixation-neutrality ($G_{ST}$ near zero) — which is exactly the point
+strongly allelically differentiated (`D` near one) while barely departing
+from fixation-neutrality (G<sub>ST</sub> near zero) — which is exactly the point
 the letter itself is making (Nm does not control allelic differentiation;
-$m/[\mu(d-1)]$ does), rendered as a parameter sweep rather than a static
-table. Approximately the geometric midpoint of the two — $N \approx 450$, $d \approx 20$,
-$m \approx 0.001$, $\mu \approx 0.00003$ — is the default scenario for exercising the
+m/[μ(d-1)] does), rendered as a parameter sweep rather than a static
+table. Approximately the geometric midpoint of the two — N ≈ 450, d ≈ 20,
+m ≈ 0.001, μ ≈ 0.00003 — is the default scenario for exercising the
 simulator end to end, sitting between the two regimes rather than at
 either extreme.
 
@@ -474,7 +474,7 @@ d=5 m=0.0001 u=0.000001"`): `L` there is the number of independent
 respectively) — confirmed, not merely suspected — and is **not** the same
 `L` as this document's `LocusSpec.length` (§3.2) despite the shared
 letter; a coincidence of the letter's own notation (which also writes the
-mutation rate as `u`, not `\mu`), not a hint about locus-length defaults.
+mutation rate as `u`, not μ), not a hint about locus-length defaults.
 
 ### 4.4 Language and library choice
 
@@ -577,7 +577,7 @@ jost-finite-island-model/
 
 **`model/allele.py`.** `AlleleId` is a plain integer newtype (or an
 `int`-backed enum-like wrapper if the language's type system rewards it) —
-carries no payload beyond its identity. `AlleleRegistry.next_id()` hands
+carries no payload beyond its identity. AlleleRegistry.next_id() hands
 out a fresh globally-unique ID; the registry is the *only* place a new
 `AlleleId` value is ever created under the default infinite-alleles model,
 so its guarantee (every mutation event is novel) reduces to "call this one
@@ -586,25 +586,25 @@ locus, holding a bounded state and the identities minted into it so far)
 and `FiniteAlleleRegistry` (dispatches to the right locus's space) live
 alongside it — see §9.
 
-**`model/locus.py`.** `LocusSpec(locus_id, length)`, immutable. A run's
+**`model/locus.py`.** LocusSpec(locus_id, length), immutable. A run's
 `loci: tuple[LocusSpec, ...]` is part of `SimulationParams`.
-`finite_allele_capacity(length) -> 4 ** length` is the finite-alleles
+finite_allele_capacity(length) -> 4 ** length is the finite-alleles
 model's only other consumer of `length`.
 
 **`model/state.py`.** `ModelState` holds, per deme and per locus, a
-sparse mapping `AlleleId → frequency` (§3.1's `p_{k,t,l}`) — not a dense
+sparse mapping `AlleleId → frequency` (§3.1's p<sub>k,t,l</sub>) — not a dense
 array indexed by allele, because the allele universe is unbounded and
 only a small, varying subset is ever present. Provides equality,
 serialization to/from the persistence layer's row format, and a
-`total_frequency()` invariant check ($\sum{p} \approx 1$, within floating-point
+total_frequency() invariant check (Σ{p} ≈ 1, within floating-point
 tolerance) usable by tests. Where a run is known in advance to be
-fixed-$K$, no-mutation (the common biallelic/SNP case), the drift
+fixed-`K`, no-mutation (the common biallelic/SNP case), the drift
 operator may use a dense-array fast path internally for vectorization —
 purely an internal performance detail behind `operators.drift()`'s
 interface, invisible to `ModelState`'s public shape.
 
 **`model/params.py`.** `SimulationParams` is the validated, immutable
-config object: the four named arguments ($N$, $m$, $\mu$, $d$, each
+config object: the four named arguments (`N`, `m`, μ, `d`, each
 scalar-or-array as described in §4.3/§9), the `loci` tuple, the RNG seed,
 and the `𝖯` bag with a documented schema and defaults (§4.3's table,
 extended as new variants are added — see §9). Serializes losslessly
@@ -612,9 +612,9 @@ alongside every run's output, so a run's exact parameters are always
 recoverable from its persisted results (this is what makes a run
 re-playable given its seed).
 
-**`model/initial.py`.** `generate_initial_state(params) -> ModelState`,
+**`model/initial.py`.** generate_initial_state(params) -> ModelState,
 implementing §3.3: default random-Dirichlet generator plus an
-explicit-`p_0` override path. Structured as a small strategy interface
+explicit-p<sub>0</sub> override path. Structured as a small strategy interface
 (`InitialConditionGenerator`) so a botanist-supplied starting distribution
 (e.g., from a real allele-frequency survey) is a second implementation of
 the same interface, not a special case wired into the engine.
@@ -623,25 +623,25 @@ the same interface, not a special case wired into the engine.
 ModelState`, matching §3.4 exactly:
 
 - `migrate(state, m) -> ModelState` — per-deme weighted blend with the
-  migrant pool. A scalar $m$ is the introduction's "island model proper"
-  (all-other-demes average); a full $d × d$ matrix generalizes this to
+  migrant pool. A scalar `m` is the introduction's "island model proper"
+  (all-other-demes average); a full `d × d` matrix generalizes this to
   asymmetric or spatial (stepping-stone) migration — see §9 and
   `model/topology.py` below.
 - `mutate(state, mu, registry) -> ModelState` — infinite-alleles model:
-  each of the $N$ gene copies independently mutates with probability $\mu$;
-  a mutating copy's label is replaced by a fresh ID from `registry`. $\mu$
+  each of the `N` gene copies independently mutates with probability μ;
+  a mutating copy's label is replaced by a fresh ID from `registry`. μ
   accepts a scalar (shared by every locus) or a per-locus tuple — see §9
-  and `SimulationParams.from_mapping`'s $mu_{b}$ for deriving the latter
-  from a per-base rate. An optional `finite_alleles` registry switches to
+  and SimulationParams.from_mapping's μ<sub>b</sub> for deriving the latter
+  from a per-base rate. An optional finite_alleles registry switches to
   the K-allele model instead — see §9 and `model/allele.py` above.
-- `drift(state, N) -> ModelState` — multinomial resample of $N$ gene
-  copies (§3.1's ploidy-neutral convention: $N$ is already a gene-copy
+- `drift(state, N) -> ModelState` — multinomial resample of `N` gene
+  copies (§3.1's ploidy-neutral convention: `N` is already a gene-copy
   count, not an individual count) from the post-migration/mutation
   frequency vector, per deme, per locus.
 
 **`model/topology.py`.** Sparse migration-map construction: turns a
 one-based `{deme: {neighbor: weight, ...}, ...}` map — hand-written, or
-generated by `stepping_stone_neighbors()` for a ring or bounded 1D
+generated by stepping_stone_neighbors() for a ring or bounded 1D
 chain — into the dense `d × d` matrix `operators.migrate()` consumes. Each
 deme's self-retention is implicit, the complement of its listed weights.
 Used only at config-load time (§4.3); `migrate()` itself never knows a
@@ -651,7 +651,7 @@ sparse map was involved.
 `is_stable(history: Sequence[float], window: int, tolerance: float) ->
 bool`. Built-ins: a trailing-window stability check (compare the mean of
 the window's first half against its second half; stable when the
-difference is within `tolerance`), a fixed-`max_generations` fallback
+difference is within `tolerance`), a fixed-max_generations fallback
 that always eventually fires regardless of statistical behavior — the
 safety valve named in §3.5, since stochastic-equilibrium detection is not
 guaranteed to trigger quickly, or at all, for a badly chosen tolerance —
@@ -659,11 +659,11 @@ and a confidence-interval criterion that reads a sequence of
 across-replicate values rather than a within-run trajectory (§9's adaptive
 replicate batching), stable once the interval's half-width is within
 `tolerance`.
-The **default** run watches a single statistic (`𝖯["convergence_statistic"]`,
+The **default** run watches a single statistic (𝖯["convergence_statistic"],
 default `"D"`) — the common case, and still the cheapest path through the
 code, exercising exactly one history and one criterion evaluation per
-generation. `𝖯["convergence_statistic"]` also accepts a list of several
-statistics, combined by `𝖯["convergence_combinator"]` (`"all"`, the
+generation. 𝖯["convergence_statistic"] also accepts a list of several
+statistics, combined by 𝖯["convergence_combinator"] (`"all"`, the
 default — every watched statistic must be simultaneously stable — or
 `"any"` — stopping as soon as one is), landing as §9's "several statistics
 needed to agree before stopping." `AnyCriterion`/`AllCriterion` here
@@ -677,7 +677,7 @@ needs its own independent history, not a shared one.
 applied independently to one history per watched statistic, plus a
 combinator over their per-statistic stability results when there is more
 than one; the engine calls `monitor.record(t, values)` once per
-generation and checks `monitor.should_stop()`. A single watched statistic
+generation and checks monitor.should_stop(). A single watched statistic
 — the default — is exactly this general mechanism's one-element case: the
 combinator has nothing to combine, and `record()` accepts a bare float
 instead of a per-statistic mapping for convenience. On stop, the monitor
@@ -691,10 +691,10 @@ run should say so plainly rather than raise).
 entirely independent of the simulator — the generative model and the
 statistic computation are kept as two separate concerns. Implements
 exactly the
-formula sheet in the differentiation-measures guide's Appendix A: $H$,
-$H_{S}$, $H_{T}$, $J$, Hill numbers $^qD$, $G_{ST}$, $D$ (Jost's), $E_{ST}$,
-$K_{ST}$, plus the general $Differentiation_{q}$ family formula so a botanist
-can sweep $q$ directly rather than being limited to the three named
+formula sheet in the differentiation-measures guide's Appendix A: `H`,
+H<sub>S</sub>, H<sub>T</sub>, `J`, Hill numbers `^qD`, G<sub>ST</sub>, `D` (Jost's), E<sub>ST</sub>,
+K<sub>ST</sub>, plus the general Differentiation_q family formula so a botanist
+can sweep `q` directly rather than being limited to the three named
 measures. Usable standalone against any persisted trajectory, current run
 or historical.
 
@@ -703,13 +703,13 @@ Student's-t confidence interval on the mean of one statistic's final
 value over several independent replicate runs. It reads a plain sequence
 of floats and knows nothing about the engine, matching
 `differentiation.py`'s own independence from it. The critical value comes
-from a published t-table (interpolated in $1/df$, with the exact normal
+from a published t-table (interpolated in `1/df`, with the exact normal
 quantile beyond the table's tail) rather than a hand-rolled special
 function, keeping the statistical surface under outside review small and
 the dependency footprint at the standard library. This is what
 `ConfidenceIntervalCriterion` and the batch summary (§9) both report.
 
-**`persistence/store.py`**, **`jsonl_store.py`**, and **`manifest.py`** —
+**`persistence/store.py`**, **jsonl_store.py**, and **`manifest.py`** —
 see §6.
 
 **`viz/scatter.py`** and **`viz/diagnostics.py`** — see §8.
@@ -718,10 +718,10 @@ see §6.
 RunResult` — the public entry point matching the requirement's own
 signature. Owns the run loop described in §4.2 and nothing else; every
 step it takes is a call into one of the modules above. With
-`n_replicates` above one it returns one `RunResult` per independently
+n<sub>replicates</sub> above one it returns one `RunResult` per independently
 seeded replicate instead, optionally stopping the batch early on an
 across-replicate confidence interval and optionally distributing
-replicates over worker processes (§9); `replicate_summary` reports each
+replicates over worker processes (§9); replicate_summary reports each
 statistic's realized interval. The batch layer orchestrates whole runs
 and changes nothing inside one.
 
@@ -747,12 +747,12 @@ alleles):
 
 | Column | Type | Meaning |
 |---|---|---|
-| `run_id` | string | groups rows from one `fim()` call |
-| `generation` | int | $t$ |
-| `deme` | int | $k$, $[1..d]$ |
-| `locus_id` | int | $l$ |
-| `allele_id` | int | opaque allele label |
-| `frequency` | float | $p_{k,t,l}(allele_id)$ |
+| run_id | string | groups rows from one `fim()` call |
+| `generation` | int | `t` |
+| `deme` | int | `k`, `[1..d]` |
+| locus_id | int | `l` |
+| allele_id | int | opaque allele label |
+| `frequency` | float | p<sub>k,t,l</sub>(allele_id) |
 
 Long-format, tidy, one value per row — directly loadable into R or Python
 without a custom parser, matching this project's purpose:
@@ -761,13 +761,13 @@ analysis, not a black box.
 
 **Backend is swappable behind a `TrajectoryStore` protocol** (`persistence/
 store.py`); the row schema above is the store's public contract, not any
-one file format's. `write_generation(run_id, generation, rows)` and
-`read(run_id) -> Iterator[row]` are the whole interface the rest of the
+one file format's. write_generation(run_id, generation, rows) and
+read(run_id) -> Iterator[row] are the whole interface the rest of the
 system depends on — `engine.py`, the statistics module, and the
 visualization module all talk to a `TrajectoryStore`, never to a file
 format directly.
 
-**`JSONLTrajectoryStore` (`persistence/jsonl_store.py`) is the only
+**`JSONLTrajectoryStore` (persistence/jsonl_store.py) is the only
 implementation**: one JSON object per line, one line per row, appended as
 each generation is produced. Human-readable with no extra tooling to open
 (reinforcing §4.5's packaging constraint), trivial to append to
@@ -782,7 +782,7 @@ A **run manifest** is written alongside the trajectory: the full
 `SimulationParams` (including seed — this is what makes a run exactly
 re-playable), start/end wall-clock time, the convergence outcome
 (converged vs. hit the cap, on which statistic, at which generation), and
-software version. The manifest is what lets someone hand a `run_id` to a
+software version. The manifest is what lets someone hand a run_id to a
 collaborator and have them reproduce the identical trajectory.
 
 ## 7. Statistics module
@@ -806,14 +806,14 @@ K_{ST} = 1 - \frac{K_{T}/K_{S}-d}{1-d}
 
 against the frequency table produced by a `ModelState` (or read back from
 a persisted trajectory — the module never depends on the engine). Deme
-weighting (`𝖯["deme_weighting"]`, §4.3) is threaded through here: $D$ is
+weighting (𝖯["deme_weighting"], §4.3) is threaded through here: `D` is
 defined with equal deme weighting by construction (per the guide, Part
-III), while $E_{ST}$ natively supports size weighting — the module exposes
+III), while E<sub>ST</sub> natively supports size weighting — the module exposes
 both, and the caller's weighting choice is explicit rather than a
 silently different default per function. This is also where the final
 scalar report (requirement 6a) and the final per-deme frequency table
 (requirement 6b) both originate — the report is nothing more than this
-module's output at $t = T$, formatted.
+module's output at `t = T`, formatted.
 
 ## 8. Visualization module
 
@@ -822,9 +822,9 @@ directly: this section explains why the plots take the form they do, and
 §12 shows the result itself.*
 
 **Canonical view (requirement 6, "scatter plot of frequency in
-$d$-dimensional space"):** one point per $(locus, allele)$, plotted with
-coordinates $(p_{1,T,l}(a), p_{2,T,l}(a), …, p_{d,T,l}(a))$ — i.e., the
-axes are the $d$ demes, and a point's position shows how that allele's
+`d`-dimensional space"):** one point per `(locus, allele)`, plotted with
+coordinates (p<sub>1,T,l</sub>(a), p<sub>2,T,l</sub>(a), …, p<sub>d,T,l</sub>(a)) — i.e., the
+axes are the `d` demes, and a point's position shows how that allele's
 frequency is distributed across them. An allele private to one deme sits
 on that deme's axis; an allele shared evenly across all demes sits near
 the diagonal. This reads directly against the differentiation-measures
@@ -832,15 +832,15 @@ guide's central theme — allelic differentiation is exactly a question of
 which alleles are shared versus private across demes, and this plot shows
 that question's answer geometrically rather than as a single scalar.
 
-Direct rendering only works for $d ≤ 3$. For $d > 3$ — the common case —
+Direct rendering only works for `d ≤ 3`. For `d > 3` — the common case —
 `viz/scatter.py` dispatches to one of two layouts, both computed from
 the same underlying point set:
 
-- a pairwise scatterplot matrix ($d choose 2$ panels), which stays fully
+- a pairwise scatterplot matrix (`d choose 2` panels), which stays fully
   faithful to the data at the cost of screen space; the default for
-  moderate $d$.
+  moderate `d`.
 - one explicit deme pair (Deme 1 vs. Deme 2 by default, any pair on
-  request) for large $d$ — not a PCA or other dimensionality-reduction
+  request) for large `d` — not a PCA or other dimensionality-reduction
   projection: an earlier version of this design used one, but keeping
   faithful, unreduced coordinates turned out to match this section's
   own precedent argument below better than a projection did — see the
@@ -852,11 +852,11 @@ the same underlying point set:
   longer the automatic choice at any `d`.
 
 **This fallback is confirmed by precedent.** The "Dear Nolan" letter's own two figures (§4.3) are, in the
-letter's own words, built by "plot\[ting\] the frequency of each allele in
+letter's own words, built by "plot[ting] the frequency of each allele in
 Deme 1 versus its frequency in Deme 2" — always exactly **two named
-demes** on the two axes, with a $y = x$ reference line drawn in and a
-title stating the run's $N$, $m$, $\mu$, $d$ directly on the figure, even
-at $d = 100$ demes (Fig. 2). That is a single panel of exactly the
+demes** on the two axes, with a `y = x` reference line drawn in and a
+title stating the run's `N`, `m`, μ, `d` directly on the figure, even
+at `d = 100` demes (Fig. 2). That is a single panel of exactly the
 pairwise-matrix fallback described above, confirming both that the
 fallback's shape is right and that titling a plot with its own generating
 parameters is worth adopting as a house style for every scatter this
@@ -884,14 +884,14 @@ modes:**
   and stays the primary, always-available output.
 - A **replicate-aggregate, two-deme view**, modeled directly on the
   letter's own convention, is a natural second mode on top of
-  `n_replicates` batching (§4.3): pick two demes (or sweep every pair,
-  $d choose 2$ panels), run many replicates to equilibrium, and overlay
+  n<sub>replicates</sub> batching (§4.3): pick two demes (or sweep every pair,
+  `d choose 2` panels), run many replicates to equilibrium, and overlay
   one point per allele per replicate with the letter's own
   coincidence-count and common/rare-color conventions. This is exactly
   the view a botanist needs to sanity-check a *distribution* of outcomes
   against a single reported run, and it costs nothing new
   architecturally — it consumes the same `TrajectoryStore` rows and the
-  same per-pair projection `viz/scatter.py` already needs for $d > 3$.
+  same per-pair projection `viz/scatter.py` already needs for `d > 3`.
 
 Because every generation is already persisted (§6), the primary scatter
 function also trivially generalizes to an animation or small-multiples
@@ -929,16 +929,16 @@ built (§11): each names the one place the change lands.
 
 | "What if…" | Where it lives | Why it stayed small |
 |---|---|---|
-| …island sizes differed ($N_{i}$)? | $N$ accepts a length-$d$ array | $drift()$ receives $N$ as a parameter, so per-deme $N_{i}$ gene copies is a broadcast, not new logic |
-| …migration were asymmetric, or a full matrix? | $m$ accepts a $d × d$ matrix; its rows are the authoritative weights and are never rescaled by $N$ ([`doc/configuration.md`](configuration.md#m)) | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
-| …migration were spatial (stepping-stone)? | $m$ accepts a sparse, neighbor-restricted map, or `{topology, rate}` sugar for a 1D ring or bounded chain (`fim.model.topology`) | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
-| …migration counted gene copies rather than blending an idealized continuous fraction? | `𝖯["migrant_sampling"] = "stochastic"` draws each deme's migrant count from $Binomial(N_{i}, rate)$; migrant composition stays the deterministic pool average, so `drift()` remains the only operator that resamples every gene copy | `migrate()`'s rate/pool split already separates "how much moves" from "what it is made of"; only the first half becomes random |
-| …locus length varied? | `LocusSpec.length` per locus, driving the finite-alleles capacity and $\mu_{b}$'s rate derivation | a first-class field of the locus (§3.2) |
-| …mutation rate were per base rather than per locus, so two loci of different lengths do not silently mutate at the same rate? | $𝖯[\mu]$ accepts a per-locus tuple; $𝖯[\mu_{b}]$, mutually exclusive with it, derives one via the exact Eq. 5 relation $\mu = 1 - (1 - \mu_{b})^{length}$ (differentiation-measures guide, Part VI) | `mutate()` loops per locus already, so reading a per-locus rate out of a tuple is a broadcast; $\mu_{b}$'s derivation lives entirely in `SimulationParams.from_mapping` and expands to the per-locus $\mu$ a hand-written list would give |
-| …the mutation model weren't infinite-alleles, to remove artifacts the infinite-length assumption causes at short loci? | `𝖯["mutation_model"] = "finite_alleles"` bounds each locus to $4^{length}$ states (`finite_allele_capacity`) and lets a mutation recur to a state already present elsewhere in the run, without imposing any ordering or distance between alleles | `AlleleRegistry` is the sole minting point for new IDs, so `FiniteAlleleSpace`/`FiniteAlleleRegistry` slot in behind the same `mutate()` call, selected by which registry `step()` threads through |
-| …several statistics had to agree before stopping? | `𝖯["convergence_statistic"]` as a list plus `𝖯["convergence_combinator"]` (`"all"`/`"any"`) | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
-| …many replicate runs were needed for a confidence interval, without hand-guessing the count? | `𝖯["replicate_tolerance"]`: once `replicate_minimum` replicates exist, the batch stops as soon as every watched statistic's across-replicate Student's-t interval (`fim.statistics.interval`) is that tight, combined by the same `convergence_combinator` used within a run, with `n_replicates` as the hard cap. `fim.engine.replicate_summary` and the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` and plugs into an unmodified `ConvergenceMonitor`, so the replicate batch loop gains a second stopping rule rather than a second loop |
-| …replicate batches ran faster? | `max_workers` (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs `_run_one` unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A `store_factory` gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
+| …island sizes differed (N<sub>i</sub>)? | `N` accepts a length-`d` array | `drift()` receives `N` as a parameter, so per-deme N<sub>i</sub> gene copies is a broadcast, not new logic |
+| …migration were asymmetric, or a full matrix? | `m` accepts a `d × d` matrix; its rows are the authoritative weights and are never rescaled by `N` ([`doc/configuration.md`](configuration.md#m)) | `migrate()`'s weighted blend generalizes to a matrix–vector product; the scalar case is that matrix's symmetric special case |
+| …migration were spatial (stepping-stone)? | `m` accepts a sparse, neighbor-restricted map, or `{topology, rate}` sugar for a 1D ring or bounded chain (`fim.model.topology`) | same mechanism as the row above; "who is a neighbor" is a matrix-construction question, not an operator change |
+| …migration counted gene copies rather than blending an idealized continuous fraction? | 𝖯["migrant_sampling"] = "stochastic" draws each deme's migrant count from Binomial(N<sub>i</sub>, rate); migrant composition stays the deterministic pool average, so `drift()` remains the only operator that resamples every gene copy | `migrate()`'s rate/pool split already separates "how much moves" from "what it is made of"; only the first half becomes random |
+| …locus length varied? | `LocusSpec.length` per locus, driving the finite-alleles capacity and μ<sub>b</sub>'s rate derivation | a first-class field of the locus (§3.2) |
+| …mutation rate were per base rather than per locus, so two loci of different lengths do not silently mutate at the same rate? | 𝖯[μ] accepts a per-locus tuple; 𝖯[μ<sub>b</sub>], mutually exclusive with it, derives one via the exact Eq. 5 relation μ = 1 - (1 - μ<sub>b</sub>)<sup>length</sup> (differentiation-measures guide, Part VI) | mutate() loops per locus already, so reading a per-locus rate out of a tuple is a broadcast; μ<sub>b</sub>'s derivation lives entirely in SimulationParams.from_mapping and expands to the per-locus μ a hand-written list would give |
+| …the mutation model weren't infinite-alleles, to remove artifacts the infinite-length assumption causes at short loci? | 𝖯["mutation_model"] = "finite_alleles" bounds each locus to 4<sup>length</sup> states (finite_allele_capacity) and lets a mutation recur to a state already present elsewhere in the run, without imposing any ordering or distance between alleles | `AlleleRegistry` is the sole minting point for new IDs, so `FiniteAlleleSpace`/`FiniteAlleleRegistry` slot in behind the same `mutate()` call, selected by which registry `step()` threads through |
+| …several statistics had to agree before stopping? | 𝖯["convergence_statistic"] as a list plus 𝖯["convergence_combinator"] (`"all"`/`"any"`) | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
+| …many replicate runs were needed for a confidence interval, without hand-guessing the count? | 𝖯["replicate_tolerance"]: once replicate_minimum replicates exist, the batch stops as soon as every watched statistic's across-replicate Student's-t interval (`fim.statistics.interval`) is that tight, combined by the same convergence_combinator used within a run, with n<sub>replicates</sub> as the hard cap. fim.engine.replicate_summary and the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` and plugs into an unmodified `ConvergenceMonitor`, so the replicate batch loop gains a second stopping rule rather than a second loop |
+| …replicate batches ran faster? | max_workers (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs _run_one unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A store_factory gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
 
 ### 9.2 Landing spots for changes that are not built
 
@@ -949,7 +949,7 @@ built (§11): each names the one place the change lands.
 | …the mutation model needed genuine spatial structure (stepwise mutation for microsatellites, where "how far" one allele is from another matters)? | swap the strategy behind `mutate()` again | a different, distance-based model from finite alleles, deliberately not the direction taken (§3.2) |
 | …a different convergence *rule* were needed, rather than a different statistic to watch? | `ConvergenceCriterion` is a pluggable protocol | `ConvergenceMonitor` accepts any object implementing it; `engine.py` constructs the built-in criteria directly, so selecting one from configuration is the only missing piece |
 | …a study needed run outputs at a scale JSONL does not suit? | a second `TrajectoryStore` implementation, Parquet-backed being the obvious candidate | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
-| …the replicate loop itself needed to vectorize, not just parallelize? | a replicate axis through every operator, both allele registries, and the convergence monitor | the deepest item here: unlike `max_workers`, it changes the shape of the model code rather than the orchestration around it |
+| …the replicate loop itself needed to vectorize, not just parallelize? | a replicate axis through every operator, both allele registries, and the convergence monitor | the deepest item here: unlike max_workers, it changes the shape of the model code rather than the orchestration around it |
 
 ## 10. Validation and test strategy
 
@@ -958,12 +958,12 @@ built (§11): each names the one place the change lands.
 **Golden worked examples.** The differentiation-measures guide's Part IV
 provides several fully worked, hand-checked scenarios with exact expected
 values — including one documented erratum against the published paper
-($D = 0.5556$, not the paper's printed `0.5`, for the "five demes fixed
+(`D = 0.5556`, not the paper's printed `0.5`, for the "five demes fixed
 for A, five for B" case) — which makes them unusually good regression
-fixtures: the "nine-fixed-for-A, one-for-B" family ($D$ = 0.20, 0.5556,
-1.00 across three configurations), the three-species $G_{ST}$-near-zero
+fixtures: the "nine-fixed-for-A, one-for-B" family (`D` = 0.20, 0.5556,
+1.00 across three configurations), the three-species G<sub>ST</sub>-near-zero
 family (Species A/B/C), the "98% within demes" trap recomputation, and
-the $D$-vs-$K_{ST}$ disagreement case. `statistics/differentiation.py`'s
+the `D`-vs-K<sub>ST</sub> disagreement case. `statistics/differentiation.py`'s
 test suite asserts against these exact values directly, not just against
 internal consistency — they were independently recomputed from first
 principles in that document, not copied from the paper.
@@ -971,20 +971,20 @@ principles in that document, not copied from the paper.
 **Invariant tests**, checked as properties over randomly generated
 frequency tables rather than single fixed inputs:
 
-- $G_{ST} ≤ 1 - H_{S}$ (the ceiling identity, Part V).
-- $H_{T} ≥ H_{S}$ always.
-- $H_{T} = H_{S} + H_{ST} - H_{S} · H_{ST}$ (the correct subadditive partition,
-  Part V) with $H_{ST}$ matching $D$'s own first bracket exactly.
-- $D \in [0, 1]$; $D = 1$ iff demes share no alleles; $D = 0$ iff demes are
+- G<sub>ST</sub> ≤ 1 - H<sub>S</sub> (the ceiling identity, Part V).
+- H<sub>T</sub> ≥ H<sub>S</sub> always.
+- H<sub>T</sub> = H<sub>S</sub> + H<sub>ST</sub> - H<sub>S</sub> · H<sub>ST</sub> (the correct subadditive partition,
+  Part V) with H<sub>ST</sub> matching `D`'s own first bracket exactly.
+- D ∈ [0, 1]; `D = 1` iff demes share no alleles; `D = 0` iff demes are
   identical.
 - The replication principle: pooling two equally sized, equally diverse,
-  completely disjoint groups exactly doubles $^HD_{T} / ^HD_{S}$ (Part V).
+  completely disjoint groups exactly doubles ^HD<sub>T</sub> / ^HD<sub>S</sub> (Part V).
 
 **Statistical/asymptotic property tests** exercise the model itself, not
 just the statistics module: the drift operator's per-generation variance
-is checked against the theoretical $p(1-p)/N$ (§3.1's gene-copy-count
-$N$), and many-replicate runs at fixed $N, m, \mu, d$ have their sample-mean
-$G_{ST}$ and $D$ checked against the equilibrium formulas
+is checked against the theoretical `p(1-p)/N` (§3.1's gene-copy-count
+`N`), and many-replicate runs at fixed N, m, μ, d have their sample-mean
+G<sub>ST</sub> and `D` checked against the equilibrium formulas
 (differentiation-measures guide, Part VI, Eq. 2 and Eq. 4) within a
 pre-derived confidence bound. These are inherently stochastic checks; they
 must still be **deterministic given the commit** — fix the seed(s) used,
@@ -997,8 +997,8 @@ stochastic simulator.
 **Published-scenario fixtures.** The two scenarios in §4.3's defaults
 table — from Jost's "Dear Nolan" letter, source and citation confirmed
 above ("Who this document is for") — are used exactly this way: real
-$(N, m, \mu, d)$ tuples with a stated expected $G_{ST}$ and both expected
-*and* mean-observed $D$, letting a test compare a many-replicate
+(N, m, μ, d) tuples with a stated expected G<sub>ST</sub> and both expected
+*and* mean-observed `D`, letting a test compare a many-replicate
 simulated run against a real prior result in addition to the two
 equilibrium formulas from the differentiation-measures guide's Part VI.
 One caveat applies: they are themselves simulation output from a
@@ -1007,8 +1007,8 @@ letter), not an analytically exact value, and the letter is
 correspondence rather than a peer-reviewed publication — appropriate for
 a tolerance-banded statistical check (consistent with how this section
 treats every other stochastic test), not for an exact-equality assertion.
-The letter's own closed-form approximations for $H_{S}$ and $H_{T}$ (stated
-in terms of $N$, $m$, $\mu$, $d$ directly) are an additional, independent
+The letter's own closed-form approximations for H<sub>S</sub> and H<sub>T</sub> (stated
+in terms of `N`, `m`, μ, `d` directly) are an additional, independent
 analytic cross-check beyond the differentiation-measures guide's Eq. 2
 and Eq. 4, used the same way.
 
@@ -1024,7 +1024,7 @@ The simulator does not model selection. Its mutation models are
 distance-free by design (§3.2), so a stepwise model for microsatellites —
 where how *far* one allele is from another carries meaning — is outside
 it; the finite-alleles model is a bounded label space, not a metric one.
-Migration is any topology expressible as a fixed $d × d$ matrix, which
+Migration is any topology expressible as a fixed `d × d` matrix, which
 excludes a 2D lattice constructor and any neighbor-selection logic that
 changes over a run. A single graphical front end is likewise out of scope
 (§4.5); the command line is the only one.
@@ -1047,11 +1047,11 @@ file:
 2. Double-click it. Windows SmartScreen will likely warn that the file is
    from an unrecognized publisher (it is a small, unsigned research tool,
    not commercial software) — click **More info**, then **Run anyway**.
-3. `fim init` creates `project-root\results\` and drops a starter config
+3. `fim init` creates project-root\results\ and drops a starter config
    file (`example-run.yaml`) there, pre-filled with the default scenario
    from §4.3.
 4. Edit it, then `fim run` it from a terminal (below). Both commands read
-   and write the same `project-root\results\` folder.
+   and write the same project-root\results\ folder.
 
 No install step touches anything outside that one folder; uninstalling is
 deleting the `.exe` and, if wanted, that folder.
@@ -1136,17 +1136,17 @@ depends on them.
 
 **Screen 1 — model input.** The four named arguments and the `𝖯`-bag
 entries from §4.3, as a form instead of a YAML file: labeled fields for
-`N`, `d`, `m`, `\mu`, seed, convergence statistic, initial condition, and
+`N`, `d`, `m`, μ, seed, convergence statistic, initial condition, and
 loci, with a "Run simulation" button.
 
 **Screen 2 — results.** Requirement 6 in one view: the run summary
 (scalars, requirement 6a) beside the canonical scatter (per-deme allele
-frequencies, requirement 6b). The scenario is a deliberately tiny $d = 2$
+frequencies, requirement 6b). The scenario is a deliberately tiny `d = 2`
 one, small enough that its whole trajectory fits on one screen, rather
-than §12's $N = 450, d = 20$ run, which has too many demes for a single
-two-axis scatter (§8's $d > 3$ fallback applies there instead). Each
+than §12's `N = 450, d = 20` run, which has too many demes for a single
+two-axis scatter (§8's `d > 3` fallback applies there instead). Each
 point is one allele; the axes are the two demes' frequencies for it: a
-run-summary sidebar (converged, generation 50, D=0.65, G_ST=0.34) beside
+run-summary sidebar (converged, generation 50, D=0.65, G<sub>ST</sub>=0.34) beside
 a scatter plot of four alleles' frequency in Deme 1 versus Deme 2, most
 of them well off the diagonal.
 
@@ -1197,7 +1197,7 @@ Corrected §8's own visualization description: `viz/scatter.py` no longer
 projects large-`d` states through PCA by default, replaced with one
 explicit deme pair (Deme 1 vs. Deme 2 by default). This resolves an
 inconsistency §8's own precedent argument already pointed at without
-acting on it — the "Dear Nolan" letter's own $d = 100$ figure is "a
+acting on it — the "Dear Nolan" letter's own `d = 100` figure is "a
 single panel of exactly the pairwise-matrix fallback," not a
 projection, and the unified-run-view design document's own §3.6
 independently reached the same conclusion (evaluated from computational

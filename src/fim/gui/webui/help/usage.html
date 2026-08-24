@@ -31,18 +31,18 @@ unless <code>--force</code> is present.</p>
 <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration.md</a>. Without <code>--output</code>, a timestamped
 directory is created under <code>project-root/results/</code>. The timestamp affects only
 the folder name and manifest metadata; it never affects the trajectory,
-statistics, convergence decision, or deterministic <code>run_id</code>.</p>
+statistics, convergence decision, or deterministic run_id.</p>
 <p><code>--quiet</code> suppresses progress and artifact-path messages. Validation errors
 name the offending key or value and return status 2. A run that reaches
-<code>max_generations</code> also returns status 0 because it is a valid, inspectable
+max_generations also returns status 0 because it is a valid, inspectable
 non-converged result.</p>
-<h3 id="batches-nreplicates-greater-than-one">Batches (<code>n_replicates</code> greater than one)</h3>
-<p>A config's <code>n_replicates</code> (see <a href="#" data-fim-help="configuration" data-fim-anchor="n_replicates">configuration.md</a>)
+<h3 id="batches-nreplicates-greater-than-one">Batches (n<sub>replicates</sub> greater than one)</h3>
+<p>A config's n<sub>replicates</sub> (see <a href="#" data-fim-help="configuration" data-fim-anchor="n%3Csub%3Ereplicates%3C/sub%3E">configuration.md</a>)
 controls whether one run or a whole batch executes:</p>
 <ul>
-<li><strong><code>n_replicates: 1</code></strong> (the default): the four-file scalar-run contract
+<li><strong>n<sub>replicates</sub>: 1</strong> (the default): the four-file scalar-run contract
 below, directly in the output directory.</li>
-<li><strong><code>n_replicates</code> greater than one</strong>: each replicate gets its own
+<li><strong>n<sub>replicates</sub> greater than one</strong>: each replicate gets its own
 <code>replicate-NNN/</code> subdirectory, keeping that same four-file contract, plus
 a batch-level <code>manifest.json</code> and <code>summary.json</code> — see
 <a href="#output-schemas">Output schemas</a>.</li>
@@ -52,23 +52,23 @@ a batch-level <code>manifest.json</code> and <code>summary.json</code> — see
 one at a time. Every replicate's trajectory, report, and statistics are
 identical to running it alone with the same seed, so the worker count
 affects only how long the batch takes.</p>
-<p>With <code>replicate_tolerance</code> unset in the config, exactly <code>n_replicates</code>
+<p>With replicate_tolerance unset in the config, exactly n<sub>replicates</sub>
 replicates run. With it set, the batch can stop earlier, once every watched
 statistic's across-replicate confidence interval has tightened enough (see
 <a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">configuration.md</a>) — the number of
-<code>replicate-NNN/</code> subdirectories written can then be less than <code>n_replicates</code>.</p>
+<code>replicate-NNN/</code> subdirectories written can then be less than n<sub>replicates</sub>.</p>
 <h2 id="worked-examples">Worked examples</h2>
 <p>Each example below is a complete config and the command that runs it: save
 the YAML, run the command, and the reported values match those shown here,
 because the same seed, parameters, and version always give the same
 <code>report.json</code> (see <a href="#reproduce-a-run">Reproduce a run</a>). Each example uses
-a small <var>N</var>, <var>d</var>, and <var>max_generations</var> so it finishes in seconds, and a
+a small <code>N</code>, <code>d</code>, and max_generations so it finishes in seconds, and a
 seed distinct from <a href="#create-a-configuration"><code>fim init</code></a>'s starter config.
 Each demonstrates one option, or one natural pair of options, from the
 <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>; a real study combines them
 freely.</p>
 <h3 id="unequal-island-sizes-with-a-migration-hub">Unequal island sizes with a migration hub</h3>
-<p>Four demes of very different size, connected by an explicit <code class="math-expr">d x d</code>
+<p>Four demes of very different size, connected by an explicit <code>d x d</code>
 migration matrix rather than one shared rate — a small &quot;hub&quot; topology
 where deme 4 is both the largest and the best-connected:</p>
 <pre><code class="language-yaml">N: [200, 200, 200, 800]
@@ -90,9 +90,9 @@ max_generations: 300
 </code></pre>
 <pre><code class="language-console">fim run hub-island.yaml --output results/hub-island --quiet
 </code></pre>
-<p>Converges at generation 11 with <code class="math-expr">D ≈ 0.100</code>. <code>manifest.json</code>'s <code>parameters.N</code>
+<p>Converges at generation 11 with D \sim 0.100. <code>manifest.json</code>'s <code>parameters.N</code>
 and <code>parameters.m</code> record the exact per-deme sizes and matrix rows used —
-compare them against a run with one shared <code class="math-expr">N/m</code> to see the effect of
+compare them against a run with one shared <code>N/m</code> to see the effect of
 unequal size and asymmetric connectivity on differentiation.</p>
 <h3 id="stepping-stone-spatial-migration">Stepping-stone (spatial) migration</h3>
 <p>Six demes arranged on a ring, each migrating only with its two neighbors —
@@ -115,13 +115,13 @@ max_generations: 500
 </code></pre>
 <pre><code class="language-console">fim run stepping-stone.yaml --output results/stepping-stone --quiet
 </code></pre>
-<p>Converges at generation 10 with <code class="math-expr">D ≈ 0.124</code>. Swap <code>topology: ring</code> for
+<p>Converges at generation 10 with D \sim 0.124. Swap <code>topology: ring</code> for
 <code>linear</code> to remove the wrap-around edge between deme 1 and deme 6.</p>
 <h3 id="stochastic-migrant-counts">Stochastic migrant counts</h3>
 <p>By default, migration blends each deme's frequencies with an exact
-<code class="math-expr">rate * N</code> fraction of its neighbors' — a deterministic step given that
-generation's frequencies. <code>migrant_sampling: stochastic</code> instead draws the
-migrant <em>count</em> from <code class="math-expr">Binomial(N, rate)</code>, adding a genuine, explicit source
+<code>rate * N</code> fraction of its neighbors' — a deterministic step given that
+generation's frequencies. migrant_sampling: stochastic instead draws the
+migrant <em>count</em> from <code>Binomial(N, rate)</code>, adding a genuine, explicit source
 of randomness some studies want counted:</p>
 <pre><code class="language-yaml">N: 100
 d: 4
@@ -139,17 +139,17 @@ max_generations: 500
 </code></pre>
 <pre><code class="language-console">fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 </code></pre>
-<p>Converges at generation 15 with <code class="math-expr">D ≈ 0.039</code>. Re-run with <code>migrant_sampling</code>
+<p>Converges at generation 15 with D \sim 0.039. Re-run with migrant_sampling
 removed (or set to <code>continuous</code>, the default) at the same seed to compare
 against the deterministic-migration baseline directly.</p>
 <h3 id="finite-length-alleles-the-k-allele-model">Finite-length alleles (the K-allele model)</h3>
-<p>By default (<code>mutation_model: infinite_alleles</code>), every mutation receives a
+<p>By default (mutation_model: infinite_alleles), every mutation receives a
 globally unique identity — the standard population-genetics idealization
 for a locus long enough that two independent mutations essentially never
-land on the same state. <code>finite_alleles</code> instead bounds a locus to
-<code class="math-expr">4^{length}</code> states and lets a mutation recur to one already present
+land on the same state. finite_alleles instead bounds a locus to
+4<sup>length</sup> states and lets a mutation recur to one already present
 elsewhere in the run — deliberately exercised here with a very short
-3-base locus (only <code class="math-expr">4^{3} = 64</code> states) and a high <var>mu</var> so recurrence is
+3-base locus (only 4<sup>3</sup> = 64 states) and a high <code>mu</code> so recurrence is
 actually likely within the run, not just theoretically possible:</p>
 <pre><code class="language-yaml">N: 100
 d: 3
@@ -168,14 +168,14 @@ max_generations: 500
 </code></pre>
 <pre><code class="language-console">fim run finite-alleles.yaml --output results/finite-alleles --quiet
 </code></pre>
-<p>Converges at generation 12 with <code class="math-expr">D ≈ 0.207</code>. See
+<p>Converges at generation 12 with D \sim 0.207. See
 <a href="#" data-fim-help="configuration" data-fim-anchor="mutation_model">configuration.md</a> for how this differs
 from a distance-based (stepwise) mutation model, which <code>fim</code> does not
 implement.</p>
 <h3 id="per-base-mutation-rate-across-unequal-locus-lengths">Per-base mutation rate across unequal locus lengths</h3>
-<p><var>mu</var><sub>b</sub> (mutually exclusive with <var>mu</var>) is a single per-base-pair mutation
-probability; each locus derives its own <var>mu</var> from <var>mu</var><sub>b</sub> and its own
-<var>length</var> via <code class="math-expr">mu = 1 - (1 - mu_{b})^{length}</code> — so two loci of very
+<p>μ<sub>b</sub> (mutually exclusive with <code>mu</code>) is a single per-base-pair mutation
+probability; each locus derives its own <code>mu</code> from μ<sub>b</sub> and its own
+<code>length</code> via mu = 1 - (1 - μ<sub>b</sub>)<sup>length</sup> — so two loci of very
 different lengths do not silently mutate at the same rate:</p>
 <pre><code class="language-yaml">N: 150
 d: 3
@@ -194,13 +194,13 @@ max_generations: 500
 </code></pre>
 <pre><code class="language-console">fim run mu-b.yaml --output results/mu-b --quiet
 </code></pre>
-<p>Converges at generation 15 with <code class="math-expr">D ≈ 0.090</code>. <code>results/mu-b/manifest.json</code>'s
+<p>Converges at generation 15 with D \sim 0.090. <code>results/mu-b/manifest.json</code>'s
 <code>parameters.mu</code> records the two derived rates — <code>0.0009995</code> for the
 50-base locus and <code>0.0099503</code> for the 500-base one — the expanded,
-canonical form <var>mu</var><sub>b</sub> is sugar for; <code>mu_{b}</code> itself is never stored.</p>
+canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never stored.</p>
 <h3 id="several-convergence-statistics">Several convergence statistics</h3>
 <p>Watch more than one statistic and decide whether stopping needs every one
-of them stable (<code>convergence_combinator: all</code>, the default) or just one
+of them stable (convergence_combinator: all, the default) or just one
 (<code>any</code>):</p>
 <pre><code class="language-yaml">N: 150
 d: 3
@@ -218,13 +218,13 @@ max_generations: 500
 </code></pre>
 <pre><code class="language-console">fim run multi-statistic.yaml --output results/multi-statistic --quiet
 </code></pre>
-<p>Converges at generation 16, with <code>report.json</code>'s <code>converged_on</code> recording
-<code class="math-expr">[&quot;D&quot;, &quot;G_ST&quot;]</code> — both were watched, and <code>any</code> means only one needed to
+<p>Converges at generation 16, with <code>report.json</code>'s converged_on recording
+[&quot;D&quot;, &quot;G<sub>ST</sub>&quot;] — both were watched, and <code>any</code> means only one needed to
 stabilize first.</p>
 <h3 id="an-adaptive-replicate-batch-with-a-confidence-interval">An adaptive replicate batch with a confidence interval</h3>
 <p>Rather than guessing how many replicate runs a confidence interval needs,
-set <code>n_replicates</code> well above the plausible requirement and let
-<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance"><code>replicate_tolerance</code></a> decide when
+set n<sub>replicates</sub> well above the plausible requirement and let
+<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">replicate_tolerance</a> decide when
 enough have run:</p>
 <pre><code class="language-yaml">N: 100
 d: 5
@@ -244,15 +244,15 @@ replicate_tolerance: 0.05
 </code></pre>
 <pre><code class="language-console">fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 </code></pre>
-<p>Stops at exactly 10 replicates (<code>replicate_minimum</code>) — <var>D</var>'s 95% confidence
-interval is already <code class="math-expr">0.218 +/- 0.048</code>, tighter than the requested <code>0.05</code>
+<p>Stops at exactly 10 replicates (replicate_minimum) — <code>D</code>'s 95% confidence
+interval is already <code>0.218 +/- 0.048</code>, tighter than the requested <code>0.05</code>
 half-width, so the remaining 40 possible replicates were never needed.
 <code>results/adaptive-batch/summary.json</code> reports every statistic's own
 interval; <code>results/adaptive-batch/replicate-001/</code> through <code>replicate-010/</code>
 each hold the ordinary four-file scalar-run contract for that one
 replicate. Drop <code>--sequential</code> to run the same batch across a worker
 process per CPU instead — the computed numbers are identical either way
-(see <a href="#batches-n_replicates-greater-than-one">Batches</a>); only the wall-clock
+(see <a href="#batches-n%3Csub%3Ereplicates%3C/sub%3E-greater-than-one">Batches</a>); only the wall-clock
 time differs.</p>
 <h2 id="re-analyze-a-trajectory">Re-analyze a trajectory</h2>
 <pre><code class="language-console">fim stats TRAJECTORY [--manifest PATH] [--generation N]
@@ -265,9 +265,9 @@ orders without re-running the simulation:</p>
 <pre><code class="language-console">fim stats run/trajectory.jsonl --q 0 --q 1 --q 2
 </code></pre>
 <p>JSON is printed to standard output. <code>--output</code> also writes the same result.
-<code>--q 0</code> and <code>--q 2</code> always match the report's own <var>K</var><sub>ST</sub> and <var>D</var>; <code>--q 1</code>
-matches <var>E</var><sub>ST</sub>, including the run's own <code>deme_weighting</code> setting — a
-size-weighted <var>E</var><sub>ST</sub> and an equal-weighted <code>Differentiation_1</code> would
+<code>--q 0</code> and <code>--q 2</code> always match the report's own K<sub>ST</sub> and <code>D</code>; <code>--q 1</code>
+matches E<sub>ST</sub>, including the run's own deme_weighting setting — a
+size-weighted E<sub>ST</sub> and an equal-weighted Differentiation_1 would
 otherwise silently disagree on the same trajectory.</p>
 <h2 id="check-for-updates">Check for updates</h2>
 <pre><code class="language-console">fim update --check
@@ -287,7 +287,7 @@ above. Install it alongside <code>fim</code> (<code>python -m pip install .</cod
 provides both console scripts), or launch it from a packaged executable by
 opening it with no arguments — for example by double-clicking
 <code>fim-windows-x64.exe</code>/<code>fim.app</code>, or running <code>fim-gui</code>/<code>fim --graphical</code> from
-a Linux install. <code>n_replicates</code> in the configuration is the only thing that
+a Linux install. n<sub>replicates</sub> in the configuration is the only thing that
 decides whether a run goes through the scalar or the batch path — there is
 no separate &quot;batch mode&quot; toggle. Every screen calls the identical underlying
 function this guide already documents; nothing here is a second
@@ -392,7 +392,7 @@ manifests, and release tags.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>run_id</code></td>
+<td>run_id</td>
 <td>string</td>
 <td>Deterministic identity for one parameter set and seed</td>
 </tr>
@@ -407,12 +407,12 @@ manifests, and release tags.</p>
 <td>One-based deme number</td>
 </tr>
 <tr>
-<td><code>locus_id</code></td>
+<td>locus_id</td>
 <td>integer</td>
 <td>Configured positive locus identifier</td>
 </tr>
 <tr>
-<td><code>allele_id</code></td>
+<td>allele_id</td>
 <td>integer</td>
 <td>Opaque identity-only allele label</td>
 </tr>
@@ -428,8 +428,8 @@ manifests, and release tags.</p>
 UTC start/end timestamps, generation, watched statistic, and whether
 convergence or the hard cap ended the run. It also carries:</p>
 <ul>
-<li><code>schema_version</code>: the manifest's own shape version.</li>
-<li><code>convergence.generation_count</code>: how many distinct generations the run
+<li>schema_version: the manifest's own shape version.</li>
+<li>convergence.generation_count: how many distinct generations the run
 actually wrote to <code>trajectory.jsonl</code> (<code>convergence.generation + 1</code> for
 every run, since no generation is ever skipped — recorded explicitly
 rather than left implicit).</li>
@@ -441,7 +441,7 @@ row, so a trajectory edited, truncated, or replaced after the run
 completed is refused with a clear error rather than re-analyzed
 silently.</li>
 </ul>
-<p><code>output_directory</code> (the whole four-file set for a scalar run, or the whole
+<p>output_directory (the whole four-file set for a scalar run, or the whole
 <code>replicate-NNN/</code> plus <code>summary.json</code>/<code>manifest.json</code> tree for a batch) is
 built in a hidden temporary location beside the target path and published
 with a single atomic rename only once every file in it is flushed and
@@ -453,7 +453,7 @@ an unclean power loss: nothing in the write path calls <code>fsync</code>, so on
 power loss a directory can look complete (the rename itself is atomic)
 while some file inside it has content that never reached physical disk.</p>
 <p><strong>Compatibility with <code>fim</code> 1.0.0 output.</strong> <code>fim</code> 1.0.0, the only version
-released before <code>schema_version</code> and <code>artifacts</code> existed, wrote manifests
+released before schema_version and <code>artifacts</code> existed, wrote manifests
 with neither field. <code>fim stats</code> refuses such a manifest — it has no
 digest to verify the trajectory against — with an error naming both the
 cause and that there is no automated migration: re-run the same
@@ -463,33 +463,33 @@ to get a manifest this version can read and verify.</p>
 <p>The final report contains:</p>
 <ul>
 <li>run identity, generation, convergence flag, watched statistic, and reason;</li>
-<li><var>H</var><sub>S</sub>, <var>H</var><sub>T</sub>, and the correctly partitioned <var>H</var><sub>ST</sub>;</li>
-<li><var>G</var><sub>ST</sub> (<code>null</code> only when <em>every</em> tracked locus is fixed for the same
+<li>H<sub>S</sub>, H<sub>T</sub>, and the correctly partitioned H<sub>ST</sub>;</li>
+<li>G<sub>ST</sub> (<code>null</code> only when <em>every</em> tracked locus is fixed for the same
 allele in every deme; with several loci, a locus that is fixed on its
 own does not blank out the others — it is dropped and the remaining,
 genuinely polymorphic loci are averaged);</li>
-<li>Jost's <var>D</var>, entropy differentiation <var>E</var><sub>ST</sub>, and allele-number
-differentiation <var>K</var><sub>ST</sub>.</li>
+<li>Jost's <code>D</code>, entropy differentiation E<sub>ST</sub>, and allele-number
+differentiation K<sub>ST</sub>.</li>
 </ul>
 <p>Multiple loci are independent repeats; report scalars are their arithmetic
-means (<var>G</var><sub>ST</sub> as just described). <var>D</var> and <var>K</var><sub>ST</sub> always use equal deme
-weighting. <code>deme_weighting</code> affects <var>E</var><sub>ST</sub>.</p>
+means (G<sub>ST</sub> as just described). <code>D</code> and K<sub>ST</sub> always use equal deme
+weighting. deme_weighting affects E<sub>ST</sub>.</p>
 <h3 id="scatterpng"><code>scatter.png</code></h3>
 <ul>
-<li><code class="math-expr">d = 2</code>: direct Deme 1 versus Deme 2 scatter with a diagonal reference.</li>
-<li><code class="math-expr">d = 3</code>: direct three-dimensional scatter.</li>
-<li><code class="math-expr">4 &lt;= d &lt;= 6</code>: every pairwise deme projection.</li>
-<li><code class="math-expr">d &gt; 6</code>: direct Deme 1 versus Deme 2 scatter, same as <code class="math-expr">d = 2</code> — not a
+<li><code>d = 2</code>: direct Deme 1 versus Deme 2 scatter with a diagonal reference.</li>
+<li><code>d = 3</code>: direct three-dimensional scatter.</li>
+<li><code>4 &lt;= d &lt;= 6</code>: every pairwise deme projection.</li>
+<li><code>d &gt; 6</code>: direct Deme 1 versus Deme 2 scatter, same as <code>d = 2</code> — not a
 PCA projection.</li>
 </ul>
-<p>One point represents one <code class="math-expr">(locus, allele)</code> pair. Coincident points are enlarged
+<p>One point represents one <code>(locus, allele)</code> pair. Coincident points are enlarged
 and annotated.</p>
 <h3 id="batch-summaryjson-and-manifestjson">Batch <code>summary.json</code> and <code>manifest.json</code></h3>
-<p>Written only for <code>n_replicates</code> greater than one, alongside the
+<p>Written only for n<sub>replicates</sub> greater than one, alongside the
 <code>replicate-NNN/</code> subdirectories, each of which holds the four scalar-run
 files above.</p>
-<p><code>summary.json</code> maps each reported statistic name (<var>D</var>, <var>G</var><sub>ST</sub>, <var>E</var><sub>ST</sub>,
-<var>K</var><sub>ST</sub>, <var>H</var><sub>S</sub>, <code class="math-expr">H_{T</code>}, <var>H</var><sub>ST</sub>) to its across-replicate confidence interval:</p>
+<p><code>summary.json</code> maps each reported statistic name (<code>D</code>, G<sub>ST</sub>, E<sub>ST</sub>,
+K<sub>ST</sub>, H<sub>S</sub>, <code>H&lt;sub&gt;T</code></sub>, H<sub>ST</sub>) to its across-replicate confidence interval:</p>
 <pre><code class="language-json">{
   &quot;D&quot;: {
     &quot;mean&quot;: 0.643,
@@ -501,30 +501,30 @@ files above.</p>
   }
 }
 </code></pre>
-<p><var>G</var><sub>ST</sub> can have a smaller <code>sample_count</code> than the other statistics: a
-replicate whose locus is monomorphic across every deme reports <var>G</var><sub>ST</sub> as
+<p>G<sub>ST</sub> can have a smaller sample_count than the other statistics: a
+replicate whose locus is monomorphic across every deme reports G<sub>ST</sub> as
 <code>null</code> in its own <code>report.json</code>, and that replicate is excluded from
-<var>G</var><sub>ST</sub>'s interval rather than papered over with a substitute value. A
+G<sub>ST</sub>'s interval rather than papered over with a substitute value. A
 statistic left with fewer than two defined replicates is omitted from
 <code>summary.json</code> entirely.</p>
 <p>The batch's own <code>manifest.json</code> (distinct from each replicate's own) records
-<code>schema_version</code>, the batch <code>run_id</code>, every <code>replicate_run_ids</code> entry,
-<code>replicate_count</code>, the shared <code>parameters</code>, batch start/end timestamps, and
-<code>software_version</code> — not a per-run convergence outcome, since each replicate
+schema_version, the batch run_id, every replicate_run_ids entry,
+replicate_count, the shared <code>parameters</code>, batch start/end timestamps, and
+software_version — not a per-run convergence outcome, since each replicate
 has its own. Like a scalar run's manifest, it also carries <code>artifacts</code>: the
 SHA-256 digest and byte count of <code>summary.json</code> and of each replicate's own
 <code>manifest.json</code> (keyed <code>replicate-NNN</code>), recorded once every one of them is
 flushed, so an edited, truncated, or replaced batch-level artifact is
 detectable the same way a scalar run's is. Under parallel execution — the
-CLI default — an adaptive <code>replicate_tolerance</code> stop can leave a worker that
+CLI default — an adaptive replicate_tolerance stop can leave a worker that
 had already started its own <code>replicate-NNN/</code> directory before the stop was
 decided; that directory is pruned before publishing, so the <code>replicate-*</code>
-subdirectories actually present always equal <code>replicate_run_ids</code> exactly.</p>
+subdirectories actually present always equal replicate_run_ids exactly.</p>
 <h2 id="reproduce-a-run">Reproduce a run</h2>
 <ol>
 <li>Copy <code>manifest.json</code>.</li>
 <li>Use its <code>parameters</code> object as a new YAML config.</li>
-<li>Run the same <code>fim</code> version shown in <code>software_version</code>.</li>
+<li>Run the same <code>fim</code> version shown in software_version.</li>
 <li>Compare <code>trajectory.jsonl</code> and <code>report.json</code> byte for byte.</li>
 </ol>
 <p>Given the same version, parameters, and seed, those files are identical.
@@ -537,7 +537,7 @@ Manifest timestamps may differ.</p>
 to publish into one that already exists at all, even if empty — never
 appended, overwritten, or reused.</li>
 <li><strong>Reached the cap:</strong> inspect the trajectory and report, then increase
-<code>max_generations</code>, relax the tolerance, increase the window, or select
+max_generations, relax the tolerance, increase the window, or select
 another convergence statistic based on the study's needs.</li>
 <li><strong>Windows warning:</strong> verify the release checksum before running the unsigned
 executable. See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/SECURITY.md">SECURITY.md</a>.</li>
