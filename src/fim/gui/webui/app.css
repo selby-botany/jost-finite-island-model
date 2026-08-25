@@ -51,12 +51,21 @@
     display: none !important;
 }
 
+/* `overflow-y: auto` on both `html` and `body` lets the page scroll
+ * inside the pywebview window when content (e.g. a large batch results
+ * table) is taller than the window height.  Without this, pywebview
+ * clips everything beyond the window edge silently. */
+html {
+    overflow-y: auto;
+}
+
 body {
     margin: 0;
     font-family: var(--fim-font);
     background: var(--fim-background);
     color: var(--fim-foreground);
     font-size: 14px;
+    overflow-y: auto;
 }
 
 #app {
