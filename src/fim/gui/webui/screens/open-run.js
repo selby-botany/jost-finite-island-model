@@ -3,8 +3,8 @@
 /* Screen 6: open an existing run (design doc §4.6) -- pick a persisted
  * trajectory and generation, then re-analyze it, matching `fim stats`.
  *
- * Reached from the unified run view's own "Open a run…" button
- * (`run-view-controls.js`). Opening succeeds by handing `Api.open_run`'s
+ * Reached from the File menu's own "Open run…" action (`app.js`'s
+ * `fim.menu.openRun`). Opening succeeds by handing `Api.open_run`'s
  * own `completed`-shaped payload straight to `window.fim.
  * enterCompletedState`, landing directly in that state (unified-run-view
  * design §3.2.1) -- literal reuse of the same rendering path a live

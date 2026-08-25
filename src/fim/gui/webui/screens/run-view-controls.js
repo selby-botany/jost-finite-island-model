@@ -1,8 +1,8 @@
 "use strict";
 
 /* The unified run view's always-present controls (unified-run-view
- * design §3.1.4, §3.7, §8 Phase E) -- Run simulation/Cancel/Open a
- * run/Open output folder, plus File-menu-driven load/save actions, and
+ * design §3.1.4, §3.7, §8 Phase E) -- Run simulation/Cancel/Open
+ * output folder, plus File-menu-driven load/save/open-run actions, and
  * the shared
  * status banner/reason line, none of which depend on which of
  * `initial`/`running`/`completed` is currently showing. `run-view-
@@ -15,7 +15,6 @@ const runBanner = document.getElementById("run-banner");
 const runReason = document.getElementById("run-reason");
 const runButton = document.getElementById("run-button");
 const cancelButton = document.getElementById("cancel-run-button");
-const openRunButton = document.getElementById("open-run-button");
 const openFolderButton = document.getElementById("open-folder-button");
 
 function showRunBanner(message) {
@@ -137,9 +136,6 @@ function wireRunViewControls() {
     runButton.addEventListener("click", onRunClicked);
     cancelButton.addEventListener("click", onCancelClicked);
     openFolderButton.addEventListener("click", onOpenFolderClicked);
-    openRunButton.addEventListener("click", () => {
-        window.fim.showOpenRunScreen();
-    });
 }
 
 window.fim.showRunBanner = showRunBanner;

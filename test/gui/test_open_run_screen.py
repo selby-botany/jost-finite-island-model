@@ -1,8 +1,8 @@
 """Headless functional tests for Screen 6, opening an existing run (design
 doc §4.6, §7.7).
 
-Real DOM-driven proof that Screen 1's "Open a run…" button reaches Screen
-6, that Screen 6's recent-runs list is populated from a real, completed
+Real DOM-driven proof that the File menu's "Open run…" action reaches
+Screen 6, that Screen 6's recent-runs list is populated from a real, completed
 run, and that selecting and opening it re-renders Screen 3 with the real
 content `Api.open_run` returns — `test/gui/test_app_api.py`'s own tests
 already prove `Api.list_recent_runs`/`open_run` correct as plain Python
@@ -73,10 +73,10 @@ def _write_run(tmp_path: Path) -> Path:
     return output_directory
 
 
-def test_open_a_run_button_reaches_screen_six(
+def test_open_run_menu_action_reaches_screen_six(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Clicking "Open a run…" on Screen 1 shows Screen 6.
+    """Triggering the File menu's "Open run…" action shows Screen 6.
 
     Polls for `window.__fimOpenRunRecentRunsLoaded` alongside screen
     visibility, not screen visibility alone: `showOpenRunScreen` shows
@@ -95,7 +95,7 @@ def test_open_a_run_button_reaches_screen_six(
     visible = drive(
         window,
         ready=_INPUT_SCREEN_READY,
-        trigger="document.getElementById('open-run-button').click();",
+        trigger="window.fim.menu.openRun();",
         read=(
             "({"
             "screenVisible: "
@@ -147,7 +147,7 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     def _drive() -> None:
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.evaluate_js("document.getElementById('open-run-button').click();")
+            window.evaluate_js("window.fim.menu.openRun();")
             row_count = _poll_until(
                 window,
                 "document.getElementById('open-run-recent-runs-body').children.length",
