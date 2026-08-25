@@ -1,0 +1,15 @@
+N: 100
+d: 5
+m: 0.0001
+mu: 0.000001
+seed: 20260825
+loci:
+  - locus_id: 1
+    length: 200
+initial_allele_count: 2
+initial_concentration: 1.0
+deme_weighting: size
+convergence_statistic: G_ST
+convergence_window: 500
+convergence_tolerance: 0.005
+max_generations: 100000

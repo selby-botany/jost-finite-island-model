@@ -1,0 +1,54 @@
+{
+  "artifacts": {
+    "report": {
+      "bytes": 326,
+      "sha256": "09d21b4f169d5a2788f3222c6462121221d0c20f00eb5c5d3b123a17a4682a9f"
+    },
+    "scatter": {
+      "bytes": 125174,
+      "sha256": "5f3f3b76e1e8fb81ad2902f1c64e5d9ca517cfbc08a2badf21d95012890f00f1"
+    },
+    "trajectory": {
+      "bytes": 379613,
+      "sha256": "38a786436c0845dc62064e7fc598788282435fe09739b6a9ad4fa8d0b141069a"
+    }
+  },
+  "convergence": {
+    "converged": true,
+    "generation": 148,
+    "generation_count": 149,
+    "reason": "statistic converged",
+    "statistic": "D"
+  },
+  "ended_at": "2026-08-25T16:56:01.494725Z",
+  "parameters": {
+    "N": 100,
+    "convergence_combinator": "all",
+    "convergence_statistic": "D",
+    "convergence_tolerance": 0.005,
+    "convergence_window": 100,
+    "d": 4,
+    "deme_weighting": "size",
+    "initial_allele_count": 2,
+    "initial_concentration": 1.0,
+    "loci": [
+      {
+        "length": 200,
+        "locus_id": 1
+      }
+    ],
+    "m": 0.01,
+    "max_generations": 10000,
+    "migrant_sampling": "continuous",
+    "mu": 0.005,
+    "mutation_model": "infinite_alleles",
+    "n_replicates": 1,
+    "replicate_confidence": 0.95,
+    "replicate_minimum": 10,
+    "seed": 20260825
+  },
+  "run_id": "run-a5f78798155d9448",
+  "schema_version": 1,
+  "software_version": "1.2.0",
+  "started_at": "2026-08-25T16:56:01.268317Z"
+}

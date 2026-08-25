@@ -1,0 +1,31 @@
+{
+  "scenario": "dear_nolan_high",
+  "naive_config": {
+    "N": 2000,
+    "d": 100,
+    "m": 0.01,
+    "mu": 0.001,
+    "seed": 992000,
+    "loci": [
+      {
+        "locus_id": 1,
+        "length": 200
+      }
+    ],
+    "convergence_statistic": "G_ST",
+    "convergence_window": 50,
+    "convergence_tolerance": 0.01,
+    "max_generations": 3000
+  },
+  "seed": 992000,
+  "replicates": 5,
+  "N": 2000,
+  "d": 100,
+  "m": 0.01,
+  "mu": 0.001,
+  "horizon": 30,
+  "mean_G_ST": 0.021884996294960227,
+  "mean_D": 0.9079033495473837,
+  "oracle_G_ST": 0.021958726088518874,
+  "oracle_D": 0.9087816296667156
+}

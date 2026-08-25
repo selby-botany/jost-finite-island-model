@@ -1,0 +1,14 @@
+{
+  "D": 0.5999999999999999,
+  "E_ST": 0.4181656600790515,
+  "G_ST": 1.0,
+  "H_S": 0.0,
+  "H_ST": 0.47999999999999987,
+  "H_T": 0.47999999999999987,
+  "K_ST": 0.25,
+  "converged": true,
+  "converged_on": "G_ST",
+  "generation": 981,
+  "reason": "statistic converged",
+  "run_id": "run-dfdfc085526b7cb5"
+}
