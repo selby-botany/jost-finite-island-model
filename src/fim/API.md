@@ -61,6 +61,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
     * [validate\_form](#fim.gui.app.Api.validate_form)
     * [get\_initial\_state\_panels](#fim.gui.app.Api.get_initial_state_panels)
+    * [get\_initial\_state\_deme\_pair\_panel](#fim.gui.app.Api.get_initial_state_deme_pair_panel)
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
@@ -1306,6 +1307,33 @@ state would show at generation 0.
   `SimulationParams` (the caller silently leaves the canvas
   blank — invalid form values are already reported through the
   normal validation path).
+
+<a id="fim.gui.app.Api.get_initial_state_deme_pair_panel"></a>
+
+#### get\_initial\_state\_deme\_pair\_panel
+
+```python
+def get_initial_state_deme_pair_panel(values: dict[str, str], first_deme: int,
+                                      second_deme: int) -> dict[str, Any]
+```
+
+Return one chosen deme pair panel for the current p_0 form values.
+
+Supports the initial screen's axis selectors, which can choose a
+specific pair even when the default overview does not render every
+pair as separate panels (`d > 6`).
+
+**Arguments**:
+
+- `values` - The same form payload `get_initial_state_panels` accepts.
+- `first_deme` - 1-based X-axis deme number.
+- `second_deme` - 1-based Y-axis deme number.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "panel": ...}` on success; `{"ok": False,
+- `"message"` - ...}` if the form is invalid or the pair is invalid.
 
 <a id="fim.gui.app.Api.load_yaml"></a>
 

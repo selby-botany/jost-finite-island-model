@@ -58,11 +58,22 @@
            takes the full row alone during `running`/`initial`. -->
     <div class="run-body">
       <div id="run-plot-title" class="run-plot-title" aria-live="polite"></div>
+      <div class="run-canvas-frame">
+        <div id="run-deme-pair-selector" class="run-axis-selectors" hidden>
+          <label for="run-y-deme" class="axis-selector axis-selector-y">
+            <select id="run-y-deme" aria-label="Y deme selector"></select>
+          </label>
+          <button type="button" id="run-show-overview-button">Show overview</button>
+          <label for="run-x-deme" class="axis-selector axis-selector-x">
+            <select id="run-x-deme" aria-label="X deme selector"></select>
+          </label>
+        </div>
       <!-- Shared across all three states: `running`/`completed` draw
            into it; `initial` now draws the p_0 scatter (Phase F).
            No width/height attributes -- sized entirely by CSS so the
            plot fills the available space and resizes with the window. -->
-      <canvas id="run-canvas"></canvas>
+        <canvas id="run-canvas"></canvas>
+      </div>
 
       <!-- `initial`-only: p_0 statistics shown before any run starts
            (Phase F: `run-view-initial.js` populates these via
@@ -95,16 +106,6 @@
         <div class="batch-results-summary" id="batch-results-summary" hidden></div>
       </div>
     </div>
-    <fieldset class="composite" id="run-deme-pair-selector" hidden>
-      <legend>Compare demes directly</legend>
-      <label for="run-x-deme">X</label>
-      <select id="run-x-deme"></select>
-      <label for="run-y-deme">Y</label>
-      <select id="run-y-deme"></select>
-      <button type="button" id="run-show-pair-button">Show pair</button>
-      <button type="button" id="run-show-overview-button">Show overview</button>
-    </fieldset>
-
     <!-- Batch `completed`-only: the replicate table, full width below
          the flex row above rather than squeezed into it. -->
     <table class="batch-results-table" id="batch-results-table" hidden>

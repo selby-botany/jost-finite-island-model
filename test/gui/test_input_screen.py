@@ -110,6 +110,30 @@ def test_input_screen_run_button_enabled_for_the_valid_starter_form(
     assert settled["disabled"] is False
 
 
+def test_initial_view_shows_axis_selectors_for_deme_pair_choice(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The initial p_0 view shows axis selectors when at least two demes exist."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="null",
+        read=(
+            "({"
+            "hidden: document.getElementById('run-deme-pair-selector').hidden, "
+            "xCount: document.getElementById('run-x-deme').options.length, "
+            "yCount: document.getElementById('run-y-deme').options.length"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("xCount", 0) >= 2,
+        poll_attempts=500,
+    )
+
+    assert settled["hidden"] is False
+    assert settled["xCount"] >= 2
+    assert settled["yCount"] == settled["xCount"]
+
+
 def test_input_screen_invalid_value_disables_the_run_button(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

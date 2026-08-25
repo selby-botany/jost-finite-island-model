@@ -234,7 +234,8 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
                 window.evaluate_js(
                     "document.getElementById('run-x-deme').value = '1';"
                     "document.getElementById('run-y-deme').value = '3';"
-                    "document.getElementById('run-show-pair-button').click();"
+                    "document.getElementById('run-y-deme').dispatchEvent("
+                    "new Event('change'));"
                 )
                 pair_snapshot = _poll_until(
                     "document.getElementById('run-canvas').toDataURL()",

@@ -497,8 +497,8 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
                 window.evaluate_js(
                     "document.getElementById('run-x-deme').value = '1';"
                     "document.getElementById('run-y-deme').value = '3';"
-                    "document.getElementById("
-                    "'run-show-pair-button').click();"
+                    "document.getElementById('run-y-deme').dispatchEvent("
+                    "new Event('change'));"
                 )
                 # Wait for the bridge round trip itself to land, not
                 # for an arbitrary number of ticks — see this test's

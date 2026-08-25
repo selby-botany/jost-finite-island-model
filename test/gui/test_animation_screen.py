@@ -27,9 +27,9 @@ pair-aware for this phase... this phase's own 'no new capabilities'
 scope does not need to answer yet"); `get_animation_deme_pair_frames`
 itself still exists and is still covered by `test_app_api.py` as a plain
 Python call, just unreachable from any button today. The *static*-frame
-deme-pair selector this phase actually ships (`run-x-deme`/`run-show-
-pair-button`, affecting only the currently-drawn frame, never future
-scrubbing) is already covered by `test/gui/test_results_screen.py`'s own
+deme-pair selector this phase actually ships (`run-x-deme`/`run-y-deme`,
+affecting only the currently-drawn frame, never future scrubbing) is
+already covered by `test/gui/test_results_screen.py`'s own
 `test_deme_pair_selector_switches_a_chosen_pair_and_back` — nothing here
 duplicates it.
 

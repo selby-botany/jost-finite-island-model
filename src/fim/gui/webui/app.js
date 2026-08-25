@@ -102,43 +102,26 @@ const fim = {
     },
 
     /**
-     * Wire a "compare two demes directly" selector -- the run view's
-     * shared answer to a large-`d` run's default overview (`fim.viz.
-     * scatter.panels_from_points`' own arbitrary "first pair" once `d`
-     * exceeds `PAIRWISE_MAX_DEMES`, unified-run-view design §3.6) not
-     * necessarily showing the one meaningful deme pair a researcher
-     * actually wants -- used identically by `completed` (a single-panel
-     * redraw, `run-view-completed.js`) and `running` (a `set_live_deme_
-     * pair` bridge call plus a local display flag, `run-view-
-     * running.js`, the one case where the underlying data itself is
-     * still changing rather than a fixed completed/sampled set). Two
-     * axis dropdowns and a "Show pair"/"Show overview" pair of buttons
-     * -- what each one *does* is entirely up to the caller's own
-     * `onShowPair`/`onShowOverview`; this function owns only the
-     * dropdown population and the "X and Y cannot match" enable/disable
-     * rule every caller shares.
+     * Wire the axis selectors used to choose a focused deme pair.
+     *
+     * The selectors apply immediately on change; there is no separate
+     * "Show pair" button. "Show overview" remains explicit so the user
+     * can return from a single-pair view to the default multi-panel
+     * overview.
      *
      * @param {Object} config
      * @param {HTMLSelectElement} config.xSelect
      * @param {HTMLSelectElement} config.ySelect
-     * @param {HTMLButtonElement} config.showPairButton
      * @param {HTMLButtonElement} config.showOverviewButton
-     * @param {HTMLElement} config.container - Hidden entirely when
-     *     `demeCount < 2` (a scatter needs two distinct demes).
+     * @param {HTMLElement} config.container - Hidden when `demeCount < 2`.
      * @param {number} config.demeCount
-     * @param {(x: number, y: number) => (void|Promise<void>)}
-     *     config.onShowPair - Called with the two chosen 1-based deme
-     *     numbers on "Show pair" click; may be `async`.
-     * @param {() => (void|Promise<void>)} config.onShowOverview -
-     *     Called on "Show overview" click; may be `async` (`screens/
-     *     progress.js`'s own live selector makes a real bridge call
-     *     here, unlike Screens 3/4/5's purely local redraw).
+     * @param {(x: number, y: number) => (void|Promise<void>)} config.onShowPair
+     * @param {() => (void|Promise<void>)} config.onShowOverview
      */
     wireDemePairSelector(config) {
         const {
             xSelect,
             ySelect,
-            showPairButton,
             showOverviewButton,
             container,
             demeCount,
@@ -162,15 +145,27 @@ const fim = {
         xSelect.value = "1";
         ySelect.value = "2";
 
-        function updateShowPairEnabled() {
-            showPairButton.disabled = xSelect.value === ySelect.value;
+        function forceDistinctSelect(changed) {
+            if (xSelect.value !== ySelect.value) {
+                return;
+            }
+            const other = changed === xSelect ? ySelect : xSelect;
+            const current = Number(changed.value);
+            const replacement = current === demeCount ? current - 1 : current + 1;
+            other.value = String(replacement);
         }
-        xSelect.onchange = updateShowPairEnabled;
-        ySelect.onchange = updateShowPairEnabled;
-        updateShowPairEnabled();
 
-        showPairButton.onclick = async () => {
+        async function applyPairSelection() {
             await onShowPair(Number(xSelect.value), Number(ySelect.value));
+        }
+
+        xSelect.onchange = async () => {
+            forceDistinctSelect(xSelect);
+            await applyPairSelection();
+        };
+        ySelect.onchange = async () => {
+            forceDistinctSelect(ySelect);
+            await applyPairSelection();
         };
 
         showOverviewButton.onclick = async () => {

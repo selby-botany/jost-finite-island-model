@@ -23,7 +23,6 @@ const scrubberControls = document.getElementById("scrubber-controls");
 const runDemePairSelector = document.getElementById("run-deme-pair-selector");
 const runXDeme = document.getElementById("run-x-deme");
 const runYDeme = document.getElementById("run-y-deme");
-const runShowPairButton = document.getElementById("run-show-pair-button");
 const runShowOverviewButton = document.getElementById("run-show-overview-button");
 
 // The progress bar / label elements (declared in run-view-running.js
@@ -80,9 +79,7 @@ async function renderInitialPreview() {
         }
     }
 
-    // Scatter panels.
-    const panels = result.panels;
-    if (panels && panels.length > 0) {
+    function drawInitialOverview() {
         if (panels.length === 1) {
             drawScatter(runCanvas, panels[0]);
         } else {
@@ -90,27 +87,34 @@ async function renderInitialPreview() {
         }
     }
 
-    // Deme-pair selector -- static view only in `initial` (no live
-    // bridge call, only a local redraw from already-fetched panels).
+    // Scatter panels.
+    const panels = result.panels;
+    if (panels && panels.length > 0) {
+        drawInitialOverview();
+    }
+
+    // Initial-state axis selectors.
     runDemePairSelector.hidden = !panels || result.demeCount < 2;
     if (panels && panels.length > 0 && result.demeCount >= 2) {
         window.fim.wireDemePairSelector({
             xSelect: runXDeme,
             ySelect: runYDeme,
-            showPairButton: runShowPairButton,
             showOverviewButton: runShowOverviewButton,
             container: runDemePairSelector,
             demeCount: result.demeCount,
-            onShowPair: (_x, _y) => {
-                // Static redraw only in `initial` -- no live pair
-                // bridge call until a run is actually running.
+            onShowPair: async (x, y) => {
+                const pairResult =
+                    await window.pywebview.api.get_initial_state_deme_pair_panel(
+                        values,
+                        x,
+                        y
+                    );
+                if (pairResult.ok) {
+                    drawScatter(runCanvas, pairResult.panel);
+                }
             },
             onShowOverview: () => {
-                if (panels.length === 1) {
-                    drawScatter(runCanvas, panels[0]);
-                } else {
-                    drawScatterGrid(runCanvas, panels);
-                }
+                drawInitialOverview();
             },
         });
     }

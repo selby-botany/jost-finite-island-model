@@ -96,8 +96,6 @@ const SINGLE_PANEL_PADDING = 44;
 const GRID_CELL_PADDING = 32;
 const SINGLE_PANEL_TICK_FONT = 10;
 const GRID_CELL_TICK_FONT = 8;
-const SINGLE_PANEL_LABEL_FONT = 11;
-const GRID_CELL_LABEL_FONT = 9;
 const GRID_CELL_MARKER_SCALE = 0.6;
 const GRID_COLUMNS_MAX = 3;
 const TICK_LENGTH = 4;
@@ -138,7 +136,6 @@ function drawScatter(canvas, panel) {
         {
             padding: SINGLE_PANEL_PADDING,
             tickFontSize: SINGLE_PANEL_TICK_FONT,
-            labelFontSize: SINGLE_PANEL_LABEL_FONT,
             markerScale: 1,
         }
     );
@@ -179,7 +176,6 @@ function drawScatterGrid(canvas, panels) {
             {
                 padding: GRID_CELL_PADDING,
                 tickFontSize: GRID_CELL_TICK_FONT,
-                labelFontSize: GRID_CELL_LABEL_FONT,
                 markerScale: GRID_CELL_MARKER_SCALE,
             }
         );
@@ -241,7 +237,7 @@ function computeDomain(points, bounded) {
  * @param {{x: number, y: number, width: number, height: number}} rect
  * @param {{x_label?: string, y_label?: string, kind?: string,
  *     points: Array<{x: number, y: number, count: number, common: boolean}>}} panel
- * @param {{padding: number, tickFontSize: number, labelFontSize: number,
+ * @param {{padding: number, tickFontSize: number,
  *     markerScale: number}} opts
  */
 function drawScatterCell(context, rect, panel, opts) {
@@ -284,21 +280,6 @@ function drawScatterCell(context, rect, panel, opts) {
     }
 
     drawAxisTicks(context, originX, originY, plotSize, opts.tickFontSize, domain, bounded);
-
-    context.fillStyle = "#6b6b6b";
-    context.font = `${opts.labelFontSize}px -apple-system, sans-serif`;
-    context.textAlign = "center";
-    context.textBaseline = "alphabetic";
-    context.fillText(
-        panel.x_label || "Deme 1",
-        originX + plotSize / 2,
-        rect.y + rect.height - 4
-    );
-    context.save();
-    context.translate(rect.x + opts.labelFontSize + 2, originY - plotSize / 2);
-    context.rotate(-Math.PI / 2);
-    context.fillText(panel.y_label || "Deme 2", 0, 0);
-    context.restore();
 
     const markerScale = opts.markerScale;
     for (const point of panel.points) {

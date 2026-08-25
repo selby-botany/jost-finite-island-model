@@ -150,7 +150,6 @@ function wireLiveDemePairSelector(demeCount) {
     window.fim.wireDemePairSelector({
         xSelect: runXDeme,
         ySelect: runYDeme,
-        showPairButton: runShowPairButton,
         showOverviewButton: runShowOverviewButton,
         container: runDemePairSelector,
         demeCount,

@@ -602,6 +602,35 @@ class Api:
             "maxGenerations": params.max_generations,
         }
 
+    def get_initial_state_deme_pair_panel(
+        self, values: dict[str, str], first_deme: int, second_deme: int
+    ) -> dict[str, Any]:
+        """Return one chosen deme pair panel for the current p_0 form values.
+
+        Supports the initial screen's axis selectors, which can choose a
+        specific pair even when the default overview does not render every
+        pair as separate panels (`d > 6`).
+
+        Args:
+            values: The same form payload `get_initial_state_panels` accepts.
+            first_deme: 1-based X-axis deme number.
+            second_deme: 1-based Y-axis deme number.
+
+        Returns:
+            `{"ok": True, "panel": ...}` on success; `{"ok": False,
+            "message": ...}` if the form is invalid or the pair is invalid.
+        """
+        try:
+            payload = form_values_to_payload(values)
+            params = SimulationParams.from_mapping(payload)
+            state = generate_initial_state(params)
+            panel = deme_pair_panel(
+                frequency_points(state), first_deme - 1, second_deme - 1
+            )
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "panel": panel}
+
     def load_yaml(self) -> dict[str, Any]:
         """Browse for and load a YAML config, returning the form values it renders to.
 

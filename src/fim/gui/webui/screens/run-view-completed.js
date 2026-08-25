@@ -319,7 +319,6 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         window.fim.wireDemePairSelector({
             xSelect: runXDeme,
             ySelect: runYDeme,
-            showPairButton: runShowPairButton,
             showOverviewButton: runShowOverviewButton,
             container: runDemePairSelector,
             demeCount: payload.demeCount,
