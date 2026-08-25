@@ -41,6 +41,7 @@ import webbrowser
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from socketserver import ThreadingMixIn
 from typing import Any, Final, Protocol, cast
 
 import webview
@@ -1625,6 +1626,11 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
             silently narrowed away, since nothing downstream of this
             function is prepared to run without a real window.
     """
+    # pywebview's local-file HTTP adapter creates a `ThreadingMixIn`
+    # request handler per WebKit connection. Its default non-daemon
+    # handlers can outlive a closed Cocoa window and block Python's
+    # interpreter shutdown in `wait_for_thread_shutdown`.
+    ThreadingMixIn.daemon_threads = True
     created = webview.create_window(
         "fim",
         url=str(_webui_directory() / "index.html"),
