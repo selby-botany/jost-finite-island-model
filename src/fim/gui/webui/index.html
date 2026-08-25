@@ -39,12 +39,23 @@
       <span class="error-dot" id="dot-batch" hidden></span>
     </div>
 
-    <!-- `running`-only: the generation/replicate progress indicator. -->
-    <div id="run-progress" hidden>
-      <div class="progress-bars">
-        <label for="progress-generation">Generation</label>
-        <progress id="progress-generation" max="1" value="0"></progress>
-        <span id="progress-generation-label"></span>
+    <div class="run-toolbar">
+      <!-- `running`-only: the generation/replicate progress indicator. -->
+      <div id="run-progress" hidden>
+        <div class="progress-bars">
+          <label for="progress-generation">Generation</label>
+          <progress id="progress-generation" max="1" value="0"></progress>
+          <span id="progress-generation-label"></span>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" id="run-button" disabled>Run simulation</button>
+        <button type="button" id="cancel-run-button" disabled>Cancel</button>
+        <button type="button" id="open-folder-button" hidden>Open output folder</button>
+        <!-- `completed`-only: return to the `initial` state (and p_0
+             preview) without starting a new run. Hidden in `initial`/
+             `running`; `run-view-completed.js` shows and wires it. -->
+        <button type="button" id="results-back-button" hidden>Back</button>
       </div>
     </div>
 
@@ -147,15 +158,6 @@
 
     <!-- Always present, regardless of state (design §3.1.4). -->
     <p id="run-reason" class="reason"></p>
-    <div class="actions">
-      <button type="button" id="run-button" disabled>Run simulation</button>
-      <button type="button" id="cancel-run-button" disabled>Cancel</button>
-      <button type="button" id="open-folder-button" hidden>Open output folder</button>
-      <!-- `completed`-only: return to the `initial` state (and p_0
-           preview) without starting a new run. Hidden in `initial`/
-           `running`; `run-view-completed.js` shows and wires it. -->
-      <button type="button" id="results-back-button" hidden>Back</button>
-    </div>
   </section>
 
   <!-- Every configuration field still lives here, in one shared
