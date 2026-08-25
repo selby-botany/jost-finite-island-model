@@ -1921,3 +1921,42 @@ def _webui_directory() -> Path:
     if bundle_root is not None:
         return Path(bundle_root) / "fim" / "gui" / "webui"
     return Path(__file__).resolve().parent / "webui"
+
+
+if __name__ == "__main__":
+    # `bin/fim-gui` invokes `python3 -m fim.gui.app "$@"`.  Without this
+    # block the module is imported and exits silently — `main()` is never
+    # called.
+    #
+    # Default behaviour is detached (the shell prompt returns immediately),
+    # matching the natural expectation for a GUI launcher.  Pass
+    # `--no-detach` to block until the window closes — useful for scripts
+    # that need to wait for the user to finish.
+    import argparse as _argparse
+
+    _p = _argparse.ArgumentParser(
+        prog="fim-gui",
+        description="Launch the Finite Island Model graphical interface.",
+        add_help=True,
+    )
+    _p.add_argument(
+        "--version",
+        action="version",
+        version=f"fim-gui {fim_version}",
+    )
+    _p.add_argument(
+        "--no-detach",
+        action="store_true",
+        default=False,
+        help="block until the GUI window closes instead of returning immediately",
+    )
+    # parse_known_args so that unrecognised flags do not abort the launch.
+    _args, _ = _p.parse_known_args()
+    if _args.no_detach:
+        raise SystemExit(main())
+    # Detached default: reuse launcher._launch_gui so the subprocess
+    # mechanics (frozen-vs-source, start_new_session, DEVNULL fds) live
+    # in exactly one place.
+    from fim.launcher import _launch_gui
+
+    raise SystemExit(_launch_gui(detach=True))
