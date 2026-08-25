@@ -120,10 +120,12 @@ window.fim.renderInitialPreview = renderInitialPreview;
 
 /**
  * Enter `initial`: hide every other state's own content, disable the
- * controls only `running`/`completed` make sense for, and render the
- * p_0 preview (Phase F: scatter, statistics, gen-0 progress bar).
+ * controls only `running`/`completed` make sense for, and optionally render
+ * the p_0 preview (Phase F: scatter, statistics, gen-0 progress bar).
+ *
+ * @param {boolean} renderPreview
  */
-function enterInitialState() {
+function enterInitialState(renderPreview = true) {
     window.fim.setRunViewState("initial");
     window.fim.setCompletedOutputDirectory(null);
     runCompleted.hidden = true;
@@ -149,7 +151,9 @@ function enterInitialState() {
     clearRunCanvas();
     // Render p_0 preview asynchronously -- do not await here since
     // `enterInitialState` is called synchronously from many sites.
-    renderInitialPreview();
+    if (renderPreview) {
+        renderInitialPreview();
+    }
 }
 
 window.fim.enterInitialState = enterInitialState;
@@ -169,27 +173,20 @@ window.fim.enterInitialState = enterInitialState;
 window.fim.menu.newConfiguration = async function newConfiguration() {
     window.fim.showScreen("screen-run");
     window.__fimRunViewReady = false;
-    enterInitialState();
+    // The reset below supplies the values for the preview. Starting one
+    // before that reset would leave an untracked bridge call in flight.
+    enterInitialState(false);
     await resetInputForm();
-    // `enterInitialState`'s own `renderInitialPreview()` call already
-    // fired above, but before `resetInputForm` had applied real
-    // starter values -- `collectFormValues()` inside it reads
-    // whatever the fields held at that instant, synchronously, before
-    // any await, so that first call raced the reset and snapshotted
-    // stale/empty fields. A confirmed-live bug, not hypothetical: the
-    // bridge call it makes then fails validation and returns `!ok`,
-    // which leaves the canvas, statistics, and progress bar all blank
-    // with nothing ever re-triggering a redraw. Render again now that
-    // the form genuinely holds starter values.
+    // Render after the form genuinely holds starter values.
     await renderInitialPreview();
     window.__fimRunViewReady = true;
 };
 
 async function initializeRunView() {
-    enterInitialState();
+    // Avoid starting a preview against the blank form before its initial
+    // reset has completed.
+    enterInitialState(false);
     await resetInputForm();
-    // See the identical comment in `newConfiguration` above -- the
-    // same race exists here, on cold start.
     await renderInitialPreview();
     window.__fimRunViewReady = true;
 }
