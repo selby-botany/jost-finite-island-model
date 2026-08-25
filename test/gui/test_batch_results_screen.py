@@ -164,14 +164,15 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     # p_0 row: generation=0, outcome="initial".
     first_row = settled["firstRowCells"]
     assert first_row[0] == "0"
-    assert first_row[1] == "initial"
-    # Second row is the first replicate. Columns: Generation | Outcome | ...
+    # Column order: Generation | Replicate | Outcome | ...
+    assert first_row[2] == "initial"
+    # Second row is the first replicate. Columns: Generation | Replicate | Outcome | ...
     # "Converged", not "Converged (statistic converged)" -- `replicate.
     # reason` is redundant with `converged` in the true case (`StopReason`
     # only ever pairs them one way), so the parenthetical said nothing a
     # reader did not already know.
     second_row = settled["secondRowCells"]
-    assert second_row[1] == "Converged"
+    assert second_row[2] == "Converged"
 
 
 def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:

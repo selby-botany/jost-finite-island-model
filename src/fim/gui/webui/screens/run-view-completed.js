@@ -115,11 +115,14 @@ function replicateLabel(replicateId) {
 function renderBatchTable(replicates, p0Statistics) {
     batchResultsTableBody.replaceChildren();
     // p_0 baseline row — the initial conditions the entire batch shared.
+    // Column order: Generation | Replicate | Outcome | ...stats | Open
     if (p0Statistics) {
         const baseRow = document.createElement("tr");
         baseRow.classList.add("p0-row");
         const baseCells = [
             0,
+            // Placeholder for Replicate column — shared by the whole batch.
+            "",
             "initial",
             ...STATISTIC_NAMES.map((name) => p0Statistics[name]),
         ];
@@ -128,17 +131,22 @@ function renderBatchTable(replicates, p0Statistics) {
             cell.textContent = String(value);
             baseRow.appendChild(cell);
         }
-        // Placeholder empty cells for the "Replicate" and "Open"
-        // columns -- the baseline is shared by the whole batch, not
-        // any one replicate.
-        baseRow.appendChild(document.createElement("td"));
+        // Placeholder for the "Open" column.
         baseRow.appendChild(document.createElement("td"));
         batchResultsTableBody.appendChild(baseRow);
     }
-    // Sort replicates by generation ascending (lowest generation first).
-    const sorted = [...replicates].sort(
-        (a, b) => a.generation - b.generation
-    );
+    // Sort by generation ascending, then by replicate index ascending so
+    // replicates that converge at the same generation appear in a
+    // predictable, stable order rather than insertion/completion order.
+    const sorted = [...replicates].sort((a, b) => {
+        const genDiff = a.generation - b.generation;
+        if (genDiff !== 0) return genDiff;
+        // Extract the numeric suffix from the replicateId ("-r001" etc.)
+        // for a numeric, not lexicographic, secondary sort.
+        const numA = Number(/-r(\d+)$/.exec(a.replicateId || "")?.[1] ?? 0);
+        const numB = Number(/-r(\d+)$/.exec(b.replicateId || "")?.[1] ?? 0);
+        return numA - numB;
+    });
     for (const replicate of sorted) {
         const row = document.createElement("tr");
         // `replicate.reason` is always exactly `"statistic converged"`
@@ -149,8 +157,10 @@ function renderBatchTable(replicates, p0Statistics) {
         const outcome = replicate.converged
             ? "Converged"
             : `Not converged (${replicate.reason})`;
+        // Column order: Generation | Replicate | Outcome | ...stats
         const cells = [
             replicate.generation,
+            replicateLabel(replicate.replicateId),
             outcome,
             ...STATISTIC_NAMES.map((name) => replicate.statistics[name]),
         ];
@@ -159,9 +169,6 @@ function renderBatchTable(replicates, p0Statistics) {
             cell.textContent = String(value);
             row.appendChild(cell);
         }
-        const replicateCell = document.createElement("td");
-        replicateCell.textContent = replicateLabel(replicate.replicateId);
-        row.appendChild(replicateCell);
         // "Open replicate" (design §4.4): the exact same operation as
         // "Open a run…" over one replicate's own trajectory --
         // `replicate.trajectoryPath` is already joined server-side
