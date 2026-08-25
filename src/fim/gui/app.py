@@ -236,6 +236,30 @@ def _active_window() -> webview.Window | None:
     return webview.windows[0] if webview.windows else None
 
 
+def _save_dialog_path(
+    selection: str | tuple[str, ...] | list[str] | None,
+) -> Path | None:
+    """Normalise pywebview's platform-inconsistent SAVE dialog return value.
+
+    pywebview's macOS backend (`cocoa.py`) returns a bare `str` for a
+    SAVE dialog (the full chosen path) while every OPEN dialog and every
+    non-macOS backend returns a tuple.  Calling `selection[0]` on a bare
+    string yields the first *character* of the path, not the path itself
+    — `Path("/Users/jim/.../config.yaml")[0]` is `Path("/")`, a directory,
+    so our `is_dir()` cancel-guard silently swallows every real save.
+
+    Accepts all observed shapes:
+    - ``None``                → cancelled, return ``None``
+    - ``""``  / ``()``        → cancelled (empty), return ``None``
+    - ``str``                 → macOS SAVE, treat the whole string as the path
+    - ``(str, ...)``          → sequence, take the first element
+    """
+    if not selection:
+        return None
+    path = Path(selection) if isinstance(selection, str) else Path(selection[0])
+    return None if path.is_dir() else path
+
+
 def _reveal_in_file_browser(directory: Path) -> None:
     """Open `directory` in the platform's file browser.
 
@@ -632,13 +656,8 @@ class Api:
             directory=str(Path.home()),
             save_filename="config.yaml",
         )
-        if not selection:
-            return {"ok": False, "message": ""}
-        target = Path(selection[0])
-        # On macOS, pywebview returns ('/',) when the dialog is dismissed
-        # without a selection rather than an empty tuple — guard against
-        # writing to a directory path (which produces [Errno 17] File exists).
-        if target.is_dir():
+        target = _save_dialog_path(selection)
+        if target is None:
             return {"ok": False, "message": ""}
         try:
             target.write_text(payload_to_yaml_text(payload), encoding="utf-8")

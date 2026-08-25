@@ -33,7 +33,7 @@ from fim.gui import app as app_module
 from fim.gui import batch_runner
 from fim.gui import recent_runs as recent_runs_module
 from fim.gui import runner as runner_module
-from fim.gui.app import Api, format_statistic
+from fim.gui.app import Api, _save_dialog_path, format_statistic
 from fim.gui.batch_runner import default_max_workers
 from fim.gui.config_form import starter_form_values
 from fim.gui.recent_runs import RecentRun
@@ -1263,3 +1263,44 @@ def test_get_about_info_names_the_installed_version() -> None:
     assert info["version"] == fim_version
     assert "selby-botany/jost-finite-island-model" in info["repository"]
     assert "AGPL" in info["license"]
+
+
+# --- _save_dialog_path ---
+
+
+def test_save_dialog_path_returns_none_for_none() -> None:
+    assert _save_dialog_path(None) is None
+
+
+def test_save_dialog_path_returns_none_for_empty_string() -> None:
+    assert _save_dialog_path("") is None
+
+
+def test_save_dialog_path_returns_none_for_empty_tuple() -> None:
+    assert _save_dialog_path(()) is None
+
+
+def test_save_dialog_path_treats_bare_string_as_full_path(tmp_path: Path) -> None:
+    # macOS cocoa backend returns a bare str, not a tuple, for SAVE dialogs.
+    # Indexing a string with [0] gives the first character ('/'), so the old
+    # code silently resolved every save path to Path('/') and the is_dir()
+    # guard swallowed it as a cancel.
+    target = tmp_path / "config.yaml"
+    result = _save_dialog_path(str(target))
+    assert result == target
+
+
+def test_save_dialog_path_treats_tuple_as_sequence(tmp_path: Path) -> None:
+    # Non-macOS backends and OPEN dialogs return a tuple.
+    target = tmp_path / "config.yaml"
+    result = _save_dialog_path((str(target),))
+    assert result == target
+
+
+def test_save_dialog_path_returns_none_for_root_directory() -> None:
+    # Older pywebview macOS versions returned ('/',) on cancel.
+    assert _save_dialog_path(("/",)) is None
+
+
+def test_save_dialog_path_returns_none_for_root_string() -> None:
+    assert _save_dialog_path("/") is None
