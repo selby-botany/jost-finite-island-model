@@ -105,12 +105,15 @@ const TICK_LENGTH = 4;
 // is bounded `[0, 1]` by construction, so this scale is fixed and
 // identical on every one of them, never computed per-panel.
 const PROBABILITY_TICK_VALUES = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
+const COMPACT_PROBABILITY_TICK_VALUES = [0.0, 0.5, 1.0];
 
 // An unbounded (`"pca"`) panel has no natural tick spacing -- this many
 // evenly spaced ticks across the panel's own auto-scaled domain, purely
 // for visual orientation ("what range of values is this"), not a claim
 // about any particular meaningful value.
 const AUTO_TICK_COUNT = 5;
+const COMPACT_AUTO_TICK_COUNT = 3;
+const COMPACT_PLOT_SIZE_THRESHOLD = 420;
 
 // Fraction of the data's own span added as margin on every side of an
 // auto-scaled (`"pca"`) domain, so the outermost points never sit
@@ -243,9 +246,13 @@ function computeDomain(points, bounded) {
 function drawScatterCell(context, rect, panel, opts) {
     const bounded = panel.kind !== "pca";
     const domain = computeDomain(panel.points, bounded);
-    const plotSize = Math.min(rect.width, rect.height) - 2 * opts.padding;
-    const originX = rect.x + opts.padding;
-    const originY = rect.y + rect.height - opts.padding;
+    const side = Math.min(rect.width, rect.height);
+    const adaptivePadding =
+        side < 520 ? Math.max(28, Math.floor(side * 0.09)) : opts.padding;
+    const plotSize = side - 2 * adaptivePadding;
+    const compact = plotSize < COMPACT_PLOT_SIZE_THRESHOLD;
+    const originX = rect.x + adaptivePadding;
+    const originY = rect.y + rect.height - adaptivePadding;
 
     const toCanvasX = (value) =>
         originX + ((value - domain.xMin) / (domain.xMax - domain.xMin)) * plotSize;
@@ -279,7 +286,16 @@ function drawScatterCell(context, rect, panel, opts) {
         context.restore();
     }
 
-    drawAxisTicks(context, originX, originY, plotSize, opts.tickFontSize, domain, bounded);
+    drawAxisTicks(
+        context,
+        originX,
+        originY,
+        plotSize,
+        opts.tickFontSize,
+        domain,
+        bounded,
+        compact
+    );
 
     const markerScale = opts.markerScale;
     for (const point of panel.points) {
@@ -297,7 +313,7 @@ function drawScatterCell(context, rect, panel, opts) {
         context.strokeStyle = "#000000";
         context.lineWidth = 0.4;
         context.stroke();
-        if (point.count > 1) {
+        if (point.count > 1 && !compact) {
             context.fillStyle = "#1a1a1a";
             context.font = `${opts.tickFontSize}px -apple-system, sans-serif`;
             context.textAlign = "left";
@@ -358,14 +374,36 @@ function formatAutoTick(value, range) {
  * @param {number} fontSize
  * @param {{xMin: number, xMax: number, yMin: number, yMax: number}} domain
  * @param {boolean} bounded
+ * @param {boolean} compact
  */
-function drawAxisTicks(context, originX, originY, plotSize, fontSize, domain, bounded) {
+function drawAxisTicks(
+    context,
+    originX,
+    originY,
+    plotSize,
+    fontSize,
+    domain,
+    bounded,
+    compact
+) {
     const xTicks = bounded
-        ? PROBABILITY_TICK_VALUES
-        : evenlySpacedTicks(domain.xMin, domain.xMax, AUTO_TICK_COUNT);
+        ? compact
+            ? COMPACT_PROBABILITY_TICK_VALUES
+            : PROBABILITY_TICK_VALUES
+        : evenlySpacedTicks(
+              domain.xMin,
+              domain.xMax,
+              compact ? COMPACT_AUTO_TICK_COUNT : AUTO_TICK_COUNT
+          );
     const yTicks = bounded
-        ? PROBABILITY_TICK_VALUES
-        : evenlySpacedTicks(domain.yMin, domain.yMax, AUTO_TICK_COUNT);
+        ? compact
+            ? COMPACT_PROBABILITY_TICK_VALUES
+            : PROBABILITY_TICK_VALUES
+        : evenlySpacedTicks(
+              domain.yMin,
+              domain.yMax,
+              compact ? COMPACT_AUTO_TICK_COUNT : AUTO_TICK_COUNT
+          );
     const xRange = domain.xMax - domain.xMin;
     const yRange = domain.yMax - domain.yMin;
     const formatX = (value) => (bounded ? value.toFixed(1) : formatAutoTick(value, xRange));
