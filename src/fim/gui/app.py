@@ -597,7 +597,7 @@ class Api:
         selection = window.create_file_dialog(
             webview.FileDialog.OPEN, file_types=_YAML_FILE_TYPES
         )
-        if not selection:
+        if not selection or Path(selection[0]).is_dir():
             return {"ok": False, "message": ""}
         try:
             params = load_config(Path(selection[0]))
@@ -628,11 +628,18 @@ class Api:
         if window is None:
             return {"ok": False, "message": "no active window"}
         selection = window.create_file_dialog(
-            webview.FileDialog.SAVE, save_filename="config.yaml"
+            webview.FileDialog.SAVE,
+            directory=str(Path.home()),
+            save_filename="config.yaml",
         )
         if not selection:
             return {"ok": False, "message": ""}
         target = Path(selection[0])
+        # On macOS, pywebview returns ('/',) when the dialog is dismissed
+        # without a selection rather than an empty tuple — guard against
+        # writing to a directory path (which produces [Errno 17] File exists).
+        if target.is_dir():
+            return {"ok": False, "message": ""}
         try:
             target.write_text(payload_to_yaml_text(payload), encoding="utf-8")
         except OSError as error:
@@ -794,7 +801,7 @@ class Api:
         selection = window.create_file_dialog(
             webview.FileDialog.OPEN, file_types=_TRAJECTORY_FILE_TYPES
         )
-        if not selection:
+        if not selection or Path(selection[0]).is_dir():
             return {"ok": False, "path": ""}
         return {"ok": True, "path": selection[0]}
 
