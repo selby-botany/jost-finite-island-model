@@ -1,8 +1,9 @@
 "use strict";
 
 /* The unified run view's always-present controls (unified-run-view
- * design §3.1.4, §3.7, §8 Phase E) -- Load YAML/Save YAML/Run
- * simulation/Cancel/Open a run/Open output folder, and the shared
+ * design §3.1.4, §3.7, §8 Phase E) -- Run simulation/Cancel/Open a
+ * run/Open output folder, plus File-menu-driven load/save actions, and
+ * the shared
  * status banner/reason line, none of which depend on which of
  * `initial`/`running`/`completed` is currently showing. `run-view-
  * initial.js`/`run-view-running.js`/`run-view-completed.js` each only
@@ -14,8 +15,6 @@ const runBanner = document.getElementById("run-banner");
 const runReason = document.getElementById("run-reason");
 const runButton = document.getElementById("run-button");
 const cancelButton = document.getElementById("cancel-run-button");
-const loadButton = document.getElementById("load-yaml-button");
-const saveButton = document.getElementById("save-yaml-button");
 const openRunButton = document.getElementById("open-run-button");
 const openFolderButton = document.getElementById("open-folder-button");
 
@@ -95,6 +94,14 @@ async function onSaveYamlClicked() {
     runReason.textContent = `Saved to ${result.path}`;
 }
 
+window.fim.openConfiguration = async function openConfiguration() {
+    await onLoadYamlClicked();
+};
+
+window.fim.saveConfiguration = async function saveConfiguration() {
+    await onSaveYamlClicked();
+};
+
 async function onCancelClicked() {
     cancelButton.disabled = true;
     // `window.__fimCancelRunSettled`, not only `cancelButton.disabled`
@@ -128,8 +135,6 @@ async function onOpenFolderClicked() {
 
 function wireRunViewControls() {
     runButton.addEventListener("click", onRunClicked);
-    loadButton.addEventListener("click", onLoadYamlClicked);
-    saveButton.addEventListener("click", onSaveYamlClicked);
     cancelButton.addEventListener("click", onCancelClicked);
     openFolderButton.addEventListener("click", onOpenFolderClicked);
     openRunButton.addEventListener("click", () => {

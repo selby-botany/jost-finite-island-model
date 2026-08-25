@@ -94,6 +94,12 @@ const fim = {
     onBatchError() {
         // Overridden by screens/run-view-running.js.
     },
+    openConfiguration() {
+        // Overridden by screens/run-view-controls.js.
+    },
+    saveConfiguration() {
+        // Overridden by screens/run-view-controls.js.
+    },
 
     /**
      * Wire a "compare two demes directly" selector -- the run view's
@@ -243,11 +249,11 @@ const fim = {
         },
         openConfiguration() {
             window.fim.showScreen("screen-run");
-            document.getElementById("load-yaml-button").click();
+            window.fim.openConfiguration();
         },
         saveConfiguration() {
             window.fim.showScreen("screen-run");
-            document.getElementById("save-yaml-button").click();
+            window.fim.saveConfiguration();
         },
         runSimulation() {
             window.fim.showScreen("screen-run");
