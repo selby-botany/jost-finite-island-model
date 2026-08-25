@@ -38,7 +38,7 @@ import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from socketserver import ThreadingMixIn
@@ -237,7 +237,7 @@ def _active_window() -> webview.Window | None:
 
 
 def _save_dialog_path(
-    selection: str | tuple[str, ...] | list[str] | None,
+    selection: Sequence[str] | None,
 ) -> Path | None:
     """Normalise pywebview's platform-inconsistent SAVE dialog return value.
 
