@@ -68,30 +68,6 @@ if [[ "${PRE_PUSH_SKIP_TYPE:-false}" != true ]]; then
         printf 'pre-push: mypy absent; types skipped\n'
     fi
 fi
-if [[ "${PRE_PUSH_SKIP_TEST:-false}" != true ]]; then
-    if command -v pytest >/dev/null 2>&1; then
-        # No explicit `-m` here: `[tool.pytest.ini_options].addopts` in
-        # pyproject.toml is the single source of truth for which markers
-        # this fast, local layer excludes (`statistical`, `slow`,
-        # `packaging`, and `gui`) -- an explicit filter here predates the
-        # `gui` marker entirely (`0697a49` wrote this line; `59c60c4`
-        # added `gui` afterward) and silently drifted out of sync with
-        # it, the same "narrows scope without changing the config" trap
-        # `mypy`'s own comment above already names. `gui`-marked tests
-        # open a real native window and, for two of them, a real
-        # multi-process batch -- genuine OS-level GUI/WindowServer state
-        # this developer's own machine may already have claimed (a
-        # running `fim-gui`, or another `pre-push`/`pytest` invocation),
-        # unlike an isolated CI runner's virtual display. `./build --ci`
-        # (via `xvfb-run` in CI, design's own "full CI gate") already
-        # covers that tier authoritatively; this hook does not need to
-        # re-run it, on a shared display, on every push.
-        pytest
-    else
-        printf 'pre-push: pytest absent; tests skipped\n'
-    fi
-fi
-
 # Verify generated documentation and always remove its temporary output.
 if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
     if [[ -x dev/bin/generate-api-docs ]] \
@@ -131,5 +107,29 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
         trap 'rm -rf -- "${lock_dir}"' EXIT
     else
         printf 'pre-push: help-HTML generator unavailable; docs skipped\n'
+    fi
+fi
+
+if [[ "${PRE_PUSH_SKIP_TEST:-false}" != true ]]; then
+    if command -v pytest >/dev/null 2>&1; then
+        # No explicit `-m` here: `[tool.pytest.ini_options].addopts` in
+        # pyproject.toml is the single source of truth for which markers
+        # this fast, local layer excludes (`statistical`, `slow`,
+        # `packaging`, and `gui`) -- an explicit filter here predates the
+        # `gui` marker entirely (`0697a49` wrote this line; `59c60c4`
+        # added `gui` afterward) and silently drifted out of sync with
+        # it, the same "narrows scope without changing the config" trap
+        # `mypy`'s own comment above already names. `gui`-marked tests
+        # open a real native window and, for two of them, a real
+        # multi-process batch -- genuine OS-level GUI/WindowServer state
+        # this developer's own machine may already have claimed (a
+        # running `fim-gui`, or another `pre-push`/`pytest` invocation),
+        # unlike an isolated CI runner's virtual display. `./build --ci`
+        # (via `xvfb-run` in CI, design's own "full CI gate") already
+        # covers that tier authoritatively; this hook does not need to
+        # re-run it, on a shared display, on every push.
+        pytest
+    else
+        printf 'pre-push: pytest absent; tests skipped\n'
     fi
 fi
