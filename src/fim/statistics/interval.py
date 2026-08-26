@@ -1,23 +1,46 @@
 """Confidence intervals for across-replicate sample means.
 
-Each independently seeded replicate run contributes one scalar draw (its
-own final ``D``, ``G_ST``, and so on); the confidence interval of the mean
-of several such draws is a standard Student's-t interval on the sample
-mean, exactly as for any other independent, identically distributed
-sample — no bootstrap or other resampling scheme is needed on top of
-draws that are already independent by construction.
+A **confidence interval** is a range around a measured average that
+expresses how much uncertainty is left after averaging only a limited
+number of independent measurements — the same idea a poll reports as
+"52% ± 3%" rather than a single bare number, where the "± 3%" is exactly
+this kind of interval. See `fim.engine.reports_summary`'s own docstring
+for the fuller explanation of what problem this solves in this project
+specifically: each independently seeded replicate run contributes one
+scalar draw (its own final ``D``, ``G_ST``, and so on), and this module
+is what turns a handful of those draws into a mean plus a defensible
+range around it.
 
-The critical value comes from a standard published Student's-t table
-(linear interpolation in ``1/df`` between listed degrees of freedom, the
-conventional way to read an unlisted row off a printed table) rather than
-an inverse regularized-incomplete-beta computation: every tabled degrees
-of freedom below 120 matches a printed statistics table exactly, needs no
-dependency beyond the standard library, and avoids hand-rolling a
-numerically delicate special function in the one area of this project
+The confidence interval of the mean of several such draws is a standard
+Student's-t interval on the sample mean, exactly as for any other
+independent, identically distributed sample — no bootstrap or other
+resampling scheme is needed on top of draws that are already independent
+by construction. "Student's-t" is the standard statistical method for
+exactly this situation: a small number of independent measurements whose
+own true variability is not known in advance and must itself be
+estimated from the measurements at hand (as opposed to the simpler,
+better-known bell-curve method, which assumes that variability is
+already known) — the correction it applies matters most for a handful of
+replicates and fades away as more are added, which is why the "degrees
+of freedom" (one less than the number of values being averaged — see
+`confidence_interval`'s own docstring) appears throughout this file.
+
+The critical value (how many standard errors wide the interval needs to
+be, for the requested confidence level and sample size) comes from a
+standard published Student's-t table (linear interpolation in ``1/df``
+between listed degrees of freedom, the conventional way to read an
+unlisted row off a printed table) rather than an inverse regularized-
+incomplete-beta computation (a more general but numerically delicate way
+of computing the identical values from first principles): every tabled
+degrees of freedom below 120 matches a printed statistics table exactly,
+needs no dependency beyond the standard library, and avoids hand-rolling
+a numerically delicate special function in the one area of this project
 under direct outside statistical review. Above the table's tail, the
 exact standard-normal quantile is used (a t-distribution's
-``degrees_of_freedom -> infinity`` limit), computed by the standard
-library's `statistics.NormalDist`, not another approximate table row.
+``degrees_of_freedom -> infinity`` limit — with enough replicates, the
+small-sample correction becomes negligible and the ordinary bell-curve
+answer is exact), computed by the standard library's `statistics.
+NormalDist`, not another approximate table row.
 """
 
 from __future__ import annotations
@@ -59,7 +82,32 @@ _MAXIMUM_TABLED_DEGREES_OF_FREEDOM = _TABLE_DEGREES_OF_FREEDOM[-1]
 
 
 class ConfidenceInterval(TypedDict):
-    """A sample mean with a two-sided confidence interval."""
+    """A sample mean with a two-sided confidence interval.
+
+    Fields:
+        mean: The plain average of every value supplied.
+        half_width: How far the interval extends on either side of
+            `mean` — `low`/`high` are just `mean` minus/plus this same
+            number, kept as its own field since it is often useful on
+            its own (the "± 3%" half of a "52% ± 3%"-style report).
+        low, high: The interval's own two ends — the range this
+            project's own convention is that the true underlying
+            average plausibly falls within, at the requested
+            `confidence` level.
+        sample_count: How many values went into this interval — the
+            same number `confidence_interval`'s own `values` argument
+            had. Carried along here so a reader of the *result* alone
+            can judge how much weight to put on the interval (a narrow
+            interval from only 2 replicates is a much shakier basis for
+            confidence than an equally narrow one from 40) without
+            needing to separately track down how many replicates
+            actually ran.
+        confidence: The confidence level actually used (see
+            `student_t_critical_value`) — kept alongside the numbers it
+            produced so the result is self-describing, the same reason
+            `fim.engine.RunResult` carries its own `params` alongside
+            its own outcome.
+    """
 
     mean: float
     half_width: float
@@ -76,9 +124,17 @@ def confidence_interval(
 ) -> ConfidenceInterval:
     """Return a sample mean's Student's-t confidence interval.
 
+    See this module's own docstring, above, for what a confidence
+    interval is and why the Student's-t method is the right tool for
+    a handful of independent replicate draws specifically.
+
     Args:
         values: Independent, identically distributed observations (each
-            replicate's own scalar outcome). At least two are required.
+            replicate's own scalar outcome). At least two are required —
+            a confidence interval is fundamentally a statement about how
+            much a value *varies* across repeated measurements, which is
+            not a meaningful question to ask of a single measurement on
+            its own.
         confidence: Two-tailed confidence level; see
             `student_t_critical_value` for supported values.
 
@@ -92,7 +148,17 @@ def confidence_interval(
     if sample_count < _MINIMUM_SAMPLE_COUNT:
         raise ValueError("confidence_interval requires at least two values")
     mean = math.fsum(values) / sample_count
-    # Bessel-corrected sample variance, then the standard error of the mean.
+    # "Bessel-corrected" means dividing by (sample_count - 1) rather than
+    # sample_count itself when estimating how spread out the values
+    # are -- the standard statistical correction for the fact that the
+    # values' own mean was itself estimated from this same limited
+    # sample, which otherwise makes the raw spread a slight
+    # underestimate of the sample's true underlying variability.
+    # "Standard error of the mean" is then how much that spread
+    # translates into uncertainty specifically about the *mean* (as
+    # opposed to uncertainty about any one individual value) -- it
+    # shrinks as more replicates are added, which is the whole reason
+    # running more replicates narrows a reported interval.
     variance = math.fsum((value - mean) ** 2 for value in values) / (sample_count - 1)
     standard_error = math.sqrt(variance / sample_count)
     half_width = student_t_critical_value(sample_count - 1, confidence) * standard_error
@@ -108,6 +174,18 @@ def confidence_interval(
 
 def student_t_critical_value(degrees_of_freedom: int, confidence: float) -> float:
     """Return the two-tailed Student's-t critical value.
+
+    "Two-tailed" means the reported interval accounts for the true
+    average being either higher *or* lower than the sample's own mean —
+    the ordinary, default way to build a confidence interval, as opposed
+    to a "one-tailed" interval that only bounds one direction. This
+    function is a lookup, not a computation from first principles: it
+    reads (or interpolates between) the entries of `_T_TABLE`, above —
+    the same fixed numbers found in the "Student's-t table" printed in
+    the back of most introductory statistics textbooks — falling back to
+    the exact large-sample (normal-distribution) answer once
+    `degrees_of_freedom` is larger than anything the table lists (see
+    `_normal_quantile`, below).
 
     Args:
         degrees_of_freedom: Sample size minus one; must be at least 1.
@@ -135,7 +213,21 @@ def student_t_critical_value(degrees_of_freedom: int, confidence: float) -> floa
 
 
 def _interpolate(degrees_of_freedom: int, confidence: float) -> float:
-    """Interpolate an untabled row in ``1/df``, the standard table convention."""
+    """Interpolate an untabled row in ``1/df``, the standard table convention.
+
+    `_T_TABLE`, above, only lists selected degrees of freedom (1
+    through 10, then wider gaps: 12, 15, 20, and so on) — exactly
+    matching a real printed statistics table, which does the same for
+    space. For a degrees-of-freedom value that falls between two listed
+    rows, this estimates the missing value by interpolating (blending
+    linearly) between its two neighbors — done in terms of `1/df` rather
+    than `df` itself specifically because the critical value changes
+    much more steeply at low degrees of freedom than at high ones, and
+    interpolating in `1/df` tracks that curve far more accurately than a
+    naive straight-line blend of the raw numbers would; this is the same
+    convention a person reading a printed table by hand is taught to use
+    for a row the table itself omits.
+    """
     lower = max(df for df in _TABLE_DEGREES_OF_FREEDOM if df < degrees_of_freedom)
     upper = min(df for df in _TABLE_DEGREES_OF_FREEDOM if df > degrees_of_freedom)
     lower_value = _T_TABLE[lower][confidence]
@@ -146,5 +238,24 @@ def _interpolate(degrees_of_freedom: int, confidence: float) -> float:
 
 
 def _normal_quantile(confidence: float) -> float:
-    """Return the exact two-tailed standard-normal quantile (df -> infinity)."""
+    """Return the exact two-tailed standard-normal quantile (df -> infinity).
+
+    As the number of replicates grows, the Student's-t distribution
+    itself gets closer and closer to the ordinary bell curve ("the
+    standard normal distribution") — the small-sample correction
+    described in this module's own docstring, above, was only ever
+    needed because a *small* number of replicates leaves genuine doubt
+    about how spread out the underlying values really are, and that
+    doubt shrinks toward zero as more replicates are added. This
+    function is what `student_t_critical_value` falls back to once
+    `degrees_of_freedom` runs past the end of `_T_TABLE`: rather than
+    guessing at (or interpolating past the edge of) a table built for
+    small samples, it computes the exact bell-curve answer directly,
+    using the standard library's own `statistics.NormalDist` — the same
+    number a t-table would converge to if it kept going forever.
+    `(1.0 + confidence) / 2.0` is the standard conversion from a
+    two-tailed confidence level (e.g. 95% in the middle) to the matching
+    one-sided cutoff `inv_cdf` expects (e.g. the 97.5th percentile,
+    which leaves exactly 2.5% in each of the two excluded tails).
+    """
     return NormalDist().inv_cdf((1.0 + confidence) / 2.0)

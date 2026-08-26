@@ -5449,15 +5449,79 @@ generation's own report.
 
 Pure diversity and differentiation statistics for finite-island models.
 
+This package is the project's math library: every function in it takes
+plain numbers in (allele frequencies, sample counts) and returns plain
+numbers out (a diversity index, a confidence interval), with no
+dependency on the simulator itself, the GUI, or how a run happens to be
+stored on disk. That separation is deliberate — it means every formula
+used to describe a population's genetic diversity lives in exactly one
+place, reviewable and testable on its own, independently of the code
+that produces the data or the code that displays it.
+
+It is organized into two modules by subject:
+
+- `fim.statistics.differentiation` — the actual diversity and
+  differentiation formulas (`H_S`, `H_T`, `H_ST`, `G_ST`, Jost's `D`,
+  `E_ST`, `K_ST`, and the general `differentiation_q` family that ties
+  them all together). See that module's own docstring, and the
+  [differentiation-measures guide](../../doc/jost-differentiation-measures.md),
+  for the underlying population-genetics ideas.
+- `fim.statistics.interval` — confidence intervals for a sample mean
+  (the "± 3%" half of a "52% ± 3%"-style report) computed across a run's
+  independent replicates. See that module's own docstring for what a
+  confidence interval is and why the Student's-t method is used.
+
+Every public name from both modules is re-exported here, so a caller
+elsewhere in the project writes ``from fim.statistics import h_s,
+jost_d, confidence_interval`` rather than reaching into either module
+by its own name directly.
+
 <a id="fim.statistics.differentiation"></a>
 
 # fim.statistics.differentiation
 
 Allele-frequency diversity and differentiation statistics.
 
+This is where the actual mathematics behind this project's own named
+statistics (`D`, `G_ST`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`) lives —
+every one of the formulas the
+[differentiation-measures guide](../../doc/jost-differentiation-measures.md)
+explains in depth, implemented here exactly as that guide (and the
+paper it summarizes, Jost et al. 2018) defines them. Reading that guide
+first is strongly recommended before this file — it explains, from
+zero, *why* there is more than one way to measure "how different are
+these populations," what each measure actually answers, and why they
+can disagree about the very same data; this file only ever computes,
+never explains, and the brief summaries in each function's own
+docstring below assume the guide's own vocabulary rather than
+re-deriving it every time.
+
+The one-paragraph version, for orientation: every measure here starts
+from **expected heterozygosity** (`heterozygosity`, `h_s`, `h_t`,
+below) — the chance that two gene copies drawn at random are different
+alleles — computed once *within* each deme (`H_S`) and once for all
+demes *pooled together* (`H_T`). Since pooling different demes can only
+add variation, `H_T` is always at least as large as `H_S`; every
+differentiation measure in this file is some way of asking "how much
+bigger is `H_T` than `H_S`, relative to some baseline" — and the
+different measures (`G_ST`, `D`, `E_ST`, `K_ST`) are, precisely, the
+different reasonable choices for what that baseline should be. None of
+them is simply "more correct" than the others; each answers a
+genuinely different question, which is exactly why this project reports
+several side by side rather than picking one.
+
 All functions operate on normalized allele-frequency tables and are
-independent of model state, persistence, and the engine. Allele identifiers
-must be integer-like; a table contains one mapping per deme.
+independent of model state, persistence, and the engine — pure
+mathematics, with no idea that a "finite island model" or a "run" even
+exists; anything with allele frequencies to compare could use this
+module. "Normalized" means each deme's own frequencies already sum to
+exactly 1 (a complete accounting of that deme's own gene pool);
+"table" means a plain sequence with one entry per deme, each entry
+itself a mapping from an allele's identity to its frequency in that
+deme; allele identifiers must be integer-like (whole numbers, or
+values that behave like them) purely as a bookkeeping convention — the
+actual identity of an allele is never mathematically meaningful here,
+only whether two entries share the same identity or not.
 
 <a id="fim.statistics.differentiation.DifferentiationReport"></a>
 
@@ -5469,6 +5533,12 @@ class DifferentiationReport(TypedDict)
 
 Scalar statistics computed from a frequency table.
 
+One locus's own complete set of results from `statistics_report`,
+below — the same seven values (`fim.engine.FinalReport` reports the
+same six, minus `H_ST`, each averaged across every locus a run
+tracks). `G_ST` alone can be `None`: see `g_st`'s own docstring for
+why. Every other field is always a real number.
+
 <a id="fim.statistics.differentiation.heterozygosity"></a>
 
 #### heterozygosity
@@ -5478,6 +5548,18 @@ def heterozygosity(frequencies: Mapping[Any, Any]) -> float
 ```
 
 Return expected heterozygosity ``H = 1 - sum(p_i ** 2)`` for one deme.
+
+Draw two gene copies at random (with replacement) from this one
+deme's own pool. `sum(p_i ** 2)` is the chance they happen to be the
+exact same allele, so `H` is the chance they are different — the
+standard, textbook measure of genetic diversity within a single
+group (see this module's own docstring, above, for how it becomes a
+*differentiation* measure once two or more demes are compared). `H`
+is always between 0 (the deme is fixed — every gene copy is the
+same allele, so two random draws can never differ) and just under 1
+(approaching 1 only as the number of equally common alleles grows
+without bound — `H` never actually reaches it for any finite number
+of alleles).
 
 <a id="fim.statistics.differentiation.identity"></a>
 
@@ -5489,6 +5571,12 @@ def identity(frequencies: Mapping[Any, Any]) -> float
 
 Return Nei gene identity ``J = sum(p_i ** 2)`` for one deme.
 
+The exact mirror image of `heterozygosity`, above: `J = 1 - H` is
+the chance two randomly drawn gene copies from this deme *do* match,
+rather than the chance they differ. Working in `J` rather than `H`
+makes several formulas below (`jost_d` especially) considerably
+simpler to read.
+
 <a id="fim.statistics.differentiation.hill_number"></a>
 
 #### hill\_number
@@ -5498,6 +5586,20 @@ def hill_number(frequencies: Mapping[Any, Any], order: float | int) -> float
 ```
 
 Return the Hill number of the requested non-negative order for one deme.
+
+A Hill number answers "how many *equally common* alleles would this
+deme need to have, to show exactly this much diversity" — a much
+more intuitive scale than a raw probability like `H` above, since a
+Hill number of, say, `6.2` genuinely means "about as diverse as 6.2
+equally common alleles," whereas `H = 0.95` on its own gives no
+similarly direct sense of scale. `order` (often written "q" in the
+literature — see this module's own docstring, above, and
+`differentiation_q`'s own docstring, below) controls how much weight
+rare alleles get: `order = 0` counts every allele actually present,
+however rare; `order = 2` is dominated almost entirely by whichever
+alleles are already common (and equals `1 / (1 - H)`, the classic
+"effective number of alleles"); `order = 1` sits in between, weighting
+each allele by its own actual frequency.
 
 <a id="fim.statistics.differentiation.h_s"></a>
 
@@ -5509,6 +5611,14 @@ def h_s(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
 
 Return weighted mean within-deme expected heterozygosity ``H_S``.
 
+"How much variation does a typical deme hold internally?" — compute
+`heterozygosity` separately for each deme, then take a weighted
+average across demes (see `_validate_weights`'s own docstring for
+what the weights mean and why `None`, the default, means "every
+deme counts equally"). One of the two building blocks (alongside
+`h_t`, below) every differentiation measure in this module is built
+from.
+
 <a id="fim.statistics.differentiation.h_t"></a>
 
 #### h\_t
@@ -5519,6 +5629,15 @@ def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
 
 Return expected heterozygosity ``H_T`` of the weighted pooled table.
 
+"How much variation is there altogether?" — pool every deme's own
+frequencies into one single, combined gene pool (`_pooled`, above),
+then compute `heterozygosity` once on that combined result. Since
+pooling different demes can only ever add variation (mixing
+different populations together cannot make the mixture *less*
+diverse than any one of them was alone), `H_T` is always at least as
+large as `H_S` — the gap between them, `H_T - H_S`, is the raw
+material every differentiation measure in this module works with.
+
 <a id="fim.statistics.differentiation.h_st"></a>
 
 #### h\_st
@@ -5528,6 +5647,20 @@ def h_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
 ```
 
 Return correctly partitioned between-deme heterozygosity ``H_ST``.
+
+The naive way to split `H_T` into a within-deme part and a between-
+deme part would be simple subtraction (`H_T - H_S` as "the between-
+deme component"), the way it would work for many other statistics —
+but heterozygosity specifically does not partition that simply (it
+is "subadditive": the true relationship is
+``H_T = H_S + H_ST - H_S * H_ST``, not plain addition). Solving that
+relationship for the actual between-deme component gives the
+formula below — the differentiation-measures guide's own "Part V"
+walks through why the naive version is wrong in more depth. This
+exact same expression, before the `d/(d-1)` rescaling `jost_d`
+(below) applies to stretch its maximum out to exactly 1, is also
+the very first term of Jost's `D` — `D` is, in a precise sense,
+nothing more than this correctly-partitioned quantity, normalized.
 
 <a id="fim.statistics.differentiation.total_hill_number"></a>
 
@@ -5541,6 +5674,11 @@ def total_hill_number(table: FrequencyTable,
 
 Return pooled Hill diversity ``^q D_T`` with optional deme weights.
 
+The multi-deme, Hill-number-family counterpart to `h_t`, above: pool
+every deme together first, then compute a Hill number (see
+`hill_number`'s own docstring for what that measures) on the
+combined result, at whichever `order` is requested.
+
 <a id="fim.statistics.differentiation.within_hill_number"></a>
 
 #### within\_hill\_number
@@ -5553,6 +5691,15 @@ def within_hill_number(table: FrequencyTable,
 
 Return alpha Hill diversity ``^q D_S`` with optional deme weights.
 
+The multi-deme, Hill-number-family counterpart to `h_s`, above: the
+weighted average of each individual deme's own Hill number, at
+whichever `order` is requested — "alpha diversity" is this
+statistic's own standard name in the wider ecology literature (the
+average diversity *within* a typical site), as distinct from "beta
+diversity" (how much diversity is added by comparing *between*
+sites — see `differentiation_q`'s own docstring, below, for where
+that shows up in this module).
+
 <a id="fim.statistics.differentiation.g_st"></a>
 
 #### g\_st
@@ -5564,6 +5711,19 @@ def g_st(table: FrequencyTable,
 
 Return ``G_ST`` or ``None`` when total heterozygosity is zero.
 
+Nei's `G_ST` — "how close to complete fixation has the differentiation
+process gone" (Wright's own original framing, quoted in the
+differentiation-measures guide) — is `(H_T - H_S) / H_T`: the gap
+between total and within-deme heterozygosity, this time as a
+fraction *of the total heterozygosity itself* (unlike `H_ST`,
+above, which divides by `1 - H_S` instead — that single choice of
+denominator is the entire difference between the two families of
+measures the guide discusses). `G_ST` genuinely has no defined value
+when `H_T` is exactly zero — every deme is fixed for the identical
+single allele, so there is no variation anywhere to measure a
+*fraction* of at all, not even zero; `None` here is the honest
+answer, not a fabricated `0.0` or `1.0`.
+
 <a id="fim.statistics.differentiation.jost_d"></a>
 
 #### jost\_d
@@ -5573,6 +5733,18 @@ def jost_d(table: FrequencyTable) -> float
 ```
 
 Return Jost's ``D`` using the required equal weighting of demes.
+
+"Do these demes hold different alleles at all" — exactly `H_ST`
+above (the correctly partitioned between-deme heterozygosity), with
+one further rescaling: multiplying by `d / (d - 1)` stretches its
+maximum possible value from `(d-1)/d` out to exactly 1, so `D = 1`
+means precisely "these demes share no alleles in common" and
+`D = 0` means precisely "these demes are genetically identical" —
+regardless of how many demes `d` there are. Equal deme weighting is
+not optional here (unlike `e_st`, below): the differentiation-
+measures guide explains why `D` gives every deme equal statistical
+weight by construction, one of the few real trade-offs it has
+relative to `E_ST`.
 
 <a id="fim.statistics.differentiation.e_st"></a>
 
@@ -5584,6 +5756,20 @@ def e_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
 
 Return entropy differentiation ``E_ST`` with optional size weights.
 
+The same "how differentiated are these demes" question `jost_d`
+answers, but built from Shannon entropy (`_entropy`, above) instead
+of heterozygosity — the `order = 1` member of the same one-formula
+family `differentiation_q`, below, generates (see this module's own
+docstring for the whole family). Its two real advantages over `D`,
+per the differentiation-measures guide: it handles demes of
+genuinely unequal size natively (`deme_weights` here can carry each
+deme's own relative population size, unlike `D`, which always
+weights every deme equally), and discovering a brand-new, unique
+allele in one deme can never make `E_ST` go *down* — a property `D`
+does not always have, since `D` weights alleles by their squared
+frequency and a new rare allele can slightly dilute the relative
+weight of other, already-differentiating alleles.
+
 <a id="fim.statistics.differentiation.k_st"></a>
 
 #### k\_st
@@ -5593,6 +5779,17 @@ def k_st(table: FrequencyTable) -> float
 ```
 
 Return allele-number differentiation ``K_ST`` with equal deme weights.
+
+The simplest and most stringent member of the family: ignores
+*frequencies* entirely and only asks "does this allele exist
+anywhere in this deme, yes or no" — the `order = 0` member of the
+same family `differentiation_q`, below, generates. Read it, roughly,
+as: the fraction of a typical deme's own alleles that turn out to
+be unique to that one deme, not found in any other. Because it
+ignores frequency entirely, `K_ST` responds to even the rarest,
+single-copy private allele exactly as strongly as it would to a
+common one — the strongest sensitivity to rare, private variation of
+any measure in this module.
 
 <a id="fim.statistics.differentiation.differentiation_q"></a>
 
@@ -5605,6 +5802,22 @@ def differentiation_q(table: FrequencyTable,
 ```
 
 Return the normalized general differentiation family at order ``q``.
+
+`k_st`, `e_st`, and `jost_d` are not three independent, rival
+formulas — they are three settings of one single underlying dial,
+`order` (conventionally written "q" — see this module's own
+docstring, above), and this function is that one general formula,
+evaluated at whichever `order` is requested: `order = 0` reproduces
+`k_st` exactly, `order = 1` reproduces `e_st` exactly, and
+`order = 2` reproduces `jost_d` exactly (each of the three
+functions above is really just this same formula's own special-
+cased, more efficiently computed endpoint). Reporting the whole
+family across several values of `order` at once — a
+"differentiation-q sweep," see `fim.reanalyze.differentiation_q_for_state`
+— is one way of seeing how sensitive a conclusion is to which
+particular measure happened to be chosen, since different members
+of the family can genuinely disagree about how differentiated the
+very same population actually is.
 
 Equal weighting is required for every order except ``q = 1``. At
 ``q = 1`` optional weights represent relative deme sizes and produce
@@ -5620,6 +5833,25 @@ def equilibrium_d(m: float, mu: float, d: int) -> float
 ```
 
 Return the finite-island equilibrium approximation for Jost's D.
+
+Every other function in this module computes a statistic from one
+*actual* frequency table — a real snapshot, from a real (or
+simulated) population. This function is different in kind: it is a
+theoretical prediction, from a mathematical analysis of what value
+`D` should settle to, on average, after a finite island model (see
+`fim.engine`'s own docstring for what that is) has been running long
+enough for its statistics to reach a stable, "equilibrium" balance
+between migration pulling demes together and drift pushing them
+apart — no actual simulated run is needed to compute it. Used to
+check the simulator itself against known theory (see the
+differentiation-measures guide's own "Part VI" for the full
+derivation and its assumptions) — a real simulation's own
+long-run average `D` should land close to what this formula
+predicts, for the same `m`/`mu`/`d`, if the simulator's own
+mechanics are correct. Notably, the population size `N` does not
+appear in this formula at all — only the *ratio* of migration to
+mutation controls where `D` settles, a genuinely counter-intuitive
+result the guide discusses at length.
 
 **Arguments**:
 
@@ -5643,9 +5875,23 @@ def equilibrium_g_st(population_size: int, m: float, mu: float,
 
 Return the equilibrium G_ST approximation for gene-copy ``N``.
 
-The source formula uses ``4 * N_individuals`` for diploids. This
-application defines ``N`` as the number of gene copies directly, so both
-terms use ``2 * N``.
+The `G_ST` counterpart to `equilibrium_d`, above — see that
+function's own docstring for what "equilibrium" means here and why
+a theoretical prediction like this one is useful for checking the
+simulator against known theory. Unlike `equilibrium_d`, this
+formula genuinely does depend on population size — specifically on
+`Nm` (population size times migration rate, the absolute number of
+migrants arriving each generation), not `m` alone — which is
+exactly the property Wright originally designed `G_ST`/`F_ST` to
+have (see `g_st`'s own docstring): a statistic sensitive to
+demography (population size and migration), essentially independent
+of the mutation rate, unlike `D`.
+
+The source formula uses ``4 * N_individuals`` for diploids (each
+individual carries two gene copies). This application defines ``N``
+as the number of gene copies directly, not individuals, so both
+terms use ``2 * N`` instead — the same quantity, `4 * N_individuals
+= 2 * N_gene_copies`, just expressed in this project's own units.
 
 **Arguments**:
 
@@ -5671,6 +5917,13 @@ def statistics_report(
 
 Return the scalar statistics block consumed by an engine report.
 
+The one function that computes all seven statistics for one
+frequency table at once — everywhere this project reports "the
+statistics" for a single locus, this is the function that produced
+them (see `fim.engine.report_for_state`, which calls this once per
+locus and then averages each field across every locus a run
+tracks).
+
 ``H_S``, ``H_T``, ``H_ST``, ``G_ST``, ``D``, and ``K_ST`` use equal
 deme weighting as specified by their definitions. ``deme_weights`` is
 applied only to ``E_ST``; pass relative deme sizes to request its native
@@ -5682,24 +5935,47 @@ size-weighted form.
 
 Confidence intervals for across-replicate sample means.
 
-Each independently seeded replicate run contributes one scalar draw (its
-own final ``D``, ``G_ST``, and so on); the confidence interval of the mean
-of several such draws is a standard Student's-t interval on the sample
-mean, exactly as for any other independent, identically distributed
-sample — no bootstrap or other resampling scheme is needed on top of
-draws that are already independent by construction.
+A **confidence interval** is a range around a measured average that
+expresses how much uncertainty is left after averaging only a limited
+number of independent measurements — the same idea a poll reports as
+"52% ± 3%" rather than a single bare number, where the "± 3%" is exactly
+this kind of interval. See `fim.engine.reports_summary`'s own docstring
+for the fuller explanation of what problem this solves in this project
+specifically: each independently seeded replicate run contributes one
+scalar draw (its own final ``D``, ``G_ST``, and so on), and this module
+is what turns a handful of those draws into a mean plus a defensible
+range around it.
 
-The critical value comes from a standard published Student's-t table
-(linear interpolation in ``1/df`` between listed degrees of freedom, the
-conventional way to read an unlisted row off a printed table) rather than
-an inverse regularized-incomplete-beta computation: every tabled degrees
-of freedom below 120 matches a printed statistics table exactly, needs no
-dependency beyond the standard library, and avoids hand-rolling a
-numerically delicate special function in the one area of this project
+The confidence interval of the mean of several such draws is a standard
+Student's-t interval on the sample mean, exactly as for any other
+independent, identically distributed sample — no bootstrap or other
+resampling scheme is needed on top of draws that are already independent
+by construction. "Student's-t" is the standard statistical method for
+exactly this situation: a small number of independent measurements whose
+own true variability is not known in advance and must itself be
+estimated from the measurements at hand (as opposed to the simpler,
+better-known bell-curve method, which assumes that variability is
+already known) — the correction it applies matters most for a handful of
+replicates and fades away as more are added, which is why the "degrees
+of freedom" (one less than the number of values being averaged — see
+`confidence_interval`'s own docstring) appears throughout this file.
+
+The critical value (how many standard errors wide the interval needs to
+be, for the requested confidence level and sample size) comes from a
+standard published Student's-t table (linear interpolation in ``1/df``
+between listed degrees of freedom, the conventional way to read an
+unlisted row off a printed table) rather than an inverse regularized-
+incomplete-beta computation (a more general but numerically delicate way
+of computing the identical values from first principles): every tabled
+degrees of freedom below 120 matches a printed statistics table exactly,
+needs no dependency beyond the standard library, and avoids hand-rolling
+a numerically delicate special function in the one area of this project
 under direct outside statistical review. Above the table's tail, the
 exact standard-normal quantile is used (a t-distribution's
-``degrees_of_freedom -> infinity`` limit), computed by the standard
-library's `statistics.NormalDist`, not another approximate table row.
+``degrees_of_freedom -> infinity`` limit — with enough replicates, the
+small-sample correction becomes negligible and the ordinary bell-curve
+answer is exact), computed by the standard library's `statistics.
+NormalDist`, not another approximate table row.
 
 <a id="fim.statistics.interval.ConfidenceInterval"></a>
 
@@ -5710,6 +5986,30 @@ class ConfidenceInterval(TypedDict)
 ```
 
 A sample mean with a two-sided confidence interval.
+
+Fields:
+    mean: The plain average of every value supplied.
+    half_width: How far the interval extends on either side of
+        `mean` — `low`/`high` are just `mean` minus/plus this same
+        number, kept as its own field since it is often useful on
+        its own (the "± 3%" half of a "52% ± 3%"-style report).
+    low, high: The interval's own two ends — the range this
+        project's own convention is that the true underlying
+        average plausibly falls within, at the requested
+        `confidence` level.
+    sample_count: How many values went into this interval — the
+        same number `confidence_interval`'s own `values` argument
+        had. Carried along here so a reader of the *result* alone
+        can judge how much weight to put on the interval (a narrow
+        interval from only 2 replicates is a much shakier basis for
+        confidence than an equally narrow one from 40) without
+        needing to separately track down how many replicates
+        actually ran.
+    confidence: The confidence level actually used (see
+        `student_t_critical_value`) — kept alongside the numbers it
+        produced so the result is self-describing, the same reason
+        `fim.engine.RunResult` carries its own `params` alongside
+        its own outcome.
 
 <a id="fim.statistics.interval.confidence_interval"></a>
 
@@ -5723,10 +6023,18 @@ def confidence_interval(values: Sequence[float],
 
 Return a sample mean's Student's-t confidence interval.
 
+See this module's own docstring, above, for what a confidence
+interval is and why the Student's-t method is the right tool for
+a handful of independent replicate draws specifically.
+
 **Arguments**:
 
 - `values` - Independent, identically distributed observations (each
-  replicate's own scalar outcome). At least two are required.
+  replicate's own scalar outcome). At least two are required —
+  a confidence interval is fundamentally a statement about how
+  much a value *varies* across repeated measurements, which is
+  not a meaningful question to ask of a single measurement on
+  its own.
 - `confidence` - Two-tailed confidence level; see
   `student_t_critical_value` for supported values.
 
@@ -5750,6 +6058,18 @@ def student_t_critical_value(degrees_of_freedom: int,
 ```
 
 Return the two-tailed Student's-t critical value.
+
+"Two-tailed" means the reported interval accounts for the true
+average being either higher *or* lower than the sample's own mean —
+the ordinary, default way to build a confidence interval, as opposed
+to a "one-tailed" interval that only bounds one direction. This
+function is a lookup, not a computation from first principles: it
+reads (or interpolates between) the entries of `_T_TABLE`, above —
+the same fixed numbers found in the "Student's-t table" printed in
+the back of most introductory statistics textbooks — falling back to
+the exact large-sample (normal-distribution) answer once
+`degrees_of_freedom` is larger than anything the table lists (see
+`_normal_quantile`, below).
 
 **Arguments**:
 
