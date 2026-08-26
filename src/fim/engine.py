@@ -274,6 +274,53 @@ def report_for_state(
     }
 
 
+def reports_summary(
+    reports: Sequence[FinalReport],
+    *,
+    confidence: float = 0.95,
+) -> dict[str, ConfidenceInterval]:
+    """Return each named statistic's across-report confidence interval.
+
+    The shared CI math behind `replicate_summary` (a completed batch's
+    own final reports), extracted so the GUI's live batch progress panel
+    (`fim.gui.app._push_batch_progress`) can summarize each currently-
+    reporting replicate's *live*, in-progress report the same way — the
+    math does not care whether a report is final or mid-run.
+
+    Unlike `replicate_summary`, this never raises for fewer than two
+    reports: a live tick's own reporting-replicate count is expected to
+    start below two and grow as the batch proceeds, not something to
+    treat as invalid input. Zero or one report simply summarizes to
+    nothing yet (an empty dict), the same "omitted, not blank" contract
+    `replicate_summary`'s own per-statistic dropping already establishes
+    for a monomorphic ``G_ST``, extended here to the "not enough reports
+    at all" case too.
+
+    Args:
+        reports: Zero or more independently seeded reports.
+        confidence: Two-tailed confidence level; see
+            `fim.statistics.interval.confidence_interval`.
+
+    Returns:
+        One `ConfidenceInterval` per statistic name in `FinalReport`
+        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``)
+        with at least two defined values across `reports`; a statistic
+        short of that (including every statistic, given fewer than two
+        reports overall) is omitted entirely.
+    """
+    summary: dict[str, ConfidenceInterval] = {}
+    for statistic in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"):
+        values = [
+            value
+            for report in reports
+            if (value := _final_report_statistic(report, statistic)) is not None
+        ]
+        if len(values) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+            continue
+        summary[statistic] = confidence_interval(values, confidence=confidence)
+    return summary
+
+
 def replicate_summary(
     results: Sequence[RunResult],
     *,
@@ -286,6 +333,11 @@ def replicate_summary(
     mean of those draws (`fim.statistics.interval.confidence_interval`),
     not a resampling scheme — the replicates are already independent by
     construction, so nothing further is needed to treat them as a sample.
+    A thin wrapper over `reports_summary`'s own shared math, adding only
+    the "fewer than two results at all is invalid input" check a
+    completed batch's own results warrant (unlike a live, still-growing
+    tick's reporting-replicate count — see that function's own
+    docstring for why it does not raise this same case itself).
 
     Args:
         results: Two or more independently seeded replicate results, as
@@ -310,17 +362,7 @@ def replicate_summary(
     """
     if len(results) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
         raise ValueError("replicate_summary requires at least two results")
-    summary: dict[str, ConfidenceInterval] = {}
-    for statistic in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"):
-        values = [
-            value
-            for result in results
-            if (value := _final_report_statistic(result.report, statistic)) is not None
-        ]
-        if len(values) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
-            continue
-        summary[statistic] = confidence_interval(values, confidence=confidence)
-    return summary
+    return reports_summary([result.report for result in results], confidence=confidence)
 
 
 def _build_finite_allele_spaces(

@@ -27,7 +27,12 @@ from webview.menu import Menu, MenuAction, MenuSeparator
 from fim import __version__ as fim_version
 from fim import cli, update
 from fim import paths as paths_module
-from fim.engine import RunResult, deterministic_run_id, replicate_summary
+from fim.engine import (
+    RunResult,
+    deterministic_run_id,
+    replicate_summary,
+    report_for_state,
+)
 from fim.engine import fim as engine_fim
 from fim.gui import app as app_module
 from fim.gui import batch_runner
@@ -558,6 +563,10 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     points = panels[0]["points"]
     assert isinstance(points, list)
     assert len(points) == 2
+    # `reports_summary` needs at least two reporting replicates to
+    # define any interval — one reporting replicate summarizes to
+    # nothing yet, not an error (design §8 Phase G's own docstring).
+    assert payload["statistics"] == {}
 
 
 def test_push_batch_progress_reports_nothing_before_any_replicate_starts(
@@ -637,8 +646,22 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
         ),
     )
     points = frequency_points(state)
+    params = SimulationParams(
+        N=20,
+        m=0.1,
+        mu=0.01,
+        d=3,
+        seed=20260814,
+        loci=(LocusSpec(1, 200),),
+        convergence_window=4,
+        convergence_tolerance=1.0,
+        max_generations=10,
+    )
+    report = report_for_state(
+        state, params, run_id="run-1", converged=False, reason="in progress"
+    )
     message_queue: queue.Queue[runner_module.RunMessage] = queue.Queue()
-    message_queue.put(("progress", 3, [], points))
+    message_queue.put(("progress", 3, [], points, report))
     # A terminal message right behind it: `_drain_run_messages`'s own
     # `while True` loop only returns once it sees one, and this test
     # cares only about the "progress" push's own first `evaluate_js`

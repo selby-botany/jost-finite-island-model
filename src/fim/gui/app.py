@@ -56,6 +56,7 @@ from fim.engine import (
     deterministic_run_id,
     replicate_summary,
     report_for_state,
+    reports_summary,
 )
 from fim.gui import batch_runner, recent_runs, runner
 from fim.gui.animation import pre_render_frames
@@ -1271,6 +1272,15 @@ def _drain_run_messages(
                 "maxGenerations": max_generations,
                 "panels": message[2],
                 "demeCount": deme_count,
+                # The six named statistics for this tick's own state
+                # (`runner.py`'s `on_generation`, `message[4]`) — keeps
+                # the running-state stats table live and populated
+                # rather than blank until the run finishes (design §8
+                # Phase G).
+                "statistics": {
+                    name: format_statistic(message[4][name], digits)
+                    for name in _RESULT_STATISTIC_NAMES
+                },
             }
             pair = live_deme_pair()
             if pair is not None:
@@ -1400,6 +1410,7 @@ def _push_batch_progress(
     run_id: str,
     working_directory: Path,
     live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
+    digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
 ) -> None:
     """Read every currently-reporting replicate's live state, push a pooled scatter.
 
@@ -1416,6 +1427,16 @@ def _push_batch_progress(
     panel for the Progress screen's own live "Compare demes directly"
     selector, reusing this tick's own already-pooled points rather than
     re-reading every replicate's trajectory a second time.
+
+    `statistics` is `reports_summary`'s own across-replicate confidence
+    interval, computed from each currently-reporting replicate's *live*
+    report (`report_for_state` on its just-read state) and pre-formatted
+    server-side exactly like `_batch_done_payload`'s own `summary` field
+    — keeps the running-state stats table live and populated rather
+    than blank until the batch finishes (design §8 Phase G). Naturally
+    empty (`{}`) for the first tick or two, before a second replicate
+    has reported anything to summarize yet — `reports_summary` never
+    raises for that, unlike `replicate_summary`.
     """
     states: list[ModelState] = []
     for index in range(1, params.n_replicates + 1):
@@ -1438,11 +1459,29 @@ def _push_batch_progress(
     panels = (
         panels_from_points(pooled_points, params.d) if pooled_points is not None else []
     )
+    raw_summary = reports_summary(
+        [
+            report_for_state(
+                state, params, run_id=run_id, converged=False, reason="in progress"
+            )
+            for state in states
+        ]
+    )
+    statistics = {
+        name: {
+            "mean": format_statistic(interval["mean"], digits),
+            "low": format_statistic(interval["low"], digits),
+            "high": format_statistic(interval["high"], digits),
+            "sampleCount": interval["sample_count"],
+        }
+        for name, interval in raw_summary.items()
+    }
     progress_payload: dict[str, object] = {
         "replicateCount": params.n_replicates,
         "reportedReplicateCount": len(states),
         "panels": panels,
         "demeCount": params.d,
+        "statistics": statistics,
     }
     pair = live_deme_pair()
     if pair is not None and pooled_points is not None:
@@ -1613,7 +1652,7 @@ def _drain_batch_messages(
             message = message_queue.get(timeout=_BATCH_POLL_INTERVAL_SECONDS)
         except queue.Empty:
             _push_batch_progress(
-                window, params, run_id, working_directory, live_deme_pair
+                window, params, run_id, working_directory, live_deme_pair, digits
             )
             continue
         if message[0] == "done":

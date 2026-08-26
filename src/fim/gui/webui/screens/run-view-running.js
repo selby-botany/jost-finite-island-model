@@ -4,9 +4,14 @@
  * §3.2.1, §3.2.3, §3.7, §8 Phase E) -- a live scatter (design doc §0.5,
  * §4.2's original "the botanists want to see scatterplots... live"),
  * folded out of the retired `screens/progress.js` into this state-
- * scoped file with no behavioral change beyond the merge itself
- * (design §8 Phase G adds the live table/statistics-with-CIs this
- * state does not have yet).
+ * scoped file with no behavioral change beyond the merge itself.
+ * Design §8 Phase G later added the live statistics table this state
+ * did not originally have (`renderLiveStatistics`/`renderBatchSummary`
+ * below, driven by `statistics` on every progress push) -- the same
+ * `results-stats`/`batch-results-summary` `.stats-table`s
+ * `enterCompletedState` shows for a finished run, kept visible and
+ * updated in place from the moment a run starts rather than appearing
+ * only once it ends.
  *
  * `Api.start_run` pushes `fim.onRunProgress`/`onRunDone`/`onRunCancelled`/
  * `onRunError` (scalar) or `onBatchProgress`/`onBatchDone`/
@@ -88,8 +93,19 @@ let lastProgressPayload = null;
  * Cancel -- the shared entry point `run-view-controls.js`'s own
  * `onRunClicked` calls once `Api.start_run` confirms a run has
  * genuinely started.
+ *
+ * The statistics table itself is *not* hidden here (design §8 Phase G:
+ * "the stats panel is always present and populated") -- whichever of
+ * `results-stats`/`batch-results-summary` matches `isBatch` stays (or
+ * becomes) the visible `.stats-table` for the run about to start, the
+ * same one `onRunProgress`/`onBatchProgress` below update every tick
+ * and `enterCompletedState` leaves showing once the run finishes, so
+ * the table is continuously on screen and continuously current from
+ * the moment "Run simulation" is clicked, never blank in between.
+ *
+ * @param {boolean} isBatch
  */
-function enterRunningState() {
+function enterRunningState(isBatch = false) {
     window.fim.setRunViewState("running");
     batchProgressHighWaterMark = 0;
     liveDemeSelectorWired = false;
@@ -100,6 +116,8 @@ function enterRunningState() {
     if (initialStats) {
         initialStats.hidden = true;
     }
+    resultsStats.hidden = isBatch;
+    batchResultsTableEl.hidden = !isBatch;
     if (runPlotTitle) {
         runPlotTitle.textContent = "FIM simulation — in progress";
     }
@@ -186,6 +204,32 @@ function wireLiveDemePairSelector(demeCount) {
     });
 }
 
+/**
+ * Update `results-stats`' six rows in place from one progress tick's
+ * own live statistics (`runner.py`'s `on_generation`, formatted
+ * server-side in `_drain_run_messages` exactly like a finished run's
+ * own `payload.statistics`) -- the same `applyStatRow`/`buildPointMeter`
+ * pair `enterCompletedState` uses, so the table reads identically
+ * whether the run is still going or already done. A no-op when
+ * `statistics` itself is absent -- every real push carries it
+ * (`_drain_run_messages` always sets it), but a synthetic/partial test
+ * payload calling `onRunProgress` directly for unrelated coverage
+ * (`test_input_screen.py`'s own batch counterpart is exactly this
+ * shape) should leave whatever the table already shows alone rather
+ * than throwing trying to read `undefined[name]`.
+ *
+ * @param {Record<string, string> | undefined} statistics
+ */
+function renderLiveStatistics(statistics) {
+    if (!statistics) {
+        return;
+    }
+    for (const name of STATISTIC_NAMES) {
+        const element = document.getElementById(`stat-${name}`);
+        applyStatRow(element, buildPointMeter(name, statistics[name]));
+    }
+}
+
 window.fim.onRunProgress = function onRunProgress(payload) {
     progressBar.max = payload.maxGenerations;
     progressBar.value = payload.generation;
@@ -194,6 +238,7 @@ window.fim.onRunProgress = function onRunProgress(payload) {
         wireLiveDemePairSelector(payload.demeCount);
         liveDemeSelectorWired = true;
     }
+    renderLiveStatistics(payload.statistics);
     lastProgressPayload = payload;
     drawProgressPanels(payload);
 };
@@ -243,6 +288,15 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
         wireLiveDemePairSelector(payload.demeCount);
         liveDemeSelectorWired = true;
     }
+    // `renderBatchSummary` (`run-view-completed.js`) already renders
+    // "omitted (fewer than two defined replicates)" for any statistic
+    // `payload.statistics` leaves out -- which, early in a batch, is
+    // every statistic (`_push_batch_progress`'s own `reports_summary`
+    // needs at least two currently-reporting replicates to define an
+    // interval at all). That omitted-row rendering *is* "populated"
+    // here, not a placeholder for it: the table always shows something
+    // meaningful for the batch's current state, never blank.
+    renderBatchSummary(payload.statistics);
     lastProgressPayload = payload;
     drawProgressPanels(payload);
 };

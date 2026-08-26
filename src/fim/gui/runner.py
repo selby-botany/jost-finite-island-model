@@ -40,7 +40,13 @@ from typing import Any, Final, Literal
 from matplotlib import pyplot as plt
 
 from fim import paths
-from fim.engine import RunResult, deterministic_run_id, fim
+from fim.engine import (
+    FinalReport,
+    RunResult,
+    deterministic_run_id,
+    fim,
+    report_for_state,
+)
 from fim.gui.store import GuiProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
@@ -72,7 +78,9 @@ _EXPECTED_ENGINE_ERRORS: Final = (
     ValueError,
 )
 
-ProgressMessage = tuple[Literal["progress"], int, list[dict[str, object]], FloatArray]
+ProgressMessage = tuple[
+    Literal["progress"], int, list[dict[str, object]], FloatArray, FinalReport
+]
 DoneMessage = tuple[Literal["done"], RunResult]
 CancelledMessage = tuple[Literal["cancelled"], int]
 ErrorMessage = tuple[Literal["error"], str]
@@ -218,7 +226,18 @@ def _run_worker(
             # thrown away after producing `panels`.
             points = frequency_points(state)
             panels = panels_from_points(points, state.deme_count)
-            message_queue.put(("progress", generation, panels, points))
+            # The six named statistics for *this* tick's state, the
+            # same `report_for_state` call `Api.get_initial_state_panels`
+            # makes for p_0 (design §8 Phase G's "the stats panel is
+            # always present and populated" — the running state's own
+            # table updates live from this instead of sitting blank
+            # until the run finishes). `converged`/`reason` are both
+            # placeholders; nothing downstream reads them off a
+            # progress tick's own report, only the six numeric fields.
+            report = report_for_state(
+                state, params, run_id=run_id, converged=False, reason="in progress"
+            )
+            message_queue.put(("progress", generation, panels, points, report))
 
     try:
         with paths.atomic_directory(output_directory) as working_directory:

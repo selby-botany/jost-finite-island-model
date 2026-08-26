@@ -123,6 +123,13 @@ def test_start_run_writes_the_four_documented_artifacts_on_success(
             # column per deme.
             points = message[3]
             assert points.shape[1] == 2
+            # `report` (design §8 Phase G's live stats-table field):
+            # the same six named statistics `report_for_state` computes
+            # for p_0/a finished run, computed fresh for this tick's
+            # own state so the running-state table has something to
+            # show before the run itself finishes.
+            report = message[4]
+            assert {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"} <= report.keys()
             checked += 1
     assert checked == len(progress_messages)
 

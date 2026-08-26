@@ -90,9 +90,17 @@ function renderDifferentiationQ(report) {
 }
 
 function renderBatchSummary(summary) {
+    // `summary` defaults to `{}` rather than requiring every caller to
+    // guard it: every real push carries it (`onBatchDone`'s own
+    // payload, `_push_batch_progress`'s own `statistics` field), but a
+    // synthetic/partial test payload calling `onBatchProgress` directly
+    // for unrelated coverage (`test_input_screen.py`'s own high-water-
+    // mark test is exactly this shape) should render every statistic
+    // as "omitted" rather than throwing trying to read `undefined[name]`.
+    const rows = summary || {};
     batchResultsSummary.replaceChildren();
     for (const name of STATISTIC_NAMES) {
-        const interval = summary[name];
+        const interval = rows[name];
         const cells =
             interval === undefined
                 ? buildOmittedMeter(name, OMITTED_SUMMARY_TEXT)

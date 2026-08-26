@@ -54,7 +54,13 @@ async function onRunClicked() {
     // bridge round-trip, not after" fix already needed for Cancel's
     // button-enable timing.
     showRunBanner("");
-    window.fim.enterRunningState();
+    // `n_replicates > 1` is the same "batch or scalar" toggle design
+    // §4.1 already established server-side (`Api._start_batch_run`'s
+    // own dispatch) -- known here from the form values already in
+    // hand, no bridge round trip needed just to pick which of
+    // `results-stats`/`batch-results-summary` `enterRunningState`
+    // shows for the run about to start.
+    window.fim.enterRunningState(Number(values.n_replicates) > 1);
     const started = await window.pywebview.api.start_run(values);
     if (!started.ok) {
         // Rare (an output-directory collision retry timing out, or a
