@@ -202,6 +202,7 @@ defines the complete scientific and architectural contract.
 
 - [Command, workflow, and output reference](doc/usage.md)
 - [Configuration reference](doc/configuration.md)
+- [Worked examples](doc/examples/README.md)
 - [Installation alternatives](install/README.md)
 - [Security model](SECURITY.md)
 - [Release history](CHANGELOG.md)

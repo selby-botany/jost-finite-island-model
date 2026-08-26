@@ -30,7 +30,7 @@ calibration.
 
 ## Examples
 
-### [golden-part-vi](golden-part-vi/)
+### [golden-part-vi](golden-part-vi/README.md)
 
 **Jost (2008) Part VI** — the primary calibration anchor for `fim`.
 Four demes, N = 100, moderate migration (m = 0.01) and mutation
@@ -38,14 +38,14 @@ Four demes, N = 100, moderate migration (m = 0.01) and mutation
 G_ST ≈ 0.125, D ≈ 0.370 at this seed. Published ensemble values
 (100 replicates, multi-locus engineered start): G_ST ≈ 0.176, D ≈ 0.604.
 
-### [dear-nolan-low](dear-nolan-low/)
+### [dear-nolan-low](dear-nolan-low/README.md)
 
 **Dear-Nolan low-migration botanical scenario** — five isolated plant
 patches, N = 100, very low migration (m = 0.0001) and negligible mutation
 (mu = 0.000001). Drift dominates: demes fix independently, G_ST → 1.0
 at generation 981. Published ensemble values: G_ST ≈ 0.970, D ≈ 0.038.
 
-### [dear-nolan-high](dear-nolan-high/)
+### [dear-nolan-high](dear-nolan-high/README.md)
 
 **Dear-Nolan high-migration botanical scenario** — the exact equilibrium
 validation case from `test/validation/test_simulator_equilibrium.py`.
