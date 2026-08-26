@@ -292,6 +292,38 @@ Public package metadata for the finite island model simulator.
 
 Researcher-facing command-line interface for the simulator.
 
+This is what actually runs when you type `fim` at a terminal — the part
+of the program that reads what you typed, figures out which of the four
+things you asked for, and calls the right code to do it. It has four
+commands, each its own subsection below:
+
+- `fim init` — write out a starter configuration file (a filled-in
+  example, ready to run or edit) so a new user has something concrete to
+  start from rather than an empty file and a blank page of documentation
+  (`_command_init`).
+- `fim run CONFIG` — actually run a simulation from a configuration file
+  and write its results to disk. Dispatches to one of two paths
+  depending on the configuration's own `n_replicates` (`_command_run`):
+  a single simulation (`_command_run_scalar`) or a whole batch of
+  independent, differently seeded repeats of the same configuration
+  (`_command_run_batch`) — see `fim.engine`'s own docstring for why
+  running several repeats matters at all.
+- `fim stats TRAJECTORY` — recompute statistics from a run's own saved
+  data, for any generation, without re-running the simulation
+  (`_command_stats`; see `fim.reanalyze`'s own docstring for what
+  "re-analysis" means and why it is useful).
+- `fim update --check` — the one place this whole program ever makes a
+  network connection: ask GitHub whether a newer release exists
+  (`_command_update`; see `fim.update`'s own docstring for the full
+  reasoning and the security posture behind it).
+
+This file's own job stops at parsing arguments, calling the right
+function, and printing the result or a plain-language error message —
+the actual scientific work (running the simulation, computing
+statistics) always lives in `fim.engine`/`fim.reanalyze`, never here.
+That separation is what lets the exact same underlying logic also power
+the desktop app (`fim.gui`) without duplicating it.
+
 <a id="fim.cli.load_config"></a>
 
 #### load\_config
@@ -301,6 +333,17 @@ def load_config(path: Path | str) -> SimulationParams
 ```
 
 Load one YAML config file into validated simulation parameters.
+
+YAML is the plain-text, human-editable file format every
+configuration in this project is written in (see `fim init`'s own
+starter config, below, for a real example) — this function is what
+turns that text file into the fully checked, ready-to-use
+`SimulationParams` object every other part of the program actually
+works with. "Validated" here means every value has already been
+checked for being sensible on its own (a population size cannot be
+negative, a probability must be between 0 and 1, and so on) — by the
+time this function returns successfully, nothing downstream needs to
+re-check any of that.
 
 **Arguments**:
 
@@ -320,6 +363,29 @@ def main(argv: Sequence[str] | None = None) -> int
 ```
 
 Parse command-line arguments and dispatch one operation.
+
+This is the single entry point every invocation of `fim` from a
+terminal reaches (via `pyproject.toml`'s own `[project.scripts]`
+entry, by way of `fim.launcher`) — it parses whatever was typed,
+figures out which of the four commands (see this module's own
+docstring, above) was requested, and calls the matching function.
+
+Every error that any command can reasonably raise on genuinely bad
+input (a malformed configuration file, an invalid parameter
+combination, a missing file, and so on) is caught here in one place
+and turned into a short, plain "fim: error: ..." message on a single
+line, with an exit status a shell script can check, rather than a
+long, intimidating Python traceback — this project's programming
+mistakes should look like tracebacks (so they get noticed and
+fixed), but a *user's* mistake (a typo in a config file, an
+out-of-range value) should look like a normal, readable command-line
+error, the same way a real command-line tool a person did not write
+themselves would report it. The specific exception types listed are
+exactly the ones the actual work below (`fim.engine`, YAML parsing,
+file I/O) can raise for an ordinary, expectable mistake; anything
+else escaping this function uncaught is treated as a real bug in
+this project's own code, and is deliberately allowed to surface as
+a full traceback instead of being hidden behind a generic message.
 
 **Arguments**:
 
@@ -3399,6 +3465,20 @@ generation still being written.
 
 Dispatcher for the single packaged executable's three ways into the GUI.
 
+This project ships one single program (one `.exe` on Windows, one `fim`
+command everywhere else) that can be started in three different-looking
+ways: double-clicked as a desktop app with no arguments at all, typed as
+a command in a terminal with real arguments (`fim run ...`), or launched
+via an explicit `--graphical` flag from a shortcut or Start Menu tile
+that wants to name the desktop app directly. All three have to result in
+the right thing happening even though, to the underlying operating
+system, they look like nothing more than "this same program got run with
+these particular arguments (or none)." This file is the very first code
+that runs either way — its only job is figuring out which of the three
+situations just happened and handing off to the right place: the desktop
+app (`_launch_gui`) or the ordinary command-line parser
+(`fim.cli.main`).
+
 Design doc `20260819-claude-sonnet-5-graphical-interface.md` §5.1: the
 Windows release ships one `.exe`, opened by double-clicking (GUI, no
 arguments), from a terminal (CLI), or via an explicit `--graphical
@@ -4495,6 +4575,24 @@ migrates with nobody — its row is the identity row.
 Project-root, results-directory, and atomic-publish logic, shared by
 every front end.
 
+This is where every part of `fim` (the command line, the desktop app,
+every test) goes to answer three small but easy-to-get-wrong questions,
+so each one is answered exactly once, the same way everywhere, rather
+than reinvented slightly differently in each front end:
+
+1. "Where does this project actually live on disk?" (`project_root`) —
+   needed to find a sensible default place to write output, without
+   requiring every command to be told an explicit path every time.
+2. "Where should a run's output go if the user did not name a specific
+   folder?" (`default_output_directory`, `results_directory`) — a
+   single, predictable `results/` folder under the project root, with
+   each unnamed run getting its own timestamped subfolder so two runs
+   never collide by writing into the same place.
+3. "How do we write a whole folder's worth of output files without ever
+   leaving a half-written, broken folder behind if something goes wrong
+   partway through?" (`atomic_directory`) — see that function's own
+   docstring for the answer.
+
 Extracted from `fim.cli` (design doc `20260819-claude-sonnet-5-graphical-
 interface.md` §3.7) so `fim.gui`'s run orchestration resolves the exact same
 `project-root/results/` layout, timestamped default folder naming, and
@@ -4519,30 +4617,56 @@ def atomic_directory(target: Path) -> Iterator[Path]
 Build a directory's contents in a hidden temporary sibling, then
 publish it at `target` with one atomic rename.
 
-Regression fix for R7 (`cli.py`'s own history, predating this
-extraction): an interrupted run used to leave a partial output
-directory that was silently indistinguishable from a complete one.
-Every write inside the `with` block happens in a temporary sibling
-of `target` — on the same filesystem, since it is always created
-directly inside `target.parent`, which guarantees the final publish
-is a single atomic rename rather than a copy. If the block raises
-anything, the temporary directory is discarded and `target` is left
-completely untouched. `target` therefore either does not exist yet
-or exists complete; there is no third, partial state to observe
-from outside this function against process-level interruption — an
-uncaught exception, `^C`, or `kill -9` all skip the `except` cleanup
-but still cannot leave anything at `target` itself, only an
-orphaned temporary directory beside it.
+The problem this solves: a simulation run writes several files
+(trajectory data, a report, a plot, a manifest) into its own output
+folder over the course of running, which can take anywhere from a
+second to hours. If that run is interrupted partway through — the
+process crashes, the computer loses power, or a person simply
+presses Ctrl-C — writing those files *directly* into the final
+folder would leave behind a folder that looks like a real,
+completed run's output (it exists, it has some files in it) but is
+actually missing whatever had not been written yet. Nothing about
+that folder's own name or existence would reveal it was actually
+incomplete — a real, previously reported bug (R7, this project's own
+tracked-issue numbering, predating this function's extraction from
+`cli.py`) that this function exists specifically to prevent.
 
-This guarantee is about the rename, not about physical durability
-(S11): nothing in this function calls `fsync`, so on an unclean
-power loss, a filesystem is free to have recorded the rename's
-metadata before every byte written into the temporary directory
-actually reached disk — a `target` that survives such an event can
-exist, look complete, and still contain corrupted or truncated file
-content. Treat this function's guarantee as "no partial directory
-is ever observable," not "every observed directory survived a
-power failure intact."
+The fix follows the same idea a careful editor uses when saving a
+long document: write the whole new version to a *different* file
+first, and only once it is completely finished, replace the old file
+with the new one in a single step — never leaving a moment where the
+file exists but is only half-written. Concretely: every write inside
+the `with` block happens in a hidden temporary folder next to
+`target` (a dot-prefixed sibling, created directly inside
+`target.parent`, on the very same filesystem — required so the
+final step below can be one atomic rename rather than a slower,
+interruptible copy). "Atomic" here means the same thing it means in
+everyday English: indivisible — from the perspective of anything
+else looking at the filesystem, that rename either has not happened
+yet (nothing at `target`) or has completely finished (everything at
+`target`); there is no in-between moment where `target` exists but
+only holds some of the files. If the code inside the `with` block
+raises anything at all — an ordinary exception, `^C` from the
+keyboard, or the process being killed outright — the temporary
+folder is discarded and `target` is left completely untouched, never
+created in a broken state. `target` therefore either does not exist
+yet or exists fully complete; there is no third, partial state ever
+observable from outside this function.
+
+This guarantee is about the *rename* being all-or-nothing, not about
+surviving a total loss of power (a separate, harder guarantee this
+function does not attempt — internal tracking reference S11): nothing
+here calls `fsync` (the low-level operation that would force every
+written byte all the way out to physical disk before continuing), so
+on an actual, unclean power loss, the operating system and disk are
+still free to have recorded the rename itself before every byte
+written into the temporary folder had physically reached the disk —
+meaning a `target` that survives such an event can exist, look
+complete, and still contain corrupted or truncated file content in
+that specific, narrow scenario. Read this function's guarantee as
+"no half-written folder is ever visible to look at," not "every
+folder this function ever produced is guaranteed to have survived a
+power failure with perfect data integrity."
 
 **Arguments**:
 
@@ -4570,17 +4694,31 @@ def default_output_directory(results: Path | None = None,
 
 Return a timestamped output folder without affecting run data.
 
+Called whenever a run is started without the caller naming a
+specific output folder — `fim run` with no `--output`, or the
+desktop app's own default. Two different, unnamed runs started at
+different times get two different folders this way (each one's own
+start time, encoded into the folder's name), so they can never
+collide by both trying to write into the exact same place.
+
 **Arguments**:
 
 - `results` - Optional results-directory override (default:
   `results_directory()`).
-- `clock` - Injectable UTC clock, for deterministic tests.
+- `clock` - Injectable UTC clock, for deterministic tests — a real
+  caller never supplies this; only a test that wants to check
+  the exact folder name a specific, fixed time would produce
+  needs to.
 
 
 **Returns**:
 
   `results / f"run-{timestamp}"`. The timestamp names the folder
-  only; it never enters any persisted scientific value.
+  only; it never enters any persisted scientific value — two runs
+  with the exact same configuration and seed still produce
+  identical scientific results regardless of which folder name
+  each one happened to land in (see `fim.engine`'s own docstring
+  for why that determinism matters).
 
 <a id="fim.paths.project_root"></a>
 
@@ -4592,6 +4730,33 @@ def project_root() -> Path
 
 Return the source checkout root, falling back to a writable default.
 
+Answers "where should output go by default, if nobody said
+otherwise" — see this module's own docstring, above. There are three
+genuinely different situations this has to handle, because `fim`
+itself can be run in three different ways, and "the project" means
+something different in each one:
+
+1. Running from a real, cloned copy of this repository (a
+"checkout") — the common case for anyone actively developing or
+reading the source. Here, "the project" plainly means that
+checkout, identified by walking up from wherever the installed
+`fim` package's own files live until a `pyproject.toml` is
+found — the file that marks the top of this specific project.
+2. Running a **packaged** build — a standalone application built by
+PyInstaller (the tool this project uses to produce a plain
+double-clickable `fim-gui` app, with no separate Python
+installation required), where there is no source checkout on
+disk to find at all. Python itself sets `sys.frozen` to `True`
+specifically to mark this situation, which is what the code below
+checks. Falls back to a `fim` folder inside the user's own home
+directory — a location that is essentially guaranteed to exist
+and be writable, regardless of which operating system or user
+account is running it.
+3. A plain `pip install fim`, run from an ordinary terminal, with no
+checkout and not packaged either — falls back to the current
+working directory, exactly as most ordinary command-line tools
+do.
+
 **Returns**:
 
   The checkout root containing `pyproject.toml`, if one is found
@@ -4599,18 +4764,23 @@ Return the source checkout root, falling back to a writable default.
   for a packaged (`sys.frozen`) build, or the current working
   directory for a plain `pip install` run from a terminal.
 
-  The frozen case cannot fall back to `Path.cwd()`: a packaged GUI
-  has no terminal, and therefore no user-chosen working directory
-  to inherit — the OS picks one instead, and on macOS a
-  Finder-launched `.app` gets `cwd() == "/"`, the read-only
-  filesystem root. `results_directory()` built straight from that
-  (`/results`) failed outright with "[Errno 30] Read-only file
-  system" on first real GUI use. A frozen CLI invocation (the same
-  binary run from an actual terminal) loses nothing here either:
-  every documented `fim run` example passes `--output` explicitly,
-  never relying on this default. `Path.cwd()` remains correct for
-  the non-frozen, no-checkout case (`pip install fim` run from a
-- `terminal)` - there, cwd is a real, user-chosen directory.
+  The packaged case specifically cannot fall back to `Path.cwd()`
+  (the current working directory) the way case 3 above does: a
+  packaged desktop app was not launched from a terminal at all, so
+  there is no user-chosen working directory for it to inherit —
+  the operating system picks some directory on the app's behalf
+  instead, and on macOS, an app launched by double-clicking it in
+  Finder gets handed `cwd() == "/"`, the very root of the entire
+  filesystem, which is read-only on modern macOS. Building
+  `results_directory()` straight from that (`/results`) failed
+  outright with a real "[Errno 30] Read-only file system" error the
+  first time this was tried against an actual packaged build — not
+  a hypothetical concern. A packaged *command-line* build (the same
+  underlying program, built the same way, but invoked from an
+  actual terminal instead of double-clicked) loses nothing from
+  using the home-directory fallback either: every documented `fim
+  run` example already passes `--output` explicitly, so it never
+  relies on this default output location at all.
 
 <a id="fim.paths.results_directory"></a>
 
@@ -4621,6 +4791,10 @@ def results_directory(root: Path | None = None) -> Path
 ```
 
 Return the project-local results directory.
+
+The one folder every unnamed run's own output lands under (see
+`default_output_directory`, just above, for how each individual
+run then gets its own timestamped subfolder inside this one).
 
 **Arguments**:
 
@@ -5093,6 +5267,18 @@ Validate and normalize one public-schema trajectory row.
 
 Re-analyze a persisted trajectory (design doc §3.8).
 
+Every generation of a completed run is saved to disk, as one row per
+deme/locus/allele combination actually present that generation (in a
+file called `trajectory.jsonl` — see `fim.persistence`). "Re-analyzing"
+that file means reading it back afterward and computing fresh statistics
+from it — the differentiation numbers for whichever generation you
+actually want to look at, computed the exact same way they were the
+first time, without needing to re-run the simulation itself at all. This
+is what makes it possible to, for example, open a run you finished last
+week and see its statistics at generation 200 even though the run itself
+stopped (and was reported) at generation 500 — the full history was
+saved, so any of it can be revisited later.
+
 Extracted from `fim.cli._command_stats` so every consumer that needs to
 "read a persisted `trajectory.jsonl` the same way `cli._command_stats`
 already does" (§3.8) — Screen 6, "open an existing run" (§4.6), and
@@ -5112,6 +5298,12 @@ class ReanalyzedGeneration()
 ```
 
 One re-analyzed generation's manifest, params, state, and report.
+
+What `reanalyze_trajectory` (below) actually returns: everything
+needed to display one specific, chosen generation of a previously
+completed run — not just its statistics, but the full state that
+produced them and the run's own original bookkeeping, bundled
+together so a caller never has to separately go fetch any of it.
 
 **Arguments**:
 
@@ -5135,6 +5327,21 @@ def differentiation_q_for_state(state: ModelState, params: SimulationParams,
 
 Average the requested differentiation order across loci.
 
+`order` here is what the
+[differentiation-measures guide](../../doc/jost-differentiation-measures.md)
+calls "q": a single number that a whole family of differentiation
+measures turns out to be special cases of, once written in a common
+mathematical form — `differentiation_q(table, order=0, ...)` is
+exactly `K_ST`, `order=1` is exactly `E_ST`, and `order=2` is exactly
+Jost's `D`, all from literally the same underlying formula, just
+evaluated at a different value of `order`. Reporting several
+different `order` values side by side for the same run — a
+"differentiation-q sweep" — is one way of seeing how sensitive a
+conclusion is to which particular measure happened to be chosen,
+since (as the linked guide explains in depth) different measures can
+genuinely disagree about how differentiated the very same population
+actually is.
+
 `deme_weighting` has a defined effect only at ``q = 1``
 (`fim.statistics.differentiation.differentiation_q` raises if
 weights are passed at any other order) — the same order that
@@ -5153,6 +5360,15 @@ def group_rows_by_generation(trajectory_path: Path,
 ```
 
 Group every persisted row by its generation number, in stored order.
+
+A `trajectory.jsonl` file already stores its rows generation by
+generation, in the order they were written during the original run —
+but as one long, flat sequence, not indexed for picking out a
+specific generation's own rows directly. This function reads that
+whole sequence once and turns it into exactly that index (a mapping
+from generation number straight to that generation's own rows), so a
+caller can then look up whichever specific generation(s) it actually
+needs without re-scanning the file for each one.
 
 Shared by `reanalyze_trajectory` — which instead filters `rows` to
 just the one selected generation, matching `cli._command_stats`'s
@@ -5188,11 +5404,19 @@ def reanalyze_trajectory(
 
 Recompute one generation's statistics from a persisted trajectory.
 
-The exact algorithm `fim stats` runs: verify the trajectory against
-its manifest's recorded digest, verify the trajectory's observed
-generation count still matches the manifest's, select a generation,
-and build its report — optionally including a differentiation-q
-sweep.
+This is the function behind `fim stats` and "open an existing run"
+(see this module's own docstring, above, for what re-analysis means
+and why it is useful) — the exact same algorithm both go through:
+load the run's own manifest (its recorded bookkeeping — see
+`fim.engine.RunResult`'s own docstring for what a manifest is),
+confirm the trajectory file has not been tampered with or corrupted
+since the run finished (by checking it against a checksum — a short
+fingerprint computed from the file's own content, recorded in the
+manifest at the time the run completed, and any edit to the file
+changes that fingerprint, so a mismatch reveals the file was altered
+— see `fim.persistence.manifest.verify_trajectory_integrity`), pick
+out the one generation actually being asked for, and build that
+generation's own report.
 
 **Arguments**:
 
@@ -5552,13 +5776,25 @@ Return the two-tailed Student's-t critical value.
 
 Explicit, opt-in release-check logic shared by every front end.
 
+This is the code behind "Check for updates": it asks GitHub whether a
+newer version of `fim` has been released than the one currently
+installed, and if so, reports the new version's own name and the web
+page describing it — it never downloads or installs anything itself,
+only checks and reports. It is also, deliberately, the *only* code
+anywhere in this entire project that ever makes a network connection to
+anywhere at all (see `SECURITY.md`'s own threat model) — every other
+part of `fim` runs entirely offline, with no network access needed or
+attempted. That single network call happens only when a person
+explicitly asks for it (the command line's own `fim update --check`, or
+the desktop app's own "Check for updates" menu item) — nothing here ever
+runs automatically in the background, on a timer, or as a side effect of
+an ordinary simulation run.
+
 Extracted from `fim.cli` (design doc `20260819-claude-sonnet-5-graphical-
 interface.md` §3.9) so `fim.gui`'s "Check for updates" action performs
 exactly the same GitHub Releases lookup and version comparison as
 `fim update --check`, rather than a second implementation of the one
-network operation SECURITY.md's threat model permits. This module never
-runs on its own; every function here is reached only by an explicit,
-user-initiated caller.
+network operation `SECURITY.md`'s threat model permits.
 
 <a id="fim.update.compare_versions"></a>
 
@@ -5570,6 +5806,21 @@ def compare_versions(current: str, latest: str) -> int
 
 Compare two three-part semantic versions.
 
+"Semantic versioning" is the widely used convention of naming a
+release `MAJOR.MINOR.PATCH` (for example `1.4.2`) so that comparing
+two version numbers to see which is newer is unambiguous and does
+not require knowing anything about what actually changed between
+them — this project's own releases follow that convention (see
+`version_parts`, below, for exactly what counts as valid). Follows
+the conventional three-way comparison result used throughout this
+project and its standard library: a negative number (always exactly
+``-1`` here, since only one comparison is ever done) means `current`
+is older than `latest`, ``0`` means the two are the same release,
+and a positive number (``1``) means `current` is actually newer —
+which can genuinely happen for a development build running ahead of
+the latest *published* release, not just a symptom of something
+wrong.
+
 <a id="fim.update.fetch_latest_release"></a>
 
 #### fetch\_latest\_release
@@ -5579,6 +5830,16 @@ def fetch_latest_release() -> Mapping[str, Any]
 ```
 
 Fetch the latest GitHub release; this is the sole network path.
+
+Reads GitHub's own public "latest release" API for this project — no
+authentication, no data about the user or their machine sent beyond
+what any web request inherently reveals (the requesting program's
+own name and version, in the `User-Agent` header, which is
+standard, polite practice for identifying a program to a server, the
+same way a web browser identifies itself). `timeout=5` (seconds)
+means a genuinely unreachable network fails quickly and reports an
+error, rather than leaving the caller waiting indefinitely for a
+response that may never come.
 
 <a id="fim.update.latest_release"></a>
 
@@ -5591,6 +5852,22 @@ def latest_release(
 
 Validate the two release fields needed by an update check.
 
+Takes `fetcher` (defaulting to the real `fetch_latest_release` above)
+as an argument, rather than calling it directly, purely so a test
+can supply a fake one that returns a fixed, made-up response instead
+of making a real network call — the same "let the caller decide
+where the data comes from" pattern used throughout this project
+wherever something needs to be tested without touching the real
+network, filesystem, or clock.
+
+GitHub's own response is a large object with many fields; this
+function pulls out and checks only the two this project actually
+needs (the release's own version tag, and the web page describing
+it), raising a clear, specific error immediately if either is
+missing or is not the kind of value expected, rather than letting a
+caller further away discover the problem indirectly, later, as a
+confusing `TypeError` or `KeyError` somewhere else entirely.
+
 <a id="fim.update.version_parts"></a>
 
 #### version\_parts
@@ -5600,6 +5877,12 @@ def version_parts(value: str) -> tuple[int, int, int]
 ```
 
 Parse a stable three-part semantic version.
+
+See `compare_versions`'s own docstring, above, for what "semantic
+version" means. A real release tag on GitHub is written with a
+leading "v" (`v1.4.2`); callers are expected to strip that off
+before calling this function, which only ever handles the bare
+`MAJOR.MINOR.PATCH` numbers themselves.
 
 <a id="fim.viz"></a>
 

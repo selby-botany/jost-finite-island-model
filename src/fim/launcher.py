@@ -1,5 +1,19 @@
 """Dispatcher for the single packaged executable's three ways into the GUI.
 
+This project ships one single program (one `.exe` on Windows, one `fim`
+command everywhere else) that can be started in three different-looking
+ways: double-clicked as a desktop app with no arguments at all, typed as
+a command in a terminal with real arguments (`fim run ...`), or launched
+via an explicit `--graphical` flag from a shortcut or Start Menu tile
+that wants to name the desktop app directly. All three have to result in
+the right thing happening even though, to the underlying operating
+system, they look like nothing more than "this same program got run with
+these particular arguments (or none)." This file is the very first code
+that runs either way — its only job is figuring out which of the three
+situations just happened and handing off to the right place: the desktop
+app (`_launch_gui`) or the ordinary command-line parser
+(`fim.cli.main`).
+
 Design doc `20260819-claude-sonnet-5-graphical-interface.md` §5.1: the
 Windows release ships one `.exe`, opened by double-clicking (GUI, no
 arguments), from a terminal (CLI), or via an explicit `--graphical
@@ -66,6 +80,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _launch_gui(*, detach: bool) -> int:
     """Start the GUI, either in this process or as a detached one.
 
+    "Detached" means started as its own separate, independent process
+    that keeps running after this one exits — the same idea as starting
+    a program from a terminal with a trailing `&` on Unix, so the
+    terminal itself becomes free to accept new commands immediately
+    instead of waiting for that program to finish. Used only when
+    something explicitly asks for the GUI via `--graphical --detach`
+    (see `main`, above) — a shortcut or launcher script that wants to
+    open the desktop app and immediately return control to whatever
+    launched it, rather than blocking until the app window is closed.
+
     Args:
         detach: When true, relaunch this same executable/script with
             `--graphical` as an independent, detached process and
@@ -85,10 +109,15 @@ def _launch_gui(*, detach: bool) -> int:
         import subprocess  # noqa: PLC0415 -- only needed for this one branch
 
         if getattr(sys, "frozen", False):
-            # A packaged PyInstaller executable (`sys.frozen`, the same
+            # PyInstaller (the tool this project uses to bundle `fim`
+            # into a single, plain, double-clickable file with no
+            # separate Python installation required) sets `sys.frozen`
+            # to `True` specifically to mark this situation — the same
             # flag `fim.__init__._load_version` already checks for the
-            # bundled `version.txt`): `sys.argv[0]` is the real,
-            # directly re-executable binary path.
+            # bundled `version.txt`. In this case, `sys.argv[0]` is the
+            # real, directly re-executable binary path — the exact same
+            # file that is currently running, safe to launch again as a
+            # brand-new, separate process.
             relaunch_argv = [sys.argv[0], "--graphical"]
         else:
             # Running from source -- a `python -m fim.launcher`
@@ -139,6 +168,12 @@ def _launch_gui(*, detach: bool) -> int:
 
 
 if __name__ == "__main__":
+    # In plain terms: this one line is required for batch runs
+    # (`n_replicates` greater than one, see `fim.engine`) to work at all
+    # in a packaged, double-clickable build — without it, every such
+    # batch crashes instantly. The reasoning below explains exactly why;
+    # skip it if the one-sentence version above is all you need.
+    #
     # Required for `multiprocessing`'s 'spawn' start method (macOS's and
     # Windows's own default) to work at all in a frozen build: every
     # worker/resource-tracker process is a re-exec of this exact `fim`
