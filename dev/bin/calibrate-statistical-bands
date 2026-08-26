@@ -320,7 +320,16 @@ def _render_data(
 
 def main(argv: list[str] | None = None) -> int:
     """Run every scenario's characterization pass and write the report."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    # `RawDescriptionHelpFormatter` preserves the module docstring's own
+    # paragraph breaks in `--help` output -- without it, argparse
+    # re-wraps the whole docstring into one dense paragraph, losing the
+    # separation between "what this measures," "why it exists," and
+    # "why it is not part of the automated gate."
+    parser = argparse.ArgumentParser(
+        prog="calibrate-statistical-bands",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "--replicates-part-vi", type=int, default=30, help="default: 30"
     )

@@ -1,19 +1,92 @@
 #!/usr/bin/env bash
+#
+# Regenerate `src/fim/API.md`, the committed reference listing every
+# public module, class, and function in the `fim` package together with
+# its docstring, from the docstrings actually written in `src/fim/` --
+# never hand-edit the generated file itself. Run `--help` for the full
+# explanation of what this is for and when to run it.
 
 set -o errexit
 set -o nounset
 set -o pipefail
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    cat <<'EOF'
+Usage: dev/bin/generate-api-docs [OUTPUT_PATH]
+
+Regenerate `src/fim/API.md`, the committed reference listing every public
+module, class, and function in the `fim` package together with its
+docstring.
+
+Why this exists:
+  The API reference is meant to be read on GitHub by anyone who wants to
+  know exactly what a function does or what arguments it takes, without
+  installing Python or opening a code editor. Its content -- every
+  heading, every description -- comes straight from the docstrings
+  already written in src/fim/, so it can never be *wrong* relative to
+  the code the way a hand-written summary eventually would be; it can
+  only ever be *stale* (regenerated less recently than the code
+  changed), which this script fixes by simply being re-run. Because of
+  that, src/fim/API.md itself is never meant to be hand-edited -- if
+  something in it reads wrong, the fix is to improve the docstring in
+  the actual source file and regenerate, not to edit the generated file
+  directly.
+
+When to run this:
+  After adding, removing, renaming, or moving any public function,
+  class, or module in src/fim/, or after editing an existing docstring.
+  In practice you rarely need to remember this yourself -- the
+  pre-commit git hook already regenerates and re-stages this file
+  automatically whenever a staged change touches src/fim/, and
+  pre-push/./build --ci independently verify that the committed file
+  still matches what regenerating it right now would produce (so a
+  commit made with the hook disabled, or from a tool that bypasses git
+  hooks, still gets caught before it reaches a reviewer).
+
+Arguments:
+  OUTPUT_PATH   Where to write the generated Markdown file.
+                Default: src/fim/API.md (the file actually committed to
+                the repository).
+
+Options:
+  -h, --help    Show this help message and exit.
+EOF
+    exit 0
+fi
+
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 PATH="${root}/bin:${PATH}"
 export PATH
 output=${1:-"${root}/src/fim/API.md"}
+# `pydoc-markdown` writes to this temporary path first, not straight to
+# `${output}`, so an interrupted or failing run (a real crash, or a
+# `Ctrl-C`) never leaves the committed API reference half-written --
+# `mv` below only replaces `${output}` once generation has fully
+# succeeded, and the `trap`/`cleanup` pairing further down removes the
+# temporary file on any *other* exit path (an error before that `mv`
+# is reached).
 temporary=$(mktemp "${TMPDIR:-/tmp}/fim-api.XXXXXX")
 module_args=()
 
-# Build an explicit, stable module list instead of relying on recursive package
-# discovery, which differs between editable installs on macOS and Linux.
+# `pydoc-markdown` needs to be told exactly which modules to document
+# (its own `-m module.name` flag, once per module) -- it does not walk
+# a package directory on its own. Building that list here, from the
+# real files on disk, rather than hard-coding it, means a newly added
+# source file is picked up automatically the next time this script
+# runs, with nothing else to remember to update. Not using Python's own
+# recursive package-discovery instead because that discovery step
+# behaves differently between an editable pip install on macOS and one
+# on Linux (confirmed by a real, cross-platform difference this project
+# hit before this explicit-list approach was adopted) -- reading the
+# file list directly off disk sidesteps that platform difference
+# entirely.
 while IFS= read -r path; do
+    # Turn a file path like ".../src/fim/model/params.py" into the
+    # dotted module name "fim.model.params" `pydoc-markdown` expects:
+    # strip the "src/" prefix pydoc-markdown never wants to see, drop
+    # the ".py" extension, replace path separators with dots, and (for
+    # a package's own `__init__.py`) drop the trailing ".__init__" so
+    # the package itself is named, not a fake submodule of it.
     module=${path#"${root}/src/"}
     module=${module%.py}
     module=${module//\//.}

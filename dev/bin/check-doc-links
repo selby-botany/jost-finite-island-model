@@ -1,8 +1,55 @@
 #!/usr/bin/env python3
-"""Validate local Markdown files, fragments, and inbound navigation."""
+"""Validate local Markdown files, fragments, and inbound navigation.
+
+Every `.md` file in this repository is checked three ways:
+
+1. Every Markdown link (``[text](target)``) and image (``![alt](target)``)
+   that points at a *local* file (not ``http://``/``https://``/``mailto:``)
+   must actually resolve to a file that exists on disk. A link to a
+   renamed or deleted file is caught here, at review time, instead of
+   being discovered later by a reader clicking a dead link on GitHub.
+2. A link with a ``#fragment`` (e.g. ``[see below](usage.md#run-a-
+   simulation)``) must name a heading that actually exists in the target
+   file. Headings are converted to the same URL-safe "slug" GitHub itself
+   uses (spaces become hyphens, punctuation is stripped, and so on), so
+   this check reproduces GitHub's own anchor behavior rather than a
+   simplified approximation of it.
+3. Every Markdown file must be reachable by clicking through links
+   starting from some other page (an "orphan" document, with nothing
+   ever linking to it, is almost always a sign that a new page was
+   written but never wired into the rest of the documentation set).
+   `README.md`, `LICENSE.md`, and `CHANGELOG.md` are exempt, since a
+   reader is expected to land on those directly rather than via a link
+   from elsewhere in the repository.
+
+Why this exists: this project's documentation is deliberately spread
+across many small, cross-linked files (a top-level `README.md`, several
+files under `doc/`, worked examples under `doc/examples/`, and so on)
+rather than one long page, on the theory that a reader can follow links
+to exactly the section they need. That only works if every link
+actually goes somewhere and every page is actually reachable -- both of
+which silently rot as files get renamed, moved, or split over time, with
+no error from any tool that only checks that the Markdown itself is
+*syntactically* well-formed (a linter like `markdownlint` does not know
+whether a link's target file still exists). This script is the
+authoritative check for that: it runs in `./build --ci` and this
+project's `pre-push` git hook, and can also be run directly whenever you
+add, rename, or delete a documentation file, to catch a broken cross-
+reference before it is committed.
+
+Usage:
+    dev/bin/check-doc-links
+
+Takes no arguments -- it always scans the whole repository checkout
+(every `.md` file, minus build artifacts and caches) starting from this
+script's own location. Exit status is 0 if every link, anchor, and
+document is reachable, or 1 (with one line per problem printed to
+stderr) otherwise.
+"""
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from collections import Counter, defaultdict
@@ -108,8 +155,31 @@ def validate() -> list[str]:
     return errors
 
 
-def main() -> int:
-    """Print validation errors and return a process-style status."""
+def main(argv: list[str] | None = None) -> int:
+    """Parse arguments (there are none besides `-h`/`--help`), then validate.
+
+    Args:
+        argv: Command-line arguments, excluding the program name. `None`
+            (the default, used when run as a script) tells `argparse` to
+            read `sys.argv[1:]` itself; a real list is used by tests that
+            want to drive `main` in-process instead of via a subprocess.
+
+    Returns:
+        0 if every link, anchor, and document is reachable; 1 otherwise.
+    """
+    # This script takes no real options -- `ArgumentParser` is used only
+    # so `-h`/`--help` prints the full module docstring above (`argparse`
+    # shows `description=` verbatim) instead of the argparse-default
+    # bare usage line, and so passing any unexpected argument fails with
+    # a clear "unrecognized arguments" error instead of being silently
+    # ignored.
+    parser = argparse.ArgumentParser(
+        prog="check-doc-links",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.parse_args(argv)
+
     errors = validate()
     if errors:
         for error in errors:

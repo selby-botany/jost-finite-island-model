@@ -222,6 +222,7 @@ defines the complete scientific and architectural contract.
 - [Generated API reference](src/fim/API.md)
 - [Maintainer runbook](CONTRIBUTING.md)
 - [Repository-managed hooks](dev/git-hooks/README.md)
+- [Maintainer scripts](dev/bin/README.md)
 
 ## Development
 

@@ -138,4 +138,5 @@ push itself. These two settings are what closes that remaining gap.
 - [Detailed design](doc/fim-simulator-detailed-design.md)
 - [Test plan](doc/fim-simulator-test-plan.md)
 - [Git hooks](dev/git-hooks/README.md)
+- [Maintainer scripts](dev/bin/README.md)
 - [Project overview](README.md)
