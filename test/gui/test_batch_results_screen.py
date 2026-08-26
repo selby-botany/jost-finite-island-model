@@ -95,14 +95,15 @@ def _wait_for_input_screen_ready(window: webview.Window) -> None:
 
 
 def test_a_completed_batch_renders_the_run_view() -> None:
-    """A finished two-replicate batch shows a run id, two table rows, and six CI bars.
+    """A finished two-replicate batch shows a run id, two table rows, and six stat rows.
 
-    Every one of the six named statistics gets a confidence-interval
-    bar (`buildCiMeter`/`buildOmittedMeter` — design §4.4's "a statistic
-    omitted from summary.json still renders as explicitly omitted, not
-    blank"), so `#batch-results-summary` always has exactly six
-    `.ci-bar` children regardless of which, if any, statistics
-    `replicate_summary` actually defined for this particular run.
+    Every one of the six named statistics gets a `.stats-table` row with
+    a confidence interval in its hover tooltip (`buildCiMeter`/
+    `buildOmittedMeter` — design §4.4's "a statistic omitted from
+    summary.json still renders as explicitly omitted, not blank"), so
+    `#batch-results-summary-body` always has exactly six `<tr>` children
+    regardless of which, if any, statistics `replicate_summary` actually
+    defined for this particular run.
     """
     done_event = threading.Event()
     messages: list[RunMessage | BatchMessage] = []
@@ -133,8 +134,8 @@ def test_a_completed_batch_renders_the_run_view() -> None:
                     "document.getElementById('batch-results-table-body')"
                     ".children.length, "
                     "ciBarCount: "
-                    "document.getElementById('batch-results-summary')"
-                    ".querySelectorAll('.ci-bar').length, "
+                    "document.getElementById('batch-results-summary-body')"
+                    ".children.length, "
                     "firstRowCells: Array.from("
                     "document.getElementById('batch-results-table-body')"
                     ".children[0].children"

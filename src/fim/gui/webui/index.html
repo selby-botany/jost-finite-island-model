@@ -59,45 +59,80 @@
       </div>
     </div>
 
-      <!-- `completed`-only: the finished run's own summary, flexed
-           beside the shared canvas below -- scalar and batch each show
-           only their own stats block (`run-view-completed.js` branches
-           on which kind of "done" payload arrived, design §3.2.5's "one
-           state model, not two" applied to this merge too) -- never both
-           at once. Hiding this one element (rather than the canvas'
-           whole row) is enough: a single remaining flex child simply
-           takes the full row alone during `running`/`initial`. -->
+      <!-- `completed`-only: the finished run's own summary text (run
+           id, outcome, q-sweep). The statistics themselves render in
+           one of the three `.stats-table`s beside the canvas below
+           (`.run-plot-row`), not inside this element -- scalar and
+           batch each show only their own table (`run-view-completed.js`
+           branches on which kind of "done" payload arrived, design
+           §3.2.5's "one state model, not two" applied to this merge
+           too) -- never both at once. -->
     <div class="run-body">
       <div id="run-plot-title" class="run-plot-title" aria-live="polite"></div>
-      <div class="run-canvas-frame">
-        <div id="run-deme-pair-selector" class="run-axis-selectors" hidden>
-          <label for="run-y-deme" class="axis-selector axis-selector-y">
-            <select id="run-y-deme" aria-label="Y deme selector"></select>
-          </label>
-          <button type="button" id="run-show-overview-button">Show overview</button>
-          <label for="run-x-deme" class="axis-selector axis-selector-x">
-            <select id="run-x-deme" aria-label="X deme selector"></select>
-          </label>
+      <!-- The shared canvas and its statistics table sit side by side
+           (visualization-and-config-editors design §3.3 revision):
+           whichever one table is active for the current state renders
+           to the right of the plot instead of in a row underneath it.
+           Only one of the three tables below is ever visible at once
+           (`initial`/scalar `completed`/batch `completed`), matching
+           the single-hideable-child precedent `.run-body` already
+           established for the canvas itself. -->
+      <div class="run-plot-row">
+        <div class="run-canvas-frame">
+          <div id="run-deme-pair-selector" class="run-axis-selectors" hidden>
+            <label for="run-y-deme" class="axis-selector axis-selector-y">
+              <select id="run-y-deme" aria-label="Y deme selector"></select>
+            </label>
+            <button type="button" id="run-show-overview-button">Show overview</button>
+            <label for="run-x-deme" class="axis-selector axis-selector-x">
+              <select id="run-x-deme" aria-label="X deme selector"></select>
+            </label>
+          </div>
+        <!-- Shared across all three states: `running`/`completed` draw
+             into it; `initial` now draws the p_0 scatter (Phase F).
+             No width/height attributes -- sized entirely by CSS so the
+             plot fills the available space and resizes with the window. -->
+          <canvas id="run-canvas"></canvas>
         </div>
-      <!-- Shared across all three states: `running`/`completed` draw
-           into it; `initial` now draws the p_0 scatter (Phase F).
-           No width/height attributes -- sized entirely by CSS so the
-           plot fills the available space and resizes with the window. -->
-        <canvas id="run-canvas"></canvas>
-      </div>
 
-      <!-- `initial`-only: p_0 statistics shown before any run starts
-           (Phase F: `run-view-initial.js` populates these via
-           `Api.get_initial_state_panels`). Same meter slots as
-           `results-stats` but keyed by `data-stat` so the initial
-           rendering path can find them without id collisions. -->
-      <div id="initial-stats" class="results-stats-row" hidden>
-        <div class="field-stat" data-stat="D"></div>
-        <div class="field-stat" data-stat="G_ST"></div>
-        <div class="field-stat" data-stat="E_ST"></div>
-        <div class="field-stat" data-stat="K_ST"></div>
-        <div class="field-stat" data-stat="H_S"></div>
-        <div class="field-stat" data-stat="H_T"></div>
+        <!-- `initial`-only: p_0 statistics shown before any run starts
+             (Phase F: `run-view-initial.js` populates these via
+             `Api.get_initial_state_panels`). Same meter slots as
+             `results-stats` but keyed by `data-stat` so the initial
+             rendering path can find them without id collisions. Each
+             row's two cells (name, value) are filled in by
+             `meters.js`'s `buildPointMeter`; the row itself carries the
+             hover tooltip with the full value. -->
+        <table id="initial-stats" class="stats-table" hidden>
+          <tbody>
+            <tr data-stat="D"></tr>
+            <tr data-stat="G_ST"></tr>
+            <tr data-stat="E_ST"></tr>
+            <tr data-stat="K_ST"></tr>
+            <tr data-stat="H_S"></tr>
+            <tr data-stat="H_T"></tr>
+          </tbody>
+        </table>
+        <!-- Scalar `completed`-only: same shape as `initial-stats`,
+             keyed by id instead of `data-stat` (`run-view-completed.js`
+             looks these up via `getElementById`). -->
+        <table id="results-stats" class="stats-table" hidden>
+          <tbody>
+            <tr id="stat-D"></tr>
+            <tr id="stat-G_ST"></tr>
+            <tr id="stat-E_ST"></tr>
+            <tr id="stat-K_ST"></tr>
+            <tr id="stat-H_S"></tr>
+            <tr id="stat-H_T"></tr>
+          </tbody>
+        </table>
+        <!-- Batch `completed`-only: `renderBatchSummary` rebuilds this
+             table's rows from scratch on every render (unlike the two
+             slot-based tables above), so only the `<tbody>` needs to
+             exist up front. -->
+        <table id="batch-results-summary" class="stats-table" hidden>
+          <tbody id="batch-results-summary-body"></tbody>
+        </table>
       </div>
       <div id="run-completed" hidden>
         <!-- run-plot-title (above the canvas) already shows the run ID
@@ -105,16 +140,7 @@
              but not displayed. -->
         <p id="results-run-id" class="results-run-id" hidden></p>
         <p id="results-outcome" class="results-outcome"></p>
-        <div class="results-stats-row" id="results-stats">
-          <div class="field-stat" id="stat-D"></div>
-          <div class="field-stat" id="stat-G_ST"></div>
-          <div class="field-stat" id="stat-E_ST"></div>
-          <div class="field-stat" id="stat-K_ST"></div>
-          <div class="field-stat" id="stat-H_S"></div>
-          <div class="field-stat" id="stat-H_T"></div>
-          <div id="results-differentiation-q" hidden></div>
-        </div>
-        <div class="batch-results-summary" id="batch-results-summary" hidden></div>
+        <div id="results-differentiation-q" hidden></div>
       </div>
     </div>
     <!-- Batch `completed`-only: the replicate table, full width below

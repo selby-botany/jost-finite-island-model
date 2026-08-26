@@ -46,7 +46,13 @@ const resultsRunId = document.getElementById("results-run-id");
 const resultsOutcome = document.getElementById("results-outcome");
 const resultsStats = document.getElementById("results-stats");
 const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
-const batchResultsSummary = document.getElementById("batch-results-summary");
+// `batchResultsTableEl` is the `<table>` whose own `hidden` attribute
+// gates visibility; `batchResultsSummary` is its `<tbody>`, where
+// `renderBatchSummary` rebuilds rows -- kept as two names rather than
+// one so every existing `batchResultsSummary.appendChild`/
+// `.replaceChildren` call below keeps working unchanged.
+const batchResultsTableEl = document.getElementById("batch-results-summary");
+const batchResultsSummary = document.getElementById("batch-results-summary-body");
 const batchResultsTableBody = document.getElementById("batch-results-table-body");
 const resultsBackButton = document.getElementById("results-back-button");
 
@@ -87,11 +93,13 @@ function renderBatchSummary(summary) {
     batchResultsSummary.replaceChildren();
     for (const name of STATISTIC_NAMES) {
         const interval = summary[name];
-        const meter =
+        const cells =
             interval === undefined
                 ? buildOmittedMeter(name, OMITTED_SUMMARY_TEXT)
                 : buildCiMeter(name, interval);
-        batchResultsSummary.appendChild(meter);
+        const row = document.createElement("tr");
+        applyStatRow(row, cells);
+        batchResultsSummary.appendChild(row);
     }
 }
 
@@ -278,7 +286,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     openFolderButton.hidden = false;
     resultsBackButton.hidden = false;
     resultsStats.hidden = isBatch;
-    batchResultsSummary.hidden = !isBatch;
+    batchResultsTableEl.hidden = !isBatch;
     batchResultsTable.hidden = !isBatch;
     resultsRunId.textContent = payload.runId;
     // `wireCompletedScrubber` (scalar branch, below) fetches animation
@@ -306,7 +314,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         for (const name of STATISTIC_NAMES) {
             const value = payload.statistics[name];
             const element = document.getElementById(`stat-${name}`);
-            element.replaceChildren(buildPointMeter(name, value));
+            applyStatRow(element, buildPointMeter(name, value));
         }
         renderDifferentiationQ(report);
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);

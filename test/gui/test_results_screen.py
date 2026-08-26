@@ -99,18 +99,16 @@ def test_a_completed_run_renders_the_run_view(
             "outcome: document.getElementById('results-outcome').textContent, "
             "statDTitle: (() => {"
             "const statD = document.getElementById('stat-D');"
-            "const track = statD && statD.querySelector('.ci-bar-track');"
-            "return track ? track.title : null;"
+            "return statD ? statD.title : null;"
             "})(), "
             "statGSTLabel: (() => {"
             "const stat = document.getElementById('stat-G_ST');"
-            "const label = stat && stat.querySelector('.ci-bar-label');"
+            "const label = stat && stat.querySelector('.stat-name');"
             "return label ? label.innerHTML : null;"
             "})(), "
             "statGSTTrackTitle: (() => {"
             "const stat = document.getElementById('stat-G_ST');"
-            "const track = stat && stat.querySelector('.ci-bar-track');"
-            "return track ? track.title : null;"
+            "return stat ? stat.title : null;"
             "})(), "
             "scrubberHidden: document.getElementById('scrubber-controls').hidden, "
             "scrubberPlayDisabled: "
@@ -145,13 +143,14 @@ def test_a_completed_run_renders_the_run_view(
     assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
     assert "generation" in settled["outcome"]
-    # The new compact meter places the value in the track's `title` attribute
-    # (hover tooltip). For `buildPointMeter`, the title is "D = <value>".
+    # The stats-table row places the full-precision value in the row's own
+    # `title` attribute (hover tooltip). For `buildPointMeter`, the title
+    # is "D = <value>".
     assert settled["statDTitle"].startswith("D = ")
     # `formatStatisticLabel` renders `_`-suffix as a real `<sub>` in the
-    # label element's innerHTML.
+    # name cell's innerHTML.
     assert "<sub>ST</sub>" in settled["statGSTLabel"]
-    # The track title for G_ST is "GST = <value>" (strip-tag form used in
+    # The row title for G_ST is "GST = <value>" (strip-tag form used in
     # `buildPointMeter`'s own title construction).
     assert settled["statGSTTrackTitle"].startswith("GST = ")
     # `tiny_params`-scale runs always persist more than one generation

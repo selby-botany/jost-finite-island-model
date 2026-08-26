@@ -33,19 +33,19 @@
 }
 
 /* An author-origin `display` declaration on an element's own class
- * (e.g. `.results-stats-row { display: flex; }` below) always beats
+ * (e.g. `.run-plot-row { display: flex; }` below) always beats
  * the browser's default `[hidden] { display: none }` UA rule once both
  * match -- author styles outrank UA styles regardless of selector
  * specificity, `!important` or not. Any element this page toggles via
  * the plain `hidden` attribute needs that restored, so this is done
  * once, globally, rather than re-adding `&[hidden] { display: none; }`
  * to every class that happens to also declare its own `display`.
- * Confirmed live as the root cause of two real, reported bugs:
- * `.results-stats-row` and `.batch-results-summary` both rendering at
- * once on the completed screen (one of them stale), and
- * `.scrubber-controls` staying visible -- disabled, but visible --
- * through a batch's own completed view despite `hidden` being set
- * correctly in JS the whole time.
+ * Confirmed live as the root cause of two real, reported bugs: the old
+ * per-state stats row and `.batch-results-summary` (still true of its
+ * successor, `.stats-table`) both rendering at once on the completed
+ * screen (one of them stale), and `.scrubber-controls` staying visible
+ * -- disabled, but visible -- through a batch's own completed view
+ * despite `hidden` being set correctly in JS the whole time.
  */
 [hidden] {
     display: none !important;
@@ -411,94 +411,60 @@ fieldset.composite > label {
     margin-top: -0.5rem;
 }
 
-.results-stats {
-    min-width: 12rem;
+/* The canvas and its active statistics table side by side (visualization-
+ * and-config-editors design §3.3 revision) -- `align-items: flex-start`
+ * keeps the table pinned to the plot's own top edge rather than
+ * stretching or centering against the taller of the two; `flex-wrap`
+ * lets the table drop below the canvas on a narrow window rather than
+ * forcing horizontal scroll. */
+.run-plot-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1rem;
+    width: 100%;
 }
 
-.results-stats .field-stat {
-    margin: 0 0 0.35rem;
+/* One statistic per row: name, value to two digits. The row's own
+ * `title` attribute (set by `meters.js`'s `applyStatRow`) is the
+ * hover/tooltip surface -- the exact value and, for a batch summary,
+ * its CI -- so no extra markup or JS is needed for the tooltip itself. */
+.stats-table {
+    border-collapse: collapse;
+    align-self: flex-start;
+    margin-top: 1.6rem;   /* roughly level with the canvas, below its
+                            * own axis-selector row */
     font-variant-numeric: tabular-nums;
 }
 
-/* Stats panel (CI meters) placed below the canvas in a compact row. */
-.batch-results-summary {
-    display: flex;
-    flex-wrap: wrap;
-    flex-direction: row;
-    gap: 0.6rem 1.2rem;
-    margin-top: 0.75rem;
+.stats-table td {
+    padding: 0.25rem 0.6rem;
+    border-bottom: 1px solid var(--fim-border);
 }
 
-/* Individual `.results-stats` block below canvas also uses row layout. */
-.results-stats-row {
-    display: flex;
-    flex-wrap: wrap;
-    flex-direction: row;
-    gap: 0.6rem 1.2rem;
-    margin-top: 0.75rem;
+.stats-table tr:hover td {
+    background: var(--fim-border);
 }
 
-/* Compact dot + error bar widget.  One row only: label + track. */
-.ci-bar {
-    display: grid;
-    grid-template-columns: 2.8rem 1fr;
-    align-items: center;
-    column-gap: 0.5rem;
-    min-width: 9rem;
-}
-
-.ci-bar-label {
+.stat-name {
     font-weight: 600;
     font-size: 0.85rem;
     white-space: nowrap;
-}
-
-/* Thin horizontal axis line; hover cursor invites the tooltip. */
-.ci-bar-track {
-    position: relative;
-    height: 1.2rem;      /* tall hit-target for hover */
     cursor: default;
 }
 
-/* The thin axis line rendered as a pseudo-element so the hit target
- * can remain tall without making the visible line tall. */
-.ci-bar-track::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: var(--fim-border);
-    transform: translateY(-50%);
+.stat-value {
+    text-align: right;
+    cursor: default;
 }
 
-/* Vertical whisker cap at low / high CI bound. */
-.ci-bar-whisker {
-    position: absolute;
-    top: 20%;
-    bottom: 20%;
-    width: 2px;
-    background: var(--fim-accent);
-    transform: translateX(-1px);
-}
-
-/* Filled dot at the mean. */
-.ci-bar-dot {
-    position: absolute;
-    top: 50%;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--fim-accent);
-    transform: translate(-50%, -50%);
-}
-
-.ci-bar-omitted {
-    grid-column: 2;
-    color: var(--fim-muted);
-    font-style: italic;
-    font-size: 0.85rem;
+/* `results-differentiation-q`'s own per-order lines (not part of the
+ * six-statistic table above -- a variable-length q-sweep, only ever
+ * present on a re-opened run). */
+.field-stat {
+    margin: 0 0 0.35rem;
+    font-variant-numeric: tabular-nums;
 }
 
 .batch-results-table {

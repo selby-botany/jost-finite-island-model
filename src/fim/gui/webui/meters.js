@@ -1,36 +1,33 @@
 "use strict";
 
-/* Shared statistic meter (visualization-and-config-editors design §3.3) --
- * a compact "dot + error bar" widget: a thin horizontal [0, 1] track with
- * a dot at the mean and vertical whisker caps at the CI low/high bounds.
- * Hover shows the exact values. Extracted from `screens/batch-results.js`'s
- * original `percentageWithin`/`buildCiBar`/`buildOmittedCiBar` and later
- * redesigned for compactness.
+/* Shared statistic table row (visualization-and-config-editors design
+ * §3.3 revision) -- each named statistic renders as one `<tr>` of two
+ * cells (name, value to two digits) inside a `.stats-table` beside the
+ * plot, with the row's own `title` attribute carrying the full-precision
+ * value (and CI, when there is one) as a native hover tooltip. Replaces
+ * the earlier "dot + error bar" track widget (`buildCiBar`/
+ * `buildOmittedCiBar` from `screens/batch-results.js`, later `buildCiMeter`/
+ * `buildOmittedMeter`/`buildPointMeter`'s own first, row-of-tracks form)
+ * with a table layout -- same three build functions, same call sites,
+ * new DOM shape.
  *
  * A classic, non-module script sharing the page's one global scope
  * (`index.html` has no `type="module"` on any `<script>` tag), the same
  * shape every other `webui/*.js` file already uses.
  */
 
-// D/G_ST/E_ST/K_ST/H_S/H_T are every named differentiation/heterozygosity
-// statistic this project reports, and each is naturally bounded to
-// [0, 1] by construction (Jost's D, Nei's G_ST, and the heterozygosities
-// alike) -- the one fixed scale every meter below is drawn against, with
-// no per-statistic dynamic scaling needed.
-const METER_MIN = 0.0;
-const METER_MAX = 1.0;
-
 /**
- * Return where `value` sits between `min` and `max`, as a 0-100 percentage.
+ * Format a `format_statistic`-formatted value string to exactly two
+ * decimal digits for the table's own value column. Falls back to the
+ * original string unchanged if it does not parse as a number (should
+ * not happen for these six statistics, but a fallback costs nothing).
  *
- * @param {number} value
- * @param {number} min
- * @param {number} max
- * @returns {number}
+ * @param {string} formattedValue
+ * @returns {string}
  */
-function percentageWithin(value, min, max) {
-    const clamped = Math.min(Math.max(value, min), max);
-    return ((clamped - min) / (max - min)) * 100;
+function formatToTwoDigits(formattedValue) {
+    const parsed = Number(formattedValue);
+    return Number.isFinite(parsed) ? parsed.toFixed(2) : String(formattedValue);
 }
 
 /**
@@ -56,115 +53,100 @@ function formatStatisticLabel(name) {
 }
 
 /**
- * Build one meter row for a statistic with no defined interval to show.
+ * Build the two `<td>` cells (name, value) shared by every row shape
+ * below, as a `DocumentFragment` -- both slot-based call sites
+ * (`replaceChildren` on a pre-existing `<tr>`) and the batch call site
+ * (`appendChild` into a freshly created `<tr>`) can use a fragment the
+ * same way, since both DOM APIs unpack a fragment into its children.
+ * `tooltip` (the full-precision value, plus CI when there is one) goes
+ * on the row's own `title` -- fragments cannot carry attributes
+ * themselves, so the caller applies it after this returns.
+ *
+ * @param {string} name
+ * @param {string} valueText - Already display-formatted (two digits,
+ *     or the omitted placeholder).
+ * @returns {DocumentFragment}
+ */
+function buildStatCells(name, valueText) {
+    const cells = document.createDocumentFragment();
+    const nameCell = document.createElement("td");
+    nameCell.className = "stat-name";
+    nameCell.innerHTML = formatStatisticLabel(name);
+    cells.appendChild(nameCell);
+    const valueCell = document.createElement("td");
+    valueCell.className = "stat-value";
+    valueCell.textContent = valueText;
+    cells.appendChild(valueCell);
+    return cells;
+}
+
+/**
+ * Build one table row's cells for a statistic with no defined interval
+ * to show (a batch summary statistic with fewer than two defined
+ * replicates). The value column shows an em dash; the tooltip carries
+ * the reason.
  *
  * @param {string} name
  * @param {string} omittedText
- * @returns {HTMLDivElement}
+ * @returns {DocumentFragment}
  */
 function buildOmittedMeter(name, omittedText) {
-    const row = document.createElement("div");
-    row.className = "ci-bar";
-    const label = document.createElement("span");
-    label.className = "ci-bar-label";
-    label.innerHTML = formatStatisticLabel(name);
-    row.appendChild(label);
-    const omitted = document.createElement("span");
-    omitted.className = "ci-bar-omitted";
-    omitted.textContent = omittedText;
-    row.appendChild(omitted);
-    return row;
+    const cells = buildStatCells(name, "—");
+    cells.tooltip = omittedText;
+    return cells;
 }
 
 /**
- * Build a compact dot+error-bar meter for a statistic with a CI.
- *
- * A thin horizontal track spans [0, 1]. A filled dot marks the mean.
- * Vertical whisker caps mark low and high. Hovering the track shows
- * `"mean [low, high]"` — no separate text row below.
+ * Build one table row's cells for a statistic with a confidence
+ * interval (a batch summary statistic). The value column shows the
+ * mean to two digits; hovering the row shows `"mean [low, high]"` at
+ * full `format_statistic` precision.
  *
  * `interval.mean`/`.low`/`.high` arrive pre-formatted for display
  * (`format_statistic`, a `%.6g`-style string) -- parsed back into a
- * number here only to compute geometry, never reformatted.
+ * number here only for the two-digit value column, never reformatted
+ * for the tooltip.
  *
  * @param {string} name
  * @param {{mean: string, low: string, high: string, sampleCount: number}} interval
- * @returns {HTMLDivElement}
+ * @returns {DocumentFragment}
  */
 function buildCiMeter(name, interval) {
-    const low = percentageWithin(Number(interval.low), METER_MIN, METER_MAX);
-    const high = percentageWithin(Number(interval.high), METER_MIN, METER_MAX);
-    const mean = percentageWithin(Number(interval.mean), METER_MIN, METER_MAX);
-
-    const row = document.createElement("div");
-    row.className = "ci-bar";
-
-    const label = document.createElement("span");
-    label.className = "ci-bar-label";
-    label.innerHTML = formatStatisticLabel(name);
-    row.appendChild(label);
-
-    // Track wrapper holds all geometric elements and carries the tooltip.
-    const track = document.createElement("div");
-    track.className = "ci-bar-track";
-    track.title = `${interval.mean} [${interval.low}, ${interval.high}]`;
-
-    const whiskerLow = document.createElement("div");
-    whiskerLow.className = "ci-bar-whisker";
-    whiskerLow.style.left = `${low}%`;
-    track.appendChild(whiskerLow);
-
-    const whiskerHigh = document.createElement("div");
-    whiskerHigh.className = "ci-bar-whisker";
-    whiskerHigh.style.left = `${high}%`;
-    track.appendChild(whiskerHigh);
-
-    const dot = document.createElement("div");
-    dot.className = "ci-bar-dot";
-    dot.style.left = `${mean}%`;
-    track.appendChild(dot);
-
-    row.appendChild(track);
-    return row;
+    const cells = buildStatCells(name, formatToTwoDigits(interval.mean));
+    cells.tooltip = `${interval.mean} [${interval.low}, ${interval.high}]`;
+    return cells;
 }
 
 /**
- * Build a compact dot meter for a single point value (scalar run).
- *
- * A filled dot on the track marks the mean; no CI interval to show.
- * Hovering shows `"Name = value"`. No separate text row below.
- *
- * No separate `.ci-bar-label` element: the label is shown only in the
- * tooltip, and the row carries just label + track (same grid shape as
- * `buildCiMeter`).
+ * Build one table row's cells for a single point value (scalar run or
+ * p_0 preview, no CI to show). The value column shows the value to two
+ * digits; hovering the row shows `"Name = value"` at full
+ * `format_statistic` precision.
  *
  * @param {string} name - The statistic's own name (`"D"`, `"G_ST"`, ...).
  * @param {string} formattedValue - The already `format_statistic`-formatted
- *     value, parsed only to place the dot -- never reformatted.
- * @returns {HTMLDivElement}
+ *     value -- shown in the tooltip verbatim, rounded to two digits for
+ *     the value column.
+ * @returns {DocumentFragment}
  */
 function buildPointMeter(name, formattedValue) {
-    const row = document.createElement("div");
-    row.className = "ci-bar";
+    const cells = buildStatCells(name, formatToTwoDigits(formattedValue));
+    const plainName = formatStatisticLabel(name).replace(/<[^>]*>/g, "");
+    cells.tooltip = `${plainName} = ${formattedValue}`;
+    return cells;
+}
 
-    const label = document.createElement("span");
-    label.className = "ci-bar-label";
-    label.innerHTML = formatStatisticLabel(name);
-    row.appendChild(label);
-
-    const track = document.createElement("div");
-    track.className = "ci-bar-track";
-    track.title = `${formatStatisticLabel(name).replace(/<[^>]*>/g, "")} = ${formattedValue}`;
-
-    const parsed = Number(formattedValue);
-    if (Number.isFinite(parsed)) {
-        const position = percentageWithin(parsed, METER_MIN, METER_MAX);
-        const dot = document.createElement("div");
-        dot.className = "ci-bar-dot";
-        dot.style.left = `${position}%`;
-        track.appendChild(dot);
-    }
-    row.appendChild(track);
-
-    return row;
+/**
+ * Apply a `buildXMeter` fragment's own `.tooltip` to `row`'s `title`
+ * attribute, then replace `row`'s children with the fragment's cells.
+ * Every call site needs both steps together (a fragment alone cannot
+ * carry the tooltip; `replaceChildren`/`appendChild` alone would drop
+ * it) -- centralized here so no call site can do one without the other.
+ *
+ * @param {HTMLTableRowElement} row
+ * @param {DocumentFragment} cells
+ */
+function applyStatRow(row, cells) {
+    row.title = cells.tooltip || "";
+    row.replaceChildren(cells);
 }

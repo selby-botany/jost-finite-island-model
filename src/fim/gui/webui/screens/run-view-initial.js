@@ -74,7 +74,7 @@ async function renderInitialPreview() {
             const value = result.statistics[name];
             const slot = initialStats.querySelector(`[data-stat="${name}"]`);
             if (slot) {
-                slot.replaceChildren(buildPointMeter(name, value));
+                applyStatRow(slot, buildPointMeter(name, value));
             }
         }
     }
@@ -142,11 +142,23 @@ function enterInitialState(renderPreview = true) {
     if (runPlotTitle) {
         runPlotTitle.textContent = "FIM simulation — initial conditions (p₀)";
     }
-    // `resultsBackButton` is declared in run-view-completed.js (loads
-    // after this file) but always present by the time any user event
-    // or `whenApiReady` callback fires.
+    // `resultsBackButton`/`resultsStats`/`batchResultsTableEl` are all
+    // declared in run-view-completed.js (loads after this file) but
+    // always present by the time any user event or `whenApiReady`
+    // callback fires. `resultsStats`/`batchResultsTableEl` now sit
+    // beside the canvas as their own `.stats-table`s rather than inside
+    // `runCompleted` (moved there so the active table renders next to
+    // the plot instead of in a row underneath it), so hiding
+    // `runCompleted` above no longer hides them for free -- each needs
+    // its own `hidden` here.
     if (typeof resultsBackButton !== "undefined") {
         resultsBackButton.hidden = true;
+    }
+    if (typeof resultsStats !== "undefined") {
+        resultsStats.hidden = true;
+    }
+    if (typeof batchResultsTableEl !== "undefined") {
+        batchResultsTableEl.hidden = true;
     }
     if (initialStats) {
         initialStats.hidden = true;
