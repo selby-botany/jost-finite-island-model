@@ -14,6 +14,42 @@ if [[ ! -f pyproject.toml ]]; then
     exit 0
 fi
 
+# A second concurrent `git push` (or a manual `pytest` run against this
+# same checkout, or an earlier hook orphaned rather than cleanly
+# finished) competes with this hook's own real `ProcessPoolExecutor`
+# batch tests (`test_batch_runner.py`, `test_engine.py`) for the
+# machine's own finite CPU cores -- two full suites each spinning up
+# batches of worker processes can starve each other past a test's own
+# fixed timeout, turning a slow but correct run into a spurious failure
+# (confirmed directly: three concurrent full suites, `gui`-marked tests
+# included at the time, reproduced two real `assert settled is True`/
+# `"error" != "done"` failures neither suite has alone -- the `gui`
+# tier has since moved out of this hook's own default run, below, but
+# the batch tests it shares the CPU-contention risk with have not).
+# `mkdir` is an atomic, dependency-free lock on any POSIX filesystem; a
+# stale lock
+# (its own pid no longer running -- an earlier hook killed mid-run, the
+# common case in practice) is reclaimed rather than left to block every
+# push afterward. Keyed by `root` itself (pure bash substitution, no
+# external hashing tool needed), not one bare global path -- otherwise
+# every checkout on the machine would share one lock, including this
+# hook's own fixture-repository tests running concurrently with each
+# other or with a real push elsewhere.
+lock_dir="${TMPDIR:-/tmp}/fim-pre-push-${root//\//_}.lock"
+if ! mkdir -- "${lock_dir}" 2>/dev/null; then
+    lock_pid=$(cat -- "${lock_dir}/pid" 2>/dev/null || true)
+    if [[ -n "${lock_pid}" ]] && kill -0 "${lock_pid}" 2>/dev/null; then
+        printf 'pre-push: another pre-push run (pid %s) is already in progress -- wait for it to finish before pushing again\n' \
+            "${lock_pid}" >&2
+        exit 1
+    fi
+    printf 'pre-push: reclaiming a stale lock left by pid %s\n' "${lock_pid:-unknown}"
+    rm -rf -- "${lock_dir}"
+    mkdir -- "${lock_dir}"
+fi
+printf '%s' "$$" > "${lock_dir}/pid"
+trap 'rm -rf -- "${lock_dir}"' EXIT
+
 if [[ "${PRE_PUSH_SKIP_LINT:-false}" != true ]]; then
     if command -v ruff >/dev/null 2>&1; then
         ruff check src test
@@ -34,7 +70,23 @@ if [[ "${PRE_PUSH_SKIP_TYPE:-false}" != true ]]; then
 fi
 if [[ "${PRE_PUSH_SKIP_TEST:-false}" != true ]]; then
     if command -v pytest >/dev/null 2>&1; then
-        pytest -m 'not statistical and not slow and not packaging'
+        # No explicit `-m` here: `[tool.pytest.ini_options].addopts` in
+        # pyproject.toml is the single source of truth for which markers
+        # this fast, local layer excludes (`statistical`, `slow`,
+        # `packaging`, and `gui`) -- an explicit filter here predates the
+        # `gui` marker entirely (`0697a49` wrote this line; `59c60c4`
+        # added `gui` afterward) and silently drifted out of sync with
+        # it, the same "narrows scope without changing the config" trap
+        # `mypy`'s own comment above already names. `gui`-marked tests
+        # open a real native window and, for two of them, a real
+        # multi-process batch -- genuine OS-level GUI/WindowServer state
+        # this developer's own machine may already have claimed (a
+        # running `fim-gui`, or another `pre-push`/`pytest` invocation),
+        # unlike an isolated CI runner's virtual display. `./build --ci`
+        # (via `xvfb-run` in CI, design's own "full CI gate") already
+        # covers that tier authoritatively; this hook does not need to
+        # re-run it, on a shared display, on every push.
+        pytest
     else
         printf 'pre-push: pytest absent; tests skipped\n'
     fi
@@ -46,11 +98,16 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
         && command -v pydoc-markdown >/dev/null 2>&1
     then
         temporary=$(mktemp "${TMPDIR:-/tmp}/fim-api.XXXXXX")
-        trap 'rm -f -- "${temporary}"' EXIT
+        # Each trap here replaces the previous handler outright (bash
+        # traps do not stack) -- always re-including the lock-dir
+        # cleanup from the top of this script, not just this block's
+        # own temp file, or a `diff` failure below would leave the lock
+        # behind for every push after this one.
+        trap 'rm -f -- "${temporary}"; rm -rf -- "${lock_dir}"' EXIT
         dev/bin/generate-api-docs "${temporary}"
         diff -u -- src/fim/API.md "${temporary}"
         rm -f -- "${temporary}"
-        trap - EXIT
+        trap 'rm -rf -- "${lock_dir}"' EXIT
     else
         printf 'pre-push: API generator unavailable; docs skipped\n'
     fi
@@ -59,7 +116,7 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
         && python3 -c 'import markdown_it' >/dev/null 2>&1
     then
         help_temporary=$(mktemp -d "${TMPDIR:-/tmp}/fim-help.XXXXXX")
-        trap 'rm -rf -- "${help_temporary}"' EXIT
+        trap 'rm -rf -- "${help_temporary}" "${lock_dir}"' EXIT
         dev/bin/generate-help-html --output-dir "${help_temporary}"
         # Compares each *generated* file by name, not the whole directory:
         # `diff -rq` on the directory itself would always report the
@@ -71,7 +128,7 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
                 "${generated}"
         done
         rm -rf -- "${help_temporary}"
-        trap - EXIT
+        trap 'rm -rf -- "${lock_dir}"' EXIT
     else
         printf 'pre-push: help-HTML generator unavailable; docs skipped\n'
     fi

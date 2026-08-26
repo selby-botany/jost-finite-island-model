@@ -228,7 +228,9 @@ def test_pre_push_skips_unavailable_python_tools(tmp_path: Path) -> None:
     """Missing local gates are reported without blocking a push."""
     _initialize_repo(tmp_path)
     tools = tmp_path / "tools"
-    path = _tool_path(tools, "bash", "git")
+    # "mkdir"/"rm"/"cat": the lock's own always-on prerequisites, not one
+    # of the optional project tools this test means to leave absent.
+    path = _tool_path(tools, "bash", "git", "mkdir", "rm", "cat")
 
     result = _run_hook(
         tmp_path,
@@ -257,7 +259,7 @@ def test_pre_push_detects_stale_generated_api(tmp_path: Path) -> None:
     )
     generator.chmod(0o755)
     tools = tmp_path / "tools"
-    path = _tool_path(tools, "bash", "diff", "git", "mktemp", "rm")
+    path = _tool_path(tools, "bash", "diff", "git", "mktemp", "rm", "mkdir", "cat")
     pydoc = tools / "pydoc-markdown"
     pydoc.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     pydoc.chmod(0o755)
@@ -277,6 +279,74 @@ def test_pre_push_detects_stale_generated_api(tmp_path: Path) -> None:
     current = _run_hook(tmp_path, "pre-push", env=env)
 
     assert current.returncode == 0, current.stderr
+
+
+def _lock_dir_for(repo: Path) -> Path:
+    """Return the same per-repository lock directory `pre-push` computes.
+
+    Mirrors the hook's own `"${TMPDIR:-/tmp}/fim-pre-push-${root//\\//_}.lock"`
+    exactly, keyed off `git rev-parse --show-toplevel` (not `repo` itself,
+    which can differ by a resolved symlink component on macOS) so a test
+    that pre-seeds or inspects the lock always agrees with the hook on
+    where it lives.
+    """
+    root = _git(repo, "rev-parse", "--show-toplevel").stdout.strip()
+    tmpdir = os.environ.get("TMPDIR") or "/tmp"
+    return Path(tmpdir) / f"fim-pre-push-{root.replace('/', '_')}.lock"
+
+
+def test_pre_push_refuses_a_second_concurrent_run(tmp_path: Path) -> None:
+    """A lock held by a still-running process blocks a second push outright.
+
+    Real, reported behavior, not a hypothetical one: three concurrent
+    full `pytest` runs against this same checkout reproduced two genuine
+    test failures neither run has alone (`assert settled is True` and a
+    real batch `"error"` in place of `"done"`) -- two processes both
+    opening real, hidden `pywebview` GUI windows race for the same
+    exclusive display resources and can starve each other past a test's
+    own fixed settle timeout. The lock turns that silent, sometimes-
+    flaky contention into an immediate, clear refusal instead.
+    """
+    _initialize_repo(tmp_path)
+    lock_dir = _lock_dir_for(tmp_path)
+    holder = subprocess.Popen(["sleep", "30"])
+    try:
+        lock_dir.mkdir(parents=True)
+        (lock_dir / "pid").write_text(str(holder.pid), encoding="utf-8")
+
+        result = _run_hook(tmp_path, "pre-push")
+
+        assert result.returncode == 1
+        assert "already in progress" in result.stderr
+        assert str(holder.pid) in result.stderr
+        # Refused before running anything -- never got as far as reporting
+        # a missing tool, let alone actually invoking ruff/mypy/pytest.
+        assert "skipped" not in result.stdout
+    finally:
+        holder.terminate()
+        holder.wait(timeout=5)
+        shutil.rmtree(lock_dir, ignore_errors=True)
+
+
+def test_pre_push_reclaims_a_stale_lock(tmp_path: Path) -> None:
+    """A lock left by a process that is no longer running does not block a push."""
+    _initialize_repo(tmp_path)
+    lock_dir = _lock_dir_for(tmp_path)
+    dead = subprocess.Popen(["true"])
+    dead.wait(timeout=5)
+    tools = tmp_path / "tools"
+    path = _tool_path(tools, "bash", "git", "mkdir", "rm", "cat")
+    lock_dir.mkdir(parents=True)
+    (lock_dir / "pid").write_text(str(dead.pid), encoding="utf-8")
+
+    result = _run_hook(tmp_path, "pre-push", env={**os.environ, "PATH": path})
+
+    assert result.returncode == 0, result.stderr
+    assert "reclaiming a stale lock" in result.stdout
+    assert "pytest absent; tests skipped" in result.stdout
+    # The hook's own `trap ... EXIT` releases the reclaimed lock too --
+    # nothing left behind for the next push to trip over.
+    assert not lock_dir.exists()
 
 
 def test_installer_links_all_repository_hooks(tmp_path: Path) -> None:
