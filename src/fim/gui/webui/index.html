@@ -257,7 +257,19 @@
        `form="input-form"` rather than a DOM descendant of that form --
        FormData(form) collects it identically either way (confirmed
        live too), which is what keeps `screens/config-modals.js`'s own
-       validation/collection code completely unchanged by this move. -->
+       validation/collection code completely unchanged by this move.
+       Each dialog's own "Close" button carries an explicit
+       `tabindex="0"` -- confirmed live: this project's own WKWebView
+       host only includes elements in the Tab order that the author
+       explicitly opted in with `tabindex`, unless the OS-level "Full
+       Keyboard Access" setting is on, so a plain (implicitly focusable)
+       `<button>` is reachable by mouse but not by Tab. `wireModal`'s own
+       `keydown` listener (`app.js`) is `Return`'s matching fix: with no
+       submit button inside any of these fields' own form (`input-form`
+       lives elsewhere, empty, per the comment above), the platform has
+       no default button to invoke on `Return` at all -- "Close" being
+       the dialog's only action, `keydown` explicitly makes it the
+       default one, rather than `Return` silently doing nothing. -->
   <dialog class="config-modal" id="modal-population">
     <h2>Population</h2>
     <div class="field">
@@ -283,7 +295,7 @@
       <label for="field-max_generations">max generations</label>
       <input type="text" id="field-max_generations" name="max_generations" form="input-form">
     </div>
-    <button type="button" class="modal-close" data-modal-close>Close</button>
+    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
 
   <dialog class="config-modal" id="modal-migration">
@@ -315,7 +327,7 @@
       </div>
       <p class="loaded-summary" id="m-loaded-summary" hidden></p>
     </fieldset>
-    <button type="button" class="modal-close" data-modal-close>Close</button>
+    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
 
   <dialog class="config-modal" id="modal-mutation">
@@ -345,7 +357,7 @@
         <input type="text" id="field-mu_b_value" name="mu_b_value" form="input-form">
       </div>
     </fieldset>
-    <button type="button" class="modal-close" data-modal-close>Close</button>
+    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
 
   <dialog class="config-modal" id="modal-initial_conditions">
@@ -359,7 +371,7 @@
       <input type="text" id="field-initial_concentration" name="initial_concentration" form="input-form">
     </div>
     <p class="loaded-summary" id="p0-summary" hidden></p>
-    <button type="button" class="modal-close" data-modal-close>Close</button>
+    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
 
   <dialog class="config-modal" id="modal-convergence">
@@ -388,7 +400,7 @@
       <label for="field-convergence_tolerance">tolerance</label>
       <input type="text" id="field-convergence_tolerance" name="convergence_tolerance" form="input-form">
     </div>
-    <button type="button" class="modal-close" data-modal-close>Close</button>
+    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
 
   <dialog class="config-modal" id="modal-batch">
@@ -421,7 +433,7 @@
         count (design §0.5, H5). Defaults to this machine's own CPU count.</p>
       </div>
     </div>
-    <button type="button" class="modal-close" data-modal-close>Close</button>
+    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
 
   <p id="bridge-status" class="bridge-status">Connecting…</p>

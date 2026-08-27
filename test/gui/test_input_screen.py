@@ -459,6 +459,48 @@ def test_configure_population_modal_close_button_closes_it(
     assert settled["closed"] is True
 
 
+def test_configure_population_modal_return_key_closes_it(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`Return` closes the modal too -- the dialog fix report's own (a)/(b): a
+    keyboard-only user (`Tab`, `Tab`, ..., `Return`) needs a default action, since
+    "Close" is the dialog's only real one, unlike Escape/backdrop-click, which are
+    the browser's own native `<dialog>` behavior and not exercised here.
+
+    Dispatching a synthetic `keydown` proves this specific case, unlike
+    `test_configure_population_modal_close_button_closes_it`'s own docstring
+    warning about a *native* close-watcher (Escape) -- this handler is this
+    app's own plain JS `keydown` listener (`fim.wireModal`), not a browser-
+    internal, untrusted-event-immune mechanism, so a synthetic event reaches
+    it exactly like a real keypress would.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.menu.configureTab('population'); "
+            "window.__fimModalWasOpened = "
+            "document.getElementById('modal-population').open; "
+            "setTimeout(() => { "
+            "document.getElementById('modal-population').dispatchEvent("
+            "new KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); "
+            "window.__fimModalReturnPressed = true; "
+            "}, 50);"
+        ),
+        read=(
+            "({"
+            "opened: window.__fimModalWasOpened === true, "
+            "closed: document.getElementById('modal-population').open === false, "
+            "done: window.__fimModalReturnPressed === true"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("done") is True,
+    )
+
+    assert settled["opened"] is True
+    assert settled["closed"] is True
+
+
 def test_batch_progress_display_never_regresses(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

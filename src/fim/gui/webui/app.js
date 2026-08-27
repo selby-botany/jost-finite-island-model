@@ -169,6 +169,17 @@ const fim = {
      * `::backdrop`, since the content box is what the content elements
      * themselves absorb the click on. Idempotent (`dataset.fimWired`)
      * so a modal reopened many times only gets one set of listeners.
+     *
+     * Also gives `Return` a default action, matching "Close" being the
+     * dialog's only real action: every field here is `form="input-
+     * form"`, an external, empty `<form>` with no submit button of its
+     * own (`index.html`'s own comment above these dialogs), so the
+     * platform has no default button to invoke on `Return` -- without
+     * this, `Return` does nothing at all, unlike a pointer user's own
+     * "click Close" affordance. `<select>`'s own native `Return`
+     * behavior (committing an open dropdown's highlighted option) fires
+     * and closes its dropdown *before* this bubbles up to `dialog`, so
+     * closing the whole modal on the same keypress does not fight it.
      * @param {string} dialogId
      */
     wireModal(dialogId) {
@@ -186,6 +197,12 @@ const fim = {
         if (closeButton !== null) {
             closeButton.addEventListener("click", () => dialog.close());
         }
+        dialog.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                dialog.close();
+            }
+        });
     },
 
     /**
