@@ -217,20 +217,21 @@ def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
     window: webview.Window,
 ) -> None:
-    """ "Show pair"/"Show overview" round-trip through the real bridge and back.
+    """Selecting a pair, then selecting back to the default, round-trips
+    through the real bridge (simplify-main-plot design: no "Show overview"
+    button any more — the selectors themselves are the only way to change
+    which pair is shown).
 
-    `d=3` (one deme past the overview's own default "Deme 1 vs Deme 2"
-    pairwise panel — `scatter.PAIRWISE_MAX_DEMES`'s own small-`d`
-    dispatch; large `d` also defaults to a Deme-1-vs-Deme-2 panel now
-    (unified-run-view design §3.6), but the selector itself does not
-    care which layout produced the overview panel, so this smaller,
-    faster configuration exercises the same bridge round trip a `d=20`
-    run would): "Show pair"
-    (Deme 1 vs Deme 3) redraws the canvas via a real `Api.get_deme_
-    pair_panel` call, and "Show overview" redraws it back to the exact
-    original panel with no further bridge call — `canvas.toDataURL()`
-    snapshots prove both the change and the exact-match revert,
-    without needing to read pixel data or canvas internals directly.
+    `d=3` (one deme past the default's own "Deme 1 vs Deme 2" panel —
+    large `d` also defaults to a Deme-1-vs-Deme-2 panel, unified-run-view
+    design §3.6, but the selector itself does not care which `d` produced
+    the default panel, so this smaller, faster configuration exercises
+    the same bridge round trip a `d=20` run would): selecting Deme 1 vs
+    Deme 3 redraws the canvas via a real `Api.get_deme_pair_panel` call,
+    and selecting back to Deme 1 vs Deme 2 redraws it via another such
+    call, reproducing the exact original panel — `canvas.toDataURL()`
+    snapshots prove both the change and the exact-match revert, without
+    needing to read pixel data or canvas internals directly.
 
     Drives the window manually (not via the `drive` fixture, the same
     reason `test_running_simulation_again_from_completed_starts_a_new_
@@ -269,7 +270,7 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
                 "optionCount: document.getElementById('run-x-deme').options.length"
                 "})"
             )
-            overview_snapshot = window.evaluate_js(
+            default_snapshot = window.evaluate_js(
                 "document.getElementById('run-canvas').toDataURL()"
             )
             window.evaluate_js(
@@ -281,22 +282,24 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
             pair_snapshot = _poll_until(
                 window,
                 "document.getElementById('run-canvas').toDataURL()",
-                lambda value: value != overview_snapshot,
+                lambda value: value != default_snapshot,
             )
             window.evaluate_js(
-                "document.getElementById('run-show-overview-button').click();"
+                "document.getElementById('run-y-deme').value = '2';"
+                "document.getElementById('run-y-deme').dispatchEvent("
+                "new Event('change'));"
             )
             reverted_snapshot = _poll_until(
                 window,
                 "document.getElementById('run-canvas').toDataURL()",
-                lambda value: value == overview_snapshot,
+                lambda value: value == default_snapshot,
             )
             outcome.put(
                 {
                     "selectorHidden": selector_state["hidden"],
                     "optionCount": selector_state["optionCount"],
-                    "pairDiffersFromOverview": pair_snapshot != overview_snapshot,
-                    "revertedMatchesOverview": reverted_snapshot == overview_snapshot,
+                    "pairDiffersFromDefault": pair_snapshot != default_snapshot,
+                    "revertedMatchesDefault": reverted_snapshot == default_snapshot,
                 }
             )
         finally:
@@ -307,8 +310,8 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
 
     assert settled["selectorHidden"] is False
     assert settled["optionCount"] == 3
-    assert settled["pairDiffersFromOverview"] is True
-    assert settled["revertedMatchesOverview"] is True
+    assert settled["pairDiffersFromDefault"] is True
+    assert settled["revertedMatchesDefault"] is True
 
 
 def test_running_simulation_again_from_completed_starts_a_new_run(

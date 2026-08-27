@@ -105,29 +105,19 @@ const fim = {
      * Wire the axis selectors used to choose a focused deme pair.
      *
      * The selectors apply immediately on change; there is no separate
-     * "Show pair" button. "Show overview" remains explicit so the user
-     * can return from a single-pair view to the default multi-panel
-     * overview.
+     * "Show pair" button, and no "Show overview" button either
+     * (simplify-main-plot design) — selecting Deme 1/Deme 2 directly is
+     * how a user returns to the default panel.
      *
      * @param {Object} config
      * @param {HTMLSelectElement} config.xSelect
      * @param {HTMLSelectElement} config.ySelect
-     * @param {HTMLButtonElement} config.showOverviewButton
      * @param {HTMLElement} config.container - Hidden when `demeCount < 2`.
      * @param {number} config.demeCount
      * @param {(x: number, y: number) => (void|Promise<void>)} config.onShowPair
-     * @param {() => (void|Promise<void>)} config.onShowOverview
      */
     wireDemePairSelector(config) {
-        const {
-            xSelect,
-            ySelect,
-            showOverviewButton,
-            container,
-            demeCount,
-            onShowPair,
-            onShowOverview,
-        } = config;
+        const { xSelect, ySelect, container, demeCount, onShowPair } = config;
         if (!demeCount || demeCount < 2) {
             container.hidden = true;
             return;
@@ -166,10 +156,6 @@ const fim = {
         ySelect.onchange = async () => {
             forceDistinctSelect(ySelect);
             await applyPairSelection();
-        };
-
-        showOverviewButton.onclick = async () => {
-            await onShowOverview();
         };
     },
 

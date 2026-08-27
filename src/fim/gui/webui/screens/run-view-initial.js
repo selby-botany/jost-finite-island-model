@@ -23,7 +23,6 @@ const scrubberControls = document.getElementById("scrubber-controls");
 const runDemePairSelector = document.getElementById("run-deme-pair-selector");
 const runXDeme = document.getElementById("run-x-deme");
 const runYDeme = document.getElementById("run-y-deme");
-const runShowOverviewButton = document.getElementById("run-show-overview-button");
 
 // The progress bar / label elements (declared in run-view-running.js
 // but needed here too -- run-view-initial.js loads before run-view-
@@ -79,14 +78,10 @@ async function renderInitialPreview() {
         }
     }
 
-    function drawInitialOverview() {
-        drawScatter(runCanvas, panels[0]);
-    }
-
-    // Scatter panels.
+    // Scatter panel.
     const panels = result.panels;
     if (panels && panels.length > 0) {
-        drawInitialOverview();
+        drawScatter(runCanvas, panels[0]);
     }
 
     // Initial-state axis selectors.
@@ -95,7 +90,6 @@ async function renderInitialPreview() {
         window.fim.wireDemePairSelector({
             xSelect: runXDeme,
             ySelect: runYDeme,
-            showOverviewButton: runShowOverviewButton,
             container: runDemePairSelector,
             demeCount: result.demeCount,
             onShowPair: async (x, y) => {
@@ -108,9 +102,6 @@ async function renderInitialPreview() {
                 if (pairResult.ok) {
                     drawScatter(runCanvas, pairResult.panel);
                 }
-            },
-            onShowOverview: () => {
-                drawInitialOverview();
             },
         });
     }

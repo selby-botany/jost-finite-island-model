@@ -57,7 +57,9 @@
  * existing `panels`), and this file decides which of the two to draw
  * (`showingLiveDemePair`) -- no per-tick or per-frame bridge call, only
  * one bridge call per selection change, the same shape every other
- * state's own selector already uses.
+ * state's own selector already uses. There is no "Show overview" button
+ * (simplify-main-plot design) -- selecting Deme 1/Deme 2 directly
+ * requests exactly the same panel the default view already shows.
  */
 
 // `progressBar` and `progressLabel` are declared in run-view-initial.js
@@ -74,17 +76,12 @@ let batchProgressHighWaterMark = 0;
 // (`demeCount` is the same for every push within one run).
 let liveDemeSelectorWired = false;
 // Whether the canvas is currently showing `pairPanel` (one explicit,
-// user-chosen deme pair) rather than `panels` (the default pairwise-
-// grid-or-first-pair view, unified-run-view design §3.6) --
-// `onShowPair`/`onShowOverview` below flip this; every push's own
-// handler reads it to decide which of the two to draw.
+// user-chosen deme pair) rather than `panels` (the default Deme 1/Deme 2
+// panel) -- `onShowPair` below sets this; every push's own handler
+// reads it to decide which of the two to draw. Never resets to `false`
+// mid-run (there is no "Show overview" button any more) -- selecting
+// Deme 1/Deme 2 directly requests the same panel `panels` already holds.
 let showingLiveDemePair = false;
-// The most recent push this run has made, kept only so "Show overview"
-// can redraw instantly from data already on hand -- the same "no
-// second bridge call needed for that direction" guarantee every other
-// state's own identical selector already gives, extended here to a
-// live stream.
-let lastProgressPayload = null;
 
 /**
  * Enter `running`: reset every per-run tracking variable above, show
@@ -109,7 +106,6 @@ function enterRunningState(isBatch = false) {
     batchProgressHighWaterMark = 0;
     liveDemeSelectorWired = false;
     showingLiveDemePair = false;
-    lastProgressPayload = null;
     progressBar.value = 0;
     runProgress.hidden = false;
     if (initialStats) {
@@ -163,7 +159,6 @@ function wireLiveDemePairSelector(demeCount) {
     window.fim.wireDemePairSelector({
         xSelect: runXDeme,
         ySelect: runYDeme,
-        showOverviewButton: runShowOverviewButton,
         container: runDemePairSelector,
         demeCount,
         onShowPair: async (x, y) => {
@@ -175,26 +170,10 @@ function wireLiveDemePairSelector(demeCount) {
             // flag only once the *full* JS-await-Python-JS round trip
             // completed was strictly later, and let a tick whose own
             // payload genuinely carried `pairPanel` still draw as the
-            // overview because the flag itself had not caught up yet.
+            // default panel because the flag itself had not caught up
+            // yet.
             showingLiveDemePair = true;
             await window.pywebview.api.set_live_deme_pair(x, y);
-        },
-        onShowOverview: async () => {
-            // Same reordering, same reason -- and here it is doubly
-            // correct: a tick processed before the bridge call's own
-            // Python-side state actually clears would otherwise still
-            // carry a *stale* `pairPanel`, which this flag flipping
-            // first now correctly overrides in favor of the overview,
-            // exactly what "Show overview" asked for.
-            showingLiveDemePair = false;
-            // Unlike "Show pair", the default view's own `panels` is
-            // always present in every push already received -- redraw
-            // immediately from the last one, no need to wait for the
-            // next tick.
-            if (lastProgressPayload) {
-                drawProgressPanels(lastProgressPayload);
-            }
-            await window.pywebview.api.set_live_deme_pair(null, null);
         },
     });
 }
@@ -234,7 +213,6 @@ window.fim.onRunProgress = function onRunProgress(payload) {
         liveDemeSelectorWired = true;
     }
     renderLiveStatistics(payload.statistics);
-    lastProgressPayload = payload;
     drawProgressPanels(payload);
 };
 
@@ -292,7 +270,6 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
     // here, not a placeholder for it: the table always shows something
     // meaningful for the batch's current state, never blank.
     renderBatchSummary(payload.statistics);
-    lastProgressPayload = payload;
     drawProgressPanels(payload);
 };
 

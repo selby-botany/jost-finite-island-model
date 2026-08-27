@@ -331,7 +331,6 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         window.fim.wireDemePairSelector({
             xSelect: runXDeme,
             ySelect: runYDeme,
-            showOverviewButton: runShowOverviewButton,
             container: runDemePairSelector,
             demeCount: payload.demeCount,
             onShowPair: async (x, y) => {
@@ -346,9 +345,6 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
                 if (result.ok) {
                     drawScatter(runCanvas, result.panel);
                 }
-            },
-            onShowOverview: () => {
-                drawCompletedOverview(panels);
             },
         });
     }

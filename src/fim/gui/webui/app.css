@@ -384,24 +384,6 @@ fieldset.composite > label {
     transform-origin: center;
 }
 
-#run-show-overview-button {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: end;
-    font: inherit;
-    color: var(--fim-foreground);
-    background: var(--fim-background);
-    border: 1px solid var(--fim-border);
-    border-radius: 4px;
-    padding: 0.2rem 0.5rem;
-    cursor: pointer;
-}
-
-#run-show-overview-button:disabled {
-    opacity: 0.6;
-    cursor: default;
-}
-
 .results-run-id {
     font-weight: 600;
 }

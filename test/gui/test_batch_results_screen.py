@@ -177,18 +177,20 @@ def test_a_completed_batch_renders_the_run_view() -> None:
 
 
 def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
-    """ "Show pair"/"Show overview" round-trip through the real batch bridge and back.
+    """Selecting a pair, then selecting back to the default, round-trips
+    through the real batch bridge (simplify-main-plot design: no "Show
+    overview" button any more).
 
     The batch counterpart to `test_results_screen.py`'s own identically
-    named scalar-run test — `d=3` past the overview's default "Deme 1
-    vs Deme 2" pairwise panel, "Show pair" (Deme 1 vs Deme 3) redraws
-    the canvas via a real `Api.get_batch_deme_pair_panel` call (pooled
-    across both replicates, `deme_pair_panel`'s own docstring), and
-    "Show overview" redraws it back to the exact original panel with
-    no further bridge call. The selector and canvas are the same shared
-    elements the scalar test drives (`run-deme-pair-selector`, `run-x-
-    deme`, `run-canvas`, ...) — `run-view-completed.js` dispatches to
-    the batch- or scalar-flavored bridge call by `window.fim.
+    named scalar-run test — `d=3` past the default "Deme 1 vs Deme 2"
+    panel, selecting Deme 1 vs Deme 3 redraws the canvas via a real
+    `Api.get_batch_deme_pair_panel` call (pooled across both replicates,
+    `deme_pair_panel`'s own docstring), and selecting back to Deme 1 vs
+    Deme 2 redraws it via another such call, reproducing the exact
+    original panel. The selector and canvas are the same shared elements
+    the scalar test drives (`run-deme-pair-selector`, `run-x-deme`,
+    `run-canvas`, ...) — `run-view-completed.js` dispatches to the
+    batch- or scalar-flavored bridge call by `window.fim.
     getRunViewState`'s own `isBatch` bookkeeping, not by a different
     element id.
     """
@@ -229,7 +231,7 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
                     "'run-x-deme').options.length"
                     "})"
                 )
-                overview_snapshot = window.evaluate_js(
+                default_snapshot = window.evaluate_js(
                     "document.getElementById('run-canvas').toDataURL()"
                 )
                 window.evaluate_js(
@@ -240,20 +242,22 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
                 )
                 pair_snapshot = _poll_until(
                     "document.getElementById('run-canvas').toDataURL()",
-                    lambda value: value != overview_snapshot,
+                    lambda value: value != default_snapshot,
                 )
                 window.evaluate_js(
-                    "document.getElementById('run-show-overview-button').click();"
+                    "document.getElementById('run-y-deme').value = '2';"
+                    "document.getElementById('run-y-deme').dispatchEvent("
+                    "new Event('change'));"
                 )
                 reverted_snapshot = _poll_until(
                     "document.getElementById('run-canvas').toDataURL()",
-                    lambda value: value == overview_snapshot,
+                    lambda value: value == default_snapshot,
                 )
                 settled = {
                     "selectorHidden": selector_state["hidden"],
                     "optionCount": selector_state["optionCount"],
-                    "pairDiffersFromOverview": pair_snapshot != overview_snapshot,
-                    "revertedMatchesOverview": reverted_snapshot == overview_snapshot,
+                    "pairDiffersFromDefault": pair_snapshot != default_snapshot,
+                    "revertedMatchesDefault": reverted_snapshot == default_snapshot,
                 }
             outcome.put(settled)
         finally:
@@ -267,8 +271,8 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
     )
     assert settled["selectorHidden"] is False
     assert settled["optionCount"] == 3
-    assert settled["pairDiffersFromOverview"] is True
-    assert settled["revertedMatchesOverview"] is True
+    assert settled["pairDiffersFromDefault"] is True
+    assert settled["revertedMatchesDefault"] is True
 
 
 def test_running_a_batch_again_from_completed_starts_a_new_batch() -> None:

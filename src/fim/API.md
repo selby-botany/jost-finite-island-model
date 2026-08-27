@@ -2133,9 +2133,8 @@ A bound-method reference to *this*, not a snapshot of its
 return value, is what `_start_scalar_run`/`_start_batch_run`
 actually thread into `_drain_run_messages`/`_drain_batch_
 messages` — each background thread calls it fresh on every
-tick, so a selection (or a "Show overview" clear) made mid-run
-affects the very next push, unlike `_significant_digits`'s own
-thread-start snapshot.
+tick, so a selection made mid-run affects the very next push,
+unlike `_significant_digits`'s own thread-start snapshot.
 
 <a id="fim.gui.app.Api.set_live_deme_pair"></a>
 
@@ -2172,7 +2171,10 @@ than crash the whole push).
 
 - `first_deme` - 1-based deme number for the X axis, or `None`
   (with `second_deme` also `None`) to clear the selection
-  — "Show overview".
+  back to the default panel — no UI trigger reaches this
+  any more (simplify-main-plot design dropped the "Show
+  overview" button), but the clearing behavior itself
+  stays, directly callable and directly tested.
 - `second_deme` - 1-based deme number for the Y axis, or `None`.
 
 
