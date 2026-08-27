@@ -402,11 +402,53 @@ a full traceback instead of being hidden behind a generic message.
 
 Convergence criteria and run-loop monitoring.
 
+This package answers "when has this simulation run been going on long
+enough?" It is organized into two modules:
+
+- `fim.convergence.criteria` — the individual, swappable *rules* for
+  judging whether a statistic's history has settled down (a trailing-
+  window comparison for a single run, a confidence-interval check
+  across replicates, and two combinators for requiring several rules
+  or several statistics to agree). See that module's own docstring for
+  why no single fixed generation count could work for every run.
+- `fim.convergence.monitor` — the stateful class (`ConvergenceMonitor`)
+  that actually drives a run using one of those rules: it accumulates
+  the watched statistic's history generation by generation, asks the
+  configured rule whether to stop, and separately enforces a hard
+  generation safety cap so a run that genuinely never settles still
+  cannot run forever. `ConvergenceOutcome` and `StopReason` describe
+  its result.
+
+Every public name from both modules is re-exported here.
+
 <a id="fim.convergence.criteria"></a>
 
 # fim.convergence.criteria
 
 Pluggable criteria for statistic-history stability.
+
+A finite-island simulation cannot know in advance how many generations
+it will take for its statistics (D, G_ST, and so on) to stop drifting
+and settle down — that number depends on the parameters of the
+specific run (population sizes, migration and mutation rates) in a way
+that is not known ahead of time. Rather than guessing a fixed number of
+generations and hoping it is enough, this module defines "convergence
+criteria": small, swappable rules that look at a statistic's history so
+far and answer one yes/no question — "has this settled down enough to
+stop now?" — every generation, so a run can stop exactly when its own
+answer is actually stable, whether that takes 50 generations or 5,000.
+
+Every criterion in this file implements the same `ConvergenceCriterion`
+protocol (a single `is_stable` method), so `fim.convergence.monitor.
+ConvergenceMonitor` — the class that actually drives a run's stop
+decision — never needs to know *which* rule it is applying, only that
+whatever object it was given can answer that one question. This module
+provides two concrete rules (`TrailingWindowCriterion`, the ordinary
+within-run default, and `ConfidenceIntervalCriterion`, used for
+replicate batches — see each class's own docstring for when to use
+which) plus two combinators (`AnyCriterion`, `AllCriterion`) for
+requiring several statistics — or several different rules on the same
+statistic — to agree before declaring convergence.
 
 <a id="fim.convergence.criteria.ConvergenceCriterion"></a>
 
@@ -418,6 +460,14 @@ class ConvergenceCriterion(Protocol)
 
 Decide whether a statistic history is stable.
 
+A "protocol" here is Python's way of saying "any object with this
+one method" — this class is never instantiated directly and defines
+no behavior of its own; it exists purely so that
+`fim.convergence.monitor.ConvergenceMonitor` can accept *any*
+object that answers `is_stable` the same way, whether that object
+is `TrailingWindowCriterion`, `ConfidenceIntervalCriterion`, one of
+the two combinators below, or something built elsewhere entirely.
+
 <a id="fim.convergence.criteria.ConvergenceCriterion.is_stable"></a>
 
 #### is\_stable
@@ -427,6 +477,21 @@ def is_stable(history: Sequence[float]) -> bool
 ```
 
 Return whether the supplied history satisfies this criterion.
+
+**Arguments**:
+
+- `history` - The watched statistic's own recorded values so
+  far, oldest first — exactly what
+  `fim.convergence.monitor.ConvergenceMonitor` has
+  accumulated for one statistic up to the current
+  generation or replicate.
+
+
+**Returns**:
+
+  ``True`` once, in this criterion's own judgment, the
+  history has settled down enough to justify stopping;
+  ``False`` while it should keep collecting more values.
 
 <a id="fim.convergence.criteria.trailing_window_stable"></a>
 
@@ -439,6 +504,18 @@ def trailing_window_stable(history: Sequence[float], window: int,
 
 Compare the means of the two halves of a trailing window.
 
+This is the plain, direct way to ask "has this number stopped
+changing?" without any statistical machinery: look at the most
+recent `window` values, split that block in half, average each
+half separately, and see how close the two averages are to each
+other. A statistic that is still trending up or down noticeably
+generation to generation will show a real gap between its earlier
+and later half; one that has settled into its long-run value will
+not, since both halves are then just noisy samples of the same
+underlying number. `tolerance` is how close counts as "close
+enough," in the watched statistic's own units (for example, 0.01
+on a statistic that itself ranges from 0 to 1).
+
 An odd `window` splits as `window // 2` observations in the first
 half and one more in the second (e.g. a window of 5 compares 2
 against 3) — a legal configuration, not an error, but it means the
@@ -447,14 +524,27 @@ odd window and evenly sized ones for an even window.
 
 **Arguments**:
 
-- `history` - Ordered statistic values.
-- `window` - Number of trailing observations to inspect.
-- `tolerance` - Maximum absolute difference between half-window means.
+- `history` - Ordered statistic values, oldest first.
+- `window` - Number of trailing (most recent) observations to
+  inspect; must be at least 2, since splitting anything
+  smaller in half leaves an empty side to average.
+- `tolerance` - Maximum absolute difference between half-window
+  means that still counts as "stable."
 
 
 **Returns**:
 
-  ``True`` only after a full stable window is available.
+  ``True`` only once `history` holds at least `window` values
+  *and* the two halves' means are within `tolerance` of each
+  other; ``False`` beforehand, however small `tolerance` is —
+  a window that has not yet fully filled cannot be judged stable
+  or unstable at all.
+
+
+**Raises**:
+
+- `ValueError` - If `window` is smaller than 2, or `tolerance` is
+  negative or not a finite number (``NaN`` or infinity).
 
 <a id="fim.convergence.criteria.TrailingWindowCriterion"></a>
 
@@ -467,6 +557,19 @@ class TrailingWindowCriterion()
 
 Detect stability by comparing two halves of a trailing window.
 
+This is the ordinary, default convergence rule used *within* one
+simulation run (as opposed to `ConfidenceIntervalCriterion`, used
+*across* several replicate runs of the same parameters) — the
+`convergence_window`/`convergence_tolerance` configuration fields
+documented in `doc/configuration.md` configure exactly this class.
+A thin, `ConvergenceCriterion`-shaped wrapper around
+`trailing_window_stable`, above — see that function's own
+docstring for what "stable" actually means here and why it is
+judged this way; this class exists only so a caller can hold one
+pre-configured object (with `window`/`tolerance` already fixed)
+and call `is_stable(history)` on it repeatedly, rather than passing
+all three arguments to the bare function every time.
+
 <a id="fim.convergence.criteria.TrailingWindowCriterion.__post_init__"></a>
 
 #### \_\_post\_init\_\_
@@ -476,6 +579,17 @@ def __post_init__() -> None
 ```
 
 Validate criterion configuration on construction.
+
+Dataclass field validation cannot happen in the field
+declarations themselves, so `__post_init__` (a hook the
+`dataclass` decorator calls automatically right after every
+field is set) is where it happens instead — the same reason
+`ConfidenceIntervalCriterion`, `AnyCriterion`, and
+`AllCriterion`, below, each define one too. Rejecting an
+invalid `window`/`tolerance` here, at construction time,
+surfaces a configuration mistake immediately rather than
+letting it silently produce a criterion that can never
+actually detect stability once a run is already under way.
 
 <a id="fim.convergence.criteria.TrailingWindowCriterion.is_stable"></a>
 
@@ -520,6 +634,10 @@ def __post_init__() -> None
 
 Validate criterion configuration on construction.
 
+See `TrailingWindowCriterion.__post_init__` for why validation
+lives in this hook rather than in the field declarations
+themselves.
+
 <a id="fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable"></a>
 
 #### is\_stable
@@ -529,6 +647,12 @@ def is_stable(history: Sequence[float]) -> bool
 ```
 
 Return whether the sample's confidence interval is tight enough.
+
+See `fim.statistics.interval` for what a confidence interval is
+and why the Student's-t method is used to compute one; this
+method's whole job is deciding whether that computed interval
+(specifically its `half_width`, the "± 3%" half of a "52% ±
+3%"-style report) has narrowed to at most `tolerance` yet.
 
 <a id="fim.convergence.criteria.AnyCriterion"></a>
 
@@ -541,6 +665,22 @@ class AnyCriterion()
 
 Declare stability when any child criterion is stable.
 
+A "combinator" here means an object that is itself a
+`ConvergenceCriterion` (it has an `is_stable` method, exactly like
+`TrailingWindowCriterion` or `ConfidenceIntervalCriterion`), but
+computes its own answer by asking several *other* criteria and
+combining their answers, rather than looking at the history
+directly itself — this is what makes it possible to require, say,
+"either a trailing window has settled *or* a confidence interval
+has tightened enough" as a single rule, by wrapping one of each
+inside an `AnyCriterion`. Note the distinction from
+`fim.convergence.monitor.ConvergenceMonitor`'s own ``combinator``
+setting: that combinator decides how *several statistics* (e.g.
+both D and G_ST) must agree, each judged by the *same* criterion,
+while `AnyCriterion`/`AllCriterion` instead combine several
+*criteria* applied to the *same* one statistic's history. The two
+can be nested together when a project genuinely needs both at once.
+
 <a id="fim.convergence.criteria.AnyCriterion.__post_init__"></a>
 
 #### \_\_post\_init\_\_
@@ -550,6 +690,12 @@ def __post_init__() -> None
 ```
 
 Reject an empty combinator.
+
+A combinator with zero child criteria could never mean
+anything sensible — "any of these" and "all of these" are both
+undefined once there is nothing to check — so this is caught
+immediately at construction rather than silently producing an
+object whose `is_stable` would need a special-cased answer.
 
 <a id="fim.convergence.criteria.AnyCriterion.is_stable"></a>
 
@@ -572,6 +718,11 @@ class AllCriterion()
 
 Declare stability only when every child criterion is stable.
 
+The stricter counterpart to `AnyCriterion`, above — see that
+class's own docstring for what a "combinator" is here and how this
+differs from `fim.convergence.monitor.ConvergenceMonitor`'s own,
+differently scoped ``combinator`` setting.
+
 <a id="fim.convergence.criteria.AllCriterion.__post_init__"></a>
 
 #### \_\_post\_init\_\_
@@ -581,6 +732,10 @@ def __post_init__() -> None
 ```
 
 Reject an empty combinator.
+
+See `AnyCriterion.__post_init__` for why an empty combinator is
+rejected immediately rather than left to define `is_stable`'s
+behavior on zero children.
 
 <a id="fim.convergence.criteria.AllCriterion.is_stable"></a>
 
@@ -598,6 +753,19 @@ Return whether every child criterion is stable.
 
 Stateful convergence monitoring with an explicit hard-cap outcome.
 
+`fim.convergence.criteria` defines the individual *rules* for deciding
+whether a statistic's history has settled down; this module is the
+class that actually drives a run using one of those rules, generation
+by generation (or replicate by replicate, for a batch): it remembers
+every value recorded so far, asks the configured criterion whether
+things have stabilized after each new one arrives, and — separately —
+always enforces a hard generation cap regardless of what the criterion
+says, so that a statistic that genuinely never settles (a legitimate,
+if unwanted, outcome for some parameter combinations) still cannot
+run a simulation forever. `ConvergenceOutcome` is the small, immutable
+record this class hands back describing which of those two things
+happened, if either yet has.
+
 <a id="fim.convergence.monitor.StopReason"></a>
 
 ## StopReason Objects
@@ -607,6 +775,17 @@ class StopReason(StrEnum)
 ```
 
 Reason a simulation stopped.
+
+A run always stops for exactly one of these two reasons — there is
+no third way for the simulation loop to exit. `STATISTIC_CONVERGED`
+means the watched statistic(s) satisfied the configured
+`fim.convergence.criteria.ConvergenceCriterion` before the
+generation cap was reached; `MAX_GENERATIONS` means the cap was hit
+first. Reaching the cap is reported as a valid, non-error outcome
+(see `ConvergenceOutcome.converged`) — some parameter combinations
+genuinely never settle within any reasonable number of generations,
+and that is itself a real, useful finding about those parameters,
+not a failure of the tool.
 
 <a id="fim.convergence.monitor.ConvergenceOutcome"></a>
 
@@ -619,6 +798,29 @@ class ConvergenceOutcome()
 
 Describe a monitor's terminal decision.
 
+Returned by `ConvergenceMonitor.record` after every observation,
+and retrievable at any time via `ConvergenceMonitor.outcome`. While
+a run is still in progress (neither converged nor capped yet) this
+is a "not stopped" placeholder with every other field `None`/
+`False`; once the run does stop, the four fields together are its
+complete, permanent answer to "why, and at which generation."
+
+**Arguments**:
+
+- `stopped` - Whether the monitor has reached a terminal decision at
+  all (``False`` for every observation until the run
+  actually stops; once ``True``, it stays ``True`` and no
+  further observations can be recorded — see
+  `ConvergenceMonitor.record`).
+- `converged` - Whether the watched statistic(s) actually stabilized
+  (``True``), as opposed to the run instead being stopped by
+  the hard generation cap (``False``). Only meaningful once
+  `stopped` is ``True``.
+- `reason` - Which of the two `StopReason` values applies, or
+  ``None`` while the run is still in progress.
+- `generation` - The generation number at which the run stopped, or
+  ``None`` while still in progress.
+
 <a id="fim.convergence.monitor.ConvergenceMonitor"></a>
 
 ## ConvergenceMonitor Objects
@@ -628,6 +830,16 @@ class ConvergenceMonitor()
 ```
 
 Record one or more watched statistics and report why a run should stop.
+
+This is the class the run loop actually calls, once per generation
+(or, for a replicate batch, once per completed replicate): give it
+the newest value(s) via `record`, and it remembers the whole
+history, asks the configured `fim.convergence.criteria.
+ConvergenceCriterion` whether things have settled, and separately
+checks the hard generation cap — see this module's own docstring
+for that split of responsibility. Everything the caller needs to
+know about the result of that decision (whether the run should
+stop yet, and if so why) comes back as a `ConvergenceOutcome`.
 
 A single statistic (the default) is this class's ordinary mode: every
 method behaves exactly as it did before several-statistic support
@@ -662,6 +874,11 @@ def __init__(criterion: ConvergenceCriterion,
 
 Initialize an empty monitor.
 
+Nothing has been recorded yet immediately after construction —
+`outcome()` returns a "still running" placeholder, and
+`record()` must be called at least once before any stop
+decision can be made.
+
 **Arguments**:
 
 - `criterion` - Statistical stability rule, applied independently to
@@ -688,6 +905,12 @@ def generations() -> tuple[int, ...]
 ```
 
 Return recorded generations in order.
+
+The generation number recorded alongside each `record()` call,
+in the same order they were recorded — parallel to `history`
+(or each series in `histories`), so pairing up
+``zip(monitor.generations, monitor.history)`` reconstructs
+exactly what was passed to `record` each round.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.history"></a>
 
@@ -725,6 +948,12 @@ def outcome() -> ConvergenceOutcome
 
 Return the current terminal or running outcome.
 
+Safe to call at any time, including before the first `record`
+call (see `ConvergenceOutcome`'s own docstring for what the
+"still running" placeholder looks like) and any number of
+times after the monitor has stopped — unlike `record`, calling
+this again never raises and never changes anything.
+
 <a id="fim.convergence.monitor.ConvergenceMonitor.reason"></a>
 
 #### reason
@@ -734,6 +963,10 @@ def reason() -> StopReason | None
 ```
 
 Return the terminal reason, or ``None`` while running.
+
+A convenience for reading just `outcome().reason` without
+needing the rest of the outcome — used, for example, when only
+the human-readable stop reason is needed for a report.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.record"></a>
 
@@ -782,6 +1015,9 @@ def should_stop() -> bool
 ```
 
 Return whether statistical convergence or the hard cap fired.
+
+A convenience for the run loop's own stop check — equivalent to
+`outcome().stopped`, without needing `converged`/`reason` too.
 
 <a id="fim.engine"></a>
 
