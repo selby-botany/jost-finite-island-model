@@ -17,25 +17,26 @@
  * tick marks on both axes for a genuine deme-frequency panel.
  *
  * `panel.kind` (`fim.viz.scatter._panel`'s own field) decides the axis
- * domain: `"frequency"` (the default) is bounded `[0, 1]` by
- * construction, gets the fixed probability-scale ticks and the `x=y`
- * reference diagonal; `"pca"` is an unbounded principal-component
+ * domain: `"frequency"` (the default, and the only `kind` the run view
+ * ever draws since the simplify-main-plot change) is bounded `[0, 1]`
+ * by construction, gets the fixed probability-scale ticks and the
+ * `x=y` reference diagonal; `"pca"` is an unbounded principal-component
  * projection -- real values are routinely negative or outside `[0, 1]`
  * entirely, so it gets an auto-scaled domain fit to the panel's own
  * points instead, numeric (not probability-labeled) ticks, and no
  * diagonal (two different principal components have no "equal" relation
- * the way two demes' frequencies of the same allele do). Drawing every
- * panel with the same fixed `[0, 1]` domain regardless of `kind` was a
- * real, reported bug: real PCA points rendered as if they carried
- * "negative probability," because they were mapped through a domain
- * that never applied to them in the first place.
+ * the way two demes' frequencies of the same allele do). `kind: "pca"`
+ * is no longer produced by anything the run view calls automatically,
+ * but stays supported here for whoever calls `pca_project`/`pca_
+ * summary` directly.
  *
- * The bridge always ships already-grouped `{x, y, count, common}`
- * points (never raw ungrouped coordinates -- any PCA projection or
- * pairwise-pair selection a high deme count needs happens server-side,
- * per design §3.5's "the client never does linear algebra" rule), so
- * this module only ever draws points; it holds no model of what `d`
- * means beyond the `kind` discriminator above.
+ * The bridge always ships exactly one already-grouped `{x, y, count,
+ * common}` panel -- always the Deme 1/Deme 2 pair by default, or
+ * whichever pair the "Compare demes directly" selector requested (any
+ * further reduction a high deme count needs happens server-side, per
+ * design §3.5's "the client never does linear algebra" rule) -- so this
+ * module only ever draws one panel's points at a time; it holds no
+ * model of what `d` means beyond the `kind` discriminator above.
  */
 
 const MARKER_BASE_RADIUS = 3;
@@ -43,9 +44,9 @@ const MARKER_COUNT_SCALE = 1.6;
 const COLOR_COMMON = "#1f6fb2";
 const COLOR_RARE = "#d97a26";
 
-// The panels most recently drawn to `runCanvas`. `syncCanvasSize`
-// reads these to redraw after a resize without a second bridge call.
-let _currentPanels = null;
+// The panel most recently drawn to `runCanvas`. `syncCanvasSize`
+// reads this to redraw after a resize without a second bridge call.
+let _currentPanel = null;
 
 /**
  * Update `canvas.width`/`canvas.height` to match the element's current
@@ -64,12 +65,8 @@ function syncCanvasSize() {
     }
     runCanvas.width = cssW;
     runCanvas.height = cssH;
-    if (_currentPanels && _currentPanels.length > 0) {
-        if (_currentPanels.length === 1) {
-            drawScatter(runCanvas, _currentPanels[0]);
-        } else {
-            drawScatterGrid(runCanvas, _currentPanels);
-        }
+    if (_currentPanel) {
+        drawScatter(runCanvas, _currentPanel);
     }
 }
 
@@ -83,21 +80,11 @@ window.addEventListener("load", () => {
     }
 });
 
-// A single panel filling the whole canvas gets generous room for tick
-// labels and an axis title on every side; a small-multiples grid cell
-// (`drawScatterGrid`) is a fraction of that size, so its own padding and
-// font sizes shrink to match -- proportions chosen so a `3 <= d <= 6`
-// grid's tick labels stay legible without crowding out the points
-// themselves (visualization-and-config-editors design §6's own
-// "confirm coincidence-count labels and tick-mark text stay legible at
-// that size" risk item -- this is the deliberately generous starting
-// point that risk item asks to verify against a real display).
+// The one panel always fills the whole canvas (simplify-main-plot
+// design: no small-multiples grid any more), so it gets generous room
+// for tick labels and an axis title on every side.
 const SINGLE_PANEL_PADDING = 44;
-const GRID_CELL_PADDING = 32;
 const SINGLE_PANEL_TICK_FONT = 10;
-const GRID_CELL_TICK_FONT = 8;
-const GRID_CELL_MARKER_SCALE = 0.6;
-const GRID_COLUMNS_MAX = 3;
 const TICK_LENGTH = 4;
 
 // The reference visualization's own tick spacing
@@ -129,7 +116,7 @@ const DOMAIN_PADDING_FRACTION = 0.08;
  *     points: Array<{x: number, y: number, count: number, common: boolean}>}} panel
  */
 function drawScatter(canvas, panel) {
-    _currentPanels = [panel];
+    _currentPanel = panel;
     const context = canvas.getContext("2d");
     context.clearRect(0, 0, canvas.width, canvas.height);
     drawScatterCell(
@@ -142,47 +129,6 @@ function drawScatter(canvas, panel) {
             markerScale: 1,
         }
     );
-}
-
-/**
- * Draw several panels onto one canvas as a small-multiples grid.
- *
- * The same `columns = min(3, count)`, `rows = ceil(count / columns)`
- * layout `fim.viz.scatter._plot_pairwise` already computes server-side
- * (visualization-and-config-editors design §3.1) -- reused here as the
- * client layout too, rather than invented separately.
- *
- * @param {HTMLCanvasElement} canvas
- * @param {Array<{x_label?: string, y_label?: string, kind?: string,
- *     points: Array<{x: number, y: number, count: number, common: boolean}>}>} panels
- */
-function drawScatterGrid(canvas, panels) {
-    _currentPanels = panels;
-    const context = canvas.getContext("2d");
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    const columns = Math.min(GRID_COLUMNS_MAX, panels.length);
-    const rows = Math.ceil(panels.length / columns);
-    const cellWidth = canvas.width / columns;
-    const cellHeight = canvas.height / rows;
-    panels.forEach((panel, index) => {
-        const column = index % columns;
-        const row = Math.floor(index / columns);
-        drawScatterCell(
-            context,
-            {
-                x: column * cellWidth,
-                y: row * cellHeight,
-                width: cellWidth,
-                height: cellHeight,
-            },
-            panel,
-            {
-                padding: GRID_CELL_PADDING,
-                tickFontSize: GRID_CELL_TICK_FONT,
-                markerScale: GRID_CELL_MARKER_SCALE,
-            }
-        );
-    });
 }
 
 /**
@@ -229,12 +175,13 @@ function computeDomain(points, bounded) {
 /**
  * Draw one grouped point set into an arbitrary sub-rectangle of a canvas.
  *
- * The shared routine `drawScatter` (one rectangle: the whole canvas) and
- * `drawScatterGrid` (one rectangle per panel) both call -- axis frame,
- * optional `x=y` reference diagonal, axis ticks, axis titles, and the
- * grouped points themselves, identically either way, with the domain
- * and diagonal both driven by `panel.kind` (see this module's own
- * top-of-file docstring).
+ * `drawScatter`'s own shared routine (one rectangle: the whole canvas)
+ * -- axis frame, optional `x=y` reference diagonal, axis ticks, axis
+ * titles, and the grouped points themselves, with the domain and
+ * diagonal both driven by `panel.kind` (see this module's own
+ * top-of-file docstring). Takes an arbitrary sub-rectangle rather than
+ * assuming the whole canvas so a future multi-panel layout could still
+ * reuse it, though nothing calls it that way today.
  *
  * @param {CanvasRenderingContext2D} context
  * @param {{x: number, y: number, width: number, height: number}} rect

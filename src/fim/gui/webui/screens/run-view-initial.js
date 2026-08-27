@@ -39,7 +39,7 @@ const progressLabel = document.getElementById("progress-generation-label");
 const initialStats = document.getElementById("initial-stats");
 
 function clearRunCanvas() {
-    _currentPanels = null;
+    _currentPanel = null;
     runCanvas.getContext("2d").clearRect(0, 0, runCanvas.width, runCanvas.height);
 }
 
@@ -80,11 +80,7 @@ async function renderInitialPreview() {
     }
 
     function drawInitialOverview() {
-        if (panels.length === 1) {
-            drawScatter(runCanvas, panels[0]);
-        } else {
-            drawScatterGrid(runCanvas, panels);
-        }
+        drawScatter(runCanvas, panels[0]);
     }
 
     // Scatter panels.

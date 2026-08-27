@@ -46,9 +46,8 @@
  * `window.__fimCancelRunSettled` flag guard against.
  *
  * `panels` (from `fim.viz.scatter.scatter_panels`/`pooled_scatter_
- * panels`, design §3.5) can hold more than one 2-D panel for
- * `3 <= d <= 6` (one per deme pair) -- every panel is drawn, as a
- * small-multiples grid when there is more than one.
+ * panels`, simplify-main-plot design) always holds exactly one 2-D
+ * panel, demes 1 and 2 by default -- that one panel is what gets drawn.
  *
  * The "Compare demes directly" choice (`app.js`'s shared `wireDemePair
  * Selector`) is the one case where the data is still live rather than a
@@ -149,11 +148,7 @@ function drawProgressPanels(payload) {
     if (!panels || panels.length === 0) {
         return;
     }
-    if (panels.length === 1) {
-        drawScatter(runCanvas, panels[0]);
-    } else {
-        drawScatterGrid(runCanvas, panels);
-    }
+    drawScatter(runCanvas, panels[0]);
 }
 
 /**

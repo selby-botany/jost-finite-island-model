@@ -427,18 +427,19 @@ def test_scatter_panels_two_demes_is_one_direct_panel() -> None:
     assert len(points) == 2
 
 
-def test_scatter_panels_four_demes_is_one_panel_per_pair() -> None:
-    """`3 <= d <= pairwise_max_demes` produces `C(d, 2)` panels, one per deme pair."""
+def test_scatter_panels_four_demes_defaults_to_the_first_deme_pair() -> None:
+    """`3 <= d` still produces exactly one panel, demes 1 and 2 (simplify-main-plot
+    design) — no small-multiples grid of every `C(d, 2)` pair any more."""
     panels = scatter_panels(_state(4))
 
-    assert len(panels) == 6
-    labels = {(panel["x_label"], panel["y_label"]) for panel in panels}
-    assert ("Deme 1", "Deme 2") in labels
-    assert ("Deme 3", "Deme 4") in labels
+    assert len(panels) == 1
+    assert panels[0]["x_label"] == "Deme 1"
+    assert panels[0]["y_label"] == "Deme 2"
+    assert panels[0]["kind"] == "frequency"
 
 
 def test_scatter_panels_large_d_defaults_to_the_first_deme_pair() -> None:
-    """`d > pairwise_max_demes` produces one frequency panel, demes 1 and 2.
+    """`d > pairwise_max_demes` also produces one frequency panel, demes 1 and 2.
 
     Not a PCA projection (unified-run-view design §3.6) — `pca_project`/
     `pca_summary`/`pca_axis_labels` are unchanged and still directly
@@ -488,7 +489,8 @@ def test_pooled_scatter_panels_pools_coincident_points_across_states() -> None:
 
 
 def test_pooled_scatter_panels_dispatches_layout_by_deme_count() -> None:
-    """`deme_count` decides direct/pairwise/first-pair, matching `scatter_panels`."""
+    """Any `deme_count >= 2` still produces the one default panel, matching
+    `scatter_panels`."""
     states = [_state(7), _state(7)]
 
     panels = pooled_scatter_panels(states, deme_count=7)
@@ -570,23 +572,17 @@ def test_pca_axis_labels_name_the_explained_variance_and_top_demes() -> None:
     assert y_label.startswith("Principal component 2 (43% of variance; demes 1")
 
 
-def test_deme_pair_panel_matches_panels_from_points_own_pairwise_output() -> None:
-    """A caller-chosen pair reproduces exactly the panel `panels_from_points`
-    already builds for that same pair, at a `d` small enough for it to
-    compute every pair itself -- the on-demand path and the automatic
-    pairwise-dispatch path share the same underlying `_panel` call, so
-    picking one pair out of the full set this way is a direct
-    equality check, not a separately reimplemented one."""
+def test_deme_pair_panel_matches_panels_from_points_own_default_output() -> None:
+    """`panels_from_points`' own single default panel (demes 1/2) reproduces exactly
+    what `deme_pair_panel` builds for that same pair -- the automatic-dispatch path
+    and the on-demand path share the same underlying `_panel` call, so this is a
+    direct equality check, not a separately reimplemented one."""
     state = _state(4)
     points = frequency_points(state)
-    all_pairs = panels_from_points(points, state.deme_count)
-    expected = next(
-        panel
-        for panel in all_pairs
-        if (panel["x_label"], panel["y_label"]) == ("Deme 2", "Deme 4")
-    )
 
-    assert deme_pair_panel(points, first=1, second=3) == expected
+    assert panels_from_points(points, state.deme_count) == [
+        deme_pair_panel(points, first=0, second=1)
+    ]
 
 
 @pytest.mark.parametrize(

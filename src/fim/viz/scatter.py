@@ -216,43 +216,28 @@ def scatter_panels(
     *,
     pairwise_max_demes: int = PAIRWISE_MAX_DEMES,
 ) -> list[dict[str, object]]:
-    """Return one or more 2-D panels of grouped points, ready for client rendering.
+    """Return the single Deme-x-Deme 2-D panel, ready for client rendering.
 
-    The data-only equivalent of `plot_frequency_scatter`'s own layout
-    dispatch (design §3.5): the client never performs dimensionality
-    reduction or picks which deme pair to show — it only ever draws
-    already-2-D points `webui/scatter.js` hands to a `<canvas>`.
-
-    - `d == 2`: one panel, the direct two demes.
-    - `3 <= d <= pairwise_max_demes`: one panel per deme pair (`C(d, 2)`
-      of them). Unlike `plot_frequency_scatter`'s own `d == 3` special
-      case (a true 3-D plot), a 2-D `<canvas>` has no 3-D equivalent to
-      draw into, so `d == 3` is treated as three pairwise panels here
-      instead — a deliberate difference from the CLI's own `scatter.png`
-      for this one case, named as worth reconsidering in the migration
-      design's own open questions rather than silently diverging.
-    - `d > pairwise_max_demes`: one panel, the first deme pair (demes 1
-      and 2) — not a PCA projection (unified-run-view design §3.6: an
-      independently-refit-per-call PCA has no cross-call alignment, and
-      the reference visualization this module targets never uses PCA at
-      any `d`). `pca_project`/`pca_summary`/`kind: "pca"` all remain
-      directly callable for an explicit exploratory view; this dispatch
-      just no longer reaches them automatically.
+    The data-only equivalent of the GUI's own run-view plot (simplify-
+    main-plot design): the client never performs dimensionality
+    reduction or picks which deme pair to show automatically — it only
+    ever draws the one already-2-D panel `webui/scatter.js` hands to a
+    `<canvas>`, always demes 1 and 2. A different pair is reachable only
+    on request, through `deme_pair_panel` (the GUI's "Compare demes
+    directly" selector); no small-multiples grid and no PCA projection
+    are ever dispatched to automatically any more, at any `d`.
 
     Args:
         state: State to visualize.
-        pairwise_max_demes: Largest `d` rendered as one panel per pair,
-            matching `plot_frequency_scatter`'s own parameter.
+        pairwise_max_demes: Unused; retained only so existing callers
+            need not change. `pca_project`/`pca_summary`/`kind: "pca"`
+            all remain directly callable for an explicit exploratory
+            view; this dispatch never reaches them automatically.
 
     Returns:
-        One dict per panel: `{"x_label", "y_label", "points", "kind"}`,
-        `points` being `grouped_points`' own list of `{x, y, count,
-        common}` entries. `kind` is always `"frequency"` from this
-        function now — `"pca"` (`_panel`'s own docstring) is still a
-        legal panel `kind` `webui/scatter.js` knows how to draw, for
-        whichever future caller reaches it directly (a labeled "PCA
-        (exploratory)" choice, per the unified-run-view design's own
-        plan — not yet built).
+        A one-element list holding `{"x_label", "y_label", "points",
+        "kind"}`, `points` being `grouped_points`' own list of `{x, y,
+        count, common}` entries. `kind` is always `"frequency"`.
     """
     return panels_from_points(
         frequency_points(state), state.deme_count, pairwise_max_demes
@@ -265,13 +250,13 @@ def pooled_scatter_panels(
     *,
     pairwise_max_demes: int = PAIRWISE_MAX_DEMES,
 ) -> list[dict[str, object]]:
-    """`scatter_panels`' own layout dispatch, over several pooled states at once.
+    """`scatter_panels`' own single-panel dispatch, over several pooled states at once.
 
     The GUI's batch progress/results screens' own data source (design
-    §4.2, §4.4, §7.6): the same direct/pairwise/first-pair layout rule
-    `scatter_panels` applies to one state's points applies identically
-    here to `pooled_frequency_points(states)`'s pooled rows —
-    coincidence counting (`grouped_points`) already treats a point
+    §4.2, §4.4, §7.6): the same "always the one Deme 1/Deme 2 panel"
+    rule `scatter_panels` applies to one state's points applies
+    identically here to `pooled_frequency_points(states)`'s pooled rows
+    — coincidence counting (`grouped_points`) already treats a point
     shared across replicates exactly like one shared across loci, so
     layout dispatch needs no special case for "pooled" either.
 
@@ -286,16 +271,16 @@ def pooled_scatter_panels(
             rather than inferred from `states[0]`, since `states` can
             legitimately be empty (design's own "live, before any
             replicate has reported a generation yet" case) — an empty
-            `states` still needs a real `deme_count` to answer "would
-            this be a direct, pairwise, or PCA layout," even though the
-            answer is moot once `points` turns out to have zero rows.
-        pairwise_max_demes: Largest `d` rendered as one panel per pair,
-            matching `scatter_panels`' own parameter.
+            `states` still needs a real `deme_count` to answer whether
+            there is even a deme pair to plot, even though the answer
+            is moot once `points` turns out to have zero rows.
+        pairwise_max_demes: Unused; retained only so existing callers
+            need not change.
 
     Returns:
         `[]` if `states` is empty (nothing to pool yet); otherwise the
-        same `scatter_panels`-shaped panel list, built from the pooled
-        points.
+        same `scatter_panels`-shaped single-panel list, built from the
+        pooled points.
     """
     if not states:
         return []
@@ -309,7 +294,7 @@ def panels_from_points(
     deme_count: int,
     pairwise_max_demes: int = PAIRWISE_MAX_DEMES,
 ) -> list[dict[str, object]]:
-    """Share `scatter_panels`/`pooled_scatter_panels`' own layout dispatch.
+    """Share `scatter_panels`/`pooled_scatter_panels`' own single-panel dispatch.
 
     `points` is `frequency_points`-shaped either way (one row per
     (locus, allele) pair, one column per deme) — a single state's own
@@ -322,34 +307,23 @@ def panels_from_points(
     responsible for any further reduction a high deme count needs," by
     its own docstring — so the GUI bridge (`Api.get_animation_frames`)
     calls this directly, once per frame, to ship the page already-2-D
-    points for any `d`, the same "the client never does linear algebra"
-    rule `scatter_panels` itself exists to uphold.
+    points for any `d`.
+
+    Always returns exactly one panel, demes 1 and 2 (simplify-main-plot
+    design): neither a small-multiples pairwise grid (one panel per
+    `C(d, 2)` pair, `3 <= d <= pairwise_max_demes`) nor a PCA projection
+    (`d > pairwise_max_demes`) is dispatched to automatically any more,
+    at any `d` — both added complexity the reference visualization
+    itself (`Dear-NolanMarch17Final.pdf` Figs. 1-2) never needed, since
+    it always shows one deme pair at a time. `deme_pair_panel` (the
+    GUI's own "Compare demes directly" selector) is how a caller reaches
+    any other pair; `pca_project`/`pca_summary`/`kind: "pca"` all stay,
+    reachable directly by a caller that wants the exploratory view, just
+    no longer the automatic dispatch target. `pairwise_max_demes` is
+    accepted and ignored, so `scatter_panels`/`pooled_scatter_panels`
+    need not change their own signatures.
     """
-    if deme_count == DIRECT_2D_DEMES:
-        return [_panel(points[:, 0], points[:, 1], "Deme 1", "Deme 2")]
-    if deme_count <= pairwise_max_demes:
-        return [
-            _panel(
-                points[:, first],
-                points[:, second],
-                f"Deme {first + 1}",
-                f"Deme {second + 1}",
-            )
-            for first in range(deme_count)
-            for second in range(first + 1, deme_count)
-        ]
-    # First pair (demes 0/1), not a PCA projection (unified-run-view
-    # design §3.6): re-fitting PCA independently per call has no
-    # cross-call alignment (a sign flip or axis swap between two calls
-    # is indistinguishable from real change), the reference visualization
-    # this whole module targets never uses PCA at any `d` -- always an
-    # explicit pair -- and "53% of variance, mainly demes 2/11/4" answers
-    # a different question than any of this project's own named
-    # differentiation statistics ask. `deme_pair_panel` is the existing,
-    # tested single-panel builder for exactly this case; `pca_project`/
-    # `pca_summary`/`kind: "pca"` all stay, reachable directly by a
-    # caller that wants the exploratory view, just no longer the
-    # automatic dispatch target.
+    del pairwise_max_demes, deme_count
     return [deme_pair_panel(points, 0, 1)]
 
 

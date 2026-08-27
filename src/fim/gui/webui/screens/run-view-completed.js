@@ -212,11 +212,7 @@ function drawCompletedOverview(panels) {
     if (!panels || panels.length === 0) {
         return;
     }
-    if (panels.length === 1) {
-        drawScatter(runCanvas, panels[0]);
-    } else {
-        drawScatterGrid(runCanvas, panels);
-    }
+    drawScatter(runCanvas, panels[0]);
 }
 
 /**
