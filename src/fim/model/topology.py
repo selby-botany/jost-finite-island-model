@@ -34,6 +34,15 @@ def stepping_stone_neighbors(
 ) -> dict[int, dict[int, float]]:
     """Build a sparse nearest-neighbor migration map.
 
+    A "stepping-stone" topology is the standard population-genetics
+    term for demes arranged along a line or a circle, each exchanging
+    migrants only with its immediate one or two neighbors — as opposed
+    to the symmetric island model's assumption that every deme
+    exchanges migrants equally with every other deme, regardless of
+    "distance." This function builds exactly that neighbor structure,
+    in the sparse form `dense_matrix_from_neighbors`, below, then
+    expands into the full matrix the rest of the simulator actually uses.
+
     Args:
         d: Number of demes, numbered ``1`` through ``d`` along the line
             or ring.
@@ -74,6 +83,16 @@ def dense_matrix_from_neighbors(
     d: int,
 ) -> tuple[tuple[float, ...], ...]:
     """Densify a one-based sparse off-diagonal map into a full matrix.
+
+    "Densify" means turning the compact, mostly-implicit sparse map
+    (which lists only which demes migrate with which, and skips every
+    zero entry) into the complete `d` by `d` matrix `fim.model.
+    operators.migrate` actually operates on, where every deme's row
+    (including its own self-retention) is spelled out explicitly, zero
+    entries included. This is the one point where a sparse topology,
+    from any source, becomes the ordinary dense form the rest of the
+    simulator already knows how to use — nothing downstream of this
+    function ever needs to know a sparse representation was involved.
 
     Every deme's self-retention is derived, not read from the map: a
     deme's diagonal entry is ``1`` minus the sum of its listed neighbor

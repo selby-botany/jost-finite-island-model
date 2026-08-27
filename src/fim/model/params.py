@@ -1,4 +1,24 @@
-"""Validated, replayable simulation configuration."""
+"""Validated, replayable simulation configuration.
+
+`SimulationParams`, below, is the single object that fully describes
+one finite-island simulation run — every number a config file (or the
+CLI's own flags) can set, gathered together, checked for validity once
+at construction time, and then held immutable for the rest of the
+run. "Replayable" means that the exact same `SimulationParams` (in
+particular, the same `seed`) always reproduces the exact same run bit
+for bit — this is what makes it possible to re-run, share, or audit a
+specific past result, rather than every run being a one-off that can
+never be reconstructed.
+
+Most of this module's private helper functions (the many small
+``_parse_*``/``_normalize_*`` functions below `SimulationParams`
+itself) exist to support `from_mapping`, which is what actually turns
+a loosely typed YAML/JSON config file — where every value could in
+principle be the wrong type, missing, or out of range — into a fully
+validated `SimulationParams`. See `doc/configuration.md` for what each
+configuration field means and its accepted range, in plain language,
+independent of this file's own more code-oriented documentation.
+"""
 
 from __future__ import annotations
 
@@ -81,6 +101,23 @@ _CONVERGENCE_STATISTICS: Final = frozenset({"D", "G_ST", "E_ST", "K_ST", "H_S", 
 @dataclass(frozen=True, slots=True)
 class SimulationParams:
     """Store all values needed to reproduce a finite-island-model run.
+
+    This is an immutable (``frozen=True``) dataclass: once constructed,
+    none of its fields can be reassigned, so a `SimulationParams` handed
+    to `fim.engine`'s run loop is guaranteed to describe the exact same
+    run throughout, with no risk of some other part of the code
+    changing a setting partway through. `__post_init__`, below, is
+    where every field actually gets checked for validity and, where
+    needed, expanded into its full internal shape (for example, a
+    single shared `N` value becomes one value per deme) — so a
+    `SimulationParams` that exists at all is guaranteed already valid
+    everywhere else it is used.
+
+    See `doc/configuration.md` for a plain-language explanation of
+    every field below, including its default value and accepted range
+    — the Args section here documents the same fields from this
+    project's own code, more tersely and with cross-references to the
+    functions that actually use each one.
 
     Args:
         N: Gene-copy count shared by all demes, or one count per deme.
@@ -172,7 +209,17 @@ class SimulationParams:
     initial_frequencies: InitialFrequencies | None = None
 
     def __post_init__(self) -> None:
-        """Normalize sequence inputs and validate every parameter."""
+        """Normalize sequence inputs and validate every parameter.
+
+        Runs automatically right after every field is assigned. Two
+        things happen here, together, for every field: validate it
+        (reject a value that is the wrong type, out of range, or
+        inconsistent with another field), and normalize it (expand a
+        convenient shorthand, like one shared `N` for every deme, into
+        its full internal shape) — a `SimulationParams` that survives
+        construction at all can therefore always be trusted downstream
+        without re-checking any of this.
+        """
         _require_integer("d", self.d, minimum=2)
         # A negative seed previously passed this validation and was only
         # ever caught deep inside `fim()`, when NumPy's PCG64 raises —
@@ -292,27 +339,57 @@ class SimulationParams:
 
     @property
     def convergence_statistics(self) -> tuple[str, ...]:
-        """Return every statistic watched by the convergence monitor."""
+        """Return every statistic watched by the convergence monitor.
+
+        `convergence_statistic` itself may be stored as either a single
+        string (the common case) or a tuple of several — this property
+        is the convenient, always-a-tuple form every caller that just
+        wants to iterate over "whichever statistics are being watched"
+        actually uses, instead of handling both shapes itself.
+        """
         if isinstance(self.convergence_statistic, str):
             return (self.convergence_statistic,)
         return self.convergence_statistic
 
     @property
     def population_sizes(self) -> tuple[int, ...]:
-        """Return one gene-copy count per deme."""
+        """Return one gene-copy count per deme.
+
+        `N` itself may be stored as either a single shared integer (the
+        common case, when every deme has the same size) or a tuple of
+        per-deme values — this property is the always-fully-expanded
+        form (always exactly `d` values, one per deme) code elsewhere
+        actually iterates over, so it never needs to special-case the
+        "every deme is the same size" shorthand itself.
+        """
         if isinstance(self.N, int):
             return (self.N,) * self.d
         return self.N
 
     @property
     def mutation_rates(self) -> tuple[float, ...]:
-        """Return one mutation-probability rate per locus."""
+        """Return one mutation-probability rate per locus.
+
+        Same shorthand-expansion pattern as `population_sizes`, above,
+        but for `mu` instead of `N`, and per-locus instead of per-deme.
+        """
         if isinstance(self.mu, float):
             return (self.mu,) * len(self.loci)
         return self.mu
 
     def to_dict(self) -> dict[str, object]:
-        """Return a JSON/YAML-serializable, lossless configuration mapping."""
+        """Return a JSON/YAML-serializable, lossless configuration mapping.
+
+        This is the inverse of `from_mapping`, below: given a fully
+        constructed `SimulationParams`, produces the equivalent plain
+        ``dict`` of JSON/YAML-safe values (nested lists and floats
+        instead of tuples and `numpy`/custom types) that, fed back
+        through `from_mapping`, reconstructs an identical
+        `SimulationParams` — used, for example, to write a run's own
+        parameters into its manifest (`fim.persistence.manifest`) so a
+        completed run's configuration can be recovered exactly, later,
+        without needing the original config file at all.
+        """
         serialized_n: int | list[int] = (
             self.N if isinstance(self.N, int) else list(self.N)
         )
@@ -370,6 +447,18 @@ class SimulationParams:
     @classmethod
     def from_mapping(cls, config: Mapping[str, Any]) -> SimulationParams:
         """Validate a config-file mapping and construct simulation parameters.
+
+        This is the actual entry point for turning a YAML or JSON
+        config file into a validated `SimulationParams` — everything
+        below (`_parse_*`/`_normalize_*`, and this method's own
+        up-front key checks) exists to support this one method. It is
+        deliberately stricter than plain `SimulationParams(**config)`
+        would be: an unrecognized key (very likely a typo) is rejected
+        outright rather than silently accepted and ignored, and a few
+        cross-field rules that only make sense at the config-file
+        layer — like `mu` and `mu_b` being mutually exclusive
+        shorthands for the same underlying setting — are checked here,
+        before construction, rather than inside `__post_init__`.
 
         Args:
             config: Parsed YAML or JSON object.
@@ -494,6 +583,15 @@ class SimulationParams:
             ),
             initial_frequencies=_parse_initial_frequencies(config.get("p_0")),
         )
+
+
+# Everything below this point is a private helper supporting
+# `SimulationParams.from_mapping`, above: each one parses and validates
+# one specific configuration field (or one shared value shape reused by
+# several fields), rejecting the field's own particular ways of being
+# malformed with a specific error message. None of these are meant to
+# be called from outside this module — `from_mapping` is the public
+# entry point that calls all of them together.
 
 
 def _loci_from_config(config: Mapping[str, Any]) -> tuple[LocusSpec, ...]:

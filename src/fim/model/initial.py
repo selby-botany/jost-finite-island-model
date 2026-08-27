@@ -1,4 +1,17 @@
-"""Seeded initial-condition strategies."""
+"""Seeded initial-condition strategies.
+
+Before a simulation can run at all, every deme needs a starting set of
+allele frequencies at generation zero — this module is where that
+starting point comes from. Two strategies are provided, both reachable
+through `generate_initial_state`: `DirichletInitialCondition` (the
+default) draws a random starting frequency for each deme/locus from a
+symmetric Dirichlet distribution (a standard way of picking a random
+set of proportions that add up to 1, used throughout population
+genetics for exactly this purpose), while `ExplicitInitialCondition`
+instead uses a frequency table the caller supplied directly in
+`SimulationParams` (``p_0`` in a config file), for reproducing a
+specific known starting condition rather than a random one.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +26,14 @@ from fim.model.state import ModelState
 
 
 class InitialConditionGenerator(Protocol):
-    """Generate generation zero from validated parameters and one RNG."""
+    """Generate generation zero from validated parameters and one RNG.
+
+    A "protocol" here means any object with this one `generate` method
+    — this class is never instantiated itself; it exists only so that
+    `generate_initial_state`, below, can hold either
+    `DirichletInitialCondition` or `ExplicitInitialCondition`
+    interchangeably, without needing to know which one it actually has.
+    """
 
     def generate(
         self,
@@ -85,7 +105,15 @@ class DirichletInitialCondition:
 
 
 class ExplicitInitialCondition:
-    """Use the frequency table supplied in ``SimulationParams`` verbatim."""
+    """Use the frequency table supplied in ``SimulationParams`` verbatim.
+
+    Chosen automatically by `generate_initial_state` whenever a config
+    supplies its own ``p_0`` frequency table, instead of the default
+    `DirichletInitialCondition` random draw — for reproducing an exact,
+    specific starting population (matching a real observed sample, or
+    replaying a scenario from another tool) rather than a randomly
+    generated one.
+    """
 
     def generate(
         self,
@@ -122,10 +150,20 @@ def generate_initial_state(
 ) -> ModelState:
     """Generate generation zero with the configured strategy.
 
+    This is the one function most callers actually use — it picks
+    `DirichletInitialCondition` or `ExplicitInitialCondition`
+    automatically, based on whether `params` has an explicit ``p_0``
+    table configured, so a caller never needs to choose between the two
+    itself.
+
     Args:
         params: Validated simulation parameters.
         rng: Optional run generator. A PCG64 generator is created from
-            ``params.seed`` only when called outside the engine.
+            ``params.seed`` only when called outside the engine — "PCG64"
+            is the specific, high-quality pseudo-random number algorithm
+            NumPy recommends by default; passing the same ``params.seed``
+            always produces the exact same generator state, which is what
+            makes a run reproducible.
 
     Returns:
         A reproducible generation-zero state.

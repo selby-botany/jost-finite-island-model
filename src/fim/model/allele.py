@@ -1,10 +1,26 @@
 """Opaque allele identities and mutant-allele allocation.
 
-Two mutation-model allocators live here: `AlleleRegistry`, a bare counter
-for the infinite-alleles model (every mutation event is globally novel),
-and `FiniteAlleleSpace`/`FiniteAlleleRegistry`, a bounded, per-locus
-alternative for the finite-alleles (K-allele) model, where a mutation event
-can land on a state that already exists elsewhere in the run.
+An "allele" here is just one distinguishable variant of a gene at one
+locus — the simulation never needs to know what that variant's actual
+DNA sequence is, only that it is different from every other variant
+currently present, so every allele is represented by a plain integer
+identifier (`AlleleId`) rather than an actual sequence. What varies
+between the project's two mutation models is how a *new* allele ID
+gets assigned when a mutation happens:
+
+- The infinite-alleles model assumes every mutation event produces a
+  variant that has never existed before anywhere in the run (a
+  reasonable approximation once the number of possible DNA sequences
+  at a locus vastly exceeds the number of mutation events that will
+  ever occur — see `fim.model.locus.finite_allele_capacity`).
+  `AlleleRegistry`, below, is this model's allocator: a bare counter
+  that simply hands out the next never-used integer each time.
+- The finite-alleles ("K-allele") model instead fixes a specific,
+  bounded number of possible states per locus up front, so a mutation
+  can land on a state some other gene copy elsewhere already carries
+  (a "recurrence") rather than always minting something brand new.
+  `FiniteAlleleSpace`/`FiniteAlleleRegistry`, below, implement that
+  bounded, per-locus allocation.
 """
 
 from __future__ import annotations
@@ -25,6 +41,11 @@ _MINIMUM_FINITE_ALLELE_CAPACITY = 2
 def founding_allele_ids(count: int) -> tuple[AlleleId, ...]:
     """Return the locus-relative founding allele identifiers.
 
+    "Founding" alleles are the variants a population starts with at
+    generation zero, before any mutation has had a chance to introduce
+    a new one — every gene copy in the starting population's frequency
+    table is one of these `count` identifiers, never a mutant one.
+
     Args:
         count: Number of founding alleles at a locus.
 
@@ -42,7 +63,16 @@ def founding_allele_ids(count: int) -> tuple[AlleleId, ...]:
 
 
 class AlleleRegistry:
-    """Allocate globally unique identities for alleles created by mutation."""
+    """Allocate globally unique identities for alleles created by mutation.
+
+    The infinite-alleles model's allocator (see this module's own
+    docstring, above): every call to `next_id` returns an integer that
+    has never been returned before, from this registry or from
+    `founding_allele_ids`, so a mutant allele's ID alone is always
+    enough to tell it apart from every founding allele and from every
+    other mutant, with no possibility of two different mutation events
+    ever colliding on the same identifier.
+    """
 
     def __init__(self, start: int = MINTED_ID_START) -> None:
         """Initialize a registry at the first mutant-only identifier.

@@ -1,4 +1,20 @@
-"""Replayable, verifiable run-manifest representation and JSON I/O."""
+"""Replayable, verifiable run-manifest representation and JSON I/O.
+
+A "manifest" is a run's own receipt: a small JSON file
+(`manifest.json`) written once a run finishes, recording everything
+needed to identify it (its `run_id`), reproduce it exactly (its full
+`SimulationParams`, via `RunManifest.params`), and know why it stopped
+(`stop_reason`, `converged`). It also records a cryptographic
+fingerprint of every other durable output file the run produced (a
+SHA-256 digest and byte count, via `hash_file`, below) — the run's own
+way of proving, later, that those files have not been silently edited,
+truncated, or replaced since the run completed (`verify_trajectory_
+integrity`, below, is what actually performs that check).
+
+`RunManifest` describes one scalar run; `BatchManifest`, further down,
+is the parallel structure for a whole replicate batch — see each
+class's own docstring for the details specific to it.
+"""
 
 from __future__ import annotations
 
@@ -27,7 +43,15 @@ _HASH_CHUNK_BYTES = 1 << 20
 
 
 class ArtifactDigest(TypedDict):
-    """One durable run-output file's content identity."""
+    """One durable run-output file's content identity.
+
+    A "digest" (or "hash") is a short fingerprint computed from a
+    file's exact bytes such that changing even one byte of the file
+    changes the fingerprint completely and unpredictably — so two
+    files with the same digest can be trusted to have identical
+    content, and a file whose current digest no longer matches a
+    previously recorded one has definitely been altered since.
+    """
 
     sha256: str
     bytes: int
@@ -35,6 +59,14 @@ class ArtifactDigest(TypedDict):
 
 def hash_file(path: Path | str) -> ArtifactDigest:
     """Return one file's exact size and lowercase hex-encoded SHA-256 digest.
+
+    "SHA-256" is a specific, standard, cryptographically strong hashing
+    algorithm — recomputing it is the only way to check a digest, there
+    is no shortcut, which is exactly the property that makes tampering
+    with a file without changing its digest infeasible in practice.
+    Reading the file in fixed-size chunks (`_HASH_CHUNK_BYTES`, above)
+    rather than all at once means hashing even a very large trajectory
+    file never requires holding the whole thing in memory simultaneously.
 
     Args:
         path: File to hash.
@@ -103,11 +135,26 @@ class RunManifest:
                 _validate_artifact_digest(name, digest)
 
     def params(self) -> SimulationParams:
-        """Reconstruct the exact validated simulation parameters."""
+        """Reconstruct the exact validated simulation parameters.
+
+        `self.parameters` is a plain, loosely typed mapping (the
+        manifest's own JSON-safe form of the run's configuration); this
+        rebuilds it into the fully validated `SimulationParams` the
+        rest of the project actually works with, exactly as if the
+        original config file were parsed again — the whole point of
+        recording `parameters` in the manifest in the first place is so
+        this reconstruction is possible without needing the original
+        config file to still exist.
+        """
         return SimulationParams.from_mapping(self.parameters)
 
     def to_dict(self) -> dict[str, object]:
-        """Return a JSON-serializable manifest mapping."""
+        """Return a JSON-serializable manifest mapping.
+
+        The inverse of `from_dict`, below: turns this dataclass into
+        the exact nested plain-``dict`` shape `write_manifest` actually
+        writes to `manifest.json`, and that `from_dict` reads back.
+        """
         return {
             "schema_version": self.schema_version,
             "run_id": self.run_id,
@@ -135,7 +182,14 @@ class RunManifest:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> RunManifest:
-        """Validate and reconstruct a manifest mapping."""
+        """Validate and reconstruct a manifest mapping.
+
+        The counterpart to `to_dict`, above, and to `read_manifest`,
+        below: given a loosely typed JSON object exactly like the one
+        `to_dict` produces (or a hand-edited or externally produced one
+        with the same shape), checks every required field is present
+        and well-formed and reconstructs the equivalent `RunManifest`.
+        """
         required = {
             "schema_version",
             "run_id",
@@ -171,7 +225,13 @@ class RunManifest:
 
 
 def read_manifest(path: Path | str) -> RunManifest:
-    """Read and validate one manifest JSON file."""
+    """Read and validate one manifest JSON file.
+
+    Reads the raw JSON from disk and hands it to `RunManifest.
+    from_dict`, above, which does the actual field-by-field validation
+    — this function's own job is only the file I/O and the top-level
+    "is this even a JSON object" check.
+    """
     manifest_path = Path(path)
     with manifest_path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
@@ -181,7 +241,15 @@ def read_manifest(path: Path | str) -> RunManifest:
 
 
 def write_manifest(path: Path | str, manifest: RunManifest) -> None:
-    """Write a manifest deterministically, replacing any prior file."""
+    """Write a manifest deterministically, replacing any prior file.
+
+    "Deterministically" here means the same fixed formatting
+    `fim.persistence.report.write_report` uses (sorted keys, a single
+    trailing newline, `NaN`/`Infinity` rejected outright) — see that
+    function's own docstring for why this matters. This is the one
+    function that actually creates `manifest.json` on disk; everywhere
+    else in the project works with the in-memory `RunManifest` object.
+    """
     manifest_path = Path(path)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     with manifest_path.open("w", encoding="utf-8", newline="\n") as handle:
@@ -197,6 +265,16 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None:
 
 def verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) -> None:
     """Refuse to analyze a trajectory that no longer matches its manifest.
+
+    Called by `fim.reanalyze.reanalyze_trajectory` before it trusts
+    anything else about the file: recomputes `trajectory_path`'s own
+    current SHA-256 digest (via `hash_file`, above) and compares it
+    against the digest the run itself recorded, in its own manifest, at
+    the moment it finished writing that file durably. A mismatch means
+    the file has changed in some way since — accidentally, through
+    corruption, or deliberately — and this raises rather than letting
+    re-analysis silently produce numbers for a file that is no longer
+    what the run actually produced.
 
     Regression fix for R7 (`cli.py`'s own history, predating this
     extraction): an edited or truncated trajectory used to re-analyze
@@ -273,15 +351,29 @@ class BatchManifest:
 
     @property
     def replicate_count(self) -> int:
-        """Return the number of published replicates."""
+        """Return the number of published replicates.
+
+        Every replicate in a batch shares the exact same
+        `SimulationParams` except its own seed (`seed + replicate_
+        index` — see `fim.model.params.SimulationParams`'s own
+        docstring for why that is always non-negative); this is simply
+        how many of them actually completed and were published.
+        """
         return len(self.replicate_run_ids)
 
     def params(self) -> SimulationParams:
-        """Reconstruct the exact validated simulation parameters."""
+        """Reconstruct the exact validated simulation parameters.
+
+        The batch-level counterpart to `RunManifest.params`, above; see
+        that method's own docstring for what this reconstructs and why.
+        """
         return SimulationParams.from_mapping(self.parameters)
 
     def to_dict(self) -> dict[str, object]:
-        """Return a JSON-serializable batch manifest mapping."""
+        """Return a JSON-serializable batch manifest mapping.
+
+        The batch-level counterpart to `RunManifest.to_dict`, above.
+        """
         return {
             "schema_version": self.schema_version,
             "run_id": self.run_id,
@@ -300,7 +392,10 @@ class BatchManifest:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> BatchManifest:
-        """Validate and reconstruct a batch manifest mapping."""
+        """Validate and reconstruct a batch manifest mapping.
+
+        The batch-level counterpart to `RunManifest.from_dict`, above.
+        """
         required = {
             "schema_version",
             "run_id",
@@ -336,7 +431,10 @@ class BatchManifest:
 
 
 def read_batch_manifest(path: Path | str) -> BatchManifest:
-    """Read and validate one batch manifest JSON file."""
+    """Read and validate one batch manifest JSON file.
+
+    The batch-level counterpart to `read_manifest`, above.
+    """
     manifest_path = Path(path)
     with manifest_path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
@@ -346,7 +444,10 @@ def read_batch_manifest(path: Path | str) -> BatchManifest:
 
 
 def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None:
-    """Write a batch manifest deterministically, replacing any prior file."""
+    """Write a batch manifest deterministically, replacing any prior file.
+
+    The batch-level counterpart to `write_manifest`, above.
+    """
     manifest_path = Path(path)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     with manifest_path.open("w", encoding="utf-8", newline="\n") as handle:

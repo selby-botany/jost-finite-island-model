@@ -1,13 +1,25 @@
 """Shared identifier and frequency parsing for config, state, and row layers.
 
-Regression fix for S5/S6: three call sites parse the same two value
-shapes — an integer-like identifier (an allele or deme ID) and a
-trajectory-row-style probability — and used to do it with three
-independently maintained rules that had already drifted apart once
-(`fim.model.params`'s config parser rejected a truncated float or a
-negative identifier; `fim.model.state.ModelState`'s own constructor and
-`from_rows` did not). One shared rule, used everywhere the same value
-shape is parsed, cannot drift piecemeal the way three copies can.
+Several different parts of this project read the same two small value
+shapes back out of loosely typed data (a YAML config file, a JSON
+trajectory row, or a `dict` built by hand in a test): an "integer-like
+identifier" (an allele ID or a deme index — always a whole number, but
+one that might have arrived as a string, since mapping keys are always
+strings under both JSON and YAML) and a "trajectory-row-style
+probability" (an allele frequency, always strictly greater than zero
+and at most one — see `fim.model.state.ModelState.from_rows` and
+`fim.persistence.store` for why a persisted row's own frequency can
+never legitimately be zero). This module is the single place both
+value shapes are parsed, so every caller enforces exactly the same
+rules on exactly the same kind of value.
+
+Regression fix for S5/S6: before this module existed, three call sites
+parsed the same two value shapes independently, and had already
+drifted apart once (`fim.model.params`'s config parser rejected a
+truncated float or a negative identifier that `fim.model.state.
+ModelState`'s own constructor and `from_rows` silently accepted). One
+shared rule, used everywhere the same value shape is parsed, cannot
+drift piecemeal the way three separately maintained copies did.
 """
 
 from __future__ import annotations

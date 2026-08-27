@@ -1,4 +1,31 @@
-"""Pure migration, mutation, drift, and generation-pipeline operators."""
+"""Pure migration, mutation, drift, and generation-pipeline operators.
+
+This module implements the three biological processes every generation
+of the simulation actually goes through, plus `step`, which chains all
+three together in the standard order:
+
+- `migrate` — a fraction of each deme's gene copies are replaced by a
+  weighted average of every other deme's own allele frequencies (the
+  "migrant pool"), modeling individuals moving between sub-populations.
+- `mutate` — a small, randomly chosen number of gene copies switch to
+  a different, new-or-existing allele, modeling a real mutation event.
+- `drift` — the full population of `N` gene copies is re-sampled from
+  the current frequencies, the same way flipping a weighted coin `N`
+  times only approximately reproduces the coin's own true weighting;
+  this is what makes a finite population's allele frequencies wander
+  randomly from one generation to the next, purely from chance, even
+  with no migration or mutation happening at all.
+
+Every function here is "pure" in the sense that none of them mutate
+their `ModelState` argument in place — each one returns a brand-new
+state representing the *result* of applying that one process, leaving
+the state it was given untouched (see `fim.model.state.ModelState`'s
+own docstring for why that immutability matters). `step`, at the
+bottom of this file, is what `fim.engine`'s run loop actually calls
+once per generation: it runs migration, then mutation, then drift, in
+that fixed order, which is the standard order these three processes
+are applied in a Wright-Fisher-style simulation.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +50,23 @@ def drift(
     rng: np.random.Generator,
 ) -> ModelState:
     """Resample ``N`` gene copies per deme and locus.
+
+    "Genetic drift" is the random change in allele frequencies from one
+    generation to the next that happens purely because a real
+    population is finite — even with no selection, migration, or
+    mutation at all, a fair coin flipped 10 times does not always come
+    up exactly 5 heads, and a deme's `N` gene copies are exactly that
+    kind of finite, random draw from the previous generation's own
+    frequencies. This function is what actually performs that draw: for
+    every deme and locus, it treats the current frequency map as the
+    probabilities of a `numpy.random.Generator.multinomial` draw of
+    size `N` (multinomial being the many-outcomes generalization of the
+    familiar two-outcome binomial coin flip), then converts the drawn
+    integer counts back into frequencies — which, unlike migration's or
+    mutation's smooth, continuous frequency changes, always land
+    exactly on the ``1 / N`` grid (a frequency of, say, `3/50`, never
+    `3.2/50`), since they came from literally counting whole gene
+    copies.
 
     Args:
         state: Post-migration and post-mutation state.
@@ -74,6 +118,21 @@ def migrate(
     rng: np.random.Generator | None = None,
 ) -> ModelState:
     """Blend each deme with the current all-other-deme migrant pool.
+
+    Every deme keeps a ``1 - rate`` share of its own current
+    frequencies and mixes in a ``rate`` share of the "migrant pool" —
+    a weighted average of every *other* deme's own frequencies, the
+    weighting coming either from a flat symmetric rate (`m` as a plain
+    number, applied identically between every pair of demes) or from a
+    full custom weight matrix (`m` as a matrix, letting some pairs of
+    demes exchange more migrants than others — see `fim.model.topology`
+    for building one). This is the process that keeps demes from
+    drifting apart in isolation: without any migration at all, each
+    deme's own genetic drift (see `drift`, above) is independent, so
+    over time they diverge; migration is the counteracting force that
+    homogenizes them, and the balance between the two is exactly what
+    the differentiation measures in `fim.statistics.differentiation`
+    are designed to quantify.
 
     Args:
         state: Current generation.
@@ -127,6 +186,19 @@ def mutate(
     finite_alleles: FiniteAlleleRegistry | None = None,
 ) -> ModelState:
     """Replace a binomially sampled number of copies with new alleles.
+
+    A "mutation event" is one gene copy switching to a different
+    allele than it currently carries — biologically, a copying error
+    when a cell divides. This function decides *how many* such events
+    happen this generation in each deme/locus (drawn from a Binomial
+    distribution, `Binomial(N, mu)` — the standard way of modeling "each
+    of `N` independent gene copies has its own small, fixed probability
+    `mu` of mutating this generation"), and then decides *which* new
+    allele each mutating copy becomes: under the default infinite-
+    alleles model, always a fresh, never-before-seen identity (see
+    `fim.model.allele.AlleleRegistry`); under the opt-in finite-alleles
+    (K-allele) model, possibly a state that already exists elsewhere in
+    the run (see `fim.model.allele.FiniteAlleleSpace`).
 
     Existing allele mass is reduced proportionally, avoiding an extra drift
     sample in the mutation stage.
@@ -229,6 +301,14 @@ def step(
     finite_alleles: FiniteAlleleRegistry | None = None,
 ) -> ModelState:
     """Advance one generation in migration, mutation, then drift order.
+
+    This is the one function `fim.engine`'s run loop actually calls,
+    once per generation: it chains `migrate`, `mutate`, and `drift`,
+    above, in that fixed order — a real population experiences all
+    three of these forces continuously and simultaneously, but a
+    discrete-generation simulation has to apply them in *some* order
+    each tick, and migration-then-mutation-then-drift is the
+    conventional choice this project follows.
 
     Args:
         state: Current model state.

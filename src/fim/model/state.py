@@ -1,4 +1,18 @@
-"""Sparse, validated state representation for every deme and locus."""
+"""Sparse, validated state representation for every deme and locus.
+
+`ModelState` is the project's snapshot of one entire population at one
+specific generation: for each deme (sub-population) and each tracked
+locus, which alleles are present and at what frequency. "Sparse" means
+an allele that is not present anywhere in a deme/locus simply has no
+entry at all, rather than an explicit `0.0` — with potentially millions
+of allele identities ever minted over a long run (see
+`fim.model.allele`), only ever storing the handful actually present at
+a given moment keeps memory and file sizes proportional to what
+actually happened, not to how many alleles could theoretically exist.
+Every frequency map is validated on construction to be non-negative and
+to sum to (very nearly) exactly 1 — a genuine probability distribution
+over alleles, never an incomplete or over-complete one.
+"""
 
 from __future__ import annotations
 
@@ -58,9 +72,19 @@ copyreg.pickle(MappingProxyType, _reduce_mapping_proxy)
 class ModelState:
     """Hold sparse allele frequencies for each deme and locus.
 
+    Immutable once constructed (``frozen=True``): every method that
+    conceptually "changes" a state (`fim.model.operators.step`, for
+    example) actually returns a brand-new `ModelState` rather than
+    mutating this one in place, so a state captured earlier in a run
+    (for a trajectory file, or for comparing against a later
+    generation) can never be silently altered out from under a caller
+    still holding a reference to it.
+
     Args:
         loci: Ordered locus descriptions shared by every deme.
-        frequencies: A deme-major, then locus-major collection of sparse maps.
+        frequencies: A deme-major, then locus-major collection of sparse
+            maps — ``frequencies[deme_index][locus_index]`` is that one
+            deme's one locus's own allele-to-frequency mapping.
         generation: Non-negative generation represented by this state.
     """
 
@@ -69,7 +93,17 @@ class ModelState:
     generation: int = 0
 
     def __post_init__(self) -> None:
-        """Normalize maps and enforce the probability-vector invariant."""
+        """Normalize maps and enforce the probability-vector invariant.
+
+        Runs automatically right after every field is assigned (this is
+        what `dataclass` calls `__post_init__` for) — this is where every
+        structural rule a valid state must satisfy is actually checked:
+        at least one locus and one deme, unique locus IDs, every deme
+        supplying the same number of loci, and (via
+        `_normalize_frequency_map`, below) every individual frequency map
+        actually summing to 1. A `ModelState` that survives construction
+        at all is therefore guaranteed valid everywhere else it is used.
+        """
         loci = tuple(self.loci)
         if not loci:
             raise ValueError("state must contain at least one locus")
@@ -119,12 +153,21 @@ class ModelState:
             locus_index: Zero-based locus index.
 
         Returns:
-            The requested allele-to-frequency mapping.
+            The requested allele-to-frequency mapping — read-only
+            (a `MappingProxyType`, above) so a caller cannot accidentally
+            mutate this state's own data through the returned reference.
         """
         return self.frequencies[deme][locus_index]
 
     def support_sizes(self) -> tuple[tuple[int, ...], ...]:
-        """Return the number of present alleles for each deme and locus."""
+        """Return the number of present alleles for each deme and locus.
+
+        "Support" is the statistical term for the set of alleles that
+        actually have a nonzero frequency — its size is simply how many
+        distinct alleles are currently segregating in that deme/locus.
+        Used by `validate_support`, below, to check this never exceeds
+        the number of gene copies actually available to carry them.
+        """
         return tuple(
             tuple(len(frequency_map) for frequency_map in deme)
             for deme in self.frequencies
@@ -132,6 +175,16 @@ class ModelState:
 
     def to_rows(self, run_id: str) -> list[dict[str, int | float | str]]:
         """Serialize the state to the public long-form trajectory row schema.
+
+        "Long-form" (also called "tidy" or "row-per-observation") means
+        one output row per individual (deme, locus, allele) combination
+        that actually has a nonzero frequency, rather than one row per
+        deme or per generation holding a nested table — the same shape
+        `fim.persistence.jsonl_store.JSONLTrajectoryStore` writes to
+        `trajectory.jsonl` and `ModelState.from_rows`, below, reads back.
+        This shape is what makes the persisted file directly usable by
+        ordinary tools (a spreadsheet, `jq`, a pandas `DataFrame`)
+        without first needing to unpack a nested structure.
 
         Args:
             run_id: Stable identifier grouping rows from one simulation.
@@ -158,7 +211,14 @@ class ModelState:
         return rows
 
     def total_frequency(self) -> dict[tuple[int, int], float]:
-        """Return the frequency sum for every one-based deme and locus ID."""
+        """Return the frequency sum for every one-based deme and locus ID.
+
+        Should always be (very nearly) exactly ``1.0`` for a state that
+        passed `__post_init__`'s own validation — this method exists as
+        an independent way to double-check that invariant elsewhere
+        (a test, a sanity check after deserializing) without needing to
+        recompute the sum by hand.
+        """
         totals: dict[tuple[int, int], float] = {}
         for deme_index, deme in enumerate(self.frequencies, start=1):
             for locus, frequency_map in zip(self.loci, deme, strict=True):
@@ -167,6 +227,15 @@ class ModelState:
 
     def validate_support(self, population_sizes: Sequence[int]) -> None:
         """Reject support that exceeds the available gene-copy count.
+
+        A deme with ``N`` gene copies can never actually carry more than
+        ``N`` distinct alleles at once — there simply are not enough
+        copies to go around any further than that. This checks that
+        physical impossibility directly, using `support_sizes`, above,
+        against each deme's own configured population size; it exists
+        as its own step (rather than folding into `__post_init__`)
+        because `ModelState`'s own constructor has no access to
+        `population_sizes`, only to the frequency data itself.
 
         Args:
             population_sizes: One positive gene-copy count per deme.
@@ -194,6 +263,16 @@ class ModelState:
         loci: Sequence[LocusSpec],
     ) -> ModelState:
         """Reconstruct one generation from long-form trajectory rows.
+
+        The inverse of `to_rows`, above: given a batch of persisted
+        rows all belonging to the same run and generation (exactly what
+        `fim.reanalyze.group_rows_by_generation` hands to this method,
+        one generation at a time), rebuilds the same nested
+        `ModelState` those rows were originally flattened from —
+        including re-deriving deme numbering, checking it starts at 1
+        and has no gaps, and rejecting a duplicate row for the same
+        (deme, locus, allele) as data corruption rather than silently
+        keeping only one of the two.
 
         Args:
             rows: Rows for exactly one run and generation.

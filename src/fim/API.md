@@ -3763,17 +3763,42 @@ through to the unmodified CLI parser.
 
 Value objects and update operators for the finite island model.
 
+This package defines the plain data (`SimulationParams`, `ModelState`,
+`LocusSpec`, `AlleleRegistry`) that describes one finite-island
+population at a single moment in time, plus the pure functions that
+generate a starting population (`generate_initial_state`) and identify
+its founding alleles (`founding_allele_ids`). The actual generation-by-
+generation update rules (mutation, migration, drift) live in
+`fim.model.operators`, not re-exported here since they are called only
+from `fim.engine`'s own run loop, never directly by outside code.
+
 <a id="fim.model.allele"></a>
 
 # fim.model.allele
 
 Opaque allele identities and mutant-allele allocation.
 
-Two mutation-model allocators live here: `AlleleRegistry`, a bare counter
-for the infinite-alleles model (every mutation event is globally novel),
-and `FiniteAlleleSpace`/`FiniteAlleleRegistry`, a bounded, per-locus
-alternative for the finite-alleles (K-allele) model, where a mutation event
-can land on a state that already exists elsewhere in the run.
+An "allele" here is just one distinguishable variant of a gene at one
+locus — the simulation never needs to know what that variant's actual
+DNA sequence is, only that it is different from every other variant
+currently present, so every allele is represented by a plain integer
+identifier (`AlleleId`) rather than an actual sequence. What varies
+between the project's two mutation models is how a *new* allele ID
+gets assigned when a mutation happens:
+
+- The infinite-alleles model assumes every mutation event produces a
+  variant that has never existed before anywhere in the run (a
+  reasonable approximation once the number of possible DNA sequences
+  at a locus vastly exceeds the number of mutation events that will
+  ever occur — see `fim.model.locus.finite_allele_capacity`).
+  `AlleleRegistry`, below, is this model's allocator: a bare counter
+  that simply hands out the next never-used integer each time.
+- The finite-alleles ("K-allele") model instead fixes a specific,
+  bounded number of possible states per locus up front, so a mutation
+  can land on a state some other gene copy elsewhere already carries
+  (a "recurrence") rather than always minting something brand new.
+  `FiniteAlleleSpace`/`FiniteAlleleRegistry`, below, implement that
+  bounded, per-locus allocation.
 
 <a id="fim.model.allele.founding_allele_ids"></a>
 
@@ -3784,6 +3809,11 @@ def founding_allele_ids(count: int) -> tuple[AlleleId, ...]
 ```
 
 Return the locus-relative founding allele identifiers.
+
+"Founding" alleles are the variants a population starts with at
+generation zero, before any mutation has had a chance to introduce
+a new one — every gene copy in the starting population's frequency
+table is one of these `count` identifiers, never a mutant one.
 
 **Arguments**:
 
@@ -3808,6 +3838,14 @@ class AlleleRegistry()
 ```
 
 Allocate globally unique identities for alleles created by mutation.
+
+The infinite-alleles model's allocator (see this module's own
+docstring, above): every call to `next_id` returns an integer that
+has never been returned before, from this registry or from
+`founding_allele_ids`, so a mutant allele's ID alone is always
+enough to tell it apart from every founding allele and from every
+other mutant, with no possibility of two different mutation events
+ever colliding on the same identifier.
 
 <a id="fim.model.allele.AlleleRegistry.__init__"></a>
 
@@ -3982,14 +4020,26 @@ Return a mutation target for ``locus_id`` under the K-allele model.
 
 Shared identifier and frequency parsing for config, state, and row layers.
 
-Regression fix for S5/S6: three call sites parse the same two value
-shapes — an integer-like identifier (an allele or deme ID) and a
-trajectory-row-style probability — and used to do it with three
-independently maintained rules that had already drifted apart once
-(`fim.model.params`'s config parser rejected a truncated float or a
-negative identifier; `fim.model.state.ModelState`'s own constructor and
-`from_rows` did not). One shared rule, used everywhere the same value
-shape is parsed, cannot drift piecemeal the way three copies can.
+Several different parts of this project read the same two small value
+shapes back out of loosely typed data (a YAML config file, a JSON
+trajectory row, or a `dict` built by hand in a test): an "integer-like
+identifier" (an allele ID or a deme index — always a whole number, but
+one that might have arrived as a string, since mapping keys are always
+strings under both JSON and YAML) and a "trajectory-row-style
+probability" (an allele frequency, always strictly greater than zero
+and at most one — see `fim.model.state.ModelState.from_rows` and
+`fim.persistence.store` for why a persisted row's own frequency can
+never legitimately be zero). This module is the single place both
+value shapes are parsed, so every caller enforces exactly the same
+rules on exactly the same kind of value.
+
+Regression fix for S5/S6: before this module existed, three call sites
+parsed the same two value shapes independently, and had already
+drifted apart once (`fim.model.params`'s config parser rejected a
+truncated float or a negative identifier that `fim.model.state.
+ModelState`'s own constructor and `from_rows` silently accepted). One
+shared rule, used everywhere the same value shape is parsed, cannot
+drift piecemeal the way three separately maintained copies did.
 
 <a id="fim.model.identifiers.parse_bounded_frequency"></a>
 
@@ -4071,6 +4121,18 @@ ID from a deme ID from the message text.
 
 Seeded initial-condition strategies.
 
+Before a simulation can run at all, every deme needs a starting set of
+allele frequencies at generation zero — this module is where that
+starting point comes from. Two strategies are provided, both reachable
+through `generate_initial_state`: `DirichletInitialCondition` (the
+default) draws a random starting frequency for each deme/locus from a
+symmetric Dirichlet distribution (a standard way of picking a random
+set of proportions that add up to 1, used throughout population
+genetics for exactly this purpose), while `ExplicitInitialCondition`
+instead uses a frequency table the caller supplied directly in
+`SimulationParams` (``p_0`` in a config file), for reproducing a
+specific known starting condition rather than a random one.
+
 <a id="fim.model.initial.InitialConditionGenerator"></a>
 
 ## InitialConditionGenerator Objects
@@ -4080,6 +4142,12 @@ class InitialConditionGenerator(Protocol)
 ```
 
 Generate generation zero from validated parameters and one RNG.
+
+A "protocol" here means any object with this one `generate` method
+— this class is never instantiated itself; it exists only so that
+`generate_initial_state`, below, can hold either
+`DirichletInitialCondition` or `ExplicitInitialCondition`
+interchangeably, without needing to know which one it actually has.
 
 <a id="fim.model.initial.InitialConditionGenerator.generate"></a>
 
@@ -4142,6 +4210,13 @@ class ExplicitInitialCondition()
 
 Use the frequency table supplied in ``SimulationParams`` verbatim.
 
+Chosen automatically by `generate_initial_state` whenever a config
+supplies its own ``p_0`` frequency table, instead of the default
+`DirichletInitialCondition` random draw — for reproducing an exact,
+specific starting population (matching a real observed sample, or
+replaying a scenario from another tool) rather than a randomly
+generated one.
+
 <a id="fim.model.initial.ExplicitInitialCondition.generate"></a>
 
 #### generate
@@ -4179,11 +4254,21 @@ def generate_initial_state(
 
 Generate generation zero with the configured strategy.
 
+This is the one function most callers actually use — it picks
+`DirichletInitialCondition` or `ExplicitInitialCondition`
+automatically, based on whether `params` has an explicit ``p_0``
+table configured, so a caller never needs to choose between the two
+itself.
+
 **Arguments**:
 
 - `params` - Validated simulation parameters.
 - `rng` - Optional run generator. A PCG64 generator is created from
-  ``params.seed`` only when called outside the engine.
+  ``params.seed`` only when called outside the engine — "PCG64"
+  is the specific, high-quality pseudo-random number algorithm
+  NumPy recommends by default; passing the same ``params.seed``
+  always produces the exact same generator state, which is what
+  makes a run reproducible.
 
 
 **Returns**:
@@ -4195,6 +4280,13 @@ Generate generation zero with the configured strategy.
 # fim.model.locus
 
 Locus metadata used by a simulation.
+
+A "locus" is one specific position (or short stretch) in the genome
+being tracked — the simulation can watch several loci at once, each
+with its own independent set of alleles and its own history, and
+`LocusSpec` is the small, fixed description of one such locus: which
+one it is (`locus_id`) and how long a DNA sequence it covers
+(`length`).
 
 <a id="fim.model.locus.LocusSpec"></a>
 
@@ -4253,6 +4345,32 @@ Return the finite-alleles model's state-space size at a locus.
 
 Pure migration, mutation, drift, and generation-pipeline operators.
 
+This module implements the three biological processes every generation
+of the simulation actually goes through, plus `step`, which chains all
+three together in the standard order:
+
+- `migrate` — a fraction of each deme's gene copies are replaced by a
+  weighted average of every other deme's own allele frequencies (the
+  "migrant pool"), modeling individuals moving between sub-populations.
+- `mutate` — a small, randomly chosen number of gene copies switch to
+  a different, new-or-existing allele, modeling a real mutation event.
+- `drift` — the full population of `N` gene copies is re-sampled from
+  the current frequencies, the same way flipping a weighted coin `N`
+  times only approximately reproduces the coin's own true weighting;
+  this is what makes a finite population's allele frequencies wander
+  randomly from one generation to the next, purely from chance, even
+  with no migration or mutation happening at all.
+
+Every function here is "pure" in the sense that none of them mutate
+their `ModelState` argument in place — each one returns a brand-new
+state representing the *result* of applying that one process, leaving
+the state it was given untouched (see `fim.model.state.ModelState`'s
+own docstring for why that immutability matters). `step`, at the
+bottom of this file, is what `fim.engine`'s run loop actually calls
+once per generation: it runs migration, then mutation, then drift, in
+that fixed order, which is the standard order these three processes
+are applied in a Wright-Fisher-style simulation.
+
 <a id="fim.model.operators.drift"></a>
 
 #### drift
@@ -4263,6 +4381,23 @@ def drift(state: ModelState, population_size: PopulationSize,
 ```
 
 Resample ``N`` gene copies per deme and locus.
+
+"Genetic drift" is the random change in allele frequencies from one
+generation to the next that happens purely because a real
+population is finite — even with no selection, migration, or
+mutation at all, a fair coin flipped 10 times does not always come
+up exactly 5 heads, and a deme's `N` gene copies are exactly that
+kind of finite, random draw from the previous generation's own
+frequencies. This function is what actually performs that draw: for
+every deme and locus, it treats the current frequency map as the
+probabilities of a `numpy.random.Generator.multinomial` draw of
+size `N` (multinomial being the many-outcomes generalization of the
+familiar two-outcome binomial coin flip), then converts the drawn
+integer counts back into frequencies — which, unlike migration's or
+mutation's smooth, continuous frequency changes, always land
+exactly on the ``1 / N`` grid (a frequency of, say, `3/50`, never
+`3.2/50`), since they came from literally counting whole gene
+copies.
 
 **Arguments**:
 
@@ -4288,6 +4423,21 @@ def migrate(state: ModelState,
 ```
 
 Blend each deme with the current all-other-deme migrant pool.
+
+Every deme keeps a ``1 - rate`` share of its own current
+frequencies and mixes in a ``rate`` share of the "migrant pool" —
+a weighted average of every *other* deme's own frequencies, the
+weighting coming either from a flat symmetric rate (`m` as a plain
+number, applied identically between every pair of demes) or from a
+full custom weight matrix (`m` as a matrix, letting some pairs of
+demes exchange more migrants than others — see `fim.model.topology`
+for building one). This is the process that keeps demes from
+drifting apart in isolation: without any migration at all, each
+deme's own genetic drift (see `drift`, above) is independent, so
+over time they diverge; migration is the counteracting force that
+homogenizes them, and the balance between the two is exactly what
+the differentiation measures in `fim.statistics.differentiation`
+are designed to quantify.
 
 **Arguments**:
 
@@ -4330,6 +4480,19 @@ def mutate(state: ModelState,
 ```
 
 Replace a binomially sampled number of copies with new alleles.
+
+A "mutation event" is one gene copy switching to a different
+allele than it currently carries — biologically, a copying error
+when a cell divides. This function decides *how many* such events
+happen this generation in each deme/locus (drawn from a Binomial
+distribution, `Binomial(N, mu)` — the standard way of modeling "each
+of `N` independent gene copies has its own small, fixed probability
+`mu` of mutating this generation"), and then decides *which* new
+allele each mutating copy becomes: under the default infinite-
+alleles model, always a fresh, never-before-seen identity (see
+`fim.model.allele.AlleleRegistry`); under the opt-in finite-alleles
+(K-allele) model, possibly a state that already exists elsewhere in
+the run (see `fim.model.allele.FiniteAlleleSpace`).
 
 Existing allele mass is reduced proportionally, avoiding an extra drift
 sample in the mutation stage.
@@ -4376,6 +4539,14 @@ def step(state: ModelState,
 
 Advance one generation in migration, mutation, then drift order.
 
+This is the one function `fim.engine`'s run loop actually calls,
+once per generation: it chains `migrate`, `mutate`, and `drift`,
+above, in that fixed order — a real population experiences all
+three of these forces continuously and simultaneously, but a
+discrete-generation simulation has to apply them in *some* order
+each tick, and migration-then-mutation-then-drift is the
+conventional choice this project follows.
+
 **Arguments**:
 
 - `state` - Current model state.
@@ -4399,6 +4570,25 @@ Advance one generation in migration, mutation, then drift order.
 
 Validated, replayable simulation configuration.
 
+`SimulationParams`, below, is the single object that fully describes
+one finite-island simulation run — every number a config file (or the
+CLI's own flags) can set, gathered together, checked for validity once
+at construction time, and then held immutable for the rest of the
+run. "Replayable" means that the exact same `SimulationParams` (in
+particular, the same `seed`) always reproduces the exact same run bit
+for bit — this is what makes it possible to re-run, share, or audit a
+specific past result, rather than every run being a one-off that can
+never be reconstructed.
+
+Most of this module's private helper functions (the many small
+``_parse_*``/``_normalize_*`` functions below `SimulationParams`
+itself) exist to support `from_mapping`, which is what actually turns
+a loosely typed YAML/JSON config file — where every value could in
+principle be the wrong type, missing, or out of range — into a fully
+validated `SimulationParams`. See `doc/configuration.md` for what each
+configuration field means and its accepted range, in plain language,
+independent of this file's own more code-oriented documentation.
+
 <a id="fim.model.params.SimulationParams"></a>
 
 ## SimulationParams Objects
@@ -4409,6 +4599,23 @@ class SimulationParams()
 ```
 
 Store all values needed to reproduce a finite-island-model run.
+
+This is an immutable (``frozen=True``) dataclass: once constructed,
+none of its fields can be reassigned, so a `SimulationParams` handed
+to `fim.engine`'s run loop is guaranteed to describe the exact same
+run throughout, with no risk of some other part of the code
+changing a setting partway through. `__post_init__`, below, is
+where every field actually gets checked for validity and, where
+needed, expanded into its full internal shape (for example, a
+single shared `N` value becomes one value per deme) — so a
+`SimulationParams` that exists at all is guaranteed already valid
+everywhere else it is used.
+
+See `doc/configuration.md` for a plain-language explanation of
+every field below, including its default value and accepted range
+— the Args section here documents the same fields from this
+project's own code, more tersely and with cross-references to the
+functions that actually use each one.
 
 **Arguments**:
 
@@ -4485,6 +4692,15 @@ def __post_init__() -> None
 
 Normalize sequence inputs and validate every parameter.
 
+Runs automatically right after every field is assigned. Two
+things happen here, together, for every field: validate it
+(reject a value that is the wrong type, out of range, or
+inconsistent with another field), and normalize it (expand a
+convenient shorthand, like one shared `N` for every deme, into
+its full internal shape) — a `SimulationParams` that survives
+construction at all can therefore always be trusted downstream
+without re-checking any of this.
+
 <a id="fim.model.params.SimulationParams.convergence_statistics"></a>
 
 #### convergence\_statistics
@@ -4495,6 +4711,12 @@ def convergence_statistics() -> tuple[str, ...]
 ```
 
 Return every statistic watched by the convergence monitor.
+
+`convergence_statistic` itself may be stored as either a single
+string (the common case) or a tuple of several — this property
+is the convenient, always-a-tuple form every caller that just
+wants to iterate over "whichever statistics are being watched"
+actually uses, instead of handling both shapes itself.
 
 <a id="fim.model.params.SimulationParams.population_sizes"></a>
 
@@ -4507,6 +4729,13 @@ def population_sizes() -> tuple[int, ...]
 
 Return one gene-copy count per deme.
 
+`N` itself may be stored as either a single shared integer (the
+common case, when every deme has the same size) or a tuple of
+per-deme values — this property is the always-fully-expanded
+form (always exactly `d` values, one per deme) code elsewhere
+actually iterates over, so it never needs to special-case the
+"every deme is the same size" shorthand itself.
+
 <a id="fim.model.params.SimulationParams.mutation_rates"></a>
 
 #### mutation\_rates
@@ -4518,6 +4747,9 @@ def mutation_rates() -> tuple[float, ...]
 
 Return one mutation-probability rate per locus.
 
+Same shorthand-expansion pattern as `population_sizes`, above,
+but for `mu` instead of `N`, and per-locus instead of per-deme.
+
 <a id="fim.model.params.SimulationParams.to_dict"></a>
 
 #### to\_dict
@@ -4527,6 +4759,16 @@ def to_dict() -> dict[str, object]
 ```
 
 Return a JSON/YAML-serializable, lossless configuration mapping.
+
+This is the inverse of `from_mapping`, below: given a fully
+constructed `SimulationParams`, produces the equivalent plain
+``dict`` of JSON/YAML-safe values (nested lists and floats
+instead of tuples and `numpy`/custom types) that, fed back
+through `from_mapping`, reconstructs an identical
+`SimulationParams` — used, for example, to write a run's own
+parameters into its manifest (`fim.persistence.manifest`) so a
+completed run's configuration can be recovered exactly, later,
+without needing the original config file at all.
 
 <a id="fim.model.params.SimulationParams.from_mapping"></a>
 
@@ -4538,6 +4780,18 @@ def from_mapping(cls, config: Mapping[str, Any]) -> SimulationParams
 ```
 
 Validate a config-file mapping and construct simulation parameters.
+
+This is the actual entry point for turning a YAML or JSON
+config file into a validated `SimulationParams` — everything
+below (`_parse_*`/`_normalize_*`, and this method's own
+up-front key checks) exists to support this one method. It is
+deliberately stricter than plain `SimulationParams(**config)`
+would be: an unrecognized key (very likely a typo) is rejected
+outright rather than silently accepted and ignored, and a few
+cross-field rules that only make sense at the config-file
+layer — like `mu` and `mu_b` being mutually exclusive
+shorthands for the same underlying setting — are checked here,
+before construction, rather than inside `__post_init__`.
 
 **Arguments**:
 
@@ -4559,6 +4813,19 @@ Validate a config-file mapping and construct simulation parameters.
 
 Sparse, validated state representation for every deme and locus.
 
+`ModelState` is the project's snapshot of one entire population at one
+specific generation: for each deme (sub-population) and each tracked
+locus, which alleles are present and at what frequency. "Sparse" means
+an allele that is not present anywhere in a deme/locus simply has no
+entry at all, rather than an explicit `0.0` — with potentially millions
+of allele identities ever minted over a long run (see
+`fim.model.allele`), only ever storing the handful actually present at
+a given moment keeps memory and file sizes proportional to what
+actually happened, not to how many alleles could theoretically exist.
+Every frequency map is validated on construction to be non-negative and
+to sum to (very nearly) exactly 1 — a genuine probability distribution
+over alleles, never an incomplete or over-complete one.
+
 <a id="fim.model.state.ModelState"></a>
 
 ## ModelState Objects
@@ -4570,10 +4837,20 @@ class ModelState()
 
 Hold sparse allele frequencies for each deme and locus.
 
+Immutable once constructed (``frozen=True``): every method that
+conceptually "changes" a state (`fim.model.operators.step`, for
+example) actually returns a brand-new `ModelState` rather than
+mutating this one in place, so a state captured earlier in a run
+(for a trajectory file, or for comparing against a later
+generation) can never be silently altered out from under a caller
+still holding a reference to it.
+
 **Arguments**:
 
 - `loci` - Ordered locus descriptions shared by every deme.
-- `frequencies` - A deme-major, then locus-major collection of sparse maps.
+- `frequencies` - A deme-major, then locus-major collection of sparse
+  maps — ``frequencies[deme_index][locus_index]`` is that one
+  deme's one locus's own allele-to-frequency mapping.
 - `generation` - Non-negative generation represented by this state.
 
 <a id="fim.model.state.ModelState.__post_init__"></a>
@@ -4585,6 +4862,15 @@ def __post_init__() -> None
 ```
 
 Normalize maps and enforce the probability-vector invariant.
+
+Runs automatically right after every field is assigned (this is
+what `dataclass` calls `__post_init__` for) — this is where every
+structural rule a valid state must satisfy is actually checked:
+at least one locus and one deme, unique locus IDs, every deme
+supplying the same number of loci, and (via
+`_normalize_frequency_map`, below) every individual frequency map
+actually summing to 1. A `ModelState` that survives construction
+at all is therefore guaranteed valid everywhere else it is used.
 
 <a id="fim.model.state.ModelState.deme_count"></a>
 
@@ -4626,7 +4912,9 @@ Return one read-only sparse frequency map.
 
 **Returns**:
 
-  The requested allele-to-frequency mapping.
+  The requested allele-to-frequency mapping — read-only
+  (a `MappingProxyType`, above) so a caller cannot accidentally
+  mutate this state's own data through the returned reference.
 
 <a id="fim.model.state.ModelState.support_sizes"></a>
 
@@ -4638,6 +4926,12 @@ def support_sizes() -> tuple[tuple[int, ...], ...]
 
 Return the number of present alleles for each deme and locus.
 
+"Support" is the statistical term for the set of alleles that
+actually have a nonzero frequency — its size is simply how many
+distinct alleles are currently segregating in that deme/locus.
+Used by `validate_support`, below, to check this never exceeds
+the number of gene copies actually available to carry them.
+
 <a id="fim.model.state.ModelState.to_rows"></a>
 
 #### to\_rows
@@ -4647,6 +4941,16 @@ def to_rows(run_id: str) -> list[dict[str, int | float | str]]
 ```
 
 Serialize the state to the public long-form trajectory row schema.
+
+"Long-form" (also called "tidy" or "row-per-observation") means
+one output row per individual (deme, locus, allele) combination
+that actually has a nonzero frequency, rather than one row per
+deme or per generation holding a nested table — the same shape
+`fim.persistence.jsonl_store.JSONLTrajectoryStore` writes to
+`trajectory.jsonl` and `ModelState.from_rows`, below, reads back.
+This shape is what makes the persisted file directly usable by
+ordinary tools (a spreadsheet, `jq`, a pandas `DataFrame`)
+without first needing to unpack a nested structure.
 
 **Arguments**:
 
@@ -4667,6 +4971,12 @@ def total_frequency() -> dict[tuple[int, int], float]
 
 Return the frequency sum for every one-based deme and locus ID.
 
+Should always be (very nearly) exactly ``1.0`` for a state that
+passed `__post_init__`'s own validation — this method exists as
+an independent way to double-check that invariant elsewhere
+(a test, a sanity check after deserializing) without needing to
+recompute the sum by hand.
+
 <a id="fim.model.state.ModelState.validate_support"></a>
 
 #### validate\_support
@@ -4676,6 +4986,15 @@ def validate_support(population_sizes: Sequence[int]) -> None
 ```
 
 Reject support that exceeds the available gene-copy count.
+
+A deme with ``N`` gene copies can never actually carry more than
+``N`` distinct alleles at once — there simply are not enough
+copies to go around any further than that. This checks that
+physical impossibility directly, using `support_sizes`, above,
+against each deme's own configured population size; it exists
+as its own step (rather than folding into `__post_init__`)
+because `ModelState`'s own constructor has no access to
+`population_sizes`, only to the frequency data itself.
 
 **Arguments**:
 
@@ -4697,6 +5016,16 @@ def from_rows(cls, rows: Iterable[Mapping[str, Any]],
 ```
 
 Reconstruct one generation from long-form trajectory rows.
+
+The inverse of `to_rows`, above: given a batch of persisted
+rows all belonging to the same run and generation (exactly what
+`fim.reanalyze.group_rows_by_generation` hands to this method,
+one generation at a time), rebuilds the same nested
+`ModelState` those rows were originally flattened from —
+including re-deriving deme numbering, checking it starts at 1
+and has no gaps, and rejecting a duplicate row for the same
+(deme, locus, allele) as data corruption rather than silently
+keeping only one of the two.
 
 **Arguments**:
 
@@ -4743,6 +5072,15 @@ def stepping_stone_neighbors(d: int, *, topology: Topology,
 
 Build a sparse nearest-neighbor migration map.
 
+A "stepping-stone" topology is the standard population-genetics
+term for demes arranged along a line or a circle, each exchanging
+migrants only with its immediate one or two neighbors — as opposed
+to the symmetric island model's assumption that every deme
+exchanges migrants equally with every other deme, regardless of
+"distance." This function builds exactly that neighbor structure,
+in the sparse form `dense_matrix_from_neighbors`, below, then
+expands into the full matrix the rest of the simulator actually uses.
+
 **Arguments**:
 
 - `d` - Number of demes, numbered ``1`` through ``d`` along the line
@@ -4778,6 +5116,16 @@ def dense_matrix_from_neighbors(neighbors: Mapping[int, Mapping[int, float]],
 ```
 
 Densify a one-based sparse off-diagonal map into a full matrix.
+
+"Densify" means turning the compact, mostly-implicit sparse map
+(which lists only which demes migrate with which, and skips every
+zero entry) into the complete `d` by `d` matrix `fim.model.
+operators.migrate` actually operates on, where every deme's row
+(including its own self-retention) is spelled out explicitly, zero
+entries included. This is the one point where a sparse topology,
+from any source, becomes the ordinary dense form the rest of the
+simulator already knows how to use — nothing downstream of this
+function ever needs to know a sparse representation was involved.
 
 Every deme's self-retention is derived, not read from the map: a
 deme's diagonal entry is ``1`` minus the sum of its listed neighbor
@@ -5047,11 +5395,45 @@ run then gets its own timestamped subfolder inside this one).
 
 Incremental trajectory and manifest persistence.
 
+This package is where a run's results actually get written to (and
+read back from) disk. A run persists two kinds of file:
+
+- A "trajectory" — every generation's own allele frequencies, written
+  one generation at a time as it happens (`fim.persistence.
+  jsonl_store.JSONLTrajectoryStore`), so a run's history survives even
+  if it is interrupted partway through and so it can later be re-
+  analyzed at any earlier generation (see `fim.reanalyze`). `fim.
+  persistence.store` defines the row schema and store interface both
+  the real file-backed store and an in-memory test double implement.
+- A "manifest" — the run's own bookkeeping recorded once, at
+  completion: its parameters, how it stopped, and a checksum of its
+  trajectory file (`fim.persistence.manifest`), used to detect if the
+  trajectory file has since been edited, corrupted, or replaced.
+
+`fim.persistence.report` holds a small helper, `write_report`, for
+writing other JSON result files (`report.json`, a batch's own
+`summary.json`) in the same deterministic, byte-reproducible format as
+the manifest — not itself re-exported here, since it is used directly
+by `fim.engine` and `fim.cli` rather than through this package's own
+top-level API.
+
 <a id="fim.persistence.jsonl_store"></a>
 
 # fim.persistence.jsonl\_store
 
 Human-readable incremental JSON Lines trajectory storage.
+
+"JSON Lines" (the ``.jsonl`` extension) is a simple file format where
+each line of the file is its own complete, independent JSON object —
+unlike a single big JSON array, a new line can be appended to the end
+of the file at any time without rewriting anything already there, and
+a reader can process the file one line at a time without first loading
+the whole thing into memory. That is exactly what a running simulation
+needs: `write_generation`, below, appends one generation's own rows to
+the file the moment that generation finishes, so the trajectory
+survives on disk even if the run is later interrupted, and a very long
+run's trajectory file never needs to be held entirely in memory at
+once, either to write it or to read it back.
 
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore"></a>
 
@@ -5062,6 +5444,13 @@ class JSONLTrajectoryStore()
 ```
 
 Append and read validated trajectory rows in JSON Lines format.
+
+This is the real, file-backed implementation of the
+`fim.persistence.store.TrajectoryStore` protocol — the one actually
+used by `fim.engine` for a real run (as opposed to
+`fim.persistence.store.InMemoryTrajectoryStore`, a lighter-weight
+stand-in used by library calls and unit tests that never need a
+file on disk at all).
 
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__"></a>
 
@@ -5088,6 +5477,17 @@ def write_generation(run_id: str, generation: int,
 
 Append and flush all rows for one generation.
 
+Every row is validated (via `fim.persistence.store.
+normalize_row`) before anything is written, so a malformed row
+is rejected up front rather than partially written to disk.
+``handle.flush()`` hands this generation's bytes from Python's
+own internal buffer to the operating system right away, rather
+than leaving them sitting in memory until the file is
+eventually closed — this generation is written to disk as soon
+as this call returns, instead of remaining vulnerable to being
+lost entirely if the process is interrupted or crashes before
+the file handle would otherwise have been closed.
+
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.read"></a>
 
 #### read
@@ -5096,7 +5496,12 @@ Append and flush all rows for one generation.
 def read(run_id: str) -> Iterator[TrajectoryRow]
 ```
 
-Yield complete rows matching ``run_id``.
+Yield complete rows matching ``run_id``, oldest first.
+
+A generator (built via the inner `iterate` function, below,
+rather than returning a plain list) so a large trajectory file
+is streamed one row at a time instead of being fully loaded
+into memory before the caller sees any of it.
 
 A final partial line from an interrupted append is ignored. Any malformed
 complete line is reported as corruption.
@@ -5106,17 +5511,32 @@ guarantee: this method alone cannot tell an interrupted-append
 trailing partial line from a trajectory that is simply short a
 generation for some other reason, since it has no manifest to
 compare against. Detecting that a trajectory doesn't have as
-many generations as it claims to is a manifest/CLI-level
-guarantee (`fim.cli._verify_trajectory_integrity`'s SHA-256
-digest check, and `fim.cli._command_stats`'s generation-count
-cross-check against `RunManifest.generation_count`), not one
-this store makes on its own.
+many generations as it claims to is a manifest-level guarantee —
+`fim.persistence.manifest.verify_trajectory_integrity`'s SHA-256
+digest check, and `fim.reanalyze.reanalyze_trajectory`'s own
+generation-count cross-check against `RunManifest.
+generation_count` — not one this store makes on its own.
 
 <a id="fim.persistence.manifest"></a>
 
 # fim.persistence.manifest
 
 Replayable, verifiable run-manifest representation and JSON I/O.
+
+A "manifest" is a run's own receipt: a small JSON file
+(`manifest.json`) written once a run finishes, recording everything
+needed to identify it (its `run_id`), reproduce it exactly (its full
+`SimulationParams`, via `RunManifest.params`), and know why it stopped
+(`stop_reason`, `converged`). It also records a cryptographic
+fingerprint of every other durable output file the run produced (a
+SHA-256 digest and byte count, via `hash_file`, below) — the run's own
+way of proving, later, that those files have not been silently edited,
+truncated, or replaced since the run completed (`verify_trajectory_
+integrity`, below, is what actually performs that check).
+
+`RunManifest` describes one scalar run; `BatchManifest`, further down,
+is the parallel structure for a whole replicate batch — see each
+class's own docstring for the details specific to it.
 
 <a id="fim.persistence.manifest.ArtifactDigest"></a>
 
@@ -5128,6 +5548,13 @@ class ArtifactDigest(TypedDict)
 
 One durable run-output file's content identity.
 
+A "digest" (or "hash") is a short fingerprint computed from a
+file's exact bytes such that changing even one byte of the file
+changes the fingerprint completely and unpredictably — so two
+files with the same digest can be trusted to have identical
+content, and a file whose current digest no longer matches a
+previously recorded one has definitely been altered since.
+
 <a id="fim.persistence.manifest.hash_file"></a>
 
 #### hash\_file
@@ -5137,6 +5564,14 @@ def hash_file(path: Path | str) -> ArtifactDigest
 ```
 
 Return one file's exact size and lowercase hex-encoded SHA-256 digest.
+
+"SHA-256" is a specific, standard, cryptographically strong hashing
+algorithm — recomputing it is the only way to check a digest, there
+is no shortcut, which is exactly the property that makes tampering
+with a file without changing its digest infeasible in practice.
+Reading the file in fixed-size chunks (`_HASH_CHUNK_BYTES`, above)
+rather than all at once means hashing even a very large trajectory
+file never requires holding the whole thing in memory simultaneously.
 
 **Arguments**:
 
@@ -5192,6 +5627,15 @@ def params() -> SimulationParams
 
 Reconstruct the exact validated simulation parameters.
 
+`self.parameters` is a plain, loosely typed mapping (the
+manifest's own JSON-safe form of the run's configuration); this
+rebuilds it into the fully validated `SimulationParams` the
+rest of the project actually works with, exactly as if the
+original config file were parsed again — the whole point of
+recording `parameters` in the manifest in the first place is so
+this reconstruction is possible without needing the original
+config file to still exist.
+
 <a id="fim.persistence.manifest.RunManifest.to_dict"></a>
 
 #### to\_dict
@@ -5201,6 +5645,10 @@ def to_dict() -> dict[str, object]
 ```
 
 Return a JSON-serializable manifest mapping.
+
+The inverse of `from_dict`, below: turns this dataclass into
+the exact nested plain-``dict`` shape `write_manifest` actually
+writes to `manifest.json`, and that `from_dict` reads back.
 
 <a id="fim.persistence.manifest.RunManifest.from_dict"></a>
 
@@ -5213,6 +5661,12 @@ def from_dict(cls, value: Mapping[str, Any]) -> RunManifest
 
 Validate and reconstruct a manifest mapping.
 
+The counterpart to `to_dict`, above, and to `read_manifest`,
+below: given a loosely typed JSON object exactly like the one
+`to_dict` produces (or a hand-edited or externally produced one
+with the same shape), checks every required field is present
+and well-formed and reconstructs the equivalent `RunManifest`.
+
 <a id="fim.persistence.manifest.read_manifest"></a>
 
 #### read\_manifest
@@ -5222,6 +5676,11 @@ def read_manifest(path: Path | str) -> RunManifest
 ```
 
 Read and validate one manifest JSON file.
+
+Reads the raw JSON from disk and hands it to `RunManifest.
+from_dict`, above, which does the actual field-by-field validation
+— this function's own job is only the file I/O and the top-level
+"is this even a JSON object" check.
 
 <a id="fim.persistence.manifest.write_manifest"></a>
 
@@ -5233,6 +5692,13 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None
 
 Write a manifest deterministically, replacing any prior file.
 
+"Deterministically" here means the same fixed formatting
+`fim.persistence.report.write_report` uses (sorted keys, a single
+trailing newline, `NaN`/`Infinity` rejected outright) — see that
+function's own docstring for why this matters. This is the one
+function that actually creates `manifest.json` on disk; everywhere
+else in the project works with the in-memory `RunManifest` object.
+
 <a id="fim.persistence.manifest.verify_trajectory_integrity"></a>
 
 #### verify\_trajectory\_integrity
@@ -5243,6 +5709,16 @@ def verify_trajectory_integrity(trajectory_path: Path,
 ```
 
 Refuse to analyze a trajectory that no longer matches its manifest.
+
+Called by `fim.reanalyze.reanalyze_trajectory` before it trusts
+anything else about the file: recomputes `trajectory_path`'s own
+current SHA-256 digest (via `hash_file`, above) and compares it
+against the digest the run itself recorded, in its own manifest, at
+the moment it finished writing that file durably. A mismatch means
+the file has changed in some way since — accidentally, through
+corruption, or deliberately — and this raises rather than letting
+re-analysis silently produce numbers for a file that is no longer
+what the run actually produced.
 
 Regression fix for R7 (`cli.py`'s own history, predating this
 extraction): an edited or truncated trajectory used to re-analyze
@@ -5304,6 +5780,12 @@ def replicate_count() -> int
 
 Return the number of published replicates.
 
+Every replicate in a batch shares the exact same
+`SimulationParams` except its own seed (`seed + replicate_
+index` — see `fim.model.params.SimulationParams`'s own
+docstring for why that is always non-negative); this is simply
+how many of them actually completed and were published.
+
 <a id="fim.persistence.manifest.BatchManifest.params"></a>
 
 #### params
@@ -5314,6 +5796,9 @@ def params() -> SimulationParams
 
 Reconstruct the exact validated simulation parameters.
 
+The batch-level counterpart to `RunManifest.params`, above; see
+that method's own docstring for what this reconstructs and why.
+
 <a id="fim.persistence.manifest.BatchManifest.to_dict"></a>
 
 #### to\_dict
@@ -5323,6 +5808,8 @@ def to_dict() -> dict[str, object]
 ```
 
 Return a JSON-serializable batch manifest mapping.
+
+The batch-level counterpart to `RunManifest.to_dict`, above.
 
 <a id="fim.persistence.manifest.BatchManifest.from_dict"></a>
 
@@ -5335,6 +5822,8 @@ def from_dict(cls, value: Mapping[str, Any]) -> BatchManifest
 
 Validate and reconstruct a batch manifest mapping.
 
+The batch-level counterpart to `RunManifest.from_dict`, above.
+
 <a id="fim.persistence.manifest.read_batch_manifest"></a>
 
 #### read\_batch\_manifest
@@ -5344,6 +5833,8 @@ def read_batch_manifest(path: Path | str) -> BatchManifest
 ```
 
 Read and validate one batch manifest JSON file.
+
+The batch-level counterpart to `read_manifest`, above.
 
 <a id="fim.persistence.manifest.write_batch_manifest"></a>
 
@@ -5355,11 +5846,20 @@ def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None
 
 Write a batch manifest deterministically, replacing any prior file.
 
+The batch-level counterpart to `write_manifest`, above.
+
 <a id="fim.persistence.report"></a>
 
 # fim.persistence.report
 
 Deterministic JSON writing for run-level report and summary artifacts.
+
+A run's own results — its final statistics, or a batch's across-
+replicate summary — need to end up in a `.json` file a human can open
+directly or another program can read back reliably; `write_report`,
+below, is the one function that actually writes such a file, in a
+fixed, reproducible format (see its own docstring for exactly what
+"deterministic" means here and why it matters).
 
 Extracted from `fim.cli`'s private `_write_json` (design doc
 `20260819-claude-sonnet-5-graphical-interface.md` §3.7), parallel to
@@ -5380,6 +5880,21 @@ def write_report(path: Path | str, value: Mapping[str, object]) -> None
 
 Write one JSON report artifact deterministically.
 
+"Deterministically" means the exact same bytes are written every
+time for the exact same `value`: keys are always sorted
+alphabetically (``sort_keys=True``), the file always ends with
+exactly one trailing newline, and the same 2-space indentation is
+always used — so two runs with identical results produce byte-
+identical `report.json`/`summary.json` files, letting a plain
+``diff`` (or a version-control system's own diff view) show a real
+change in results, never a spurious change caused only by dict key
+ordering or formatting differing between two writes. ``allow_nan=
+False`` additionally rejects ``NaN``/``Infinity`` outright rather
+than writing them as invalid JSON that most other tools cannot
+parse back — a real bug in the reported values should be caught
+here, not silently written to a file that then fails to load
+somewhere else.
+
 **Arguments**:
 
 - `path` - Destination file path. Parent directories are created.
@@ -5391,6 +5906,16 @@ Write one JSON report artifact deterministically.
 
 Backend-independent trajectory row schema and store protocol.
 
+`TrajectoryRow` is the one, single-observation record shape every
+persisted trajectory row uses (see `fim.model.state.ModelState.to_rows`
+for how a state turns into a batch of these), and `TrajectoryStore` is
+the shared interface both `fim.persistence.jsonl_store.
+JSONLTrajectoryStore` (the real, file-backed store) and
+`InMemoryTrajectoryStore`, below (a lighter-weight stand-in for
+library calls and tests that never need an actual file), implement —
+so `fim.engine`'s run loop can write to either without knowing which
+one it actually has.
+
 <a id="fim.persistence.store.TrajectoryRow"></a>
 
 ## TrajectoryRow Objects
@@ -5401,6 +5926,15 @@ class TrajectoryRow(TypedDict)
 
 One nonzero allele-frequency observation.
 
+One row means one specific allele, at one specific locus, in one
+specific deme, at one specific generation, had a nonzero frequency
+— an allele that is entirely absent from a given deme/locus/
+generation simply has no row at all (see `fim.model.state.
+ModelState`'s own docstring for why this sparse representation is
+used). `run_id`, `generation`, `deme`, and `locus_id` together
+identify *which* observation this is; `allele_id` and `frequency`
+are the observation itself.
+
 <a id="fim.persistence.store.TrajectoryStore"></a>
 
 ## TrajectoryStore Objects
@@ -5410,6 +5944,12 @@ class TrajectoryStore(Protocol)
 ```
 
 Incrementally persist and iterate long-form trajectory rows.
+
+A "protocol" here means any object with these two methods — this
+class is never instantiated itself; both `InMemoryTrajectoryStore`,
+below, and `fim.persistence.jsonl_store.JSONLTrajectoryStore`
+satisfy it, so a caller can be written against this one shared
+interface regardless of which concrete store it is actually given.
 
 <a id="fim.persistence.store.TrajectoryStore.write_generation"></a>
 
@@ -5441,6 +5981,13 @@ class InMemoryTrajectoryStore()
 ```
 
 Store trajectories in memory for library calls and focused tests.
+
+Implements the same `TrajectoryStore` protocol as `fim.persistence.
+jsonl_store.JSONLTrajectoryStore`, but keeps every row in an
+ordinary Python list rather than writing to a file — used whenever
+a caller (a unit test, or a library user who only wants the final
+result and does not care about a persisted trajectory file) has no
+need to actually write anything to disk.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__init__"></a>
 
@@ -5485,6 +6032,18 @@ def normalize_row(row: Mapping[str, Any],
 ```
 
 Validate and normalize one public-schema trajectory row.
+
+"Public schema" means this is the one row shape a trajectory file
+is allowed to contain — exactly the six `TrajectoryRow` fields,
+nothing missing and nothing extra — so a hand-edited or externally
+produced row is checked against the identical rules a row
+generated by the simulator itself already satisfies. When `run_id`
+and/or `generation` are supplied, the row's own values for those
+fields are additionally cross-checked against them (used by
+`write_generation`, below, and by `fim.persistence.jsonl_store.
+JSONLTrajectoryStore.write_generation`, to catch a row that claims
+to belong to a different run or generation than the batch it was
+handed in).
 
 **Arguments**:
 

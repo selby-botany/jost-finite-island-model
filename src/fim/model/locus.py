@@ -1,4 +1,12 @@
-"""Locus metadata used by a simulation."""
+"""Locus metadata used by a simulation.
+
+A "locus" is one specific position (or short stretch) in the genome
+being tracked — the simulation can watch several loci at once, each
+with its own independent set of alleles and its own history, and
+`LocusSpec` is the small, fixed description of one such locus: which
+one it is (`locus_id`) and how long a DNA sequence it covers
+(`length`).
+"""
 
 from __future__ import annotations
 
