@@ -1066,6 +1066,23 @@ are on the table.
 G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1}
 ```
 
+The `(d/(d-1))²` factor multiplying the migration term is the
+finite-number-of-demes correction from Crow & Aoki (1984) — see
+Appendix D — confirmed directly against their Eq. 7/Eq. 8
+(`G_ST ≈ 1/(4Nmα+1)`, `α = [n/(n-1)]²`, their `n` this document's `d`),
+not to this paper or to Wright's own original (infinite-island)
+derivation; it vanishes as `d → ∞`, recovering Wright's classical
+`1/(4Nm+1)`, exactly as Crow & Aoki's own paper notes. One boundary of
+that attribution worth being precise about: Crow & Aoki's own Eq. 7
+carries **no mutation term at all** — dropping it entirely is the
+"pleasing result" their own paper highlights, valid under their stated
+`μ ≪ m, 1/N ≪ 1` approximation. The `(d/(d-1))·4Nμ` mutation term
+above is this project's own retention of a term Crow & Aoki chose to
+drop, not something their paper itself provides; Crow & Aoki's own
+references (their eq. 6, with mutation retained) instead credit
+Takahata (1983) for the general finite-`K`-allele solution and Nei's
+1975 textbook for an exact infinite-allele solution — see Appendix D.
+
 When m \gg μ — the usual case for slowly mutating loci — the
 4Nμ term is negligible and this collapses to a function of **Nm**
 and **d** alone:
@@ -1692,6 +1709,19 @@ listed with full citation details for lookup.
   106(949):283–292.
 - Nei M (1973). Analysis of gene diversity in subdivided populations.
   *Proceedings of the National Academy of Sciences* 70(12):3321–3323.
+- Crow JF, Aoki K (1984). Group selection for a polygenic behavioral trait:
+  estimating the degree of population subdivision. *Proceedings of the
+  National Academy of Sciences* 81(19):6073–6077. Confirmed directly
+  (full text) as the source of the finite-deme `(d/(d-1))²` migration-term
+  correction Part VI's Eq. 2 and Appendix A carry — added here because
+  those sections previously stated the correction with no attribution at
+  all. Their own Eq. 7 has no mutation term; see Part VI for the
+  distinction from this document's own Eq. 2.
+- Takahata N (1983). Gene identity and genetic differentiation of
+  populations in the finite island model. *Genetics* 104(3):497–512.
+  Cited by Crow & Aoki (1984) as the source of the general
+  finite-`K`-allele solution (their eq. 6) their own Eq. 7 simplifies by
+  dropping the mutation term — not independently verified here.
 - Weir BS, Cockerham CC (1984). Estimating `F`-statistics for the analysis of
   population structure. *Evolution* 38(6):1358–1370.
 

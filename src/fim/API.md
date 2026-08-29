@@ -6684,6 +6684,18 @@ have (see `g_st`'s own docstring): a statistic sensitive to
 demography (population size and migration), essentially independent
 of the mutation rate, unlike `D`.
 
+The `(d/(d-1))**2` finite-deme correction multiplying the migration
+term below is not this project's own invention or specific to Jost
+et al. (2018) — confirmed directly against Crow & Aoki (1984)'s own
+Eq. 7/Eq. 8, `G_ST ~= 1/(4Nm*alpha+1)`, `alpha = [n/(n-1)]**2` (see
+the differentiation-measures guide's own Part VI and Appendix D for
+the citation, added there because earlier revisions of this project
+stated the correction with no attribution at all). Crow & Aoki's own
+equation has no mutation term at all — the `mu` term below is this
+project's own retention of a term they deliberately dropped as
+negligible under their stated approximation regime, not something
+their paper itself provides; see Part VI for the fuller distinction.
+
 The source formula uses ``4 * N_individuals`` for diploids (each
 individual carries two gene copies). This application defines ``N``
 as the number of gene copies directly, not individuals, so both
