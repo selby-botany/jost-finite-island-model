@@ -1046,9 +1046,12 @@ loci spanning many base pairs); reproduction resamples **2N** copies from
 the local post-migration pool, which is where drift enters.
 
 "Finite" is not decoration. Wright's original *infinite* island model
-draws migrants from an infinitely large external reservoir that never
-itself drifts, which is what makes the classical closed-form F<sub>ST</sub>
-equilibrium easy to write down. The finite version removes that fiction:
+(Wright, 1931 — see Appendix D; Whitlock & McCauley, 1999, credit this
+specific paper, not the more commonly cited Wright 1943 "isolation by
+distance," as the origin of both the island model itself and
+`F_ST ≈ 1/(4Nm+1)`) draws migrants from an infinitely large external
+reservoir that never itself drifts, which is what makes the classical
+closed-form F<sub>ST</sub> equilibrium easy to write down. The finite version removes that fiction:
 there are only **d** demes and no reservoir, so migrants come from the
 actual, currently-drifting other demes, and the whole metapopulation is a
 closed finite system that drifts as a whole. The system settles into a
@@ -1696,6 +1699,13 @@ listed with full citation details for lookup.
 
 ### Classical sources for the fixation family
 
+- Wright S (1931). Evolution in Mendelian populations. *Genetics*
+  16(2):97–159. The island model and `F_ST ≈ 1/(4Nm+1)` itself — per
+  Whitlock & McCauley (1999) below, not the more commonly cited Wright
+  1943 paper (a different contribution, on isolation by distance). Added
+  here because this document referenced "Wright's original infinite
+  island model" without it; not independently verified against Wright's
+  own 1931 text, only against Whitlock & McCauley's account of it.
 - Wright S (1943). Isolation by distance. *Genetics* 28(2):114.
 - Wright S (1965). The interpretation of population structure by `F`-statistics
   with special regard to systems of mating. *Evolution* 19(3):395–420.
