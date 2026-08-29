@@ -676,6 +676,78 @@ def test_identity_recursion_oracle_matches_formula_and_published(
     assert oracle_d == pytest.approx(published_d, abs=0.02)
 
 
+def test_identity_recursion_d_and_g_st_are_non_increasing_in_migration() -> None:
+    """The exact finite-N oracle's D and G_ST never rise as migration rises.
+
+    Same underlying claim as `test-manifest.yaml`'s own `M1`-`M5`
+    migration panel (same `N`, `mu`, `d`, and even the same five `m`
+    values), but checked against this module's own exact identity-
+    recursion oracle (`_identity_fixed_point`) rather than a chain of
+    single-seeded `fim()` engine runs compared with a fixed `1e-9`
+    tolerance. That design cannot be ported as specified: it compares
+    single stochastic realizations, not expectations, and gives each
+    of the five runs its own independent convergence horizon (see the
+    metamorphic-panel-investigation design doc for the full argument).
+    The oracle used here has neither problem — it is iterated to its
+    own exact fixed point every time, with no seed and no replicate
+    count involved, so this assertion can never flake — while still
+    being *stronger* than a check on the closed-form diffusion
+    approximation alone (`equilibrium_d`/`equilibrium_g_st`, checked
+    separately in `test/statistics/test_properties.py`): this is the
+    finite-N truth those formulas are themselves only shown (just
+    above, `_ONE_OVER_N_TOL`) to approximate.
+    """
+    population_size = 100
+    mu = 0.001
+    d = 4
+    m_values = (0.0, 0.0001, 0.001, 0.01, 0.1)
+
+    g_st_values = []
+    d_values = []
+    for m in m_values:
+        within_star, between_star = _identity_fixed_point(
+            population_size=population_size, m=m, mu=mu, d=d
+        )
+        g_st, jost_d_value = _identities_to_statistics(within_star, between_star, d)
+        g_st_values.append(g_st)
+        d_values.append(jost_d_value)
+
+    assert g_st_values == sorted(g_st_values, reverse=True)
+    assert d_values == sorted(d_values, reverse=True)
+
+
+def test_identity_recursion_d_and_g_st_move_opposite_ways_in_mutation() -> None:
+    """The exact finite-N oracle's D rises and G_ST falls as mutation rises.
+
+    The deterministic-oracle counterpart to the migration test above,
+    for `test-manifest.yaml`'s own `MU1`-`MU5` mutation panel (same
+    `N`, `m`, `d`, and the same five `mu` values) — which itself never
+    asserted a direction at all, only "is finite" at each step. The
+    direction actually implied by the model (Part VI's own headline
+    point, "Why this kills the standard inference") is that `D` and
+    `G_ST` move opposite ways as mutation rate rises, checked here
+    exactly, with the same non-flaking, no-seed, no-calibration
+    oracle as the migration test above.
+    """
+    population_size = 100
+    m = 0.01
+    d = 4
+    mu_values = (0.0, 0.000001, 0.0001, 0.001, 0.01)
+
+    g_st_values = []
+    d_values = []
+    for mu in mu_values:
+        within_star, between_star = _identity_fixed_point(
+            population_size=population_size, m=m, mu=mu, d=d
+        )
+        g_st, jost_d_value = _identities_to_statistics(within_star, between_star, d)
+        g_st_values.append(g_st)
+        d_values.append(jost_d_value)
+
+    assert d_values == sorted(d_values)
+    assert g_st_values == sorted(g_st_values, reverse=True)
+
+
 @pytest.mark.slow
 @pytest.mark.statistical
 def test_engine_reproduces_part_vi_equilibrium() -> None:

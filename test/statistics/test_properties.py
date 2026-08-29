@@ -6,6 +6,8 @@ from hypothesis import strategies as st
 
 from fim.statistics import (
     e_st,
+    equilibrium_d,
+    equilibrium_g_st,
     g_st,
     h_s,
     h_st,
@@ -158,3 +160,74 @@ def test_differentiation_statistics_are_invariant_to_allele_relabeling(
     assert e_st(relabeled) == e_st(table)
     assert k_st(relabeled) == k_st(table)
     assert g_st(relabeled) == g_st(table)
+
+
+@given(
+    d=st.integers(min_value=2, max_value=50),
+    mu=st.floats(min_value=1e-6, max_value=1.0, allow_nan=False),
+    m_values=st.lists(
+        st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
+        min_size=2,
+        max_size=2,
+    ),
+)
+def test_equilibrium_d_and_g_st_are_non_increasing_in_migration(
+    d: int,
+    mu: float,
+    m_values: list[float],
+) -> None:
+    """More migration never raises equilibrium D or G_ST (fixed mu, d).
+
+    Direct, exact-algebra check of Part VI's own "Equilibrium D" and
+    "Equilibrium GST" sections: both closed forms are monotonic
+    non-increasing functions of `m` alone (more migration homogenizes
+    demes, so neither differentiation measure can increase) — checked
+    here on the closed forms themselves, not a stochastic run of any
+    kind, so this can never flake and costs nothing to run. Was
+    previously untested: no monotonicity check of any kind existed
+    anywhere in this suite before this test (test-manifest.yaml's own
+    `M1`-`M5` panel proposed the same underlying claim, but as a chain
+    of single-seeded engine runs compared with a fixed `1e-9`
+    tolerance — a design this project's own determinism rule rules
+    out; see the metamorphic-panel-investigation design doc for why).
+    """
+    m_lo, m_hi = sorted(m_values)
+    population_size = 100
+
+    assert equilibrium_d(m_lo, mu, d) >= equilibrium_d(m_hi, mu, d)
+    assert equilibrium_g_st(population_size, m_lo, mu, d) >= equilibrium_g_st(
+        population_size, m_hi, mu, d
+    )
+
+
+@given(
+    d=st.integers(min_value=2, max_value=50),
+    m=st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
+    mu_values=st.lists(
+        st.floats(min_value=1e-6, max_value=1.0, allow_nan=False),
+        min_size=2,
+        max_size=2,
+    ),
+)
+def test_equilibrium_d_and_g_st_move_opposite_ways_in_mutation(
+    d: int,
+    m: float,
+    mu_values: list[float],
+) -> None:
+    """D rises and G_ST falls together as mutation rate rises (fixed m, d).
+
+    Part VI's own headline point ("Why this kills the standard
+    inference"): allelic differentiation (`D`) and nearness-to-fixation
+    (`G_ST`) respond to mutation rate in *opposite* directions — more
+    mutation drives more allelic differentiation between demes (`D`
+    rises toward 1) even as it moves every deme further from fixation
+    (`G_ST` falls). This test is the executable version of that
+    section's own prose, not a restatement of it.
+    """
+    mu_lo, mu_hi = sorted(mu_values)
+    population_size = 100
+
+    assert equilibrium_d(m, mu_lo, d) <= equilibrium_d(m, mu_hi, d)
+    assert equilibrium_g_st(population_size, m, mu_lo, d) >= equilibrium_g_st(
+        population_size, m, mu_hi, d
+    )
