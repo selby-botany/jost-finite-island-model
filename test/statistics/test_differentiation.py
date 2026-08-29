@@ -231,6 +231,83 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "only defined"):
             differentiation_q([{0: 1.0}, {0: 1.0}], 2, [1, 1])
 
+    def test_two_deme_two_allele_special_case_matches_the_guide(self) -> None:
+        """Part VII's "two demes, two alleles" table, by hand from the guide.
+
+        `doc/jost-differentiation-measures.md` Part VII walks through this
+        exact four-row table as the one regime where G_ST and D "largely
+        evaporate" into agreement; unlike Part IV's own worked examples
+        (`test_golden_statistics`, above), no existing fixture covers it.
+        The G_ST/D values below are the guide's own printed numbers; E_ST
+        and K_ST are not printed there but are asserted anyway since they
+        are cheap to also pin down exactly at this small a table.
+        """
+        cases = (
+            ("both demes fixed, different alleles", [{0: 1.0}, {1: 1.0}], 1.0, 1.0),
+            (
+                "identical frequencies, not both fixed",
+                [{0: 0.5, 1: 0.5}, {0: 0.5, 1: 0.5}],
+                0.0,
+                0.0,
+            ),
+            (
+                "one deme 50/50, the other fixed",
+                [{0: 0.5, 1: 0.5}, {0: 1.0}],
+                1 / 3,
+                1 / 3,
+            ),
+            ("both demes fixed for the same allele", [{0: 1.0}, {0: 1.0}], None, 0.0),
+        )
+        for description, table, expected_g_st, expected_d in cases:
+            with self.subTest(description=description):
+                report = statistics_report(table)
+                actual_g_st = report["G_ST"]
+                if expected_g_st is None or actual_g_st is None:
+                    self.assertIsNone(actual_g_st)
+                    self.assertIsNone(expected_g_st)
+                else:
+                    self.assertAlmostEqual(actual_g_st, expected_g_st, places=6)
+                self.assertAlmostEqual(report["D"], expected_d, places=6)
+
+    def test_duplicate_canonical_allele_id_is_rejected(self) -> None:
+        """Two distinct dict keys that normalize to the same id collide.
+
+        `_validate_deme` canonicalizes every allele id through
+        `operator.index` before checking for duplicates, so triggering the
+        duplicate check needs two dict keys that are genuinely distinct
+        Python objects (different identity, not `==` to each other, so both
+        survive as separate entries in the same dict) yet resolve to the
+        same integer identity through `__index__` — an ordinary `int` key
+        can never collide with itself this way, which is why this path has
+        no other test.
+        """
+
+        class _AlwaysIndexesToOne:
+            def __index__(self) -> int:
+                return 1
+
+        with self.assertRaisesRegex(ValueError, "duplicate allele ID"):
+            h_s([{1: 0.5, _AlwaysIndexesToOne(): 0.5}])
+
+    def test_within_hill_number_order_one_is_the_alpha_entropy_exponential(
+        self,
+    ) -> None:
+        """q=1 within-deme ("alpha") Hill diversity is exp of mean entropy.
+
+        `_hill`'s own docstring: order=0 and order=2 are both limiting cases
+        computed via their own closed forms, handled separately from the
+        general power-sum formula; `within_hill_number` mirrors that same
+        three-way split, but only its order 0 and order 2 branches were
+        previously exercised (`test_weighted_heterozygosity_and_hill_numbers_
+        use_weights`, `test_differentiation_endpoints_and_hill_partition`).
+        Chosen so the expected value has a clean closed form: with equal
+        deme weights, one deme fixed (entropy 0) and one deme an even
+        two-allele split (entropy ln 2), the weighted mean entropy is
+        (ln 2)/2, and exp((ln 2)/2) = sqrt(2) exactly.
+        """
+        table = [{0: 0.5, 1: 0.5}, {0: 1.0}]
+        self.assertAlmostEqual(within_hill_number(table, 1), math.sqrt(2))
+
     def test_equilibrium_formulas_validate_inputs_and_zero_mutation(self) -> None:
         """Equilibrium helpers expose exact parameter and zero-mutation contracts."""
         self.assertAlmostEqual(equilibrium_d(0.1, 0.01, 3), 1 / 6)

@@ -28,6 +28,22 @@ def test_dear_nolan_scenarios_match_published_approximations(
     assert equilibrium_d(m, mu, d) == pytest.approx(expected_d, abs=0.015)
 
 
+def test_part_iv_dynamic_example_matches_the_guide() -> None:
+    """The Part IV "dynamic example" bottleneck scenario, both endpoints.
+
+    `doc/jost-differentiation-measures.md` Part IV: a 100-deme population
+    (`d = 100`) recovers from a bottleneck to `N = 10,000` diploid
+    individuals each (20,000 gene copies) with `mu = 0.001` and zero
+    migration. The guide's own equilibrium numbers: `D -> 1.00 "exactly"`
+    (quoting Part VI's own worked sanity check, "with no migration
+    (m = 0), D = 1") and `G_ST -> 1/41.4 ~= 0.0242`.
+    """
+    assert equilibrium_d(0.0, 0.001, 100) == 1.0
+    assert equilibrium_g_st(20_000, 0.0, 0.001, 100) == pytest.approx(
+        0.0242, abs=0.0005
+    )
+
+
 def test_gene_copy_convention_uses_two_n_not_four_n() -> None:
     """Haploid N=100 plugs in directly without a ploidy conversion."""
     observed = equilibrium_g_st(100, 0.0001, 0.000001, 5)
