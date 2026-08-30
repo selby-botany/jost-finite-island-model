@@ -245,6 +245,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [total\_hill\_number](#fim.statistics.differentiation.total_hill_number)
   * [within\_hill\_number](#fim.statistics.differentiation.within_hill_number)
   * [g\_st](#fim.statistics.differentiation.g_st)
+  * [d\_m](#fim.statistics.differentiation.d_m)
+  * [r\_st](#fim.statistics.differentiation.r_st)
+  * [g\_st\_log](#fim.statistics.differentiation.g_st_log)
   * [jost\_d](#fim.statistics.differentiation.jost_d)
   * [e\_st](#fim.statistics.differentiation.e_st)
   * [k\_st](#fim.statistics.differentiation.k_st)
@@ -6525,6 +6528,102 @@ when `H_T` is exactly zero — every deme is fixed for the identical
 single allele, so there is no variation anywhere to measure a
 *fraction* of at all, not even zero; `None` here is the honest
 answer, not a fabricated `0.0` or `1.0`.
+
+<a id="fim.statistics.differentiation.d_m"></a>
+
+#### d\_m
+
+```python
+def d_m(table: FrequencyTable) -> float
+```
+
+Return Nei's mean pairwise between-deme gene diversity ``D_m``.
+
+"How much do a typical *pair* of demes actually differ, in absolute
+terms" (Nei 1973, Eq. 10) — unlike every other between-deme measure
+in this module, `D_m` is deliberately **not** rescaled to `[0, 1]`;
+it is expressed in the same units as heterozygosity itself, so it
+stays comparable across populations with very different within-deme
+diversity (`H_S`) — the exact comparison `g_st` cannot make, since
+`G_ST` can be "very large even if the absolute gene differentiation
+is small" whenever `H_S` happens to be small (Nei's own words). It is
+`H_T - H_S` — Nei's Eq. 7 `D_ST`, the *simple* difference, not the
+subadditivity-corrected `h_st` this module also exposes — rescaled
+by `d / (d - 1)` to average only over *distinct* pairs of demes,
+excluding the `d` "compare a deme to itself" terms Eq. 7's own
+average silently includes. `H_T <= 1` and `H_S >= 0` give a loose
+universal ceiling of `d/(d-1)`, but that ceiling is not reached in
+practice: at `H_S = 0` (every deme fixed for a single allele, the
+only way to reach zero within-deme diversity at all), `H_T` itself
+tops out at exactly `(d-1)/d` — pooling `d` equally weighted, all-
+distinct point masses is the most spread-out a `d`-outcome
+distribution can be — so `D_m` reaches exactly `1` there, for any
+`d`, not `d/(d-1)`. Like `jost_d`, this follows Nei's own derivation
+in assuming equal deme weights throughout (Eq. 4's `w_i = 1/s`);
+there is no `deme_weights` parameter here for the same reason
+`jost_d` has none.
+
+<a id="fim.statistics.differentiation.r_st"></a>
+
+#### r\_st
+
+```python
+def r_st(table: FrequencyTable) -> float | None
+```
+
+Return ``D_m`` relative to within-deme diversity, or ``None``.
+
+Nei's Eq. 11: `D_m / H_S` — the same absolute between-deme diversity
+`d_m` computes, this time expressed *relative to* how much diversity
+a typical deme holds internally, so it can answer "how big is the
+between-deme signal compared to the within-deme noise" without
+`G_ST`'s own denominator (`H_T`, which already includes the between-
+deme signal itself). Undefined, and returned as `None` rather than a
+fabricated `inf`, when `H_S` is exactly zero — every deme
+individually fixed for a single allele, with no within-deme
+diversity to express the between-deme diversity relative to at all;
+the same honest-`None` convention `g_st` already uses for its own,
+structurally identical zero-denominator case.
+
+<a id="fim.statistics.differentiation.g_st_log"></a>
+
+#### g\_st\_log
+
+```python
+def g_st_log(table: FrequencyTable,
+             deme_weights: DemeWeights = None) -> float | None
+```
+
+Return Nei's log-based large-differentiation ``G_ST`` estimator.
+
+Nei (1973)'s closing discussion, verbatim: "a better estimate of
+`G_ST` may be obtained by `-log_e(J_T/J_S) / [-log_e(J_T)]`" — offered
+as a replacement for ordinary `g_st` specifically when
+differentiation is large (subspecies-level) and `J_T` (`= 1 - H_T`)
+is much smaller than `J_S` (`= 1 - H_S`), the regime in which linear
+`g_st` saturates toward 1 and stops discriminating well between
+"very differentiated" and "almost completely fixed apart." The paper
+gives this estimator no name or equation number of its own.
+
+Rigorously bounded in `[0, 1]`, exactly like `g_st` — provably, not
+just empirically, from the same two facts `g_st` already relies on
+(`H_S <= H_T` always, since pooling can only add variation; both are
+probabilities). Writing the formula as
+`1 + ln(J_S) / (-ln(J_T))`: `J_S <= 1` makes `ln(J_S) <= 0`, so the
+second term is never positive, giving the `<= 1` bound; `J_S >= J_T`
+(from `H_S <= H_T`) makes `ln(J_S) >= ln(J_T)`, so the second term is
+never below `ln(J_T)/(-ln(J_T)) = -1`, giving the `>= 0` bound. See
+`dev/doc/apps/selby/jost-finite-island-model/20260830-claude-sonnet-
+5-nei-1973-gene-diversity-test-plan.md` in the `1121-citrus` project
+for the full derivation this docstring summarizes.
+
+Undefined, and returned as `None` rather than a fabricated value, in
+the same spirit as `g_st`'s own `None` case: when `H_T` is exactly
+zero (complete fixation on the identical allele everywhere — no
+variation anywhere to measure a fraction of, `g_st`'s own case
+exactly), or when `H_S` is exactly one (`J_S = 0`, `ln(J_S)`
+undefined — every deme individually has zero chance that two
+randomly drawn gene copies match).
 
 <a id="fim.statistics.differentiation.jost_d"></a>
 
