@@ -1,35 +1,37 @@
-"""Engine-level validation of scientific behavior against the design oracle.
+"""Engine-level validation of scientific behavior, plus the internal oracle.
 
-Scope against definition-of-done item 4 and test-plan sections 7.3-7.4. These
-tests run the real :func:`fim.engine.fim` simulator (not the closed-form
-formulas) and check its emitted differentiation statistics:
+Scope against definition-of-done item 4 and test-plan sections 7.3-7.4.
 
-* Part VI equilibrium (test-plan 7.3): the engine is integrated to equilibrium
-  and its pooled ``G_ST`` and ``D`` land in a derived band around the exact
-  finite-``N`` recursion (which itself bridges to the diffusion formulas).
-* Dear-Nolan high migration (``N=2000, d=100, m=0.01, mu=0.001``; published
-  ``G_ST ~= 0.02``, ``D ~= 0.90/0.91``): the engine DIRECTLY reproduces BOTH
-  published values. It is started from a *derived* near-equilibrium state (see
-  :func:`_dn2_equilibrium_start`) and shown to hold the published equilibrium,
-  a stationarity check a biased operator would fail.
-* Dear-Nolan low migration (``N=100, d=5, m=0.0001, mu=0.000001``; published
-  ``G_ST ~= 0.97``, ``D ~= 0.04``): the engine DIRECTLY reproduces BOTH
-  published values. It starts from a derived 26-locus ensemble (see
-  :func:`_dn1_equilibrium_start`) whose pooled identities approximate the
-  recursion fixed point at the available locus resolution, then holds the
-  published equilibrium.
+This file mixes two kinds of test, deliberately labeled rather than
+separated into different files (see `doc/fim-simulator-functional-api.md`
+and `doc/fim-simulator-detailed-test-plan.md` for the full three-way
+taxonomy this project uses -- fim functional, fim-gui functional, and
+internal/deep):
 
-Two oracles are used, both derived from first principles rather than fitted to
-the simulator:
-
-* The closed-form diffusion equilibria ``equilibrium_g_st`` / ``equilibrium_d``
-  (documentation Eq. 2 / Eq. 4). These are ``O(1/N)`` approximations.
-* An exact per-generation identity recursion for the engine's own
-  Migrate -> Mutate -> Drift pipeline (:func:`_pipeline_identity_dynamics`,
-  built on :func:`_iterate_identities`). This is the finite-``N`` expectation
-  of the very quantities the simulator samples, so it is the correct center for
-  a seeded many-replicate band, it supplies the fixed point used to build the
-  equilibrium starts.
+* **Functional** tests run the real :func:`fim.engine.fim` simulator and
+  assert its output directly against a published literature value or a
+  public closed-form formula (``equilibrium_g_st``/``equilibrium_d`` and
+  siblings, in `fim.statistics`) -- nothing in the assertion itself
+  depends on any detail of the engine's current internal pipeline, so
+  these assertions are expected to keep passing after a future core
+  refactor that preserves the model's own scientific behavior. Each
+  such test's own docstring says "**Functional**" explicitly.
+* **Internal** tests and helpers assume today's specific Migrate ->
+  Mutate -> Drift pipeline order: the exact per-generation identity
+  recursion (:func:`_iterate_identities` and everything built on it --
+  :func:`_pipeline_identity_dynamics`, :func:`_identity_fixed_point`,
+  :func:`_iterate_pairwise_identities`, :func:`_pairwise_identity_fixed_
+  point`) mirrors the engine's own current mechanics deliberately, so it
+  can validate them precisely -- but that same specificity means these
+  checks are expected to need re-deriving, not necessarily to signal an
+  engine regression, once a future core refactor changes that internal
+  order. Two of the five engine-level scenario tests (Dear-Nolan-high;
+  see its own docstring) keep one internal, implementation-coupled
+  assertion deliberately alongside a functional one, since it catches a
+  regression class (a biased operator drifting away from a known fixed
+  point) the functional check alone would not; every such assertion is
+  labeled `# INTERNAL:` in place, distinct from the `# FUNCTIONAL:`
+  assertions beside it.
 
 Tolerance bands are derived analytically before any seed is chosen: each band
 is ``k`` standard errors wide (``k = 5``), with the per-replicate spread taken
@@ -38,22 +40,20 @@ from an independent characterization pass and rounded up conservatively (the
 bit-reproducible; the bands document the scientific margin, they are not tuned
 to a particular realized draw.
 
-The characterization pass behind every ``_SIGMA_*`` constant is versioned
-(R18, ``doc/dev/20260818-claude-opus-5-project-review-rollup.md``, not
-committed -- gitignored review material): the program is
-:mod:`dev/bin/calibrate-statistical-bands`, and its raw output, seeds, and
-environment fingerprint are retained in
-``test/validation/statistical-calibration-evidence.json``, not merely summarized here in
-a comment. An analytic bound was considered and is not currently available
-(see that document's "Analytic bound" section) -- the per-replicate
-``G_ST``/``D`` estimate is a ratio-of-means statistic sampled from a
-multi-generation stochastic recursion, and a closed-form variance would
-need delta-method propagation through that recursion's higher moments,
-which has not been derived. Re-run the calibration script (never hand-edit
-the constants) if a scenario's configuration changes enough that its
-characterized spread might no longer be current; deliberately not wired
-into ``build`` or ``ci.yml`` -- a characterization pass is itself
-stochastic by design, so it stays out of the deterministic PR gate.
+The characterization pass behind every ``_SIGMA_*`` constant is versioned: the
+program is :mod:`dev/bin/calibrate-statistical-bands`, and its raw output,
+seeds, and environment fingerprint are retained in
+``test/validation/statistical-calibration-evidence.json``, not merely
+summarized here in a comment. An analytic bound was considered and is not
+currently available -- the per-replicate ``G_ST``/``D`` estimate is a
+ratio-of-means statistic sampled from a multi-generation stochastic
+recursion, and a closed-form variance would need delta-method propagation
+through that recursion's higher moments, which has not been derived. Re-run
+the calibration script (never hand-edit the constants) if a scenario's
+configuration changes enough that its characterized spread might no longer
+be current; deliberately not wired into ``build`` or ``ci.yml`` -- a
+characterization pass is itself stochastic by design, so it stays out of the
+deterministic PR gate.
 """
 
 from __future__ import annotations
@@ -1483,10 +1483,23 @@ def test_identity_recursion_d_and_g_st_move_opposite_ways_in_mutation() -> None:
 def test_engine_reproduces_part_vi_equilibrium() -> None:
     """The simulator approaches the Part VI equilibrium (test-plan 7.3).
 
-    Runs the real engine to equilibrium for a general moderate-migration case
-    (``N=100, m=0.01, mu=0.005, d=4``) and checks the pooled ``G_ST`` and ``D``
-    against the exact finite-``N`` recursion, which in turn is shown to bridge
-    to the diffusion formulas Eq. 2 / Eq. 4 within the ``O(1/N)`` residual.
+    **Functional (public-API-only):** runs the real engine to equilibrium
+    for a general moderate-migration case (``N=100, m=0.01, mu=0.005,
+    d=4``) and checks the pooled ``G_ST``/``D`` directly against the
+    public closed-form diffusion formulas (``equilibrium_g_st``/
+    ``equilibrium_d``, Eq. 2 / Eq. 4) -- no dependence on this file's own
+    internal-recursion oracle (`_pipeline_identity_dynamics` and its
+    siblings) or on any detail of the engine's current internal pipeline
+    order, so this assertion's validity survives a future core refactor
+    that preserves the model's own scientific behavior. The tolerance
+    combines two already-established, independently-derived error
+    sources by the triangle inequality rather than a new one picked to
+    make this specific comparison pass: the statistical replicate band
+    (`_band`, from the versioned characterization pass) plus the
+    diffusion-formula's own `O(1/N)` residual (`_ONE_OVER_N_TOL`, itself
+    already validated against this same file's internal-recursion oracle
+    elsewhere -- see `_ONE_OVER_N_TOL`'s own module-level comment, and
+    `test_identity_recursion_oracle_matches_formula_and_published`).
 
     Configuration: 8 loci, 6 replicates, horizon 1000 generations (the
     between-deme identity equilibrates by ~500), base seed 707000. Runtime is
@@ -1509,25 +1522,14 @@ def test_engine_reproduces_part_vi_equilibrium() -> None:
     mean_g = statistics.fmean(g_values)
     mean_d = statistics.fmean(d_values)
 
-    oracle_g_st, oracle_d = _pipeline_identity_dynamics(
-        population_size=100,
-        m=0.01,
-        mu=0.005,
-        d=4,
-        within_identity=1.0,
-        between_identity=0.0,
-        generations=None,
+    assert mean_g == pytest.approx(
+        equilibrium_g_st(100, 0.01, 0.005, 4),
+        abs=_band(_SIGMA_PART_VI_G, replicates) + _ONE_OVER_N_TOL,
     )
-
-    # The finite-N oracle itself approaches Eq. 2 / Eq. 4 (test-plan 7.3).
-    assert oracle_g_st == pytest.approx(
-        equilibrium_g_st(100, 0.01, 0.005, 4), abs=_ONE_OVER_N_TOL
+    assert mean_d == pytest.approx(
+        equilibrium_d(0.01, 0.005, 4),
+        abs=_band(_SIGMA_PART_VI_D, replicates) + _ONE_OVER_N_TOL,
     )
-    assert oracle_d == pytest.approx(equilibrium_d(0.01, 0.005, 4), abs=_ONE_OVER_N_TOL)
-
-    # The simulator output lands inside the derived band around the oracle.
-    assert mean_g == pytest.approx(oracle_g_st, abs=_band(_SIGMA_PART_VI_G, replicates))
-    assert mean_d == pytest.approx(oracle_d, abs=_band(_SIGMA_PART_VI_D, replicates))
 
 
 @pytest.mark.slow
@@ -1535,14 +1537,22 @@ def test_engine_reproduces_part_vi_equilibrium() -> None:
 def test_dear_nolan_low_migration_scenario_via_engine() -> None:
     """The simulator reproduces both low-migration Dear-Nolan values (7.4).
 
-    Scenario: ``N=100, d=5, m=0.0001, mu=0.000001`` (published ``G_ST ~= 0.97,
-    D ~= 0.04``). Configuration: 26 loci, 12 replicates, horizon 100, base seed
-    884000, and a derived equilibrium start whose pooled identities approximate
-    the recursion fixed point. Runtime is about 12 seconds.
+    **Functional (public-API-only):** scenario ``N=100, d=5, m=0.0001,
+    mu=0.000001`` (published ``G_ST ~= 0.97, D ~= 0.04``). Configuration:
+    26 loci, 12 replicates, horizon 100, base seed 884000, and a derived
+    equilibrium start whose pooled identities approximate the recursion
+    fixed point. Runtime is about 12 seconds. This test's own pass/fail
+    criterion is the direct comparison against the two *published*
+    values below -- implementation-independent, and expected to survive
+    a future core refactor that preserves the model's own scientific
+    behavior. (`_identity_fixed_point`, used only to derive the warm
+    ``equilibrium_start`` state below, is test-setup convenience, not an
+    assertion: a core refactor changing internal mechanics would at
+    worst make this specific starting point a slightly less perfect
+    warm start, not invalidate the published-value comparison itself.)
 
     The multi-locus ensemble resolves a fixed point that is not representable
-    at a single locus with ``N=100``. The engine holds it, providing a
-    stationarity check that a biased operator fails.
+    at a single locus with ``N=100``.
 
     Band derivation before seed selection (versioned characterization pass
     -- module docstring, ``test/validation/statistical-calibration-evidence.json``):
@@ -1578,22 +1588,8 @@ def test_dear_nolan_low_migration_scenario_via_engine() -> None:
     mean_g = statistics.fmean(g_values)
     mean_d = statistics.fmean(d_values)
 
-    oracle_g_st, oracle_d = _pipeline_identity_dynamics(
-        population_size=100,
-        m=0.0001,
-        mu=0.000001,
-        d=d,
-        within_identity=1.0,
-        between_identity=0.0,
-        generations=None,
-    )
-
-    band_g = _band(_SIGMA_DEAR_NOLAN_LOW_G, replicates)
-    band_d = _band(_SIGMA_DEAR_NOLAN_LOW_D, replicates)
-    assert mean_g == pytest.approx(0.97, abs=band_g)
-    assert mean_d == pytest.approx(0.04, abs=band_d)
-    assert mean_g == pytest.approx(oracle_g_st, abs=band_g)
-    assert mean_d == pytest.approx(oracle_d, abs=band_d)
+    assert mean_g == pytest.approx(0.97, abs=_band(_SIGMA_DEAR_NOLAN_LOW_G, replicates))
+    assert mean_d == pytest.approx(0.04, abs=_band(_SIGMA_DEAR_NOLAN_LOW_D, replicates))
 
 
 @pytest.mark.slow
@@ -1601,16 +1597,33 @@ def test_dear_nolan_low_migration_scenario_via_engine() -> None:
 def test_dear_nolan_high_migration_scenario_via_engine() -> None:
     """The simulator reproduces the high-migration Dear-Nolan equilibrium (7.4).
 
-    Scenario: ``N=2000, d=100, m=0.01, mu=0.001`` (published ``G_ST ~= 0.02,
-    D ~= 0.90/0.91``). Forward-integrating to this equilibrium from an
-    undifferentiated start is not compute-feasible: the between-deme identity
-    relaxes over ~1800 generations while the infinite-alleles pool grows to
-    ~``10^4`` distinct ids, pushing per-generation cost past 0.4 s
-    (>13 min/replicate). Instead the engine is started from a *derived*
-    near-equilibrium state (:func:`_dn2_equilibrium_start`) and shown to HOLD
-    both published values -- a stationarity check that a biased operator (for
-    example the mutation defect regressed in ``test/model/test_operators.py``)
-    would fail by drifting away from the fixed point.
+    **Functional (public-API-only) claim:** ``N=2000, d=100, m=0.01,
+    mu=0.001`` (published ``G_ST ~= 0.02, D ~= 0.90/0.91``) -- the direct
+    comparison against these two published values, at the end of this
+    function, is this test's own implementation-independent pass/fail
+    criterion, expected to survive a future core refactor that preserves
+    the model's own scientific behavior.
+
+    **Internal (implementation-coupled) claim, kept in the same test
+    deliberately rather than deleted:** the engine, started from a
+    *derived* near-equilibrium state (:func:`_dn2_equilibrium_start`),
+    is also shown to HOLD that state -- a stationarity check that a
+    biased operator (for example the mutation defect regressed in
+    ``test/model/test_operators.py``) would fail by drifting away from
+    the fixed point, catching a class of regression the published-value
+    check alone would not (a biased operator could coincidentally still
+    land near 0.02/0.90 from a *different* starting point). This check's
+    own oracle (`_identity_fixed_point`) assumes today's specific
+    Migrate -> Mutate -> Drift pipeline order, so it is expected to need
+    re-deriving -- not necessarily to signal an engine regression -- once
+    a core refactor changes that order; see the labeled assertions below.
+
+    Forward-integrating to this equilibrium from an undifferentiated start is
+    not compute-feasible: the between-deme identity relaxes over ~1800
+    generations while the infinite-alleles pool grows to ~``10^4`` distinct
+    ids, pushing per-generation cost past 0.4 s (>13 min/replicate). Both
+    checks above therefore start from the same derived near-equilibrium
+    state rather than an undifferentiated one.
 
     Derivation (no tuning): ``(jw*, jb*)`` is the exact identity fixed point of
     the Migrate -> Mutate -> Drift recursion (:func:`_identity_fixed_point`).
@@ -1657,24 +1670,37 @@ def test_dear_nolan_high_migration_scenario_via_engine() -> None:
     mean_g = statistics.fmean(g_values)
     mean_d = statistics.fmean(d_values)
 
-    oracle_g_st, oracle_d = _identities_to_statistics(within_star, between_star, d)
+    # FUNCTIONAL: direct reproduction of BOTH published headline values --
+    # implementation-independent; this is the assertion pair that must
+    # keep passing after any future core refactor.
+    assert mean_g == pytest.approx(0.02, abs=0.005)
+    assert 0.89 <= mean_d <= 0.92
 
-    # The engine holds the exact recursion fixed point within the derived band.
+    # INTERNAL: the engine holds today's exact-recursion fixed point
+    # within the derived band -- see the docstring's own "Internal"
+    # paragraph for what this catches and why it is expected to need
+    # re-deriving, not necessarily to fail outright, after a future core
+    # refactor changes the pipeline's internal operator order.
+    oracle_g_st, oracle_d = _identities_to_statistics(within_star, between_star, d)
     assert mean_g == pytest.approx(
         oracle_g_st, abs=_band(_SIGMA_DEAR_NOLAN_HIGH_G, replicates)
     )
     assert mean_d == pytest.approx(
         oracle_d, abs=_band(_SIGMA_DEAR_NOLAN_HIGH_D, replicates)
     )
-    # Direct reproduction of BOTH published headline values.
-    assert mean_g == pytest.approx(0.02, abs=0.005)
-    assert 0.89 <= mean_d <= 0.92
 
 
 @pytest.mark.slow
 @pytest.mark.statistical
 def test_crow_aoki_torus_scenario_via_engine() -> None:
     """The simulator reproduces Crow & Aoki (1984)'s own torus G_ST (Table 1).
+
+    **Functional (public-API-only):** this test's own assertion compares
+    the engine directly against the literal published number, with no
+    internal-recursion oracle involved at all -- the cleanest of this
+    file's five engine-level scenario tests from an implementation-
+    independence standpoint (a direct consequence of the gap the next
+    paragraph describes: there was no oracle available to lean on).
 
     Scenario: a 3-by-3 toroidal stepping-stone lattice (`_crow_aoki_torus_
     matrix`), ``N=20`` gene copies, ``mu=1e-5``, migration rate ``m=0.05``
@@ -1759,6 +1785,13 @@ def test_crow_aoki_torus_scenario_via_engine() -> None:
 @pytest.mark.statistical
 def test_chao_shannon_equilibrium_scenario_via_engine() -> None:
     """The simulator reproduces Chao et al. (2015)'s equilibrium Shannon predictions.
+
+    **Functional (public-API-only):** this test's own assertions compare
+    the engine directly against `equilibrium_shannon_entropy_total`/
+    `_subpopulation`/`equilibrium_shannon_differentiation` -- public
+    closed-form formulas, not this file's own internal-recursion oracle
+    -- so, like the Crow & Aoki torus test above, this one is already
+    fully implementation-independent.
 
     Scenario: this file's own Part VI scenario (`N=100, m=0.01, mu=0.005,
     d=4`, 8 loci) -- already proven to converge `G_ST`/`D` well at
