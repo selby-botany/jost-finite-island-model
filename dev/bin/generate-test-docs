@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""Regenerate `test/TESTS.md`, the committed reference listing every test
+module, class, and test function under `test/` together with its
+docstring, from the docstrings actually written in `test/` -- the
+`test/` counterpart to `dev/bin/generate-api-docs`'s own `src/fim/
+API.md`. Never hand-edit the generated file itself.
+
+Why this exists: `doc/fim-simulator-detailed-test-plan.md` organizes and
+tabulates the test suite; the detail behind any one test -- what it
+checks, how, and why -- lives in that test's own docstring, deliberately
+not duplicated in the plan document. `test/TESTS.md` is where that
+detail becomes browsable on its own, the same way `src/fim/API.md`
+already makes every production docstring browsable without installing
+Python or opening an editor, and the same way `doc/fim-simulator-
+detailed-test-plan.md` links directly into it rather than repeating any
+one test's own explanation.
+
+How this differs from `generate-api-docs`: `src/fim/` is a real Python
+package (every directory has an `__init__.py`), so `pydoc-markdown` can
+resolve a fully dotted module name (`fim.model.params`) directly. Most
+of `test/` is not a package this way (only `test/gui/` happens to carry
+an empty `__init__.py`) -- confirmed the hard way, `pydoc-markdown`'s own
+`find_module` raised `ImportError` on a dotted `test.model.test_allele`
+name, unlike Python's own `importlib`, which would have resolved it as a
+namespace package. This script works around that by treating each test
+directory as its own self-contained search path (`-I test/<group>`) and
+each file within it by its own bare filename (`-m test_allele`) -- one
+`pydoc-markdown` invocation per file, never a package-qualified one --
+then re-qualifies every heading and anchor it produces with that
+directory's own name before combining every group's output into one
+document, both for organization and because two directories genuinely
+do contain a same-named file (`test/gui/test_store.py` and `test/
+persistence/test_store.py`) that would otherwise collide.
+
+Usage:
+    dev/bin/generate-test-docs [OUTPUT_PATH]
+
+Arguments:
+    OUTPUT_PATH   Where to write the generated Markdown file.
+                  Default: test/TESTS.md (the file actually committed to
+                  the repository).
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[2]
+_TEST_ROOT = _ROOT / "test"
+_DEFAULT_OUTPUT = _TEST_ROOT / "TESTS.md"
+
+# Every documented group, in the order they appear in the generated
+# file -- `""` is the synthetic group for files directly under `test/`
+# itself (`conftest.py`, the top-level `test_*.py` files), labeled
+# `test` in the generated output; every other entry is a real
+# subdirectory name, unchanged.
+_GROUPS: tuple[str, ...] = (
+    "",
+    "cli",
+    "convergence",
+    "engine",
+    "gui",
+    "model",
+    "persistence",
+    "statistics",
+    "validation",
+    "viz",
+)
+
+
+def _group_directory(group: str) -> Path:
+    """Return the directory a group's own files live in."""
+    return _TEST_ROOT / group if group else _TEST_ROOT
+
+
+def _group_label(group: str) -> str:
+    """Return the qualifier prefixed onto that group's own anchors/headings."""
+    return group or "test"
+
+
+def _module_files(directory: Path) -> list[Path]:
+    """Return one group's own `.py` files, sorted, `__init__.py` excluded.
+
+    Only files directly in `directory` -- a group never recurses into a
+    further subdirectory (`test/data/`, fixture JSON, is never reached
+    this way at all, since it is not itself one of `_GROUPS`).
+    """
+    return sorted(path for path in directory.glob("*.py") if path.name != "__init__.py")
+
+
+def _render_module(directory: Path, module: str, label: str) -> str:
+    """Render one file's own docstrings, with every anchor/heading qualified.
+
+    Runs `pydoc-markdown` scoped to `directory` alone (never the whole
+    `test/` tree at once) so a same-named file in a different group can
+    never be the one actually resolved. `label` (e.g. `"gui"`) is
+    prefixed onto the bare module name pydoc-markdown itself produces
+    (`test_store` -> `gui.test_store`) in both the heading and every
+    anchor id, disambiguating a same-named file in a different group
+    without needing a real Python package structure at all.
+
+    Args:
+        directory: The one directory `pydoc-markdown`'s own `-I` search
+            path is scoped to.
+        module: The bare module name (file stem) to document.
+        label: This module's own group qualifier.
+
+    Returns:
+        The qualified Markdown for this one module.
+
+    Raises:
+        subprocess.CalledProcessError: If `pydoc-markdown` itself fails.
+    """
+    result = subprocess.run(
+        ["pydoc-markdown", "-q", "-I", str(directory), "-m", module],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=_ROOT,
+    )
+    text = result.stdout
+    qualified = f"{label}.{module}"
+    # The bare-anchor form (`id="test_store"`) and the per-function form
+    # (`id="test_store.test_something"`) both start with the same bare
+    # module name; the lookahead keeps everything from the following
+    # quote or dot onward untouched, qualifying only the module prefix.
+    text = re.sub(rf'id="{re.escape(module)}(?=["\.])', f'id="{qualified}', text)
+    escaped_module = module.replace("_", r"\_")
+    text = re.sub(
+        rf"^# {re.escape(escaped_module)}$",
+        f"# {label}.{escaped_module}",
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    return text
+
+
+def _render_group(group: str) -> tuple[str, list[str]]:
+    """Render one group's own heading, files, and table-of-contents entries.
+
+    Args:
+        group: One entry from `_GROUPS`.
+
+    Returns:
+        The group's own rendered Markdown, and the list of
+        `[label](#anchor)` table-of-contents lines its own files
+        produced (one per file, not one per test function -- a
+        function-level top-level table of contents would run to
+        hundreds of entries; a reader who wants that level of detail is
+        already reading one module's own section directly, not
+        skimming the top of the document).
+    """
+    directory = _group_directory(group)
+    label = _group_label(group)
+    # An explicit anchor, exactly like the per-function ones `pydoc-
+    # markdown` itself emits -- not left to GitHub's own heading-to-slug
+    # conversion, which does not treat a backtick-quoted path containing
+    # a `/` predictably enough to rely on.
+    heading_text = f"`test/{group}/`" if group else "`test/`"
+    sections: list[str] = [f'<a id="group-{label}"></a>\n\n## {heading_text}']
+    toc_lines: list[str] = []
+    for path in _module_files(directory):
+        module = path.stem
+        qualified = f"{label}.{module}"
+        sections.append(_render_module(directory, module, label))
+        toc_lines.append(f"  - [`{module}`](#{qualified})")
+    return "\n\n".join(sections), toc_lines
+
+
+def _render_document() -> str:
+    """Render the complete `TESTS.md` document: intro, table of contents,
+    then every group's own content in `_GROUPS` order."""
+    group_bodies: list[str] = []
+    toc: list[str] = ["## Table of contents", ""]
+    for group in _GROUPS:
+        body, toc_lines = _render_group(group)
+        label = _group_label(group)
+        heading_text = f"`test/{group}/`" if group else "`test/`"
+        toc.append(f"- [{heading_text}](#group-{label})")
+        toc.extend(toc_lines)
+        group_bodies.append(body)
+
+    intro = (
+        "# `test` suite reference\n\n"
+        "Generated from test-suite docstrings. Do not edit this file "
+        "directly -- see `dev/bin/generate-test-docs --help`.\n\n"
+        "Every test module, fixture, and test function documented here "
+        "in full; `doc/fim-simulator-detailed-test-plan.md` links "
+        "directly into specific entries rather than repeating their own "
+        "explanations. Return to the [source-tree orientation]"
+        "(../src/README.md) or the [developer guide](../doc/developer.md)."
+    )
+    return "\n\n".join([intro, "\n".join(toc), *group_bodies]) + "\n"
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Regenerate `test/TESTS.md` (or a caller-chosen path) and write it."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "output",
+        nargs="?",
+        type=Path,
+        default=_DEFAULT_OUTPUT,
+        help="default: test/TESTS.md",
+    )
+    args = parser.parse_args(argv)
+
+    document = _render_document()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(document, encoding="utf-8")
+    print(f"generate-test-docs: wrote {args.output}", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
