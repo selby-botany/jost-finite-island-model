@@ -8,6 +8,29 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A new deterministic, parametrized test,
+  `test_stepping_stone_differentiation_is_at_least_the_island_models`
+  (`test/validation/test_simulator_equilibrium.py`), checking Kimura &
+  Weiss (1964)'s claim (cited by Whitlock & McCauley 1999) that
+  stepping-stone differentiation is at least as large as the island
+  model's at matched per-deme migration rate. No new production code:
+  reuses the existing `_identity_fixed_point` (island) and
+  `_pairwise_identity_fixed_point` (stepping stone, on a ring matrix
+  from `fim.model.topology.stepping_stone_neighbors`) oracles end to
+  end. Seven scenarios (weak/strong migration, few/many demes,
+  small/large `N`/`mu`), all confirmed numerically before the assertion
+  was written; the `d=3` case is a deliberate boundary check -- a ring
+  and the island model are the same graph at `d=3`, so `G_ST`/`D` come
+  out exactly equal there, which is why the assertion is `>=`, not `>`.
+  Closes the one item a double-check of this session's own "open items"
+  tables found dropped rather than deliberately deferred -- flagged
+  twice (the Crow & Aoki torus document's Part 2, and implicitly by the
+  metamorphic-panel document's own same-day Tier A/B build, which
+  covered migration/mutation-rate monotonicity but not this topology
+  comparison) and picked up by neither. Design doc:
+  `dev/doc/apps/selby/jost-finite-island-model/20260830-claude-
+  sonnet-5-kimura-weiss-stepping-stone-test-plan.md` in the
+  `1121-citrus` project.
 - Four new closed-form functions in `src/fim/statistics/
   differentiation.py`, from Whitlock (1992, *Evolution* 46:608-615):
   `identity_recovery_rate`, `_equilibrium`, `_trajectory`, and

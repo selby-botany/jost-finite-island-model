@@ -74,7 +74,7 @@ from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import InitialFrequencies, Migration, SimulationParams
 from fim.model.state import ModelState
-from fim.model.topology import dense_matrix_from_neighbors
+from fim.model.topology import dense_matrix_from_neighbors, stepping_stone_neighbors
 from fim.persistence.store import TrajectoryRow
 from fim.statistics import (
     equilibrium_d,
@@ -1199,6 +1199,69 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
     # (see this test's own docstring for why that is not asserted here).
     assert 0.0 <= g_st <= 1.0
     assert g_st == pytest.approx(0.324, abs=0.01)
+
+
+@pytest.mark.parametrize(
+    ("population_size", "m", "mu", "d"),
+    [
+        (100, 0.01, 0.001, 3),
+        (100, 0.01, 0.001, 5),
+        (100, 0.01, 0.001, 10),
+        (100, 0.1, 0.001, 5),
+        (100, 0.001, 0.0001, 5),
+        (20, 0.05, 1e-5, 9),
+        (2000, 0.01, 0.001, 20),
+    ],
+)
+def test_stepping_stone_differentiation_is_at_least_the_island_models(
+    population_size: int, m: float, mu: float, d: int
+) -> None:
+    """Kimura & Weiss (1964): stepping-stone G_ST/D >= the island model's.
+
+    Cited by Whitlock & McCauley (1999, *Heredity* 82:117-125, read in
+    full for the Crow & Aoki torus work): "the genetic differentiation
+    of stepping stone systems is substantially greater for the same
+    number of migrants coming into a deme per generation" than the
+    island model. Kimura & Weiss (1964) itself was not obtained this
+    session -- this is Whitlock & McCauley's own account of it, the
+    same secondhand standing this project already gives Wright (1931)
+    via the same source, not an independent check against the 1964
+    text.
+
+    A directional claim, not a numeric one, so no calibration band or
+    stochastic engine run is needed: this project's own already-
+    validated exact-recursion oracles settle it directly. Both the
+    island fixed point (`_identity_fixed_point`) and the stepping-stone
+    one (`_pairwise_identity_fixed_point` on a ring matrix from
+    `fim.model.topology.stepping_stone_neighbors`) use the same total
+    outgoing migration rate `m` -- "the same number of migrants coming
+    into a deme per generation" is exactly what matching `m` across
+    both topologies already means, since both builders split it evenly
+    across however many neighbors a deme has.
+
+    At `d=3` a ring and the island model are the *same* graph -- each
+    deme's two neighbors are already the only two other demes there
+    are -- so this scenario's own `G_ST`/`D` come out exactly equal, not
+    strictly greater; `>=`, not `>`, is the correct assertion, and this
+    is why `d=3` stays in the parametrization rather than being dropped
+    as a redundant case. Every scenario here was computed and checked
+    directly before being written down (see `1121-citrus`'s design doc
+    for the full seven-scenario table).
+    """
+    within_star, between_star = _identity_fixed_point(
+        population_size=population_size, m=m, mu=mu, d=d
+    )
+    island_g_st, island_d = _identities_to_statistics(within_star, between_star, d)
+
+    neighbors = stepping_stone_neighbors(d, topology="ring", rate=m)
+    matrix = dense_matrix_from_neighbors(neighbors, d)
+    identity = _pairwise_identity_fixed_point(
+        population_size=population_size, migration_matrix=matrix, mu=mu
+    )
+    ring_g_st, ring_d = _pooled_statistics_from_identity_matrix(identity, d)
+
+    assert ring_g_st >= island_g_st - 1e-9
+    assert ring_d >= island_d - 1e-9
 
 
 def test_identity_recursion_reduces_to_whitlock_infinite_island_trajectory() -> None:
