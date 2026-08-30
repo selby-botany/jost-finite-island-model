@@ -10,11 +10,13 @@ from pathlib import Path
 from typing import cast
 
 from fim.statistics import (
+    d_m,
     differentiation_q,
     e_st,
     equilibrium_d,
     equilibrium_g_st,
     g_st,
+    g_st_log,
     h_s,
     h_st,
     h_t,
@@ -23,6 +25,7 @@ from fim.statistics import (
     identity,
     jost_d,
     k_st,
+    r_st,
     statistics_report,
     total_hill_number,
     within_hill_number,
@@ -116,6 +119,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         table = [{9: 1.0}, {9: 1.0}]
         self.assertIsNone(g_st(table))
         self.assertIsNone(statistics_report(table)["G_ST"])
+        self.assertIsNone(g_st_log(table))
 
     def test_e_st_accepts_size_weights_but_d_is_always_equal_weighted(self) -> None:
         """Only E_ST accepts optional relative deme-size weights."""
@@ -154,9 +158,11 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         for table in tables:
             with self.subTest(table=table):
                 values = [jost_d(table), e_st(table), k_st(table)]
-                gst = g_st(table)
-                if gst is not None:
-                    values.append(gst)
+                values.extend(
+                    value
+                    for value in (g_st(table), g_st_log(table))
+                    if value is not None
+                )
                 for value in values:
                     self.assertGreaterEqual(value, 0.0)
                     self.assertLessEqual(value, 1.0)
@@ -222,7 +228,7 @@ class DifferentiationStatisticsTests(unittest.TestCase):
     ) -> None:
         """Between-deme measures require two demes and equal weighting rules."""
         one = [{0: 1.0}]
-        for function in (g_st, jost_d, e_st, k_st):
+        for function in (g_st, jost_d, e_st, k_st, d_m, r_st, g_st_log):
             with (
                 self.subTest(function=function.__name__),
                 self.assertRaisesRegex(ValueError, "at least two"),
@@ -268,6 +274,69 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                 else:
                     self.assertAlmostEqual(actual_g_st, expected_g_st, places=6)
                 self.assertAlmostEqual(report["D"], expected_d, places=6)
+
+    def test_d_m_matches_its_defining_algebra_and_is_never_negative(self) -> None:
+        """Nei's D_m (Eq. 10) equals d/(d-1) * (H_T - H_S) and stays >= 0.
+
+        Unlike every other between-deme measure in this module, `D_m` is
+        not rescaled to `[0, 1]` (see its own docstring) — but the first
+        table below (both demes fixed for different alleles, `H_S = 0`,
+        `H_T = 0.5`) still lands on exactly `1.0`: `d_m`'s own docstring
+        explains why `H_S = 0` caps `H_T` at `(d-1)/d`, making `D_m`
+        reach exactly `1` there for any `d`, not the looser `d/(d-1)`
+        ceiling `H_T <= 1` alone would suggest.
+        """
+        tables = (
+            [{0: 1.0}, {1: 1.0}],
+            [{0: 0.5, 1: 0.5}, {0: 0.5, 1: 0.5}],
+            [{0: 0.1, 1: 0.9}, {0: 0.9, 1: 0.1}],
+        )
+        for table in tables:
+            with self.subTest(table=table):
+                deme_count = len(table)
+                expected = (deme_count / (deme_count - 1)) * (h_t(table) - h_s(table))
+                self.assertAlmostEqual(d_m(table), expected)
+                self.assertGreaterEqual(d_m(table), 0.0)
+        self.assertAlmostEqual(d_m([{0: 1.0}, {1: 1.0}]), 1.0)
+
+    def test_r_st_is_d_m_over_h_s_and_none_at_zero_within_deme_diversity(self) -> None:
+        """Nei's R_ST (Eq. 11) is D_m/H_S, undefined when H_S is zero."""
+        table = [{0: 0.1, 1: 0.9}, {0: 0.9, 1: 0.1}]
+        self.assertAlmostEqual(r_st(table), d_m(table) / h_s(table))
+        self.assertIsNone(r_st([{0: 1.0}, {1: 1.0}]))
+
+    def test_g_st_log_matches_a_hand_worked_value(self) -> None:
+        """The log-based large-differentiation G_ST estimator, by hand.
+
+        Design-doc worked case: `H_S = 0.18`, `H_T = 0.5`, so
+        `J_S = 0.82`, `J_T = 0.5`, giving
+        `ln(0.82/0.5) / -ln(0.5) ~= 0.713696` — larger than the ordinary
+        linear `g_st` (`0.64`) at this same table, as Nei's own paper
+        anticipates for the log form away from the zero-differentiation
+        endpoint.
+        """
+        table = [{0: 0.9, 1: 0.1}, {0: 0.1, 1: 0.9}]
+        self.assertAlmostEqual(h_s(table), 0.18)
+        self.assertAlmostEqual(h_t(table), 0.5)
+        actual_g_st = g_st(table)
+        assert actual_g_st is not None
+        self.assertAlmostEqual(actual_g_st, 0.64)
+        actual_g_st_log = g_st_log(table)
+        assert actual_g_st_log is not None
+        self.assertAlmostEqual(actual_g_st_log, 0.713696, places=6)
+        self.assertGreater(actual_g_st_log, actual_g_st)
+
+    def test_g_st_log_agrees_with_g_st_at_the_complete_fixation_endpoint(self) -> None:
+        """Both G_ST estimators equal exactly 1 when demes fix apart.
+
+        The one case where the two necessarily agree — `H_S = 0` (no
+        diversity within either deme) and each deme fixed for a
+        different allele — checked exactly, not approximately, since
+        both forms reduce to closed integers here.
+        """
+        table = [{0: 1.0}, {1: 1.0}]
+        self.assertEqual(g_st(table), 1.0)
+        self.assertEqual(g_st_log(table), 1.0)
 
     def test_duplicate_canonical_allele_id_is_rejected(self) -> None:
         """Two distinct dict keys that normalize to the same id collide.
