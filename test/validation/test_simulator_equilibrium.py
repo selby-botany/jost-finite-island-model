@@ -61,11 +61,13 @@ from __future__ import annotations
 import json
 import math
 import statistics
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
+import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from fim.engine import fim
 from fim.model.allele import AlleleId
@@ -82,6 +84,12 @@ from fim.statistics import (
     h_s,
     h_t,
 )
+
+# A dense d-by-d matrix, as opposed to `Migration`'s own scalar/sparse/
+# topology-sugar variants -- what `_iterate_pairwise_identities` and its
+# own siblings actually operate on (already-densified, e.g. by
+# `_crow_aoki_torus_matrix`).
+_FloatMatrix: TypeAlias = NDArray[np.float64]
 
 # Width, in standard errors, of every statistical band (test-plan 7.1).
 _BAND_SIGMA = 5.0
@@ -397,6 +405,156 @@ def _identity_fixed_point(
     )
 
 
+def _iterate_pairwise_identities(
+    *,
+    population_size: int,
+    migration_matrix: Sequence[Sequence[float]],
+    mu: float,
+    initial_identity: _FloatMatrix,
+    generations: int | None,
+) -> _FloatMatrix:
+    """Return the full pairwise identity-in-state matrix after one recursion run.
+
+    The general-topology counterpart to :func:`_iterate_identities`,
+    above: that function's own ``(jw, jb)`` pair is only a valid state
+    representation because the symmetric island model makes every deme
+    exchangeable with every other one, collapsing "identity between any
+    two distinct demes" down to one shared scalar. A migration matrix
+    without that full exchangeability -- the Crow & Aoki torus in
+    particular, where a deme's four nearest neighbors are not
+    interchangeable with its five more-distant ones -- has no such
+    shortcut: this tracks the full ``d`` by ``d`` symmetric matrix of
+    pairwise identities instead, one entry per ordered pair of demes
+    (the diagonal holding each deme's own within-deme identity).
+
+    Derivation, one Migrate -> Mutate -> Drift generation at a time,
+    matching :func:`fim.model.operators.step`'s own order exactly like
+    :func:`_iterate_identities` already does:
+
+    * **Migrate**: post-migration deme ``i``'s pool is a weighted mix of
+      every deme's pre-migration pool, weighted by migration matrix row
+      ``i``. Two independent gene copies drawn after migration, one from
+      deme ``i`` and one from deme ``j``, are each drawn from that mix
+      independently, so their joint identity is the bilinear form
+      ``migrated[i, j] = sum_k sum_l M[i, k] * M[j, l] * identity[k,
+      l]`` -- exactly ``M @ identity @ M.T`` in matrix form. Specialized
+      to the symmetric island model's own migration matrix, this
+      bilinear form reduces to precisely
+      :func:`_identity_coefficients`'s own four scalar coefficients (
+      confirmed directly, not assumed, before this function was written
+      -- see :func:`test_pairwise_identity_recursion_matches_the_island_
+      model_oracle`, below).
+    * **Mutate**: scales every pairwise identity by the same
+      :func:`_mutation_survival` factor :func:`_iterate_identities`
+      already applies uniformly to both its own ``jw`` and ``jb`` --
+      including this function's own off-diagonal (between-deme) entries,
+      which is a mild approximation (the exact between-deme survival
+      factor has no same-deme mutation-count covariance term to correct
+      for, unlike the diagonal) already implicit in the existing,
+      already-published-value-validated ``_iterate_identities``, carried
+      forward here unchanged rather than "fixed" and made inconsistent
+      with it.
+    * **Drift**: only the diagonal (within-deme) entries gain the
+      ``1/population_size`` collision term -- two copies drawn from
+      *different* demes can never be the same physical gene copy, so
+      only same-deme identity gets that correction, matching
+      :func:`_iterate_identities`'s own ``next_within``/``next_between``
+      split exactly.
+
+    Args:
+        population_size: Gene-copy count ``N``, equal across every deme.
+        migration_matrix: A ``d`` by ``d`` row-stochastic migration
+            matrix (any topology, not only symmetric island or torus).
+        mu: Per-copy mutation probability.
+        initial_identity: The starting ``d`` by ``d`` symmetric identity
+            matrix (the identity matrix itself, i.e. every deme fixed
+            for a distinct private allele with no identity between any
+            two of them, is the usual undifferentiated starting point --
+            see :func:`_pairwise_identity_fixed_point`).
+        generations: Fixed step count, or ``None`` to iterate to a fixed
+            point (the same convergence tolerance and step cap as
+            :func:`_iterate_identities`).
+
+    Returns:
+        The ``d`` by ``d`` pairwise identity-in-state matrix after the
+        requested number of generations.
+    """
+    migration = np.asarray(migration_matrix, dtype=np.float64)
+    survival = _mutation_survival(mu, population_size)
+    inverse = 1.0 / population_size
+    deme_count = migration.shape[0]
+    diagonal = np.diag_indices(deme_count)
+
+    identity = initial_identity.copy()
+    step = 0
+    while True:
+        migrated = migration @ identity @ migration.T
+        next_identity = survival * migrated
+        next_identity[diagonal] = (
+            inverse + (1.0 - inverse) * survival * migrated[diagonal]
+        )
+        converged = bool(np.max(np.abs(next_identity - identity)) < 1e-16)
+        identity = next_identity
+        step += 1
+        if generations is None:
+            if converged or step >= 5_000_000:
+                break
+        elif step >= generations:
+            break
+    result: _FloatMatrix = identity
+    return result
+
+
+def _pairwise_identity_fixed_point(
+    *,
+    population_size: int,
+    migration_matrix: Sequence[Sequence[float]],
+    mu: float,
+) -> _FloatMatrix:
+    """Return the recursion fixed point of the full pairwise identity matrix.
+
+    The general-topology counterpart to :func:`_identity_fixed_point`,
+    above: starts from every deme fixed for its own distinct private
+    allele (the identity matrix -- diagonal ``1``, off-diagonal ``0``,
+    the same undifferentiated founding condition
+    :func:`_identity_fixed_point` starts from in its own two-scalar
+    form) and iterates :func:`_iterate_pairwise_identities` to
+    convergence.
+    """
+    deme_count = len(migration_matrix)
+    return _iterate_pairwise_identities(
+        population_size=population_size,
+        migration_matrix=migration_matrix,
+        mu=mu,
+        initial_identity=np.eye(deme_count),
+        generations=None,
+    )
+
+
+def _pooled_statistics_from_identity_matrix(
+    identity: np.ndarray, d: int
+) -> tuple[float, float]:
+    """Return pooled ``(G_ST, D)`` from a full pairwise identity matrix.
+
+    Averages the matrix's own diagonal (within-deme identity) and
+    off-diagonal (between-deme identity) entries down to the same two
+    scalars :func:`_identities_to_statistics` already turns into
+    ``(G_ST, D)`` for the symmetric island model -- the natural pooling
+    for a topology with translation symmetry but not full pairwise
+    exchangeability (the torus in particular: every deme's own four
+    nearest neighbors are closer, in the migration-matrix sense, than
+    its remaining five, so no single off-diagonal entry represents "the"
+    between-deme identity the way the symmetric island model's own single
+    shared value does) -- the same averaging
+    :func:`_pooled_g_st_d` already applies across loci for real simulated
+    data, applied here across deme pairs instead.
+    """
+    mean_within = float(np.mean(np.diag(identity)))
+    off_diagonal_mask = ~np.eye(d, dtype=bool)
+    mean_between = float(np.mean(identity[off_diagonal_mask]))
+    return _identities_to_statistics(mean_within, mean_between, d)
+
+
 def _dn2_equilibrium_start(
     *,
     within_fixed_point: float,
@@ -536,7 +694,9 @@ def _pooled_g_st_d(state: ModelState, d: int, n_loci: int) -> tuple[float, float
     return g_st, jost_d
 
 
-def _crow_aoki_torus_matrix(side_length: int, rate: float) -> Migration:
+def _crow_aoki_torus_matrix(
+    side_length: int, rate: float
+) -> tuple[tuple[float, ...], ...]:
     """Return the dense migration matrix for an `L`-by-`L` toroidal lattice.
 
     Crow & Aoki (1984)'s own "two-dimensional stepping-stone model"
@@ -740,6 +900,130 @@ def test_identity_recursion_oracle_matches_formula_and_published(
     assert oracle_d == pytest.approx(equilibrium_d(m, mu, d), abs=_ONE_OVER_N_TOL)
     assert oracle_g_st == pytest.approx(published_g_st, abs=0.011)
     assert oracle_d == pytest.approx(published_d, abs=0.02)
+
+
+def _symmetric_island_matrix(d: int, m: float) -> tuple[tuple[float, ...], ...]:
+    """Return the dense symmetric-island migration matrix for `d` demes, rate `m`."""
+    retained = 1.0 - m
+    shared = m / (d - 1)
+    return tuple(
+        tuple(retained if row == col else shared for col in range(d))
+        for row in range(d)
+    )
+
+
+@pytest.mark.parametrize(
+    ("population_size", "m", "mu", "d"),
+    [
+        (100, 0.0001, 0.000001, 5),
+        (2000, 0.01, 0.001, 100),
+        (100, 0.01, 0.005, 4),
+    ],
+)
+def test_pairwise_identity_recursion_matches_the_island_model_oracle(
+    population_size: int, m: float, mu: float, d: int
+) -> None:
+    """The general matrix recursion exactly reproduces the island-specific one.
+
+    `_iterate_pairwise_identities`'s own derivation is re-derived from
+    the model's mechanics directly (see its own docstring), not
+    transcribed from `_identity_coefficients`'s own island-specific
+    algebra -- so this is a real independent check, not a restatement of
+    the same formula in different variable names. Given a symmetric
+    island migration matrix, `_identity_coefficients`'s own four scalar
+    coefficients are provably the same bilinear form specialized to that
+    matrix's own symmetric structure (worked out by hand before writing
+    `_iterate_pairwise_identities`'s own docstring), and this test
+    confirms that algebra holds in the running code, across the same
+    three scenarios (Part VI, both Dear-Nolan configurations) the
+    existing island-specific oracle is already validated against.
+    """
+    matrix = _symmetric_island_matrix(d, m)
+    identity = _pairwise_identity_fixed_point(
+        population_size=population_size, migration_matrix=matrix, mu=mu
+    )
+    general_g_st, general_d = _pooled_statistics_from_identity_matrix(identity, d)
+
+    within_star, between_star = _identity_fixed_point(
+        population_size=population_size, m=m, mu=mu, d=d
+    )
+    island_g_st, island_d = _identities_to_statistics(within_star, between_star, d)
+
+    assert general_g_st == pytest.approx(island_g_st, abs=1e-9)
+    assert general_d == pytest.approx(island_d, abs=1e-9)
+
+
+def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
+    """The general recursion's own torus result, and an open discrepancy it found.
+
+    Applies the same general, now cross-validated (see the test above)
+    pairwise-identity recursion to the actual Crow & Aoki torus matrix
+    (`_crow_aoki_torus_matrix`) at the paper's own `n=9, N=20, m=0.05
+    (M=1.0), mu=1e-5` parameters -- the deterministic, exact-math answer
+    to "what does this project's own Migrate -> Mutate -> Drift model
+    predict for this topology," with no stochastic noise, no seed, and
+    no replicate count involved at all (unlike
+    `test_crow_aoki_torus_scenario_via_engine`, this cannot flake and
+    needed no calibration).
+
+    This does **not** assert a match to the published `G_ST=0.172` --
+    it does not match, and forcing an assertion that it does would be
+    exactly the "pick parameters until the test passes" pattern this
+    project's own testing rules forbid. What the recursion actually
+    gives, at this project's already-established migration-rate
+    convention (`m = M/N = 1.0/20 = 0.05`, split evenly across each
+    deme's four neighbors -- the same convention already used to build
+    `_crow_aoki_torus_matrix` for the calibrated engine test), is
+    `G_ST ~= 0.324` -- notably *higher* than both the published value and
+    `test_crow_aoki_torus_scenario_via_engine`'s own characterized
+    engine mean (`0.272`), not lower, which revises rather than confirms
+    that test's own attribution of the gap to a small-`N`, `O(1/N)`
+    equilibration residual: an exact, infinite-generations recursion has
+    no equilibration lag left to attribute anything to, and it lands
+    even further from `0.172` than the finite-horizon engine mean did.
+
+    A honest exploration (not committed as its own assertion, since it
+    is not resolved) found that quadrupling the migration rate to
+    `m = 0.2` (one full `M/N` fraction *per neighbor*, rather than split
+    across all four) undershoots to `G_ST ~= 0.115`, and an intermediate
+    `m ~= 0.12` reproduces `0.172` almost exactly -- suggesting the real
+    explanation is most likely an undocumented difference between this
+    project's own migration-rate convention for the torus and whatever
+    Crow & Aoki's own unpublished "numerical calculations" (their own
+    words -- the paper states no explicit stepping-stone formula) used,
+    not a bug in this recursion (independently cross-validated against
+    three already-published, already-engine-validated island scenarios,
+    exactly, just above) or in `test_crow_aoki_torus_scenario_via_engine`
+    itself (which reproduces *this same* `G_ST ~= 0.32`-ish
+    neighborhood, not the published `0.172`, when run long enough that
+    its own equilibration lag genuinely shrinks). See `1121-citrus`'s
+    Crow & Aoki torus-test-plan design doc for the fuller writeup of this
+    finding and what it revises about the Tier 2 test's own conclusion.
+    """
+    side_length = 3
+    d = side_length * side_length
+    matrix = _crow_aoki_torus_matrix(side_length, 0.05)
+
+    identity = _pairwise_identity_fixed_point(
+        population_size=20, migration_matrix=matrix, mu=1e-5
+    )
+    g_st, jost_d = _pooled_statistics_from_identity_matrix(identity, d)
+
+    # Deterministic and reproducible: re-running from scratch gives the
+    # exact same fixed point, bit for bit -- no seed, no stochasticity.
+    identity_again = _pairwise_identity_fixed_point(
+        population_size=20, migration_matrix=matrix, mu=1e-5
+    )
+    g_st_again, jost_d_again = _pooled_statistics_from_identity_matrix(
+        identity_again, d
+    )
+    assert g_st == g_st_again
+    assert jost_d == jost_d_again
+
+    # A real, deterministic, in-range value -- not the published 0.172
+    # (see this test's own docstring for why that is not asserted here).
+    assert 0.0 <= g_st <= 1.0
+    assert g_st == pytest.approx(0.324, abs=0.01)
 
 
 def test_shannon_entropy_isolated_theta_convention_matches_identity_recursion() -> None:
