@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+"""Compare this project's engine against hierfstat, an independent simulator.
+
+Every existing literature-grounded check in this project compares this
+project's own math (or this project's own engine) against a formula or a
+published number -- never against another program's own simulation of the
+same process. hierfstat (Goudet's group, CRAN R package) implements exactly
+this project's own model -- a migration matrix, Wright-Fisher drift, and
+mutation, run generation by generation (`sim.genot.metapop.t`) -- in
+independently-written code with its own random number stream, which makes
+it the first source of genuinely independent comparison data this project
+has ever had.
+
+hierfstat's own summary-statistic functions (`basic.stats`/`wc`/`betas`)
+are deliberately never called: they are finite-sample, bias-corrected
+estimators (built for the real-world case of a genotyped *sample*, not a
+fully known population), a different mathematical quantity from this
+project's own exact `h_s`/`h_t`/`g_st`/`jost_d` -- the same "related but
+different quantity" trap already found for Weir & Cockerham's F_ST and
+Chao et al.'s L1-L3 starling estimates, confirmed a third time (with an
+exact worked comparison) for mmod's own test suite while researching this
+tool. Instead, `dev/docker/hierfstat/simulate.R` is asked to return the
+*entire* simulated population's raw genotypes (`size = N`, avoiding any
+additional sampling step beyond the drift process itself); this script
+converts those genotypes into a `FrequencyTable` by hand and runs this
+project's own exact statistics on the result -- both sides of the
+comparison then use the same formula layer, so what is actually being
+compared is two different programs' own simulated trajectories, nothing
+else.
+
+Deliberately NOT wired into `build` or `ci.yml`: builds and runs a Docker
+container (slow, and an external dependency this project does not
+otherwise have), the same "manually-invoked, outside the deterministic PR
+gate" category `dev/bin/calibrate-statistical-bands` already established
+for its own reasons. This script reports a comparison; it does not assert
+pass/fail -- no calibrated tolerance exists yet for "how far apart should
+two independent stochastic simulators land," and manufacturing one without
+characterizing it properly would repeat the exact mistake this project's
+own testing rules forbid (a tolerance picked because it happened to make
+one run pass). See `1121-citrus`'s own
+`20260830-claude-sonnet-5-external-tooling-cross-validation-plan.md`
+design doc for the full reasoning.
+
+Usage:
+    dev/bin/compare-against-hierfstat \\
+        --population-size 100 --m 0.01 --mu 0.005 --d 4 \\
+        --generations 4000 --nbal 99 --nbloc 200 --seed 900001
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import io
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+
+from fim.statistics import equilibrium_d, equilibrium_g_st, g_st, h_s, h_t, jost_d
+
+_DOCKER_CONTEXT = Path(__file__).resolve().parents[1] / "docker" / "hierfstat"
+_IMAGE_TAG = "fim-hierfstat-compare:dev"
+
+
+def _build_image() -> None:
+    """Build (or reuse, via Docker's own layer cache) the comparison image."""
+    subprocess.run(
+        ["docker", "build", "--tag", _IMAGE_TAG, str(_DOCKER_CONTEXT)],
+        check=True,
+    )
+
+
+def _run_simulation(
+    *,
+    n_diploid: int,
+    m: float,
+    mu: float,
+    d: int,
+    generations: int,
+    nbal: int,
+    nbloc: int,
+    seed: int,
+) -> str:
+    """Run the R container and return its raw CSV genotype output."""
+    result = subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            _IMAGE_TAG,
+            str(n_diploid),
+            str(m),
+            str(mu),
+            str(d),
+            str(generations),
+            str(nbal),
+            str(nbloc),
+            str(seed),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout
+
+
+def _genotype_to_alleles(cell: str, allele_width: int) -> tuple[int, int] | None:
+    """Split one hierfstat genotype cell into its two allele codes.
+
+    hierfstat's own genepop-style convention (confirmed against `mmod`'s
+    bundled `test.gen` fixture while researching this tool): each locus
+    cell is two fixed-width allele codes concatenated together, `NA` for
+    a missing genotype. The per-allele width is *not* safe to derive from
+    the cell's own length -- confirmed the hard way running a real scenario
+    this session, where a genotype pair with a low-numbered leading allele
+    (e.g. allele ``4`` under a two-digit ``nbal=99`` scheme) came back as
+    the numeral ``404`` rather than the fixed-width ``"0404"``, because
+    hierfstat's own CSV column stores genotypes as a plain integer, which
+    has no leading zero to begin with. The caller passes `allele_width`
+    (derived from the run's own ``nbal`` argument, the one thing that
+    actually fixes the width) and every cell is left-zero-padded to
+    ``2 * allele_width`` before splitting, recovering the dropped digit.
+    """
+    text = str(cell).strip()
+    if not text or text.upper() == "NA":
+        return None
+    padded = text.zfill(2 * allele_width)
+    return int(padded[:allele_width]), int(padded[allele_width:])
+
+
+def _frequency_table_from_genotypes(
+    rows: list[dict[str, str]],
+    locus_column: str,
+    deme_count: int,
+    allele_width: int,
+) -> list[dict[int, float]]:
+    """Build one locus's `FrequencyTable` from hierfstat's raw genotype rows.
+
+    Each simulated individual contributes two gene copies (diploid) to its
+    own population's allele counts; the result is normalized to
+    frequencies, matching `fim.statistics`'s own `FrequencyTable` contract
+    exactly -- this is this project's own exact allele-frequency
+    accounting applied to hierfstat's own simulated individuals, not
+    anything hierfstat itself computes.
+    """
+    counts: list[dict[int, int]] = [{} for _ in range(deme_count)]
+    for row in rows:
+        deme_index = int(row["Pop"]) - 1
+        alleles = _genotype_to_alleles(row[locus_column], allele_width)
+        if alleles is None:
+            continue
+        for allele in alleles:
+            counts[deme_index][allele] = counts[deme_index].get(allele, 0) + 1
+    table: list[dict[int, float]] = []
+    for deme_counts in counts:
+        total = sum(deme_counts.values())
+        table.append({allele: count / total for allele, count in deme_counts.items()})
+    return table
+
+
+def _report(
+    *,
+    population_size: int,
+    m: float,
+    mu: float,
+    d: int,
+    nbal: int,
+    csv_text: str,
+) -> None:
+    """Print a comparison: hierfstat's own simulated statistics vs. this
+    project's closed-form equilibrium prediction, at matched parameters."""
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    locus_columns = [name for name in rows[0] if name != "Pop"]
+    allele_width = len(str(nbal))
+
+    h_s_values: list[float] = []
+    h_t_values: list[float] = []
+    g_st_values: list[float] = []
+    d_values: list[float] = []
+    for locus_column in locus_columns:
+        table = _frequency_table_from_genotypes(rows, locus_column, d, allele_width)
+        h_s_values.append(h_s(table))
+        h_t_values.append(h_t(table))
+        locus_g_st = g_st(table)
+        if locus_g_st is not None:
+            g_st_values.append(locus_g_st)
+        d_values.append(jost_d(table))
+
+    mean_h_s = sum(h_s_values) / len(h_s_values)
+    mean_h_t = sum(h_t_values) / len(h_t_values)
+    mean_g_st = sum(g_st_values) / len(g_st_values)
+    mean_d = sum(d_values) / len(d_values)
+
+    theoretical_g_st = equilibrium_g_st(population_size, m, mu, d)
+    theoretical_d = equilibrium_d(m, mu, d)
+
+    print(f"loci: {len(locus_columns)}")
+    print(
+        f"hierfstat  H_S={mean_h_s:.4f}  H_T={mean_h_t:.4f}  "
+        f"G_ST={mean_g_st:.4f}  D={mean_d:.4f}"
+    )
+    print(f"theory     G_ST={theoretical_g_st:.4f}  D={theoretical_d:.4f}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Build the comparison image, run one scenario, and print the report."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--population-size",
+        type=int,
+        default=100,
+        help="gene copies; must be even (default: 100)",
+    )
+    parser.add_argument("--m", type=float, default=0.01, help="default: 0.01")
+    parser.add_argument("--mu", type=float, default=0.005, help="default: 0.005")
+    parser.add_argument("--d", type=int, default=4, help="default: 4")
+    parser.add_argument("--generations", type=int, default=4000, help="default: 4000")
+    parser.add_argument(
+        "--nbal", type=int, default=99, help="max alleles per locus (default: 99)"
+    )
+    parser.add_argument("--nbloc", type=int, default=200, help="default: 200")
+    parser.add_argument("--seed", type=int, default=900001, help="default: 900001")
+    parser.add_argument(
+        "--skip-build",
+        action="store_true",
+        help="reuse the already-built Docker image instead of rebuilding it",
+    )
+    args = parser.parse_args(argv)
+
+    if args.population_size % 2 != 0:
+        parser.error("--population-size must be even (2 * diploid individuals)")
+    n_diploid = args.population_size // 2
+
+    if not args.skip_build:
+        _build_image()
+
+    csv_text = _run_simulation(
+        n_diploid=n_diploid,
+        m=args.m,
+        mu=args.mu,
+        d=args.d,
+        generations=args.generations,
+        nbal=args.nbal,
+        nbloc=args.nbloc,
+        seed=args.seed,
+    )
+    _report(
+        population_size=args.population_size,
+        m=args.m,
+        mu=args.mu,
+        d=args.d,
+        nbal=args.nbal,
+        csv_text=csv_text,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
