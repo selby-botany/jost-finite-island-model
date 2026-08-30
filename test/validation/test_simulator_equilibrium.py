@@ -70,8 +70,9 @@ import pytest
 from fim.engine import fim
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
-from fim.model.params import InitialFrequencies, SimulationParams
+from fim.model.params import InitialFrequencies, Migration, SimulationParams
 from fim.model.state import ModelState
+from fim.model.topology import dense_matrix_from_neighbors
 from fim.persistence.store import TrajectoryRow
 from fim.statistics import equilibrium_d, equilibrium_g_st, h_s, h_t
 
@@ -92,7 +93,7 @@ def _load_sigma_constants() -> dict[str, tuple[float, float]]:
     """Load assertion sigma constants from the generated calibration artifact."""
     payload = json.loads(_CALIBRATION_DATA_PATH.read_text(encoding="utf-8"))
     scenarios = payload["scenarios"]
-    required = ("part_vi", "dear_nolan_low", "dear_nolan_high")
+    required = ("part_vi", "dear_nolan_low", "dear_nolan_high", "crow_aoki_torus")
     sigmas: dict[str, tuple[float, float]] = {}
     for scenario_name in required:
         scenario = scenarios[scenario_name]
@@ -114,6 +115,7 @@ except Exception as exc:  # pragma: no cover - hard failure before tests run
 _SIGMA_PART_VI_G, _SIGMA_PART_VI_D = _SIGMA_CONSTANTS["part_vi"]
 _SIGMA_DEAR_NOLAN_LOW_G, _SIGMA_DEAR_NOLAN_LOW_D = _SIGMA_CONSTANTS["dear_nolan_low"]
 _SIGMA_DEAR_NOLAN_HIGH_G, _SIGMA_DEAR_NOLAN_HIGH_D = _SIGMA_CONSTANTS["dear_nolan_high"]
+_SIGMA_CROW_AOKI_TORUS_G, _SIGMA_CROW_AOKI_TORUS_D = _SIGMA_CONSTANTS["crow_aoki_torus"]
 
 
 class _DiscardingStore:
@@ -527,10 +529,63 @@ def _pooled_g_st_d(state: ModelState, d: int, n_loci: int) -> tuple[float, float
     return g_st, jost_d
 
 
+def _crow_aoki_torus_matrix(side_length: int, rate: float) -> Migration:
+    """Return the dense migration matrix for an `L`-by-`L` toroidal lattice.
+
+    Crow & Aoki (1984)'s own "two-dimensional stepping-stone model"
+    (`pnas00620-0169.pdf`, §"Other migration patterns"): demes arranged
+    on a rectangular lattice, each exchanging migrants only with its
+    four nearest neighbors (up/down/left/right), with the two edges of
+    the lattice identified in each direction — an "abstract torus," so
+    every deme has exactly four neighbors, none of them an edge case.
+    This is a genuinely different migration topology from every other
+    scenario in this file (the symmetric island model) and from
+    `fim.model.topology`'s own `"ring"`/`"linear"` topology sugar (both
+    one-dimensional); no existing helper builds it, so this one does,
+    reusing `dense_matrix_from_neighbors` — whose own docstring already
+    permits a hand-built sparse neighbor map, not only one from
+    `stepping_stone_neighbors` — for the actual sparse-to-dense
+    conversion rather than re-deriving that validation and normalization
+    logic here.
+
+    Demes are numbered row-major, one-based (`row * side_length + column
+    + 1`), matching `dense_matrix_from_neighbors`'s own one-based
+    convention. `rate`'s total outgoing migration fraction is split
+    evenly across all four neighbors, `rate / 4` each, mirroring how
+    `fim.model.topology._neighbor_weights` already splits a topology's
+    total rate across however many neighbors a deme actually has.
+
+    Args:
+        side_length: `L`, the lattice's side length; the deme count is
+            `L * L` (Crow & Aoki's own `n`).
+        rate: Every deme's total outgoing migration fraction, matching
+            the meaning `m` already has in the symmetric island model.
+
+    Returns:
+        An `(L*L)`-by-`(L*L)` row-stochastic dense migration matrix.
+    """
+    neighbor_weight = rate / 4.0
+    neighbors: dict[int, dict[int, float]] = {}
+    for row in range(side_length):
+        for column in range(side_length):
+            deme = row * side_length + column + 1
+            lattice_neighbors = (
+                ((row - 1) % side_length, column),
+                ((row + 1) % side_length, column),
+                (row, (column - 1) % side_length),
+                (row, (column + 1) % side_length),
+            )
+            neighbors[deme] = {
+                neighbor_row * side_length + neighbor_column + 1: neighbor_weight
+                for neighbor_row, neighbor_column in lattice_neighbors
+            }
+    return dense_matrix_from_neighbors(neighbors, side_length * side_length)
+
+
 def _run_engine_pooled(
     *,
     population_size: int,
-    m: float,
+    m: Migration,
     mu: float,
     d: int,
     n_loci: int,
@@ -553,7 +608,11 @@ def _run_engine_pooled(
 
     Args:
         population_size: Gene-copy count ``N``.
-        m: Symmetric migration rate.
+        m: Migration — a scalar symmetric rate for every scenario this
+            file used before the Crow & Aoki torus scenario, or a full
+            dense matrix for that one (see
+            `_crow_aoki_torus_matrix`) — passed through unexamined to
+            `SimulationParams`, which already accepts either.
         mu: Per-copy mutation probability.
         d: Number of demes.
         n_loci: Number of independently tracked loci.
@@ -939,3 +998,87 @@ def test_dear_nolan_high_migration_scenario_via_engine() -> None:
     # Direct reproduction of BOTH published headline values.
     assert mean_g == pytest.approx(0.02, abs=0.005)
     assert 0.89 <= mean_d <= 0.92
+
+
+@pytest.mark.slow
+@pytest.mark.statistical
+def test_crow_aoki_torus_scenario_via_engine() -> None:
+    """The simulator reproduces Crow & Aoki (1984)'s own torus G_ST (Table 1).
+
+    Scenario: a 3-by-3 toroidal stepping-stone lattice (`_crow_aoki_torus_
+    matrix`), ``N=20`` gene copies, ``mu=1e-5``, migration rate ``m=0.05``
+    (``Nm=1.0``, matching Crow & Aoki's own ``M``) -- Crow & Aoki (1984)
+    Table 1's ``n=9, N=20, M=1.0, u=10⁻⁵`` row, published ``G_ST=0.172``.
+    Source and citation confirmed directly against the paper's own full
+    text this session (`pnas00620-0169.pdf`); see `jost-finite-island-
+    model`'s own commits `d3adcf0`/`2dd1ea3` and `1121-citrus`'s Crow &
+    Aoki torus-test-plan design doc for the fuller citation history.
+
+    Unlike the three scenarios above, this one has no independent exact-
+    recursion oracle to cross-check against: `_identity_fixed_point`'s own
+    `_identity_coefficients` are specific to the symmetric island model
+    (every deme migrates with every other deme equally), not to a torus
+    lattice's four-nearest-neighbor structure, and deriving the
+    torus-specific equivalent was scoped separately (design doc "Tier 1")
+    and not built here. This test is therefore only a two-way check
+    (engine against the literal published number, not engine-against-
+    oracle-against-formula-against-published the way the three scenarios
+    above are) -- a real, acknowledged gap in rigor relative to them, not
+    an oversight.
+
+    Configuration and horizon were both found empirically this session,
+    not guessed: unlike the three scenarios above, there is no equilibrium-
+    start construction available for this scenario (see above), so the
+    only lever against slow convergence is horizon and locus count, and
+    both needed real measurement, not a guess, to get right. A first
+    attempt at 100 loci / horizon 2000 landed systematically *high*
+    (multiple single-replicate trials in the 0.20-0.36 range, none below
+    0.20, against a published 0.172) -- not noise around the right
+    answer, an actual convergence lag: re-running the same seed at
+    horizon 4000 and then 8000 showed `G_ST` trending steadily down
+    (0.361 -> 0.255 -> 0.213), confirming the scenario itself was sound
+    and the horizon was simply too short. 60 loci, separately, proved too
+    thin to reliably avoid all-loci global fixation (`G_ST` undefined)
+    over these horizons. 150 loci / horizon 6000 is the configuration
+    that came out of this search: four independent trial seeds landed at
+    0.198, 0.088, 0.318, and 0.218 (mean 0.206, straddling 0.172 from
+    both sides rather than sitting uniformly above it) with no fixation
+    failures -- see this session's own exploration log for the fuller
+    numeric record.
+
+    6 replicates, base seed 845000, distinct from every other scenario's
+    own seed in this file. Runtime is around 23 minutes -- the highest
+    per-replicate cost of any scenario in this file (150 loci at horizon
+    6000, versus, e.g., Dear-Nolan-high's 1 locus at horizon 30), a direct
+    consequence of having no equilibrium-start shortcut available. Band
+    derivation (before seed selection, from the versioned characterization
+    pass -- module docstring, `test/validation/statistical-calibration-
+    evidence.json`, characterization seed 603000): per-replicate spread
+    from the generated `assertion_sigma_g` value in that same file, from a
+    10-replicate characterization pass -- smaller than the other three
+    scenarios' own 20-100-replicate passes, a direct, acknowledged
+    consequence of this scenario's per-replicate cost; see the evidence
+    file's own `elapsed_seconds` for the specific trade-off made. No `D`
+    assertion: Crow & Aoki's Table 1 reports only `G_ST` for the
+    stepping-stone model, never `D`.
+    """
+    replicates = 6
+    side_length = 3
+    d = side_length * side_length
+    torus_matrix = _crow_aoki_torus_matrix(side_length, 0.05)
+
+    g_values, _d_values = _run_engine_pooled(
+        population_size=20,
+        m=torus_matrix,
+        mu=1e-5,
+        d=d,
+        n_loci=150,
+        horizon=6000,
+        replicates=replicates,
+        seed=845000,
+    )
+    mean_g = statistics.fmean(g_values)
+
+    assert mean_g == pytest.approx(
+        0.172, abs=_band(_SIGMA_CROW_AOKI_TORUS_G, replicates)
+    )

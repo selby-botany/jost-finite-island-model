@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Characterize the per-replicate spread behind the equilibrium test bands.
 
-`test/validation/test_simulator_equilibrium.py` asserts three engine-level
+`test/validation/test_simulator_equilibrium.py` asserts four engine-level
 scientific tests (Part VI equilibrium, Dear-Nolan low migration, Dear-Nolan
-high migration) against a band of the form ``k * sigma / sqrt(replicates)``,
+high migration, and the Crow & Aoki (1984) toroidal stepping-stone
+scenario) against a band of the form ``k * sigma / sqrt(replicates)``,
 where ``sigma`` is a per-replicate standard deviation. Deriving that
 ``sigma`` analytically would require propagating variance through a
 multi-generation Migrate -> Mutate -> Drift recursion's higher moments (a
@@ -35,7 +36,7 @@ today's numbers on faith.
 Usage:
     dev/bin/calibrate-statistical-bands \\
         --replicates-part-vi 30 --replicates-dear-nolan-low 40 \\
-        --replicates-dear-nolan-high 20 \\
+        --replicates-dear-nolan-high 20 --replicates-crow-aoki-torus 10 \\
         --output test/validation/statistical-calibration-evidence.json
 """
 
@@ -68,6 +69,7 @@ DEFAULT_OUTPUT_PATH = (
 _DEFAULT_SEED_PART_VI = 600000
 _DEFAULT_SEED_DEAR_NOLAN_LOW = 601000
 _DEFAULT_SEED_DEAR_NOLAN_HIGH = 602000
+_DEFAULT_SEED_CROW_AOKI_TORUS = 603000
 
 
 @dataclass(frozen=True)
@@ -214,6 +216,43 @@ def _characterize_dear_nolan_high(
     )
 
 
+def _characterize_crow_aoki_torus(
+    module: ModuleType, *, seed: int, replicates: int
+) -> CharacterizationResult:
+    """Characterize the Crow & Aoki (1984) toroidal stepping-stone scenario.
+
+    Same configuration as `test_crow_aoki_torus_scenario_via_engine`
+    (a 3-by-3 torus, `N=20, mu=1e-5, m=0.05`, 150 loci, horizon 6000 --
+    see that test's own docstring for the empirical search that found
+    this specific configuration; 100 loci / horizon 2000 was tried first
+    and found to converge too slowly). Unlike the three scenarios above,
+    this one has no independent exact-recursion oracle (see that test's
+    own docstring for why) -- the characterization pass still measures
+    the same thing, the empirical per-replicate spread of the engine's
+    own pooled `G_ST`/`D`, it is just compared against the literal
+    published number directly rather than against an oracle too. Each
+    replicate costs around 225 seconds (versus, e.g., Dear-Nolan-high's
+    much cheaper 1-locus/30-generation replicates), so this
+    characterization pass deliberately defaults to fewer replicates than
+    the other three scenarios' own 20-100.
+    """
+    started = time.monotonic()
+    g_values, d_values = module._run_engine_pooled(
+        population_size=20,
+        m=module._crow_aoki_torus_matrix(3, 0.05),
+        mu=1e-5,
+        d=9,
+        n_loci=150,
+        horizon=6000,
+        replicates=replicates,
+        seed=seed,
+    )
+    elapsed = time.monotonic() - started
+    return CharacterizationResult(
+        "crow_aoki_torus", seed, replicates, elapsed, tuple(g_values), tuple(d_values)
+    )
+
+
 def _environment_fingerprint() -> dict[str, str]:
     """Return the interpreter/platform/package versions this run used."""
     fingerprint = {
@@ -339,12 +378,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--replicates-dear-nolan-high", type=int, default=20, help="default: 20"
     )
+    parser.add_argument(
+        "--replicates-crow-aoki-torus", type=int, default=10, help="default: 10"
+    )
     parser.add_argument("--seed-part-vi", type=int, default=_DEFAULT_SEED_PART_VI)
     parser.add_argument(
         "--seed-dear-nolan-low", type=int, default=_DEFAULT_SEED_DEAR_NOLAN_LOW
     )
     parser.add_argument(
         "--seed-dear-nolan-high", type=int, default=_DEFAULT_SEED_DEAR_NOLAN_HIGH
+    )
+    parser.add_argument(
+        "--seed-crow-aoki-torus", type=int, default=_DEFAULT_SEED_CROW_AOKI_TORUS
     )
     parser.add_argument(
         "--output",
@@ -371,6 +416,11 @@ def main(argv: list[str] | None = None) -> int:
             module,
             seed=args.seed_dear_nolan_high,
             replicates=args.replicates_dear_nolan_high,
+        ),
+        _characterize_crow_aoki_torus(
+            module,
+            seed=args.seed_crow_aoki_torus,
+            replicates=args.replicates_crow_aoki_torus,
         ),
     ]
     existing_sigmas = _load_existing_assertion_sigmas(args.output)

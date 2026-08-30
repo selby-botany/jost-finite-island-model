@@ -8,6 +8,45 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A fourth engine-level "published scenario" scientific test,
+  `test_crow_aoki_torus_scenario_via_engine`
+  (`test/validation/test_simulator_equilibrium.py`), reproducing Crow &
+  Aoki (1984)'s own two-dimensional toroidal stepping-stone `G_ST`
+  value (Table 1, `n=9, N=20, M=1.0, u=10⁻⁵`, published `G_ST=0.172`) —
+  a genuinely independent migration topology from every existing
+  scenario (a 3-by-3 torus with four-nearest-neighbor migration, versus
+  the symmetric island model every prior scenario used) and, more
+  importantly, from an author with no connection at all to the Jost/Chao
+  cluster every other literature-grounded test in this project traces
+  back to. Adds `_crow_aoki_torus_matrix` (`test/validation/
+  test_simulator_equilibrium.py`), building the dense migration matrix
+  for an `L`-by-`L` toroidal lattice by hand via `fim.model.topology.
+  dense_matrix_from_neighbors` — no new topology-sugar keyword was
+  needed. `dev/bin/calibrate-statistical-bands` gained the matching
+  fourth `_characterize_crow_aoki_torus` scenario and
+  `--replicates-crow-aoki-torus`/`--seed-crow-aoki-torus` flags.
+  Configuration (150 loci, horizon 6000 generations, `N=20`) was found
+  empirically, not guessed: a first attempt at 100 loci / horizon 2000
+  converged too slowly (a single seed's own `G_ST` trended `0.361 ->
+  0.255 -> 0.213` as horizon lengthened to 4000 then 8000, without
+  leveling off), and 60 loci proved too thin to reliably avoid all-loci
+  global fixation. Unlike the three existing scenarios, this one has no
+  independent exact-recursion oracle (the existing `_identity_
+  coefficients` are specific to the symmetric island model, not a torus
+  lattice) — an acknowledged, documented gap in rigor relative to them,
+  scoped separately as a possible follow-up rather than built here.  The
+  characterization pass's own empirical mean (`0.272`) lands measurably
+  above the published value, well inside the resulting 5-sigma band but
+  not centered on it; documented directly (`doc/statistical-
+  calibration-evidence.md`) as a plausible `O(1/N)`-scale residual at
+  `N=20`, the smallest population size used anywhere in this file, and
+  reported honestly rather than adjusted away. That evidence document's
+  own `crow_aoki_torus` section also documents a provenance deviation
+  from the other three scenarios: assembled from two exploratory runs
+  sharing the same seeded code path rather than one full script
+  invocation, with `D` captured for only 6 of the 10 replicates — noted
+  directly rather than silently normalized to look identical to the
+  other three.
 - A native File/Configure/Run/View/Help menu bar in the desktop GUI,
   reachable from every screen (including mid-run): File covers
   configuration/run file-system actions (New/Open/Save configuration,

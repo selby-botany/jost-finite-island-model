@@ -70,7 +70,12 @@ def test_calibration_evidence_data_is_retained_and_versioned() -> None:
     assert "python_version" in evidence["environment"]
 
     scenarios = evidence["scenarios"]
-    for scenario_name in ("part_vi", "dear_nolan_low", "dear_nolan_high"):
+    for scenario_name in (
+        "part_vi",
+        "dear_nolan_low",
+        "dear_nolan_high",
+        "crow_aoki_torus",
+    ):
         scenario = scenarios[scenario_name]
         assert scenario["replicates"] >= 2
         assert scenario["empirical_sigma_g"] > 0.0
