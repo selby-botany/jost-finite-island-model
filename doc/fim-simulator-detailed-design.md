@@ -45,7 +45,7 @@ and quality gates every change passes through, how continuous integration
 and releases work, and how the tool is packaged and distributed.
 
 Test detail is delegated in full to the companion
-[test plan](fim-simulator-test-plan.md); §9 here is
+[detailed test plan](fim-simulator-detailed-test-plan.md); §9 here is
 only a summary and a pointer. Section references of the form "design §N"
 point into the design document; bare "§N" references point within this
 document.
@@ -206,7 +206,10 @@ jost-finite-island-model/
 │   ├── jost-differentiation-measures.md      # companion: the statistics
 │   ├── fim-simulator-design.md    # model, statistics, and architecture
 │   ├── fim-simulator-detailed-design.md  # this doc
-│   ├── fim-simulator-test-plan.md # companion test plan
+│   ├── fim-simulator-test-plan.md # companion test plan (botanist-facing)
+│   ├── fim-simulator-detailed-test-plan.md # companion test plan (developer-facing)
+│   ├── fim-simulator-functional-api.md     # externally accessible engine API
+│   ├── fim-gui-test-plan.md       # desktop GUI test coverage
 │   ├── usage.md                   # user-facing command + config reference
 │   ├── configuration.md           # the P-bag schema, every key, every default
 │   ├── developer.md               # architecture-for-maintainers + how to extend
@@ -711,7 +714,7 @@ reach every related page and every section within it:
 ## 9. Test strategy summary
 
 Full detail is in the
-[test plan](fim-simulator-test-plan.md); this is
+[detailed test plan](fim-simulator-detailed-test-plan.md); this is
 the shape only. Eight test layers, mapped to where they live:
 
 - **Unit** (`test/<module>/`) — every value object and pure function,

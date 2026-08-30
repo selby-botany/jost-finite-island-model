@@ -38,8 +38,13 @@ The scientific rationale is in the
 [simulator design](fim-simulator-design.md). The
 [detailed design](fim-simulator-detailed-design.md)
 records implementation and release choices, and the
-[test plan](fim-simulator-test-plan.md) maps each
-requirement to evidence.
+[detailed test plan](fim-simulator-detailed-test-plan.md) maps each
+requirement to evidence — its own companions,
+[the externally accessible engine API](fim-simulator-functional-api.md)
+and the [desktop GUI test plan](fim-gui-test-plan.md), scope exactly
+what a functional test may call. The plain-language
+[test plan](fim-simulator-test-plan.md) is this project's own answer,
+for a non-programmer, to "can this simulator's numbers be trusted."
 
 ## Build environment
 

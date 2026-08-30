@@ -212,12 +212,16 @@ defines the complete scientific and architectural contract.
 - [Finite island model introduction](doc/finite-island-model-introduction.md)
 - [Jost differentiation measures](doc/jost-differentiation-measures.md)
 - [Simulator design](doc/fim-simulator-design.md)
+- [Test plan](doc/fim-simulator-test-plan.md) — how this project knows
+  its own numbers are trustworthy, written for a non-programmer
 
 ### Maintaining or extending the application
 
 - [Developer and extension guide](doc/developer.md)
 - [Detailed implementation design](doc/fim-simulator-detailed-design.md)
-- [Test plan](doc/fim-simulator-test-plan.md)
+- [Detailed test plan](doc/fim-simulator-detailed-test-plan.md)
+- [Externally accessible engine API](doc/fim-simulator-functional-api.md)
+- [Desktop GUI test plan](doc/fim-gui-test-plan.md)
 - [Source-tree orientation](src/README.md)
 - [Generated API reference](src/fim/API.md)
 - [Maintainer runbook](CONTRIBUTING.md)
