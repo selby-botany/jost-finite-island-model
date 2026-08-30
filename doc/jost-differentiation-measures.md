@@ -1475,6 +1475,9 @@ changes results — make it explicitly and record it.
 | K<sub>T</sub>, K<sub>S</sub> | Total / mean-per-deme allele counts |
 | `q` | Order of a diversity measure (rare-allele weighting) |
 | \mathrm{NGD} | Nei's genetic distance |
+| D̄<sub>m</sub> | Nei's absolute mean pairwise between-deme gene diversity |
+| R<sub>ST</sub> | Nei's `D̄_m` relative to within-deme diversity, `= D̄_m/H_S` |
+| G'<sub>ST</sub> | Nei's log-based large-differentiation `G_ST` estimator |
 
 ### Within one deme
 
@@ -1517,6 +1520,23 @@ E_{ST} = \frac{E_{T} - E_{S}}{E_{w}} \qquad (E_{w} = \ln d \text{ for equal deme
 
 ```math
 K_{ST} = 1 - \frac{K_{T}/K_{S} - d}{1 - d}
+```
+
+Nei (1973) also defines two further statistics this project implements
+(`d_m`, `r_st`, `g_st_log`) but does not otherwise discuss above: an
+*absolute*, not-`[0, 1]`-bounded pairwise diversity, its ratio to
+within-deme diversity, and a log-based alternative to `G_ST` recommended
+specifically for strong (subspecies-level) differentiation, where linear
+`G_ST` saturates. `D̄_m` and `R_ST` assume equal deme weights, the same
+restriction `D`, above, already carries and for the same reason (Nei's
+own Eq. 4 derivation assumes `w_i = 1/s`):
+
+```math
+\bar{D}_m = \frac{d}{d-1}(H_T - H_S), \qquad R_{ST} = \frac{\bar{D}_m}{H_S}
+```
+
+```math
+G'_{ST} = \frac{-\ln(J_T/J_S)}{-\ln J_T} = \frac{\ln(J_S/J_T)}{-\ln J_T}
 ```
 
 ### Useful identities
