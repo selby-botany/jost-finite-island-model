@@ -23,6 +23,10 @@ from fim.statistics import (
     heterozygosity,
     hill_number,
     identity,
+    identity_recovery_equilibrium,
+    identity_recovery_half_life,
+    identity_recovery_rate,
+    identity_recovery_trajectory,
     jost_d,
     k_st,
     r_st,
@@ -302,7 +306,9 @@ class DifferentiationStatisticsTests(unittest.TestCase):
     def test_r_st_is_d_m_over_h_s_and_none_at_zero_within_deme_diversity(self) -> None:
         """Nei's R_ST (Eq. 11) is D_m/H_S, undefined when H_S is zero."""
         table = [{0: 0.1, 1: 0.9}, {0: 0.9, 1: 0.1}]
-        self.assertAlmostEqual(r_st(table), d_m(table) / h_s(table))
+        actual_r_st = r_st(table)
+        assert actual_r_st is not None
+        self.assertAlmostEqual(actual_r_st, d_m(table) / h_s(table))
         self.assertIsNone(r_st([{0: 1.0}, {1: 1.0}]))
 
     def test_g_st_log_matches_a_hand_worked_value(self) -> None:
@@ -395,3 +401,65 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                 self.assertRaisesRegex(ValueError, message),
             ):
                 equilibrium_g_st(population_size, m, mu, d)
+
+    def test_identity_recovery_trajectory_at_zero_generations_is_the_start(
+        self,
+    ) -> None:
+        """No elapsed time means no change: f_0[t=0] == f0_initial exactly."""
+        self.assertEqual(
+            identity_recovery_trajectory(0.42, 100, 0.05, 0),
+            0.42,
+        )
+
+    def test_identity_recovery_half_life_lands_on_the_exact_midpoint(self) -> None:
+        """Whitlock (1992)'s t_1/2 is where the trajectory is exactly halfway.
+
+        Checked both directions -- starting above the equilibrium (the
+        trajectory decreases) and starting below it (the trajectory
+        increases) -- since `identity_recovery_rate` is the same either
+        way and the paper's own derivation makes no directional
+        assumption.
+        """
+        population_size = 100
+        m = 0.05
+        equilibrium = identity_recovery_equilibrium(population_size, m)
+        half_life = identity_recovery_half_life(population_size, m)
+        for f0_initial in (0.8, 0.01):
+            with self.subTest(f0_initial=f0_initial):
+                midpoint = f0_initial + (equilibrium - f0_initial) / 2.0
+                self.assertAlmostEqual(
+                    identity_recovery_trajectory(
+                        f0_initial, population_size, m, half_life
+                    ),
+                    midpoint,
+                )
+
+    def test_identity_recovery_rate_is_bounded_in_the_unit_interval(self) -> None:
+        """L = (1-m)^2 * (1 - 1/N) stays in [0, 1) for every valid input."""
+        for population_size, m in ((1, 0.0), (2, 0.0), (100, 0.05), (1000, 1.0)):
+            with self.subTest(population_size=population_size, m=m):
+                rate = identity_recovery_rate(population_size, m)
+                self.assertGreaterEqual(rate, 0.0)
+                self.assertLess(rate, 1.0)
+
+    def test_identity_recovery_half_life_is_zero_at_full_replacement(self) -> None:
+        """At m=1, L=0 and half-life is the correct limit, 0, not a crash."""
+        self.assertEqual(identity_recovery_half_life(100, 1.0), 0.0)
+
+    def test_identity_recovery_functions_validate_their_inputs(self) -> None:
+        """The identity-recovery family rejects the same malformed inputs
+        as the rest of this module's equilibrium-formula family."""
+        with self.assertRaisesRegex(ValueError, "positive gene-copy"):
+            identity_recovery_rate(0, 0.05)
+        with self.assertRaisesRegex(ValueError, "m must"):
+            identity_recovery_rate(100, 1.5)
+        with self.assertRaisesRegex(ValueError, "positive gene-copy"):
+            identity_recovery_equilibrium(0, 0.05)
+        with self.assertRaisesRegex(ValueError, "m must"):
+            identity_recovery_half_life(100, -0.1)
+        with self.assertRaisesRegex(ValueError, "f0_initial must"):
+            identity_recovery_trajectory(1.5, 100, 0.05, 10)
+        with self.assertRaisesRegex(ValueError, "generations must"):
+            identity_recovery_trajectory(0.5, 100, 0.05, -1)
+        with self.assertRaisesRegex(ValueError, "generations must"):
+            identity_recovery_trajectory(0.5, 100, 0.05, math.inf)
