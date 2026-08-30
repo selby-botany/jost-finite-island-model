@@ -88,6 +88,22 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
         printf 'pre-push: API generator unavailable; docs skipped\n'
     fi
 
+    # `test/TESTS.md`'s own freshness check -- the identical shape as
+    # `generate-api-docs` immediately above, `src/fim/API.md`'s
+    # test-suite counterpart.
+    if [[ -x dev/bin/generate-test-docs ]] \
+        && command -v pydoc-markdown >/dev/null 2>&1
+    then
+        tests_temporary=$(mktemp "${TMPDIR:-/tmp}/fim-tests.XXXXXX")
+        trap 'rm -f -- "${tests_temporary}"; rm -rf -- "${lock_dir}"' EXIT
+        dev/bin/generate-test-docs "${tests_temporary}"
+        diff -u -- test/TESTS.md "${tests_temporary}"
+        rm -f -- "${tests_temporary}"
+        trap 'rm -rf -- "${lock_dir}"' EXIT
+    else
+        printf 'pre-push: test-docs generator unavailable; docs skipped\n'
+    fi
+
     if [[ -x dev/bin/generate-help-html ]] \
         && python3 -c 'import markdown_it' >/dev/null 2>&1
     then

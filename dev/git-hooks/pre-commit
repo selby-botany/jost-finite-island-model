@@ -37,6 +37,24 @@ if ((${#python_files[@]})); then
     else
         printf 'pre-commit: API generator unavailable; refresh skipped\n'
     fi
+
+    # `test/TESTS.md` is `src/fim/API.md`'s test-suite counterpart
+    # (`dev/bin/generate-test-docs`) -- only worth regenerating when a
+    # staged change actually touches `test/`, unlike the API refresh
+    # above, which is cheap enough to run on any staged Python change.
+    test_files_staged=false
+    for path in "${python_files[@]}"; do
+        [[ "${path}" == test/* ]] && test_files_staged=true && break
+    done
+    if "${test_files_staged}"; then
+        if [[ -x dev/bin/generate-test-docs ]] \
+            && command -v pydoc-markdown >/dev/null 2>&1; then
+            dev/bin/generate-test-docs
+            git add -- test/TESTS.md
+        else
+            printf 'pre-commit: test-docs generator unavailable; refresh skipped\n'
+        fi
+    fi
 fi
 
 # Refresh the Help screen's generated HTML whenever a Tier 1 source doc,

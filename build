@@ -175,6 +175,21 @@ if "${run_docs}"; then
     else
         run dev/bin/generate-api-docs
     fi
+
+    # `dev/bin/generate-test-docs`'s own committed-output freshness
+    # check, the identical shape as `generate-api-docs` immediately
+    # above: `test/TESTS.md` is `src/fim/API.md`'s test-suite
+    # counterpart, generated from `test/`'s own docstrings the same way.
+    if "${ci}"; then
+        tests_temporary=$(mktemp "${TMPDIR:-/tmp}/fim-tests.XXXXXX")
+        trap 'rm -f -- "${tests_temporary}"' EXIT
+        run dev/bin/generate-test-docs "${tests_temporary}"
+        run diff -u -- test/TESTS.md "${tests_temporary}"
+        rm -f -- "${tests_temporary}"
+        trap - EXIT
+    else
+        run dev/bin/generate-test-docs
+    fi
     run dev/bin/check-doc-links
 
     # `dev/bin/generate-help-html`'s own committed-output freshness check,

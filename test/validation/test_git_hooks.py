@@ -177,6 +177,59 @@ def test_pre_commit_refreshes_api_only_for_staged_python(
     assert staged_names == "README.md\n"
 
 
+def test_pre_commit_refreshes_test_docs_only_for_staged_test_files(
+    tmp_path: Path,
+) -> None:
+    """`test/TESTS.md` regenerates only when a staged change touches
+    `test/` -- unlike `src/fim/API.md`, refreshed for any staged Python
+    change at all, `generate-test-docs` has nothing to regenerate for a
+    `src/`-only change."""
+    _initialize_repo(tmp_path)
+    src_module = tmp_path / "module.py"
+    src_module.write_text("VALUE = 1\n", encoding="utf-8")
+    test_dir = tmp_path / "test"
+    test_dir.mkdir(parents=True)
+    test_module = test_dir / "test_module.py"
+    test_module.write_text(
+        "def test_one() -> None:\n    assert True\n", encoding="utf-8"
+    )
+    tests_doc = test_dir / "TESTS.md"
+    tests_doc.write_text("old\n", encoding="utf-8")
+    generator = tmp_path / "dev" / "bin" / "generate-test-docs"
+    generator.parent.mkdir(parents=True)
+    generator.write_text(
+        "#!/usr/bin/env bash\nprintf 'generated\\n' > test/TESTS.md\n",
+        encoding="utf-8",
+    )
+    generator.chmod(0o755)
+    tools = tmp_path / "tools"
+    path = _tool_path(tools, "bash", "git", "grep", "python3")
+    for name in ("pydoc-markdown", "ruff"):
+        tool = tools / name
+        tool.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        tool.chmod(0o755)
+    env = {**os.environ, "PATH": path}
+
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "--quiet", "-m", "test: create fixture")
+
+    src_module.write_text("VALUE = 2\n", encoding="utf-8")
+    _git(tmp_path, "add", src_module.name)
+    src_result = _run_hook(tmp_path, "pre-commit", env=env)
+
+    assert src_result.returncode == 0, src_result.stderr
+    assert _git(tmp_path, "show", ":test/TESTS.md").stdout == "old\n"
+
+    test_module.write_text(
+        "def test_one() -> None:\n    assert 1 == 1\n", encoding="utf-8"
+    )
+    _git(tmp_path, "add", "test/test_module.py")
+    test_result = _run_hook(tmp_path, "pre-commit", env=env)
+
+    assert test_result.returncode == 0, test_result.stderr
+    assert _git(tmp_path, "show", ":test/TESTS.md").stdout == "generated\n"
+
+
 def test_pre_commit_rejects_new_non_ascii_filename(tmp_path: Path) -> None:
     """A newly added filename outside ASCII fails before commit."""
     _initialize_repo(tmp_path)
