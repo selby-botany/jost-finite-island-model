@@ -6,6 +6,13 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [dev, main]
+  # Drives the `slow-tests` job alone (see its own `if:` below) --
+  # every other job in this file only ever runs for `push`/`pull_
+  # request`/a tag push, never for these two triggers, so a scheduled
+  # or manually dispatched run costs nothing beyond that one job.
+  schedule:
+    - cron: "17 8 * * *"  # ~03:17 US/Eastern (04:17 EDT), arbitrary
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -16,6 +23,10 @@ concurrency:
 
 jobs:
   build:
+    # `schedule`/`workflow_dispatch` drive `slow-tests` alone (see its
+    # own comment) -- this job stays exactly as fast and exactly as
+    # blocking as before for the events it already ran for.
+    if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -61,71 +72,94 @@ jobs:
         run: ./build --no-lint --no-type --no-docs --no-package
         timeout-minutes: 5
       # `build`'s own `--ci` branch deliberately drops `-m`'s argument
-      # entirely (`pytest_marker_args=()`) rather than negating every
-      # marker in turn, specifically so a newly added marker is included
-      # by default instead of silently excluded (`build`'s own comment
-      # at that line) -- `gui` is exactly such a marker, so this step
-      # really does try to open a real pywebview/GTK window, unlike the
-      # fast layer above (a bare, unflagged `pytest` call, which still
-      # gets pyproject.toml's own default `-m 'not ... and not gui'`).
-      # Found the hard way: without `xvfb-run`, this step crashed
-      # instantly the moment pytest reached the first `gui`-marked test
-      # file, before printing a single result from it -- no display at
-      # all, not a slow hang, `##[error]Process completed with exit
-      # code 1` arriving 1.2ms after that file's own collection line.
-      # Budget history: 30 minutes was sufficient through the last known
-      # green run of this step (2dd1ea3, 2026-08-29, full step 10m54s
-      # total) but every attempt since has hit this ceiling and been
-      # killed mid-run (run 33287369208, commit 0dd4282, the first push
-      # to include the two new `slow`+`statistical` engine scenarios
-      # below; run 33320621024, commit 10f3c9f, two commits later) --
-      # both times stalled at the identical point, immediately after
-      # `test/validation/test_simulator_equilibrium.py`'s own fast items
-      # print their progress dots, with no further pytest output before
-      # the kill. That is not a hang: this file's own five `slow`+
-      # `statistical` tests carry their own measured (local, offline)
-      # runtimes in their docstrings (~60s, ~12s, ~130s, ~23 min, ~52s --
-      # summing to ~27.2 min alone), and the two newest of them
-      # (`test_crow_aoki_torus_scenario_via_engine`,
-      # `test_chao_shannon_equilibrium_scenario_via_engine`, added by
-      # `8b19a56`/`45ba3f1`) did not exist yet at the last green run --
-      # added to that run's own real 624s full-suite time, the total
-      # comes to roughly 34-35 minutes before lint/mypy/docs/package
-      # overhead (~30s) is even added.
+      # down to just `not slow` (see `build`'s own comment at that line)
+      # rather than negating every OTHER marker in turn, specifically so
+      # a newly added marker (besides `slow` itself) is included here by
+      # default instead of silently excluded -- `gui` is exactly such a
+      # marker, so this step really does try to open a real pywebview/
+      # GTK window, unlike the fast layer above (a bare, unflagged
+      # `pytest` call, which still gets pyproject.toml's own default
+      # `-m 'not ... and not gui'`). Found the hard way: without
+      # `xvfb-run`, this step crashed instantly the moment pytest reached
+      # the first `gui`-marked test file, before printing a single result
+      # from it -- no display at all, not a slow hang, `##[error]Process
+      # completed with exit code 1` arriving 1.2ms after that file's own
+      # collection line.
       #
-      # Raised 30 -> 45 minutes on that evidence (commit 674ce26) --
-      # insufficient: run 33326916619 (commit 5085719, a documentation-
-      # only push touching no test file or CI config) still timed out,
-      # both matrix jobs stalled at the *identical* point once again,
-      # this time after running 41-42 minutes past that point (46m51s-
-      # 47m2s total) before the 45-minute kill -- a real, further
-      # increase over the previous ~27-34 minute range, with nothing in
-      # the intervening commits that could add engine runtime. The most
-      # likely explanation is CI-runner speed variance (a known property
-      # of shared runners) on top of the local-machine-measured
-      # docstring estimates above, which were never validated against
-      # actual CI-runner throughput -- raised further, with real margin
-      # this time rather than a minimal bump, specifically so this
-      # class of variance does not require a third repeat of this same
-      # investigation. Still well short of the job's own 360-minute
-      # default ceiling.
+      # Budget history, for whoever next has to touch this number: 30
+      # minutes was sufficient through the last known green run of this
+      # step (2dd1ea3, 2026-08-29, full step 10m54s total, before this
+      # file's own `slow`-marked engine scenarios existed at all). Once
+      # they did, this step's own timeout was raised twice in one day
+      # (30 -> 45 -> 75 minutes) chasing what looked like ordinary
+      # CI-runner speed variance on top of a legitimately expensive
+      # suite -- and STILL timed out a third time (run 33330448601,
+      # commit 6db08c0, 75-minute budget), stalled at the identical
+      # point as every prior failure (immediately after `test/
+      # validation/test_simulator_equilibrium.py`'s own fast items print
+      # their progress dots) for over 71 minutes straight with zero
+      # further pytest output, on a push that touched no test-affecting
+      # code at all. Three raises that each proved insufficient within
+      # the same day is not "the estimate was a little off" -- it is the
+      # wrong fix for this shape of problem: a single `slow`+
+      # `statistical`-marked test (`test_crow_aoki_torus_scenario_via_
+      # engine`, 150 loci at horizon 6000, no equilibrium-start shortcut
+      # available -- ~23 minutes measured locally, offline, on ordinary
+      # developer hardware) run inside a job that also has to fit lint,
+      # type-checking, docs, packaging, and every `gui` test into the
+      # same fixed wall-clock window, on a shared runner whose own CPU
+      # allocation for a long, sustained, CPU-bound pure-Python
+      # simulation loop is not something a fixed timeout can be sized
+      # against reliably.
       #
-      # Recommendation, not yet acted on: `test/validation/test_
-      # simulator_equilibrium.py` alone can consume most of this step's
-      # entire budget on a slow runner, on every single push, for a
-      # `slow`-marked test -- exactly the marker this project's own
-      # `doc/fim-simulator-detailed-test-plan.md` (§3) already
-      # documents as intended for "CI nightly / on demand," not a
-      # blocking per-push gate. No scheduled (`on: schedule`) workflow
-      # exists in this file at all; splitting `slow`+`statistical`
-      # scenario tests into one would make this budget problem stop
-      # recurring by construction, rather than by raising this number
-      # again the next time a slow test is added or a runner has a slow
-      # day -- a real, larger workflow change, not attempted here.
+      # Fix: `slow`-marked tests no longer run here at all -- moved to
+      # the separately scheduled/on-demand `slow-tests` job below, which
+      # answers exactly the question `doc/fim-simulator-detailed-test-
+      # plan.md` (§3) already documented as this marker's own intended
+      # home ("CI nightly / on demand") well before this job's own
+      # budget problems started. This step's own timeout drops back down
+      # accordingly -- the `slow` suite was the entire reason it needed
+      # to be large.
       - name: Run the full CI gate (lint, type, docs, package, and the
-          full test suite incl. slow/statistical/gui scenarios)
+          full test suite incl. statistical/gui scenarios, excl. slow)
         run: xvfb-run --auto-servernum ./build --ci
-        timeout-minutes: 75
+        timeout-minutes: 20
+
+  # The `slow`-marked engine scenario suite (`test/validation/test_
+  # simulator_equilibrium.py`'s five published/theoretical literature
+  # comparisons, `test_crow_aoki_torus_scenario_via_engine` alone
+  # ~23 minutes measured locally) -- split out of `build`'s own per-push
+  # gate above after that gate's own `timeout-minutes` proved unable to
+  # reliably budget for it even after being raised three times in one day
+  # (30 -> 45 -> 75 minutes, the last of which still timed out; see
+  # `build`'s own step comment for the full evidence). Runs on a daily
+  # schedule and on manual dispatch only -- never for a push or a pull
+  # request, so a slow runner or a newly added expensive scenario can
+  # never block or delay an ordinary push the way it did three times
+  # before this job existed. This is exactly what this project's own
+  # `doc/fim-simulator-detailed-test-plan.md` (§3) already documented as
+  # the `slow` marker's intended home ("CI nightly / on demand") before
+  # any of those three failures happened -- the code did not match that
+  # documented intent until now.
+  #
+  # A single Python version (not `build`'s own 3.12/3.13 matrix): the
+  # `slow` suite exercises the engine's own scientific behavior, which
+  # does not vary by interpreter version the way a packaging or typing
+  # concern might -- `build`'s own matrix already covers the interpreter-
+  # version question for everything else.
+  slow-tests:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Run the slow engine-scenario suite
+        run: ./build --slow-only
 
   # Gate for the release jobs below: cheap and fast, so it runs alongside
   # `build` rather than waiting on it. Only ever runs for a tag push (every
@@ -337,6 +371,7 @@ jobs:
   # drift out of sync with pyproject.toml's own dependencies at any
   # time, not only at release time.
   homebrew:
+    if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

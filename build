@@ -17,6 +17,7 @@ run_lint=true
 run_package=true
 run_test=true
 run_type=true
+slow_only=false
 
 # Print command usage.
 # Args:
@@ -27,7 +28,7 @@ usage() {
     cat <<'EOF'
 Usage: build [--ci] [--coverage] [--dry-run]
              [--no-lint] [--no-type] [--no-test] [--no-docs] [--no-package]
-             [--help]
+             [--slow-only] [--help]
 EOF
 }
 
@@ -57,6 +58,13 @@ while (($#)); do
         --no-package) run_package=false ;;
         --no-test) run_test=false ;;
         --no-type) run_type=false ;;
+        --slow-only)
+            slow_only=true
+            run_docs=false
+            run_lint=false
+            run_package=false
+            run_type=false
+            ;;
         --help)
             usage
             exit 0
@@ -69,6 +77,11 @@ while (($#)); do
     esac
     shift
 done
+
+if "${ci}" && "${slow_only}"; then
+    printf '%s\n' '--ci and --slow-only are mutually exclusive' >&2
+    exit 2
+fi
 
 if "${ci}" && {
     ! "${run_docs}" || ! "${run_lint}" || ! "${run_package}" \
@@ -147,14 +160,30 @@ fi
 "${run_type}" && run "${python}" -m mypy
 
 if "${run_test}"; then
-    if "${coverage}"; then
-        # The authoritative --ci gate runs every marker, including
-        # `packaging` (R17) and the `slow`/`statistical` layers the fast
-        # local default skips; dropping -m's argument entirely, rather
-        # than negating every marker in turn, is what keeps a newly added
-        # marker included here by default instead of silently excluded.
+    if "${slow_only}"; then
+        # The `slow` scenario suite's own separately scheduled/on-demand
+        # gate (`.github/workflows/ci.yml`'s own `slow-tests` job) --
+        # deliberately carved out of the authoritative --ci gate below
+        # after this project's own per-push gate repeatedly proved
+        # unable to reliably budget a fixed wall-clock timeout for it
+        # (30 -> 45 -> 75 minutes, each raise itself insufficient within
+        # the same day; see that job's own inline comment for the
+        # evidence). No coverage here -- coverage is `--ci`'s own job,
+        # and this small, deliberately separate invocation is not it.
+        run "${python}" -m pytest -o addopts= --strict-config \
+            --strict-markers -m 'slow'
+    elif "${coverage}"; then
+        # The authoritative --ci gate runs every marker except `slow`
+        # (see the `--slow-only` branch above for where that one now
+        # runs instead), including `packaging` (R17) and the
+        # `statistical` layer the fast local default also skips.
+        # Dropping -m's argument down to just `not slow`, rather than
+        # negating every *other* marker in turn, is what keeps a newly
+        # added marker included here by default instead of silently
+        # excluded -- the same reasoning R17 itself established, now
+        # applied to one deliberately-named exception rather than none.
         pytest_marker_args=(-m 'not slow and not packaging')
-        "${ci}" && pytest_marker_args=()
+        "${ci}" && pytest_marker_args=(-m 'not slow')
         run "${python}" -m pytest -o addopts= --strict-config \
             --strict-markers "${pytest_marker_args[@]}" \
             --cov=fim --cov-branch --cov-report=term-missing \

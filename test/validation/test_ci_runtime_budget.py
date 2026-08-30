@@ -84,3 +84,68 @@ def test_each_test_step_has_a_nonflaky_wall_clock_budget() -> None:
     assert isinstance(fast_budget, int) and fast_budget > 0
     assert isinstance(full_budget, int) and full_budget > 0
     assert fast_budget < full_budget
+
+
+def test_slow_tests_job_never_runs_for_a_push_or_pull_request() -> None:
+    """`slow-tests` only fires on a schedule or manual dispatch.
+
+    The `slow`-marked engine scenario suite was moved out of `build`'s
+    own per-push gate into this job specifically so a push or pull
+    request can never be blocked or delayed by it -- confirmed directly
+    here, not just by convention, since a workflow-file typo (a `push`
+    accidentally left in this job's own `if:`) would otherwise silently
+    reintroduce the exact problem this job exists to close.
+    """
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    slow_tests = workflow["jobs"]["slow-tests"]
+
+    condition = slow_tests["if"]
+    assert "schedule" in condition
+    assert "workflow_dispatch" in condition
+    assert "push" not in condition
+    assert "pull_request" not in condition
+
+
+def test_slow_tests_job_runs_slow_only_with_its_own_budget() -> None:
+    """`slow-tests` runs `build --slow-only` under its own real timeout."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    slow_tests = workflow["jobs"]["slow-tests"]
+
+    run_steps = [step for step in slow_tests["steps"] if "run" in step]
+    slow_step = next(step for step in run_steps if "--slow-only" in str(step["run"]))
+
+    assert str(slow_step["run"]).strip() == "./build --slow-only"
+    budget = slow_tests["timeout-minutes"]
+    assert isinstance(budget, int) and budget > 0
+
+
+def test_build_and_homebrew_jobs_never_run_on_schedule_or_dispatch() -> None:
+    """`build`/`homebrew` skip the two triggers `slow-tests` alone answers.
+
+    Without this, a scheduled or manually dispatched run would
+    needlessly re-run the entire ordinary per-push pipeline alongside
+    `slow-tests`, not just the slow suite it was actually meant to add.
+    """
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+
+    for job_name in ("build", "homebrew"):
+        condition = workflow["jobs"][job_name]["if"]
+        assert "schedule" in condition
+        assert "workflow_dispatch" in condition
+
+
+def test_ci_workflow_declares_schedule_and_workflow_dispatch_triggers() -> None:
+    """The two triggers `slow-tests`'s own `if:` checks for actually exist.
+
+    PyYAML's default (YAML 1.1) resolver parses the bare `on:` key as
+    the boolean `True`, not the string `"on"` -- confirmed directly
+    before writing this assertion, not assumed -- so this reads the
+    trigger block back the same way every other test in this file
+    already reads the rest of the workflow, through `workflow[True]`.
+    """
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+
+    triggers = workflow[True]
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
+    assert triggers["schedule"][0]["cron"].count(" ") == 4

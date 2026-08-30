@@ -296,18 +296,30 @@ def test_publish_rejects_a_malformed_tag_before_comparing_to_version_txt() -> No
     assert 'test "${GITHUB_REF_NAME#v}" = "$(cat version.txt)"' in verify_step["run"]
 
 
-def test_ci_build_runs_every_test_marker() -> None:
-    """The authoritative release gate applies no marker exclusion at all.
+def test_ci_build_runs_every_test_marker_except_slow() -> None:
+    """The authoritative release gate excludes only `slow`, deliberately.
 
     Regression test for R17: `--ci` used to hard-code `not packaging`
     even in CI mode, so a test marked `packaging` (declared in
-    `pyproject.toml` but, before this fix, carried by zero tests) could
+    `pyproject.toml` but, before that fix, carried by zero tests) could
     never run through any path a contributor or CI actually exercises.
-    `--ci` now drops the `-m` marker filter entirely — the local default
-    still excludes `slow`, `statistical`, and `packaging` for fast
-    iteration, but the authoritative gate excludes nothing.
+    `--ci` dropped the `-m` marker filter entirely to fix that — the
+    local default still excludes `slow`, `statistical`, and `packaging`
+    for fast iteration, and the authoritative gate excluded nothing at
+    all, for years.
+
+    That "excludes nothing" invariant was narrowed, deliberately, once
+    (not silently the way R17's own original bug was): `slow`-marked
+    tests moved to their own separately scheduled/on-demand `slow-tests`
+    job (`.github/workflows/ci.yml`) after this same gate's own
+    `timeout-minutes` proved unable to reliably budget for a single
+    `slow`-marked engine scenario test, even after being raised three
+    times in one day. `--ci` now excludes `slow` specifically, named
+    explicitly here rather than silently — every other marker,
+    including `packaging` and `statistical`, keeps running through this
+    one gate exactly as R17 originally established.
     """
     build_script = BUILD_SCRIPT.read_text(encoding="utf-8")
 
     assert "pytest_marker_args=(-m 'not slow and not packaging')" in build_script
-    assert '"${ci}" && pytest_marker_args=()' in build_script
+    assert "\"${ci}\" && pytest_marker_args=(-m 'not slow')" in build_script

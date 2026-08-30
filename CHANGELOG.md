@@ -370,6 +370,28 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   this class of problem recurring by construction rather than by
   raising this number again the next time a slow test is added or a
   runner has a slow day.
+  A third timeout, run 33330448601 (commit `6db08c0`, the 75-minute
+  raise itself -- again touching no test-affecting code), again
+  stalled at the identical point, this time 71+ minutes past it
+  (1h16m50s total) before the 75-minute kill. Three raises in a row,
+  each insufficient almost immediately and each on a commit unable to
+  add engine runtime, is not distinguishable from "the next raise will
+  hold" -- it is the recurring-by-construction problem the previous
+  entry already named. Acted on this time instead of raised again: the
+  five `slow`+`statistical` engine scenario tests move out of the
+  per-push gate entirely, into a new `slow-tests` job that only runs
+  on `schedule` (nightly cron) or manual `workflow_dispatch`, with its
+  own 90-minute budget and no effect whatsoever on push/pull-request
+  latency. `build` gained a `--slow-only` flag (runs only `-m slow`,
+  no coverage) for that job to call, and `--ci`'s own marker filter
+  changed from excluding nothing to excluding `slow` (`-m 'not
+  slow'`), keeping every other marker -- `statistical`, `gui`,
+  `packaging` -- included by default the same way R17 already
+  established. The "Run the full CI gate" step's own `timeout-minutes`
+  drops back to 20 now that it no longer carries the scenario suite's
+  cost at all. `build`/`homebrew` are gated off the two new triggers so
+  a scheduled/dispatched run adds only `slow-tests`, not a second full
+  pipeline run alongside it.
 
 ## [1.2.0] - 2026-08-22
 

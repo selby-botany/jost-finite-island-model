@@ -9082,6 +9082,64 @@ on test determinism (CLAUDE.md: "a test is a pure function of its
 commit") forbids. The full step's budget is larger than the fast
 step's, matching the much larger scenario suite it alone carries.
 
+<a id="validation.test_ci_runtime_budget.test_slow_tests_job_never_runs_for_a_push_or_pull_request"></a>
+
+#### test\_slow\_tests\_job\_never\_runs\_for\_a\_push\_or\_pull\_request
+
+```python
+def test_slow_tests_job_never_runs_for_a_push_or_pull_request() -> None
+```
+
+`slow-tests` only fires on a schedule or manual dispatch.
+
+The `slow`-marked engine scenario suite was moved out of `build`'s
+own per-push gate into this job specifically so a push or pull
+request can never be blocked or delayed by it -- confirmed directly
+here, not just by convention, since a workflow-file typo (a `push`
+accidentally left in this job's own `if:`) would otherwise silently
+reintroduce the exact problem this job exists to close.
+
+<a id="validation.test_ci_runtime_budget.test_slow_tests_job_runs_slow_only_with_its_own_budget"></a>
+
+#### test\_slow\_tests\_job\_runs\_slow\_only\_with\_its\_own\_budget
+
+```python
+def test_slow_tests_job_runs_slow_only_with_its_own_budget() -> None
+```
+
+`slow-tests` runs `build --slow-only` under its own real timeout.
+
+<a id="validation.test_ci_runtime_budget.test_build_and_homebrew_jobs_never_run_on_schedule_or_dispatch"></a>
+
+#### test\_build\_and\_homebrew\_jobs\_never\_run\_on\_schedule\_or\_dispatch
+
+```python
+def test_build_and_homebrew_jobs_never_run_on_schedule_or_dispatch() -> None
+```
+
+`build`/`homebrew` skip the two triggers `slow-tests` alone answers.
+
+Without this, a scheduled or manually dispatched run would
+needlessly re-run the entire ordinary per-push pipeline alongside
+`slow-tests`, not just the slow suite it was actually meant to add.
+
+<a id="validation.test_ci_runtime_budget.test_ci_workflow_declares_schedule_and_workflow_dispatch_triggers"></a>
+
+#### test\_ci\_workflow\_declares\_schedule\_and\_workflow\_dispatch\_triggers
+
+```python
+def test_ci_workflow_declares_schedule_and_workflow_dispatch_triggers(
+) -> None
+```
+
+The two triggers `slow-tests`'s own `if:` checks for actually exist.
+
+PyYAML's default (YAML 1.1) resolver parses the bare `on:` key as
+the boolean `True`, not the string `"on"` -- confirmed directly
+before writing this assertion, not assumed -- so this reads the
+trigger block back the same way every other test in this file
+already reads the rest of the workflow, through `workflow[True]`.
+
 
 
 <a id="validation.test_doc_links"></a>
@@ -10158,23 +10216,35 @@ Regression test for R14: comparing `${GITHUB_REF_NAME#v}` to
 like `vX.Y.Z` in the first place — only that whatever followed the
 stripped `v` happened to equal the file's content.
 
-<a id="validation.test_release_notes.test_ci_build_runs_every_test_marker"></a>
+<a id="validation.test_release_notes.test_ci_build_runs_every_test_marker_except_slow"></a>
 
-#### test\_ci\_build\_runs\_every\_test\_marker
+#### test\_ci\_build\_runs\_every\_test\_marker\_except\_slow
 
 ```python
-def test_ci_build_runs_every_test_marker() -> None
+def test_ci_build_runs_every_test_marker_except_slow() -> None
 ```
 
-The authoritative release gate applies no marker exclusion at all.
+The authoritative release gate excludes only `slow`, deliberately.
 
 Regression test for R17: `--ci` used to hard-code `not packaging`
 even in CI mode, so a test marked `packaging` (declared in
-`pyproject.toml` but, before this fix, carried by zero tests) could
+`pyproject.toml` but, before that fix, carried by zero tests) could
 never run through any path a contributor or CI actually exercises.
-`--ci` now drops the `-m` marker filter entirely — the local default
-still excludes `slow`, `statistical`, and `packaging` for fast
-iteration, but the authoritative gate excludes nothing.
+`--ci` dropped the `-m` marker filter entirely to fix that — the
+local default still excludes `slow`, `statistical`, and `packaging`
+for fast iteration, and the authoritative gate excluded nothing at
+all, for years.
+
+That "excludes nothing" invariant was narrowed, deliberately, once
+(not silently the way R17's own original bug was): `slow`-marked
+tests moved to their own separately scheduled/on-demand `slow-tests`
+job (`.github/workflows/ci.yml`) after this same gate's own
+`timeout-minutes` proved unable to reliably budget for a single
+`slow`-marked engine scenario test, even after being raised three
+times in one day. `--ci` now excludes `slow` specifically, named
+explicitly here rather than silently — every other marker,
+including `packaging` and `statistical`, keeps running through this
+one gate exactly as R17 originally established.
 
 
 
