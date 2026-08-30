@@ -340,9 +340,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   newest scenarios existed), the legitimate total comes to roughly
   34-35 minutes before the ~30 s of lint/mypy/docs/package overhead the
   same step also carries — already past 30 minutes with no CI-runner
-  slowdown assumed. Raised to 45 minutes, comfortable headroom above
-  that documented cost, still well short of the job's own 360-minute
-  default ceiling.
+  slowdown assumed. Raised to 45 minutes.
+  Still insufficient: run 33326916619 (commit `5085719`, a
+  documentation-only push touching no test file or CI config at all)
+  again timed out, both matrix jobs again stalling at the identical
+  point, this time 41-42 minutes past it (46m51s/47m2s total) before
+  the 45-minute kill — a real further increase over the ~27-34 minute
+  range above, with nothing in the intervening commits able to add
+  engine runtime. Most likely explanation: CI-runner speed variance (a
+  known property of shared runners) on top of docstring runtimes that
+  were only ever measured locally, never against actual CI-runner
+  throughput. Raised again, to 75 minutes this time, with real margin
+  rather than a minimal bump. A further recommendation, not yet acted
+  on: `slow`-marked tests are already documented (`doc/
+  fim-simulator-detailed-test-plan.md` §3) as intended for "CI nightly
+  / on demand," not a blocking per-push gate, but no scheduled workflow
+  exists in this repository at all — splitting them out would stop
+  this class of problem recurring by construction rather than by
+  raising this number again the next time a slow test is added or a
+  runner has a slow day.
 
 ## [1.2.0] - 2026-08-22
 

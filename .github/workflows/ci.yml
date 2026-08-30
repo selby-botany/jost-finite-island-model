@@ -83,23 +83,49 @@ jobs:
       # `test/validation/test_simulator_equilibrium.py`'s own fast items
       # print their progress dots, with no further pytest output before
       # the kill. That is not a hang: this file's own five `slow`+
-      # `statistical` tests carry their own measured runtimes in their
-      # docstrings (~60s, ~12s, ~130s, ~23 min, ~52s -- summing to
-      # ~27.2 min alone), and the two newest of them
+      # `statistical` tests carry their own measured (local, offline)
+      # runtimes in their docstrings (~60s, ~12s, ~130s, ~23 min, ~52s --
+      # summing to ~27.2 min alone), and the two newest of them
       # (`test_crow_aoki_torus_scenario_via_engine`,
       # `test_chao_shannon_equilibrium_scenario_via_engine`, added by
       # `8b19a56`/`45ba3f1`) did not exist yet at the last green run --
       # added to that run's own real 624s full-suite time, the total
       # comes to roughly 34-35 minutes before lint/mypy/docs/package
-      # overhead (~30s) is even added, which already exceeds 30 minutes
-      # on its own before any CI-runner slowdown. 45 minutes leaves
-      # comfortable headroom above that legitimate, already-documented
-      # cost without masking a real future hang (still well short of
-      # the job's own 360-minute default ceiling).
+      # overhead (~30s) is even added.
+      #
+      # Raised 30 -> 45 minutes on that evidence (commit 674ce26) --
+      # insufficient: run 33326916619 (commit 5085719, a documentation-
+      # only push touching no test file or CI config) still timed out,
+      # both matrix jobs stalled at the *identical* point once again,
+      # this time after running 41-42 minutes past that point (46m51s-
+      # 47m2s total) before the 45-minute kill -- a real, further
+      # increase over the previous ~27-34 minute range, with nothing in
+      # the intervening commits that could add engine runtime. The most
+      # likely explanation is CI-runner speed variance (a known property
+      # of shared runners) on top of the local-machine-measured
+      # docstring estimates above, which were never validated against
+      # actual CI-runner throughput -- raised further, with real margin
+      # this time rather than a minimal bump, specifically so this
+      # class of variance does not require a third repeat of this same
+      # investigation. Still well short of the job's own 360-minute
+      # default ceiling.
+      #
+      # Recommendation, not yet acted on: `test/validation/test_
+      # simulator_equilibrium.py` alone can consume most of this step's
+      # entire budget on a slow runner, on every single push, for a
+      # `slow`-marked test -- exactly the marker this project's own
+      # `doc/fim-simulator-detailed-test-plan.md` (§3) already
+      # documents as intended for "CI nightly / on demand," not a
+      # blocking per-push gate. No scheduled (`on: schedule`) workflow
+      # exists in this file at all; splitting `slow`+`statistical`
+      # scenario tests into one would make this budget problem stop
+      # recurring by construction, rather than by raising this number
+      # again the next time a slow test is added or a runner has a slow
+      # day -- a real, larger workflow change, not attempted here.
       - name: Run the full CI gate (lint, type, docs, package, and the
           full test suite incl. slow/statistical/gui scenarios)
         run: xvfb-run --auto-servernum ./build --ci
-        timeout-minutes: 45
+        timeout-minutes: 75
 
   # Gate for the release jobs below: cheap and fast, so it runs alongside
   # `build` rather than waiting on it. Only ever runs for a tag push (every
