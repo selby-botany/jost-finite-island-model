@@ -323,6 +323,26 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   run…" click is still in flight no longer risks an unhandled crash —
   every bridge method that needs the app's own window now declines
   gracefully instead of indexing an empty window list.
+- `.github/workflows/ci.yml`'s "Run the full CI gate" step's
+  `timeout-minutes` (`30`) was too tight for the suite's own legitimate,
+  already-documented cost, not a hang: GitHub Actions run 33320621024
+  (`build (3.12)`/`build (3.13)`, commit `10f3c9f`) and, before it, run
+  33287369208 (commit `0dd4282`, the first push to include the two
+  newest `slow`+`statistical` engine scenarios in
+  `test/validation/test_simulator_equilibrium.py`) both stalled at the
+  identical point — immediately after that file's own fast items print
+  their progress dots, no further pytest output before the 30-minute
+  kill — which is not what a hang looks like across two independent
+  attempts. Those five `slow`+`statistical` tests carry their own
+  measured runtimes in their docstrings (~60 s, ~12 s, ~130 s, ~23 min,
+  ~52 s, summing to ~27.2 min alone); added to the last known-green
+  run's own real 624 s full-suite time (`2dd1ea3`, before the two
+  newest scenarios existed), the legitimate total comes to roughly
+  34-35 minutes before the ~30 s of lint/mypy/docs/package overhead the
+  same step also carries — already past 30 minutes with no CI-runner
+  slowdown assumed. Raised to 45 minutes, comfortable headroom above
+  that documented cost, still well short of the job's own 360-minute
+  default ceiling.
 
 ## [1.2.0] - 2026-08-22
 
