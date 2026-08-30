@@ -8,6 +8,32 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `dev/docker/hierfstat/` (a pinned `r-base:4.6.1` image with hierfstat
+  0.5-11 installed) and `dev/bin/compare-against-hierfstat`: this
+  project's first cross-implementation comparison against a genuinely
+  independent simulator of the same model, rather than another way of
+  checking this project's own math against itself. hierfstat's own
+  summary statistics are deliberately never called (they are finite-
+  sample, bias-corrected estimators, a different quantity from this
+  project's exact `h_s`/`h_t`/`g_st`/`jost_d` -- the same trap already
+  found for Weir & Cockerham and Chao et al.'s starling estimates,
+  confirmed a third time this session against mmod's own test suite);
+  instead the tool reads hierfstat's raw simulated genotypes directly
+  and runs this project's own statistics on them. Not wired into
+  `build`/`ci.yml`, matching `dev/bin/calibrate-statistical-bands`'s own
+  precedent -- a report, not a pass/fail assertion. Run for real this
+  session at this project's own Part VI scenario (`population_size=100,
+  m=0.01, mu=0.005, d=4`, 200 loci, 4000 generations): hierfstat's own
+  simulated `G_ST=0.1775, D=0.5922`, against this project's own engine's
+  characterized mean (`G_ST=0.175765, D=0.603904`,
+  `test/validation/statistical-calibration-evidence.json`) and the
+  closed-form prediction (`G_ST=0.1698, D=0.6000`) -- all three within a
+  few percent of each other, hierfstat's own `G_ST` landing closer to
+  this project's engine than to the diffusion-limit theory. Full
+  research and reasoning, including why mmod's own test data was not
+  used directly: `dev/doc/apps/selby/jost-finite-island-model/
+  20260830-claude-sonnet-5-external-tooling-cross-validation-plan.md` in
+  the `1121-citrus` project.
 - A new deterministic, parametrized test,
   `test_stepping_stone_differentiation_is_at_least_the_island_models`
   (`test/validation/test_simulator_equilibrium.py`), checking Kimura &

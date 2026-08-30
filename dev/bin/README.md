@@ -5,6 +5,7 @@
   - [At a glance](#at-a-glance)
   - [`calibrate-statistical-bands`](#calibrate-statistical-bands)
   - [`check-doc-links`](#check-doc-links)
+  - [`compare-against-hierfstat`](#compare-against-hierfstat)
   - [`extract-release-notes`](#extract-release-notes)
   - [`generate-api-docs`](#generate-api-docs)
   - [`generate-help-html`](#generate-help-html)
@@ -59,6 +60,7 @@ run by hand.
 |---|---|
 | [`calibrate-statistical-bands`](#calibrate-statistical-bands) | Re-measures how much random variation is normal for the three published-science validation scenarios, so the tests that check the simulator against them use an honest, evidence-based tolerance |
 | [`check-doc-links`](#check-doc-links) | Confirms every link between documentation pages actually goes somewhere, and that no page is orphaned with nothing linking to it |
+| [`compare-against-hierfstat`](#compare-against-hierfstat) | Runs an independently-written simulator (hierfstat, an R package, inside Docker) alongside this project's own, and prints how closely the two agree |
 | [`extract-release-notes`](#extract-release-notes) | Pulls one version's own section out of `CHANGELOG.md`, for GitHub's release page |
 | [`generate-api-docs`](#generate-api-docs) | Rebuilds the generated API reference (`src/fim/API.md`) from the code's own docstrings |
 | [`generate-help-html`](#generate-help-html) | Rebuilds the desktop app's in-app Help screen content from `doc/usage.md`/`doc/configuration.md` |
@@ -163,6 +165,58 @@ Takes no arguments. It always checks the whole repository, starting
 from wherever it is run. Prints one line per problem found (if any) and
 exits with a non-zero status; prints a single confirmation line and
 exits successfully if everything checks out.
+
+## `compare-against-hierfstat`
+
+**What it does:** Builds a small Docker image containing
+[hierfstat](https://cran.r-project.org/package=hierfstat), an R package
+from a different research group that independently implements the same
+underlying model this project does (a migration matrix, random genetic
+drift, and mutation, applied generation by generation). It runs hierfstat
+with the same population size, migration rate, mutation rate, and deme
+count as one of this project's own already-tested scenarios, reads back
+the genotypes hierfstat itself simulated, and computes this project's own
+statistics (`H_S`, `H_T`, `G_ST`, `D`) from them -- then prints those
+numbers next to this project's own closed-form theoretical prediction for
+the same scenario, so you can see how closely an entirely separate
+implementation, written by someone else, in a different programming
+language, agrees.
+
+**Why it matters:** Every other check in this project's test suite
+compares this project's own code against a formula, a published number,
+or another part of this project's own code -- never against a genuinely
+different program's own simulation of the same process. This script is
+the one place that happens. Deliberate care went into *what* gets
+compared: hierfstat's own built-in summary statistics use a different
+convention (correcting for the fact that real studies only ever sample a
+handful of individuals from a much bigger population), so this script
+does not use them -- it reads hierfstat's simulated genotypes directly
+and runs this project's own statistics on them instead, so both sides of
+the comparison are computed the same way, and the only real difference
+left is which program generated the underlying random simulation.
+
+**When to run it:** Whenever you want independent reassurance that this
+project's own simulator is not just internally consistent but agrees
+with someone else's separately-written code -- there is no fixed
+schedule for this. It is deliberately **not** run automatically by any
+test, build, or release step: it needs Docker installed and running, the
+first run takes a few minutes to build the image, and it only ever
+prints a comparison for you to read, rather than a pass/fail answer (see
+its own `--help` text for why a firm pass/fail tolerance does not exist
+yet).
+
+**Usage:**
+
+```console
+dev/bin/compare-against-hierfstat \
+    --population-size 100 --m 0.01 --mu 0.005 --d 4 \
+    --generations 4000 --nbal 99 --nbloc 200 --seed 900001
+```
+
+Every flag has a sensible default matching one of this project's own
+already-tested scenarios; running the command with no arguments at all
+uses those defaults. Pass `--skip-build` on a second run to reuse the
+already-built image instead of checking for updates to it.
 
 ## `extract-release-notes`
 
