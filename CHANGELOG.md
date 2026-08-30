@@ -8,6 +8,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Three more Nei (1973) statistics in `src/fim/statistics/
+  differentiation.py`: `d_m`/`r_st` (Eqs. 10-11, the mean pairwise
+  between-deme gene diversity and its ratio to within-deme diversity —
+  an absolute, deliberately not-`[0, 1]`-bounded measure, unlike every
+  other differentiation statistic already in this module) and
+  `g_st_log` (the paper's own unnumbered closing-discussion "better
+  estimate" of `G_ST` for strong, subspecies-level differentiation,
+  never named or numbered in the source). This project's existing
+  `h_s`/`h_t`/`g_st` already matched the paper's central result (Eqs.
+  8-9) exactly; these three close the remaining gap short of the
+  three-level hierarchical decomposition (Eqs. 12-14), which is
+  explicitly out of scope — this project's `FrequencyTable` data model
+  has no nested-deme concept to build it on. `g_st_log` is proven
+  (not just tested) to be bounded in `[0, 1]`, from the same two facts
+  `g_st` already relies on (`H_S <= H_T` always; both are
+  probabilities) — the source paper states no such bound itself. Full
+  design and worked derivations:
+  `dev/doc/apps/selby/jost-finite-island-model/20260830-claude-
+  sonnet-5-nei-1973-gene-diversity-test-plan.md` in the `1121-citrus`
+  project. Adds four new tests to `test/statistics/
+  test_differentiation.py` and extends three existing ones (bounds,
+  the shared-fixation `None` case, and the multiple-demes requirement)
+  to cover the new functions alongside the ones they already checked,
+  plus a short Appendix A addition (symbol table rows and two formula
+  blocks) to `doc/jost-differentiation-measures.md`.
 - A fifth engine-level scientific test,
   `test_chao_shannon_equilibrium_scenario_via_engine`
   (`test/validation/test_simulator_equilibrium.py`), comparing the real
