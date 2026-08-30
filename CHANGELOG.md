@@ -8,6 +8,37 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Four new closed-form functions in `src/fim/statistics/
+  differentiation.py`, from Whitlock (1992, *Evolution* 46:608-615):
+  `identity_recovery_rate`, `_equilibrium`, `_trajectory`, and
+  `_half_life`, predicting how *fast* a single population's identity by
+  descent moves toward equilibrium after a disturbance, in Wright's
+  classical infinite-island model -- a genuinely new kind of prediction
+  for this project, whose existing literature-grounded functions all
+  predict an equilibrium *value*, never a convergence *speed*. Shown,
+  not just cited, to be an exact algebraic reduction of this project's
+  own already-validated `_iterate_identities` recursion (the Crow &
+  Aoki torus scenario's own Tier 1 oracle) in the `d -> infinity`,
+  `mu = 0` limit -- confirmed by a new deterministic test,
+  `test_identity_recursion_reduces_to_whitlock_infinite_island_
+  trajectory` (`test/validation/test_simulator_equilibrium.py`), at
+  `d=100,000` against a new `_ONE_OVER_D_TOL` bound (an `O(1/d)`
+  residual, the same shape of approximation `equilibrium_g_st`/
+  `equilibrium_d` already carry as `O(1/N)`). Closes the citation gap
+  the Crow & Aoki torus design doc left open ("Whitlock (1992b) itself
+  was not available this session"). Full derivation, a six-row
+  numerical `d`-sweep, and scope notes (an engine-level empirical
+  convergence-speed test, and the paper's own demographic-variability
+  material, both explicitly deferred):
+  `dev/doc/apps/selby/jost-finite-island-model/20260830-claude-
+  sonnet-5-whitlock-1992-identity-recovery-test-plan.md` in the
+  `1121-citrus` project. Adds five new tests to `test/statistics/
+  test_differentiation.py`, and fixes a pre-existing `mypy` gap that
+  same file's Nei `R_ST` test carried since it was added
+  (`r_st(table)`'s own `float | None` return type was never narrowed
+  before comparison -- caught only now because this session, unlike the
+  Nei session, ran `mypy` over the test file directly, not just the
+  statistics module it exercises).
 - Three more Nei (1973) statistics in `src/fim/statistics/
   differentiation.py`: `d_m`/`r_st` (Eqs. 10-11, the mean pairwise
   between-deme gene diversity and its ratio to within-deme diversity —
