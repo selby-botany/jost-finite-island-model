@@ -254,6 +254,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [differentiation\_q](#fim.statistics.differentiation.differentiation_q)
   * [equilibrium\_d](#fim.statistics.differentiation.equilibrium_d)
   * [equilibrium\_g\_st](#fim.statistics.differentiation.equilibrium_g_st)
+  * [identity\_recovery\_rate](#fim.statistics.differentiation.identity_recovery_rate)
+  * [identity\_recovery\_equilibrium](#fim.statistics.differentiation.identity_recovery_equilibrium)
+  * [identity\_recovery\_trajectory](#fim.statistics.differentiation.identity_recovery_trajectory)
+  * [identity\_recovery\_half\_life](#fim.statistics.differentiation.identity_recovery_half_life)
   * [equilibrium\_shannon\_entropy\_isolated](#fim.statistics.differentiation.equilibrium_shannon_entropy_isolated)
   * [equilibrium\_shannon\_entropy\_isolated\_smm](#fim.statistics.differentiation.equilibrium_shannon_entropy_isolated_smm)
   * [equilibrium\_shannon\_entropy\_total](#fim.statistics.differentiation.equilibrium_shannon_entropy_total)
@@ -6817,6 +6821,151 @@ terms use ``2 * N`` instead — the same quantity, `4 * N_individuals
 **Returns**:
 
   The finite-island equilibrium approximation.
+
+<a id="fim.statistics.differentiation.identity_recovery_rate"></a>
+
+#### identity\_recovery\_rate
+
+```python
+def identity_recovery_rate(population_size: int, m: float) -> float
+```
+
+Return Whitlock (1992) Eq. 1's per-generation identity-recovery rate.
+
+Whitlock (1992), *Evolution* 46(3):608-615 — a genuinely different
+kind of question from every other function in this module: not "what
+value does a statistic settle to at equilibrium" but "how fast does
+it get there." `L = (1-m)^2 * (1 - 1/N)` is the fraction of a
+disturbance's own gap from equilibrium that *survives* one more
+generation — Wright's classical infinite-island model (infinitely
+many demes, migrants drawn from an outside pool with zero identity
+by descent), mutation set aside (the paper's own stated
+simplification: "The mutation rate will be assumed to be negligibly
+small"). Provably in `[0, 1)` for every valid input — `(1-m)^2 <= 1`
+and `1 - 1/N < 1` for finite `N`, both factors non-negative — so no
+`_bounded` clamp is needed the way frequency-derived statistics
+elsewhere in this module require.
+
+This is not merely cited from the paper: it is an exact algebraic
+reduction of this project's own already-validated `_iterate_
+identities` recursion (`test/validation/test_simulator_equilibrium.py`,
+also the Tier 1 oracle for the Crow & Aoki torus scenario) in the
+`d -> infinity`, `mu = 0` limit — worked out in full, with a six-row
+numerical confirmation, in `dev/doc/apps/selby/jost-finite-island-
+model/20260830-claude-sonnet-5-whitlock-1992-identity-recovery-test-
+plan.md` in the `1121-citrus` project.
+
+**Arguments**:
+
+- `population_size` - Gene-copy count ``N`` (Whitlock's own "2N").
+- `m` - Migration rate.
+
+
+**Returns**:
+
+  ``(1 - m)**2 * (1 - 1/population_size)``.
+
+<a id="fim.statistics.differentiation.identity_recovery_equilibrium"></a>
+
+#### identity\_recovery\_equilibrium
+
+```python
+def identity_recovery_equilibrium(population_size: int, m: float) -> float
+```
+
+Return Whitlock (1992)'s single-population identity equilibrium.
+
+`f_hat_0 = 1 / [N * (1 - L)]` (cited by Whitlock to Wright 1977) —
+the value `identity_recovery_trajectory`, below, approaches as
+``generations`` grows without bound; see `identity_recovery_rate`'s
+own docstring for what `L` is and where this whole family comes
+from.
+
+**Arguments**:
+
+- `population_size` - Gene-copy count ``N``.
+- `m` - Migration rate.
+
+
+**Returns**:
+
+  ``1 / (population_size * (1 - identity_recovery_rate(...)))``.
+
+<a id="fim.statistics.differentiation.identity_recovery_trajectory"></a>
+
+#### identity\_recovery\_trajectory
+
+```python
+def identity_recovery_trajectory(f0_initial: float, population_size: int,
+                                 m: float, generations: float | int) -> float
+```
+
+Return Whitlock (1992) Eq. 3's ``f_0`` after ``generations`` steps.
+
+``f_0[i] + (1 - L**generations) * (f_hat_0 - f_0[i])`` — the closed-
+form trajectory a disturbed identity-by-descent value follows back
+toward `identity_recovery_equilibrium`, at the rate `identity_
+recovery_rate` describes. At ``generations = 0`` this returns
+``f0_initial`` exactly (no time has passed to change anything); as
+``generations`` grows it approaches the equilibrium value regardless
+of which direction ``f0_initial`` started from (`(1 - L**t) -> 1`
+monotonically as `t` grows, since `0 <= L < 1`).
+
+``generations`` accepts a non-integer value deliberately, not just as
+a looser-than-necessary check: the paper's own half-life result
+(`identity_recovery_half_life`) treats generation count as continuous
+("Note that ... the time to half recovery is t_1/2 = ..."), and
+evaluating this function at exactly that (generally non-integer)
+value is how the half-life formula's own correctness is checked —
+see that function's own docstring.
+
+**Arguments**:
+
+- `f0_initial` - Starting identity by descent, ``f_0[i]``.
+- `population_size` - Gene-copy count ``N``.
+- `m` - Migration rate.
+- `generations` - Generations elapsed since ``f0_initial`` (may be
+  fractional; see above).
+
+
+**Returns**:
+
+  ``f_0`` after ``generations`` generations.
+
+<a id="fim.statistics.differentiation.identity_recovery_half_life"></a>
+
+#### identity\_recovery\_half\_life
+
+```python
+def identity_recovery_half_life(population_size: int, m: float) -> float
+```
+
+Return Whitlock (1992)'s generations to halfway recovery.
+
+``t_1/2 = ln(1/2) / ln(L)`` — the number of generations (treating
+time as continuous, as the paper itself does for this formula) for
+`identity_recovery_trajectory` to close half the gap between its
+starting value and `identity_recovery_equilibrium`, regardless of
+which direction it started from (`identity_recovery_trajectory`
+evaluated at this many generations always lands exactly on the
+arithmetic midpoint — see the design doc for a worked numeric check
+in both directions).
+
+Special-cased at ``m = 1`` (the only way `identity_recovery_rate`
+can be exactly `0`, meaning full replacement every generation, hence
+equilibrium every generation too): returns `0.0` directly rather
+than evaluating ``log(0.5) / log(0.0)``, which is the correct limit
+(`t_1/2 -> 0` as `L -> 0+`), not an arbitrary guard.
+
+**Arguments**:
+
+- `population_size` - Gene-copy count ``N``.
+- `m` - Migration rate.
+
+
+**Returns**:
+
+  Generations to close half the gap to equilibrium.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated"></a>
 
