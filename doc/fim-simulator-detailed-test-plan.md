@@ -104,8 +104,8 @@ The contract, applied to every test in this plan:
    version-pinned (detailed design §4) so the suite is a function of the
    commit, not of upstream's release schedule. Hypothesis runs with a fixed
    `derandomize=True` profile in CI so property tests are reproducible —
-   test/test_hypothesis_profile.py asserts `settings.default.derandomize`
-   directly, so a future edit to `test/conftest.py`'s profile registration
+   [`test/test_hypothesis_profile.py`](../test/TESTS.md#test.test_hypothesis_profile) asserts `settings.default.derandomize`
+   directly, so a future edit to [`test/conftest.py`](../test/TESTS.md#test.conftest)'s profile registration
    fails loudly instead of only showing up as an intermittently flipping
    property test months later.
 
@@ -142,7 +142,7 @@ test's own pass/fail criterion depend on*.
 |---|---|---|---|
 | **fim functional** | Only the public API surface: `fim.engine.fim`, `fim.model`'s re-exported names, `fim.statistics`, `fim.persistence`, `fim.reanalyze`, `fim.viz`, `fim.cli` — assertions compare that surface's output against a published value or a public closed-form formula | Yes, by construction | `fim-simulator-functional-api.md` |
 | **fim-gui functional** | The above, plus `fim.gui`'s own bridge (`Api`) and the desktop page it drives | Yes (independent of core engine internals; still coupled to the GUI's own contract) | `fim-gui-test-plan.md` |
-| **internal / deep** | Anything private (`_`-prefixed), any submodule never re-exported (`fim.model.operators`, most concretely), or a test-only helper built to mirror the engine's *current* internal mechanics precisely (the exact-recursion oracle in `test/validation/test_simulator_equilibrium.py` is the standing example) | Not necessarily — expected to need re-deriving, not to signal a regression, once the mechanics it mirrors change | this document, §4 and §7 |
+| **internal / deep** | Anything private (`_`-prefixed), any submodule never re-exported (`fim.model.operators`, most concretely), or a test-only helper built to mirror the engine's *current* internal mechanics precisely (the exact-recursion oracle in [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium) is the standing example) | Not necessarily — expected to need re-deriving, not to signal a regression, once the mechanics it mirrors change | this document, §4 and §7 |
 
 A single test file, or even a single test function, can straddle the
 second taxonomy — several of §7.4/§7.5's own engine-level scenario tests
@@ -155,7 +155,7 @@ fim functional; `test/gui/` is fim-gui functional in its entirety.
 ## 3. Layout, tooling, and markers
 
 Tests live under `test/`, mirroring `src/fim/`, run by pytest with branch
-coverage (detailed design §4). `test/conftest.py` provides the shared
+coverage (detailed design §4). [`test/conftest.py`](../test/TESTS.md#test.conftest) provides the shared
 scaffolding:
 
 - `rng(seed)` — a factory returning `Generator(PCG64(seed))`; the only
@@ -171,10 +171,10 @@ each own their scaffolding locally rather than sharing it through
 
 - The property tests (§5) build their own bounded per-deme frequency-table
   Hypothesis strategy (frequency_tables() in
-  test/statistics/test_properties.py) rather than drawing on a shared
+  [`test/statistics/test_properties.py`](../test/TESTS.md#statistics.test_properties)) rather than drawing on a shared
   fixture.
 - The golden tests (§6) load the Part IV fixtures via a small local loader
-  (`_fixture`/_frequency_table in test/statistics/test_differentiation.py)
+  (`_fixture`/_frequency_table in [`test/statistics/test_differentiation.py`](../test/TESTS.md#statistics.test_differentiation))
   that reads the JSON files directly from `test/data/statistics/`.
 
 Markers keep the fast/slow split explicit:
@@ -260,7 +260,7 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   states, including states with a single fixed allele and states at full
   `N`-allele support.
 - Equality is value equality, independent of internal dict ordering.
-- **Malformed-input validation** (test/model/test_state_validation.py,
+- **Malformed-input validation** ([`test/model/test_state_validation.py`](../test/TESTS.md#model.test_state_validation),
   split out from the happy-path tests above): construction rejects empty
   `loci`, duplicate locus IDs, a negative `generation`, an empty deme list,
   and a `frequencies` shape that disagrees with `loci`'s length; a
@@ -343,13 +343,10 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   does not spuriously trip this check on every adaptive batch's own
   replicates; the adaptive machinery is provably inert at
   n<sub>replicates</sub> == 1). Covered by a parametrized case in this file's
-  own scalar-contract table (window) and by
-  `test/engine/test_engine.py::
-  test_replicate_minimum_exceeding_n<sub>replicates</sub>_is_rejected`
+  own scalar-contract table (window) and by [`test/engine/test_engine.py::test_replicate_minimum_exceeding_n_replicates_is_rejected`](../test/TESTS.md#engine.test_engine.test_replicate_minimum_exceeding_n_replicates_is_rejected)
   (replicate), which also documents the *legal* neighbor this rule is
-  distinguished from —
-  `test_replicate_tolerance_never_stops_on_a<sub>permanently</sub>_undefined_
-  statistic`, where the criterion is evaluable but never satisfied
+  distinguished from — [`test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic`](../test/TESTS.md#engine.test_engine.test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic),
+  where the criterion is evaluable but never satisfied
   rather than never evaluable at all.
 - **Explicit initial frequencies (p<sub>0</sub>)**: normalized and losslessly
   serialized; the parser names malformed inputs precisely; shape and
@@ -444,7 +441,7 @@ form.
 
 ### 4.9 `statistics/interval.py`
 
-Home: test/statistics/test_interval.py. The across-replicate Student's-t
+Home: [`test/statistics/test_interval.py`](../test/TESTS.md#statistics.test_interval). The across-replicate Student's-t
 interval (design §5, §9) is a self-contained numeric module, tested
 without the engine:
 
@@ -494,7 +491,7 @@ without the engine:
   hash_file produces a digest matching an independent hash of the same
   bytes; every malformed digest shape (missing/empty `sha256`, non-integer
   or negative `bytes`) is rejected by name.
-- **Validation** (test/persistence/test_validation.py): row normalization
+- **Validation** ([`test/persistence/test_validation.py`](../test/TESTS.md#persistence.test_validation)): row normalization
   rejects invalid values and reports missing/extra fields and context
   mismatches by name; stores reject empty generations and filter by
   run_id; the manifest constructor and its mapping-based reconstruction
@@ -625,7 +622,7 @@ Functional detail in §8.
 
 ## 5. Property-based invariants for the statistics module
 
-Home: test/statistics/test_properties.py. Checked with Hypothesis over a
+Home: [`test/statistics/test_properties.py`](../test/TESTS.md#statistics.test_properties). Checked with Hypothesis over a
 locally defined frequency_tables() strategy (derandomized in CI — §3).
 These are the differentiation-measures guide's Part V identities, asserted
 as properties rather than point cases:
@@ -649,7 +646,7 @@ same run while leaving `D` unaffected (§4.11).
 
 ## 6. Golden worked examples and focused statistics checks
 
-Home: test/statistics/test_differentiation.py, fixtures in
+Home: [`test/statistics/test_differentiation.py`](../test/TESTS.md#statistics.test_differentiation), fixtures in
 `test/data/statistics/`. The golden values were independently recomputed
 from first principles in the differentiation guide's Part IV, not copied
 from the paper, and are asserted **exact** (`assertAlmostEqual` to 12
@@ -701,7 +698,7 @@ reproducible. This is the operational meaning of "deterministic given the
 commit" for a stochastic check.
 
 **Where step 2's standard error is empirical, not closed-form (R18
-remediation).** The three test/validation/test_simulator_equilibrium.py
+remediation).** The three [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium)
 equilibrium tests (§7.3, §7.4) use a `k·sigma/sqrt(R)` band whose `sigma`
 has no known closed form (see that file's module docstring): the
 per-replicate G<sub>ST</sub>/`D` estimate is a ratio-of-means statistic sampled
@@ -725,7 +722,7 @@ the check.
 
 ### 7.2 Drift variance
 
-Home: test/model/test_operators.py. A single-locus, single-deme drift
+Home: [`test/model/test_operators.py`](../test/TESTS.md#model.test_operators). A single-locus, single-deme drift
 step starting from a known `p` has per-generation sampling variance
 `p(1−p)/N` (design §3.1's gene-copy-count `N`). Over `R` seeded replicates
 of one step, the sample variance of the resulting frequency is asserted
@@ -737,8 +734,8 @@ on (design §10).
 
 ### 7.3 Equilibrium formulas
 
-Home: test/validation/test_equilibrium.py (the closed-form formulas
-directly) and test/validation/test_simulator_equilibrium.py (the real
+Home: [`test/validation/test_equilibrium.py`](../test/TESTS.md#validation.test_equilibrium) (the closed-form formulas
+directly) and [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium) (the real
 engine against the same oracle). Two independent oracles are used, per the
 latter file's own module docstring, and are cross-checked against each
 other before either is trusted against the engine:
@@ -752,9 +749,9 @@ other before either is trusted against the engine:
    seeded many-replicate band, and it also supplies the fixed point used to
    construct the near-equilibrium starting states in §7.4.
 
-test_identity_recursion_oracle_matches_formula_and_published confirms
+[`test_identity_recursion_oracle_matches_formula_and_published`](../test/TESTS.md#validation.test_simulator_equilibrium.test_identity_recursion_oracle_matches_formula_and_published) confirms
 the two oracles and the published Dear-Nolan values agree with each other
-before either is used as a ruler. test_engine_reproduces_part_vi_equilibrium
+before either is used as a ruler. [`test_engine_reproduces_part_vi_equilibrium`](../test/TESTS.md#validation.test_simulator_equilibrium.test_engine_reproduces_part_vi_equilibrium)
 then runs the real engine to stochastic equilibrium and checks its
 sample-mean G<sub>ST</sub> and `D` land in a `k = 5`-standard-error band (derived
 analytically from an independent replicate-spread characterization pass,
@@ -775,9 +772,9 @@ analytic values (design §10):
 Both plug in directly under the ploidy-neutral `N` convention (no
 conversion — design §4.3). Each is checked at two levels:
 
-- test_equilibrium.py plugs the scenario's `(N, m, μ, d)` directly into
+- [`test_equilibrium.py`](../test/TESTS.md#validation.test_equilibrium) plugs the scenario's `(N, m, μ, d)` directly into
   the closed-form formulas and checks them against the published values.
-- test_simulator_equilibrium.py goes further: it runs the *real* engine,
+- [`test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium) goes further: it runs the *real* engine,
   started from a derived near-equilibrium state built from the identity
   recursion (§7.3) — a 26-locus ensemble for the low-migration scenario,
   a direct derived start for the high-migration one — and shows the
@@ -795,8 +792,7 @@ scenario test's own docstring carries the full worked derivation. This
 section states only what each contributes and how it is tested.
 
 - **Crow & Aoki (1984)**, Table 1's toroidal stepping-stone scenario
-  (`test_crow_aoki_torus_scenario_via_engine`, home file `test/
-  validation/test_simulator_equilibrium.py`) — a genuinely different
+  ([`test_crow_aoki_torus_scenario_via_engine`](../test/TESTS.md#validation.test_simulator_equilibrium.test_crow_aoki_torus_scenario_via_engine), home file [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium)) — a genuinely different
   migration topology (a 3-by-3 torus, four-nearest-neighbor migration)
   from every other scenario in this section (the symmetric island
   model), and from an author with no connection to the Jost/Chao
@@ -810,29 +806,27 @@ section states only what each contributes and how it is tested.
   topology at this project's own established migration-rate
   convention — see the Open Issues appendix of `doc/
   fim-simulator-test-plan.md` for the full, still-unresolved finding,
-  and this file's own `test_pairwise_identity_recursion_applied_to_
-  the_crow_aoki_torus` for the internal side of that discrepancy).
+  and this file's own [`test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus`](../test/TESTS.md#validation.test_simulator_equilibrium.test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus) for the internal side of that discrepancy).
 - **Chao, Chiu, Jost, Sherwin & Rollins (2015)**, the Shannon-entropy
   equilibrium formulas (Eqs. 2A/5A/6/7D/10) — a genuinely independent
   *statistic family* (mutual-information-based Shannon differentiation,
   not heterozygosity-based `G_ST`/`D`) validated against the real engine
   for the first time in this project
-  (`test_chao_shannon_equilibrium_scenario_via_engine`, same home
+  ([`test_chao_shannon_equilibrium_scenario_via_engine`](../test/TESTS.md#validation.test_simulator_equilibrium.test_chao_shannon_equilibrium_scenario_via_engine), same home
   file). **Fully fim functional**: compares the engine directly against
   the public closed-form `equilibrium_shannon_entropy_total`/
   `_subpopulation`/`equilibrium_shannon_differentiation`
   (`fim.statistics`), not any internal oracle. The closed forms
   themselves (`equilibrium_shannon_entropy_isolated`/`_isolated_smm`,
   a dependency-free digamma implementation) are unit-tested exactly
-  against textbook closed forms in `test/validation/test_equilibrium.py`
+  against textbook closed forms in [`test/validation/test_equilibrium.py`](../test/TESTS.md#validation.test_equilibrium)
   — those unit tests are internal in the taxonomy sense (they exercise
   `_digamma` directly) but the engine-level scenario test above is not.
 - **Nei (1973)** — `d_m`, `r_st` (Eqs. 10-11, an absolute, deliberately
   not-`[0, 1]`-bounded pairwise gene-diversity measure and its ratio to
   within-deme diversity) and `g_st_log` (the paper's own unnumbered
   "better estimate" of `G_ST` for strong differentiation). Pure closed-
-  form additions to `fim.statistics`, unit-tested in `test/statistics/
-  test_differentiation.py` against the paper's own algebra — `g_st_log`'s
+  form additions to `fim.statistics`, unit-tested in [`test/statistics/test_differentiation.py`](../test/TESTS.md#statistics.test_differentiation) against the paper's own algebra — `g_st_log`'s
   own `[0, 1]` boundedness is proven, not just tested, from the same two
   facts `g_st` already relies on. No engine-level scenario test: the
   paper supplies no numeric worked example to reproduce, only formulas.
@@ -843,8 +837,7 @@ section states only what each contributes and how it is tested.
   value it settles to. Shown to be an exact algebraic reduction of this
   project's own `_iterate_identities` recursion in the `d -> infinity`,
   `mu = 0` limit — confirmed by a deterministic test at `d = 100,000`
-  (`test_identity_recursion_reduces_to_whitlock_infinite_island_
-  trajectory`), an internal-taxonomy test by construction (it is
+  ([`test_identity_recursion_reduces_to_whitlock_infinite_island_trajectory`](../test/TESTS.md#validation.test_simulator_equilibrium.test_identity_recursion_reduces_to_whitlock_infinite_island_trajectory)), an internal-taxonomy test by construction (it is
   specifically about validating the internal recursion's own large-`d`
   limit, not the engine). No engine-level empirical convergence-speed
   test exists yet — see the Open Issues appendix of `doc/
@@ -852,7 +845,7 @@ section states only what each contributes and how it is tested.
 - **Kimura & Weiss (1964)**, cited via Whitlock & McCauley (1999) —
   stepping-stone differentiation is at least as large as the island
   model's, for the same per-deme migration rate.
-  `test_stepping_stone_differentiation_is_at_least_the_island_models`
+  [`test_stepping_stone_differentiation_is_at_least_the_island_models`](../test/TESTS.md#validation.test_simulator_equilibrium.test_stepping_stone_differentiation_is_at_least_the_island_models)
   is a directional (metamorphic), fully deterministic check, reusing
   the already-validated exact-recursion oracles for both topologies —
   no calibration band needed, since it asserts an inequality, not a
@@ -865,10 +858,10 @@ Migration/mutation-rate monotonicity (`D`/`G_ST` non-increasing in `m`,
 moving opposite ways in `mu`) is checked at two of §2's second-taxonomy
 levels for the same underlying claim: a closed-form, Hypothesis-driven
 property test directly on `equilibrium_d`/`equilibrium_g_st`
-(`test/statistics/test_properties.py`, fim functional — no engine or
+([`test/statistics/test_properties.py`](../test/TESTS.md#statistics.test_properties), fim functional — no engine or
 oracle involved at all) and an exact-recursion version reusing the same
 internal oracle as the scenarios above
-(`test_identity_recursion_d_and_g_st_are_non_increasing_in_migration`/
+([`test_identity_recursion_d_and_g_st_are_non_increasing_in_migration`](../test/TESTS.md#validation.test_simulator_equilibrium.test_identity_recursion_d_and_g_st_are_non_increasing_in_migration)/
 `_move_opposite_ways_in_mutation`, internal). A third, real-engine-level
 version of the same claim (replicated stochastic runs, properly
 calibrated) remains a deferred opportunity — see `doc/
@@ -996,31 +989,35 @@ different, non-scientific kind of check. These are fast, Docker-free
 shell/pytest checks that obey the determinism contract (§1): no network,
 no wall-clock, fully reproducible.
 
-- **`commit-msg`** (test_git_hooks.py): accepts valid Conventional
+- **`commit-msg`** ([`test_git_hooks.py`](../test/TESTS.md#validation.test_git_hooks)): accepts valid Conventional
   Commit subjects (including `merge`, `revert`, `fixup!`, and `squash!`
   forms) and rejects malformed ones, driven by a table of
   subject/expected-result cases.
-- **`pre-commit`** (test_git_hooks.py): formats a deliberately messy
+- **`pre-commit`** ([`test_git_hooks.py`](../test/TESTS.md#validation.test_git_hooks)): formats a deliberately messy
   staged Python file and confirms the re-staged content is `ruff`-clean;
   regenerates `src/fim/API.md` only when a staged `.py` changed (a staged
   docs-only or non-Python change leaves it untouched); rejects a newly
   added non-ASCII filename.
-- **`pre-push`** (test_git_hooks.py): detects a stale generated
+- **`pre-push`** ([`test_git_hooks.py`](../test/TESTS.md#validation.test_git_hooks)): detects a stale generated
   `src/fim/API.md` (the same doc-freshness gate `pre-commit` enforces,
   checked again at push time) and passes once it is regenerated.
-- **Graceful degradation** (test_git_hooks.py): each hook — including
+- **Graceful degradation** ([`test_git_hooks.py`](../test/TESTS.md#validation.test_git_hooks)): each hook — including
   `pre-push` — is run in a fixture repository with the relevant tool (or
   `pyproject.toml`) absent and asserted to no-op with an informational
   message rather than error, so a fresh clone that has not yet installed
   the `dev` group is never blocked (detailed design §8.2).
-- **Hook installer** (test_git_hooks.py): `dev/git-hooks/install`
+- **Hook installer** ([`test_git_hooks.py`](../test/TESTS.md#validation.test_git_hooks)): `dev/git-hooks/install`
   symlinks every documented hook (`commit-msg`, `pre-commit`, `pre-push`)
   into a fixture repository's `.git/hooks/`.
-- **Doc-freshness gate** (test_api_docs.py): every committed Python
+- **Doc-freshness gate** ([`test_api_docs.py`](../test/TESTS.md#validation.test_api_docs)): every committed Python
   module receives an API section in the generated reference, the direct
   proof (alongside the `pre-commit`/`pre-push` hook coverage above) that a
-  stale API reference cannot reach `main` (§8.1).
-- **Doc-navigation checker** (test_doc_links.py;
+  stale API reference cannot reach `main` (§8.1). [`test_test_docs.py`](../test/TESTS.md#validation.test_test_docs)
+  is the identical check for `test/TESTS.md` (`dev/bin/generate-
+  test-docs`): every committed test module receives its own anchor, and
+  the generator's own `_GROUPS` list is independently checked to cover
+  every real subdirectory of `test/` that actually holds `.py` files.
+- **Doc-navigation checker** ([`test_doc_links.py`](../test/TESTS.md#validation.test_doc_links);
   `dev/bin/check-doc-links`, detailed design §8.3): a fixture set of small
   Markdown files exercises the pass and fail paths — a valid relative link,
   in-page anchor, GitHub-style em/en-dash anchor, and a code-span heading's
@@ -1029,7 +1026,7 @@ no wall-clock, fully reproducible.
   the offending target. The checker is offline and deterministic (§1); it
   never resolves external `http(s)` URLs, so its result is a pure function
   of the tree.
-- **Changelog-backed release notes** (test_release_notes.py,
+- **Changelog-backed release notes** ([`test_release_notes.py`](../test/TESTS.md#validation.test_release_notes),
   `dev/bin/extract-release-notes`, detailed design §5.4): the extractor
   returns exactly one version's `CHANGELOG.md` section, excluding adjacent
   releases, and fails rather than publishing a blank body when the tag has
@@ -1043,21 +1040,21 @@ no wall-clock, fully reproducible.
   `packaging`, `statistical`, and `slow` (§2's taxonomy), unlike the
   fast default `pytest` invocation (§3), which excludes all three for
   local iteration speed.
-- **Release gating** (test_release_notes.py, detailed design §5.4, R8
+- **Release gating** ([`test_release_notes.py`](../test/TESTS.md#validation.test_release_notes), detailed design §5.4, R8
   remediation): `windows` and `publish` name `verify-tag` and/or `build`
   in their `needs:`, and `verify-tag` itself is checked to both `git
   rev-parse --verify "...^{tag}"` (rejecting a lightweight tag) and `git
   merge-base --is-ancestor` (rejecting a tag that is not reachable from
   `main`) — so the structural dependency the fix relies on cannot silently
   regress to independent, ungated workflows again.
-- **CI test-layer runtime budget** (test_ci_runtime_budget.py, detailed
+- **CI test-layer runtime budget** ([`test_ci_runtime_budget.py`](../test/TESTS.md#validation.test_ci_runtime_budget), detailed
   design §5.2, R19 remediation): the fast marker-filtered layer and the
   full `--ci` gate are checked to be two separately named steps, in that
   order, and each to declare its own `timeout-minutes` (the fast step's
   smaller than the full step's) — so the expensive `slow`/`statistical`
   scenario suite cannot silently be re-folded back into one opaque,
   unbudgeted step.
-- **Statistical calibration provenance** (test_calibration_provenance.py,
+- **Statistical calibration provenance** ([`test_calibration_provenance.py`](../test/TESTS.md#validation.test_calibration_provenance),
   R18 remediation, §7.1): `dev/bin/calibrate-statistical-bands` is checked
   to appear in `build` only inside the lint stage's static-analysis
   invocations, never as an executed step, and nowhere in `ci.yml` — the
@@ -1067,7 +1064,7 @@ no wall-clock, fully reproducible.
   checked to actually carry the retained evidence (every scenario's
   section, seed, replicate count, empirical sigma, environment, and the
   generator metadata block), not merely exist as an empty placeholder.
-- **Repository-local Python tool resolution** (test_python_wrappers.py):
+- **Repository-local Python tool resolution** ([`test_python_wrappers.py`](../test/TESTS.md#validation.test_python_wrappers)):
   `bin/ruff` and `build`'s lint step both work correctly in an environment
   with no activated virtual environment on `PATH`, confirming the
   repository's own wrapper scripts — not whatever Python happens to be
