@@ -224,6 +224,7 @@ defines the complete scientific and architectural contract.
 - [Desktop GUI test plan](doc/fim-gui-test-plan.md)
 - [Source-tree orientation](src/README.md)
 - [Generated API reference](src/fim/API.md)
+- [Generated test-suite reference](test/TESTS.md)
 - [Maintainer runbook](CONTRIBUTING.md)
 - [Repository-managed hooks](dev/git-hooks/README.md)
 - [Maintainer scripts](dev/bin/README.md)
