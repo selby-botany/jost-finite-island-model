@@ -7,8 +7,10 @@ import pytest
 from fim.statistics import (
     equilibrium_d,
     equilibrium_g_st,
+    equilibrium_shannon_differentiation,
     equilibrium_shannon_entropy_isolated,
     equilibrium_shannon_entropy_isolated_smm,
+    equilibrium_shannon_entropy_subpopulation,
     equilibrium_shannon_entropy_total,
 )
 from fim.statistics.differentiation import _EULER_GAMMA, _digamma
@@ -206,3 +208,109 @@ def test_equilibrium_shannon_entropy_total_exceeds_isolated_with_more_demes() ->
         equilibrium_shannon_entropy_total(100, 0.01, 0.001, d) for d in (2, 4, 10, 50)
     ]
     assert values == sorted(values)
+
+
+@pytest.mark.parametrize(
+    ("population_size", "m", "mu", "d"),
+    [
+        (100, 0.01, 0.001, 4),
+        (2000, 0.01, 0.001, 100),
+        (100, 0.0001, 0.000001, 5),
+        # d=2: Chao et al.'s own stated weak spot for Eq. 7D (see
+        # `equilibrium_shannon_entropy_subpopulation`'s own docstring) --
+        # included deliberately, not avoided, so the bounds property is
+        # checked at the approximation's own least reliable point too.
+        (5000, 0.15, 0.0022, 2),
+    ],
+)
+def test_equilibrium_shannon_entropy_subpopulation_never_exceeds_total(
+    population_size: int, m: float, mu: float, d: int
+) -> None:
+    """A subpopulation can never hold more diversity than the whole population.
+
+    The same "pooling can only add diversity" direction as
+    `test_equilibrium_shannon_entropy_total_exceeds_isolated_with_more_
+    demes`, above, checked here between a single subpopulation and the
+    total population it is part of rather than between demes counts.
+    """
+    total = equilibrium_shannon_entropy_total(population_size, m, mu, d)
+    subpopulation = equilibrium_shannon_entropy_subpopulation(population_size, m, mu, d)
+    assert subpopulation <= total
+
+
+@pytest.mark.parametrize(
+    ("population_size", "m", "mu", "d"),
+    [
+        (100, 0.01, 0.001, 4),
+        (2000, 0.01, 0.001, 100),
+        (100, 0.0001, 0.000001, 5),
+    ],
+)
+def test_equilibrium_shannon_differentiation_is_bounded(
+    population_size: int, m: float, mu: float, d: int
+) -> None:
+    """Shannon differentiation stays in `[0, 1]`, the same range `D`/`G_ST` share.
+
+    Chao et al. (2015) state this directly: zero when every
+    subpopulation is identical to the whole, one when subpopulations
+    share no alleles at all. Checked over three scenarios spanning very
+    different `Nm`/`Nmu` regimes, deliberately excluding `d=2` here (see
+    `equilibrium_shannon_entropy_subpopulation`'s own docstring for why
+    that specific case gets its own, separately-bounded check below
+    rather than being folded into this tight one).
+    """
+    value = equilibrium_shannon_differentiation(population_size, m, mu, d)
+    assert 0.0 <= value <= 1.0
+
+
+def test_equilibrium_shannon_differentiation_at_two_demes_is_roughly_bounded() -> None:
+    """At `d=2`, Eq. 7D's own approximation error can push slightly outside `[0, 1]`.
+
+    Chao et al. (2015) state their own approximation formula (Eq. 7D,
+    behind `equilibrium_shannon_entropy_subpopulation`) is unreliable
+    specifically "for the special case of two subpopulations" -- their
+    own words, not a caveat invented here. Checked with a deliberately
+    loose bound rather than the tight `[0, 1]` the three-or-more-deme
+    scenarios get, so a real regression (the approximation becoming
+    *badly* wrong, not just imprecise at its own documented weak point)
+    would still be caught.
+    """
+    value = equilibrium_shannon_differentiation(5000, 0.15, 0.0022, 2)
+    assert -0.05 <= value <= 1.05
+
+
+def test_equilibrium_shannon_differentiation_is_increasing_in_mutation() -> None:
+    """More mutation drives more equilibrium Shannon differentiation.
+
+    Part VI's own "Why this kills the standard inference" pattern
+    (`equilibrium_d`'s own docstring), extended to the Shannon-entropy
+    family: Fig. 1/Fig. 2 of Chao et al. (2015) show Shannon
+    differentiation and Jost's `D` "always exhibit consistent
+    patterns" -- both increasing in `mu`, both decreasing in `m` (the
+    next test, below) -- stated in the paper as a qualitative figure,
+    checked here as an executable property instead.
+    """
+    values = [
+        equilibrium_shannon_differentiation(100, 0.01, mu, 4)
+        for mu in (0.0001, 0.001, 0.01)
+    ]
+    assert values == sorted(values)
+
+
+def test_equilibrium_shannon_differentiation_is_decreasing_in_migration() -> None:
+    """More migration lowers equilibrium Shannon differentiation.
+
+    The migration-direction half of the same Fig. 1/Fig. 2 pattern the
+    mutation-direction test above checks.
+    """
+    values = [
+        equilibrium_shannon_differentiation(100, m, 0.001, 4)
+        for m in (0.001, 0.01, 0.1)
+    ]
+    assert values == sorted(values, reverse=True)
+
+
+def test_equilibrium_shannon_entropy_subpopulation_rejects_zero_mutation() -> None:
+    """A FIM subpopulation with `mu=0` never reaches a polymorphic equilibrium."""
+    with pytest.raises(ValueError, match="mu greater than 0"):
+        equilibrium_shannon_entropy_subpopulation(100, 0.01, 0.0, 4)

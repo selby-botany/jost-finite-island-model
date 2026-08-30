@@ -954,9 +954,134 @@ def equilibrium_shannon_entropy_total(
     _validate_equilibrium_inputs(population_size=population_size, m=m, mu=mu, d=d)
     if mu == 0.0:
         raise ValueError("equilibrium Shannon entropy requires mu greater than 0")
-    migration_star = m * d / (d - 1)
-    theta_total = 2.0 * population_size * d * mu + (d - 1) * mu / (migration_star + mu)
+    theta_total = _theta_total_iam(population_size, m, mu, d)
     return _digamma(theta_total + 1.0) + _EULER_GAMMA
+
+
+def _theta_total_iam(population_size: int, m: float, mu: float, d: int) -> float:
+    """Return `theta_T`, the IAM-FIM total population's own effective `theta`.
+
+    Chao et al. (2015)'s own closed form (Table 1, IAM total-population
+    row): `theta_T = 4*N*n*mu + (n-1)*mu / (m* + mu)`, where `m* =
+    m*n/(n-1)` follows Latter (1973)'s own notation. Shared by
+    `equilibrium_shannon_entropy_total`, above, and `equilibrium_
+    shannon_entropy_subpopulation`/`equilibrium_shannon_differentiation`,
+    below — every one of them needs this same total-population parameter
+    first. See `equilibrium_shannon_entropy_total`'s own docstring for
+    the ploidy-conversion derivation this carries (`4*N` in the paper's
+    own diploid-individual notation is `2*population_size` in this
+    project's gene-copy one).
+    """
+    migration_star = m * d / (d - 1)
+    return 2.0 * population_size * d * mu + (d - 1) * mu / (migration_star + mu)
+
+
+def equilibrium_shannon_entropy_subpopulation(
+    population_size: int,
+    m: float,
+    mu: float,
+    d: int,
+) -> float:
+    """Return the equilibrium expected Shannon entropy of a typical FIM subpopulation.
+
+    Chao et al. (2015) Eq. 7D: the general *approximation* formula for a
+    typical subpopulation's own expected Shannon entropy under IAM-FIM —
+    the subpopulation counterpart to `equilibrium_shannon_entropy_total`,
+    above. Unlike every other equilibrium function in this module, there
+    is no exact closed form for this one at all: the paper's own exact
+    expression (its Eq. 7C) is an integral with no elementary
+    antiderivative, "numerically evaluated using standard integration
+    software" in the paper's own words — genuinely outside what this
+    module's own dependency-free, closed-form-only style can offer (a
+    hand-rolled numerical quadrature was scoped separately and not
+    built here; see `1121-citrus`'s Chao-et-al-2015 findings doc, item
+    5). Eq. 7D is the paper's own stated approximation to that integral,
+    accurate "except for the special case of two subpopulations (`n =
+    2`)" — its own words, not a caveat added here — so a two-deme
+    scenario's own result from this function should be treated with
+    real skepticism, not the same confidence as `d >= 3`.
+
+    Uses the same `theta_T` (`_theta_total_iam`) every other total-
+    population-dependent formula in this module already shares.
+
+    Args:
+        population_size: Gene-copy count `N` per deme.
+        m: Symmetric per-generation migration rate.
+        mu: Infinite-alleles mutation rate; must be greater than 0.
+        d: Number of equal demes.
+
+    Returns:
+        The approximate equilibrium expected Shannon entropy of a
+        typical subpopulation, in nats. Unbounded above, the same as
+        `equilibrium_shannon_entropy_isolated`/`_total` — but always
+        less than or equal to `equilibrium_shannon_entropy_total`'s own
+        return for the same inputs (a subpopulation can never hold more
+        diversity than the whole population it is part of).
+
+    Raises:
+        ValueError: If any input is invalid, or `mu` is exactly 0.
+    """
+    _validate_equilibrium_inputs(population_size=population_size, m=m, mu=mu, d=d)
+    if mu == 0.0:
+        raise ValueError("equilibrium Shannon entropy requires mu greater than 0")
+    migration_star = m * d / (d - 1)
+    theta_total = _theta_total_iam(population_size, m, mu, d)
+    migrants_star = 2.0 * population_size * migration_star
+    total_mutation_rate = 2.0 * population_size * (migration_star + mu)
+
+    first_term = _digamma(total_mutation_rate + 1.0)
+    second_term = _digamma(migrants_star / (theta_total + 1.0) + 1.0)
+    ratio = migrants_star / (migrants_star + theta_total + 1.0)
+    third_term = 0.5 * ratio * ratio * theta_total / (theta_total + 2.0)
+    return first_term - second_term + third_term
+
+
+def equilibrium_shannon_differentiation(
+    population_size: int,
+    m: float,
+    mu: float,
+    d: int,
+) -> float:
+    """Return the equilibrium Shannon differentiation ("`1 - C_1n`") under IAM-FIM.
+
+    Chao et al. (2015) Eq. 10: the mutual-information-based
+    differentiation measure this project's own `differentiation_q` (at
+    `order=1`, equivalent to `e_st`) computes from real, simulated data
+    — this is that same statistic's *equilibrium prediction* instead,
+    the `E_ST` counterpart to what `equilibrium_g_st`/`equilibrium_d`
+    already are for `G_ST`/`D`. Defined as the mutual information
+    between total-population and subpopulation allele identity,
+    normalized by `log(d)`:
+    `(equilibrium_shannon_entropy_total - equilibrium_shannon_entropy_
+    subpopulation) / log(d)`.
+
+    Inherits `equilibrium_shannon_entropy_subpopulation`'s own
+    Eq. 7D approximation and its own stated weak spot: the paper's own
+    text says that approximation is unreliable at `d = 2`, so treat a
+    two-deme result from this function the same way — with real
+    skepticism, not the confidence `d >= 3` warrants. Bounded in
+    `[0, 1]` in principle (zero when every subpopulation is identical to
+    the whole, one when subpopulations share no alleles at all, per the
+    paper's own description) but not passed through `_bounded`: it is
+    built from an approximation, not an exact formula, so a small
+    excursion outside `[0, 1]` reflects that approximation's own error,
+    not a bug to raise on.
+
+    Args:
+        population_size: Gene-copy count `N` per deme.
+        m: Symmetric per-generation migration rate.
+        mu: Infinite-alleles mutation rate; must be greater than 0.
+        d: Number of equal demes.
+
+    Returns:
+        The approximate equilibrium Shannon differentiation.
+
+    Raises:
+        ValueError: If any input is invalid, or `mu` is exactly 0.
+    """
+    total = equilibrium_shannon_entropy_total(population_size, m, mu, d)
+    subpopulation = equilibrium_shannon_entropy_subpopulation(population_size, m, mu, d)
+    return (total - subpopulation) / log(d)
 
 
 def statistics_report(
