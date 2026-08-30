@@ -85,6 +85,7 @@ from fim.statistics import (
     equilibrium_shannon_entropy_total,
     h_s,
     h_t,
+    identity_recovery_trajectory,
     total_hill_number,
     within_hill_number,
 )
@@ -102,6 +103,14 @@ _BAND_SIGMA = 5.0
 # O(1/N) diffusion formulas Eq. 2 / Eq. 4; the residual is O(1/N) and is at
 # most ~0.0034 for the smallest scenario (N=100, d=4).
 _ONE_OVER_N_TOL = 0.005
+
+# Largest tolerated gap between `_iterate_identities` at a large but finite
+# `d` and Whitlock (1992)'s own infinite-island (`d -> infinity`) closed-form
+# trajectory; the residual is O(1/d) and is ~2.075e-6 at d=100,000 for the
+# scenario `test_identity_recursion_reduces_to_whitlock_1992_infinite_island_
+# trajectory` uses (see that test's own docstring and `1121-citrus`'s
+# Whitlock design doc for the full six-row sweep this was measured from).
+_ONE_OVER_D_TOL = 1e-5
 
 _CALIBRATION_DATA_PATH = Path(__file__).with_name(
     "statistical-calibration-evidence.json"
@@ -1190,6 +1199,52 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
     # (see this test's own docstring for why that is not asserted here).
     assert 0.0 <= g_st <= 1.0
     assert g_st == pytest.approx(0.324, abs=0.01)
+
+
+def test_identity_recursion_reduces_to_whitlock_infinite_island_trajectory() -> None:
+    """`_iterate_identities`, at large `d` and `mu=0`, is Whitlock's own Eq. 1.
+
+    Whitlock (1992, *Evolution* 46:608-615) derives the trajectory of
+    within-population identity by descent, `f_0`, in Wright's classical
+    infinite-island model: infinitely many demes, migrants drawn from an
+    outside gene pool with zero identity, mutation set aside as
+    negligible. This project's own `_iterate_identities` is a *finite*-
+    `d` symmetric-island recursion -- so Whitlock's own closed form
+    (`identity_recovery_trajectory`) should be exactly what `_iterate_
+    identities` converges to as `d -> infinity`, with an `O(1/d)`
+    residual at any finite `d`, the same shape of approximation
+    `equilibrium_g_st`/`equilibrium_d` already carry as `O(1/N)`
+    residuals against the exact finite-`N` recursion.
+
+    Checked here at `d=100,000` (negligible runtime -- `_iterate_
+    identities` only takes 10 fixed steps regardless of `d`; only its
+    per-step *coefficients* depend on `d`), well inside `_ONE_OVER_D_
+    TOL`. The full six-row `d` sweep (10 through 100,000) this bound and
+    its `O(1/d)` shape were measured from, plus the from-scratch
+    algebraic derivation of this exact reduction, are in `1121-citrus`'s
+    `dev/doc/apps/selby/jost-finite-island-model/20260830-claude-
+    sonnet-5-whitlock-1992-identity-recovery-test-plan.md`.
+    """
+    population_size = 100
+    m = 0.05
+    f0_initial = 0.8
+    generations = 10
+    d = 100_000
+
+    within, _between = _iterate_identities(
+        population_size=population_size,
+        m=m,
+        mu=0.0,
+        d=d,
+        within_identity=f0_initial,
+        between_identity=0.0,
+        generations=generations,
+    )
+    closed_form = identity_recovery_trajectory(
+        f0_initial, population_size, m, generations
+    )
+
+    assert within == pytest.approx(closed_form, abs=_ONE_OVER_D_TOL)
 
 
 def test_shannon_entropy_isolated_theta_convention_matches_identity_recursion() -> None:
