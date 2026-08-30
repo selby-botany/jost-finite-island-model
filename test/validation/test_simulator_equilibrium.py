@@ -74,7 +74,14 @@ from fim.model.params import InitialFrequencies, Migration, SimulationParams
 from fim.model.state import ModelState
 from fim.model.topology import dense_matrix_from_neighbors
 from fim.persistence.store import TrajectoryRow
-from fim.statistics import equilibrium_d, equilibrium_g_st, h_s, h_t
+from fim.statistics import (
+    equilibrium_d,
+    equilibrium_g_st,
+    equilibrium_shannon_entropy_isolated,
+    equilibrium_shannon_entropy_total,
+    h_s,
+    h_t,
+)
 
 # Width, in standard errors, of every statistical band (test-plan 7.1).
 _BAND_SIGMA = 5.0
@@ -733,6 +740,102 @@ def test_identity_recursion_oracle_matches_formula_and_published(
     assert oracle_d == pytest.approx(equilibrium_d(m, mu, d), abs=_ONE_OVER_N_TOL)
     assert oracle_g_st == pytest.approx(published_g_st, abs=0.011)
     assert oracle_d == pytest.approx(published_d, abs=0.02)
+
+
+def test_shannon_entropy_isolated_theta_convention_matches_identity_recursion() -> None:
+    """`equilibrium_shannon_entropy_isolated`'s `theta = 2*N*mu` is the right one.
+
+    There is no exact recursion for Shannon entropy itself in this
+    project (the pairwise-identity recursion these `_pipeline_identity_
+    dynamics`-family functions track is a heterozygosity-scale quantity,
+    not an entropy-scale one) -- and no independent "published" isolated-
+    population Shannon-entropy value in this project's own literature
+    trail either (see `1121-citrus`'s Chao-et-al-2015 findings doc). What
+    *is* checkable, and is the one thing every equilibrium Shannon-
+    entropy formula in `fim.statistics.differentiation` shares: the
+    ploidy conversion from Chao et al. (2015)'s own diploid-individual
+    `N` to this project's gene-copy `population_size`, `theta =
+    2*population_size*mu`. Checked here the same way it was checked
+    before ever writing `equilibrium_shannon_entropy_isolated`'s own
+    docstring: run this module's own exact finite-N identity recursion
+    isolated (`m=0`), convert its fixed-point identity to heterozygosity
+    (`1 - within`), and compare to what `theta = 2*population_size*mu`
+    implies via Eq. 1 (`theta / (theta + 1)`) -- the same `O(1/N)`-scale
+    residual `equilibrium_g_st`/`equilibrium_d` already carry, shrinking
+    as `N` grows. `equilibrium_shannon_entropy_isolated`'s own digamma
+    arithmetic is verified independently, exactly, against textbook
+    closed forms in `test/validation/test_equilibrium.py`.
+    """
+    for population_size, mu in ((100, 0.001), (1_000, 0.001), (10_000, 0.001)):
+        within, _between = _iterate_identities(
+            population_size=population_size,
+            m=0.0,
+            mu=mu,
+            d=2,
+            within_identity=1.0,
+            between_identity=0.0,
+            generations=None,
+        )
+        exact_heterozygosity = 1.0 - within
+        theta = 2.0 * population_size * mu
+        formula_heterozygosity = theta / (theta + 1.0)
+
+        assert exact_heterozygosity == pytest.approx(
+            formula_heterozygosity, abs=_ONE_OVER_N_TOL
+        )
+
+
+@pytest.mark.parametrize(
+    ("population_size", "m", "mu", "d"),
+    [
+        (100, 0.01, 0.001, 4),
+        (2000, 0.01, 0.001, 100),
+        (100, 0.0001, 0.000001, 5),
+    ],
+)
+def test_shannon_entropy_total_theta_convention_matches_identity_recursion(
+    population_size: int, m: float, mu: float, d: int
+) -> None:
+    """`equilibrium_shannon_entropy_total`'s own `theta_T` formula, cross-checked.
+
+    The total-population counterpart to the isolated-population check
+    above, over three of this project's own existing scenarios (Part VI
+    and both Dear-Nolan configurations). `_identity_fixed_point`'s own
+    pooled total-population identity, `(1/d)*within + ((d-1)/d)*between`,
+    converted to heterozygosity, is compared against `equilibrium_
+    shannon_entropy_total`'s own `theta_T` via Eq. 1.
+    """
+    within_star, between_star = _identity_fixed_point(
+        population_size=population_size, m=m, mu=mu, d=d
+    )
+    pooled_identity = (1.0 / d) * within_star + ((d - 1) / d) * between_star
+    exact_heterozygosity = 1.0 - pooled_identity
+
+    migration_star = m * d / (d - 1)
+    theta_total = 2.0 * population_size * d * mu + (d - 1) * mu / (migration_star + mu)
+    formula_heterozygosity = theta_total / (theta_total + 1.0)
+
+    assert exact_heterozygosity == pytest.approx(
+        formula_heterozygosity, abs=_ONE_OVER_N_TOL
+    )
+
+
+def test_shannon_entropy_isolated_and_total_are_computed_and_finite() -> None:
+    """Both equilibrium Shannon-entropy functions run end to end and return sane values.
+
+    Not a numeric cross-check (those are above) -- just confirms the
+    public functions themselves are wired correctly and importable from
+    `fim.statistics` (`__init__.py`'s own re-export), the same "does it
+    actually run" floor every other public equilibrium function already
+    has.
+    """
+    isolated = equilibrium_shannon_entropy_isolated(100, 0.001)
+    total = equilibrium_shannon_entropy_total(100, 0.01, 0.001, 4)
+
+    assert math.isfinite(isolated)
+    assert math.isfinite(total)
+    assert isolated > 0.0
+    assert total > 0.0
 
 
 def test_identity_recursion_d_and_g_st_are_non_increasing_in_migration() -> None:

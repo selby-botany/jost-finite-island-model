@@ -1,8 +1,17 @@
 """Deterministic validation against published finite-island scenarios."""
 
+import math
+
 import pytest
 
-from fim.statistics import equilibrium_d, equilibrium_g_st
+from fim.statistics import (
+    equilibrium_d,
+    equilibrium_g_st,
+    equilibrium_shannon_entropy_isolated,
+    equilibrium_shannon_entropy_isolated_smm,
+    equilibrium_shannon_entropy_total,
+)
+from fim.statistics.differentiation import _EULER_GAMMA, _digamma
 
 
 @pytest.mark.parametrize(
@@ -53,3 +62,147 @@ def test_gene_copy_convention_uses_two_n_not_four_n() -> None:
 
     assert observed > diploid_individual_formula
     assert observed == pytest.approx(0.97, abs=0.01)
+
+
+@pytest.mark.parametrize(
+    ("x", "expected"),
+    [
+        (1.0, -_EULER_GAMMA),
+        (2.0, 1.0 - _EULER_GAMMA),
+        (3.0, 1.0 + 1.0 / 2.0 - _EULER_GAMMA),
+        (5.0, 1.0 + 1.0 / 2.0 + 1.0 / 3.0 + 1.0 / 4.0 - _EULER_GAMMA),
+        (0.5, -_EULER_GAMMA - 2.0 * math.log(2.0)),
+        (1.5, 2.0 - _EULER_GAMMA - 2.0 * math.log(2.0)),
+    ],
+)
+def test_digamma_matches_known_closed_forms(x: float, expected: float) -> None:
+    """`_digamma` matches the textbook exact values at integers and halves.
+
+    Integers: `psi(n) = H_{n-1} - gamma`, the `n-1`-th harmonic number
+    minus the Euler-Mascheroni constant (the recurrence `_digamma`
+    itself uses to shift small arguments, unrolled by hand here as an
+    independent check rather than trusted circularly). Half-integers:
+    `psi(1/2) = -gamma - 2*ln(2)` and `psi(3/2) = psi(1/2) + 2`, the two
+    other closed forms every digamma reference table starts with.
+    """
+    assert _digamma(x) == pytest.approx(expected, abs=1e-8)
+
+
+def test_digamma_rejects_non_positive_and_invalid_input() -> None:
+    """`_digamma` is only defined here for a positive, finite `x`."""
+    for bad in (0.0, -1.0, math.inf, math.nan):
+        with pytest.raises(ValueError, match="positive"):
+            _digamma(bad)
+
+
+@pytest.mark.parametrize(
+    ("population_size", "mu", "expected"),
+    [
+        # theta = 2*N*mu = 1 -> psi(2) + gamma = H_1 = 1.0 exactly.
+        (1, 0.5, 1.0),
+        # theta = 2*N*mu = 2 -> psi(3) + gamma = H_2 = 1.5 exactly.
+        (1, 1.0, 1.5),
+        (2, 0.5, 1.5),
+    ],
+)
+def test_equilibrium_shannon_entropy_isolated_matches_harmonic_numbers(
+    population_size: int, mu: float, expected: float
+) -> None:
+    """Chao et al. (2015) Eq. 2A at integer `theta`, an exact harmonic number.
+
+    `psi(n) + gamma = H_{n-1}` for a positive integer `n` -- chosen
+    `(population_size, mu)` pairs here land `theta = 2*population_size*mu`
+    on exactly `0` or `1`, both cases where the equilibrium entropy has
+    a clean closed form independent of any digamma-table lookup, unlike
+    `test_digamma_matches_known_closed_forms`'s own values (which this
+    test does not reuse, so the two together do not share a single
+    point of failure).
+    """
+    assert equilibrium_shannon_entropy_isolated(population_size, mu) == pytest.approx(
+        expected, abs=1e-8
+    )
+
+
+def test_equilibrium_shannon_entropy_is_increasing_in_mutation() -> None:
+    """More mutation never lowers the equilibrium Shannon entropy (IAM or SMM).
+
+    Same direction as `equilibrium_d`'s own migration-mutation-ratio
+    result (Part VI): more mutation drives more standing diversity at
+    equilibrium, in the same way a locus with a higher mutation rate
+    supports more distinct alleles. Checked for both mutation models
+    together since they share the same underlying `theta`.
+    """
+    population_size = 100
+    low, high = (
+        equilibrium_shannon_entropy_isolated(population_size, 0.0001),
+        equilibrium_shannon_entropy_isolated(population_size, 0.01),
+    )
+    assert low < high
+
+    low_smm, high_smm = (
+        equilibrium_shannon_entropy_isolated_smm(population_size, 0.0001),
+        equilibrium_shannon_entropy_isolated_smm(population_size, 0.01),
+    )
+    assert low_smm < high_smm
+
+
+def test_equilibrium_shannon_entropy_smm_reduces_toward_iam_as_alpha_shrinks() -> None:
+    """SMM entropy approaches the IAM value as `alpha` (and `theta`) shrink.
+
+    Chao et al. (2015) state this "bridge" explicitly: SMM's own `alpha`
+    parameter tends to 0 as `theta` does, at which point Eq. 5A reduces
+    exactly to Eq. 2A. Checked here as a convergence trend (SMM and IAM
+    values move closer together as `theta` shrinks) rather than an exact
+    equality at any single point, since `alpha` is strictly positive for
+    every `theta > 0`, however small.
+    """
+    population_size = 100
+    gaps = [
+        abs(
+            equilibrium_shannon_entropy_isolated_smm(population_size, mu)
+            - equilibrium_shannon_entropy_isolated(population_size, mu)
+        )
+        for mu in (0.01, 0.0001, 0.000001)
+    ]
+    assert gaps == sorted(gaps, reverse=True)
+    assert gaps[-1] < 1e-4
+
+
+def test_equilibrium_shannon_entropy_rejects_zero_mutation() -> None:
+    """An isolated deme with `mu=0` never reaches a polymorphic equilibrium."""
+    with pytest.raises(ValueError, match="mu greater than 0"):
+        equilibrium_shannon_entropy_isolated(100, 0.0)
+    with pytest.raises(ValueError, match="mu greater than 0"):
+        equilibrium_shannon_entropy_isolated_smm(100, 0.0)
+    with pytest.raises(ValueError, match="mu greater than 0"):
+        equilibrium_shannon_entropy_total(100, 0.01, 0.0, 4)
+
+
+def test_equilibrium_shannon_entropy_isolated_validates_its_inputs() -> None:
+    """`_validate_isolated_equilibrium_inputs` rejects a bad `N` or `mu`.
+
+    The isolated-population counterpart to `equilibrium_g_st`/
+    `equilibrium_d`'s own input validation, checked the same way.
+    """
+    for bad_population_size in (0, -1, 1.5, True):
+        with pytest.raises(ValueError, match="positive gene-copy count"):
+            equilibrium_shannon_entropy_isolated(bad_population_size, 0.001)  # type: ignore[arg-type]
+    for bad_mu in (-0.1, 1.1, math.inf, True):
+        with pytest.raises(ValueError, match="mu must be between 0 and 1"):
+            equilibrium_shannon_entropy_isolated(100, bad_mu)
+
+
+def test_equilibrium_shannon_entropy_total_exceeds_isolated_with_more_demes() -> None:
+    """Pooling more demes together can only add entropy, never remove it.
+
+    The same "pooling can only add diversity" property Part V's
+    replication principle already establishes for heterozygosity-based
+    measures (`fim.statistics.differentiation`'s own module docstring),
+    checked here on the total-population Shannon entropy instead: for
+    fixed `N`, `m`, `mu`, more demes pooled together means strictly more
+    standing diversity at equilibrium, never less.
+    """
+    values = [
+        equilibrium_shannon_entropy_total(100, 0.01, 0.001, d) for d in (2, 4, 10, 50)
+    ]
+    assert values == sorted(values)

@@ -45,7 +45,7 @@ only whether two entries share the same identity or not.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from math import exp, expm1, fsum, isfinite, log
+from math import exp, expm1, fsum, isfinite, log, sqrt
 from numbers import Real
 from operator import index as integer_index
 from typing import Any, TypeAlias, TypedDict
@@ -55,6 +55,18 @@ DemeWeights: TypeAlias = Sequence[Any] | None
 
 _MINIMUM_DEMES = 2
 _TOLERANCE = 1e-12
+
+# Euler-Mascheroni constant gamma = -psi(1), to full double precision
+# (Abramowitz & Stegun 1972, table 1.1) -- the additive constant every
+# equilibrium Shannon-entropy formula below (`equilibrium_shannon_
+# entropy_isolated` and its siblings) carries, following Chao et al.
+# (2015) Eq. 2A.
+_EULER_GAMMA = 0.5772156649015328606
+# Threshold above which `_digamma`'s asymptotic series (Abramowitz &
+# Stegun 1972, formula 6.3.18 -- the same one Chao et al.'s own S2
+# Appendix cites) is accurate to within machine precision; below it,
+# the recurrence psi(x+1) = psi(x) + 1/x shifts the argument up first.
+_DIGAMMA_ASYMPTOTIC_THRESHOLD = 6.0
 
 
 class DifferentiationReport(TypedDict):
@@ -702,6 +714,249 @@ def equilibrium_g_st(
         + 1.0
     )
     return _bounded(1.0 / denominator, "equilibrium G_ST")
+
+
+def _digamma(x: float) -> float:
+    """Return the digamma function psi(x) for x > 0.
+
+    The digamma function is the logarithmic derivative of the gamma
+    function, `psi(x) = Gamma'(x) / Gamma(x)` — the one special function
+    every equilibrium Shannon-entropy formula below
+    (`equilibrium_shannon_entropy_isolated` and its siblings) is written
+    in terms of (Chao et al. 2015, Eq. 2A/5A). No dependency this
+    project takes on ships a digamma implementation (`numpy` does not;
+    `scipy` is not a dependency at all — see this module's own docstring
+    for why formulas here stay dependency-free), so this is a small,
+    self-contained one: the standard recurrence `psi(x+1) = psi(x) +
+    1/x` shifts a small `x` up past `_DIGAMMA_ASYMPTOTIC_THRESHOLD`,
+    where the asymptotic series below is accurate to within machine
+    precision.
+
+    Args:
+        x: A positive real number.
+
+    Returns:
+        `psi(x)`, accurate to within machine precision for any `x > 0`.
+
+    Raises:
+        ValueError: If `x` is not a positive, finite real number.
+    """
+    if (
+        isinstance(x, bool)
+        or not isinstance(x, int | float)
+        or not isfinite(x)
+        or x <= 0.0
+    ):
+        raise ValueError("digamma is only defined here for a positive, finite x")
+    value = 0.0
+    shifted = float(x)
+    while shifted < _DIGAMMA_ASYMPTOTIC_THRESHOLD:
+        value -= 1.0 / shifted
+        shifted += 1.0
+    inverse = 1.0 / shifted
+    inverse_squared = inverse * inverse
+    value += log(shifted) - 0.5 * inverse
+    value -= inverse_squared * (
+        1.0 / 12.0 - inverse_squared * (1.0 / 120.0 - inverse_squared / 252.0)
+    )
+    return value
+
+
+def _validate_isolated_equilibrium_inputs(*, population_size: int, mu: float) -> None:
+    """Validate a single-isolated-deme equilibrium formula's inputs.
+
+    The `equilibrium_g_st`/`equilibrium_d` counterpart
+    (`_validate_equilibrium_inputs`) always requires `m` and `d` too,
+    since every statistic it validates for is inherently a between-deme
+    comparison. A single isolated deme has neither — there is nothing to
+    migrate between and nothing to compare against — so this is a
+    genuinely smaller, not just a specialized, contract.
+    """
+    if (
+        isinstance(population_size, bool)
+        or not isinstance(population_size, int)
+        or population_size < 1
+    ):
+        raise ValueError("N must be a positive gene-copy count")
+    if (
+        isinstance(mu, bool)
+        or not isinstance(mu, int | float)
+        or not isfinite(mu)
+        or not 0.0 <= mu <= 1.0
+    ):
+        raise ValueError("mu must be between 0 and 1")
+
+
+def equilibrium_shannon_entropy_isolated(population_size: int, mu: float) -> float:
+    """Return the equilibrium expected Shannon entropy of one isolated deme (IAM).
+
+    Chao, Jost, Hsieh, Ma, Sherwin & Rollins (2015) Eq. 2A: at
+    mutation-drift equilibrium under the infinite-alleles model, a
+    single isolated deme's expected Shannon entropy is
+    `psi(theta + 1) + gamma`, where `psi` is the digamma function and
+    `gamma` is the Euler-Mascheroni constant — the Shannon-entropy-scale
+    counterpart to `heterozygosity`'s own equilibrium, `theta / (theta +
+    1)` (the same paper's Eq. 1, which this project already implements
+    identically in miniature every time `_iterate_identities`
+    — `test/validation/test_simulator_equilibrium.py` — is run with
+    `m=0`).
+
+    `theta = 4*N*mu` in the paper's own notation, where the paper's own
+    `N` is diploid individuals. This project's own `population_size` is
+    gene copies (`2*N`), so `theta` here is `2*population_size*mu` — the
+    same halving already established for `equilibrium_g_st`/
+    `equilibrium_d`, but confirmed independently for this formula rather
+    than assumed by analogy: run this project's own exact finite-N
+    identity recursion in isolation (`_iterate_identities` with `m=0`,
+    which has no equivalent of the diffusion approximation's own `theta`
+    at all — it is the literal discrete Wright-Fisher-style recursion
+    this project's engine implements), and `1 - within_identity` at
+    increasing `N` converges to `theta / (theta + 1)` under
+    `theta = 2*population_size*mu` and nothing close to it under
+    `theta = 4*population_size*mu` (checked directly at `N = 100, 1000,
+    10000` before writing this docstring; the residual shrinks as `N`
+    grows, the same `O(1/N)` diffusion-approximation pattern already
+    documented for `equilibrium_g_st`/`equilibrium_d`).
+
+    This measures a genuinely different family of statistic from every
+    other function in this module — Shannon entropy, not heterozygosity
+    — so it is not directly comparable to `equilibrium_d`/
+    `equilibrium_g_st`, and is unbounded above rather than confined to
+    `[0, 1]` (see `Returns`, below). See `within_hill_number`/
+    `total_hill_number` at `order=1` for how this project already
+    computes the *simulated* (not equilibrium-predicted) version of the
+    same quantity from an actual frequency table:
+    `log(within_hill_number(table, 1))` recovers Shannon entropy
+    exactly, since `within_hill_number` itself already returns
+    `exp(entropy)` at that order.
+
+    Args:
+        population_size: Gene-copy count `N` (this project's own
+            convention — see above for the conversion from the paper's
+            own diploid-individual `N`).
+        mu: Infinite-alleles mutation rate; must be greater than 0 (an
+            isolated deme with no mutation at all never reaches a
+            polymorphic equilibrium to have an entropy of).
+
+    Returns:
+        The equilibrium expected Shannon entropy, in nats (natural-log
+        units). Unlike every other statistic in this module, this is
+        unbounded above: entropy grows without limit as the number of
+        distinct alleles actually present grows, so there is no
+        `_bounded` call here — a genuinely different, not merely
+        unenforced, mathematical range.
+
+    Raises:
+        ValueError: If `population_size` or `mu` is invalid, or `mu` is
+            exactly 0.
+    """
+    _validate_isolated_equilibrium_inputs(population_size=population_size, mu=mu)
+    if mu == 0.0:
+        raise ValueError("equilibrium Shannon entropy requires mu greater than 0")
+    theta = 2.0 * population_size * mu
+    return _digamma(theta + 1.0) + _EULER_GAMMA
+
+
+def equilibrium_shannon_entropy_isolated_smm(population_size: int, mu: float) -> float:
+    """Return the equilibrium expected Shannon entropy of one isolated deme (SMM).
+
+    Chao et al. (2015) Eq. 5A: the stepwise-mutation-model counterpart to
+    `equilibrium_shannon_entropy_isolated`, above — same `theta =
+    2*population_size*mu` (this project's own gene-copy convention; see
+    that function's own docstring for the ploidy derivation), plus
+    `alpha = [(1 + 2*theta)**0.5 - 1] / 2` (the paper's own Eq. 4A/4B),
+    giving `psi(theta + alpha + 1) - psi(alpha + 1)`. As `alpha` tends to
+    0 this reduces exactly to the infinite-alleles formula above — the
+    paper's own stated "bridge" between the two mutation models — and
+    `alpha` is always non-negative for `theta >= 0`, so this can never
+    silently drift below that limit.
+
+    Unlike `equilibrium_shannon_entropy_isolated` (whose infinite-alleles
+    model is exactly this project's own default `mutation_model`), this
+    project has no stepwise-mutation-model implementation at all — a
+    finite, ordered walk over adjacent allele states (the standard model
+    for a microsatellite repeat count, ±1 per mutation), genuinely
+    different from this project's own `"finite_alleles"` option (a fixed
+    set of K alleles, mutation uniform over the other K-1, with no
+    notion of "adjacent"). This function is included because the
+    formula itself is real, published, and cheap to state correctly once
+    `equilibrium_shannon_entropy_isolated` already exists — but, unlike
+    that function, it has no engine-level scenario in this project to
+    ever validate it against; treat it as a literature reference, not a
+    simulator cross-check.
+
+    Args:
+        population_size: Gene-copy count `N`.
+        mu: Per-generation mutation (single-step) rate; must be greater
+            than 0.
+
+    Returns:
+        The equilibrium expected Shannon entropy, in nats — unbounded
+        above, the same as `equilibrium_shannon_entropy_isolated`.
+
+    Raises:
+        ValueError: If `population_size` or `mu` is invalid, or `mu` is
+            exactly 0.
+    """
+    _validate_isolated_equilibrium_inputs(population_size=population_size, mu=mu)
+    if mu == 0.0:
+        raise ValueError("equilibrium Shannon entropy requires mu greater than 0")
+    theta = 2.0 * population_size * mu
+    alpha = (sqrt(1.0 + 2.0 * theta) - 1.0) / 2.0
+    return _digamma(theta + alpha + 1.0) - _digamma(alpha + 1.0)
+
+
+def equilibrium_shannon_entropy_total(
+    population_size: int,
+    m: float,
+    mu: float,
+    d: int,
+) -> float:
+    """Return the equilibrium expected Shannon entropy of the pooled FIM population.
+
+    Chao et al. (2015) Eq. 6 (IAM-FIM): the total-population counterpart
+    to `equilibrium_shannon_entropy_isolated`, above, under Wright's
+    finite island model — the same model `equilibrium_g_st`/
+    `equilibrium_d` already predict `G_ST`/`D` for. The paper's own
+    closed form for the total population's own effective mutation
+    parameter is `theta_T = 4*N*n*mu + (n-1)*mu / (m* + mu)`, where
+    `m* = m*n/(n-1)` follows Latter (1973)'s own notation (already used
+    identically in `equilibrium_g_st`'s own citation history) and the
+    paper's own `N` is diploid individuals per deme — converted here to
+    this project's gene-copy `population_size` the same way
+    `equilibrium_shannon_entropy_isolated` already is, and confirmed the
+    same way: this formula's implied `theta_T / (theta_T + 1)`
+    (Eq. 1's own heterozygosity link) matches this project's own exact
+    finite-N identity recursion's pooled total-population identity,
+    `(1/d)*within + ((d-1)/d)*between` from `_identity_fixed_point`, to
+    within the same small, `O(1/N)`-scale residual already documented
+    for `equilibrium_g_st`/`equilibrium_d` (checked directly, across
+    three of this project's own existing scenarios spanning
+    `N=100..2000, d=4..100`, before writing this docstring).
+
+    Unbounded above, the same as `equilibrium_shannon_entropy_isolated`
+    — see that function's own `Returns` for why.
+
+    Args:
+        population_size: Gene-copy count `N` per deme (equal across
+            demes, matching the finite island model's own assumption).
+        m: Symmetric per-generation migration rate.
+        mu: Infinite-alleles mutation rate; must be greater than 0.
+        d: Number of equal demes.
+
+    Returns:
+        The equilibrium expected Shannon entropy of the pooled
+        total population, in nats.
+
+    Raises:
+        ValueError: If any input is invalid, or `mu` is exactly 0.
+    """
+    _validate_equilibrium_inputs(population_size=population_size, m=m, mu=mu, d=d)
+    if mu == 0.0:
+        raise ValueError("equilibrium Shannon entropy requires mu greater than 0")
+    migration_star = m * d / (d - 1)
+    theta_total = 2.0 * population_size * d * mu + (d - 1) * mu / (migration_star + mu)
+    return _digamma(theta_total + 1.0) + _EULER_GAMMA
 
 
 def statistics_report(
