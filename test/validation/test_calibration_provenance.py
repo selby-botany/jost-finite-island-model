@@ -84,6 +84,31 @@ def test_calibration_evidence_data_is_retained_and_versioned() -> None:
         assert scenario["assertion_sigma_d"] > 0.0
 
 
+def test_chao_shannon_equilibrium_evidence_is_retained_and_versioned() -> None:
+    """The Chao-Shannon scenario's own (differently-shaped) evidence is retained.
+
+    The `chao_shannon_equilibrium` counterpart to the test above: three
+    named statistics (`total_entropy`/`subpopulation_entropy`/
+    `shannon_differentiation`), not the two (`G_ST`/`D`) every other
+    scenario shares -- see `dev/bin/calibrate-statistical-bands`'s own
+    `_characterize_chao_shannon_equilibrium` docstring for why this one
+    scenario's evidence uses its own schema instead of being folded into
+    the loop above.
+    """
+    evidence = json.loads(EVIDENCE_DATA.read_text(encoding="utf-8"))
+    scenario = evidence["scenarios"]["chao_shannon_equilibrium"]
+    assert scenario["replicates"] >= 2
+    for statistic_name in (
+        "total_entropy",
+        "subpopulation_entropy",
+        "shannon_differentiation",
+    ):
+        statistic = scenario[statistic_name]
+        assert statistic["empirical_sigma"] > 0.0
+        assert statistic["recommended_sigma"] > 0.0
+        assert len(statistic["values"]) == scenario["replicates"]
+
+
 def test_user_facing_calibration_doc_is_present() -> None:
     """The user-facing calibration document is retained and script-linked."""
     assert EVIDENCE_DOC.is_file()

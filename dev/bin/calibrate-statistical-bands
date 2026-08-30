@@ -70,6 +70,7 @@ _DEFAULT_SEED_PART_VI = 600000
 _DEFAULT_SEED_DEAR_NOLAN_LOW = 601000
 _DEFAULT_SEED_DEAR_NOLAN_HIGH = 602000
 _DEFAULT_SEED_CROW_AOKI_TORUS = 603000
+_DEFAULT_SEED_CHAO_SHANNON = 604000
 
 
 @dataclass(frozen=True)
@@ -253,6 +254,77 @@ def _characterize_crow_aoki_torus(
     )
 
 
+def _characterize_chao_shannon_equilibrium(
+    module: ModuleType, *, seed: int, replicates: int
+) -> dict[str, object]:
+    """Characterize the Chao et al. (2015) Shannon-equilibrium scenario.
+
+    Reuses Part VI's own already-proven-convergent `(N, m, mu, d)`
+    (`N=100, m=0.01, mu=0.005, d=4`) rather than searching for a new
+    configuration from scratch, at a longer horizon (2000 generations,
+    versus Part VI's own 1000) -- deliberately, not arbitrarily: Chao et
+    al. (2015) state directly, in their own Discussion, that
+    "the measure GST in FIM converges very quickly ... whereas the
+    normalized mutual information based on Shannon entropy converges
+    relatively slowly," so the exact horizon already proven to converge
+    `G_ST`/`D` in `test_engine_reproduces_part_vi_equilibrium` is not
+    assumed to also be enough for Shannon differentiation, and was not:
+    a quick single-seed check across horizons 1000-8000 (this session's
+    own record, not repeated here) found `G_ST`-style convergence
+    already essentially flat by 1000 but the Shannon-based statistics
+    still measurably settling at that horizon.
+
+    Three named statistics (`H_T`, `H_S`, Shannon differentiation), not
+    the two (`G_ST`, `D`) `CharacterizationResult`/`_render_data` above
+    are built for -- returns a plain dict in its own natural schema
+    rather than forcing a fit into that one, and is merged into the
+    same output payload's own `scenarios` mapping directly in `main`,
+    below, rather than through `_render_data`. Generalizing
+    `CharacterizationResult` to an arbitrary number of named series
+    would remove this asymmetry; not done here to avoid touching the
+    four already-working, already-validated G_ST/D scenarios' own code
+    path for a fifth scenario's sake.
+    """
+    started = time.monotonic()
+    total_values, subpopulation_values, differentiation_values = (
+        module._run_engine_pooled_shannon(
+            population_size=100,
+            m=0.01,
+            mu=0.005,
+            d=4,
+            n_loci=8,
+            horizon=2000,
+            replicates=replicates,
+            seed=seed,
+        )
+    )
+    elapsed = time.monotonic() - started
+
+    def _stats(values: list[float]) -> dict[str, float]:
+        mean = statistics.fmean(values)
+        sigma = statistics.stdev(values)
+        return {
+            "mean": mean,
+            "empirical_sigma": sigma,
+            "recommended_sigma": _recommend_sigma(sigma),
+        }
+
+    return {
+        "seed": seed,
+        "replicates": replicates,
+        "elapsed_seconds": elapsed,
+        "total_entropy": {**_stats(total_values), "values": total_values},
+        "subpopulation_entropy": {
+            **_stats(subpopulation_values),
+            "values": subpopulation_values,
+        },
+        "shannon_differentiation": {
+            **_stats(differentiation_values),
+            "values": differentiation_values,
+        },
+    }
+
+
 def _environment_fingerprint() -> dict[str, str]:
     """Return the interpreter/platform/package versions this run used."""
     fingerprint = {
@@ -381,6 +453,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--replicates-crow-aoki-torus", type=int, default=10, help="default: 10"
     )
+    parser.add_argument(
+        "--replicates-chao-shannon", type=int, default=10, help="default: 10"
+    )
     parser.add_argument("--seed-part-vi", type=int, default=_DEFAULT_SEED_PART_VI)
     parser.add_argument(
         "--seed-dear-nolan-low", type=int, default=_DEFAULT_SEED_DEAR_NOLAN_LOW
@@ -390,6 +465,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--seed-crow-aoki-torus", type=int, default=_DEFAULT_SEED_CROW_AOKI_TORUS
+    )
+    parser.add_argument(
+        "--seed-chao-shannon", type=int, default=_DEFAULT_SEED_CHAO_SHANNON
     )
     parser.add_argument(
         "--output",
@@ -425,6 +503,18 @@ def main(argv: list[str] | None = None) -> int:
     ]
     existing_sigmas = _load_existing_assertion_sigmas(args.output)
     payload = _render_data(results, _environment_fingerprint(), existing_sigmas)
+    # `chao_shannon_equilibrium` has its own three-named-statistic schema
+    # (see `_characterize_chao_shannon_equilibrium`'s own docstring for
+    # why it is not built from `CharacterizationResult`/`_render_data`
+    # like the four scenarios above) -- merged in directly rather than
+    # forced through that G_ST/D-shaped rendering path.
+    payload["scenarios"]["chao_shannon_equilibrium"] = (  # type: ignore[index]
+        _characterize_chao_shannon_equilibrium(
+            module,
+            seed=args.seed_chao_shannon,
+            replicates=args.replicates_chao_shannon,
+        )
+    )
     args.output.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

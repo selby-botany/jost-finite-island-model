@@ -18,6 +18,62 @@
     "version": "Claude Sonnet 5"
   },
   "scenarios": {
+    "chao_shannon_equilibrium": {
+      "elapsed_seconds": 135.0,
+      "replicates": 10,
+      "seed": 604000,
+      "shannon_differentiation": {
+        "empirical_sigma": 0.039461508671953575,
+        "mean": 0.49322,
+        "recommended_sigma": 0.047400000000000005,
+        "values": [
+          0.518,
+          0.4773,
+          0.4271,
+          0.4522,
+          0.5531,
+          0.5293,
+          0.5262,
+          0.5055,
+          0.4765,
+          0.467
+        ]
+      },
+      "subpopulation_entropy": {
+        "empirical_sigma": 0.05680082550260847,
+        "mean": 1.47624,
+        "recommended_sigma": 0.06820000000000001,
+        "values": [
+          1.4662,
+          1.4634,
+          1.5493,
+          1.4649,
+          1.4343,
+          1.5203,
+          1.3817,
+          1.5468,
+          1.5204,
+          1.4151
+        ]
+      },
+      "total_entropy": {
+        "empirical_sigma": 0.06441521990613368,
+        "mean": 2.15995,
+        "recommended_sigma": 0.07730000000000001,
+        "values": [
+          2.1843,
+          2.125,
+          2.1414,
+          2.0918,
+          2.201,
+          2.254,
+          2.1111,
+          2.2475,
+          2.181,
+          2.0624
+        ]
+      }
+    },
     "crow_aoki_torus": {
       "assertion_sigma_d": 0.00159,
       "assertion_sigma_g": 0.16000000000000003,

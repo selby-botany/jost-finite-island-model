@@ -8,6 +8,41 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A fifth engine-level scientific test,
+  `test_chao_shannon_equilibrium_scenario_via_engine`
+  (`test/validation/test_simulator_equilibrium.py`), comparing the real
+  `fim()` engine's own simulated Shannon-entropy statistics against
+  Chao et al. (2015)'s closed-form equilibrium predictions
+  (`equilibrium_shannon_entropy_total`/`_subpopulation`/
+  `equilibrium_shannon_differentiation`) — the first engine-level test
+  in this project validating a genuinely independent statistic family
+  (Shannon entropy, not heterozygosity) against the real, stochastic
+  simulator, not just the closed-form theory. Reuses this file's own
+  already-proven-convergent Part VI scenario (`N=100, m=0.01, mu=0.005,
+  d=4`) rather than searching for a new one, but at double Part VI's own
+  horizon (2000 generations, not 1000) — deliberately, not arbitrarily:
+  Chao et al. (2015) state directly that Shannon-based statistics
+  converge more slowly than `G_ST`, confirmed for this exact scenario
+  (a quick single-seed horizon sweep, 1000 through 8000) before
+  committing to 2000. Adds `_run_engine_replicates` (factoring the
+  shared engine-running step out of `_run_engine_pooled`, which now
+  builds on it, so a scenario's own trajectory is never simulated twice
+  for two different statistic families), `_run_engine_pooled_shannon`,
+  and `_pooled_shannon_statistics` (reading `log(within_hill_number(
+  table, 1))`/`log(total_hill_number(table, 1))` off a final state —
+  already-exact quantities, not an approximation). `dev/bin/
+  calibrate-statistical-bands` gained the matching
+  `_characterize_chao_shannon_equilibrium` scenario (its own three-
+  named-statistic schema, distinct from every other scenario's `G_ST`/
+  `D` one — merged into the same evidence file directly rather than
+  forced through the shared `G_ST`/`D` rendering path) and a
+  `--replicates-chao-shannon`/`--seed-chao-shannon` flag pair. A real
+  10-replicate characterization pass found `H_S`'s own empirical mean
+  within `0.009` of its theoretical prediction, and `H_T`/Shannon
+  differentiation both within about 1.5 characterized standard
+  deviations — reported plainly in `doc/statistical-calibration-
+  evidence.md` rather than investigated further to force an exact
+  match.
 - A fourth engine-level "published scenario" scientific test,
   `test_crow_aoki_torus_scenario_via_engine`
   (`test/validation/test_simulator_equilibrium.py`), reproducing Crow &

@@ -79,10 +79,14 @@ from fim.persistence.store import TrajectoryRow
 from fim.statistics import (
     equilibrium_d,
     equilibrium_g_st,
+    equilibrium_shannon_differentiation,
     equilibrium_shannon_entropy_isolated,
+    equilibrium_shannon_entropy_subpopulation,
     equilibrium_shannon_entropy_total,
     h_s,
     h_t,
+    total_hill_number,
+    within_hill_number,
 )
 
 # A dense d-by-d matrix, as opposed to `Migration`'s own scalar/sparse/
@@ -131,6 +135,39 @@ _SIGMA_PART_VI_G, _SIGMA_PART_VI_D = _SIGMA_CONSTANTS["part_vi"]
 _SIGMA_DEAR_NOLAN_LOW_G, _SIGMA_DEAR_NOLAN_LOW_D = _SIGMA_CONSTANTS["dear_nolan_low"]
 _SIGMA_DEAR_NOLAN_HIGH_G, _SIGMA_DEAR_NOLAN_HIGH_D = _SIGMA_CONSTANTS["dear_nolan_high"]
 _SIGMA_CROW_AOKI_TORUS_G, _SIGMA_CROW_AOKI_TORUS_D = _SIGMA_CONSTANTS["crow_aoki_torus"]
+
+
+def _load_shannon_sigma_constants() -> tuple[float, float, float]:
+    """Load the Chao et al. Shannon-equilibrium scenario's own three sigmas.
+
+    That scenario's own evidence entry uses a different schema from the
+    four `G_ST`/`D` scenarios above (three named statistics, not two --
+    see `dev/bin/calibrate-statistical-bands`'s own
+    `_characterize_chao_shannon_equilibrium` docstring for why), so it is
+    not one of `_load_sigma_constants`'s own `required` scenarios and
+    gets this small, separate loader instead.
+    """
+    payload = json.loads(_CALIBRATION_DATA_PATH.read_text(encoding="utf-8"))
+    scenario = payload["scenarios"]["chao_shannon_equilibrium"]
+    return (
+        float(scenario["total_entropy"]["recommended_sigma"]),
+        float(scenario["subpopulation_entropy"]["recommended_sigma"]),
+        float(scenario["shannon_differentiation"]["recommended_sigma"]),
+    )
+
+
+try:
+    (
+        _SIGMA_CHAO_SHANNON_TOTAL,
+        _SIGMA_CHAO_SHANNON_SUBPOPULATION,
+        _SIGMA_CHAO_SHANNON_DIFFERENTIATION,
+    ) = _load_shannon_sigma_constants()
+except Exception as exc:  # pragma: no cover - hard failure before tests run
+    raise RuntimeError(
+        "Missing or invalid calibration artifact at "
+        f"{_CALIBRATION_DATA_PATH}; regenerate with "
+        "dev/bin/calibrate-statistical-bands"
+    ) from exc
 
 
 class _DiscardingStore:
@@ -694,6 +731,47 @@ def _pooled_g_st_d(state: ModelState, d: int, n_loci: int) -> tuple[float, float
     return g_st, jost_d
 
 
+def _pooled_shannon_statistics(
+    state: ModelState, d: int, n_loci: int
+) -> tuple[float, float, float]:
+    """Return multi-locus pooled ``(H_T, H_S, Shannon differentiation)``.
+
+    The Shannon-entropy counterpart to `_pooled_g_st_d`, above — same
+    per-locus-then-averaged pooling, reading `H_T`/`H_S` off `within_
+    hill_number`/`total_hill_number` at ``order=1`` (already exact:
+    `within_hill_number` and `total_hill_number` return ``exp(entropy)``
+    at that order by construction, so `log(...)` recovers Chao et al.
+    (2015)'s own `¹H_S`/`¹H_T` exactly, not an approximation of them) and
+    combining them via the same Eq. 10 `(H_T - H_S) / log(d)` `fim.
+    statistics.differentiation.equilibrium_shannon_differentiation`
+    predicts the equilibrium value of.
+
+    Args:
+        state: Final state of one replicate.
+        d: Number of demes.
+        n_loci: Number of tracked loci.
+
+    Returns:
+        The pooled ``(H_T, H_S, Shannon differentiation)`` estimate.
+    """
+    total_entropies: list[float] = []
+    subpopulation_entropies: list[float] = []
+    for locus_index in range(n_loci):
+        table = [
+            {
+                int(allele): freq
+                for allele, freq in state.frequency_map(deme, locus_index).items()
+            }
+            for deme in range(d)
+        ]
+        total_entropies.append(math.log(total_hill_number(table, 1)))
+        subpopulation_entropies.append(math.log(within_hill_number(table, 1)))
+    mean_total = statistics.fmean(total_entropies)
+    mean_subpopulation = statistics.fmean(subpopulation_entropies)
+    shannon_differentiation = (mean_total - mean_subpopulation) / math.log(d)
+    return mean_total, mean_subpopulation, shannon_differentiation
+
+
 def _crow_aoki_torus_matrix(
     side_length: int, rate: float
 ) -> tuple[tuple[float, ...], ...]:
@@ -749,7 +827,7 @@ def _crow_aoki_torus_matrix(
     return dense_matrix_from_neighbors(neighbors, side_length * side_length)
 
 
-def _run_engine_pooled(
+def _run_engine_replicates(
     *,
     population_size: int,
     m: Migration,
@@ -760,8 +838,8 @@ def _run_engine_pooled(
     replicates: int,
     seed: int,
     initial_frequencies: InitialFrequencies | None = None,
-) -> tuple[list[float], list[float]]:
-    """Run the real engine and return per-replicate pooled ``(G_ST, D)``.
+) -> tuple[ModelState, ...]:
+    """Run the real engine and return every replicate's own final state.
 
     The convergence monitor is effectively disabled so the run is a
     deterministic fixed-horizon integration: ``convergence_tolerance = 0``
@@ -772,6 +850,13 @@ def _run_engine_pooled(
     ``max_generations`` (R23 rejects anything larger as structurally unable
     to fill before the cap) — it still cannot fill until the very last
     recorded generation, one step too late to preempt the cap.
+
+    The shared engine-running step behind both `_run_engine_pooled`
+    (heterozygosity-based `G_ST`/`D`) and `_run_engine_pooled_shannon`
+    (Shannon-entropy-based `H_T`/`H_S`/Shannon differentiation), below —
+    factored out so a scenario's own simulated trajectory is never run
+    twice just because two different statistic families both want to read
+    it.
 
     Args:
         population_size: Gene-copy count ``N``.
@@ -790,7 +875,7 @@ def _run_engine_pooled(
             Dirichlet founding condition is used.
 
     Returns:
-        Two parallel lists, the pooled ``G_ST`` and ``D`` per replicate.
+        Every replicate's own final `ModelState`, in replicate order.
     """
     loci = tuple(LocusSpec(index + 1, 400) for index in range(n_loci))
     params = SimulationParams(
@@ -809,13 +894,94 @@ def _run_engine_pooled(
     )
     results = fim(population_size, m, mu, d, params=params, store=_DiscardingStore())
     replicate_results = results if isinstance(results, tuple) else (results,)
+    return tuple(result.final_state for result in replicate_results)
+
+
+def _run_engine_pooled(
+    *,
+    population_size: int,
+    m: Migration,
+    mu: float,
+    d: int,
+    n_loci: int,
+    horizon: int,
+    replicates: int,
+    seed: int,
+    initial_frequencies: InitialFrequencies | None = None,
+) -> tuple[list[float], list[float]]:
+    """Run the real engine and return per-replicate pooled ``(G_ST, D)``.
+
+    See `_run_engine_replicates`, above, for every argument's own
+    meaning and the deterministic-horizon integration this builds on.
+
+    Returns:
+        Two parallel lists, the pooled ``G_ST`` and ``D`` per replicate.
+    """
+    final_states = _run_engine_replicates(
+        population_size=population_size,
+        m=m,
+        mu=mu,
+        d=d,
+        n_loci=n_loci,
+        horizon=horizon,
+        replicates=replicates,
+        seed=seed,
+        initial_frequencies=initial_frequencies,
+    )
     g_values: list[float] = []
     d_values: list[float] = []
-    for result in replicate_results:
-        g_st, jost_d = _pooled_g_st_d(result.final_state, d, n_loci)
+    for state in final_states:
+        g_st, jost_d = _pooled_g_st_d(state, d, n_loci)
         g_values.append(g_st)
         d_values.append(jost_d)
     return g_values, d_values
+
+
+def _run_engine_pooled_shannon(
+    *,
+    population_size: int,
+    m: Migration,
+    mu: float,
+    d: int,
+    n_loci: int,
+    horizon: int,
+    replicates: int,
+    seed: int,
+    initial_frequencies: InitialFrequencies | None = None,
+) -> tuple[list[float], list[float], list[float]]:
+    """Run the real engine and return per-replicate pooled Shannon statistics.
+
+    The Shannon-entropy counterpart to `_run_engine_pooled`, above — same
+    deterministic-horizon integration, same arguments, but reading
+    `H_T`/`H_S`/Shannon differentiation off each replicate's own final
+    state (`_pooled_shannon_statistics`) instead of `G_ST`/`D`.
+
+    Returns:
+        Three parallel lists, the pooled total-population entropy,
+        subpopulation entropy, and Shannon differentiation per replicate.
+    """
+    final_states = _run_engine_replicates(
+        population_size=population_size,
+        m=m,
+        mu=mu,
+        d=d,
+        n_loci=n_loci,
+        horizon=horizon,
+        replicates=replicates,
+        seed=seed,
+        initial_frequencies=initial_frequencies,
+    )
+    total_values: list[float] = []
+    subpopulation_values: list[float] = []
+    differentiation_values: list[float] = []
+    for state in final_states:
+        total, subpopulation, differentiation = _pooled_shannon_statistics(
+            state, d, n_loci
+        )
+        total_values.append(total)
+        subpopulation_values.append(subpopulation)
+        differentiation_values.append(differentiation)
+    return total_values, subpopulation_values, differentiation_values
 
 
 @pytest.mark.parametrize(
@@ -1468,4 +1634,85 @@ def test_crow_aoki_torus_scenario_via_engine() -> None:
 
     assert mean_g == pytest.approx(
         0.172, abs=_band(_SIGMA_CROW_AOKI_TORUS_G, replicates)
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.statistical
+def test_chao_shannon_equilibrium_scenario_via_engine() -> None:
+    """The simulator reproduces Chao et al. (2015)'s equilibrium Shannon predictions.
+
+    Scenario: this file's own Part VI scenario (`N=100, m=0.01, mu=0.005,
+    d=4`, 8 loci) -- already proven to converge `G_ST`/`D` well at
+    horizon 1000 (`test_engine_reproduces_part_vi_equilibrium`, above) --
+    but at horizon 2000, double that. Not arbitrary: Chao et al. (2015)
+    state directly, in their own Discussion, that "the measure GST in
+    FIM converges very quickly ... whereas the normalized mutual
+    information based on Shannon entropy converges relatively slowly,"
+    and a quick single-seed check across horizons 1000-8000 confirmed it
+    for this exact scenario before committing to a horizon: `G_ST`-style
+    convergence was already essentially flat by 1000, but the
+    Shannon-based statistics were still measurably settling.
+
+    Compares the engine's own simulated `H_T`/`H_S`/Shannon
+    differentiation (`_pooled_shannon_statistics`, reading `log(within_
+    hill_number(table, 1))`/`log(total_hill_number(table, 1))` off each
+    replicate's final state -- already-exact quantities, not an
+    approximation of Chao et al.'s own `¹H_S`/`¹H_T`) against
+    `equilibrium_shannon_entropy_total`/`_subpopulation`/
+    `equilibrium_shannon_differentiation`'s own closed-form (Eq. 6/7D/10)
+    predictions -- the same "real engine against closed-form theory"
+    structure `test_engine_reproduces_part_vi_equilibrium` already uses
+    for `G_ST`/`D`, applied here to a genuinely independent statistic
+    family (Shannon entropy, not heterozygosity) for the first time in
+    this file.
+
+    Unlike the Crow & Aoki torus scenario, this one has no migration-
+    convention ambiguity to contend with (same `N`/`m`/`mu`/`d` as the
+    already-validated Part VI scenario, only the horizon differs) and no
+    fixation risk (8 loci at `mu=0.005` is comfortably far from the
+    torus's own `mu=1e-5` regime) -- a 10-replicate characterization pass
+    landed tight and stable (`H_S`'s own empirical mean within `0.008` of
+    its theoretical prediction; `H_T` and Shannon differentiation both
+    within about `1.5` characterized standard deviations, comfortably
+    inside the wider band this test's own fewer assertion replicates
+    produce). 6 replicates, base seed 715000 (distinct from every other
+    scenario's own seed in this file). Runtime is under two minutes --
+    far cheaper than the torus scenario's own ~23 minutes, since 8 loci
+    at horizon 2000 is a much smaller integration than 150 loci at
+    horizon 6000.
+    """
+    replicates = 6
+    total_values, subpopulation_values, differentiation_values = (
+        _run_engine_pooled_shannon(
+            population_size=100,
+            m=0.01,
+            mu=0.005,
+            d=4,
+            n_loci=8,
+            horizon=2000,
+            replicates=replicates,
+            seed=715000,
+        )
+    )
+    mean_total = statistics.fmean(total_values)
+    mean_subpopulation = statistics.fmean(subpopulation_values)
+    mean_differentiation = statistics.fmean(differentiation_values)
+
+    expected_total = equilibrium_shannon_entropy_total(100, 0.01, 0.005, 4)
+    expected_subpopulation = equilibrium_shannon_entropy_subpopulation(
+        100, 0.01, 0.005, 4
+    )
+    expected_differentiation = equilibrium_shannon_differentiation(100, 0.01, 0.005, 4)
+
+    assert mean_total == pytest.approx(
+        expected_total, abs=_band(_SIGMA_CHAO_SHANNON_TOTAL, replicates)
+    )
+    assert mean_subpopulation == pytest.approx(
+        expected_subpopulation,
+        abs=_band(_SIGMA_CHAO_SHANNON_SUBPOPULATION, replicates),
+    )
+    assert mean_differentiation == pytest.approx(
+        expected_differentiation,
+        abs=_band(_SIGMA_CHAO_SHANNON_DIFFERENTIATION, replicates),
     )

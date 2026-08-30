@@ -140,6 +140,47 @@ D (first 6 replicates only): [0.0037591012719535733, 0.0035422195878707977, 0.00
 
 </details>
 
+### chao_shannon_equilibrium
+
+Three named statistics, not `G_ST`/`D` -- a different schema from every
+scenario above (see `dev/bin/calibrate-statistical-bands`'s own
+`_characterize_chao_shannon_equilibrium` docstring for why this one
+scenario's evidence is not folded into that same two-statistic
+rendering). Scenario: this file's own Part VI `(N, m, mu, d)`
+(`100, 0.01, 0.005, 4`) at horizon 2000 (double Part VI's own 1000 --
+Chao et al. 2015 state Shannon-based statistics converge more slowly
+than `G_ST`, confirmed directly for this scenario before choosing the
+horizon).
+
+- Characterization seed: `604000` (replicate `i` uses seed `604000 + i`)
+- Replicates: `10`
+- Elapsed: `135.0s`
+
+| Statistic | Mean | Empirical sigma | Recommended sigma | Theoretical prediction |
+|---|---|---|---|---|
+| Total-population entropy (`H_T`) | `2.1600` | `0.0644` | `0.0773` | `2.2498` (`equilibrium_shannon_entropy_total`) |
+| Subpopulation entropy (`H_S`) | `1.4762` | `0.0568` | `0.0682` | `1.4676` (`equilibrium_shannon_entropy_subpopulation`) |
+| Shannon differentiation | `0.4932` | `0.0395` | `0.0474` | `0.5643` (`equilibrium_shannon_differentiation`) |
+
+`H_S`'s own empirical mean lands within `0.009` of its theoretical
+prediction -- close to exact. `H_T` and Shannon differentiation both sit
+noticeably further off (`0.09` and `0.07` respectively, both under `1.5`
+characterized standard deviations) but land comfortably inside the wider
+band the assertion test's own fewer replicates produce (`abs=0.157`/
+`abs=0.097` at 6 replicates) -- reported plainly rather than
+investigated further to force a tighter match, the same standard applied
+to `crow_aoki_torus`'s own larger, unresolved gap above.
+
+<details><summary>Raw per-replicate values</summary>
+
+```text
+H_T: [2.1843, 2.1250, 2.1414, 2.0918, 2.2010, 2.2540, 2.1111, 2.2475, 2.1810, 2.0624]
+H_S: [1.4662, 1.4634, 1.5493, 1.4649, 1.4343, 1.5203, 1.3817, 1.5468, 1.5204, 1.4151]
+Shannon differentiation: [0.5180, 0.4773, 0.4271, 0.4522, 0.5531, 0.5293, 0.5262, 0.5055, 0.4765, 0.4670]
+```
+
+</details>
+
 ## Metadata
 
 ```text
