@@ -342,16 +342,20 @@ dependency on any private workflow repo.
 
 ### 5.1 Branch and tag model
 
-A simple two-branch model:
+A simple branch model:
 
 - `dev` — the working branch; every commit lands here.
+- `staging` — an optional pre-release gate; pushing here (or dispatching
+  it manually) triggers `beta.yml` (§5.4), which builds an unofficial,
+  unreleased artifact for every platform `ci.yml`'s own tagged release
+  path builds, for hands-on verification before cutting a real tag.
 - `main` — release-ready; `dev` is fast-forwarded or merged here only at a
   release boundary.
 - `v*` tags — cut from `main`, drive the release workflow (§5.4).
 
-CI runs on pushes to `dev`/`main` and on pull requests targeting them, and
-on `v*` tags. Concurrency cancels superseded runs except on tags, so a
-release build is never cancelled mid-flight.
+CI (`ci.yml`) runs on pushes to `dev`/`main` and on pull requests
+targeting them, and on `v*` tags. Concurrency cancels superseded runs
+except on tags, so a release build is never cancelled mid-flight.
 
 ### 5.2 The `ci` workflow
 
@@ -450,21 +454,47 @@ verified before anything is built from it:
    message entirely; then `git merge-base --is-ancestor "$GITHUB<sub>SHA</sub>"
    origin/main` must hold, rejecting a tag pushed from a commit `main`
    has never merged.
-2. **`windows` (`needs: [build, verify-tag]`, runs-on
-   `windows-latest`).** Install pinned runtime + build deps, run
-   `pyinstaller packaging/fim.spec`, smoke-test the resulting
-   `dist/fim.exe` (`fim.exe --version` must print the tag's version, and
-   a tiny bundled config must run end-to-end offline), rename to
-   `fim-windows-x64.exe`, and emit its `.sha256`. Cannot start until
-   every `build` matrix leg and `verify-tag` have succeeded.
-3. **`publish` (`needs: windows`, runs-on `ubuntu-latest`, its own
-   `contents: write` permission — the only job in the workflow that
-   needs it).** Build the `sdist` + `wheel`, verify `version.txt` equals
-   the tag (fail loudly on mismatch — a tag that disagrees with
-   `version.txt` is a release bug, not a warning), extract the matching
-   `CHANGELOG.md` section as the release notes, and create the GitHub
-   Release attaching the `.exe`, its `.sha256`, the wheel, and the
-   sdist.
+2. **Five platform jobs, each `needs: [build, verify-tag]` and
+   independent of the other four** (PyInstaller never cross-compiles —
+   producing a native executable always means actually running the
+   build on a matching runner, not passing a different flag on a shared
+   one):
+   - **`windows`** (`windows-latest`) and **`windows-arm64`**
+     (`windows-11-arm`, the ARM64-native runner) — `pyinstaller
+     packaging/fim.spec`, smoke-test the resulting `dist/fim.exe`
+     (`--version` must print the tag's version; a tiny bundled config
+     must run end-to-end offline; the zero-argument launch must stay
+     alive for a few seconds, proving WebView2 starts), rename to
+     `fim-windows-x64.exe`/`fim-windows-arm64.exe`, emit each `.sha256`.
+   - **`macos-arm64`** (`macos-latest`, Apple Silicon) and
+     **`macos-x64`** (`macos-15-intel`) — the same PyInstaller spec
+     builds a real `.app` bundle on macOS (`packaging/fim.spec`'s
+     `sys.platform == "darwin"` branch, onedir plus `BUNDLE`, so Finder
+     can double-click-launch it); the same smoke checks run against it,
+     then it is wrapped in a `.dmg` (with a symlinked `/Applications`
+     for the standard drag-to-install pattern) and hashed.
+   - **`linux-x64`** (`ubuntu-latest`, built inside a
+     `python:3.12-slim-bullseye` container rather than a bare runner or
+     a `manylinux` image — a bare runner's glibc can be newer than a
+     user's own system, and manylinux's own bundled Pythons lack the
+     `--enable-shared` build PyInstaller requires) — the same smoke
+     checks, run under `xvfb-run` for the GUI-launch check; a second,
+     dependency-purged smoke run confirms the zero-argument launch
+     fails loudly (not silently or by hanging) on a machine with no
+     WebKitGTK at all.
+3. **`publish`** (`needs: [windows, windows-arm64, macos-arm64,
+   macos-x64, linux-x64]`, runs-on `ubuntu-latest`, its own `contents:
+   write` permission — the only job in the workflow that needs it).
+   Build the `sdist` + `wheel`, verify `version.txt` equals the tag
+   (fail loudly on mismatch — a tag that disagrees with `version.txt`
+   is a release bug, not a warning), extract the matching
+   `CHANGELOG.md` section as the release notes, download and re-verify
+   every platform job's artifact against its own `.sha256` (an
+   artifact crossed a job boundary to get here, so it is checked again
+   rather than re-shipped unread), generate one consolidated
+   `SHA256SUMS` manifest (§5.5) covering every artifact, and create the
+   GitHub Release attaching all of it: both Windows executables, both
+   macOS `.dmg` images, the Linux binary, the wheel, and the sdist.
 
 The tag-equals-`version.txt` check is the one guard that makes the version
 string trustworthy everywhere it appears (bundle, manifest, `--version`,
@@ -479,8 +509,10 @@ a workflow file — see `CONTRIBUTING.md`'s "Repository settings" checklist.
 
 ### 5.5 Supply-chain hardening
 
-Every `uses:` reference in both workflow files (§5.2–§5.4) names a full
-40-character commit SHA, never a mutable tag like `@v4` — a tag owner can
+Every `uses:` reference in all three workflow files (`ci.yml`, §5.2–§5.4;
+`gitleaks-ci.yml`, §5.3; `beta.yml`, an unofficial per-platform build
+triggered from `staging`, §5.1) names a full 40-character commit SHA,
+never a mutable tag like `@v4` — a tag owner can
 silently repoint it at different, unreviewed content at any time, the same
 risk this project's own `bin/` wrappers already avoid by pinning Docker
 images to a digest rather than a floating tag. A trailing `# vN` comment
@@ -494,11 +526,13 @@ above), each on a weekly cadence, each landing as an ordinary reviewable
 PR rather than an automatic merge.
 
 `publish` (§5.4) generates `SHA256SUMS` inside `dist/` — covering the
-wheel, the sdist, and the Windows executable — before `gh release create`
-runs, so every artifact a release actually ships has a checksum attached
-to it. The Windows executable also keeps its own separate
-`fim-windows-x64.exe.sha256` sidecar file, since `README.md` documents it
-specifically for a Windows user's manual verification.
+wheel, the sdist, and all five platform executables — before `gh release
+create` runs, so every artifact a release actually ships has a checksum
+attached to it. Each platform executable also keeps its own separate
+`.sha256` sidecar file (`README.md` documents the Windows one
+specifically for a Windows user's manual verification), which `publish`
+re-verifies against the file that actually arrived before ever
+re-shipping it.
 
 **Deliberately deferred:** a hash-locked constraints file (`pip install
 --require-hashes` against a lock file covering transitive dependencies,
