@@ -8,6 +8,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+---
+
+## [1.2.0] - 2026-08-31
+
+### Added
+
 - Operational logging, built on Python's own `logging`/`warnings`
   standard-library modules and documented end to end in `doc/
   fim-logging-design.md`: every command gains a top-level `-l`/`--log
@@ -69,6 +79,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   closed-form prediction (`G_ST=0.1698, D=0.6000`) -- all three within a
   few percent of each other, hierfstat's own `G_ST` landing closer to
   this project's engine than to the diffusion-limit theory.
+
 - A new deterministic, parametrized test,
   `test_stepping_stone_differentiation_is_at_least_the_island_models`
   (`test/validation/test_simulator_equilibrium.py`), checking Kimura &
@@ -89,6 +100,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   questions, and once implicitly by a same-day monotonicity build that
   covered migration/mutation-rate monotonicity but not this topology
   comparison) and picked up by neither.
+
 - Four new closed-form functions in `src/fim/statistics/
   differentiation.py`, from Whitlock (1992, *Evolution* 46:608-615):
   `identity_recovery_rate`, `_equilibrium`, `_trajectory`, and
@@ -116,6 +128,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   before comparison -- caught only now because this session, unlike the
   Nei session, ran `mypy` over the test file directly, not just the
   statistics module it exercises).
+
 - Three more Nei (1973) statistics in `src/fim/statistics/
   differentiation.py`: `d_m`/`r_st` (Eqs. 10-11, the mean pairwise
   between-deme gene diversity and its ratio to within-deme diversity —
@@ -138,6 +151,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to cover the new functions alongside the ones they already checked,
   plus a short Appendix A addition (symbol table rows and two formula
   blocks) to `doc/jost-differentiation-measures.md`.
+
 - A fifth engine-level scientific test,
   `test_chao_shannon_equilibrium_scenario_via_engine`
   (`test/validation/test_simulator_equilibrium.py`), comparing the real
@@ -173,6 +187,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   deviations — reported plainly in `doc/statistical-calibration-
   evidence.md` rather than investigated further to force an exact
   match.
+
 - A fourth engine-level "published scenario" scientific test,
   `test_crow_aoki_torus_scenario_via_engine`
   (`test/validation/test_simulator_equilibrium.py`), reproducing Crow &
@@ -212,6 +227,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   invocation, with `D` captured for only 6 of the 10 replicates — noted
   directly rather than silently normalized to look identical to the
   other three.
+
 - A native File/Configure/Run/View/Help menu bar in the desktop GUI,
   reachable from every screen (including mid-run): File covers
   configuration/run file-system actions (New/Open/Save configuration,
@@ -232,6 +248,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "Check for updates" — the same opt-in GitHub Releases check `fim
   update --check` already performs from the command line, now also
   reachable from the GUI.
+
 - The Results and Batch results screens now show every deme-pair panel
   at once, as a small-multiples grid, once `d` is 3 or more (previously
   only the first pair was ever drawn, even though the data for every
@@ -240,6 +257,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reference visualization's own figures. Every named statistic — a
   scalar run's own six, and the batch confidence intervals — now
   renders through the same meter widget.
+
 - The five separate screens (Model input, Running, Results, Batch
   results, Animated trajectory) are now one unified run view, in
   exactly one of three states — `initial` (an editable form, nothing
@@ -255,6 +273,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   own display of the run's final state. Re-running from `completed`
   reuses the same "Run simulation" control that started the first run,
   with no separate "New run"/reset step.
+
 - The live Running screen gains the same "Compare demes directly" pair
   selector too, live: picking a pair tells the in-progress simulation's
   own background thread to start including that pair's own panel in
@@ -262,17 +281,51 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tick), for both a scalar run's own generations and a batch's own
   pooled replicates. "Show overview" reverts instantly, from whichever
   view the screen already had on hand.
+
 - Every Configure section (Population, Migration, Mutation, Initial
   conditions, Convergence, Batch) now opens as a small dialog floating
   over whatever screen is currently showing, instead of switching the
   whole window to the Model input screen — including the auto-jump to
   an invalid field's own section on "Run simulation".
+
 - Configure also gains three direct value-selector submenus that set a
   field immediately, no dialog: Deme weighting, Mutation model, and
   Convergence statistic — the last one adds or removes one statistic
   from the active set on each click, rather than replacing the whole
   selection, so it can never silently discard a multi-statistic
   combination already configured in the Convergence dialog.
+
+- A desktop GUI (`fim-gui`, or double-click the packaged executable /
+  `fim.app` / run `fim` with no arguments) alongside the existing command
+  line: six screens covering model input, a live scatter plot while a run
+  or batch is in progress, results (scalar and batch), opening and
+  re-analyzing a previous run, and an animated playback of any persisted
+  trajectory. Reads and writes the exact same `results/` folder and file
+  formats the command line already does — a GUI-authored run with the same
+  parameters and seed produces byte-identical output to the same
+  configuration run from the terminal. Ships on every platform: Windows
+  (x64/ARM64), macOS (`.dmg`, both architectures), and Linux
+  (`fim-linux-x64`, needs the system's own WebKitGTK package). See the
+  [desktop GUI section of the command reference](doc/usage.md#desktop-gui-fim-gui).
+
+- macOS (`fim-macos-arm64.dmg`, `fim-macos-x64.dmg`) and Linux
+  (`fim-linux-x64`) release executables, alongside the existing Windows
+  ones — every platform in the project's own support matrix now has a
+  self-contained, no-Python-required distribution. Linux also gains
+  `install.sh`, a `curl | bash` installer matching the rustup/uv
+  pattern (no root, installs to `~/.local/bin`, verifies a checksum
+  before installing anything).
+
+- A native Windows ARM64 release executable, `fim-windows-arm64.exe`,
+  built and smoke-tested alongside the existing x64 executable. PyInstaller
+  never cross-compiles — the executable it produces always matches the
+  architecture of the interpreter that ran it — so this required a second,
+  independent `windows-arm64` job in `ci.yml` running on GitHub's hosted
+  `windows-11-arm` runner with a native ARM64 CPython 3.12
+  (`actions/setup-python`'s `architecture: arm64`), not a flag on the
+  existing job. `publish` now downloads, verifies, and ships both
+  executables, each with its own `.sha256` sidecar, in the same
+  consolidated `SHA256SUMS` manifest.
 
 ### Changed
 
@@ -285,15 +338,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "mu" throughout the Mutation tab's own labels for the same reason;
   every field's own name/id (what `config_form.py` and `input.js` key
   off of) is unchanged, only the human-visible text.
+
 - A batch replicate's own "Run ID" table column now shows just its own
   `rNNN` suffix (e.g. `r001`), not the whole batch id repeated on every
   row — that id is already shown once, in full, directly above the
   table.
+
 - A converged replicate's own Status column now reads "Converged"
   instead of "Converged (statistic converged)" — the parenthetical
   restated the same word a second time; a non-converged replicate keeps
   its own reason (e.g. "Not converged (hit the cap)"), which still adds
   real information.
+
 - A run with more than six demes no longer defaults to a PCA
   projection, in either the GUI or `fim run`'s own `scatter.png` — both
   now default to one explicit pair (Deme 1 vs. Deme 2), matching every
@@ -302,6 +358,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `d`. PCA rendering itself is unchanged and still directly reachable
   for whoever wants that exploratory view; it is no longer chosen
   automatically.
+
+- Bumped the pinned `numpy` dependency from `2.1.*` to `2.3.*` and
+  `matplotlib` from `3.9.*` to `3.11.*` — the first minor series of each to
+  publish `win_arm64` wheels for CPython 3.12, which the new
+  `windows-arm64` release job needs to install natively rather than
+  attempting a source build against an ARM64 MSVC/OpenBLAS toolchain no
+  GitHub-hosted runner provides. Verified compatible before landing: the
+  full test suite (519 tests, plus the `slow`/`statistical` layer `--ci`
+  adds, 528 of 529 total with only the `packaging` marker excluded) passes
+  unchanged against both new pins, and `mypy --strict` remains clean.
 
 ### Fixed
 
@@ -312,6 +378,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bridge round trip resolved, which is later than the moment the pair
   itself was actually selected. It now flips immediately, so a chosen
   pair is never delayed behind an in-flight bridge call.
+
 - A large-`d` run's scatter (the PCA fallback for `d > 6`) no longer
   plots its genuinely unbounded, signed coordinates through the same
   `[0, 1]` probability-scale frame every other panel uses — that frame
@@ -323,6 +390,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   variance and top-loading demes (e.g. "Principal component 1 (57% of
   variance; demes 2, 11, 4)") instead of a bare, uninterpretable
   "Component 1"/"Component 2".
+
 - A batch run's live progress bar no longer visibly regresses late in
   a run with an adaptive `replicate_tolerance` stop set. The replicate
   count itself was never wrong — a worker that overshoots the
@@ -331,23 +399,27 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   next poll legitimately sees fewer valid replicates than before — but
   the displayed count now tracks a high-water mark instead of the raw
   reported figure, so the bar only ever moves forward.
+
 - Clicking "Run simulation" again from `completed` no longer leaves the
   just-finished run's own summary showing, unresponsively, for the
   full round trip of starting the next one — the view now clears to
   `running` the instant the click is accepted, not only once the
   bridge call that starts the run has returned.
+
 - The scrubber auto-populating within `completed` no longer risks
   silently repainting the canvas over whatever "Show pair"/"Show
   overview" (or a fresh run started while the previous one's own
   frames were still loading) had just drawn — loading a frame set no
   longer draws anything on its own; only an explicit scrub or Play
   does.
+
 - Closing the app (or, in this project's own test suite, a background
   bridge call outliving the specific window it was headed for) while a
   "Run simulation"/"Load configuration"/"Save configuration"/"Open a
   run…" click is still in flight no longer risks an unhandled crash —
   every bridge method that needs the app's own window now declines
   gracefully instead of indexing an empty window list.
+
 - `.github/workflows/ci.yml`'s "Run the full CI gate" step's
   `timeout-minutes` (`30`) was too tight for the suite's own legitimate,
   already-documented cost, not a hang: GitHub Actions run 33320621024
@@ -407,51 +479,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a scheduled/dispatched run adds only `slow-tests`, not a second full
   pipeline run alongside it.
 
-## [1.2.0] - 2026-08-22
-
-### Added
-
-- A desktop GUI (`fim-gui`, or double-click the packaged executable /
-  `fim.app` / run `fim` with no arguments) alongside the existing command
-  line: six screens covering model input, a live scatter plot while a run
-  or batch is in progress, results (scalar and batch), opening and
-  re-analyzing a previous run, and an animated playback of any persisted
-  trajectory. Reads and writes the exact same `results/` folder and file
-  formats the command line already does — a GUI-authored run with the same
-  parameters and seed produces byte-identical output to the same
-  configuration run from the terminal. Ships on every platform: Windows
-  (x64/ARM64), macOS (`.dmg`, both architectures), and Linux
-  (`fim-linux-x64`, needs the system's own WebKitGTK package). See the
-  [desktop GUI section of the command reference](doc/usage.md#desktop-gui-fim-gui).
-- macOS (`fim-macos-arm64.dmg`, `fim-macos-x64.dmg`) and Linux
-  (`fim-linux-x64`) release executables, alongside the existing Windows
-  ones — every platform in the project's own support matrix now has a
-  self-contained, no-Python-required distribution. Linux also gains
-  `install.sh`, a `curl | bash` installer matching the rustup/uv
-  pattern (no root, installs to `~/.local/bin`, verifies a checksum
-  before installing anything).
-- A native Windows ARM64 release executable, `fim-windows-arm64.exe`,
-  built and smoke-tested alongside the existing x64 executable. PyInstaller
-  never cross-compiles — the executable it produces always matches the
-  architecture of the interpreter that ran it — so this required a second,
-  independent `windows-arm64` job in `ci.yml` running on GitHub's hosted
-  `windows-11-arm` runner with a native ARM64 CPython 3.12
-  (`actions/setup-python`'s `architecture: arm64`), not a flag on the
-  existing job. `publish` now downloads, verifies, and ships both
-  executables, each with its own `.sha256` sidecar, in the same
-  consolidated `SHA256SUMS` manifest.
-
-### Changed
-
-- Bumped the pinned `numpy` dependency from `2.1.*` to `2.3.*` and
-  `matplotlib` from `3.9.*` to `3.11.*` — the first minor series of each to
-  publish `win_arm64` wheels for CPython 3.12, which the new
-  `windows-arm64` release job needs to install natively rather than
-  attempting a source build against an ARM64 MSVC/OpenBLAS toolchain no
-  GitHub-hosted runner provides. Verified compatible before landing: the
-  full test suite (519 tests, plus the `slow`/`statistical` layer `--ci`
-  adds, 528 of 529 total with only the `packaging` marker excluded) passes
-  unchanged against both new pins, and `mypy --strict` remains clean.
+---
 
 ## [1.1.0] - 2026-08-19
 
