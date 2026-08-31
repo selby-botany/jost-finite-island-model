@@ -284,8 +284,7 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   below), and an unknown top-level config key is rejected by name.
 - Every `P`-bag default matches design §4.3's table exactly; a self-checking
   test parses the schema and asserts the documented defaults are the applied
-  defaults (guards against silent drift, mirroring the sibling projects'
-  self-validating-helper pattern).
+  defaults (guards against silent drift between the two).
 - Array-typed `N` and matrix-typed `m` are accepted and shape-validated
   (`N` length `d`; `m` `d×d`, each row summing to 1); initial_allele_count
   is bounded by the smallest deme `N`; the full mapping round-trips
@@ -327,7 +326,7 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   replicate_tolerance round-trips when set and stays absent from
   to_dict() when unset, so an adaptive batch is distinguishable from a
   fixed-count one in a persisted manifest.
-- **Stopping rules that can never fire (R23 remediation)**: two
+- **Stopping rules that can never fire**: two
   cross-field checks, both raised from _validate_stopping_rules.
   convergence_window is rejected once it exceeds
   max_generations + 1 — the most generations a run can ever record
@@ -450,8 +449,8 @@ without the engine:
 - An untabled degrees of freedom interpolates between its listed
   neighbors, and the interpolation matches the documented `1/df` formula
   rather than merely landing between them.
-- **Interpolation error is bounded against an independent oracle** (R22
-  remediation): for ten untabled degrees-of-freedom values spanning the
+- **Interpolation error is bounded against an independent oracle**: for
+  ten untabled degrees-of-freedom values spanning the
   whole table, the interpolated critical value is fed to a numerical
   quadrature of the closed-form Student's-t density — sharing no table,
   formula, or code path with `interval._interpolate` — and the tail
@@ -483,7 +482,7 @@ without the engine:
   manifest and confirms it re-runs to an identical trajectory (the replay
   contract — design §6), including a manifest that names **several**
   convergence statistics (design §9), not only the single-statistic case.
-- **Artifact integrity** (design §6, R7 remediation): schema_version and
+- **Artifact integrity** (design §6): schema_version and
   generation_count are required, positive-integer manifest fields;
   `artifacts` — a per-file `{sha256, bytes}` digest, keyed by artifact
   name — is `None` on a manifest as the engine constructs it (before any
@@ -602,7 +601,7 @@ Functional detail in §8.
   batch refuses a non-empty output directory.
 - Default output paths use the project's `results` directory, falling
   back to the working directory when no project root is found.
-- **Atomic output publishing** (R7 remediation): a scalar or batch run's
+- **Atomic output publishing**: a scalar or batch run's
   entire output directory is built in a hidden temporary sibling and
   published with one atomic rename (_atomic_directory), only once every
   artifact is flushed and `manifest.json` — written last — records each
@@ -613,7 +612,7 @@ Functional detail in §8.
   the plot render — each confirms the target directory does not exist
   afterward, at both the scalar and (a replicate write, sequential batch)
   batch layers.
-- **Trajectory integrity verification** (R7 remediation): `fim stats`
+- **Trajectory integrity verification**: `fim stats`
   recomputes the trajectory's SHA-256 digest and distinct generation count
   against the manifest's recorded values before reading a single row,
   refusing an edited, truncated, or replaced trajectory with a named error
@@ -697,8 +696,8 @@ essentially any seed, and the fixed seed only makes the single realization
 reproducible. This is the operational meaning of "deterministic given the
 commit" for a stochastic check.
 
-**Where step 2's standard error is empirical, not closed-form (R18
-remediation).** The three [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium)
+**Where step 2's standard error is empirical, not closed-form.** The
+three [`test/validation/test_simulator_equilibrium.py`](../test/TESTS.md#validation.test_simulator_equilibrium)
 equilibrium tests (§7.3, §7.4) use a `k·sigma/sqrt(R)` band whose `sigma`
 has no known closed form (see that file's module docstring): the
 per-replicate G<sub>ST</sub>/`D` estimate is a ratio-of-means statistic sampled
@@ -948,12 +947,12 @@ are headless and reproducible.
   points coincide (design §8).
 - Diagnostics: the convergence-trace series has one point per recorded
   generation; the STRUCTURE-style bar chart has `d` stacked bars.
-- **Error paths and file writing** (R15 remediation): every documented
+- **Error paths and file writing**: every documented
   `ValueError` guard (mismatched deme count, an undersized
   pairwise_max_demes, a length mismatch or empty history for a
   convergence trace, an out-of-range locus_index) is asserted by
   name; both diagnostic views are confirmed to actually write a
-  non-empty PNG when given a `path` (previously untested for either);
+  non-empty PNG when given a `path`;
   the pairwise matrix's unused-grid-cell hiding is exercised at the
   specific `d` that reaches it; the PCA projection's single-point
   special case (skipping `numpy.linalg.svd` entirely) is exercised by
@@ -1034,28 +1033,31 @@ no wall-clock, fully reproducible.
   `.github/workflows/ci.yml`, to source their GitHub release notes from
   the extractor rather than GitHub's own auto-generated notes, and to use
   a `pyinstaller` work path that does not collide with the build script's
-  own directories. A companion check (R17 remediation) confirms
-  `build`'s CI-mode test invocation applies no marker exclusion at
-  all — the authoritative release gate runs every layer, including
-  `packaging`, `statistical`, and `slow` (§2's taxonomy), unlike the
-  fast default `pytest` invocation (§3), which excludes all three for
-  local iteration speed.
-- **Release gating** ([`test_release_notes.py`](../test/TESTS.md#validation.test_release_notes), detailed design §5.4, R8
-  remediation): `windows` and `publish` name `verify-tag` and/or `build`
-  in their `needs:`, and `verify-tag` itself is checked to both `git
-  rev-parse --verify "...^{tag}"` (rejecting a lightweight tag) and `git
+  own directories. A companion check confirms `build`'s CI-mode test
+  invocation excludes only the `slow` marker — the authoritative release
+  gate still runs every other layer, including `packaging`, `statistical`,
+  and `gui` (§2's taxonomy), unlike the fast default `pytest` invocation
+  (§3), which excludes all four for local iteration speed.
+- **Release gating** ([`test_release_notes.py`](../test/TESTS.md#validation.test_release_notes), detailed design §5.4):
+  `windows` and `publish` name `verify-tag` and/or `build` in their
+  `needs:`, and `verify-tag` itself is checked to both `git rev-parse
+  --verify "...^{tag}"` (rejecting a lightweight tag) and `git
   merge-base --is-ancestor` (rejecting a tag that is not reachable from
-  `main`) — so the structural dependency the fix relies on cannot silently
-  regress to independent, ungated workflows again.
+  `main`) — so a release cannot silently regress to publishing from an
+  unverified or untested tag.
 - **CI test-layer runtime budget** ([`test_ci_runtime_budget.py`](../test/TESTS.md#validation.test_ci_runtime_budget), detailed
-  design §5.2, R19 remediation): the fast marker-filtered layer and the
-  full `--ci` gate are checked to be two separately named steps, in that
-  order, and each to declare its own `timeout-minutes` (the fast step's
-  smaller than the full step's) — so the expensive `slow`/`statistical`
-  scenario suite cannot silently be re-folded back into one opaque,
-  unbudgeted step.
+  design §5.2): the fast marker-filtered step and the full `--ci` step
+  are checked to be two separately named steps, in that order, each
+  declaring its own `timeout-minutes` (the fast step's smaller than the
+  full step's) — so the two cannot silently be re-folded back into one
+  opaque, unbudgeted step. Separately, the `slow-tests` job is checked to
+  run only on `schedule`/`workflow_dispatch` (never `push`/`pull_
+  request`) and to call `./build --slow-only` under its own positive
+  budget, while `build` and `homebrew` are each checked to skip those
+  same two triggers — so a scheduled or dispatched run adds only
+  `slow-tests`, never a duplicate of the ordinary per-push pipeline.
 - **Statistical calibration provenance** ([`test_calibration_provenance.py`](../test/TESTS.md#validation.test_calibration_provenance),
-  R18 remediation, §7.1): `dev/bin/calibrate-statistical-bands` is checked
+  §7.1): `dev/bin/calibrate-statistical-bands` is checked
   to appear in `build` only inside the lint stage's static-analysis
   invocations, never as an executed step, and nowhere in `ci.yml` — the
   structural guarantee behind "characterization stays out of the
@@ -1073,9 +1075,8 @@ no wall-clock, fully reproducible.
 ## 11. Coverage targets and CI gating
 
 - Branch coverage gate: **90%** of `src/fim`, with every package
-  measured — `viz/` (structurally tested by §9, previously the one
-  coverage omit) now also carries real error-path and file-writing
-  coverage (R15 remediation) and sits at 100%. `cli.py`'s
+  measured — `viz/` (structurally tested by §9) carries real error-path
+  and file-writing coverage and sits at 100%. `cli.py`'s
   `update --check` network wrapper is *not* omitted: its `urlopen` call is
   monkeypatched at the boundary (§4.12), so the surrounding logic is
   exercised and counted normally, and the coverage gate itself never

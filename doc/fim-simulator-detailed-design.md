@@ -196,7 +196,7 @@ jost-finite-island-model/
 │   │   └── README.md              # hook set + install instructions
 │   └── bin/
 │       ├── calibrate-statistical-bands  # versioned equilibrium-test band
-│       │                           # characterization (R18, §9)
+│       │                           # characterization (§9)
 │       ├── check-doc-links        # validates Markdown links + anchors (§8.3)
 │       ├── extract-release-notes  # one CHANGELOG.md section → release notes (§5.4)
 │       ├── generate-api-docs      # docstrings → src/fim/API.md (pydoc-markdown)
@@ -214,7 +214,7 @@ jost-finite-island-model/
 │   ├── configuration.md           # the P-bag schema, every key, every default
 │   ├── developer.md               # architecture-for-maintainers + how to extend
 │   ├── statistical-calibration-evidence.md  # retained calibration-pass
-│   │                               # output (R18, §9)
+│   │                               # output (§9)
 │   └── img/                       # design mockups and release screenshots
 ├── include/
 │   └── dot-bashrc                 # puts bin/ on PATH for the current shell
@@ -342,8 +342,7 @@ dependency on any private workflow repo.
 
 ### 5.1 Branch and tag model
 
-Matching the repository's existing history (`dev` is the working branch)
-and the sibling projects' convention:
+A simple two-branch model:
 
 - `dev` — the working branch; every commit lands here.
 - `main` — release-ready; `dev` is fast-forwarded or merged here only at a
@@ -357,32 +356,31 @@ release build is never cancelled mid-flight.
 ### 5.2 The `ci` workflow
 
 `.github/workflows/ci.yml` runs on `ubuntu-latest` across a Python matrix
-(`3.12`, `3.13`). It installs the pinned `dev` dependencies, then runs the
-test suite as two separately named, separately budgeted steps (R19) before
-the workflow file's logic bottoms out in `./build`, the one script a
+(`3.12`, `3.13`) for every push to `dev`/`main` and every pull request
+targeting them. It installs the pinned `dev` dependencies, then runs the
+test suite as two separately named, separately budgeted steps before the
+workflow file's logic bottoms out in `./build`, the one script a
 maintainer runs identically offline (§7). Permissions are `contents: read`.
 
-**Two test steps, not one (R19 remediation).** A single `./build --ci`
-step used to be the workflow's entire test-related substance, so the
-`slow`/`statistical` scenario suite's own wall-clock cost (18m07s at
-review time) was invisible in the Actions run summary — indistinguishable
-from lint, type-checking, docs, and packaging, all bundled into the same
-opaque step, with no budget bounding any of it. The workflow now runs:
+**Two test steps, not one.** Bundling every stage into a single
+`./build --ci` step would make the `slow`/`statistical` scenario suite's
+own wall-clock cost invisible in the Actions run summary — indistinguishable
+from lint, type-checking, docs, and packaging, all sharing one opaque step
+with no budget bounding any of it individually. The workflow instead runs:
 
 1. `./build --no-lint --no-type --no-docs --no-package` — the same
    deterministic layer `--ci` also covers (`pyproject.toml`'s own default
    marker filter, no coverage), so it fails in seconds if anything
    obviously broken slipped through, before CI pays for the much larger
    scenario suite. `timeout-minutes: 5`.
-2. `./build --ci` — the authoritative gate, unchanged in substance
-   (below). `timeout-minutes: 30`.
+2. `./build --ci` — the authoritative gate (below). `timeout-minutes: 20`.
 
 Each step's own duration is visible in the Actions run summary natively,
 with no extra instrumentation; each `timeout-minutes` is a hard budget
 enforced by the runner itself rather than a wall-clock assertion inside
 the test run, which machine-speed variance would make a non-deterministic
 pass/fail signal (the same commit reporting differently only because of
-runner load). test/validation/test_ci_runtime_budget.py statically
+runner load). `test/validation/test_ci_runtime_budget.py` statically
 checks both steps stay present, correctly ordered, and budgeted.
 
 `--ci` itself runs these stages in order (§7 gives the flag surface):
@@ -394,39 +392,54 @@ checks both steps stay present, correctly ordered, and budgeted.
    explicit positional argument here would silently narrow it back to
    `src` alone and drop `test` from the checked set — the exact
    regression test/test_mypy_scope.py guards against).
-3. `pytest` with branch coverage and no marker exclusion at all — so the
-   authoritative gate runs every layer the fast default invocation skips
-   for local iteration speed (`statistical`, `slow`, and `packaging` —
-   test plan §3) — failing below the coverage gate: **90%** of
-   `src/fim`, with every package measured; `viz/` carries no coverage
+3. `pytest` with branch coverage, excluding only the `slow` marker — so
+   the authoritative gate still runs every other layer the fast default
+   invocation skips for local iteration speed (`statistical`, `gui`, and
+   `packaging` — test plan §3), failing below the coverage gate: **90%**
+   of `src/fim`, with every package measured; `viz/` carries no coverage
    omit and is currently at 100%.
-4. Regenerate `src/fim/API.md` to a scratch path and diff it against the
-   committed copy (the doc-freshness gate, §8.1), then validate every
-   Markdown link and in-page anchor with `dev/bin/check-doc-links` (§8.3).
+4. Regenerate `src/fim/API.md` and `test/TESTS.md` to a scratch path and
+   diff each against its committed copy (the doc-freshness gate, §8.1),
+   then validate every Markdown link and in-page anchor with
+   `dev/bin/check-doc-links` (§8.3).
 5. Build the wheel and sdist, install the wheel into a throwaway virtual
    environment outside the checkout, and run `fim --version` and
    `fim --help` from the installed entry point. This last stage is what
    keeps `pyproject.toml`'s entry-point wiring from silently breaking
    between releases.
 
+The five `slow`-marked engine-scenario tests
+(`test/validation/test_simulator_equilibrium.py`'s published/theoretical
+literature comparisons, dominated by
+`test_crow_aoki_torus_scenario_via_engine`'s own ~23-minute local cost)
+run separately, in a `slow-tests` job gated to fire only on a daily
+`schedule` or a manual `workflow_dispatch` — never on a push or a pull
+request — with its own 90-minute budget, calling `./build --slow-only`. A
+single sustained, CPU-bound simulation does not fit reliably inside a
+fixed per-push wall-clock window on a shared runner; keeping it out of
+that window entirely, rather than sizing a timeout large enough to always
+survive whatever runner load shows up, is what `doc/
+fim-simulator-detailed-test-plan.md` §3 already documents as this
+marker's intended home ("CI nightly / on demand"). `build` and the
+Homebrew formula check (§6.3) both skip the `schedule`/`workflow_dispatch`
+triggers, so a scheduled or manually dispatched run costs nothing beyond
+that one job.
+
 ### 5.3 The `gitleaks` workflow
 
-`.github/workflows/gitleaks-ci.yml` mirrors the sibling repositories: a
-full-history checkout (`fetch-depth: 0`) and `gitleaks/gitleaks-action`,
-both pinned to a commit SHA (§5.5). It is a separate workflow, not a step
+`.github/workflows/gitleaks-ci.yml` runs a full-history checkout
+(`fetch-depth: 0`) and `gitleaks/gitleaks-action`, both pinned to a
+commit SHA (§5.5). It is a separate workflow, not a step
 in `ci.yml`, so a secret-scan failure is legible on its own and does not
 mask a test failure or vice versa.
 
 ### 5.4 The release jobs in `ci.yml`
 
-Release publishing was originally a separate `release.yml`, triggered
-independently by the same `v*` tag push as `ci.yml`, with no dependency
-between the two workflows — a tag could publish a release before CI had
-even started, let alone passed, and nothing checked that the tag was
-reachable from `main` or was more than a bare, unauthenticated ref. Both
-gaps are R7 review findings; the fix folds release publishing into
-`ci.yml` itself, where GitHub Actions' own `needs:` graph makes the
-dependency structural rather than advisory:
+Release publishing lives inside `ci.yml` itself rather than a separate
+workflow file, so GitHub Actions' own `needs:` graph makes the dependency
+on a passing build structural rather than advisory: a tag cannot publish
+a release before CI has run, let alone passed, and the tag itself is
+verified before anything is built from it:
 
 1. **`verify-tag` (`if: startsWith(github.ref, 'refs/tags/v')`, runs
    alongside `build` rather than after it — cheap, and independent of
@@ -483,9 +496,9 @@ PR rather than an automatic merge.
 `publish` (§5.4) generates `SHA256SUMS` inside `dist/` — covering the
 wheel, the sdist, and the Windows executable — before `gh release create`
 runs, so every artifact a release actually ships has a checksum attached
-to it; previously only the executable did, via its own pre-existing
-`fim-windows-x64.exe.sha256` sidecar (kept, since `README.md` documents
-it specifically for a Windows user's manual verification).
+to it. The Windows executable also keeps its own separate
+`fim-windows-x64.exe.sha256` sidecar file, since `README.md` documents it
+specifically for a Windows user's manual verification.
 
 **Deliberately deferred:** a hash-locked constraints file (`pip install
 --require-hashes` against a lock file covering transitive dependencies,
@@ -536,7 +549,7 @@ describes.
 (`pipx`-style behavior via a Python formula, or a thin wrapper installing
 `bin/fim`), and `install/homebrew/test-formula` validates it with
 `brew style`/`brew audit` inside the `homebrew/brew` Docker image — no
-Homebrew on the host, mirroring the sibling repositories. `install/README.md`
+Homebrew required on the host. `install/README.md`
 documents the non-default paths (Homebrew, `pip install`, and plain
 `PATH`-from-a-clone via `bin/fim`). The homepage/URL fields point at
 `github.com/selby-botany/jost-finite-island-model`.
@@ -552,36 +565,39 @@ that every feature commit updates as it lands.
 
 ## 7. The `build` script — local CI equivalent
 
-A single `build` script at the repository root is the local mirror of CI,
-in the spirit of the sibling `usb-explore`/`bwx` `build` scripts but for a
-Python project. It is what a solo maintainer runs before every push and is
-the exact body of `ci.yml` (§5.2), so the two cannot drift.
+A single `build` script at the repository root is the local mirror of CI
+for this Python project. It is what a solo maintainer runs before every
+push and is the exact body of `ci.yml` (§5.2), so the two cannot drift.
 
 Stages, in order, each skippable by flag for fast iteration:
 
 ```text
 build [--ci] [--coverage] [--dry-run]
       [--no-lint] [--no-type] [--no-test] [--no-docs] [--no-package]
-      [--help]
+      [--slow-only] [--help]
 
   1. lint     ruff check + ruff format --check
   2. type     mypy (bare; scope comes from [tool.mypy] in pyproject.toml)
-  3. test     pytest (+ branch coverage with --coverage or --ci)
-  4. docs     regenerate src/fim/API.md from docstrings; with --ci, verify
-              it matches the committed copy and fail if stale (§8.1); run
-              dev/bin/check-doc-links to validate every Markdown link and
-              anchor (§8.3)
+  3. test     pytest (+ branch coverage with --coverage or --ci); --ci
+              excludes only the `slow` marker; --slow-only runs the
+              `slow` marker alone, with lint/type/docs/package forced off
+  4. docs     regenerate src/fim/API.md and test/TESTS.md from
+              docstrings; with --ci, verify each matches its committed
+              copy and fail if stale (§8.1); run dev/bin/check-doc-links
+              to validate every Markdown link and anchor (§8.3)
   5. package  build wheel/sdist, install into a throwaway venv,
               run `fim --version` and `fim --help`
 ```
 
 `--ci` selects the full, non-skippable gate set with coverage enforcement
-and the stale-doc check, and is what `ci.yml` calls. Run without `--ci`,
-the `docs` stage regenerates `src/fim/API.md` in place (the write the
-`pre-commit` hook performs); with `--ci` it regenerates to a temporary
-location and diffs, never writing, so CI stays read-only. `--dry-run`
-prints each command without running it. The script needs only Python and a
-POSIX shell; it creates and tears down its own virtual environments so it
+and the stale-doc check, and is what `ci.yml`'s main gate calls;
+`--slow-only` is what its separately scheduled `slow-tests` job calls
+instead (§5.2). Run without `--ci`, the `docs` stage regenerates
+`src/fim/API.md`/`test/TESTS.md` in place (the write the `pre-commit`
+hook performs); with `--ci` it regenerates each to a temporary location
+and diffs, never writing, so CI stays read-only. `--dry-run` prints each
+command without running it. The script needs only Python and a POSIX
+shell; it creates and tears down its own virtual environments so it
 never mutates the maintainer's global Python.
 
 ## 8. Documentation set and developer workflow
@@ -751,7 +767,7 @@ above) rather than a mechanical ninth entry in the list — tracked as a
 backlog item rather than adopted silently as a side effect of a later
 pass.
 
-**Calibration provenance (R18 remediation).** The Statistical/asymptotic
+**Calibration provenance.** The Statistical/asymptotic
 layer's equilibrium tests band against a per-replicate spread with no
 known closed form (test plan §7.1). That spread comes from
 `dev/bin/calibrate-statistical-bands`, a versioned characterization

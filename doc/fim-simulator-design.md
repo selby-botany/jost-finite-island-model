@@ -841,13 +841,11 @@ the same underlying point set:
   moderate `d`.
 - one explicit deme pair (Deme 1 vs. Deme 2 by default, any pair on
   request) for large `d` — not a PCA or other dimensionality-reduction
-  projection: an earlier version of this design used one, but keeping
-  faithful, unreduced coordinates turned out to match this section's
-  own precedent argument below better than a projection did — see the
-  unified-run-view design document's own §3.6 for the full evaluation
-  (computational cost, cross-frame instability once the GUI could
-  animate a run, and interpretability, all argued against a projection;
-  none argued for one). PCA remains directly callable in `viz/
+  projection: keeping faithful, unreduced coordinates matches this
+  section's own precedent argument below better than a projection
+  would (computational cost, cross-frame instability once the GUI
+  animates a run, and interpretability all argue against a projection;
+  none argue for one). PCA remains directly callable in `viz/
   scatter.py` for whoever wants an exploratory reduction, just no
   longer the automatic choice at any `d`.
 
@@ -1193,18 +1191,17 @@ generation-date: 2026-08-18
 generator-responsibility: revision
 ```
 
-Corrected §8's own visualization description: `viz/scatter.py` no longer
-projects large-`d` states through PCA by default, replaced with one
+Corrected §8's own visualization description: `viz/scatter.py` does not
+project large-`d` states through PCA by default; the default is one
 explicit deme pair (Deme 1 vs. Deme 2 by default). This resolves an
 inconsistency §8's own precedent argument already pointed at without
 acting on it — the "Dear Nolan" letter's own `d = 100` figure is "a
 single panel of exactly the pairwise-matrix fallback," not a
-projection, and the unified-run-view design document's own §3.6
-independently reached the same conclusion (evaluated from computational
-cost, cross-frame instability once the GUI could animate a run, and
-interpretability — full reasoning there, not duplicated here). PCA
-remains directly callable in `viz/scatter.py` for an exploratory view;
-it is simply no longer the automatic choice at any `d`.
+projection, and the same conclusion follows independently from
+computational cost, cross-frame instability once the GUI animates a
+run, and interpretability, all of which argue against a projection.
+PCA remains directly callable in `viz/scatter.py` for an exploratory
+view; it is simply not the automatic choice at any `d`.
 
 ```text
 generator-name: Claude Code
