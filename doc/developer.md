@@ -43,7 +43,9 @@ requirement to evidence — its own companions,
 [the externally accessible engine API](fim-simulator-functional-api.md)
 and the [desktop GUI test plan](fim-gui-test-plan.md), scope exactly
 what a functional test may call. The [desktop GUI design](fim-gui-design.md)
-covers why and how `fim.gui` itself is built. The plain-language
+covers why and how `fim.gui` itself is built, and the
+[operational logging design](fim-logging-design.md) covers the `-l`/`-L`
+flags and where log calls live. The plain-language
 [test plan](fim-simulator-test-plan.md) is this project's own answer,
 for a non-programmer, to "can this simulator's numbers be trusted."
 

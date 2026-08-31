@@ -211,6 +211,7 @@ jost-finite-island-model/
 │   ├── fim-simulator-functional-api.md     # externally accessible engine API
 │   ├── fim-gui-design.md          # desktop GUI architecture and design
 │   ├── fim-gui-test-plan.md       # desktop GUI test coverage
+│   ├── fim-logging-design.md      # operational logging: -l/-L, where calls live
 │   ├── usage.md                   # user-facing command + config reference
 │   ├── configuration.md           # the P-bag schema, every key, every default
 │   ├── developer.md               # architecture-for-maintainers + how to extend
@@ -656,6 +657,7 @@ disclosure, role callouts) rather than one file per role.
 | `dev/git-hooks/README.md` | Developer | The hook set, what each gate does, and the one-line install step (§8.2). |
 | The two companion design docs | Developer, botanist | Model + statistics reference (design doc's own sources). |
 | `doc/fim-gui-design.md` | Developer | Desktop GUI architecture: the `Api` bridge, the unified run view, run orchestration, and how it shares logic with the CLI. |
+| `doc/fim-logging-design.md` | Developer | Operational logging: the `-l`/`-L` CLI flags, the GUI's environment-variable equivalents, and where log calls live. |
 | This document + test plan | Developer | Engineering, release, and test reference. |
 
 The durability rule applies to every row: no document says "ask the
