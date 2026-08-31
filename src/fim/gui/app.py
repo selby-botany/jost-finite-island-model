@@ -1798,18 +1798,27 @@ def _set_macos_application_name(name: str) -> None:
     dependency `pywebview` pulls in only there — `pyproject.toml`'s own
     platform markers), and tolerant of it being unavailable for any
     other reason: a cosmetic menu-bar rename is never worth failing the
-    whole application over.
+    whole application over. The platform check is a positive `if
+    sys.platform == "darwin":` wrapping the whole body, not an early
+    `if sys.platform != "darwin": return` — matching `fim.launcher`'s
+    own `win32`-only branch (its own comment there for why): mypy
+    treats a `sys.platform` comparison specially and does not flag
+    statements *inside* a not-taken platform branch as unreachable,
+    but flags everything *after* an early return that mypy can prove
+    always fires under whichever platform it is itself running on
+    (Linux in CI, unlike the macOS this was written and tested on) —
+    the early-return form failed exactly that check in CI, on this
+    file's every earlier revision.
     """
-    if sys.platform != "darwin":
-        return
-    try:
-        from AppKit import NSBundle  # noqa: PLC0415 -- macOS-only
-    except ImportError:
-        return
-    bundle = NSBundle.mainBundle()
-    info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
-    if info is not None:
-        info["CFBundleName"] = name
+    if sys.platform == "darwin":
+        try:
+            from AppKit import NSBundle  # noqa: PLC0415 -- macOS-only
+        except ImportError:
+            return
+        bundle = NSBundle.mainBundle()
+        info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+        if info is not None:
+            info["CFBundleName"] = name
 
 
 def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Window:
