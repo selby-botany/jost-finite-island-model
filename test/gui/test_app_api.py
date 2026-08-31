@@ -5,8 +5,7 @@ No display, no Tk import, no `gui` marker: `get_starter_form`,
 `webview.windows[0]` — they call straight into `fim.gui.config_form`/
 `fim.gui.batch_runner`, so they are exercised here as plain Python calls,
 far cheaper and more direct than driving them through a real window and
-`evaluate_js` (design doc §6.2's unit layer, applied to the bridge
-itself). `load_yaml`/`save_yaml` do need a real window (a real file
+`evaluate_js`. `load_yaml`/`save_yaml` do need a real window (a real file
 dialog) and are covered instead in `test/gui/test_app.py`, marked `gui`.
 """
 
@@ -565,7 +564,7 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     assert len(points) == 2
     # `reports_summary` needs at least two reporting replicates to
     # define any interval — one reporting replicate summarizes to
-    # nothing yet, not an error (design §8 Phase G's own docstring).
+    # nothing yet, not an error (see `reports_summary`'s own docstring).
     assert payload["statistics"] == {}
 
 
@@ -1078,7 +1077,7 @@ class _FakeMenuWindow:
 
 
 def test_build_menu_has_file_configure_run_view_and_help() -> None:
-    """The menu bar has exactly the five menus this design specifies.
+    """The menu bar has exactly the five menus `doc/fim-gui-design.md` §10 specifies.
 
     Configure is new alongside File/Run/View/Help (the input screen's
     own six-tab bar moving off-canvas) — this test's own name and
@@ -1133,7 +1132,7 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         if hasattr(item, "title")
     ] == ["D", "Gₛₜ", "Eₛₜ", "Kₛₜ", "Hₛ", "Hₜ"]
     run_items = [item.title for item in menus[2].items if hasattr(item, "title")]
-    # No "Animate" item (unified-run-view design §3.2.4, §8 Phase E): the
+    # No "Animate" item (`doc/fim-gui-design.md` §5.1): the
     # time slider is simply part of `completed`'s own view now, not a
     # second trigger reachable from a menu -- see `_build_menu`'s own
     # comment on the Run menu.
@@ -1160,7 +1159,7 @@ def test_statistic_menu_label_renders_true_unicode_subscripts() -> None:
     """`_statistic_menu_label` matches every `CONVERGENCE_STATISTIC_NAMES` entry.
 
     Direct, focused coverage of the small pure function behind the
-    Convergence statistic submenu's own labels (design §3.1.3) — native
+    Convergence statistic submenu's own labels — native
     menu items are plain text, so this is the closest equivalent to the
     `<sub>`-tagged labels `index.html`'s own static markup uses.
     """

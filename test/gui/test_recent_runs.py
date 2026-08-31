@@ -64,9 +64,9 @@ def test_recent_runs_lists_manifests_newest_first(tmp_path: Path) -> None:
 
 
 def test_recent_runs_labels_batch_manifests_as_batch(tmp_path: Path) -> None:
-    """Design doc's own named test: a batch manifest is listed, labeled distinctly.
+    """A batch manifest is listed, labeled distinctly, not offered for direct opening.
 
-    Not offered to Screen 3 directly (design §0, §4.0 #9, §4.6) —
+    Not offered to Screen 3 directly (`doc/fim-gui-design.md` §9) —
     `is_batch` is the flag Screen 6 uses to refuse opening it the same
     way a scalar run is opened.
     """

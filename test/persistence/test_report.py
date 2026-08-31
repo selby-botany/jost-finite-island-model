@@ -10,9 +10,9 @@ from fim.persistence.report import write_report
 def test_write_report_matches_previous_cli_json_formatting(tmp_path: Path) -> None:
     """`write_report` reproduces `cli.py`'s pre-extraction JSON formatting.
 
-    Regression proof for Milestone G0 (design doc
-    `20260819-claude-sonnet-5-graphical-interface.md` §3.7, §6.3): sorted
-    keys, two-space indent, trailing newline, no `NaN`/`Infinity`.
+    Regression proof for Milestone G0 (`doc/fim-gui-design.md` §12):
+    sorted keys, two-space indent, trailing newline, no
+    `NaN`/`Infinity`.
     """
     target = tmp_path / "nested" / "report.json"
 

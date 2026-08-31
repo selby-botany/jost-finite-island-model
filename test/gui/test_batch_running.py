@@ -1,5 +1,5 @@
 """Headless functional proof that a real batch run reaches the bridge end to end
-(design doc §0.5, §3.4, §7.6).
+(`doc/fim-gui-design.md` §7.2).
 
 Milestone W5's backend half: `Api.start_run` dispatching to `fim.gui.
 batch_runner.start_batch_run` and `fim.gui.app._drain_batch_messages`
@@ -14,8 +14,8 @@ Milestone W5's remaining, separate piece — `webui/app.js`'s own
 `onBatchProgress`/`onBatchDone`/`onBatchCancelled`/`onBatchError` are
 still no-op stubs at this point (the same walking-skeleton precedent
 Milestone W1 set for the scalar handlers), so this test observes the
-pipeline through `Api`'s own `on_message` hook (design §3.4's "push,
-not poll," extended to how a test observes a run — see `test/gui/
+pipeline through `Api`'s own `on_message` hook -- push,
+not poll, extended to how a test observes a run — see `test/gui/
 test_running_screen.py`'s own module docstring for why a DOM-polling
 test-driving loop is the wrong tool here) rather than by reading DOM
 state a screen that does not exist yet would have rendered.
@@ -46,8 +46,8 @@ _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # A small, fast, two-replicate batch — the same tiny-scale values `test/
 # gui/test_running_screen.py`'s own `_SET_TINY_FIELDS` uses for a scalar
-# run, plus `n_replicates` set to 2 (design §4.1's "there is no separate
-# 'batch mode' toggle; `n_replicates` *is* the toggle") and a matching
+# run, plus `n_replicates` set to 2 -- there is no separate
+# "batch mode" toggle; `n_replicates` *is* the toggle -- and a matching
 # small `max_workers`.
 _SET_TINY_BATCH_FIELDS = """
 function setField(name, value) {

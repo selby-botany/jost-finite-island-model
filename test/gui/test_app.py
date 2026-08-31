@@ -1,4 +1,4 @@
-"""Headless functional tests for `fim.gui.app` (design doc §6.4, §7.2).
+"""Headless functional tests for `fim.gui.app` (`doc/fim-gui-design.md` §4).
 
 The walking skeleton's own proof: the pywebview window builds, loads
 `webui/index.html`, and the `Api` bridge — in-process (`ping`) and
@@ -24,7 +24,7 @@ def test_create_window_loads_index_html(
 ) -> None:
     """The window's own page is `webui/index.html`, not a blank default.
 
-    `app.js`'s own automatic bootstrap (§7.2) should already have called
+    `app.js`'s own automatic bootstrap should already have called
     `ping` and updated `#bridge-status` by the time this test's `read`
     first observes it settle away from "Connecting…" — no manually
     injected `trigger` needed, unlike the two tests below, which exercise
@@ -156,7 +156,7 @@ def test_ping_from_worker_round_trip(
     """A trivial `ProcessPoolExecutor` call survives a real cross-process round trip.
 
     Direct regression test for the walking-skeleton's second proof
-    (design §0.5, §7.2): `ProcessPoolExecutor` working at all from inside
+    (`doc/fim-gui-design.md` §4.2): `ProcessPoolExecutor` working at all from inside
     this exact pywebview-hosted process, checked before any real batch
     logic (`fim.gui.store.LiveProgressStore`, `fim.gui.batch_runner`,
     both already built and tested independently) is ever reached through

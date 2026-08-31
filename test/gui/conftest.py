@@ -1,5 +1,6 @@
-r"""Shared fixtures for `fim.gui` headless functional tests (design doc
-`20260821-claude-sonnet-5-graphical-interface.md` §6.1, §6.4).
+r"""Shared fixtures for `fim.gui` headless functional tests.
+
+(`doc/fim-gui-design.md` §4.)
 
 Replaces the Tk-era `conftest.py` (session-scoped `tk.Tk()` root, a
 disabled cyclic garbage collector to work around a Tkinter/threading
@@ -10,7 +11,7 @@ drives the page via `window.evaluate_js(...)`, and calls
 `window.destroy()` when done, letting `webview.start()` return — the same
 "construct real widgets, drive them synchronously, never call the real
 blocking entry point without a controlled exit" discipline the Tk-era
-tests followed (§6.1), adapted to pywebview's own API.
+tests followed, adapted to pywebview's own API.
 
 `window.evaluate_js(...)` returns the raw value of whatever JS expression
 it evaluates, never the resolved value of a Promise that expression

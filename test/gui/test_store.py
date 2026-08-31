@@ -3,8 +3,7 @@
 No display, no Tk import, no thread and no real subprocess — each
 decorator's contract is exercised against an `InMemoryTrajectoryStore`
 fake (or, for `LiveProgressStore`, plain files under `tmp_path`), one
-method call at a time (design doc §6.3; `LiveProgressStore`'s own tests
-per §0.5/§3.4's revision).
+method call at a time (`doc/fim-gui-design.md` §7).
 """
 
 from __future__ import annotations
@@ -63,7 +62,7 @@ def test_gui_progress_store_calls_on_generation_once_per_write() -> None:
 def test_gui_progress_store_passes_the_generation_own_rows_to_on_generation() -> None:
     """`on_generation` receives that generation's real rows, not just its number.
 
-    Direct regression test for design §0.5: the scalar run screen's live
+    Direct regression test: the scalar run screen's live
     scatter needs the actual frequency data, and there is no trajectory
     file path the caller could otherwise re-read it from (the temporary
     working directory `fim.paths.atomic_directory` builds is private to
@@ -205,8 +204,8 @@ def test_live_progress_store_raises_when_the_shared_cancel_file_exists(
 ) -> None:
     """A cancel file's mere existence turns the next write into `RunCancelledError`.
 
-    Direct regression test for the cross-process cancellation contract
-    (design §0.5, §3.4): unlike `GuiProgressStore`'s `threading.Event`,
+    Direct regression test for the cross-process cancellation contract:
+    unlike `GuiProgressStore`'s `threading.Event`,
     the signal here is a plain file another process created — its
     *content* is never inspected, only whether it exists.
     """
@@ -292,8 +291,8 @@ def test_write_progress_sidecar_records_a_real_wall_clock_timestamp(
     Not a race-prone timing assertion (project CLAUDE.md's determinism
     contract) — a generous bound proving the recorded timestamp is a
     real observation of *this* write, which is what
-    `test_batch_replicates_actually_run_concurrently`-style tests (design
-    §6.4) rely on to prove real concurrency structurally.
+    `test_batch_replicates_actually_run_concurrently`-style tests rely
+    on to prove real concurrency structurally.
     """
     progress_path = tmp_path / ".progress"
     before = datetime.now(UTC)

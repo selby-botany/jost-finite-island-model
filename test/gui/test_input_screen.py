@@ -1,7 +1,6 @@
 """Headless functional tests for the unified run view's own configuration
 side -- the Configure menu's modals/value-selectors and the always-
-present controls (design doc §4.1, §6.4; unified-run-view design §3.1,
-§8 Phase E).
+present controls (`doc/fim-gui-design.md` §5.2, §6).
 
 Real DOM-driven proof that `webui/screens/config-modals.js`/`run-view-
 controls.js`/`run-view-initial.js` actually wire the page correctly —
@@ -168,10 +167,10 @@ def test_input_screen_switches_to_the_tab_with_an_invalid_field(
 ) -> None:
     """Clicking "Run simulation" with an invalid Migration field opens that modal.
 
-    Direct regression test for design §4.0 #2 ("every tab with an
-    invalid field shows a small error dot... the disabled Run button
-    always shows a one-line reason") — the modal-opening specifically
-    (design §3.1/§8 Phase B: Migration is now a `<dialog>`, not a
+    Direct regression test: every tab with an
+    invalid field shows a small error dot, and the disabled Run button
+    always shows a one-line reason — the modal-opening specifically
+    (Migration is now a `<dialog>`, not a
     tab-panel), since `test_app_api.py` already proves the bridge's own
     `tab`/`field` values are correct. No `input` event needs dispatching
     first: `onRunClicked` calls `revalidate()` itself, which reads the
@@ -204,8 +203,8 @@ def test_menu_new_configuration_resets_an_edited_field(
 ) -> None:
     """`fim.menu.newConfiguration` resets the form to starter values.
 
-    The one behavioral difference from the existing "New run" buttons
-    (in-app help design §4.5): those only navigate back to Screen 1,
+    The one behavioral difference from the existing "New run" buttons:
+    those only navigate back to Screen 1,
     leaving whatever was already in the form; the menu's own "New
     configuration" genuinely resets it, the same way a fresh app
     launch's own `initializeInputScreen` does — this test exists
@@ -257,8 +256,8 @@ def test_menu_configure_tab_switches_tabs_without_resetting_the_form(
 ) -> None:
     """`fim.menu.configureTab` (the native Configure menu) opens a modal, no reset.
 
-    Every section is now a `<dialog>`, not a tab-panel (design §3.1,
-    §8 Phase A/B) — `test_configure_population_opens_a_modal_without_
+    Every section is now a `<dialog>`, not a tab-panel —
+    `test_configure_population_opens_a_modal_without_
     navigating_away` already proves the modal opens without navigating
     away; this test's own remaining job is the one behavioral contract
     that distinguishes `configureTab` from `newConfiguration`: an edited
@@ -291,7 +290,7 @@ def test_menu_configure_tab_switches_tabs_without_resetting_the_form(
 def test_every_configure_section_has_its_own_modal(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """All six sections open their own `modal-<name>` dialog (design §8 Phase B).
+    """All six sections open their own `modal-<name>` dialog.
 
     Population and Migration each already have their own dedicated test
     above; this one instead sweeps all six in a single `drive()` call
@@ -322,7 +321,7 @@ def test_every_configure_section_has_its_own_modal(
 def test_menu_set_deme_weighting_updates_the_field_without_a_modal(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """`fim.menu.setDemeWeighting` sets the field directly (design §3.1.3)."""
+    """`fim.menu.setDemeWeighting` sets the field directly, without opening a modal."""
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
@@ -343,7 +342,7 @@ def test_menu_set_deme_weighting_updates_the_field_without_a_modal(
 def test_menu_set_mutation_model_updates_the_field_without_a_modal(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """`fim.menu.setMutationModel` sets the field directly (design §3.1.3)."""
+    """`fim.menu.setMutationModel` sets the field directly, without opening a modal."""
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
@@ -362,8 +361,8 @@ def test_menu_toggle_convergence_statistic_adds_to_the_set(
 
     The starter form has only `cs_D` checked. Toggling `cs_G_ST` on must
     leave `cs_D` checked too — an exclusive pick here would silently
-    discard whatever combination was already configured (design §3.1.3,
-    `app.py`'s own `_build_menu` docstring has the full reasoning) — and
+    discard whatever combination was already configured
+    (`app.py`'s own `_build_menu` docstring has the full reasoning) — and
     checking two statistics is exactly what makes the combinator field
     appear, proving `syncConditionalVisibility` ran as a side effect too.
     """
@@ -389,16 +388,16 @@ def test_menu_toggle_convergence_statistic_adds_to_the_set(
 def test_configure_population_opens_a_modal_without_navigating_away(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Configure > Population floats a modal over the run view (design §3.1/§8 Phase A).
+    """Configure > Population floats a modal over the run view.
 
-    The Phase A proof-of-concept this test exists for: Population is the
-    first (of eventually six, §8 Phase B) tab-panel converted to a native
+    Population is the first of six sections converted to a native
     `<dialog>`. Asserted against `runViewState` staying untouched, not
     just `screen-run` staying visible -- the bug this whole redesign
     responds to was the old `configureTab` calling `showScreen(
     "screen-input")` first, discarding whatever the user was looking at
-    (a live run, a completed result); the merged run view (design §8
-    Phase E) makes "which screen is visible" trivially true on its own
+    (a live run, a completed result); the merged run view
+    (`doc/fim-gui-design.md` §5.1) makes "which screen is visible"
+    trivially true on its own
     (there is only one to navigate away from), so the state itself is
     the assertion that still has teeth.
     """
@@ -425,7 +424,7 @@ def test_configure_population_opens_a_modal_without_navigating_away(
 def test_configure_population_modal_close_button_closes_it(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """The modal's own close button closes it (design §3.1.1's backdrop/close wiring).
+    """The modal's own close button closes it (`fim.wireModal`'s backdrop/close wiring).
 
     Escape and backdrop-click are the browser's own native `<dialog>`
     behavior (not exercised here — a synthetic, untrusted `keydown` does

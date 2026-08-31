@@ -4,8 +4,8 @@
 `cli.main(["stats", ...])` end to end, unmodified by this extraction
 (confirmed: they pass unchanged against the new import path); these
 tests instead call `fim.reanalyze` directly, the way `fim.gui`'s
-"open an existing run" (design doc §3.8, §4.6) and "animated
-trajectory" (§4.5) screens do.
+"open an existing run" and animated-trajectory paths do
+(`doc/fim-gui-design.md` §8, §9).
 """
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
-"""Headless functional tests for Screen 6, opening an existing run (design
-doc §4.6, §7.7).
+"""Headless functional tests for Screen 6, opening an existing run
+(`doc/fim-gui-design.md` §9).
 
 Real DOM-driven proof that the File menu's "Open run…" action reaches
 Screen 6, that Screen 6's recent-runs list is populated from a real, completed

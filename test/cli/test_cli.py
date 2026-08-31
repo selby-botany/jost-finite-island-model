@@ -393,9 +393,9 @@ def test_default_paths_use_project_results(
     """Default configuration and run outputs stay under project-root/results.
 
     `_project_root`/`_results_directory`/`_default_output_directory`'s own
-    resolution logic is tested directly in `test/test_paths.py` (design
-    doc `20260819-claude-sonnet-5-graphical-interface.md`, Milestone G0,
-    §3.7) against `fim.paths` — this test only confirms `cli._command_init`
+    resolution logic is tested directly in `test/test_paths.py`
+    (Milestone G0, `doc/fim-gui-design.md` §12,13) against `fim.paths`
+    — this test only confirms `cli._command_init`
     still calls through to it correctly, by patching the one shared root
     resolver both front ends now use.
     """
@@ -986,9 +986,8 @@ def test_format_optional_helper_is_stable() -> None:
     The network-error, non-object-payload, release-field-validation,
     version-comparison, and version-parsing cases this test file used to
     carry moved out to `test/test_update.py`'s own direct unit tests
-    against `fim.update` (design doc
-    `20260819-claude-sonnet-5-graphical-interface.md`, Milestone G0,
-    §3.9, §7.2) — they relied on monkeypatching `urlopen` as a `cli.py`
+    against `fim.update` (Milestone G0, `doc/fim-gui-design.md` §12) —
+    they relied on monkeypatching `urlopen` as a `cli.py`
     module attribute, which the extracted code no longer reads from this
     location. `_format_optional` stays here: it is `cli.py`'s own
     terminal-formatting helper, untouched by the extraction.

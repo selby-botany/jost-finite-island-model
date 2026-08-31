@@ -1,4 +1,4 @@
-"""Headless functional tests for the Help screen (in-app help design §4.4)."""
+"""Headless functional tests for the Help screen (doc/fim-gui-design.md §11)."""
 
 from __future__ import annotations
 
@@ -143,7 +143,7 @@ def test_help_screen_returns_to_results_when_opened_from_there(
     """Back returns to Results, not a fixed default, when Help was opened from there.
 
     The one genuinely new interaction Help adds relative to every other
-    screen's own fixed-target "Back" button (design §4.4): recording
+    screen's own fixed-target "Back" button: recording
     *whichever* screen was showing, not always the same one.
     """
     outcome: queue.Queue[bool] = queue.Queue(maxsize=1)

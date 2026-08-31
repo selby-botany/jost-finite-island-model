@@ -1,9 +1,8 @@
 """Unit tests for `fim.gui.animation`.
 
 No display, no Tk import, no Matplotlib import at all — `pre_render_frames`
-returns plain coordinate data (design doc §0.5, §3.8 of
-`20260821-claude-sonnet-5-graphical-interface.md`), not rendered `Figure`
-objects, so nothing here carries the `gui` marker.
+returns plain coordinate data (`doc/fim-gui-design.md` §8), not rendered
+`Figure` objects, so nothing here carries the `gui` marker.
 """
 
 from __future__ import annotations
@@ -128,7 +127,7 @@ def test_pre_render_frames_are_sorted_ascending_by_generation(tmp_path: Path) ->
 
 
 def test_animation_module_never_imports_matplotlib() -> None:
-    """Direct regression test for §0.5/§3.8: no rendering happens on this path.
+    """Direct regression test: no rendering happens on this path.
 
     A static check of the module's own source, not a runtime
     `sys.modules` check — other test files in this session may have

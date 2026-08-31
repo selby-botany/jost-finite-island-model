@@ -96,8 +96,7 @@ def test_windows_and_linux_build_stays_a_single_onefile_executable() -> None:
 def test_macos_bundle_wraps_a_collected_onedir_build() -> None:
     """The macOS `.app` uses onedir mode, not onefile-plus-`BUNDLE`.
 
-    Design doc 20260821-claude-sonnet-5-macos-linux-packaging.md §3.2:
-    combining PyInstaller's single-file (onefile) `EXE()` output with
+    Combining PyInstaller's single-file (onefile) `EXE()` output with
     `BUNDLE()` is deprecated as of PyInstaller 6.x ("a .app bundle can
     not be a single file... will become an error in v7.0") — confirmed
     against a real local build before this test was written. `COLLECT`

@@ -138,7 +138,7 @@ def test_three_demes_render_direct_three_dimensional_axes() -> None:
 def test_large_dimensions_default_to_the_first_deme_pair() -> None:
     """Large `d` defaults to one explicit pair, not a PCA projection.
 
-    Unified-run-view design §3.6: dropped as the CLI's own default for
+    Dropped as the CLI's own default for
     the same reasons `panels_from_points` dropped it as the GUI's —
     `_plot_pca` itself is unchanged and still directly reachable, see
     `test_pca_is_still_directly_reachable_for_a_large_dimension` below.
@@ -156,7 +156,7 @@ def test_pca_is_still_directly_reachable_for_a_large_dimension() -> None:
     """`_plot_pca` itself is unchanged — no longer the CLI's default, still callable.
 
     Direct regression proof for the "PCA is not deleted, only demoted"
-    half of design §3.6's decision: calling it directly on the same
+    decision: calling it directly on the same
     seven-deme points `plot_frequency_scatter` no longer routes there
     reproduces exactly what that branch used to render.
     """
@@ -174,8 +174,8 @@ def test_pca_projection_handles_a_single_point_without_svd() -> None:
 
     `numpy.linalg.svd` is not called at all when there is only one
     (locus, allele) point to project — `_plot_pca` special-cases it to
-    avoid a degenerate decomposition. Called directly (design §3.6:
-    `plot_frequency_scatter` no longer reaches `_plot_pca` for any `d`),
+    avoid a degenerate decomposition. Called directly (`plot_frequency_
+    scatter` no longer reaches `_plot_pca` for any `d`),
     matching `test_pca_is_still_directly_reachable_for_a_large_dimension`
     above; fixing every deme for the same single allele collapses the
     whole state to exactly one point.
@@ -312,7 +312,7 @@ def test_frequency_bars_omits_the_legend_beyond_the_display_cap() -> None:
 
 
 def test_frequency_points_shape_is_locus_allele_rows_by_deme_columns() -> None:
-    """Public data function (graphical-interface migration §3.3): shape and content.
+    """Public data function (`doc/fim-gui-design.md` §12): shape and content.
 
     Direct regression test that the GUI's own bridge can rely on this
     function without ever building a `Figure` — no `matplotlib.pyplot`
@@ -379,7 +379,7 @@ def test_grouped_points_matches_marker_groups_exactly() -> None:
     """`marker_groups` is now a thin reshaping of `grouped_points` — proven directly.
 
     Regression test for the refactor introduced alongside `scatter_
-    panels` (graphical-interface migration §3.5): the two functions'
+    panels`: the two functions'
     grouping must never silently drift apart, since `marker_groups` is
     implemented in terms of `grouped_points` specifically to make that
     impossible by construction.
@@ -441,7 +441,7 @@ def test_scatter_panels_four_demes_defaults_to_the_first_deme_pair() -> None:
 def test_scatter_panels_large_d_defaults_to_the_first_deme_pair() -> None:
     """`d > pairwise_max_demes` also produces one frequency panel, demes 1 and 2.
 
-    Not a PCA projection (unified-run-view design §3.6) — `pca_project`/
+    Not a PCA projection — `pca_project`/
     `pca_summary`/`pca_axis_labels` are unchanged and still directly
     testable (`test_pca_project_matches_the_rendered_pca_plot` and the
     `pca_summary`/`pca_axis_labels` tests below); only this dispatch's
@@ -609,10 +609,10 @@ def test_pca_project_matches_the_rendered_pca_plot() -> None:
     """`pca_project`'s standalone output matches what `_plot_pca` actually draws.
 
     Direct regression test that factoring the SVD out of `_plot_pca` and
-    into `pca_project` (graphical-interface migration §3.5) changed
+    into `pca_project` changed
     nothing about the rendered figure. Calls `_plot_pca` directly rather
-    than through `plot_frequency_scatter` (unified-run-view design §3.6:
-    that dispatch no longer reaches PCA for any `d`).
+    than through `plot_frequency_scatter` (that dispatch no longer
+    reaches PCA for any `d`).
     """
     state = _state(7)
     points = frequency_points(state)

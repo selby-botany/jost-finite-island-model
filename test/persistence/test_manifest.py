@@ -39,8 +39,7 @@ def test_verify_trajectory_integrity_accepts_a_matching_digest(
 ) -> None:
     """A trajectory whose digest matches its manifest passes silently.
 
-    Regression proof for Milestone G0 (design doc
-    `20260819-claude-sonnet-5-graphical-interface.md` §3.7, §3.8, §6.3):
+    Regression proof for Milestone G0 (`doc/fim-gui-design.md` §12):
     the relocated `verify_trajectory_integrity` reproduces
     `cli._verify_trajectory_integrity`'s exact prior behavior.
     """

@@ -19,8 +19,8 @@ def test_project_root_falls_back_to_working_directory(
 ) -> None:
     """Installed and frozen applications never write inside their package.
 
-    Regression test carried over from `test/cli/test_cli.py` (design doc
-    `20260819-claude-sonnet-5-graphical-interface.md`, Milestone G0):
+    Regression test carried over from `test/cli/test_cli.py` (Milestone
+    G0, `doc/fim-gui-design.md` §12):
     `fim.paths.project_root` is anchored on the `fim` package's own
     `__init__.py` (`fim.__file__`) rather than the caller's own module
     file, so every caller — the CLI, the GUI, or any future front end —
@@ -95,7 +95,7 @@ def test_default_output_directory_matches_previous_cli_behavior(
 ) -> None:
     """`fim.paths` reproduces `cli.py`'s pre-extraction directory naming.
 
-    Regression proof for Milestone G0 (design doc §3.7, §6.3): the
+    Regression proof for Milestone G0 (`doc/fim-gui-design.md` §12): the
     timestamped folder name format (`run-YYYYMMDD-HHMMSS`, UTC) is
     unchanged from the version this logic replaced inside `fim.cli`.
     """
@@ -118,7 +118,7 @@ def test_default_output_directory_uses_results_directory_by_default() -> None:
 def test_atomic_directory_rejects_an_existing_target(tmp_path: Path) -> None:
     """A pre-existing target is refused outright, regardless of its contents.
 
-    Regression proof for Milestone G0 (design doc §3.7, §6.3): the
+    Regression proof for Milestone G0 (`doc/fim-gui-design.md` §7.3): the
     relocated `atomic_directory` still requires the final path not to
     exist at all — the same stricter-than-filename-checking contract
     `cli._atomic_directory` established, reproduced here directly

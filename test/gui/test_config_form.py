@@ -1,7 +1,7 @@
 """Unit tests for all six tabs' marshaling (no Tk).
 
-`test_config_form_round_trips_starter_config` is the design doc's own
-named test (§6.3) — every tab now exists, so `starter_form_values()`'s
+`test_config_form_round_trips_starter_config` is this package's own
+named regression test — every tab now exists, so `starter_form_values()`'s
 output round-trips through `form_values_to_payload` back into an
 equivalent `SimulationParams`.
 """
@@ -65,7 +65,7 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
 def test_config_form_round_trips_starter_config() -> None:
     """`starter_form_values()` round-trips into an equivalent `SimulationParams`.
 
-    The design doc's own named test (§6.3), reachable only once every
+    Reachable only once every
     tab exists — `form_values_to_payload` now covers every key
     `SimulationParams.from_mapping` requires.
     """
@@ -211,8 +211,8 @@ def _params(**overrides: object) -> SimulationParams:
 def test_form_values_to_payload_accepts_a_per_locus_length_list() -> None:
     """A comma-separated `locus_lengths` derives `n_loci` from its own item count.
 
-    The cardinality rule's O(loci) case (§3.6), the design doc's own
-    named test's counterpart for `locus_lengths` rather than a
+    The cardinality rule's O(loci) case (`doc/fim-gui-design.md` §6.1),
+    this package's own named test's counterpart for `locus_lengths` rather than a
     per-locus `mu` list — this form has no such widget (G11 scopes
     `mu`/`mu_b` to shared scalars only; see `mu_from_params`'s own
     per-locus rejection below).
@@ -278,7 +278,7 @@ def test_mu_to_payload_mu_mode_returns_a_bare_mu_key() -> None:
 
 
 def test_mu_to_payload_mu_b_mode_returns_a_bare_mu_b_key() -> None:
-    """`mu_b` mode submits `{"mu_b": ...}` only — exclusive with `mu` (§4.0 #4)."""
+    """`mu_b` mode submits `{"mu_b": ...}` only — exclusive with `mu`."""
     payload = config_form.mu_to_payload(
         {"mu_mode": "mu_b", "mu_value": "", "mu_b_value": "0.00003"}
     )

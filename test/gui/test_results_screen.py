@@ -1,6 +1,5 @@
 """Headless functional tests for the unified run view's own `completed`
-state, scalar case (design doc §4.3, §6.4; unified-run-view design
-§3.2.4, §8 Phase E).
+state, scalar case (`doc/fim-gui-design.md` §5.2).
 
 Real DOM-driven proof that a completed scalar run actually reaches
 `fim.enterCompletedState` (`webui/screens/run-view-completed.js`) and
@@ -156,7 +155,7 @@ def test_a_completed_run_renders_the_run_view(
     # `tiny_params`-scale runs always persist more than one generation
     # (`convergence_window`'s own minimum of 2 forces at least one step
     # past generation 0 before stability can first be evaluated), so the
-    # scrubber (design §3.2.4: no separate "Animate" button, this is the
+    # scrubber (no separate "Animate" button, this is the
     # same time slider `completed` shows directly) is populated and
     # enabled here, not just present.
     assert settled["scrubberHidden"] is False
@@ -218,13 +217,13 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
     window: webview.Window,
 ) -> None:
     """Selecting a pair, then selecting back to the default, round-trips
-    through the real bridge (simplify-main-plot design: no "Show overview"
+    through the real bridge (no "Show overview"
     button any more — the selectors themselves are the only way to change
     which pair is shown).
 
     `d=3` (one deme past the default's own "Deme 1 vs Deme 2" panel —
-    large `d` also defaults to a Deme-1-vs-Deme-2 panel, unified-run-view
-    design §3.6, but the selector itself does not care which `d` produced
+    large `d` also defaults to a Deme-1-vs-Deme-2 panel,
+    but the selector itself does not care which `d` produced
     the default panel, so this smaller, faster configuration exercises
     the same bridge round trip a `d=20` run would): selecting Deme 1 vs
     Deme 3 redraws the canvas via a real `Api.get_deme_pair_panel` call,
@@ -319,10 +318,10 @@ def test_running_simulation_again_from_completed_starts_a_new_run(
 ) -> None:
     """ "Run simulation," clicked again from `completed`, starts a genuinely new run.
 
-    Design §3.2.1's own `completed → initial → running` transition: a
-    fresh "Run simulation" click reuses the current form values with no
-    separate "New run"/reset step needed (retired this phase, design
-    §8 Phase E — the shared controls are always present, so the same
+    The unified run view's own `completed → initial → running`
+    transition: a fresh "Run simulation" click reuses the current form
+    values with no separate "New run"/reset step needed (the shared
+    controls are always present, so the same
     button that started the first run is already right there). Proven
     by the *output directory* changing between the two completed views,
     not just by `completed` being reached again — a stale DOM left over

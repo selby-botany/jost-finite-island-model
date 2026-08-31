@@ -28,8 +28,7 @@ def test_install_script_is_executable() -> None:
 def test_install_script_never_requires_root() -> None:
     """No `sudo` anywhere -- everything installs under the user's home.
 
-    Design doc 20260821-claude-sonnet-5-macos-linux-packaging.md §3.5:
-    matches how rustup/uv behave, and avoids the trust escalation a
+    Matches how rustup/uv behave, and avoids the trust escalation a
     piped-to-a-privileged-shell install would ask a first-time academic
     user for.
     """
@@ -58,7 +57,7 @@ def test_install_script_verifies_a_checksum_before_installing() -> None:
 def test_install_script_rejects_non_linux_and_non_x86_64() -> None:
     """The script fails clearly on an unsupported OS or architecture.
 
-    Only a Linux/x86_64 binary is built (design doc §3.6); running this
+    Only a Linux/x86_64 binary is built; running this
     on macOS or an arm64 Linux machine must not silently attempt (and
     fail) a download of an asset that does not exist.
     """
@@ -73,7 +72,7 @@ def test_install_script_installs_both_entry_points() -> None:
 
     `fim-gui` is a thin wrapper invoking the same binary's `--graphical`
     flag rather than a second downloaded artifact -- there is only ever
-    one binary for Linux (design doc §3.5).
+    one binary for Linux.
     """
     script = _script_text()
 
@@ -87,7 +86,7 @@ def test_install_script_writes_a_desktop_entry() -> None:
 
     The piece CLI-only install-script templates (rustup, uv) skip and
     this GUI actually needs, so `fim-gui` shows up in a real application
-    menu (design doc §3.5).
+    menu.
     """
     script = _script_text()
 

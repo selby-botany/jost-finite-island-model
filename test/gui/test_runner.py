@@ -1,16 +1,15 @@
 """Unit and integration tests for `fim.gui.runner`.
 
 No Tk import and no display needed anywhere in this file: `ProgressThrottle`
-is a pure clock-driven predicate (§6.3), and `start_run`'s tests exercise a
+is a pure clock-driven predicate, and `start_run`'s tests exercise a
 real background thread, a real `fim.engine.fim` call, and the real
 filesystem directly — the `gui` pytest marker (this project's own,
 "constructs real Tk widgets; needs a display") does not apply to any of it.
 Nothing here sleeps or races on wall-clock timing (the determinism
-contract, design doc §6.1).
+contract, `doc/fim-gui-design.md` §7.1).
 
-`test_cancel_during_run_leaves_no_output_directory`, the dedicated
-integration test design §7.4's fourth bullet names, lives in its own
-commit and is not part of this file.
+`test_cancel_during_run_leaves_no_output_directory`, a dedicated
+integration test, lives in its own commit and is not part of this file.
 """
 
 from __future__ import annotations
@@ -104,7 +103,7 @@ def test_start_run_writes_the_four_documented_artifacts_on_success(
     assert isinstance(messages[-1][1], RunResult)
     progress_messages = messages[:-1]
     # Each progress message carries that generation's own live scatter
-    # data (design §0.5) — `d == 2` for `tiny_params`, so exactly one
+    # data — `d == 2` for `tiny_params`, so exactly one
     # direct panel per message, never empty. The `if` (not a bare
     # `assert message[0] == ...` followed by indexing) is what lets
     # mypy narrow `message` from the full `RunMessage` union down to
@@ -116,14 +115,14 @@ def test_start_run_writes_the_four_documented_artifacts_on_success(
             panels = message[2]
             assert len(panels) == 1
             assert panels[0]["points"]
-            # `points` (design's own live "Compare demes directly"
+            # `points` (the live "Compare demes directly"
             # selector, `fim.gui.app._drain_run_messages`'s own
             # `deme_pair_panel(message[3], ...)` call): the same raw,
             # not-yet-reduced array `panels` was itself built from, one
             # column per deme.
             points = message[3]
             assert points.shape[1] == 2
-            # `report` (design §8 Phase G's live stats-table field):
+            # `report` (the running-state view's live stats-table field):
             # the same six named statistics `report_for_state` computes
             # for p_0/a finished run, computed fresh for this tick's
             # own state so the running-state table has something to
@@ -185,14 +184,13 @@ def test_cancel_during_run_leaves_no_output_directory(
 ) -> None:
     """A run cancelled before it ever writes leaves no output directory at all.
 
-    The one true integration test in this layer (design doc §6.4, plan
-    §7.4's fourth bullet): `cancel_event` is set *before* `start_run` is
+    The one true integration test in this layer: `cancel_event` is set
+    *before* `start_run` is
     even called, so the worker's very first `write_generation` call —
     generation 0, made unconditionally before the convergence loop
     begins — already observes it and raises `RunCancelledError`
-    deterministically, without any wall-clock race. Design §6.4 lists
-    this test under its "marked gui" heading, but it constructs no Tk
-    widget and needs no display — a real background thread, a real
+    deterministically, without any wall-clock race. This test constructs
+    no Tk widget and needs no display — a real background thread, a real
     `fim.engine.fim` call, and the real filesystem are the whole test —
     so it stays here, unmarked, alongside every other test in this file
     that shares exactly that same technical shape, rather than

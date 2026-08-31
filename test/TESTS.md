@@ -153,20 +153,18 @@ the one in effect), is deliberate.
 
 Unit tests for the packaged single-exe's GUI/CLI dispatch.
 
-No subprocess and no real PyInstaller build (§6.5's packaging smoke
+No subprocess and no real PyInstaller build (the packaging smoke
 layer owns that): these exercise `fim.launcher.main`'s branching logic
 directly, with `fim.cli.main`, `fim.gui.app.main`, and
 `subprocess.Popen` replaced by recording stubs so a real simulation
 run, a real `Tk` root, or a real detached process is never built here.
-Design doc `20260819-claude-sonnet-5-graphical-interface.md` §7.9's own
-commit bullets: "explicit regression test that every existing
-non-empty-argv CLI invocation still reaches `fim.cli.main` unchanged"
-and "unit tests for all four cases: `--graphical` alone (foreground
-GUI, no `subprocess.Popen` call), `--graphical --detach`/`--detach
---graphical` (asserts the exact `subprocess.Popen` argv and
-`start_new_session=True`, mocked), `--detach` alone (exit status 2,
-the clear usage error), and every existing subcommand/flag combination
-still reaching `fim.cli.main` unchanged."
+Covers every existing non-empty-argv CLI invocation still reaching
+`fim.cli.main` unchanged, and all four dispatch cases: `--graphical`
+alone (foreground GUI, no `subprocess.Popen` call), `--graphical
+--detach`/`--detach --graphical` (asserts the exact `subprocess.Popen`
+argv and `start_new_session=True`, mocked), `--detach` alone (exit
+status 2, the clear usage error), and every existing subcommand/flag
+combination still reaching `fim.cli.main` unchanged.
 
 The Windows-only `FreeConsole` mechanic is exercised at the end of this
 file rather than beside the flag-parsing tests above — it fires from
@@ -525,8 +523,8 @@ def test_project_root_falls_back_to_working_directory(
 
 Installed and frozen applications never write inside their package.
 
-Regression test carried over from `test/cli/test_cli.py` (design doc
-`20260819-claude-sonnet-5-graphical-interface.md`, Milestone G0):
+Regression test carried over from `test/cli/test_cli.py` (Milestone
+G0, `doc/fim-gui-design.md` §12):
 `fim.paths.project_root` is anchored on the `fim` package's own
 `__init__.py` (`fim.__file__`) rather than the caller's own module
 file, so every caller — the CLI, the GUI, or any future front end —
@@ -599,7 +597,7 @@ def test_default_output_directory_matches_previous_cli_behavior(
 
 `fim.paths` reproduces `cli.py`'s pre-extraction directory naming.
 
-Regression proof for Milestone G0 (design doc §3.7, §6.3): the
+Regression proof for Milestone G0 (`doc/fim-gui-design.md` §12): the
 timestamped folder name format (`run-YYYYMMDD-HHMMSS`, UTC) is
 unchanged from the version this logic replaced inside `fim.cli`.
 
@@ -623,7 +621,7 @@ def test_atomic_directory_rejects_an_existing_target(tmp_path: Path) -> None
 
 A pre-existing target is refused outright, regardless of its contents.
 
-Regression proof for Milestone G0 (design doc §3.7, §6.3): the
+Regression proof for Milestone G0 (`doc/fim-gui-design.md` §7.3): the
 relocated `atomic_directory` still requires the final path not to
 exist at all — the same stricter-than-filename-checking contract
 `cli._atomic_directory` established, reproduced here directly
@@ -666,8 +664,8 @@ Unit tests for `fim.reanalyze`, extracted from `fim.cli._command_stats`.
 `cli.main(["stats", ...])` end to end, unmodified by this extraction
 (confirmed: they pass unchanged against the new import path); these
 tests instead call `fim.reanalyze` directly, the way `fim.gui`'s
-"open an existing run" (design doc §3.8, §4.6) and "animated
-trajectory" (§4.5) screens do.
+"open an existing run" and animated-trajectory paths do
+(`doc/fim-gui-design.md` §8, §9).
 
 <a id="test.test_reanalyze.test_reanalyze_trajectory_matches_the_live_report"></a>
 
@@ -1047,9 +1045,9 @@ def test_default_paths_use_project_results(
 Default configuration and run outputs stay under project-root/results.
 
 `_project_root`/`_results_directory`/`_default_output_directory`'s own
-resolution logic is tested directly in `test/test_paths.py` (design
-doc `20260819-claude-sonnet-5-graphical-interface.md`, Milestone G0,
-§3.7) against `fim.paths` — this test only confirms `cli._command_init`
+resolution logic is tested directly in `test/test_paths.py`
+(Milestone G0, `doc/fim-gui-design.md` §12,13) against `fim.paths`
+— this test only confirms `cli._command_init`
 still calls through to it correctly, by patching the one shared root
 resolver both front ends now use.
 
@@ -1384,9 +1382,8 @@ The optional-statistic terminal formatter has deterministic output.
 The network-error, non-object-payload, release-field-validation,
 version-comparison, and version-parsing cases this test file used to
 carry moved out to `test/test_update.py`'s own direct unit tests
-against `fim.update` (design doc
-`20260819-claude-sonnet-5-graphical-interface.md`, Milestone G0,
-§3.9, §7.2) — they relied on monkeypatching `urlopen` as a `cli.py`
+against `fim.update` (Milestone G0, `doc/fim-gui-design.md` §12) —
+they relied on monkeypatching `urlopen` as a `cli.py`
 module attribute, which the extracted code no longer reads from this
 location. `_format_optional` stays here: it is `cli.py`'s own
 terminal-formatting helper, untouched by the extraction.
@@ -2289,8 +2286,9 @@ that actually exercises them together end to end.
 
 # gui.conftest
 
-Shared fixtures for `fim.gui` headless functional tests (design doc
-`20260821-claude-sonnet-5-graphical-interface.md` §6.1, §6.4).
+Shared fixtures for `fim.gui` headless functional tests.
+
+(`doc/fim-gui-design.md` §4.)
 
 Replaces the Tk-era `conftest.py` (session-scoped `tk.Tk()` root, a
 disabled cyclic garbage collector to work around a Tkinter/threading
@@ -2301,7 +2299,7 @@ drives the page via `window.evaluate_js(...)`, and calls
 `window.destroy()` when done, letting `webview.start()` return — the same
 "construct real widgets, drive them synchronously, never call the real
 blocking entry point without a controlled exit" discipline the Tk-era
-tests followed (§6.1), adapted to pywebview's own API.
+tests followed, adapted to pywebview's own API.
 
 `window.evaluate_js(...)` returns the raw value of whatever JS expression
 it evaluates, never the resolved value of a Promise that expression
@@ -2568,9 +2566,8 @@ Bind `drive_and_read` as a fixture, for tests that prefer the fixture style.
 Unit tests for `fim.gui.animation`.
 
 No display, no Tk import, no Matplotlib import at all — `pre_render_frames`
-returns plain coordinate data (design doc §0.5, §3.8 of
-`20260821-claude-sonnet-5-graphical-interface.md`), not rendered `Figure`
-objects, so nothing here carries the `gui` marker.
+returns plain coordinate data (`doc/fim-gui-design.md` §8), not rendered
+`Figure` objects, so nothing here carries the `gui` marker.
 
 <a id="gui.test_animation.test_select_sample_generations_returns_everything_when_within_the_limit"></a>
 
@@ -2684,7 +2681,7 @@ Frames come back in generation order regardless of trajectory row order.
 def test_animation_module_never_imports_matplotlib() -> None
 ```
 
-Direct regression test for §0.5/§3.8: no rendering happens on this path.
+Direct regression test: no rendering happens on this path.
 
 A static check of the module's own source, not a runtime
 `sys.modules` check — other test files in this session may have
@@ -2699,8 +2696,7 @@ itself ever does.
 # gui.test\_animation\_screen
 
 Headless functional tests for the unified run view's own scrubber,
-reached by opening a persisted run (design doc §3.8, §4.5, §7.7;
-unified-run-view design §3.2.4, §8 Phase E).
+reached by opening a persisted run (`doc/fim-gui-design.md` §5.2, §8).
 
 The separate "Animate" button and its own screen (`webui/screens/
 animation.js`) are retired this phase: there is no longer anything to
@@ -2761,7 +2757,7 @@ Re-opening a multi-generation run auto-populates and scrubs the scrubber.
 
 # gui.test\_app
 
-Headless functional tests for `fim.gui.app` (design doc §6.4, §7.2).
+Headless functional tests for `fim.gui.app` (`doc/fim-gui-design.md` §4).
 
 The walking skeleton's own proof: the pywebview window builds, loads
 `webui/index.html`, and the `Api` bridge — in-process (`ping`) and
@@ -2780,7 +2776,7 @@ def test_create_window_loads_index_html(window: webview.Window,
 
 The window's own page is `webui/index.html`, not a blank default.
 
-`app.js`'s own automatic bootstrap (§7.2) should already have called
+`app.js`'s own automatic bootstrap should already have called
 `ping` and updated ``bridge`-status` by the time this test's `read`
 first observes it settle away from "Connecting…" — no manually
 injected `trigger` needed, unlike the two tests below, which exercise
@@ -2876,7 +2872,7 @@ def test_ping_from_worker_round_trip(window: webview.Window,
 A trivial `ProcessPoolExecutor` call survives a real cross-process round trip.
 
 Direct regression test for the walking-skeleton's second proof
-(design §0.5, §7.2): `ProcessPoolExecutor` working at all from inside
+(`doc/fim-gui-design.md` §4.2): `ProcessPoolExecutor` working at all from inside
 this exact pywebview-hosted process, checked before any real batch
 logic (`fim.gui.store.LiveProgressStore`, `fim.gui.batch_runner`,
 both already built and tested independently) is ever reached through
@@ -2895,8 +2891,7 @@ No display, no Tk import, no `gui` marker: `get_starter_form`,
 `webview.windows[0]` — they call straight into `fim.gui.config_form`/
 `fim.gui.batch_runner`, so they are exercised here as plain Python calls,
 far cheaper and more direct than driving them through a real window and
-`evaluate_js` (design doc §6.2's unit layer, applied to the bridge
-itself). `load_yaml`/`save_yaml` do need a real window (a real file
+`evaluate_js`. `load_yaml`/`save_yaml` do need a real window (a real file
 dialog) and are covered instead in `test/gui/test_app.py`, marked `gui`.
 
 <a id="gui.test_app_api.test_get_starter_form_matches_config_form_directly"></a>
@@ -3470,7 +3465,7 @@ size.
 def test_build_menu_has_file_configure_run_view_and_help() -> None
 ```
 
-The menu bar has exactly the five menus this design specifies.
+The menu bar has exactly the five menus `doc/fim-gui-design.md` §10 specifies.
 
 Configure is new alongside File/Run/View/Help (the input screen's
 own six-tab bar moving off-canvas) — this test's own name and
@@ -3488,7 +3483,7 @@ def test_statistic_menu_label_renders_true_unicode_subscripts() -> None
 `_statistic_menu_label` matches every `CONVERGENCE_STATISTIC_NAMES` entry.
 
 Direct, focused coverage of the small pure function behind the
-Convergence statistic submenu's own labels (design §3.1.3) — native
+Convergence statistic submenu's own labels — native
 menu items are plain text, so this is the closest equivalent to the
 `<sub>`-tagged labels `index.html`'s own static markup uses.
 
@@ -3537,8 +3532,7 @@ follows for OS-dispatched actions — no real browser opens in a test.
 # gui.test\_batch\_results\_screen
 
 Headless functional tests for the unified run view's own `completed`
-state, batch case (design doc §4.4, §7.6; unified-run-view design §3.2.5,
-§8 Phase E).
+state, batch case (`doc/fim-gui-design.md` §5.2).
 
 Real DOM-driven proof that a completed batch actually reaches
 `fim.enterCompletedState(payload, true)` (`webui/screens/run-view-
@@ -3554,9 +3548,10 @@ renders it — which no Python-only test can check.
 The scalar counterpart is `test/gui/test_results_screen.py`; the two
 files share the same element ids (`results-run-id`, `run-canvas`,
 `run-deme-pair-selector`, `open-folder-button`, ...) below `completed`,
-since `enterCompletedState` is the one shared entry point for both kinds
-of run (design §3.2.5's "one state model, not two"), branching internally
-on `isBatch` only for the statistics/table fields that actually differ.
+since `enterCompletedState` is the one shared entry point for both
+kinds of run -- one state model, not two (`doc/fim-gui-design.md`
+§5.2) -- branching internally on `isBatch` only for the
+statistics/table fields that actually differ.
 
 Drives a real, small (two-replicate) batch through the actual UI, the
 same tiny-scale `_SET_TINY_BATCH_FIELDS` `test/gui/test_batch_running.py`
@@ -3582,8 +3577,8 @@ A finished two-replicate batch shows a run id, two table rows, and six stat rows
 
 Every one of the six named statistics gets a `.stats-table` row with
 a confidence interval in its hover tooltip (`buildCiMeter`/
-`buildOmittedMeter` — design §4.4's "a statistic omitted from
-summary.json still renders as explicitly omitted, not blank"), so
+`buildOmittedMeter`: a statistic omitted from
+`summary.json` still renders as explicitly omitted, not blank), so
 ``batch`-results-summary-body` always has exactly six `<tr>` children
 regardless of which, if any, statistics `replicate_summary` actually
 defined for this particular run.
@@ -3597,8 +3592,7 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None
 ```
 
 Selecting a pair, then selecting back to the default, round-trips
-through the real batch bridge (simplify-main-plot design: no "Show
-overview" button any more).
+through the real batch bridge (no "Show overview" button any more).
 
 The batch counterpart to `test_results_screen.py`'s own identically
 named scalar-run test — `d=3` past the default "Deme 1 vs Deme 2"
@@ -3625,9 +3619,9 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch() -> None
 
 The batch counterpart to `test_results_screen.py`'s own `test_
 running_simulation_again_from_completed_starts_a_new_run` — no
-separate "New run" button exists any more (retired this phase,
-design §8 Phase E: the shared controls are always present, so the
-same button that started the first batch is already right there).
+separate "New run" button exists any more: the shared controls
+are always present, so the same button that started the first
+batch is already right there.
 Proven by the *output directory* changing between the two completed
 views, the same reason the scalar test gives: `deterministic_run_id
 (params)` is deliberately the same string for two batches of
@@ -3650,7 +3644,7 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None
 The batch-results counterpart to `test_results_screen.py`'s own
 identically-named test — same shared `open-folder-button`/`window.
 __fimOpenFolderSettled` flag (one button now, regardless of scalar
-or batch, design §8 Phase E), same injected-`open_folder` hook (so a
+or batch), same injected-`open_folder` hook (so a
 real Finder/Explorer window never opens here either), same real,
 once-reproduced hang this closes: a click handler calling `window.
 pywebview.api.open_output_folder(...)` with nothing downstream
@@ -3668,8 +3662,8 @@ Unit and integration tests for `fim.gui.batch_runner`.
 
 No Tk import and no display needed anywhere in this file — real
 background threads, real `fim.engine.fim` batch calls (in parallel, real
-OS processes, since design §0.5), and the real filesystem, the same
-technical shape as `test/gui/test_runner.py`.
+OS processes, `doc/fim-gui-design.md` §7.2), and the real filesystem, the
+same technical shape as `test/gui/test_runner.py`.
 
 <a id="gui.test_batch_runner.batch_params"></a>
 
@@ -3767,8 +3761,8 @@ The published `replicate-*` set matches the manifest, adaptive stop included.
 
 Direct mirror of `cli.py`'s own
 `test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_
-directories` (regression fix S1): under real parallelism (design
-§0.5), `fim.engine._run_batch_parallel` applies an adaptive
+directories`: under real parallelism,
+`fim.engine._run_batch_parallel` applies an adaptive
 `replicate_tolerance` stop only after a whole concurrent worker wave
 completes, in ascending replicate order — a worker beyond the
 replicate that triggered the stop still runs to completion and fully
@@ -3803,14 +3797,14 @@ def test_cancel_during_batch_leaves_no_output_directory(
 A batch cancelled before it ever writes leaves no output directory at all.
 
 The batch-level parallel to `test/gui/test_runner.py`'s
-`test_cancel_during_run_leaves_no_output_directory` (design doc
-§6.4, plan §7.6's fifth and final bullet): `cancel_event` is set
+`test_cancel_during_run_leaves_no_output_directory`
+(`doc/fim-gui-design.md` §7.2): `cancel_event` is set
 *before* `start_batch_run` is even called, so the first
 replicate's very first `write_generation` call — generation 0,
 made unconditionally before that replicate's convergence loop
 begins — already observes it and raises `RunCancelledError`
-deterministically, without any wall-clock race (§6.1). "Cancel
-batch" stops the whole batch, not one replicate (design §4.0 `6`):
+deterministically, without any wall-clock race. "Cancel
+batch" stops the whole batch, not one replicate:
 there is no partial-batch save point to preserve, so this asserts
 the same "nothing at all" outcome a mid-first-replicate
 cancellation and a mid-third-replicate cancellation would both
@@ -3827,7 +3821,7 @@ def test_default_max_workers_matches_cpu_count() -> None
 
 The GUI's default batch worker count matches `cli._cpu_count()`'s own logic.
 
-Direct regression test for H5 (design §0.5): the GUI's default is
+Direct regression test: the GUI's default is
 never silently weaker than the CLI's own default.
 
 <a id="gui.test_batch_runner.test_start_batch_run_passes_a_real_worker_count_to_fim"></a>
@@ -3843,7 +3837,7 @@ def test_start_batch_run_passes_a_real_worker_count_to_fim(
 `max_workers=None` resolves to `default_max_workers()`, never stays `None`.
 
 Direct regression test for the sequential-only gap this whole
-reconsideration started from (design §0.5): `fim.engine.fim`'s own
+reconsideration started from: `fim.engine.fim`'s own
 `max_workers=None` means "run sequentially, in-process" — the exact
 behavior `start_batch_run` must never silently fall back to.
 
@@ -3908,7 +3902,7 @@ independent of any one platform's own process-startup speed.
 # gui.test\_batch\_running
 
 Headless functional proof that a real batch run reaches the bridge end to end
-(design doc §0.5, §3.4, §7.6).
+(`doc/fim-gui-design.md` §7.2).
 
 Milestone W5's backend half: `Api.start_run` dispatching to `fim.gui.
 batch_runner.start_batch_run` and `fim.gui.app._drain_batch_messages`
@@ -3923,8 +3917,8 @@ Milestone W5's remaining, separate piece — `webui/app.js`'s own
 `onBatchProgress`/`onBatchDone`/`onBatchCancelled`/`onBatchError` are
 still no-op stubs at this point (the same walking-skeleton precedent
 Milestone W1 set for the scalar handlers), so this test observes the
-pipeline through `Api`'s own `on_message` hook (design §3.4's "push,
-not poll," extended to how a test observes a run — see `test/gui/
+pipeline through `Api`'s own `on_message` hook -- push,
+not poll, extended to how a test observes a run — see `test/gui/
 test_running_screen.py`'s own module docstring for why a DOM-polling
 test-driving loop is the wrong tool here) rather than by reading DOM
 state a screen that does not exist yet would have rendered.
@@ -3956,8 +3950,8 @@ handler would raise inside `_drain_batch_messages` first, and
 
 Unit tests for all six tabs' marshaling (no Tk).
 
-`test_config_form_round_trips_starter_config` is the design doc's own
-named test (§6.3) — every tab now exists, so `starter_form_values()`'s
+`test_config_form_round_trips_starter_config` is this package's own
+named regression test — every tab now exists, so `starter_form_values()`'s
 output round-trips through `form_values_to_payload` back into an
 equivalent `SimulationParams`.
 
@@ -3991,7 +3985,7 @@ def test_config_form_round_trips_starter_config() -> None
 
 `starter_form_values()` round-trips into an equivalent `SimulationParams`.
 
-The design doc's own named test (§6.3), reachable only once every
+Reachable only once every
 tab exists — `form_values_to_payload` now covers every key
 `SimulationParams.from_mapping` requires.
 
@@ -4111,8 +4105,8 @@ def test_form_values_to_payload_accepts_a_per_locus_length_list() -> None
 
 A comma-separated `locus_lengths` derives `n_loci` from its own item count.
 
-The cardinality rule's O(loci) case (§3.6), the design doc's own
-named test's counterpart for `locus_lengths` rather than a
+The cardinality rule's O(loci) case (`doc/fim-gui-design.md` §6.1),
+this package's own named test's counterpart for `locus_lengths` rather than a
 per-locus `mu` list — this form has no such widget (G11 scopes
 `mu`/`mu_b` to shared scalars only; see `mu_from_params`'s own
 per-locus rejection below).
@@ -4178,7 +4172,7 @@ def test_mu_to_payload_mu_mode_returns_a_bare_mu_key() -> None
 def test_mu_to_payload_mu_b_mode_returns_a_bare_mu_b_key() -> None
 ```
 
-`mu_b` mode submits `{"mu_b": ...}` only — exclusive with `mu` (§4.0 `4`).
+`mu_b` mode submits `{"mu_b": ...}` only — exclusive with `mu`.
 
 <a id="gui.test_config_form.test_mu_to_payload_rejects_an_unknown_mode"></a>
 
@@ -4420,7 +4414,7 @@ from an existing one without it would silently reintroduce the gap.
 
 # gui.test\_help\_screen
 
-Headless functional tests for the Help screen (in-app help design §4.4).
+Headless functional tests for the Help screen (doc/fim-gui-design.md §11).
 
 <a id="gui.test_help_screen.test_help_screen_shows_usage_and_back_returns_to_the_prior_screen"></a>
 
@@ -4481,7 +4475,7 @@ def test_help_screen_returns_to_results_when_opened_from_there(
 Back returns to Results, not a fixed default, when Help was opened from there.
 
 The one genuinely new interaction Help adds relative to every other
-screen's own fixed-target "Back" button (design §4.4): recording
+screen's own fixed-target "Back" button: recording
 *whichever* screen was showing, not always the same one.
 
 
@@ -4492,8 +4486,7 @@ screen's own fixed-target "Back" button (design §4.4): recording
 
 Headless functional tests for the unified run view's own configuration
 side -- the Configure menu's modals/value-selectors and the always-
-present controls (design doc §4.1, §6.4; unified-run-view design §3.1,
-§8 Phase E).
+present controls (`doc/fim-gui-design.md` §5.2, §6).
 
 Real DOM-driven proof that `webui/screens/config-modals.js`/`run-view-
 controls.js`/`run-view-initial.js` actually wire the page correctly —
@@ -4580,10 +4573,10 @@ def test_input_screen_switches_to_the_tab_with_an_invalid_field(
 
 Clicking "Run simulation" with an invalid Migration field opens that modal.
 
-Direct regression test for design §4.0 `2` ("every tab with an
-invalid field shows a small error dot... the disabled Run button
-always shows a one-line reason") — the modal-opening specifically
-(design §3.1/§8 Phase B: Migration is now a `<dialog>`, not a
+Direct regression test: every tab with an
+invalid field shows a small error dot, and the disabled Run button
+always shows a one-line reason — the modal-opening specifically
+(Migration is now a `<dialog>`, not a
 tab-panel), since `test_app_api.py` already proves the bridge's own
 `tab`/`field` values are correct. No `input` event needs dispatching
 first: `onRunClicked` calls `revalidate()` itself, which reads the
@@ -4601,8 +4594,8 @@ def test_menu_new_configuration_resets_an_edited_field(
 
 `fim.menu.newConfiguration` resets the form to starter values.
 
-The one behavioral difference from the existing "New run" buttons
-(in-app help design §4.5): those only navigate back to Screen 1,
+The one behavioral difference from the existing "New run" buttons:
+those only navigate back to Screen 1,
 leaving whatever was already in the form; the menu's own "New
 configuration" genuinely resets it, the same way a fresh app
 launch's own `initializeInputScreen` does — this test exists
@@ -4638,8 +4631,8 @@ def test_menu_configure_tab_switches_tabs_without_resetting_the_form(
 
 `fim.menu.configureTab` (the native Configure menu) opens a modal, no reset.
 
-Every section is now a `<dialog>`, not a tab-panel (design §3.1,
-§8 Phase A/B) — `test_configure_population_opens_a_modal_without_
+Every section is now a `<dialog>`, not a tab-panel —
+`test_configure_population_opens_a_modal_without_
 navigating_away` already proves the modal opens without navigating
 away; this test's own remaining job is the one behavioral contract
 that distinguishes `configureTab` from `newConfiguration`: an edited
@@ -4659,7 +4652,7 @@ def test_every_configure_section_has_its_own_modal(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-All six sections open their own `modal-<name>` dialog (design §8 Phase B).
+All six sections open their own `modal-<name>` dialog.
 
 Population and Migration each already have their own dedicated test
 above; this one instead sweeps all six in a single `drive()` call
@@ -4676,7 +4669,7 @@ def test_menu_set_deme_weighting_updates_the_field_without_a_modal(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-`fim.menu.setDemeWeighting` sets the field directly (design §3.1.3).
+`fim.menu.setDemeWeighting` sets the field directly, without opening a modal.
 
 <a id="gui.test_input_screen.test_menu_set_mutation_model_updates_the_field_without_a_modal"></a>
 
@@ -4687,7 +4680,7 @@ def test_menu_set_mutation_model_updates_the_field_without_a_modal(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-`fim.menu.setMutationModel` sets the field directly (design §3.1.3).
+`fim.menu.setMutationModel` sets the field directly, without opening a modal.
 
 <a id="gui.test_input_screen.test_menu_toggle_convergence_statistic_adds_to_the_set"></a>
 
@@ -4702,8 +4695,8 @@ def test_menu_toggle_convergence_statistic_adds_to_the_set(
 
 The starter form has only `cs_D` checked. Toggling `cs_G_ST` on must
 leave `cs_D` checked too — an exclusive pick here would silently
-discard whatever combination was already configured (design §3.1.3,
-`app.py`'s own `_build_menu` docstring has the full reasoning) — and
+discard whatever combination was already configured
+(`app.py`'s own `_build_menu` docstring has the full reasoning) — and
 checking two statistics is exactly what makes the combinator field
 appear, proving `syncConditionalVisibility` ran as a side effect too.
 
@@ -4716,16 +4709,16 @@ def test_configure_population_opens_a_modal_without_navigating_away(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Configure > Population floats a modal over the run view (design §3.1/§8 Phase A).
+Configure > Population floats a modal over the run view.
 
-The Phase A proof-of-concept this test exists for: Population is the
-first (of eventually six, §8 Phase B) tab-panel converted to a native
+Population is the first of six sections converted to a native
 `<dialog>`. Asserted against `runViewState` staying untouched, not
 just `screen-run` staying visible -- the bug this whole redesign
 responds to was the old `configureTab` calling `showScreen(
 "screen-input")` first, discarding whatever the user was looking at
-(a live run, a completed result); the merged run view (design §8
-Phase E) makes "which screen is visible" trivially true on its own
+(a live run, a completed result); the merged run view
+(`doc/fim-gui-design.md` §5.1) makes "which screen is visible"
+trivially true on its own
 (there is only one to navigate away from), so the state itself is
 the assertion that still has teeth.
 
@@ -4738,7 +4731,7 @@ def test_configure_population_modal_close_button_closes_it(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-The modal's own close button closes it (design §3.1.1's backdrop/close wiring).
+The modal's own close button closes it (`fim.wireModal`'s backdrop/close wiring).
 
 Escape and backdrop-click are the browser's own native `<dialog>`
 behavior (not exercised here — a synthetic, untrusted `keydown` does
@@ -4800,8 +4793,8 @@ starts at its own initial `0` regardless.
 
 # gui.test\_open\_run\_screen
 
-Headless functional tests for Screen 6, opening an existing run (design
-doc §4.6, §7.7).
+Headless functional tests for Screen 6, opening an existing run
+(`doc/fim-gui-design.md` §9).
 
 Real DOM-driven proof that the File menu's "Open run…" action reaches
 Screen 6, that Screen 6's recent-runs list is populated from a real, completed
@@ -4895,9 +4888,9 @@ Design doc's own named test: results come back newest `ended_at` first.
 def test_recent_runs_labels_batch_manifests_as_batch(tmp_path: Path) -> None
 ```
 
-Design doc's own named test: a batch manifest is listed, labeled distinctly.
+A batch manifest is listed, labeled distinctly, not offered for direct opening.
 
-Not offered to Screen 3 directly (design §0, §4.0 `9`, §4.6) —
+Not offered to Screen 3 directly (`doc/fim-gui-design.md` §9) —
 `is_batch` is the flag Screen 6 uses to refuse opening it the same
 way a scalar run is opened.
 
@@ -4951,8 +4944,7 @@ Omitting `results_directory` resolves through `fim.paths.results_directory`.
 # gui.test\_results\_screen
 
 Headless functional tests for the unified run view's own `completed`
-state, scalar case (design doc §4.3, §6.4; unified-run-view design
-§3.2.4, §8 Phase E).
+state, scalar case (`doc/fim-gui-design.md` §5.2).
 
 Real DOM-driven proof that a completed scalar run actually reaches
 `fim.enterCompletedState` (`webui/screens/run-view-completed.js`) and
@@ -5011,13 +5003,13 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
 ```
 
 Selecting a pair, then selecting back to the default, round-trips
-through the real bridge (simplify-main-plot design: no "Show overview"
+through the real bridge (no "Show overview"
 button any more — the selectors themselves are the only way to change
 which pair is shown).
 
 `d=3` (one deme past the default's own "Deme 1 vs Deme 2" panel —
-large `d` also defaults to a Deme-1-vs-Deme-2 panel, unified-run-view
-design §3.6, but the selector itself does not care which `d` produced
+large `d` also defaults to a Deme-1-vs-Deme-2 panel,
+but the selector itself does not care which `d` produced
 the default panel, so this smaller, faster configuration exercises
 the same bridge round trip a `d=20` run would): selecting Deme 1 vs
 Deme 3 redraws the canvas via a real `Api.get_deme_pair_panel` call,
@@ -5042,10 +5034,10 @@ def test_running_simulation_again_from_completed_starts_a_new_run(
 
 "Run simulation," clicked again from `completed`, starts a genuinely new run.
 
-Design §3.2.1's own `completed → initial → running` transition: a
-fresh "Run simulation" click reuses the current form values with no
-separate "New run"/reset step needed (retired this phase, design
-§8 Phase E — the shared controls are always present, so the same
+The unified run view's own `completed → initial → running`
+transition: a fresh "Run simulation" click reuses the current form
+values with no separate "New run"/reset step needed (the shared
+controls are always present, so the same
 button that started the first run is already right there). Proven
 by the *output directory* changing between the two completed views,
 not just by `completed` being reached again — a stale DOM left over
@@ -5102,16 +5094,15 @@ recorded path is the icing.
 Unit and integration tests for `fim.gui.runner`.
 
 No Tk import and no display needed anywhere in this file: `ProgressThrottle`
-is a pure clock-driven predicate (§6.3), and `start_run`'s tests exercise a
+is a pure clock-driven predicate, and `start_run`'s tests exercise a
 real background thread, a real `fim.engine.fim` call, and the real
 filesystem directly — the `gui` pytest marker (this project's own,
 "constructs real Tk widgets; needs a display") does not apply to any of it.
 Nothing here sleeps or races on wall-clock timing (the determinism
-contract, design doc §6.1).
+contract, `doc/fim-gui-design.md` §7.1).
 
-`test_cancel_during_run_leaves_no_output_directory`, the dedicated
-integration test design §7.4's fourth bullet names, lives in its own
-commit and is not part of this file.
+`test_cancel_during_run_leaves_no_output_directory`, a dedicated
+integration test, lives in its own commit and is not part of this file.
 
 <a id="gui.test_runner.test_progress_throttle_always_reports_the_final_generation"></a>
 
@@ -5214,14 +5205,13 @@ def test_cancel_during_run_leaves_no_output_directory(
 
 A run cancelled before it ever writes leaves no output directory at all.
 
-The one true integration test in this layer (design doc §6.4, plan
-§7.4's fourth bullet): `cancel_event` is set *before* `start_run` is
+The one true integration test in this layer: `cancel_event` is set
+*before* `start_run` is
 even called, so the worker's very first `write_generation` call —
 generation 0, made unconditionally before the convergence loop
 begins — already observes it and raises `RunCancelledError`
-deterministically, without any wall-clock race. Design §6.4 lists
-this test under its "marked gui" heading, but it constructs no Tk
-widget and needs no display — a real background thread, a real
+deterministically, without any wall-clock race. This test constructs
+no Tk widget and needs no display — a real background thread, a real
 `fim.engine.fim` call, and the real filesystem are the whole test —
 so it stays here, unmarked, alongside every other test in this file
 that shares exactly that same technical shape, rather than
@@ -5240,8 +5230,9 @@ because `fim.paths.atomic_directory` alone is responsible for it.
 
 # gui.test\_running\_screen
 
-Headless functional tests for Screen 2, the running screen (design doc
-§0.5, §4.2, §6.4).
+Headless functional tests for Screen 2, the running screen.
+
+(`doc/fim-gui-design.md` §5.2.)
 
 Real DOM-driven proof that clicking "Run simulation" actually starts a
 real background run (`fim.gui.runner.start_run`, unchanged from the
@@ -5301,8 +5292,8 @@ suite's own rapid succession of runs.
 The `on_run_started`/`on_message` hooks stayed even once the real cause
 was found: waiting on a plain `threading.Event` a real background thread
 sets, rather than polling `window.evaluate_js` for the same fact, is a
-strictly better test-driving shape on its own merits (design §3.4's own
-"push, not poll," extended to how a test observes a run) — it just was
+strictly better test-driving shape on its own merits -- push, not poll,
+extended to how a test observes a run -- it just was
 not, on its own, the fix for this specific failure.
 
 <a id="gui.test_running_screen.test_run_button_starts_a_real_run_that_pushes_live_progress"></a>
@@ -5400,8 +5391,8 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run(
 
 Same starter-`d`-plus-`_SET_UNREACHABLE_CONVERGENCE` setup as the
 Cancel test above (`d=20`, past `scatter.PAIRWISE_MAX_DEMES`, so the
-default live view is one Deme-1-vs-Deme-2 panel, unified-run-view
-design §3.6 — "Show pair" (Deme 1 vs Deme 3) should still look
+default live view is one Deme-1-vs-Deme-2 panel —
+"Show pair" (Deme 1 vs Deme 3) should still look
 different from it) and the same reasoning for using it: that
 constant's own comment records a real, confirmed defect an earlier
 version of this test could have hit too (the starter form's own
@@ -5465,8 +5456,7 @@ Unit tests for `GuiProgressStore`, `LiveProgressStore`, and `RunCancelledError`.
 No display, no Tk import, no thread and no real subprocess — each
 decorator's contract is exercised against an `InMemoryTrajectoryStore`
 fake (or, for `LiveProgressStore`, plain files under `tmp_path`), one
-method call at a time (design doc §6.3; `LiveProgressStore`'s own tests
-per §0.5/§3.4's revision).
+method call at a time (`doc/fim-gui-design.md` §7).
 
 <a id="gui.test_store.test_gui_progress_store_calls_on_generation_once_per_write"></a>
 
@@ -5489,7 +5479,7 @@ def test_gui_progress_store_passes_the_generation_own_rows_to_on_generation(
 
 `on_generation` receives that generation's real rows, not just its number.
 
-Direct regression test for design §0.5: the scalar run screen's live
+Direct regression test: the scalar run screen's live
 scatter needs the actual frequency data, and there is no trajectory
 file path the caller could otherwise re-read it from (the temporary
 working directory `fim.paths.atomic_directory` builds is private to
@@ -5582,8 +5572,8 @@ def test_live_progress_store_raises_when_the_shared_cancel_file_exists(
 
 A cancel file's mere existence turns the next write into `RunCancelledError`.
 
-Direct regression test for the cross-process cancellation contract
-(design §0.5, §3.4): unlike `GuiProgressStore`'s `threading.Event`,
+Direct regression test for the cross-process cancellation contract:
+unlike `GuiProgressStore`'s `threading.Event`,
 the signal here is a plain file another process created — its
 *content* is never inspected, only whether it exists.
 
@@ -5651,8 +5641,8 @@ The sidecar's timestamp brackets the actual write, for concurrency proofs.
 Not a race-prone timing assertion (project CLAUDE.md's determinism
 contract) — a generous bound proving the recorded timestamp is a
 real observation of *this* write, which is what
-`test_batch_replicates_actually_run_concurrently`-style tests (design
-§6.4) rely on to prove real concurrency structurally.
+`test_batch_replicates_actually_run_concurrently`-style tests rely
+on to prove real concurrency structurally.
 
 <a id="gui.test_store.test_read_live_state_reconstructs_a_sidecar_confirmed_generation"></a>
 
@@ -7736,8 +7726,7 @@ def test_verify_trajectory_integrity_accepts_a_matching_digest(
 
 A trajectory whose digest matches its manifest passes silently.
 
-Regression proof for Milestone G0 (design doc
-`20260819-claude-sonnet-5-graphical-interface.md` §3.7, §3.8, §6.3):
+Regression proof for Milestone G0 (`doc/fim-gui-design.md` §12):
 the relocated `verify_trajectory_integrity` reproduces
 `cli._verify_trajectory_integrity`'s exact prior behavior.
 
@@ -7804,9 +7793,9 @@ def test_write_report_matches_previous_cli_json_formatting(
 
 `write_report` reproduces `cli.py`'s pre-extraction JSON formatting.
 
-Regression proof for Milestone G0 (design doc
-`20260819-claude-sonnet-5-graphical-interface.md` §3.7, §6.3): sorted
-keys, two-space indent, trailing newline, no `NaN`/`Infinity`.
+Regression proof for Milestone G0 (`doc/fim-gui-design.md` §12):
+sorted keys, two-space indent, trailing newline, no
+`NaN`/`Infinity`.
 
 <a id="persistence.test_report.test_write_report_creates_parent_directories"></a>
 
@@ -9743,8 +9732,7 @@ def test_install_script_never_requires_root() -> None
 
 No `sudo` anywhere -- everything installs under the user's home.
 
-Design doc 20260821-claude-sonnet-5-macos-linux-packaging.md §3.5:
-matches how rustup/uv behave, and avoids the trust escalation a
+Matches how rustup/uv behave, and avoids the trust escalation a
 piped-to-a-privileged-shell install would ask a first-time academic
 user for.
 
@@ -9774,7 +9762,7 @@ def test_install_script_rejects_non_linux_and_non_x86_64() -> None
 
 The script fails clearly on an unsupported OS or architecture.
 
-Only a Linux/x86_64 binary is built (design doc §3.6); running this
+Only a Linux/x86_64 binary is built; running this
 on macOS or an arm64 Linux machine must not silently attempt (and
 fail) a download of an asset that does not exist.
 
@@ -9790,7 +9778,7 @@ def test_install_script_installs_both_entry_points() -> None
 
 `fim-gui` is a thin wrapper invoking the same binary's `--graphical`
 flag rather than a second downloaded artifact -- there is only ever
-one binary for Linux (design doc §3.5).
+one binary for Linux.
 
 <a id="validation.test_install_sh.test_install_script_writes_a_desktop_entry"></a>
 
@@ -9804,7 +9792,7 @@ A `.desktop` file is installed, not just a PATH-only command.
 
 The piece CLI-only install-script templates (rustup, uv) skip and
 this GUI actually needs, so `fim-gui` shows up in a real application
-menu (design doc §3.5).
+menu.
 
 <a id="validation.test_install_sh.test_install_script_warns_when_the_install_dir_is_not_on_path"></a>
 
@@ -9927,8 +9915,7 @@ def test_macos_bundle_wraps_a_collected_onedir_build() -> None
 
 The macOS `.app` uses onedir mode, not onefile-plus-`BUNDLE`.
 
-Design doc 20260821-claude-sonnet-5-macos-linux-packaging.md §3.2:
-combining PyInstaller's single-file (onefile) `EXE()` output with
+Combining PyInstaller's single-file (onefile) `EXE()` output with
 `BUNDLE()` is deprecated as of PyInstaller 6.x ("a .app bundle can
 not be a single file... will become an error in v7.0") — confirmed
 against a real local build before this test was written. `COLLECT`
@@ -11194,7 +11181,7 @@ def test_large_dimensions_default_to_the_first_deme_pair() -> None
 
 Large `d` defaults to one explicit pair, not a PCA projection.
 
-Unified-run-view design §3.6: dropped as the CLI's own default for
+Dropped as the CLI's own default for
 the same reasons `panels_from_points` dropped it as the GUI's —
 `_plot_pca` itself is unchanged and still directly reachable, see
 `test_pca_is_still_directly_reachable_for_a_large_dimension` below.
@@ -11210,7 +11197,7 @@ def test_pca_is_still_directly_reachable_for_a_large_dimension() -> None
 `_plot_pca` itself is unchanged — no longer the CLI's default, still callable.
 
 Direct regression proof for the "PCA is not deleted, only demoted"
-half of design §3.6's decision: calling it directly on the same
+decision: calling it directly on the same
 seven-deme points `plot_frequency_scatter` no longer routes there
 reproduces exactly what that branch used to render.
 
@@ -11226,8 +11213,8 @@ A one-row point matrix (every deme fixed for the same allele) skips SVD.
 
 `numpy.linalg.svd` is not called at all when there is only one
 (locus, allele) point to project — `_plot_pca` special-cases it to
-avoid a degenerate decomposition. Called directly (design §3.6:
-`plot_frequency_scatter` no longer reaches `_plot_pca` for any `d`),
+avoid a degenerate decomposition. Called directly (`plot_frequency_
+scatter` no longer reaches `_plot_pca` for any `d`),
 matching `test_pca_is_still_directly_reachable_for_a_large_dimension`
 above; fixing every deme for the same single allele collapses the
 whole state to exactly one point.
@@ -11320,7 +11307,7 @@ one.
 def test_frequency_points_shape_is_locus_allele_rows_by_deme_columns() -> None
 ```
 
-Public data function (graphical-interface migration §3.3): shape and content.
+Public data function (`doc/fim-gui-design.md` §12): shape and content.
 
 Direct regression test that the GUI's own bridge can rely on this
 function without ever building a `Figure` — no `matplotlib.pyplot`
@@ -11376,7 +11363,7 @@ def test_grouped_points_matches_marker_groups_exactly() -> None
 `marker_groups` is now a thin reshaping of `grouped_points` — proven directly.
 
 Regression test for the refactor introduced alongside `scatter_
-panels` (graphical-interface migration §3.5): the two functions'
+panels`: the two functions'
 grouping must never silently drift apart, since `marker_groups` is
 implemented in terms of `grouped_points` specifically to make that
 impossible by construction.
@@ -11428,7 +11415,7 @@ def test_scatter_panels_large_d_defaults_to_the_first_deme_pair() -> None
 
 `d > pairwise_max_demes` also produces one frequency panel, demes 1 and 2.
 
-Not a PCA projection (unified-run-view design §3.6) — `pca_project`/
+Not a PCA projection — `pca_project`/
 `pca_summary`/`pca_axis_labels` are unchanged and still directly
 testable (`test_pca_project_matches_the_rendered_pca_plot` and the
 `pca_summary`/`pca_axis_labels` tests below); only this dispatch's
@@ -11583,10 +11570,10 @@ def test_pca_project_matches_the_rendered_pca_plot() -> None
 `pca_project`'s standalone output matches what `_plot_pca` actually draws.
 
 Direct regression test that factoring the SVD out of `_plot_pca` and
-into `pca_project` (graphical-interface migration §3.5) changed
+into `pca_project` changed
 nothing about the rendered figure. Calls `_plot_pca` directly rather
-than through `plot_frequency_scatter` (unified-run-view design §3.6:
-that dispatch no longer reaches PCA for any `d`).
+than through `plot_frequency_scatter` (that dispatch no longer
+reaches PCA for any `d`).
 
 <a id="viz.test_plots.test_pca_project_handles_a_single_point_without_svd"></a>
 

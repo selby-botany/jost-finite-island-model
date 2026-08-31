@@ -1,19 +1,17 @@
 """Unit tests for the packaged single-exe's GUI/CLI dispatch.
 
-No subprocess and no real PyInstaller build (§6.5's packaging smoke
+No subprocess and no real PyInstaller build (the packaging smoke
 layer owns that): these exercise `fim.launcher.main`'s branching logic
 directly, with `fim.cli.main`, `fim.gui.app.main`, and
 `subprocess.Popen` replaced by recording stubs so a real simulation
 run, a real `Tk` root, or a real detached process is never built here.
-Design doc `20260819-claude-sonnet-5-graphical-interface.md` §7.9's own
-commit bullets: "explicit regression test that every existing
-non-empty-argv CLI invocation still reaches `fim.cli.main` unchanged"
-and "unit tests for all four cases: `--graphical` alone (foreground
-GUI, no `subprocess.Popen` call), `--graphical --detach`/`--detach
---graphical` (asserts the exact `subprocess.Popen` argv and
-`start_new_session=True`, mocked), `--detach` alone (exit status 2,
-the clear usage error), and every existing subcommand/flag combination
-still reaching `fim.cli.main` unchanged."
+Covers every existing non-empty-argv CLI invocation still reaching
+`fim.cli.main` unchanged, and all four dispatch cases: `--graphical`
+alone (foreground GUI, no `subprocess.Popen` call), `--graphical
+--detach`/`--detach --graphical` (asserts the exact `subprocess.Popen`
+argv and `start_new_session=True`, mocked), `--detach` alone (exit
+status 2, the clear usage error), and every existing subcommand/flag
+combination still reaching `fim.cli.main` unchanged.
 
 The Windows-only `FreeConsole` mechanic is exercised at the end of this
 file rather than beside the flag-parsing tests above — it fires from

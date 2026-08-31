@@ -2,8 +2,8 @@
 
 No Tk import and no display needed anywhere in this file — real
 background threads, real `fim.engine.fim` batch calls (in parallel, real
-OS processes, since design §0.5), and the real filesystem, the same
-technical shape as `test/gui/test_runner.py`.
+OS processes, `doc/fim-gui-design.md` §7.2), and the real filesystem, the
+same technical shape as `test/gui/test_runner.py`.
 """
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
     }
     for index in (1, 2, 3):
         replicate_directory = output_directory / f"replicate-{index:03}"
-        # `.progress` is a GUI-only sidecar (design §0.5) removed once a
+        # `.progress` is a GUI-only sidecar removed once a
         # replicate's real artifacts are written — the published set
         # stays exactly the CLI's own four-file contract, nothing extra
         # left behind.
@@ -102,8 +102,8 @@ def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
             "report.json",
             "scatter.png",
         }
-    # Progress no longer travels through `message_queue` at all (design
-    # §0.5, §3.4): it is entirely file-mediated now, so a successful
+    # Progress no longer travels through `message_queue` at all
+    # (`doc/fim-gui-design.md` §7.2): it is entirely file-mediated now, so a successful
     # batch posts exactly two messages — `"started"` (the parent-side
     # poller's own only way to learn the hidden working directory, since
     # its random `mkdtemp` suffix is not derivable from `output_
@@ -176,8 +176,8 @@ def test_start_batch_run_prunes_orphan_replicate_directories(
 
     Direct mirror of `cli.py`'s own
     `test_run_batch_parallel_adaptive_stop_leaves_no_orphan_replicate_
-    directories` (regression fix S1): under real parallelism (design
-    §0.5), `fim.engine._run_batch_parallel` applies an adaptive
+    directories`: under real parallelism,
+    `fim.engine._run_batch_parallel` applies an adaptive
     `replicate_tolerance` stop only after a whole concurrent worker wave
     completes, in ascending replicate order — a worker beyond the
     replicate that triggered the stop still runs to completion and fully
@@ -242,14 +242,14 @@ def test_cancel_during_batch_leaves_no_output_directory(
     """A batch cancelled before it ever writes leaves no output directory at all.
 
     The batch-level parallel to `test/gui/test_runner.py`'s
-    `test_cancel_during_run_leaves_no_output_directory` (design doc
-    §6.4, plan §7.6's fifth and final bullet): `cancel_event` is set
+    `test_cancel_during_run_leaves_no_output_directory`
+    (`doc/fim-gui-design.md` §7.2): `cancel_event` is set
     *before* `start_batch_run` is even called, so the first
     replicate's very first `write_generation` call — generation 0,
     made unconditionally before that replicate's convergence loop
     begins — already observes it and raises `RunCancelledError`
-    deterministically, without any wall-clock race (§6.1). "Cancel
-    batch" stops the whole batch, not one replicate (design §4.0 #6):
+    deterministically, without any wall-clock race. "Cancel
+    batch" stops the whole batch, not one replicate:
     there is no partial-batch save point to preserve, so this asserts
     the same "nothing at all" outcome a mid-first-replicate
     cancellation and a mid-third-replicate cancellation would both
@@ -280,7 +280,7 @@ def test_cancel_during_batch_leaves_no_output_directory(
 def test_default_max_workers_matches_cpu_count() -> None:
     """The GUI's default batch worker count matches `cli._cpu_count()`'s own logic.
 
-    Direct regression test for H5 (design §0.5): the GUI's default is
+    Direct regression test: the GUI's default is
     never silently weaker than the CLI's own default.
     """
     assert batch_runner.default_max_workers() == (os.cpu_count() or 1)
@@ -343,7 +343,7 @@ def test_start_batch_run_passes_a_real_worker_count_to_fim(
     """`max_workers=None` resolves to `default_max_workers()`, never stays `None`.
 
     Direct regression test for the sequential-only gap this whole
-    reconsideration started from (design §0.5): `fim.engine.fim`'s own
+    reconsideration started from: `fim.engine.fim`'s own
     `max_workers=None` means "run sequentially, in-process" — the exact
     behavior `start_batch_run` must never silently fall back to.
     """

@@ -1,6 +1,5 @@
 """Headless functional tests for the unified run view's own `completed`
-state, batch case (design doc §4.4, §7.6; unified-run-view design §3.2.5,
-§8 Phase E).
+state, batch case (`doc/fim-gui-design.md` §5.2).
 
 Real DOM-driven proof that a completed batch actually reaches
 `fim.enterCompletedState(payload, true)` (`webui/screens/run-view-
@@ -16,9 +15,10 @@ renders it — which no Python-only test can check.
 The scalar counterpart is `test/gui/test_results_screen.py`; the two
 files share the same element ids (`results-run-id`, `run-canvas`,
 `run-deme-pair-selector`, `open-folder-button`, ...) below `completed`,
-since `enterCompletedState` is the one shared entry point for both kinds
-of run (design §3.2.5's "one state model, not two"), branching internally
-on `isBatch` only for the statistics/table fields that actually differ.
+since `enterCompletedState` is the one shared entry point for both
+kinds of run -- one state model, not two (`doc/fim-gui-design.md`
+§5.2) -- branching internally on `isBatch` only for the
+statistics/table fields that actually differ.
 
 Drives a real, small (two-replicate) batch through the actual UI, the
 same tiny-scale `_SET_TINY_BATCH_FIELDS` `test/gui/test_batch_running.py`
@@ -99,8 +99,8 @@ def test_a_completed_batch_renders_the_run_view() -> None:
 
     Every one of the six named statistics gets a `.stats-table` row with
     a confidence interval in its hover tooltip (`buildCiMeter`/
-    `buildOmittedMeter` — design §4.4's "a statistic omitted from
-    summary.json still renders as explicitly omitted, not blank"), so
+    `buildOmittedMeter`: a statistic omitted from
+    `summary.json` still renders as explicitly omitted, not blank), so
     `#batch-results-summary-body` always has exactly six `<tr>` children
     regardless of which, if any, statistics `replicate_summary` actually
     defined for this particular run.
@@ -178,8 +178,7 @@ def test_a_completed_batch_renders_the_run_view() -> None:
 
 def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
     """Selecting a pair, then selecting back to the default, round-trips
-    through the real batch bridge (simplify-main-plot design: no "Show
-    overview" button any more).
+    through the real batch bridge (no "Show overview" button any more).
 
     The batch counterpart to `test_results_screen.py`'s own identically
     named scalar-run test — `d=3` past the default "Deme 1 vs Deme 2"
@@ -280,9 +279,9 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch() -> None:
 
     The batch counterpart to `test_results_screen.py`'s own `test_
     running_simulation_again_from_completed_starts_a_new_run` — no
-    separate "New run" button exists any more (retired this phase,
-    design §8 Phase E: the shared controls are always present, so the
-    same button that started the first batch is already right there).
+    separate "New run" button exists any more: the shared controls
+    are always present, so the same button that started the first
+    batch is already right there.
     Proven by the *output directory* changing between the two completed
     views, the same reason the scalar test gives: `deterministic_run_id
     (params)` is deliberately the same string for two batches of
@@ -354,7 +353,7 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
     The batch-results counterpart to `test_results_screen.py`'s own
     identically-named test — same shared `open-folder-button`/`window.
     __fimOpenFolderSettled` flag (one button now, regardless of scalar
-    or batch, design §8 Phase E), same injected-`open_folder` hook (so a
+    or batch), same injected-`open_folder` hook (so a
     real Finder/Explorer window never opens here either), same real,
     once-reproduced hang this closes: a click handler calling `window.
     pywebview.api.open_output_folder(...)` with nothing downstream

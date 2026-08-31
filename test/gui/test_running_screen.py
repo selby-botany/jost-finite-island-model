@@ -1,5 +1,6 @@
-"""Headless functional tests for Screen 2, the running screen (design doc
-§0.5, §4.2, §6.4).
+"""Headless functional tests for Screen 2, the running screen.
+
+(`doc/fim-gui-design.md` §5.2.)
 
 Real DOM-driven proof that clicking "Run simulation" actually starts a
 real background run (`fim.gui.runner.start_run`, unchanged from the
@@ -59,8 +60,8 @@ suite's own rapid succession of runs.
 The `on_run_started`/`on_message` hooks stayed even once the real cause
 was found: waiting on a plain `threading.Event` a real background thread
 sets, rather than polling `window.evaluate_js` for the same fact, is a
-strictly better test-driving shape on its own merits (design §3.4's own
-"push, not poll," extended to how a test observes a run) — it just was
+strictly better test-driving shape on its own merits -- push, not poll,
+extended to how a test observes a run -- it just was
 not, on its own, the fix for this specific failure.
 """
 
@@ -401,8 +402,8 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
 
     Same starter-`d`-plus-`_SET_UNREACHABLE_CONVERGENCE` setup as the
     Cancel test above (`d=20`, past `scatter.PAIRWISE_MAX_DEMES`, so the
-    default live view is one Deme-1-vs-Deme-2 panel, unified-run-view
-    design §3.6 — "Show pair" (Deme 1 vs Deme 3) should still look
+    default live view is one Deme-1-vs-Deme-2 panel —
+    "Show pair" (Deme 1 vs Deme 3) should still look
     different from it) and the same reasoning for using it: that
     constant's own comment records a real, confirmed defect an earlier
     version of this test could have hit too (the starter form's own

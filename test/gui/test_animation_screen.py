@@ -1,6 +1,5 @@
 """Headless functional tests for the unified run view's own scrubber,
-reached by opening a persisted run (design doc §3.8, §4.5, §7.7;
-unified-run-view design §3.2.4, §8 Phase E).
+reached by opening a persisted run (`doc/fim-gui-design.md` §5.2, §8).
 
 The separate "Animate" button and its own screen (`webui/screens/
 animation.js`) are retired this phase: there is no longer anything to
