@@ -57,7 +57,7 @@ jobs:
               libwebkit2gtk-4.1-0 libgirepository1.0-dev libcairo2-dev \
               pkg-config
       - run: python -m pip install -e ".[dev]"
-      # Split into two named, separately timed/budgeted steps (R19) rather
+      # Split into two named, separately timed/budgeted steps rather
       # than one opaque `./build --ci` step: the fast step re-runs the
       # same deterministic layer `--ci` also covers (`build`'s own
       # pyproject.toml-driven default marker filter, no coverage) purely
@@ -262,12 +262,11 @@ jobs:
               throw "Executable smoke artifact '$artifact' is empty"
             }
           }
-          # A startup smoke check, not a functional GUI test (design doc
-          # 20260821-claude-sonnet-5-graphical-interface.md §6.5): no
+          # A startup smoke check, not a functional GUI test: no
           # widget is driven here, only that the zero-argument launch
           # stays alive for a few seconds instead of crashing
           # immediately, proving WebView2 starts at all on this runner
-          # image (§3.11's own open question for Windows).
+          # image.
           $guiProcess = Start-Process -FilePath .\dist\fim.exe -PassThru
           Start-Sleep -Seconds 5
           if ($guiProcess.HasExited) {
@@ -384,9 +383,8 @@ jobs:
   # actually running the build on a matching runner. `macos-13` (Intel)
   # was fully retired by GitHub in December 2025; `macos-15-intel` is the
   # current Intel label, confirmed against GitHub's own runner-images
-  # changelog (design doc
-  # 20260821-claude-sonnet-5-macos-linux-packaging.md §2) rather than
-  # assumed from older knowledge. Unlike Windows, macOS builds a real
+  # changelog rather than assumed from older knowledge. Unlike Windows,
+  # macOS builds a real
   # `.app` (packaging/fim.spec's `sys.platform == "darwin"` branch, onedir
   # plus `BUNDLE`) so Finder can double-click-launch it, then wraps that
   # in a `.dmg` for the drag-to-Applications install pattern macOS users
@@ -520,8 +518,7 @@ jobs:
             fim-macos-x64.dmg
             fim-macos-x64.dmg.sha256
 
-  # The single Linux release artifact install.sh downloads (design doc
-  # 20260821-claude-sonnet-5-macos-linux-packaging.md §3.5). Built inside
+  # The single Linux release artifact install.sh downloads. Built inside
   # `python:3.12-slim-bullseye`, not a bare `ubuntu-latest` runner and
   # not a `manylinux`-family image: a bare runner links against whatever
   # glibc that runner happens to ship, which can be newer than a user's

@@ -1,10 +1,9 @@
 name: Beta builds
 
-# Design doc 20260821-claude-sonnet-5-windows-beta-build-pipeline.md,
-# extended to cover every platform ci.yml's own tag-gated release path
-# now builds (macOS and Linux did not exist when that doc was written).
-# A separate workflow, not a broadened `if:` on ci.yml's own release
-# jobs: `publish` there hard-validates `GITHUB_REF_NAME` against
+# Builds a beta artifact for every platform ci.yml's own tag-gated
+# release path builds. A separate workflow, not a broadened `if:` on
+# ci.yml's own release jobs: `publish` there hard-validates
+# `GITHUB_REF_NAME` against
 # `^v[0-9]+\.[0-9]+\.[0-9]+$`, extracts release notes by looking that
 # exact version up in CHANGELOG.md, and names the GitHub Release after
 # it -- none of which has a meaningful value for a bare branch push, so
