@@ -93,6 +93,16 @@ logger = logging.getLogger(__name__)
 _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
 _TRAJECTORY_FILE_TYPES = ("trajectory.jsonl files (*.jsonl)", "All files (*.*)")
 
+# The macOS menu bar's own bold, leftmost app-name item (`_set_macos_
+# application_name`) and the window's own title bar text (`create_
+# window`) are two different, unrelated pieces of UI text -- deliberately
+# not the same string. The menu bar name stays short (matching a real
+# macOS app's own convention: "Safari," "Mail," never a parenthetical),
+# while the window title spells the project out for a user who has never
+# seen the abbreviation before.
+_MACOS_APPLICATION_NAME = "FIM"
+_WINDOW_TITLE = "Finite Island Model (fim)"
+
 # The existing `pyproject.toml` `[project.urls] Documentation` value,
 # reused rather than invented (doc/fim-gui-design.md §11) -- the Help
 # menu's own "Documentation on GitHub" item, and `get_about_info`'s own
@@ -1760,6 +1770,48 @@ def _worker_ping() -> str:
     return "pong from worker"
 
 
+def _set_macos_application_name(name: str) -> None:
+    """Rename this process's own app identity for the macOS menu bar.
+
+    Only macOS shows a per-process app name at all, as the bold,
+    leftmost item of the menu bar — sourced from the running process's
+    own bundle `CFBundleName`, never from anything `webview.create_
+    window`'s own `title` controls (that only ever reaches the window's
+    *title bar*, a separate piece of text — see `_WINDOW_TITLE`). A
+    plain, unbundled `python3` process's bundle is Python's own
+    framework bundle (`CFBundleName == "Python"`), which is exactly why
+    an unmodified `fim`/`fim-gui` run shows "python" there instead of
+    naming this application at all — nothing wrong with the window
+    itself, just an unrelated, unbundled process's own borrowed
+    identity leaking into a completely different piece of system UI.
+
+    Mutating `NSBundle.mainBundle()`'s own live info dictionary before
+    any window or menu is created is the documented workaround for
+    exactly this case (an unbundled pyobjc app): `webview.platforms.
+    cocoa` (imported the moment `webview.create_window` runs on macOS)
+    already mutates two *other* keys on this same dictionary object at
+    import time, for its own, unrelated reasons — confirming the same
+    live-mutation technique already works reliably for it, not a
+    speculative trick tried here for the first time.
+
+    A no-op everywhere except macOS (`AppKit` is a macOS-only optional
+    dependency `pywebview` pulls in only there — `pyproject.toml`'s own
+    platform markers), and tolerant of it being unavailable for any
+    other reason: a cosmetic menu-bar rename is never worth failing the
+    whole application over.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSBundle  # noqa: PLC0415 -- macOS-only
+    except ImportError:
+        return
+    bundle = NSBundle.mainBundle()
+    info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+    if info is not None:
+        info["CFBundleName"] = name
+
+
 def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Window:
     """Build, but do not show, fim's one pywebview window over `webui/index.html`.
 
@@ -1804,8 +1856,9 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     # handlers can outlive a closed Cocoa window and block Python's
     # interpreter shutdown in `wait_for_thread_shutdown`.
     ThreadingMixIn.daemon_threads = True
+    _set_macos_application_name(_MACOS_APPLICATION_NAME)
     created = webview.create_window(
-        "fim",
+        _WINDOW_TITLE,
         url=str(_webui_directory() / "index.html"),
         js_api=api if api is not None else Api(),
         width=900,

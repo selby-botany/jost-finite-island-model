@@ -436,7 +436,14 @@
     <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
 
-  <p id="bridge-status" class="bridge-status">Connecting…</p>
+  <!-- Not user-facing: `app.js`'s own automatic bootstrap still writes
+       the bridge's real connect/error status here for a test to read
+       (`test/gui/test_app.py`'s own proof that the bridge auto-connects
+       on page load, with no manually injected trigger), but the text
+       has no meaning to an end user, so it stays out of sight rather
+       than shown -- the same "still functional, not still shown"
+       precedent this file's own now-fully-retired tab bar established. -->
+  <p id="bridge-status" hidden>Connecting…</p>
 </div>
 <script src="app.js"></script>
 <script src="scatter.js"></script>

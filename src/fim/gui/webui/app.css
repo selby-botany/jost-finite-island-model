@@ -72,12 +72,6 @@ body {
     padding: 1rem;
 }
 
-.bridge-status {
-    color: var(--fim-muted);
-    font-size: 0.85rem;
-    margin-top: 1.5rem;
-}
-
 /* The six Configure-modal error dots (design §3.1) -- `hidden` on their
  * own `.error-dots` wrapper in `index.html` is enough to keep them out
  * of sight (the same "still functional, not still shown" precedent the

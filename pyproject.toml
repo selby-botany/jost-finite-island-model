@@ -162,6 +162,15 @@ warn_unreachable = true
 module = "mpl_toolkits.*"
 ignore_missing_imports = true
 
+# pyobjc (AppKit and friends) ships no py.typed marker or stubs, and is a
+# macOS-only optional dependency `pywebview` itself pulls in only there
+# (pyproject.toml's own `sys_platform != 'linux'` marker) -- `fim.gui.app.
+# _set_macos_application_name`'s own deferred, try/except-guarded import
+# is the only place this project imports it directly.
+[[tool.mypy.overrides]]
+module = "AppKit.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "-m 'not statistical and not slow and not packaging and not gui' --strict-config --strict-markers"
 testpaths = ["test"]
