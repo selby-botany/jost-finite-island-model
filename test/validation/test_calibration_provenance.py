@@ -1,4 +1,4 @@
-"""R18 remediation: the statistical calibration pass stays versioned and ungated."""
+"""The statistical calibration pass stays versioned and ungated."""
 
 from __future__ import annotations
 
@@ -18,10 +18,9 @@ EVIDENCE_DOC = PROJECT_ROOT / "doc" / "statistical-calibration-evidence.md"
 def test_calibration_script_is_not_wired_into_the_deterministic_gate() -> None:
     """`calibrate-statistical-bands` is never invoked by `build` or `ci.yml`.
 
-    Regression guard for R18 (`doc/dev/20260818-claude-opus-5-project-
-    review-rollup.md`, not committed -- gitignored review material): "keep
-    characterization out of the deterministic PR gate." A characterization
-    pass is itself stochastic by design (that is the thing it measures),
+    Regression guard for the rule "keep characterization out of the
+    deterministic PR gate." A characterization pass is itself
+    stochastic by design (that is the thing it measures),
     so wiring it into `build --ci` or a CI step would make the gate a
     function of the run, not only the commit -- exactly what this
     project's test-determinism rule (CLAUDE.md: "a test is a pure function
@@ -56,7 +55,7 @@ def test_calibration_script_is_not_wired_into_the_deterministic_gate() -> None:
 def test_calibration_evidence_data_is_retained_and_versioned() -> None:
     """The characterization pass's generated data is retained and versioned.
 
-    Regression guard for R18: the `_SIGMA_*` constants in
+    Regression guard: the `_SIGMA_*` constants in
     `test_simulator_equilibrium.py` previously came from "an independent
     characterization pass" named only in a code comment -- no program,
     seeds, raw output, or environment fingerprint was ever retained. This

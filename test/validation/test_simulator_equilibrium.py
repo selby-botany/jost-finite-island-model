@@ -108,8 +108,8 @@ _ONE_OVER_N_TOL = 0.005
 # `d` and Whitlock (1992)'s own infinite-island (`d -> infinity`) closed-form
 # trajectory; the residual is O(1/d) and is ~2.075e-6 at d=100,000 for the
 # scenario `test_identity_recursion_reduces_to_whitlock_1992_infinite_island_
-# trajectory` uses (see that test's own docstring and `1121-citrus`'s
-# Whitlock design doc for the full six-row sweep this was measured from).
+# trajectory` uses (see that test's own docstring for the full six-row
+# sweep this was measured from).
 _ONE_OVER_D_TOL = 1e-5
 
 _CALIBRATION_DATA_PATH = Path(__file__).with_name(
@@ -856,8 +856,8 @@ def _run_engine_replicates(
     drift/migration/mutation trajectory essentially never produces, so the
     run always stops exactly at ``max_generations``. ``convergence_window =
     horizon + 1`` is the largest window `SimulationParams` accepts for this
-    ``max_generations`` (R23 rejects anything larger as structurally unable
-    to fill before the cap) — it still cannot fill until the very last
+    ``max_generations`` (validation rejects anything larger as structurally
+    unable to fill before the cap) — it still cannot fill until the very last
     recorded generation, one step too late to preempt the cap.
 
     The shared engine-running step behind both `_run_engine_pooled`
@@ -1014,8 +1014,9 @@ def test_mutation_survival_matches_brute_force_binomial_second_moment(
     including a high-``mu``, small-``population_size`` case
     (``mu=0.4, population_size=3``) where the omitted ``mu(1-mu)/N`` term
     is ``0.08`` against a base of ``0.36`` -- large enough that the
-    ``(1 - mu) ** 2`` approximation R3 replaced would fail this comparison
-    outright, not merely drift outside a statistical tolerance.
+    plain ``(1 - mu) ** 2`` approximation this exact term corrects would
+    fail this comparison outright, not merely drift outside a
+    statistical tolerance.
     """
     brute_force = math.fsum(
         math.comb(population_size, k)
@@ -1171,9 +1172,7 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
     exactly, just above) or in `test_crow_aoki_torus_scenario_via_engine`
     itself (which reproduces *this same* `G_ST ~= 0.32`-ish
     neighborhood, not the published `0.172`, when run long enough that
-    its own equilibration lag genuinely shrinks). See `1121-citrus`'s
-    Crow & Aoki torus-test-plan design doc for the fuller writeup of this
-    finding and what it revises about the Tier 2 test's own conclusion.
+    its own equilibration lag genuinely shrinks).
     """
     side_length = 3
     d = side_length * side_length
@@ -1245,8 +1244,7 @@ def test_stepping_stone_differentiation_is_at_least_the_island_models(
     strictly greater; `>=`, not `>`, is the correct assertion, and this
     is why `d=3` stays in the parametrization rather than being dropped
     as a redundant case. Every scenario here was computed and checked
-    directly before being written down (see `1121-citrus`'s design doc
-    for the full seven-scenario table).
+    directly before being written down.
     """
     within_star, between_star = _identity_fixed_point(
         population_size=population_size, m=m, mu=mu, d=d
@@ -1282,11 +1280,11 @@ def test_identity_recursion_reduces_to_whitlock_infinite_island_trajectory() -> 
     Checked here at `d=100,000` (negligible runtime -- `_iterate_
     identities` only takes 10 fixed steps regardless of `d`; only its
     per-step *coefficients* depend on `d`), well inside `_ONE_OVER_D_
-    TOL`. The full six-row `d` sweep (10 through 100,000) this bound and
-    its `O(1/d)` shape were measured from, plus the from-scratch
-    algebraic derivation of this exact reduction, are in `1121-citrus`'s
-    `dev/doc/apps/selby/jost-finite-island-model/20260830-claude-
-    sonnet-5-whitlock-1992-identity-recovery-test-plan.md`.
+    TOL`. This single large-`d` point is a spot check, not the full
+    sweep: the `O(1/d)` shape of the residual was confirmed separately
+    across a six-row `d` sweep (10 through 100,000) alongside a
+    from-scratch algebraic derivation of the reduction itself, not
+    reproduced here.
     """
     population_size = 100
     m = 0.05
@@ -1318,12 +1316,12 @@ def test_shannon_entropy_isolated_theta_convention_matches_identity_recursion() 
     dynamics`-family functions track is a heterozygosity-scale quantity,
     not an entropy-scale one) -- and no independent "published" isolated-
     population Shannon-entropy value in this project's own literature
-    trail either (see `1121-citrus`'s Chao-et-al-2015 findings doc). What
-    *is* checkable, and is the one thing every equilibrium Shannon-
-    entropy formula in `fim.statistics.differentiation` shares: the
-    ploidy conversion from Chao et al. (2015)'s own diploid-individual
-    `N` to this project's gene-copy `population_size`, `theta =
-    2*population_size*mu`. Checked here the same way it was checked
+    trail either. What *is* checkable, and is the one thing every
+    equilibrium Shannon-entropy formula in
+    `fim.statistics.differentiation` shares: the ploidy conversion from
+    Chao et al. (2015)'s own diploid-individual `N` to this project's
+    gene-copy `population_size`, `theta = 2*population_size*mu`. Checked
+    here the same way it was checked
     before ever writing `equilibrium_shannon_entropy_isolated`'s own
     docstring: run this module's own exact finite-N identity recursion
     isolated (`m=0`), convert its fixed-point identity to heterozygosity
@@ -1416,8 +1414,7 @@ def test_identity_recursion_d_and_g_st_are_non_increasing_in_migration() -> None
     single-seeded `fim()` engine runs compared with a fixed `1e-9`
     tolerance. That design cannot be ported as specified: it compares
     single stochastic realizations, not expectations, and gives each
-    of the five runs its own independent convergence horizon (see the
-    metamorphic-panel-investigation design doc for the full argument).
+    of the five runs its own independent convergence horizon.
     The oracle used here has neither problem — it is iterated to its
     own exact fixed point every time, with no seed and no replicate
     count involved, so this assertion can never flake — while still
@@ -1707,17 +1704,16 @@ def test_crow_aoki_torus_scenario_via_engine() -> None:
     (``Nm=1.0``, matching Crow & Aoki's own ``M``) -- Crow & Aoki (1984)
     Table 1's ``n=9, N=20, M=1.0, u=10⁻⁵`` row, published ``G_ST=0.172``.
     Source and citation confirmed directly against the paper's own full
-    text this session (`pnas00620-0169.pdf`); see `jost-finite-island-
-    model`'s own commits `d3adcf0`/`2dd1ea3` and `1121-citrus`'s Crow &
-    Aoki torus-test-plan design doc for the fuller citation history.
+    text (`pnas00620-0169.pdf`); see this project's own commits
+    `d3adcf0`/`2dd1ea3` for the fuller citation history.
 
     Unlike the three scenarios above, this one has no independent exact-
     recursion oracle to cross-check against: `_identity_fixed_point`'s own
     `_identity_coefficients` are specific to the symmetric island model
     (every deme migrates with every other deme equally), not to a torus
     lattice's four-nearest-neighbor structure, and deriving the
-    torus-specific equivalent was scoped separately (design doc "Tier 1")
-    and not built here. This test is therefore only a two-way check
+    torus-specific equivalent was scoped separately and not built here.
+    This test is therefore only a two-way check
     (engine against the literal published number, not engine-against-
     oracle-against-formula-against-published the way the three scenarios
     above are) -- a real, acknowledged gap in rigor relative to them, not

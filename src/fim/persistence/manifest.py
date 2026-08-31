@@ -276,7 +276,7 @@ def verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) ->
     re-analysis silently produce numbers for a file that is no longer
     what the run actually produced.
 
-    Regression fix for R7 (`cli.py`'s own history, predating this
+    Regression fix (`cli.py`'s own history, predating this
     extraction): an edited or truncated trajectory used to re-analyze
     silently under `fim stats`. The run that wrote `trajectory_path`
     also recorded its exact SHA-256 digest and byte count in
@@ -495,7 +495,7 @@ def _raise_missing_manifest_fields(
     A manifest missing only `schema_version`, with a recognizable
     `software_version` present, is not corrupt — it predates the
     manifest schema-version contract this project added after 1.0.0,
-    the only version ever released (R7). Naming that explicitly, rather
+    the only version ever released. Naming that explicitly, rather
     than only the JSON key that happens to be absent, points at the
     actual cause: there is no automated migration for a pre-schema-
     version manifest, so re-running the same configuration with the

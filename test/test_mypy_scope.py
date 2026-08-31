@@ -32,7 +32,7 @@ def _mypy_config() -> dict[str, object]:
 def test_mypy_config_declares_files_without_a_conflicting_packages_key() -> None:
     """`files` and `packages` together make every bare `mypy` invocation fail.
 
-    Regression test for R6: mypy accepts at most one of `files`,
+    Regression test: mypy accepts at most one of `files`,
     `packages`, `-m`/`-p`, or positional file arguments. `[tool.mypy]`
     once declared both `files = ["src", "test"]` and `packages =
     ["fim"]`, so a bare `mypy` (no CLI arguments) failed immediately with
@@ -52,7 +52,7 @@ def test_mypy_config_declares_files_without_a_conflicting_packages_key() -> None
 def test_build_and_pre_push_never_narrow_mypys_scope() -> None:
     """Neither script passes mypy a positional path that overrides the config.
 
-    Regression test for R6: `build` and `dev/git-hooks/pre-push` used to
+    Regression test: `build` and `dev/git-hooks/pre-push` used to
     invoke `mypy --strict src`, an explicit scope argument that silently
     overrides `[tool.mypy]`'s own `files` setting — so the type gate
     actually run in CI and at push time never covered `test/` at all,

@@ -356,7 +356,7 @@ def test_run_rejects_negative_seed_before_creating_the_output_directory(
 ) -> None:
     """A negative `seed` fails at config load, before any run artifact exists.
 
-    Regression test for R4: `load_config` runs before
+    Regression test: `load_config` runs before
     `output_directory.mkdir(...)` in both `_command_run_scalar` and
     `_command_run_batch`, so a config-level rejection here means the CLI
     never creates an output directory for a run that could not possibly
@@ -505,7 +505,7 @@ def test_run_scalar_never_overwrites_an_existing_output_directory(
 ) -> None:
     """A scalar run refuses any pre-existing output directory outright.
 
-    `_atomic_directory` (R7) rejects `output_directory` if it already
+    `_atomic_directory` rejects `output_directory` if it already
     exists at all — stricter than the prior contract, which only
     rejected the four specific artifact filenames already being
     present. Populating the directory with something else entirely is
@@ -528,7 +528,7 @@ def test_run_scalar_rejects_an_empty_pre_existing_output_directory(
 ) -> None:
     """An empty pre-existing directory is rejected too, not just a populated one.
 
-    Regression test for R7's stricter contract: before atomic
+    Regression test for the stricter output-directory contract: before atomic
     publishing, an empty `-o` directory the caller had already created
     (e.g. via `mkdir -p`) was silently accepted and written into in
     place. `_atomic_directory` now requires the final path to not exist
@@ -550,7 +550,7 @@ def test_run_scalar_leaves_no_trace_when_interrupted_mid_trajectory(
 ) -> None:
     """A failure while still writing generations leaves no output directory.
 
-    Failure-injection test for R7's write boundary: the third
+    Failure-injection test for the write boundary: the third
     `write_generation` call (well after the temporary directory has a
     real, partial `trajectory.jsonl` on disk) raises, simulating an
     interruption mid-run. `output_directory` must not exist afterward —
@@ -586,7 +586,7 @@ def test_run_scalar_leaves_no_trace_when_the_report_write_fails(
 ) -> None:
     """A failure writing `report.json` leaves no output directory.
 
-    Failure-injection test for R7's report boundary: by this point the
+    Failure-injection test for the report boundary: by this point the
     temporary directory already has a real, complete `trajectory.jsonl`
     on disk (the run itself finished), but the failure still means
     `output_directory` must not exist afterward.
@@ -614,7 +614,7 @@ def test_run_scalar_leaves_no_trace_when_the_plot_fails(
 ) -> None:
     """A failure rendering `scatter.png` leaves no output directory.
 
-    Failure-injection test for R7's plot boundary: `trajectory.jsonl`
+    Failure-injection test for the plot boundary: `trajectory.jsonl`
     and `report.json` are both already real and complete in the
     temporary directory when this fails, but the whole run still must
     not appear at `output_directory`.
@@ -867,7 +867,7 @@ def test_run_batch_leaves_no_trace_when_a_replicate_write_fails(
 ) -> None:
     """A batch failure partway through replicates leaves no output directory.
 
-    Failure-injection test for R7's batch write boundary: the second
+    Failure-injection test for the batch write boundary: the second
     replicate's artifact write raises, after the first replicate's four
     files are already real and complete in the temporary directory.
     `output_directory` — including `summary.json`, `manifest.json`, and
@@ -946,10 +946,10 @@ def test_stats_reports_a_tampered_trajectory_and_unknown_generations(
 ) -> None:
     """Stats errors distinguish a tampered trajectory from a missing generation.
 
-    Regression test for R7: editing the trajectory after the run
+    Regression test: editing the trajectory after the run
     completed — even a content-preserving edit like retagging every
-    row's ``run_id`` — no longer "re-analyses silently" (the defect the
-    review named). It now fails the manifest's recorded SHA-256 digest
+    row's ``run_id`` — no longer re-analyzes silently. It now fails the
+    manifest's recorded SHA-256 digest
     check before `_command_stats` ever gets to read a row, superseding
     the weaker "no rows for this run_id" diagnosis a retag used to
     produce.

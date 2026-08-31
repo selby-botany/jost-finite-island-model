@@ -566,10 +566,7 @@ def g_st_log(table: FrequencyTable, deme_weights: DemeWeights = None) -> float |
     `1 + ln(J_S) / (-ln(J_T))`: `J_S <= 1` makes `ln(J_S) <= 0`, so the
     second term is never positive, giving the `<= 1` bound; `J_S >= J_T`
     (from `H_S <= H_T`) makes `ln(J_S) >= ln(J_T)`, so the second term is
-    never below `ln(J_T)/(-ln(J_T)) = -1`, giving the `>= 0` bound. See
-    `dev/doc/apps/selby/jost-finite-island-model/20260830-claude-sonnet-
-    5-nei-1973-gene-diversity-test-plan.md` in the `1121-citrus` project
-    for the full derivation this docstring summarizes.
+    never below `ln(J_T)/(-ln(J_T)) = -1`, giving the `>= 0` bound.
 
     Undefined, and returned as `None` rather than a fabricated value, in
     the same spirit as `g_st`'s own `None` case: when `H_T` is exactly
@@ -879,10 +876,9 @@ def identity_recovery_rate(population_size: int, m: float) -> float:
     reduction of this project's own already-validated `_iterate_
     identities` recursion (`test/validation/test_simulator_equilibrium.py`,
     also the Tier 1 oracle for the Crow & Aoki torus scenario) in the
-    `d -> infinity`, `mu = 0` limit — worked out in full, with a six-row
-    numerical confirmation, in `dev/doc/apps/selby/jost-finite-island-
-    model/20260830-claude-sonnet-5-whitlock-1992-identity-recovery-test-
-    plan.md` in the `1121-citrus` project.
+    `d -> infinity`, `mu = 0` limit, confirmed by direct numerical
+    comparison against that recursion across six representative
+    `(N, m)` combinations.
 
     Args:
         population_size: Gene-copy count ``N`` (Whitlock's own "2N").
@@ -1279,9 +1275,11 @@ def equilibrium_shannon_entropy_subpopulation(
     antiderivative, "numerically evaluated using standard integration
     software" in the paper's own words — genuinely outside what this
     module's own dependency-free, closed-form-only style can offer (a
-    hand-rolled numerical quadrature was scoped separately and not
-    built here; see `1121-citrus`'s Chao-et-al-2015 findings doc, item
-    5). Eq. 7D is the paper's own stated approximation to that integral,
+    hand-rolled numerical quadrature was considered and deliberately not
+    built: this module depends on nothing beyond NumPy, and adding a
+    quadrature routine for one approximation formula would break that
+    property for a single function). Eq. 7D is the paper's own stated
+    approximation to that integral,
     accurate "except for the special case of two subpopulations (`n =
     2`)" — its own words, not a caveat added here — so a two-deme
     scenario's own result from this function should be treated with

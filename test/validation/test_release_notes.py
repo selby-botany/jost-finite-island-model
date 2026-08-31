@@ -11,14 +11,12 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BUILD_SCRIPT = PROJECT_ROOT / "build"
 EXTRACTOR = PROJECT_ROOT / "dev" / "bin" / "extract-release-notes"
-# The release jobs (`windows`, `publish`) live in `ci.yml` (R8 remediation),
-# not a separate `release.yml`, so their `needs:` on `build` is structural
+# The release jobs (`windows`, `publish`) live in `ci.yml`, not a
+# separate `release.yml`, so their `needs:` on `build` is structural
 # rather than a race between two independently triggered workflows.
 RELEASE_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
 # Every job that builds one platform's release artifact and hands it to
-# `publish` -- design doc 20260821-claude-sonnet-5-macos-linux-packaging.md
-# §3.2/§3.5 added the macOS and Linux jobs alongside the original two
-# Windows ones. Named once here so the four tests that walk this same
+# `publish`. Named once here so the four tests that walk this same
 # list cannot drift from each other as new platforms are added.
 RELEASE_ARTIFACT_JOBS = (
     "windows",
@@ -119,7 +117,7 @@ def test_release_workflow_uses_changelog_notes() -> None:
 def test_publish_generates_a_checksum_manifest_before_release_create() -> None:
     """A consolidated checksum manifest covers every released artifact.
 
-    Regression test for R11: only the Windows executable had a checksum
+    Regression test: only the Windows executable had a checksum
     (its own `.sha256` sidecar, documented in `README.md` for a Windows
     user's manual verification); the wheel and sdist `python -m build`
     produces had none at all. `SHA256SUMS` must be generated, from
@@ -143,7 +141,7 @@ def test_publish_generates_a_checksum_manifest_before_release_create() -> None:
 def test_release_jobs_cannot_run_without_a_passing_build_and_valid_tag() -> None:
     """Every platform job, and `publish`, depend on `build` and `verify-tag`.
 
-    Regression test for R8: `windows` and `publish` used to live in a
+    Regression test: `windows` and `publish` used to live in a
     separate `release.yml`, triggered independently by the same tag push
     with no dependency on `ci.yml`'s `build` job at all — a tag could
     publish a release before CI had even started, let alone passed.
@@ -172,7 +170,7 @@ def test_release_jobs_cannot_run_without_a_passing_build_and_valid_tag() -> None
 def test_contents_write_is_scoped_to_the_publish_job_only() -> None:
     """Only `publish` carries the elevated `contents: write` permission.
 
-    Regression test for R13: `release.yml` set `contents: write` at the
+    Regression test: `release.yml` set `contents: write` at the
     workflow level, so every job in the file — including the ones that
     only build and smoke-test, and never touch the repository or a
     release — ran with write access to repository contents it never
@@ -191,7 +189,7 @@ def test_contents_write_is_scoped_to_the_publish_job_only() -> None:
 def test_verify_tag_job_checks_annotation_and_main_ancestry() -> None:
     """`verify-tag` rejects a lightweight tag and one not reachable from main.
 
-    Regression test for R8: nothing previously checked that a release tag
+    Regression test: nothing previously checked that a release tag
     was an annotated tag (not a bare `git tag v1.2.3` ref) or that its
     commit was actually reachable from `main` — any ref matching `v*`,
     from any branch, published a release.
@@ -223,7 +221,7 @@ def test_verify_tag_job_checks_annotation_and_main_ancestry() -> None:
 def test_release_artifacts_have_a_short_retention() -> None:
     """No inter-job handoff artifact lingers past its purpose.
 
-    Regression test for R14: `actions/upload-artifact` defaults to the
+    Regression test: `actions/upload-artifact` defaults to the
     repository's general retention setting (up to 90 days) with no
     `retention-days` override. Every platform job's artifact exists only
     to hand its build to `publish` within the same workflow run; its
@@ -243,7 +241,7 @@ def test_release_artifacts_have_a_short_retention() -> None:
 def test_publish_verifies_the_downloaded_checksum_before_shipping_it() -> None:
     """`publish` verifies every platform artifact against its `.sha256`.
 
-    Regression test for R14: `publish` downloaded the Windows executable
+    Regression test: `publish` downloaded the Windows executable
     and its `.sha256` sidecar and re-shipped both without ever actually
     verifying they still matched each other — trusting the inter-job
     artifact hand-off blindly rather than checking it. Every platform
@@ -281,7 +279,7 @@ def test_publish_verifies_the_downloaded_checksum_before_shipping_it() -> None:
 def test_publish_rejects_a_malformed_tag_before_comparing_to_version_txt() -> None:
     """The tag/version check guards the tag's shape, not just its value.
 
-    Regression test for R14: comparing `${GITHUB_REF_NAME#v}` to
+    Regression test: comparing `${GITHUB_REF_NAME#v}` to
     `version.txt` by bare string equality never confirmed the tag looked
     like `vX.Y.Z` in the first place — only that whatever followed the
     stripped `v` happened to equal the file's content.
@@ -299,7 +297,7 @@ def test_publish_rejects_a_malformed_tag_before_comparing_to_version_txt() -> No
 def test_ci_build_runs_every_test_marker_except_slow() -> None:
     """The authoritative release gate excludes only `slow`, deliberately.
 
-    Regression test for R17: `--ci` used to hard-code `not packaging`
+    Regression test: `--ci` used to hard-code `not packaging`
     even in CI mode, so a test marked `packaging` (declared in
     `pyproject.toml` but, before that fix, carried by zero tests) could
     never run through any path a contributor or CI actually exercises.
@@ -309,15 +307,15 @@ def test_ci_build_runs_every_test_marker_except_slow() -> None:
     all, for years.
 
     That "excludes nothing" invariant was narrowed, deliberately, once
-    (not silently the way R17's own original bug was): `slow`-marked
-    tests moved to their own separately scheduled/on-demand `slow-tests`
-    job (`.github/workflows/ci.yml`) after this same gate's own
-    `timeout-minutes` proved unable to reliably budget for a single
-    `slow`-marked engine scenario test, even after being raised three
-    times in one day. `--ci` now excludes `slow` specifically, named
-    explicitly here rather than silently — every other marker,
+    (not silently the way the original `packaging` bug was): `slow`-
+    marked tests moved to their own separately scheduled/on-demand
+    `slow-tests` job (`.github/workflows/ci.yml`) after this same
+    gate's own `timeout-minutes` proved unable to reliably budget for a
+    single `slow`-marked engine scenario test, even after being raised
+    three times in one day. `--ci` now excludes `slow` specifically,
+    named explicitly here rather than silently — every other marker,
     including `packaging` and `statistical`, keeps running through this
-    one gate exactly as R17 originally established.
+    one gate exactly as originally established.
     """
     build_script = BUILD_SCRIPT.read_text(encoding="utf-8")
 

@@ -57,7 +57,7 @@ def test_monitor_distinguishes_convergence_from_cap() -> None:
 def test_multi_statistic_monitor_requires_a_mapping_but_accepts_a_partial_one() -> None:
     """Watching several statistics rejects a bare float, not a partial mapping.
 
-    Regression test for R5: a mapping that omits a configured statistic
+    Regression test: a mapping that omits a configured statistic
     (its value is undefined this round) is now valid — that statistic
     simply does not advance this round — but a name outside the
     configured set is still almost certainly a typo and still raises.

@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-# `ci.yml` is also home to the release jobs (R8); see test_release_notes.py
+# `ci.yml` is also home to the release jobs; see test_release_notes.py
 # for the corresponding checks on those.
 CI_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
 
@@ -27,7 +27,7 @@ def _run_steps() -> list[dict[str, object]]:
 def test_the_expensive_scenario_layer_runs_as_its_own_named_budgeted_step() -> None:
     """The slow/statistical suite is a separately named step, not folded into one.
 
-    Regression test for R19: `./build --ci` used to be the workflow's only
+    Regression test: `./build --ci` used to be the workflow's only
     test-related step, so the `slow`/`statistical` scenario suite's own
     cost (18m07s at review time) was invisible in the Actions run summary
     -- indistinguishable from lint, type-checking, docs, and packaging,

@@ -772,7 +772,7 @@ def _require_picklable(name: str, value: object) -> None:
     handing in an unpicklable value would fail anyway — but only later,
     silently, deep inside worker-process spawn machinery, surfacing as
     raw pickling error noise with no indication of which of `fim`'s own
-    arguments was actually at fault (R24). Checking here instead fails
+    arguments was actually at fault. Checking here instead fails
     immediately at the call site, before a single worker process is
     even started, naming the exact offending argument by name.
 

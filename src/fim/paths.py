@@ -62,9 +62,9 @@ def atomic_directory(target: Path) -> Iterator[Path]:
     completed run's output (it exists, it has some files in it) but is
     actually missing whatever had not been written yet. Nothing about
     that folder's own name or existence would reveal it was actually
-    incomplete — a real, previously reported bug (R7, this project's own
-    tracked-issue numbering, predating this function's extraction from
-    `cli.py`) that this function exists specifically to prevent.
+    incomplete — a real bug found in `cli.py` before this function was
+    extracted from it, and one this function exists specifically to
+    prevent.
 
     The fix follows the same idea a careful editor uses when saving a
     long document: write the whole new version to a *different* file

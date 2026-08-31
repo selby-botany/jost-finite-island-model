@@ -338,7 +338,7 @@ def test_mu_and_mu_b_are_mutually_exclusive_and_one_is_required() -> None:
             # Default convergence_window is 50; capping max_generations to 5
             # leaves room for only 6 possible records (generation 0 plus 5
             # steps), so the window could never fill before the cap stops
-            # the run (R23).
+            # the run.
             {"max_generations": 5},
             "convergence_window cannot exceed max_generations",
         ),
@@ -347,7 +347,7 @@ def test_mu_and_mu_b_are_mutually_exclusive_and_one_is_required() -> None:
         ({"replicate_tolerance": float("nan")}, "finite"),
         ({"replicate_minimum": 1}, "replicate_minimum"),
         (
-            # replicate_minimum unreachable within n_replicates (R23) — the
+            # replicate_minimum unreachable within n_replicates — the
             # engine-flavored regression test for this same rule lives in
             # `test/engine/test_engine.py::
             # test_replicate_minimum_exceeding_n_replicates_is_rejected`,

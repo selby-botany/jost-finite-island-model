@@ -189,7 +189,9 @@ def test_equilibrium_d_and_g_st_are_non_increasing_in_migration(
     `M1`-`M5` panel proposed the same underlying claim, but as a chain
     of single-seeded engine runs compared with a fixed `1e-9`
     tolerance — a design this project's own determinism rule rules
-    out; see the metamorphic-panel-investigation design doc for why).
+    out, since it compares single stochastic realizations rather than
+    expectations, and each of the five runs would need its own
+    independent convergence horizon rather than a shared one).
     """
     m_lo, m_hi = sorted(m_values)
     population_size = 100

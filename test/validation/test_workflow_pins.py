@@ -34,7 +34,7 @@ def _every_uses_reference(workflow: dict[object, object]) -> list[str]:
 def test_every_workflow_action_is_pinned_to_a_full_commit_sha() -> None:
     """No `uses:` reference names a floating tag, branch, or short SHA.
 
-    Regression test for R11: `actions/checkout@v4` and friends are
+    Regression test: `actions/checkout@v4` and friends are
     mutable tags a repository owner can silently repoint at a different
     commit — a supply-chain risk this project's own `bin/` wrappers
     already avoid by pinning Docker images to a digest. Every workflow
@@ -91,7 +91,7 @@ def test_gitleaks_scan_has_the_token_pull_request_scanning_requires() -> None:
 def test_dependabot_tracks_pip_and_github_actions() -> None:
     """Dependabot is configured to refresh both dependency ecosystems.
 
-    Regression test for R11: SHA-pinned actions and version-ranged pip
+    Regression test: SHA-pinned actions and version-ranged pip
     dependencies both still need a mechanism to move forward on their
     own schedule — a pin with nothing ever refreshing it just becomes a
     silently stale one instead of a silently floating one.

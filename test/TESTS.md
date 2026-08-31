@@ -129,7 +129,7 @@ def test_hypothesis_profile_stays_derandomized() -> None
 
 The active Hypothesis profile never draws from real system entropy.
 
-Regression test for R21: `test/conftest.py` registers and loads a
+Regression test: `test/conftest.py` registers and loads a
 "deterministic" profile with `derandomize=True` so every
 property-based test's examples are a pure function of the test's own
 seed, not of wall-clock-seeded randomness. A silent edit to that
@@ -475,7 +475,7 @@ def test_mypy_config_declares_files_without_a_conflicting_packages_key(
 
 `files` and `packages` together make every bare `mypy` invocation fail.
 
-Regression test for R6: mypy accepts at most one of `files`,
+Regression test: mypy accepts at most one of `files`,
 `packages`, `-m`/`-p`, or positional file arguments. `[tool.mypy]`
 once declared both `files = ["src", "test"]` and `packages =
 ["fim"]`, so a bare `mypy` (no CLI arguments) failed immediately with
@@ -497,7 +497,7 @@ def test_build_and_pre_push_never_narrow_mypys_scope() -> None
 
 Neither script passes mypy a positional path that overrides the config.
 
-Regression test for R6: `build` and `dev/git-hooks/pre-push` used to
+Regression test: `build` and `dev/git-hooks/pre-push` used to
 invoke `mypy --strict src`, an explicit scope argument that silently
 overrides `[tool.mypy]`'s own `files` setting — so the type gate
 actually run in CI and at push time never covered `test/` at all,
@@ -626,7 +626,7 @@ A pre-existing target is refused outright, regardless of its contents.
 Regression proof for Milestone G0 (design doc §3.7, §6.3): the
 relocated `atomic_directory` still requires the final path not to
 exist at all — the same stricter-than-filename-checking contract
-`cli._atomic_directory` established (R7), reproduced here directly
+`cli._atomic_directory` established, reproduced here directly
 against `fim.paths` rather than only indirectly through
 `test/cli/test_cli.py`'s `cli.main(["run", ...])` integration tests
 (which keep passing unmodified, since the behavior itself did not
@@ -1017,7 +1017,7 @@ def test_run_rejects_negative_seed_before_creating_the_output_directory(
 
 A negative `seed` fails at config load, before any run artifact exists.
 
-Regression test for R4: `load_config` runs before
+Regression test: `load_config` runs before
 `output_directory.mkdir(...)` in both `_command_run_scalar` and
 `_command_run_batch`, so a config-level rejection here means the CLI
 never creates an output directory for a run that could not possibly
@@ -1116,7 +1116,7 @@ def test_run_scalar_never_overwrites_an_existing_output_directory(
 
 A scalar run refuses any pre-existing output directory outright.
 
-`_atomic_directory` (R7) rejects `output_directory` if it already
+`_atomic_directory` rejects `output_directory` if it already
 exists at all — stricter than the prior contract, which only
 rejected the four specific artifact filenames already being
 present. Populating the directory with something else entirely is
@@ -1134,7 +1134,7 @@ def test_run_scalar_rejects_an_empty_pre_existing_output_directory(
 
 An empty pre-existing directory is rejected too, not just a populated one.
 
-Regression test for R7's stricter contract: before atomic
+Regression test for the stricter output-directory contract: before atomic
 publishing, an empty `-o` directory the caller had already created
 (e.g. via `mkdir -p`) was silently accepted and written into in
 place. `_atomic_directory` now requires the final path to not exist
@@ -1151,7 +1151,7 @@ def test_run_scalar_leaves_no_trace_when_interrupted_mid_trajectory(
 
 A failure while still writing generations leaves no output directory.
 
-Failure-injection test for R7's write boundary: the third
+Failure-injection test for the write boundary: the third
 `write_generation` call (well after the temporary directory has a
 real, partial `trajectory.jsonl` on disk) raises, simulating an
 interruption mid-run. `output_directory` must not exist afterward —
@@ -1170,7 +1170,7 @@ def test_run_scalar_leaves_no_trace_when_the_report_write_fails(
 
 A failure writing `report.json` leaves no output directory.
 
-Failure-injection test for R7's report boundary: by this point the
+Failure-injection test for the report boundary: by this point the
 temporary directory already has a real, complete `trajectory.jsonl`
 on disk (the run itself finished), but the failure still means
 `output_directory` must not exist afterward.
@@ -1186,7 +1186,7 @@ def test_run_scalar_leaves_no_trace_when_the_plot_fails(
 
 A failure rendering `scatter.png` leaves no output directory.
 
-Failure-injection test for R7's plot boundary: `trajectory.jsonl`
+Failure-injection test for the plot boundary: `trajectory.jsonl`
 and `report.json` are both already real and complete in the
 temporary directory when this fails, but the whole run still must
 not appear at `output_directory`.
@@ -1324,7 +1324,7 @@ def test_run_batch_leaves_no_trace_when_a_replicate_write_fails(
 
 A batch failure partway through replicates leaves no output directory.
 
-Failure-injection test for R7's batch write boundary: the second
+Failure-injection test for the batch write boundary: the second
 replicate's artifact write raises, after the first replicate's four
 files are already real and complete in the temporary directory.
 `output_directory` — including `summary.json`, `manifest.json`, and
@@ -1363,10 +1363,10 @@ def test_stats_reports_a_tampered_trajectory_and_unknown_generations(
 
 Stats errors distinguish a tampered trajectory from a missing generation.
 
-Regression test for R7: editing the trajectory after the run
+Regression test: editing the trajectory after the run
 completed — even a content-preserving edit like retagging every
-row's ``run_id`` — no longer "re-analyses silently" (the defect the
-review named). It now fails the manifest's recorded SHA-256 digest
+row's ``run_id`` — no longer re-analyzes silently. It now fails the
+manifest's recorded SHA-256 digest
 check before `_command_stats` ever gets to read a row, superseding
 the weaker "no rows for this run_id" diagnosis a retag used to
 produce.
@@ -1603,7 +1603,7 @@ def test_multi_statistic_monitor_requires_a_mapping_but_accepts_a_partial_one(
 
 Watching several statistics rejects a bare float, not a partial mapping.
 
-Regression test for R5: a mapping that omits a configured statistic
+Regression test: a mapping that omits a configured statistic
 (its value is undefined this round) is now valid — that statistic
 simply does not advance this round — but a name outside the
 configured set is still almost certainly a typo and still raises.
@@ -1683,7 +1683,7 @@ def test_cap_is_a_valid_nonconverged_result(
 An exact-match tolerance a live drift process cannot satisfy hits the cap.
 
 `convergence_window=2` is the smallest legal window that still fits
-`max_generations=2 + 1` (R23 rejects anything larger — see the
+`max_generations=2 + 1` (validation rejects anything larger — see the
 `convergence_window` case in `test/model/test_params.py::
 test_post_init_validation_covers_all_scalar_contracts`);
 `convergence_tolerance=0.0` requires the two half-window means to
@@ -1754,7 +1754,7 @@ def test_replicate_minimum_exceeding_n_replicates_is_rejected() -> None
 
 `replicate_minimum` unreachable within `n_replicates` fails at construction.
 
-Regression test for R23: `replicate_minimum=100` with `n_replicates=3`
+Regression test: `replicate_minimum=100` with `n_replicates=3`
 used to be accepted and silently fall back to the `n_replicates`
 hard cap every time (adaptive stopping could never even be
 evaluated, let alone fire) — a config that can never do what it
@@ -1776,7 +1776,7 @@ def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic(
 
 A batch watching only an always-undefined `G_ST` runs to the full cap.
 
-Regression test for R5: every replicate here is fully monomorphic at
+Regression test: every replicate here is fully monomorphic at
 its one locus, so `G_ST` is undefined for every one of them and its
 stopping-criterion window never fills. The batch correctly falls back
 to the `n_replicates` cap rather than the prior behavior, where
@@ -1827,7 +1827,7 @@ def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary(
 
 `seed=0`, the lowest legal value, still derives valid replicate seeds.
 
-Regression boundary test for R4: `seed >= 0` is the whole legal
+Regression boundary test: `seed >= 0` is the whole legal
 range (`fim.model.params.SimulationParams.__post_init__`), so
 `seed=0` is the boundary most likely to expose an off-by-one in the
 `seed + replicate_index` derivation. Every derived replicate seed
@@ -1912,7 +1912,7 @@ def test_max_workers_rejects_an_unpicklable_clock() -> None
 
 A closure `clock` fails at the call site, not deep in worker spawn.
 
-Regression test for R24: the prior behavior let an unpicklable
+Regression test: the prior behavior let an unpicklable
 `clock` reach `ProcessPoolExecutor`, where it failed as raw pickling
 noise from inside worker-process spawn machinery.
 
@@ -1926,7 +1926,7 @@ def test_max_workers_rejects_an_unpicklable_store_factory() -> None
 
 A closure `store_factory` fails at the call site, not in a worker.
 
-Regression test for R24, the `store_factory` counterpart to
+Regression test, the `store_factory` counterpart to
 `test_max_workers_rejects_an_unpicklable_clock` above.
 
 <a id="engine.test_engine.test_max_workers_respects_adaptive_stopping_in_batches"></a>
@@ -1985,7 +1985,7 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None
 
 A run whose only watched statistic never becomes defined hits the cap.
 
-Regression test for R5: `G_ST` is undefined every generation here (the
+Regression test: `G_ST` is undefined every generation here (the
 single locus is fixed for the same allele in both demes throughout,
 since `mu=0.0`), so its trailing window never fills and the criterion
 can never report stability — there is no data to judge stability
@@ -2004,7 +2004,7 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None
 
 A replicate with one monomorphic and one polymorphic locus never crashes.
 
-Regression test for R5's headline defect: with two loci, one fixed
+Regression test for the multi-locus G_ST averaging defect: with two loci, one fixed
 for the same allele in every deme (undefined at that locus alone) and
 one polymorphic, the *replicate's* G_ST used to come out `None` (the
 old rule voided the whole multi-locus average on any single
@@ -2136,7 +2136,7 @@ def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average(
 
 `G_ST` averages only the loci where it is defined, not zero-filled.
 
-Regression test for R5: one locus fixed for the same allele in every
+Regression test: one locus fixed for the same allele in every
 deme (`G_ST` undefined there — `H_T == 0`) alongside one polymorphic
 locus. The reported `G_ST` must equal the polymorphic locus's own
 value exactly, not that value averaged against a fabricated `0.0` for
@@ -6759,7 +6759,7 @@ Exactly one of `mu`/`mu_b` must be given — never both, never neither.
             # Default convergence_window is 50; capping max_generations to 5
             # leaves room for only 6 possible records (generation 0 plus 5
             # steps), so the window could never fill before the cap stops
-            # the run (R23).
+            # the run.
             {
                 "max_generations": 5
             },
@@ -6778,7 +6778,7 @@ Exactly one of `mu`/`mu_b` must be given — never both, never neither.
             "replicate_minimum": 1
         }, "replicate_minimum"),
         (
-            # replicate_minimum unreachable within n_replicates (R23) — the
+            # replicate_minimum unreachable within n_replicates — the
             # engine-flavored regression test for this same rule lives in
             # `test/engine/test_engine.py::
             # test_replicate_minimum_exceeding_n_replicates_is_rejected`,
@@ -8577,8 +8577,7 @@ def test_interpolated_critical_values_match_an_independent_quadrature_oracle(
 
 1/df interpolation is checked against numerical integration, not just itself.
 
-R22 (`doc/dev/20260818-claude-opus-5-project-review-rollup.md`,
-not committed): interpolating a printed table in 1/df is a
+Interpolating a printed table in 1/df is a
 defensible dependency-free choice, but nothing previously bounded
 its actual error against an independent reference -- every prior
 test in this class either reads a tabled row back or recomputes
@@ -8827,7 +8826,9 @@ anywhere in this suite before this test (test-manifest.yaml's own
 `M1`-`M5` panel proposed the same underlying claim, but as a chain
 of single-seeded engine runs compared with a fixed `1e-9`
 tolerance — a design this project's own determinism rule rules
-out; see the metamorphic-panel-investigation design doc for why).
+out, since it compares single stochastic realizations rather than
+expectations, and each of the five runs would need its own
+independent convergence horizon rather than a shared one).
 
 <a id="statistics.test_properties.test_equilibrium_d_and_g_st_move_opposite_ways_in_mutation"></a>
 
@@ -8967,7 +8968,7 @@ real-build-verified list; this job must not drift from it.
 
 # validation.test\_calibration\_provenance
 
-R18 remediation: the statistical calibration pass stays versioned and ungated.
+The statistical calibration pass stays versioned and ungated.
 
 <a id="validation.test_calibration_provenance.test_calibration_script_is_not_wired_into_the_deterministic_gate"></a>
 
@@ -8979,10 +8980,9 @@ def test_calibration_script_is_not_wired_into_the_deterministic_gate() -> None
 
 `calibrate-statistical-bands` is never invoked by `build` or `ci.yml`.
 
-Regression guard for R18 (`doc/dev/20260818-claude-opus-5-project-
-review-rollup.md`, not committed -- gitignored review material): "keep
-characterization out of the deterministic PR gate." A characterization
-pass is itself stochastic by design (that is the thing it measures),
+Regression guard for the rule "keep characterization out of the
+deterministic PR gate." A characterization pass is itself
+stochastic by design (that is the thing it measures),
 so wiring it into `build --ci` or a CI step would make the gate a
 function of the run, not only the commit -- exactly what this
 project's test-determinism rule (CLAUDE.md: "a test is a pure function
@@ -9000,7 +9000,7 @@ def test_calibration_evidence_data_is_retained_and_versioned() -> None
 
 The characterization pass's generated data is retained and versioned.
 
-Regression guard for R18: the `_SIGMA_*` constants in
+Regression guard: the `_SIGMA_*` constants in
 `test_simulator_equilibrium.py` previously came from "an independent
 characterization pass" named only in a code comment -- no program,
 seeds, raw output, or environment fingerprint was ever retained. This
@@ -9054,7 +9054,7 @@ def test_the_expensive_scenario_layer_runs_as_its_own_named_budgeted_step(
 
 The slow/statistical suite is a separately named step, not folded into one.
 
-Regression test for R19: `./build --ci` used to be the workflow's only
+Regression test: `./build --ci` used to be the workflow's only
 test-related step, so the `slow`/`statistical` scenario suite's own
 cost (18m07s at review time) was invisible in the Actions run summary
 -- indistinguishable from lint, type-checking, docs, and packaging,
@@ -9837,13 +9837,12 @@ def test_upx_compression_is_disabled() -> None
 
 The Windows executable is never UPX-compressed.
 
-Regression test for R9: UPX-compressed executables are a well-known
-antivirus/SmartScreen false-positive trigger, and `upx` is an
-undeclared build dependency PyInstaller silently skips compression
-for when absent — so a compressed build was a function of whichever
-runner image happened to build it, not of the tag. `upx=True` must
-never come back without `upx` also becoming a pinned, versioned
-build dependency.
+UPX-compressed executables are a well-known antivirus/SmartScreen
+false-positive trigger, and `upx` is an undeclared build dependency
+PyInstaller silently skips compression for when absent — so a
+compressed build was a function of whichever runner image happened
+to build it, not of the tag. `upx=True` must never come back
+without `upx` also becoming a pinned, versioned build dependency.
 
 <a id="validation.test_packaging_spec.test_tkinter_and_its_matplotlib_backend_stay_excluded"></a>
 
@@ -9855,12 +9854,10 @@ def test_tkinter_and_its_matplotlib_backend_stay_excluded() -> None
 
 `tkinter`/`backend_tkagg` never creep back into a pywebview build.
 
-This project's GUI is pywebview (design doc
-`20260821-claude-sonnet-5-graphical-interface.md` §3.2), never Tk —
-a regression guard against either being un-excluded again, the same
-"assert an invariant without starting a build" pattern this
-project's sibling repo (1121-citrus) already uses for startup
-scripts and CI YAML.
+This project's GUI is pywebview, never Tk — a regression guard
+against either being un-excluded again, asserting the invariant
+statically rather than starting a real PyInstaller build to find
+out.
 
 <a id="validation.test_packaging_spec.test_analysis_targets_the_launcher_not_the_bare_cli"></a>
 
@@ -10097,7 +10094,7 @@ def test_publish_generates_a_checksum_manifest_before_release_create() -> None
 
 A consolidated checksum manifest covers every released artifact.
 
-Regression test for R11: only the Windows executable had a checksum
+Regression test: only the Windows executable had a checksum
 (its own `.sha256` sidecar, documented in `README.md` for a Windows
 user's manual verification); the wheel and sdist `python -m build`
 produces had none at all. `SHA256SUMS` must be generated, from
@@ -10115,7 +10112,7 @@ def test_release_jobs_cannot_run_without_a_passing_build_and_valid_tag(
 
 Every platform job, and `publish`, depend on `build` and `verify-tag`.
 
-Regression test for R8: `windows` and `publish` used to live in a
+Regression test: `windows` and `publish` used to live in a
 separate `release.yml`, triggered independently by the same tag push
 with no dependency on `ci.yml`'s `build` job at all — a tag could
 publish a release before CI had even started, let alone passed.
@@ -10136,7 +10133,7 @@ def test_contents_write_is_scoped_to_the_publish_job_only() -> None
 
 Only `publish` carries the elevated `contents: write` permission.
 
-Regression test for R13: `release.yml` set `contents: write` at the
+Regression test: `release.yml` set `contents: write` at the
 workflow level, so every job in the file — including the ones that
 only build and smoke-test, and never touch the repository or a
 release — ran with write access to repository contents it never
@@ -10153,7 +10150,7 @@ def test_verify_tag_job_checks_annotation_and_main_ancestry() -> None
 
 `verify-tag` rejects a lightweight tag and one not reachable from main.
 
-Regression test for R8: nothing previously checked that a release tag
+Regression test: nothing previously checked that a release tag
 was an annotated tag (not a bare `git tag v1.2.3` ref) or that its
 commit was actually reachable from `main` — any ref matching `v*`,
 from any branch, published a release.
@@ -10177,7 +10174,7 @@ def test_release_artifacts_have_a_short_retention() -> None
 
 No inter-job handoff artifact lingers past its purpose.
 
-Regression test for R14: `actions/upload-artifact` defaults to the
+Regression test: `actions/upload-artifact` defaults to the
 repository's general retention setting (up to 90 days) with no
 `retention-days` override. Every platform job's artifact exists only
 to hand its build to `publish` within the same workflow run; its
@@ -10194,7 +10191,7 @@ def test_publish_verifies_the_downloaded_checksum_before_shipping_it() -> None
 
 `publish` verifies every platform artifact against its `.sha256`.
 
-Regression test for R14: `publish` downloaded the Windows executable
+Regression test: `publish` downloaded the Windows executable
 and its `.sha256` sidecar and re-shipped both without ever actually
 verifying they still matched each other — trusting the inter-job
 artifact hand-off blindly rather than checking it. Every platform
@@ -10211,7 +10208,7 @@ def test_publish_rejects_a_malformed_tag_before_comparing_to_version_txt(
 
 The tag/version check guards the tag's shape, not just its value.
 
-Regression test for R14: comparing `${GITHUB_REF_NAME#v}` to
+Regression test: comparing `${GITHUB_REF_NAME#v}` to
 `version.txt` by bare string equality never confirmed the tag looked
 like `vX.Y.Z` in the first place — only that whatever followed the
 stripped `v` happened to equal the file's content.
@@ -10226,7 +10223,7 @@ def test_ci_build_runs_every_test_marker_except_slow() -> None
 
 The authoritative release gate excludes only `slow`, deliberately.
 
-Regression test for R17: `--ci` used to hard-code `not packaging`
+Regression test: `--ci` used to hard-code `not packaging`
 even in CI mode, so a test marked `packaging` (declared in
 `pyproject.toml` but, before that fix, carried by zero tests) could
 never run through any path a contributor or CI actually exercises.
@@ -10236,15 +10233,15 @@ for fast iteration, and the authoritative gate excluded nothing at
 all, for years.
 
 That "excludes nothing" invariant was narrowed, deliberately, once
-(not silently the way R17's own original bug was): `slow`-marked
-tests moved to their own separately scheduled/on-demand `slow-tests`
-job (`.github/workflows/ci.yml`) after this same gate's own
-`timeout-minutes` proved unable to reliably budget for a single
-`slow`-marked engine scenario test, even after being raised three
-times in one day. `--ci` now excludes `slow` specifically, named
-explicitly here rather than silently — every other marker,
+(not silently the way the original `packaging` bug was): `slow`-
+marked tests moved to their own separately scheduled/on-demand
+`slow-tests` job (`.github/workflows/ci.yml`) after this same
+gate's own `timeout-minutes` proved unable to reliably budget for a
+single `slow`-marked engine scenario test, even after being raised
+three times in one day. `--ci` now excludes `slow` specifically,
+named explicitly here rather than silently — every other marker,
 including `packaging` and `statistical`, keeps running through this
-one gate exactly as R17 originally established.
+one gate exactly as originally established.
 
 
 
@@ -10264,7 +10261,7 @@ def test_sdist_includes_docs_tests_and_release_metadata() -> None
 
 The source archive is reviewable and buildable end to end.
 
-Regression test for R12: the sdist previously included only
+Regression test: the sdist previously included only
 `LICENSE.md`, `README.md`, `src/fim`, and `version.txt` — a
 scientific package's source archive should also carry the
 documentation, the test suite, the maintainer tooling under `dev/`,
@@ -10291,7 +10288,7 @@ gitignored `doc/dev/` scratch directory — AI review drafts and
 reference PDFs never meant for distribution — straight into a real
 built sdist. Verified by actually building one, not just reading the
 config: a config-only check cannot see hatchling's own file-walk
-behavior. Marked `packaging` (R17): it needs a real `python -m
+behavior. Marked `packaging`: it needs a real `python -m
 build` invocation, which it makes itself rather than depending on
 `build`'s own package step having already run.
 
@@ -10420,8 +10417,9 @@ re-deriving the same algebra :func:`_mutation_survival` already uses,
 including a high-``mu``, small-``population_size`` case
 (``mu=0.4, population_size=3``) where the omitted ``mu(1-mu)/N`` term
 is ``0.08`` against a base of ``0.36`` -- large enough that the
-``(1 - mu) ** 2`` approximation R3 replaced would fail this comparison
-outright, not merely drift outside a statistical tolerance.
+plain ``(1 - mu) ** 2`` approximation this exact term corrects would
+fail this comparison outright, not merely drift outside a
+statistical tolerance.
 
 <a id="validation.test_simulator_equilibrium.test_identity_recursion_oracle_matches_formula_and_published"></a>
 
@@ -10536,9 +10534,7 @@ three already-published, already-engine-validated island scenarios,
 exactly, just above) or in `test_crow_aoki_torus_scenario_via_engine`
 itself (which reproduces *this same* `G_ST ~= 0.32`-ish
 neighborhood, not the published `0.172`, when run long enough that
-its own equilibration lag genuinely shrinks). See `1121-citrus`'s
-Crow & Aoki torus-test-plan design doc for the fuller writeup of this
-finding and what it revises about the Tier 2 test's own conclusion.
+its own equilibration lag genuinely shrinks).
 
 <a id="validation.test_simulator_equilibrium.test_stepping_stone_differentiation_is_at_least_the_island_models"></a>
 
@@ -10590,8 +10586,7 @@ are -- so this scenario's own `G_ST`/`D` come out exactly equal, not
 strictly greater; `>=`, not `>`, is the correct assertion, and this
 is why `d=3` stays in the parametrization rather than being dropped
 as a redundant case. Every scenario here was computed and checked
-directly before being written down (see `1121-citrus`'s design doc
-for the full seven-scenario table).
+directly before being written down.
 
 <a id="validation.test_simulator_equilibrium.test_identity_recursion_reduces_to_whitlock_infinite_island_trajectory"></a>
 
@@ -10619,11 +10614,11 @@ residuals against the exact finite-`N` recursion.
 Checked here at `d=100,000` (negligible runtime -- `_iterate_
 identities` only takes 10 fixed steps regardless of `d`; only its
 per-step *coefficients* depend on `d`), well inside `_ONE_OVER_D_
-TOL`. The full six-row `d` sweep (10 through 100,000) this bound and
-its `O(1/d)` shape were measured from, plus the from-scratch
-algebraic derivation of this exact reduction, are in `1121-citrus`'s
-`dev/doc/apps/selby/jost-finite-island-model/20260830-claude-
-sonnet-5-whitlock-1992-identity-recovery-test-plan.md`.
+TOL`. This single large-`d` point is a spot check, not the full
+sweep: the `O(1/d)` shape of the residual was confirmed separately
+across a six-row `d` sweep (10 through 100,000) alongside a
+from-scratch algebraic derivation of the reduction itself, not
+reproduced here.
 
 <a id="validation.test_simulator_equilibrium.test_shannon_entropy_isolated_theta_convention_matches_identity_recursion"></a>
 
@@ -10641,12 +10636,12 @@ project (the pairwise-identity recursion these `_pipeline_identity_
 dynamics`-family functions track is a heterozygosity-scale quantity,
 not an entropy-scale one) -- and no independent "published" isolated-
 population Shannon-entropy value in this project's own literature
-trail either (see `1121-citrus`'s Chao-et-al-2015 findings doc). What
-*is* checkable, and is the one thing every equilibrium Shannon-
-entropy formula in `fim.statistics.differentiation` shares: the
-ploidy conversion from Chao et al. (2015)'s own diploid-individual
-`N` to this project's gene-copy `population_size`, `theta =
-2*population_size*mu`. Checked here the same way it was checked
+trail either. What *is* checkable, and is the one thing every
+equilibrium Shannon-entropy formula in
+`fim.statistics.differentiation` shares: the ploidy conversion from
+Chao et al. (2015)'s own diploid-individual `N` to this project's
+gene-copy `population_size`, `theta = 2*population_size*mu`. Checked
+here the same way it was checked
 before ever writing `equilibrium_shannon_entropy_isolated`'s own
 docstring: run this module's own exact finite-N identity recursion
 isolated (`m=0`), convert its fixed-point identity to heterozygosity
@@ -10717,8 +10712,7 @@ recursion oracle (`_identity_fixed_point`) rather than a chain of
 single-seeded `fim()` engine runs compared with a fixed `1e-9`
 tolerance. That design cannot be ported as specified: it compares
 single stochastic realizations, not expectations, and gives each
-of the five runs its own independent convergence horizon (see the
-metamorphic-panel-investigation design doc for the full argument).
+of the five runs its own independent convergence horizon.
 The oracle used here has neither problem — it is iterated to its
 own exact fixed point every time, with no seed and no replicate
 count involved, so this assertion can never flake — while still
@@ -10903,17 +10897,16 @@ matrix`), ``N=20`` gene copies, ``mu=1e-5``, migration rate ``m=0.05``
 (``Nm=1.0``, matching Crow & Aoki's own ``M``) -- Crow & Aoki (1984)
 Table 1's ``n=9, N=20, M=1.0, u=10⁻⁵`` row, published ``G_ST=0.172``.
 Source and citation confirmed directly against the paper's own full
-text this session (`pnas00620-0169.pdf`); see `jost-finite-island-
-model`'s own commits `d3adcf0`/`2dd1ea3` and `1121-citrus`'s Crow &
-Aoki torus-test-plan design doc for the fuller citation history.
+text (`pnas00620-0169.pdf`); see this project's own commits
+`d3adcf0`/`2dd1ea3` for the fuller citation history.
 
 Unlike the three scenarios above, this one has no independent exact-
 recursion oracle to cross-check against: `_identity_fixed_point`'s own
 `_identity_coefficients` are specific to the symmetric island model
 (every deme migrates with every other deme equally), not to a torus
 lattice's four-nearest-neighbor structure, and deriving the
-torus-specific equivalent was scoped separately (design doc "Tier 1")
-and not built here. This test is therefore only a two-way check
+torus-specific equivalent was scoped separately and not built here.
+This test is therefore only a two-way check
 (engine against the literal published number, not engine-against-
 oracle-against-formula-against-published the way the three scenarios
 above are) -- a real, acknowledged gap in rigor relative to them, not
@@ -11062,7 +11055,7 @@ def test_every_workflow_action_is_pinned_to_a_full_commit_sha() -> None
 
 No `uses:` reference names a floating tag, branch, or short SHA.
 
-Regression test for R11: `actions/checkout@v4` and friends are
+Regression test: `actions/checkout@v4` and friends are
 mutable tags a repository owner can silently repoint at a different
 commit — a supply-chain risk this project's own `bin/` wrappers
 already avoid by pinning Docker images to a digest. Every workflow
@@ -11101,7 +11094,7 @@ def test_dependabot_tracks_pip_and_github_actions() -> None
 
 Dependabot is configured to refresh both dependency ecosystems.
 
-Regression test for R11: SHA-pinned actions and version-ranged pip
+Regression test: SHA-pinned actions and version-ranged pip
 dependencies both still need a mechanism to move forward on their
 own schedule — a pin with nothing ever refreshing it just becomes a
 silently stale one instead of a silently floating one.
@@ -11128,7 +11121,7 @@ def test_scatter_rejects_a_deme_count_mismatch() -> None
 
 `state.deme_count` must agree with `params.d`.
 
-Regression test for R15: `plot_frequency_scatter` had this guard
+Regression test: `plot_frequency_scatter` had this guard
 (`src/fim/viz/scatter.py:53`) from the start, but nothing exercised
 it — the `viz` package's coverage was entirely omitted from the
 gate (`omit = ["src/fim/viz/*"]`, also removed by this change), so
@@ -11300,7 +11293,7 @@ def test_convergence_trace_and_frequency_bars_write_a_png_when_given_a_path(
 
 Both diagnostic views honor their documented optional `path` argument.
 
-Regression test for R15: neither function's file-writing branch
+Regression test: neither function's file-writing branch
 (`_save`) was exercised anywhere — `test_diagnostic_views_have_one_
 trace_and_one_bar_per_deme` above calls both with no `path` at all.
 

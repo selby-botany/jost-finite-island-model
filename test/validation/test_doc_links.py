@@ -17,11 +17,9 @@ def _run_checker(root: Path) -> subprocess.CompletedProcess[str]:
 
     `dev/lib/docslug.py` is copied alongside it, mirroring the real
     repository layout: `check-doc-links` imports `anchor_for` from
-    there via a `sys.path` entry relative to its own `__file__`
-    (in-app help design doc `20260822-claude-sonnet-5-in-app-help-
-    design.md` §4.1's own shared-slugger extraction) — the checker is
-    no longer a single self-contained file, so a copy of just the one
-    script is no longer enough to run it in isolation.
+    there via a `sys.path` entry relative to its own `__file__` — the
+    checker is not a single self-contained file, so a copy of just the
+    one script is not enough to run it in isolation.
     """
     checker = root / "dev" / "bin" / "check-doc-links"
     checker.parent.mkdir(parents=True)

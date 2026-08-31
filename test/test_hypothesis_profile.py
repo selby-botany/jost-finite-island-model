@@ -8,7 +8,7 @@ from hypothesis import settings
 def test_hypothesis_profile_stays_derandomized() -> None:
     """The active Hypothesis profile never draws from real system entropy.
 
-    Regression test for R21: `test/conftest.py` registers and loads a
+    Regression test: `test/conftest.py` registers and loads a
     "deterministic" profile with `derandomize=True` so every
     property-based test's examples are a pure function of the test's own
     seed, not of wall-clock-seeded randomness. A silent edit to that

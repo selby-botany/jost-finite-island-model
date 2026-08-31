@@ -137,8 +137,7 @@ class StudentTCriticalValueTests(unittest.TestCase):
     ) -> None:
         """1/df interpolation is checked against numerical integration, not just itself.
 
-        R22 (`doc/dev/20260818-claude-opus-5-project-review-rollup.md`,
-        not committed): interpolating a printed table in 1/df is a
+        Interpolating a printed table in 1/df is a
         defensible dependency-free choice, but nothing previously bounded
         its actual error against an independent reference -- every prior
         test in this class either reads a tabled row back or recomputes

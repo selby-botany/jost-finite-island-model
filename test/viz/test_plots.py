@@ -65,7 +65,7 @@ def _state(d: int) -> ModelState:
 def test_scatter_rejects_a_deme_count_mismatch() -> None:
     """`state.deme_count` must agree with `params.d`.
 
-    Regression test for R15: `plot_frequency_scatter` had this guard
+    Regression test: `plot_frequency_scatter` had this guard
     (`src/fim/viz/scatter.py:53`) from the start, but nothing exercised
     it — the `viz` package's coverage was entirely omitted from the
     gate (`omit = ["src/fim/viz/*"]`, also removed by this change), so
@@ -273,7 +273,7 @@ def test_convergence_trace_and_frequency_bars_write_a_png_when_given_a_path(
 ) -> None:
     """Both diagnostic views honor their documented optional `path` argument.
 
-    Regression test for R15: neither function's file-writing branch
+    Regression test: neither function's file-writing branch
     (`_save`) was exercised anywhere — `test_diagnostic_views_have_one_
     trace_and_one_bar_per_deme` above calls both with no `path` at all.
     """

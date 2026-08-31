@@ -121,7 +121,7 @@ def test_atomic_directory_rejects_an_existing_target(tmp_path: Path) -> None:
     Regression proof for Milestone G0 (design doc §3.7, §6.3): the
     relocated `atomic_directory` still requires the final path not to
     exist at all — the same stricter-than-filename-checking contract
-    `cli._atomic_directory` established (R7), reproduced here directly
+    `cli._atomic_directory` established, reproduced here directly
     against `fim.paths` rather than only indirectly through
     `test/cli/test_cli.py`'s `cli.main(["run", ...])` integration tests
     (which keep passing unmodified, since the behavior itself did not

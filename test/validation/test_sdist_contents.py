@@ -28,7 +28,7 @@ def _sdist_include() -> set[str]:
 def test_sdist_includes_docs_tests_and_release_metadata() -> None:
     """The source archive is reviewable and buildable end to end.
 
-    Regression test for R12: the sdist previously included only
+    Regression test: the sdist previously included only
     `LICENSE.md`, `README.md`, `src/fim`, and `version.txt` — a
     scientific package's source archive should also carry the
     documentation, the test suite, the maintainer tooling under `dev/`,
@@ -61,7 +61,7 @@ def test_sdist_excludes_gitignored_scratch_content() -> None:
     reference PDFs never meant for distribution — straight into a real
     built sdist. Verified by actually building one, not just reading the
     config: a config-only check cannot see hatchling's own file-walk
-    behavior. Marked `packaging` (R17): it needs a real `python -m
+    behavior. Marked `packaging`: it needs a real `python -m
     build` invocation, which it makes itself rather than depending on
     `build`'s own package step having already run.
     """

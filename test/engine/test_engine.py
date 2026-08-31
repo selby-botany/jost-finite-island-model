@@ -86,7 +86,7 @@ def test_cap_is_a_valid_nonconverged_result(
     """An exact-match tolerance a live drift process cannot satisfy hits the cap.
 
     `convergence_window=2` is the smallest legal window that still fits
-    `max_generations=2 + 1` (R23 rejects anything larger — see the
+    `max_generations=2 + 1` (validation rejects anything larger — see the
     `convergence_window` case in `test/model/test_params.py::
     test_post_init_validation_covers_all_scalar_contracts`);
     `convergence_tolerance=0.0` requires the two half-window means to
@@ -208,7 +208,7 @@ def test_replicate_tolerance_can_stop_before_the_cap() -> None:
 def test_replicate_minimum_exceeding_n_replicates_is_rejected() -> None:
     """`replicate_minimum` unreachable within `n_replicates` fails at construction.
 
-    Regression test for R23: `replicate_minimum=100` with `n_replicates=3`
+    Regression test: `replicate_minimum=100` with `n_replicates=3`
     used to be accepted and silently fall back to the `n_replicates`
     hard cap every time (adaptive stopping could never even be
     evaluated, let alone fire) — a config that can never do what it
@@ -235,7 +235,7 @@ def test_replicate_minimum_exceeding_n_replicates_is_rejected() -> None:
 def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() -> None:
     """A batch watching only an always-undefined `G_ST` runs to the full cap.
 
-    Regression test for R5: every replicate here is fully monomorphic at
+    Regression test: every replicate here is fully monomorphic at
     its one locus, so `G_ST` is undefined for every one of them and its
     stopping-criterion window never fills. The batch correctly falls back
     to the `n_replicates` cap rather than the prior behavior, where
@@ -320,7 +320,7 @@ def test_replicate_summary_covers_every_numeric_final_report_key(
 def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:
     """`seed=0`, the lowest legal value, still derives valid replicate seeds.
 
-    Regression boundary test for R4: `seed >= 0` is the whole legal
+    Regression boundary test: `seed >= 0` is the whole legal
     range (`fim.model.params.SimulationParams.__post_init__`), so
     `seed=0` is the boundary most likely to expose an off-by-one in the
     `seed + replicate_index` derivation. Every derived replicate seed
@@ -424,7 +424,7 @@ def test_max_workers_rejects_a_non_positive_count() -> None:
 def test_max_workers_rejects_an_unpicklable_clock() -> None:
     """A closure `clock` fails at the call site, not deep in worker spawn.
 
-    Regression test for R24: the prior behavior let an unpicklable
+    Regression test: the prior behavior let an unpicklable
     `clock` reach `ProcessPoolExecutor`, where it failed as raw pickling
     noise from inside worker-process spawn machinery.
     """
@@ -446,7 +446,7 @@ def test_max_workers_rejects_an_unpicklable_clock() -> None:
 def test_max_workers_rejects_an_unpicklable_store_factory() -> None:
     """A closure `store_factory` fails at the call site, not in a worker.
 
-    Regression test for R24, the `store_factory` counterpart to
+    Regression test, the `store_factory` counterpart to
     `test_max_workers_rejects_an_unpicklable_clock` above.
     """
     params = SimulationParams.from_mapping({**_tiny_config(), "n_replicates": 2})
@@ -533,7 +533,7 @@ def test_naive_manifest_clock_is_rejected(tiny_params: SimulationParams) -> None
 def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
     """A run whose only watched statistic never becomes defined hits the cap.
 
-    Regression test for R5: `G_ST` is undefined every generation here (the
+    Regression test: `G_ST` is undefined every generation here (the
     single locus is fixed for the same allele in both demes throughout,
     since `mu=0.0`), so its trailing window never fills and the criterion
     can never report stability — there is no data to judge stability
@@ -577,7 +577,7 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
 def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
     """A replicate with one monomorphic and one polymorphic locus never crashes.
 
-    Regression test for R5's headline defect: with two loci, one fixed
+    Regression test for the multi-locus G_ST averaging defect: with two loci, one fixed
     for the same allele in every deme (undefined at that locus alone) and
     one polymorphic, the *replicate's* G_ST used to come out `None` (the
     old rule voided the whole multi-locus average on any single
@@ -598,7 +598,7 @@ def test_adaptive_g_st_batch_survives_partial_monomorphism() -> None:
         seed=7,
         loci=(LocusSpec(1, 100), LocusSpec(2, 100)),
         convergence_statistic="G_ST",
-        # R23: convergence_window must fit within max_generations + 1;
+        # convergence_window must fit within max_generations + 1;
         # this test is about replicate-batch behavior, not within-run
         # convergence, so the minimum legal window keeps max_generations=1
         # valid without changing what the test actually verifies.
@@ -641,7 +641,7 @@ def test_adaptive_batch_drops_replicates_where_g_st_is_undefined() -> None:
         seed=7,
         loci=(LocusSpec(1, 100),),
         convergence_statistic="G_ST",
-        # R23: convergence_window must fit within max_generations + 1;
+        # convergence_window must fit within max_generations + 1;
         # this test is about replicate-batch behavior, not within-run
         # convergence, so the minimum legal window keeps max_generations=1
         # valid without changing what the test actually verifies.
@@ -926,7 +926,7 @@ def test_report_for_state_supports_multiple_loci_and_equal_weighting() -> None:
 def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average() -> None:
     """`G_ST` averages only the loci where it is defined, not zero-filled.
 
-    Regression test for R5: one locus fixed for the same allele in every
+    Regression test: one locus fixed for the same allele in every
     deme (`G_ST` undefined there — `H_T == 0`) alongside one polymorphic
     locus. The reported `G_ST` must equal the polymorphic locus's own
     value exactly, not that value averaged against a fabricated `0.0` for

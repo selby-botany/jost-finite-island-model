@@ -5227,9 +5227,9 @@ folder would leave behind a folder that looks like a real,
 completed run's output (it exists, it has some files in it) but is
 actually missing whatever had not been written yet. Nothing about
 that folder's own name or existence would reveal it was actually
-incomplete — a real, previously reported bug (R7, this project's own
-tracked-issue numbering, predating this function's extraction from
-`cli.py`) that this function exists specifically to prevent.
+incomplete — a real bug found in `cli.py` before this function was
+extracted from it, and one this function exists specifically to
+prevent.
 
 The fix follows the same idea a careful editor uses when saving a
 long document: write the whole new version to a *different* file
@@ -5736,7 +5736,7 @@ corruption, or deliberately — and this raises rather than letting
 re-analysis silently produce numbers for a file that is no longer
 what the run actually produced.
 
-Regression fix for R7 (`cli.py`'s own history, predating this
+Regression fix (`cli.py`'s own history, predating this
 extraction): an edited or truncated trajectory used to re-analyze
 silently under `fim stats`. The run that wrote `trajectory_path`
 also recorded its exact SHA-256 digest and byte count in
@@ -6618,10 +6618,7 @@ probabilities). Writing the formula as
 `1 + ln(J_S) / (-ln(J_T))`: `J_S <= 1` makes `ln(J_S) <= 0`, so the
 second term is never positive, giving the `<= 1` bound; `J_S >= J_T`
 (from `H_S <= H_T`) makes `ln(J_S) >= ln(J_T)`, so the second term is
-never below `ln(J_T)/(-ln(J_T)) = -1`, giving the `>= 0` bound. See
-`dev/doc/apps/selby/jost-finite-island-model/20260830-claude-sonnet-
-5-nei-1973-gene-diversity-test-plan.md` in the `1121-citrus` project
-for the full derivation this docstring summarizes.
+never below `ln(J_T)/(-ln(J_T)) = -1`, giving the `>= 0` bound.
 
 Undefined, and returned as `None` rather than a fabricated value, in
 the same spirit as `g_st`'s own `None` case: when `H_T` is exactly
@@ -6852,10 +6849,9 @@ This is not merely cited from the paper: it is an exact algebraic
 reduction of this project's own already-validated `_iterate_
 identities` recursion (`test/validation/test_simulator_equilibrium.py`,
 also the Tier 1 oracle for the Crow & Aoki torus scenario) in the
-`d -> infinity`, `mu = 0` limit — worked out in full, with a six-row
-numerical confirmation, in `dev/doc/apps/selby/jost-finite-island-
-model/20260830-claude-sonnet-5-whitlock-1992-identity-recovery-test-
-plan.md` in the `1121-citrus` project.
+`d -> infinity`, `mu = 0` limit, confirmed by direct numerical
+comparison against that recursion across six representative
+`(N, m)` combinations.
 
 **Arguments**:
 
@@ -7172,9 +7168,11 @@ expression (its Eq. 7C) is an integral with no elementary
 antiderivative, "numerically evaluated using standard integration
 software" in the paper's own words — genuinely outside what this
 module's own dependency-free, closed-form-only style can offer (a
-hand-rolled numerical quadrature was scoped separately and not
-built here; see `1121-citrus`'s Chao-et-al-2015 findings doc, item
-5). Eq. 7D is the paper's own stated approximation to that integral,
+hand-rolled numerical quadrature was considered and deliberately not
+built: this module depends on nothing beyond NumPy, and adding a
+quadrature routine for one approximation formula would break that
+property for a single function). Eq. 7D is the paper's own stated
+approximation to that integral,
 accurate "except for the special case of two subpopulations (`n =
 2`)" — its own words, not a caveat added here — so a two-deme
 scenario's own result from this function should be treated with

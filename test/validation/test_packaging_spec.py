@@ -11,13 +11,12 @@ SPEC_FILE = PROJECT_ROOT / "packaging" / "fim.spec"
 def test_upx_compression_is_disabled() -> None:
     """The Windows executable is never UPX-compressed.
 
-    Regression test for R9: UPX-compressed executables are a well-known
-    antivirus/SmartScreen false-positive trigger, and `upx` is an
-    undeclared build dependency PyInstaller silently skips compression
-    for when absent — so a compressed build was a function of whichever
-    runner image happened to build it, not of the tag. `upx=True` must
-    never come back without `upx` also becoming a pinned, versioned
-    build dependency.
+    UPX-compressed executables are a well-known antivirus/SmartScreen
+    false-positive trigger, and `upx` is an undeclared build dependency
+    PyInstaller silently skips compression for when absent — so a
+    compressed build was a function of whichever runner image happened
+    to build it, not of the tag. `upx=True` must never come back
+    without `upx` also becoming a pinned, versioned build dependency.
     """
     spec = SPEC_FILE.read_text(encoding="utf-8")
 
@@ -28,12 +27,10 @@ def test_upx_compression_is_disabled() -> None:
 def test_tkinter_and_its_matplotlib_backend_stay_excluded() -> None:
     """`tkinter`/`backend_tkagg` never creep back into a pywebview build.
 
-    This project's GUI is pywebview (design doc
-    `20260821-claude-sonnet-5-graphical-interface.md` §3.2), never Tk —
-    a regression guard against either being un-excluded again, the same
-    "assert an invariant without starting a build" pattern this
-    project's sibling repo (1121-citrus) already uses for startup
-    scripts and CI YAML.
+    This project's GUI is pywebview, never Tk — a regression guard
+    against either being un-excluded again, asserting the invariant
+    statically rather than starting a real PyInstaller build to find
+    out.
     """
     spec = SPEC_FILE.read_text(encoding="utf-8")
     excludes = spec.split("excludes=[", 1)[1].split("]", 1)[0]
