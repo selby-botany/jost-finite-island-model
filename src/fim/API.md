@@ -1865,6 +1865,7 @@ Start with no run in flight.
 #### start\_run
 
 ```python
+@_log_bridge_call
 def start_run(values: dict[str, str]) -> dict[str, Any]
 ```
 
@@ -1908,6 +1909,7 @@ driver thread, before this method was written; see
 #### cancel\_run
 
 ```python
+@_log_bridge_call
 def cancel_run() -> None
 ```
 
@@ -1923,6 +1925,7 @@ that arrives a moment after the run already finished on its own.
 #### open\_output\_folder
 
 ```python
+@_log_bridge_call
 def open_output_folder(path: str) -> None
 ```
 
@@ -1941,6 +1944,7 @@ Reveal a completed run's output directory in the OS file browser.
 #### get\_starter\_form
 
 ```python
+@_log_bridge_call
 def get_starter_form() -> dict[str, str]
 ```
 
@@ -1956,6 +1960,7 @@ beyond calling it.
 #### validate\_form
 
 ```python
+@_log_bridge_call
 def validate_form(values: dict[str, str]) -> dict[str, Any]
 ```
 
@@ -1985,6 +1990,7 @@ Validate the form exactly as "Run simulation" would.
 #### get\_initial\_state\_panels
 
 ```python
+@_log_bridge_call
 def get_initial_state_panels(values: dict[str, str]) -> dict[str, Any]
 ```
 
@@ -2016,6 +2022,7 @@ state would show at generation 0.
 #### get\_initial\_state\_deme\_pair\_panel
 
 ```python
+@_log_bridge_call
 def get_initial_state_deme_pair_panel(values: dict[str, str], first_deme: int,
                                       second_deme: int) -> dict[str, Any]
 ```
@@ -2043,6 +2050,7 @@ pair as separate panels (`d > 6`).
 #### load\_yaml
 
 ```python
+@_log_bridge_call
 def load_yaml() -> dict[str, Any]
 ```
 
@@ -2064,6 +2072,7 @@ terminal loads identically here, error for error.
 #### save\_yaml
 
 ```python
+@_log_bridge_call
 def save_yaml(values: dict[str, str]) -> dict[str, Any]
 ```
 
@@ -2087,6 +2096,7 @@ Validate the form, then save it as a `fim run`-compatible YAML file.
 #### get\_default\_max\_workers
 
 ```python
+@_log_bridge_call
 def get_default_max_workers() -> int
 ```
 
@@ -2102,6 +2112,7 @@ workers` directly rather than inventing a second default.
 #### get\_significant\_digits
 
 ```python
+@_log_bridge_call
 def get_significant_digits() -> int
 ```
 
@@ -2120,6 +2131,7 @@ back).
 #### set\_significant\_digits
 
 ```python
+@_log_bridge_call
 def set_significant_digits(digits: int) -> dict[str, Any]
 ```
 
@@ -2146,6 +2158,7 @@ once, at push time, and is not retroactively reformatted.
 #### get\_live\_deme\_pair
 
 ```python
+@_log_bridge_call
 def get_live_deme_pair() -> tuple[int, int] | None
 ```
 
@@ -2163,6 +2176,7 @@ unlike `_significant_digits`'s own thread-start snapshot.
 #### set\_live\_deme\_pair
 
 ```python
+@_log_bridge_call
 def set_live_deme_pair(first_deme: int | None,
                        second_deme: int | None) -> dict[str, Any]
 ```
@@ -2210,6 +2224,7 @@ than crash the whole push).
 #### list\_recent\_runs
 
 ```python
+@_log_bridge_call
 def list_recent_runs() -> list[dict[str, Any]]
 ```
 
@@ -2231,6 +2246,7 @@ no single trajectory of its own to open.
 #### browse\_for\_trajectory
 
 ```python
+@_log_bridge_call
 def browse_for_trajectory() -> dict[str, Any]
 ```
 
@@ -2254,6 +2270,7 @@ OS's own file picker on every platform.
 #### open\_run
 
 ```python
+@_log_bridge_call
 def open_run(values: dict[str, str]) -> dict[str, Any]
 ```
 
@@ -2298,6 +2315,7 @@ reuse, not a second rendering path.
 #### get\_animation\_frames
 
 ```python
+@_log_bridge_call
 def get_animation_frames(output_directory: str) -> dict[str, Any]
 ```
 
@@ -2337,6 +2355,7 @@ any kind during playback.
 #### get\_animation\_deme\_pair\_frames
 
 ```python
+@_log_bridge_call
 def get_animation_deme_pair_frames(output_directory: str, first_deme: int,
                                    second_deme: int) -> dict[str, Any]
 ```
@@ -2380,6 +2399,7 @@ shape the default view's own frames already arrived in.
 #### get\_deme\_pair\_panel
 
 ```python
+@_log_bridge_call
 def get_deme_pair_panel(output_directory: str, first_deme: int,
                         second_deme: int) -> dict[str, Any]
 ```
@@ -2419,6 +2439,7 @@ small `d`).
 #### get\_batch\_deme\_pair\_panel
 
 ```python
+@_log_bridge_call
 def get_batch_deme_pair_panel(output_directory: str, first_deme: int,
                               second_deme: int) -> dict[str, Any]
 ```
@@ -2456,6 +2477,7 @@ itself.
 #### ping
 
 ```python
+@_log_bridge_call
 def ping() -> str
 ```
 
@@ -2470,6 +2492,7 @@ context, before any real screen is built on top of it.
 #### ping\_from\_worker
 
 ```python
+@_log_bridge_call
 def ping_from_worker() -> str
 ```
 
@@ -2489,6 +2512,7 @@ inside a real batch run.
 #### open\_external\_link
 
 ```python
+@_log_bridge_call
 def open_external_link(url: str) -> None
 ```
 
@@ -2507,6 +2531,7 @@ module already follows for another OS-dispatched action.
 #### check\_for\_updates
 
 ```python
+@_log_bridge_call
 def check_for_updates() -> dict[str, Any]
 ```
 
@@ -2536,6 +2561,7 @@ own equivalent action called the same module the same way.
 #### get\_about\_info
 
 ```python
+@_log_bridge_call
 def get_about_info() -> dict[str, str]
 ```
 

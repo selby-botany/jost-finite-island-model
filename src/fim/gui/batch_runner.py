@@ -37,6 +37,7 @@ here now that real parallelism reopens it for the GUI too.
 from __future__ import annotations
 
 import functools
+import logging
 import os
 import queue
 import shutil
@@ -86,6 +87,8 @@ DoneMessage = tuple[Literal["done"], tuple[RunResult, ...]]
 CancelledMessage = tuple[Literal["cancelled"], int, int]
 ErrorMessage = tuple[Literal["error"], str]
 BatchMessage = StartedMessage | DoneMessage | CancelledMessage | ErrorMessage
+
+logger = logging.getLogger(__name__)
 
 
 def default_max_workers() -> int:
@@ -181,6 +184,12 @@ def start_batch_run(
         ),
     )
     thread.start()
+    logger.debug(
+        "batch run worker thread started: %s -> %s (max_workers=%d)",
+        run_id,
+        output_directory,
+        resolved_workers,
+    )
     return thread
 
 
@@ -310,6 +319,7 @@ def _watch_for_cancellation(
     """
     while not stop_watching.is_set():
         if cancel_event.wait(timeout=_CANCEL_WATCH_INTERVAL_SECONDS):
+            logger.debug("batch cancellation observed; touching %s", cancel_path)
             cancel_path.touch()
             return
 

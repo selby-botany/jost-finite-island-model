@@ -28,6 +28,7 @@ the caller, rather than re-verifying it a second time.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,8 @@ from fim.reanalyze import group_rows_by_generation
 from fim.viz.scatter import FloatArray, frequency_points
 
 GUI_ANIMATION_MAX_FRAMES: Final = 100
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +93,12 @@ def pre_render_frames(
         state = ModelState.from_rows(grouped[generation], params.loci)
         points = frequency_points(state)
         frames.append(AnimationFrame(generation=generation, points=points))
+    logger.debug(
+        "pre-rendered %d animation frame(s) from %d persisted generation(s) in %s",
+        len(frames),
+        len(grouped),
+        trajectory_path,
+    )
     return frames
 
 

@@ -34,6 +34,7 @@ fim-gui-design.md` §7.1, §7.2):
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -46,6 +47,8 @@ from fim.model.locus import LocusSpec
 from fim.model.state import ModelState
 from fim.persistence.store import TrajectoryRow, TrajectoryStore
 from fim.reanalyze import group_rows_by_generation
+
+logger = logging.getLogger(__name__)
 
 
 class RunCancelledError(Exception):
@@ -222,6 +225,18 @@ def write_progress_sidecar(progress_path: Path, generation: int) -> None:
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
+    # Guarded like `fim.persistence.jsonl_store.JSONLTrajectoryStore.
+    # write_generation` (`doc/fim-logging-design.md` §9): called once
+    # per generation for the life of a replicate. This runs inside a
+    # `ProcessPoolExecutor` worker process for a batch replicate — see
+    # `fim.engine._run_replicate_worker`'s own docstring for why whether
+    # this line actually reaches a handler depends on the worker's start
+    # method (fork inherits the parent's configured logging; spawn does
+    # not).
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "wrote progress sidecar: %s (generation=%d)", progress_path, generation
+        )
 
 
 def read_progress_sidecar(progress_path: Path) -> dict[str, Any] | None:

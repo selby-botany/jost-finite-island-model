@@ -32,6 +32,7 @@ after the `await` resolves.
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 import logging
 import os
@@ -98,6 +99,29 @@ _TRAJECTORY_FILE_TYPES = ("trajectory.jsonl files (*.jsonl)", "All files (*.*)")
 # repository link, both point here.
 _REPOSITORY_URL = "https://github.com/selby-botany/jost-finite-island-model"
 _DOCUMENTATION_URL = f"{_REPOSITORY_URL}#readme"
+
+
+def _log_bridge_call[ApiMethod: Callable[..., Any]](method: ApiMethod) -> ApiMethod:
+    """Log every `Api` bridge call at DEBUG, by method name only.
+
+    `doc/fim-logging-design.md` §10's own `fim.gui.*` row: applied to
+    every public `Api` method below, one line per call, naming only
+    the method — never its arguments. A real call can carry a full
+    configuration form (`start_run`) or a filesystem path a user
+    typed (`open_run`), neither of which belongs in a log file by
+    default; unlike `fim.cli.main`'s own "parsed arguments" DEBUG line
+    (reachable only from a terminal invocation on this same machine), a
+    bridge call originates from JS running inside the app's own
+    embedded browser, one step further removed from a trusted
+    terminal.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self: Api, *args: Any, **kwargs: Any) -> Any:
+        logger.debug("bridge: %s", method.__name__)
+        return method(self, *args, **kwargs)
+
+    return cast(ApiMethod, wrapper)
 
 
 class _EvaluatesJs(Protocol):
@@ -363,6 +387,7 @@ class Api:
         # only a future run the way `_significant_digits` does.
         self._live_deme_pair: tuple[int, int] | None = None
 
+    @_log_bridge_call
     def start_run(self, values: dict[str, str]) -> dict[str, Any]:
         """Validate the form, then start a run pushing live progress to the page.
 
@@ -424,7 +449,9 @@ class Api:
         try:
             runner.start_run(params, output_directory, message_queue, cancel_event)
         except FileExistsError as error:
+            logger.warning("scalar run failed to start: %s", error)
             return {"ok": False, "message": str(error)}
+        logger.info("scalar run starting: %s", output_directory)
         self._cancel_event = cancel_event
         # A fresh run never inherits a previous run's own live pair
         # selection — the same "never left showing stale state from
@@ -477,7 +504,14 @@ class Api:
                 max_workers=max_workers,
             )
         except FileExistsError as error:
+            logger.warning("batch run failed to start: %s", error)
             return {"ok": False, "message": str(error)}
+        logger.info(
+            "batch run starting: %s (n_replicates=%d, max_workers=%s)",
+            output_directory,
+            params.n_replicates,
+            max_workers,
+        )
         self._cancel_event = cancel_event
         # See `_start_scalar_run`'s identical reset for why.
         self._live_deme_pair = None
@@ -499,6 +533,7 @@ class Api:
         ).start()
         return {"ok": True}
 
+    @_log_bridge_call
     def cancel_run(self) -> None:
         """Request cancellation of whichever scalar run `start_run` last started.
 
@@ -510,6 +545,7 @@ class Api:
         if self._cancel_event is not None:
             self._cancel_event.set()
 
+    @_log_bridge_call
     def open_output_folder(self, path: str) -> None:
         """Reveal a completed run's output directory in the OS file browser.
 
@@ -522,6 +558,7 @@ class Api:
         """
         self._open_folder(Path(path))
 
+    @_log_bridge_call
     def get_starter_form(self) -> dict[str, str]:
         """Return a fresh form's default values.
 
@@ -532,6 +569,7 @@ class Api:
         """
         return starter_form_values()
 
+    @_log_bridge_call
     def validate_form(self, values: dict[str, str]) -> dict[str, Any]:
         """Validate the form exactly as "Run simulation" would.
 
@@ -564,6 +602,7 @@ class Api:
             }
         return {"ok": True}
 
+    @_log_bridge_call
     def get_initial_state_panels(self, values: dict[str, str]) -> dict[str, Any]:
         """Compute scatter panels and statistics for the configured p_0 state.
 
@@ -611,6 +650,7 @@ class Api:
             "maxGenerations": params.max_generations,
         }
 
+    @_log_bridge_call
     def get_initial_state_deme_pair_panel(
         self, values: dict[str, str], first_deme: int, second_deme: int
     ) -> dict[str, Any]:
@@ -640,6 +680,7 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "panel": panel}
 
+    @_log_bridge_call
     def load_yaml(self) -> dict[str, Any]:
         """Browse for and load a YAML config, returning the form values it renders to.
 
@@ -668,6 +709,7 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "values": values}
 
+    @_log_bridge_call
     def save_yaml(self, values: dict[str, str]) -> dict[str, Any]:
         """Validate the form, then save it as a `fim run`-compatible YAML file.
 
@@ -703,6 +745,7 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "path": str(target)}
 
+    @_log_bridge_call
     def get_default_max_workers(self) -> int:
         """Return the Batch tab's own default parallel-worker count.
 
@@ -713,6 +756,7 @@ class Api:
         """
         return batch_runner.default_max_workers()
 
+    @_log_bridge_call
     def get_significant_digits(self) -> int:
         """Return the GUI's current display-rounding precision.
 
@@ -726,6 +770,7 @@ class Api:
         """
         return self._significant_digits
 
+    @_log_bridge_call
     def set_significant_digits(self, digits: int) -> dict[str, Any]:
         """Change the GUI's display-rounding precision (View menu).
 
@@ -755,6 +800,7 @@ class Api:
         self._significant_digits = digits
         return {"ok": True, "digits": digits}
 
+    @_log_bridge_call
     def get_live_deme_pair(self) -> tuple[int, int] | None:
         """Return the deme pair the Progress screen's live selector wants, or `None`.
 
@@ -767,6 +813,7 @@ class Api:
         """
         return self._live_deme_pair
 
+    @_log_bridge_call
     def set_live_deme_pair(
         self, first_deme: int | None, second_deme: int | None
     ) -> dict[str, Any]:
@@ -811,6 +858,7 @@ class Api:
             self._live_deme_pair = (first_deme, second_deme)
         return {"ok": True}
 
+    @_log_bridge_call
     def list_recent_runs(self) -> list[dict[str, Any]]:
         """List every run under `results/`, newest first (`doc/fim-gui-design.md` §9).
 
@@ -839,6 +887,7 @@ class Api:
             for run in recent_runs.list_recent_runs()
         ]
 
+    @_log_bridge_call
     def browse_for_trajectory(self) -> dict[str, Any]:
         """Browse for a `trajectory.jsonl` via the OS's own native file picker.
 
@@ -864,6 +913,7 @@ class Api:
             return {"ok": False, "path": ""}
         return {"ok": True, "path": selection[0]}
 
+    @_log_bridge_call
     def open_run(self, values: dict[str, str]) -> dict[str, Any]:
         """Re-analyze a persisted trajectory, matching `fim stats`'s own semantics.
 
@@ -943,6 +993,7 @@ class Api:
             "demeCount": reanalyzed.params.d,
         }
 
+    @_log_bridge_call
     def get_animation_frames(self, output_directory: str) -> dict[str, Any]:
         """Sample and ship every animation frame for one run, in a single call.
 
@@ -993,6 +1044,7 @@ class Api:
             ],
         }
 
+    @_log_bridge_call
     def get_animation_deme_pair_frames(
         self, output_directory: str, first_deme: int, second_deme: int
     ) -> dict[str, Any]:
@@ -1047,6 +1099,7 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "frames": panel_frames}
 
+    @_log_bridge_call
     def get_deme_pair_panel(
         self, output_directory: str, first_deme: int, second_deme: int
     ) -> dict[str, Any]:
@@ -1087,6 +1140,7 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "panel": panel}
 
+    @_log_bridge_call
     def get_batch_deme_pair_panel(
         self, output_directory: str, first_deme: int, second_deme: int
     ) -> dict[str, Any]:
@@ -1128,6 +1182,7 @@ class Api:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "panel": panel}
 
+    @_log_bridge_call
     def ping(self) -> str:
         """Prove the basic JS-to-Python bridge round trip (Milestone W1).
 
@@ -1137,6 +1192,7 @@ class Api:
         """
         return "pong"
 
+    @_log_bridge_call
     def ping_from_worker(self) -> str:
         """Prove a trivial picklable callable survives a real cross-process round trip.
 
@@ -1152,6 +1208,7 @@ class Api:
         with ProcessPoolExecutor(max_workers=1) as executor:
             return executor.submit(_worker_ping).result()
 
+    @_log_bridge_call
     def open_external_link(self, url: str) -> None:
         """Open `url` in the OS default browser (doc/fim-gui-design.md §11).
 
@@ -1165,6 +1222,7 @@ class Api:
         """
         webbrowser.open(url)
 
+    @_log_bridge_call
     def check_for_updates(self) -> dict[str, Any]:
         """Perform the same opt-in GitHub release check `fim update --check` does.
 
@@ -1200,6 +1258,7 @@ class Api:
             "url": release_url,
         }
 
+    @_log_bridge_call
     def get_about_info(self) -> dict[str, str]:
         """Return the static "About fim" facts the Help menu shows.
 
@@ -1266,6 +1325,7 @@ def _drain_run_messages(
     `_start_scalar_run`'s own thread), but a future direct call needs
     no new argument to keep working.
     """
+    logger.debug("run message-drain thread started: %s", output_directory)
     while True:
         # Indexed access under an `if` on `message[0]`, not a tuple-
         # unpacking assignment: `message`'s static type is the whole
@@ -1304,6 +1364,8 @@ def _drain_run_messages(
                     progress_payload["pairPanel"] = deme_pair_panel(
                         message[3], first_deme - 1, second_deme - 1
                     )
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("run progress: generation=%s", message[1])
             window.evaluate_js(f"fim.onRunProgress({json.dumps(progress_payload)})")
             if on_message is not None:
                 on_message(message)
@@ -1321,16 +1383,19 @@ def _drain_run_messages(
                 "generationCount": result.manifest.generation_count,
                 "demeCount": deme_count,
             }
+            logger.info("run done: %s", output_directory)
             window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")
             if on_message is not None:
                 on_message(message)
             return
         elif message[0] == "cancelled":
+            logger.info("run cancelled: %s", output_directory)
             window.evaluate_js(f"fim.onRunCancelled({json.dumps(message[1])})")
             if on_message is not None:
                 on_message(message)
             return
         else:
+            logger.warning("run error: %s", message[1])
             window.evaluate_js(f"fim.onRunError({json.dumps(message[1])})")
             if on_message is not None:
                 on_message(message)
@@ -1656,6 +1721,7 @@ def _drain_batch_messages(
     if on_message is not None:
         on_message(started)
     working_directory = started[1]
+    logger.debug("batch message-drain thread started: %s", working_directory)
     while True:
         try:
             message = message_queue.get(timeout=_BATCH_POLL_INTERVAL_SECONDS)
@@ -1668,11 +1734,14 @@ def _drain_batch_messages(
             payload = _batch_done_payload(
                 params, run_id, output_directory, message[1], digits
             )
+            logger.info("batch done: %s", output_directory)
             window.evaluate_js(f"fim.onBatchDone({json.dumps(payload)})")
         elif message[0] == "cancelled":
             cancelled_payload = {"replicateIndex": message[1], "generation": message[2]}
+            logger.info("batch cancelled: %s", output_directory)
             window.evaluate_js(f"fim.onBatchCancelled({json.dumps(cancelled_payload)})")
         else:
+            logger.warning("batch error: %s", message[1])
             window.evaluate_js(f"fim.onBatchError({json.dumps(message[1])})")
         if on_message is not None:
             on_message(message)
@@ -1745,6 +1814,7 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     )
     if created is None:
         raise RuntimeError("pywebview did not create a window")
+    logger.debug("window created (hidden=%s)", hidden)
     return created
 
 

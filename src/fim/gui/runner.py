@@ -30,6 +30,7 @@ against.
 
 from __future__ import annotations
 
+import logging
 import queue
 import threading
 import time
@@ -85,6 +86,8 @@ DoneMessage = tuple[Literal["done"], RunResult]
 CancelledMessage = tuple[Literal["cancelled"], int]
 ErrorMessage = tuple[Literal["error"], str]
 RunMessage = ProgressMessage | DoneMessage | CancelledMessage | ErrorMessage
+
+logger = logging.getLogger(__name__)
 
 
 class ProgressThrottle:
@@ -186,6 +189,7 @@ def start_run(
         args=(params, run_id, output_directory, message_queue, cancel_event, clock),
     )
     thread.start()
+    logger.debug("scalar run worker thread started: %s -> %s", run_id, output_directory)
     return thread
 
 

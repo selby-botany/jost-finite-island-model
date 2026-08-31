@@ -326,7 +326,8 @@ unless noted:
 | `fim.viz.*` | Figure saved (path, DEBUG); large-`d` fallback panel selected (DEBUG). |
 | `fim.reanalyze` | Re-analysis start/end (trajectory path, generation selected). |
 | `fim.update` | Network request start/end and outcome (INFO on success, WARNING on failure — this project's own only network call, so its own failure mode deserves visibility by default). |
-| `fim.gui.app`/`runner`/`batch_runner`/`store` | Window/bridge lifecycle events; background thread start/stop; run/batch start, progress-push cadence (DEBUG), done/cancelled/error; every bridge method call (DEBUG, method name only — arguments may contain a full configuration and are not logged by default). |
+| `fim.gui.app`/`runner`/`batch_runner`/`store` | Window/bridge lifecycle events; background thread start/stop; run/batch start, progress-push cadence (DEBUG), done/cancelled/error; every `Api` bridge method call (DEBUG, method name only — via a `_log_bridge_call` decorator, since arguments may contain a full configuration and are not logged by default). |
+| `fim.gui.recent_runs`/`animation` | Recent-run scan result count and any unrecognized manifest skipped (DEBUG); animation frames pre-rendered from how many persisted generations (DEBUG). |
 | `fim.launcher` | Which of the three dispatch branches fired (DEBUG). |
 
 Two corrections against this table's own first draft, found only once the

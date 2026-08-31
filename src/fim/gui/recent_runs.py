@@ -15,6 +15,7 @@ trajectory of its own to verify or re-analyze.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +26,8 @@ from fim.persistence.manifest import (
     read_batch_manifest,
     read_manifest,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +78,7 @@ def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]:
         else paths.results_directory()
     )
     if not root.is_dir():
+        logger.debug("scanning recent runs: %s does not exist", root)
         return []
     found: list[RecentRun] = []
     for manifest_path in root.glob("*/manifest.json"):
@@ -82,6 +86,7 @@ def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]:
         if run is not None:
             found.append(run)
     found.sort(key=lambda run: run.ended_at, reverse=True)
+    logger.debug("scanning recent runs: found %d under %s", len(found), root)
     return found
 
 
@@ -118,6 +123,7 @@ def _recent_run_from_file(manifest_path: Path) -> RecentRun | None:
             read_batch_manifest(manifest_path), manifest_path.parent
         )
     except (ValueError, KeyError):
+        logger.debug("skipping unrecognized manifest: %s", manifest_path)
         return None
 
 
