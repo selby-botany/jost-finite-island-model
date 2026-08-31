@@ -138,6 +138,7 @@ push itself. These two settings are what closes that remaining gap.
 - [Detailed design](doc/fim-simulator-detailed-design.md)
 - [Detailed test plan](doc/fim-simulator-detailed-test-plan.md)
 - [Externally accessible engine API](doc/fim-simulator-functional-api.md)
+- [Desktop GUI design](doc/fim-gui-design.md)
 - [Desktop GUI test plan](doc/fim-gui-test-plan.md)
 - [Git hooks](dev/git-hooks/README.md)
 - [Maintainer scripts](dev/bin/README.md)

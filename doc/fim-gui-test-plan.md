@@ -19,7 +19,9 @@ fim-simulator-detailed-test-plan.md`'s taxonomy: fim functional, fim-gui
 functional, internal/deep); everything below is the second of those
 three. Detailed, per-test documentation lives in each test file's own
 docstrings (pydoc) — this document organizes and tabulates rather than
-repeating that content.
+repeating that content. The companion
+[desktop GUI design document](fim-gui-design.md) covers why and how
+`fim.gui` itself is built; this document covers only how it is tested.
 
 ## What the GUI is, in one paragraph
 

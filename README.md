@@ -221,6 +221,7 @@ defines the complete scientific and architectural contract.
 - [Detailed implementation design](doc/fim-simulator-detailed-design.md)
 - [Detailed test plan](doc/fim-simulator-detailed-test-plan.md)
 - [Externally accessible engine API](doc/fim-simulator-functional-api.md)
+- [Desktop GUI design](doc/fim-gui-design.md)
 - [Desktop GUI test plan](doc/fim-gui-test-plan.md)
 - [Source-tree orientation](src/README.md)
 - [Generated API reference](src/fim/API.md)
