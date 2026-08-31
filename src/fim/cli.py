@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import functools
 import json
+import logging
 import os
 import pickle
 import shutil
@@ -50,7 +51,7 @@ from pathlib import Path
 import yaml
 from matplotlib import pyplot as plt
 
-from fim import __version__, paths, reanalyze, update
+from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
 from fim.model.params import SimulationParams
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
@@ -69,6 +70,8 @@ from fim.persistence.manifest import (
 # mypy strict, not merely an unexported transitive import.
 from fim.persistence.report import write_report as write_report  # noqa: PLC0414
 from fim.viz.scatter import plot_frequency_scatter
+
+logger = logging.getLogger(__name__)
 
 STARTER_CONFIG = """\
 # Finite island model starter configuration
@@ -152,6 +155,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     parser = _parser()
     arguments = parser.parse_args(argv)
+    try:
+        logging_setup.configure(
+            arguments.log, logging_setup.parse_log_options(arguments.log_options)
+        )
+    except ValueError as error:
+        # A malformed `-l`/`-L` value is a command-line mistake, exactly
+        # like any other `parser.error` case below — `argparse`'s own
+        # usage-line-plus-message shape, not a traceback, and not yet
+        # routed through the run-the-actual-work `except` block below
+        # (logging is not configured until this succeeds, so nothing
+        # past this point should run at all).
+        parser.error(str(error))
+    logger.debug("parsed arguments: %s", arguments)
     try:
         if arguments.command == "init":
             return _command_init(arguments)
@@ -657,6 +673,26 @@ def _parser() -> argparse.ArgumentParser:
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
+    )
+    # Declared once, here, and nowhere else — never repeated on a
+    # subcommand's own parser (`doc/fim-logging-design.md` §4: a
+    # subparser-level copy would let its own default silently overwrite
+    # a value already set from before the subcommand name, an
+    # `argparse` `parents=`-sharing gotcha). Must therefore appear
+    # before the subcommand: `fim -l debug run CONFIG`, not
+    # `fim run CONFIG -l debug`.
+    parser.add_argument(
+        "-l",
+        "--log",
+        default="warning",
+        metavar="LEVEL",
+        help="log level: debug, info, warn, error, or critical (default: warning)",
+    )
+    parser.add_argument(
+        "-L",
+        "--log-options",
+        metavar="KEY=VALUE[,KEY=VALUE]...",
+        help="log configuration overrides (see doc/fim-logging-design.md)",
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 

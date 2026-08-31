@@ -375,9 +375,23 @@ is missing rather than opening a window.</p>
 <h2 id="global-flags">Global flags</h2>
 <pre><code class="language-console">fim --help
 fim --version
+fim -l debug run myrun.yaml
+fim -l info -L file=none run myrun.yaml
 </code></pre>
 <p><code>--version</code> comes from the same <code>version.txt</code> value used by packages,
 manifests, and release tags.</p>
+<p><code>-l</code>/<code>--log LEVEL</code> (<code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>, or <code>critical</code>;
+default <code>warning</code>) and <code>-L</code>/<code>--log-options KEY=VALUE[,KEY=VALUE]...</code>
+control this program's own operational log — separate from, and
+unaffected by, <code>run</code>'s own <code>--quiet</code> and progress/artifact messages
+above. Every run already writes a rotated log file at
+<code>project-root/logs/fim.log</code> by default, whether or not <code>-l</code>/<code>-L</code> is
+given at all; <code>-l debug</code> raises what reaches it (and the terminal),
+<code>-L file=none</code> turns the file off entirely. Both flags must appear
+<em>before</em> the subcommand name (<code>fim -l debug run ...</code>, not
+<code>fim run ... -l debug</code>). Full flag reference, every <code>-L</code> key, and where
+each log call in the source lives:
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-logging-design.md">operational logging design</a>.</p>
 <h2 id="output-schemas">Output schemas</h2>
 <h3 id="trajectoryjsonl"><code>trajectory.jsonl</code></h3>
 <p>One JSON object is appended for every nonzero frequency:</p>

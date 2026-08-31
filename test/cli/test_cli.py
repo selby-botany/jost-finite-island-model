@@ -479,6 +479,74 @@ def test_version_reads_single_source_of_truth(
     assert __version__ in capsys.readouterr().out
 
 
+def test_log_and_log_options_are_accepted_before_every_subcommand(
+    tmp_path: Path,
+) -> None:
+    """`-l`/`-L`, given before the subcommand, parse on every one of the four.
+
+    Not a runtime assertion about logging's own effect (`test/test_
+    logging_setup.py` already covers `configure()` itself) -- just that
+    `argparse` accepts the flags at all, on every subcommand, the same
+    shared declaration point (`doc/fim-logging-design.md` §4).
+    """
+    parser = cli._parser()
+    config = tmp_path / "run.yaml"
+    _write_config(config)
+
+    assert parser.parse_args(["-l", "debug", "init"]).log == "debug"
+    assert (
+        parser.parse_args(
+            ["-l", "info", "-L", "file=none", "run", str(config)]
+        ).log_options
+        == "file=none"
+    )
+    assert parser.parse_args(["-l", "warn", "stats", "trajectory.jsonl"]).log == "warn"
+    assert parser.parse_args(["-l", "error", "update"]).log == "error"
+
+
+def test_log_after_the_subcommand_is_rejected() -> None:
+    """`-l`/`-L` must precede the subcommand name, not follow it.
+
+    `doc/fim-logging-design.md` §4 documents this one-directional
+    ordering rule directly (a deliberate `argparse` `parents=`-sharing
+    gotcha avoided, not an oversight) -- this is the regression test for
+    it: `fim run CONFIG -l debug` must fail clearly, not silently ignore
+    `-l` or apply it to the wrong scope.
+    """
+    parser = cli._parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["init", "-l", "debug"])
+
+
+def test_an_invalid_log_level_is_a_plain_parser_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bad `-l` value exits 2 with a plain message, never a traceback.
+
+    `parser.error(...)` -- the same path every other malformed-argument
+    case on this parser already takes -- exits the process directly
+    (`SystemExit`), rather than `main` returning a status: the same
+    shape `test_version_reads_single_source_of_truth` already asserts
+    for `--version`.
+    """
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["-l", "verbose", "init"])
+
+    assert exit_info.value.code == 2
+    assert "unknown log level 'verbose'" in capsys.readouterr().err
+
+
+def test_an_invalid_log_options_entry_is_a_plain_parser_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bad `-L` entry exits 2 with a plain message, never a traceback."""
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["-L", "not-a-key-value-pair", "init"])
+
+    assert exit_info.value.code == 2
+    assert "invalid --log-options entry" in capsys.readouterr().err
+
+
 def test_load_config_requires_a_mapping_root(tmp_path: Path) -> None:
     """YAML documents that are not objects fail before parameter parsing."""
     path = tmp_path / "invalid.yaml"

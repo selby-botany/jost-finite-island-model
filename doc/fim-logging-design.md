@@ -129,10 +129,15 @@ It:
 ## 4. The CLI flag surface
 
 Both flags are defined once, on the top-level parser in
-`cli._parser()`, before the subcommand parsers branch off — so every
-subcommand (`init`/`run`/`stats`/`update`) accepts them identically,
-and `fim -l debug run CONFIG` and `fim run CONFIG -l debug` both parse
-(`argparse`'s own standard behavior for a parent-parser argument).
+`cli._parser()`, and nowhere else: `fim -l debug run CONFIG`, before
+the subcommand name. Deliberately not also added to each subparser
+(`fim run CONFIG -l debug` is rejected as an unrecognized argument,
+with a clear `argparse` message naming it): `argparse`'s own
+`parents=`-sharing mechanism silently lets a subparser's own default
+overwrite a value the top-level parser already set from an
+earlier-positioned flag, a well-known gotcha that would make `-l`'s
+own effective value depend on where it appeared — a single, unambiguous
+declaration point is worth the one-directional ordering rule.
 `main()` calls `fim.logging_setup.configure(...)` with the parsed
 values immediately after `parser.parse_args()` returns, before
 dispatching to any command.
@@ -319,14 +324,33 @@ unless noted:
   level-string parsing (valid, invalid, case-insensitive), `-L`-style
   option parsing (every key, an unknown key rejected), idempotent
   re-configuration (calling `configure()` twice never doubles a
-  handler), the file handler actually writing to the resolved default
-  path, `captureWarnings` actually routing a `warnings.warn` call
-  through `caplog`.
-- **CLI static-analysis tests** (`test/cli/test_cli.py`), matching this
-  project's own established pattern (`test/validation/test_ci_runtime_
-  budget.py` for the equivalent CI-side case): `-l`/`-L` accepted on
-  every subcommand, an invalid `-l` value rejected with a plain
-  `parser.error` message rather than a traceback.
+  handler), the file handler actually writing, `captureWarnings`
+  actually routing a real `warnings.warn` call to the configured file
+  (a genuine end-to-end check, not only that `captureWarnings(True)`
+  was called: `logging.captureWarnings(True)` only overrides `warnings.
+  showwarning` the *first* time it runs and silently no-ops on every
+  later call, a real gotcha `configure()` itself works around — see
+  its own docstring).
+- **CLI static-analysis and error-path tests** (`test/cli/test_cli.py`),
+  matching this project's own established pattern (`test/validation/
+  test_ci_runtime_budget.py` for the equivalent CI-side case): `-l`/`-L`
+  accepted before every subcommand, rejected after one, and an invalid
+  `-l`/`-L` value exits via `parser.error` (`SystemExit(2)`, a plain
+  message on stderr) rather than a traceback.
+- **Keeping `configure()`'s default file resolution off the real
+  checkout during tests.** Any test that calls `fim.cli.main` for real
+  ends up calling `configure()`, which — absent an explicit
+  `-L file=...` — resolves against the real `fim.paths.
+  default_log_file()`, not a test's own `tmp_path`. `test/cli/
+  conftest.py` redirects it, scoped to that directory alone (an
+  autouse fixture in the suite-wide `test/conftest.py` was tried first
+  and rejected: it silently replaced the exact function `test/test_
+  paths.py`'s own dedicated tests need to call for real, confirmed
+  directly by a test failure before this was scoped down). `test/cli/`
+  needed its own `__init__.py` alongside this (matching `test/gui/`'s
+  existing one) so mypy does not see two same-named, unqualified
+  `conftest` modules once a second directory-local `conftest.py`
+  exists.
 - **No test asserts exact log message text or count in a
   determinism-sensitive way.** This project's own house rule (`a test
   is a pure function of its commit`) already forbids asserting

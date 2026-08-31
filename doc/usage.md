@@ -434,10 +434,25 @@ is missing rather than opening a window.
 ```console
 fim --help
 fim --version
+fim -l debug run myrun.yaml
+fim -l info -L file=none run myrun.yaml
 ```
 
 `--version` comes from the same `version.txt` value used by packages,
 manifests, and release tags.
+
+`-l`/`--log LEVEL` (`debug`, `info`, `warn`, `error`, or `critical`;
+default `warning`) and `-L`/`--log-options KEY=VALUE[,KEY=VALUE]...`
+control this program's own operational log — separate from, and
+unaffected by, `run`'s own `--quiet` and progress/artifact messages
+above. Every run already writes a rotated log file at
+`project-root/logs/fim.log` by default, whether or not `-l`/`-L` is
+given at all; `-l debug` raises what reaches it (and the terminal),
+`-L file=none` turns the file off entirely. Both flags must appear
+*before* the subcommand name (`fim -l debug run ...`, not
+`fim run ... -l debug`). Full flag reference, every `-L` key, and where
+each log call in the source lives:
+[operational logging design](fim-logging-design.md).
 
 ## Output schemas
 

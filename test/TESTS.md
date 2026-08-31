@@ -17,6 +17,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_reanalyze`](#test.test_reanalyze)
   - [`test_update`](#test.test_update)
 - [`test/cli/`](#group-cli)
+  - [`conftest`](#cli.conftest)
   - [`test_cli`](#cli.test_cli)
 - [`test/convergence/`](#group-convergence)
   - [`test_criteria_validation`](#convergence.test_criteria_validation)
@@ -359,10 +360,11 @@ Unit tests for `fim.logging_setup` (`doc/fim-logging-design.md` §11).
 Every `configure()` call in this file passes an explicit `file=`
 pointing under `tmp_path`, never the real default (`fim.paths.
 default_log_file()`) — a test suite run must never create or write to
-this project's own `logs/` directory as a side effect. `_isolate_fim_
-logger` (autouse, below) restores the `fim` logger's own handlers,
-level, and propagation after every test, so no test in this file can
-leak a handler into a later, unrelated test elsewhere in the suite.
+this project's own `logs/` directory as a side effect. `test/conftest.
+py`'s own `_isolate_logging` (autouse, shared across the whole suite)
+restores the `fim`/`py.warnings` loggers' own handlers, level, and
+propagation after every test, so no test in this file can leak a
+handler into a later, unrelated test elsewhere in the suite.
 
 <a id="test.test_logging_setup.test_resolve_level_accepts_every_standard_name_case_insensitively"></a>
 
@@ -1106,6 +1108,24 @@ Release version parsing requires exactly three non-negative integers.
 
 ## `test/cli/`
 
+<a id="cli.conftest"></a>
+
+# cli.conftest
+
+Shared fixtures for `test/cli/` — scoped here, not `test/conftest.py`.
+
+Every test under this directory calls `fim.cli.main`/`fim.launcher.main`
+for real, which ends up calling `fim.logging_setup.configure()`. Scoped
+to `test/cli/` specifically (not the whole suite) because `test/test_
+paths.py`/`test/test_logging_setup.py` — siblings of this directory,
+not descendants — legitimately need the *real*
+`fim.paths.default_log_file`/`project_root` behavior to test those
+functions themselves; a suite-wide autouse fixture here would silently
+replace the exact function under test in those files instead (confirmed
+directly: it did, once, before this fixture was scoped down to here).
+
+
+
 <a id="cli.test_cli"></a>
 
 # cli.test\_cli
@@ -1336,6 +1356,66 @@ def test_version_reads_single_source_of_truth(
 ```
 
 The global version flag reports the bundled package version.
+
+<a id="cli.test_cli.test_log_and_log_options_are_accepted_before_every_subcommand"></a>
+
+#### test\_log\_and\_log\_options\_are\_accepted\_before\_every\_subcommand
+
+```python
+def test_log_and_log_options_are_accepted_before_every_subcommand(
+        tmp_path: Path) -> None
+```
+
+`-l`/`-L`, given before the subcommand, parse on every one of the four.
+
+Not a runtime assertion about logging's own effect (`test/test_
+logging_setup.py` already covers `configure()` itself) -- just that
+`argparse` accepts the flags at all, on every subcommand, the same
+shared declaration point (`doc/fim-logging-design.md` §4).
+
+<a id="cli.test_cli.test_log_after_the_subcommand_is_rejected"></a>
+
+#### test\_log\_after\_the\_subcommand\_is\_rejected
+
+```python
+def test_log_after_the_subcommand_is_rejected() -> None
+```
+
+`-l`/`-L` must precede the subcommand name, not follow it.
+
+`doc/fim-logging-design.md` §4 documents this one-directional
+ordering rule directly (a deliberate `argparse` `parents=`-sharing
+gotcha avoided, not an oversight) -- this is the regression test for
+it: `fim run CONFIG -l debug` must fail clearly, not silently ignore
+`-l` or apply it to the wrong scope.
+
+<a id="cli.test_cli.test_an_invalid_log_level_is_a_plain_parser_error"></a>
+
+#### test\_an\_invalid\_log\_level\_is\_a\_plain\_parser\_error
+
+```python
+def test_an_invalid_log_level_is_a_plain_parser_error(
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A bad `-l` value exits 2 with a plain message, never a traceback.
+
+`parser.error(...)` -- the same path every other malformed-argument
+case on this parser already takes -- exits the process directly
+(`SystemExit`), rather than `main` returning a status: the same
+shape `test_version_reads_single_source_of_truth` already asserts
+for `--version`.
+
+<a id="cli.test_cli.test_an_invalid_log_options_entry_is_a_plain_parser_error"></a>
+
+#### test\_an\_invalid\_log\_options\_entry\_is\_a\_plain\_parser\_error
+
+```python
+def test_an_invalid_log_options_entry_is_a_plain_parser_error(
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A bad `-L` entry exits 2 with a plain message, never a traceback.
 
 <a id="cli.test_cli.test_load_config_requires_a_mapping_root"></a>
 

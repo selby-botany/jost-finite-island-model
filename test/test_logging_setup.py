@@ -3,10 +3,11 @@
 Every `configure()` call in this file passes an explicit `file=`
 pointing under `tmp_path`, never the real default (`fim.paths.
 default_log_file()`) — a test suite run must never create or write to
-this project's own `logs/` directory as a side effect. `_isolate_fim_
-logger` (autouse, below) restores the `fim` logger's own handlers,
-level, and propagation after every test, so no test in this file can
-leak a handler into a later, unrelated test elsewhere in the suite.
+this project's own `logs/` directory as a side effect. `test/conftest.
+py`'s own `_isolate_logging` (autouse, shared across the whole suite)
+restores the `fim`/`py.warnings` loggers' own handlers, level, and
+propagation after every test, so no test in this file can leak a
+handler into a later, unrelated test elsewhere in the suite.
 """
 
 from __future__ import annotations
@@ -14,43 +15,11 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import warnings
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from fim import logging_setup
-
-
-@pytest.fixture(autouse=True)
-def _isolate_fim_logger() -> Iterator[None]:
-    """Snapshot and restore the `fim`/`py.warnings` loggers' own state.
-
-    `configure()` touches both (`py.warnings` is where
-    `logging.captureWarnings` routes every `warnings.warn` call — see
-    its own docstring) — both must be restored, or a handler this file
-    attaches could leak into an unrelated later test.
-    """
-    loggers = [
-        logging.getLogger(logging_setup.LOGGER_NAME),
-        logging.getLogger("py.warnings"),
-    ]
-    snapshots = [
-        (list(logger.handlers), logger.level, logger.propagate) for logger in loggers
-    ]
-    try:
-        yield
-    finally:
-        for logger, (original_handlers, original_level, original_propagate) in zip(
-            loggers, snapshots, strict=True
-        ):
-            for handler in list(logger.handlers):
-                logger.removeHandler(handler)
-                handler.close()
-            for handler in original_handlers:
-                logger.addHandler(handler)
-            logger.setLevel(original_level)
-            logger.propagate = original_propagate
 
 
 def test_resolve_level_accepts_every_standard_name_case_insensitively() -> None:
