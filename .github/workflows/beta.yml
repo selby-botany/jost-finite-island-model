@@ -71,8 +71,8 @@ jobs:
   # linux-beta-x64 mirror ci.yml's windows/windows-arm64/macos-arm64/
   # macos-x64/linux-x64 jobs step for step, duplicated rather than
   # shared via a reusable workflow (the same "don't touch the proven
-  # release path to make room for a lower-stakes one" tradeoff the
-  # design doc's own §3.2 already accepted) -- with two differences:
+  # release path to make room for a lower-stakes one" tradeoff already
+  # accepted) -- with two differences:
   # `version.txt` is overwritten with the computed label before
   # building (safe: this checkout is never pushed back), and every
   # output filename carries a `-beta` suffix so a beta download is
