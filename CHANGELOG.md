@@ -40,11 +40,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `test/validation/statistical-calibration-evidence.json`) and the
   closed-form prediction (`G_ST=0.1698, D=0.6000`) -- all three within a
   few percent of each other, hierfstat's own `G_ST` landing closer to
-  this project's engine than to the diffusion-limit theory. Full
-  research and reasoning, including why mmod's own test data was not
-  used directly: `dev/doc/apps/selby/jost-finite-island-model/
-  20260830-claude-sonnet-5-external-tooling-cross-validation-plan.md` in
-  the `1121-citrus` project.
+  this project's engine than to the diffusion-limit theory.
 - A new deterministic, parametrized test,
   `test_stepping_stone_differentiation_is_at_least_the_island_models`
   (`test/validation/test_simulator_equilibrium.py`), checking Kimura &
@@ -60,14 +56,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the island model are the same graph at `d=3`, so `G_ST`/`D` come
   out exactly equal there, which is why the assertion is `>=`, not `>`.
   Closes the one item a double-check of this session's own "open items"
-  tables found dropped rather than deliberately deferred -- flagged
-  twice (the Crow & Aoki torus document's Part 2, and implicitly by the
-  metamorphic-panel document's own same-day Tier A/B build, which
+  tracking found dropped rather than deliberately deferred -- flagged
+  twice (once against the Crow & Aoki torus scenario's own open
+  questions, and once implicitly by a same-day monotonicity build that
   covered migration/mutation-rate monotonicity but not this topology
-  comparison) and picked up by neither. Design doc:
-  `dev/doc/apps/selby/jost-finite-island-model/20260830-claude-
-  sonnet-5-kimura-weiss-stepping-stone-test-plan.md` in the
-  `1121-citrus` project.
+  comparison) and picked up by neither.
 - Four new closed-form functions in `src/fim/statistics/
   differentiation.py`, from Whitlock (1992, *Evolution* 46:608-615):
   `identity_recovery_rate`, `_equilibrium`, `_trajectory`, and
@@ -84,15 +77,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   trajectory` (`test/validation/test_simulator_equilibrium.py`), at
   `d=100,000` against a new `_ONE_OVER_D_TOL` bound (an `O(1/d)`
   residual, the same shape of approximation `equilibrium_g_st`/
-  `equilibrium_d` already carry as `O(1/N)`). Closes the citation gap
-  the Crow & Aoki torus design doc left open ("Whitlock (1992b) itself
-  was not available this session"). Full derivation, a six-row
-  numerical `d`-sweep, and scope notes (an engine-level empirical
-  convergence-speed test, and the paper's own demographic-variability
-  material, both explicitly deferred):
-  `dev/doc/apps/selby/jost-finite-island-model/20260830-claude-
-  sonnet-5-whitlock-1992-identity-recovery-test-plan.md` in the
-  `1121-citrus` project. Adds five new tests to `test/statistics/
+  `equilibrium_d` already carry as `O(1/N)`). Closes a citation gap an
+  earlier pass had left open (Whitlock (1992b) itself was not
+  available at the time). An engine-level empirical convergence-speed
+  test and the paper's own demographic-variability material are both
+  explicitly out of scope for this change. Adds five new tests to `test/statistics/
   test_differentiation.py`, and fixes a pre-existing `mypy` gap that
   same file's Nei `R_ST` test carried since it was added
   (`r_st(table)`'s own `float | None` return type was never narrowed
@@ -114,11 +103,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   has no nested-deme concept to build it on. `g_st_log` is proven
   (not just tested) to be bounded in `[0, 1]`, from the same two facts
   `g_st` already relies on (`H_S <= H_T` always; both are
-  probabilities) — the source paper states no such bound itself. Full
-  design and worked derivations:
-  `dev/doc/apps/selby/jost-finite-island-model/20260830-claude-
-  sonnet-5-nei-1973-gene-diversity-test-plan.md` in the `1121-citrus`
-  project. Adds four new tests to `test/statistics/
+  probabilities) — the source paper states no such bound itself. Adds
+  four new tests to `test/statistics/
   test_differentiation.py` and extends three existing ones (bounds,
   the shared-fixation `None` case, and the multiple-demes requirement)
   to cover the new functions alongside the ones they already checked,
@@ -386,8 +372,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   no coverage) for that job to call, and `--ci`'s own marker filter
   changed from excluding nothing to excluding `slow` (`-m 'not
   slow'`), keeping every other marker -- `statistical`, `gui`,
-  `packaging` -- included by default the same way R17 already
-  established. The "Run the full CI gate" step's own `timeout-minutes`
+  `packaging` -- included by default rather than excluded by omission.
+  The "Run the full CI gate" step's own `timeout-minutes`
   drops back to 20 now that it no longer carries the scenario suite's
   cost at all. `build`/`homebrew` are gated off the two new triggers so
   a scheduled/dispatched run adds only `slow-tests`, not a second full
@@ -455,7 +441,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   conditions" section, `doc/fim-simulator-design.md` §3.3, and
   `DirichletInitialCondition`'s docstring.
 - Several docstrings and `doc/usage.md`/`doc/fim-simulator-test-plan.md`
-  described the atomic-publish write path (R7) as making output
+  described the atomic-publish write path as making output
   "durable," including `_atomic_directory`'s claim that "no matter when
   a crash happens (a hard kill or power loss...)" no partial state is
   observable. There is no `fsync` anywhere in `src/`; the only
@@ -499,7 +485,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `fim stats` rejected every manifest `fim` 1.0.0 wrote — the only
   released version so far — with `manifest is missing: schema_version`,
   a message naming the absent JSON key rather than the cause: 1.0.0
-  predates the `schema_version`/`artifacts` contract (R7) entirely.
+  predates the `schema_version`/`artifacts` contract entirely.
   `RunManifest.from_dict` now recognizes this specific case (only
   `schema_version` missing, a recognizable `software_version` present)
   and raises an error naming both the cause and the remedy — there is no
@@ -721,7 +707,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `not packaging`, so a marker added in the future is included by
   default rather than silently excluded; the local (non-`--ci`) default
   still excludes `slow`, `statistical`, and `packaging` for fast
-  iteration. The `packaging`-marked test added for R12
+  iteration. The `packaging`-marked test added alongside this fix
   (`test/validation/test_sdist_contents.py`) is the first test this
   marker has ever actually carried.
 - The source distribution (`sdist`) excluded `doc/`, `test/`, `dev/`,
@@ -742,7 +728,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a matching `exclude = ["/doc/dev"]`. Added
   `test/validation/test_sdist_contents.py`: one static test asserting
   the required paths are declared, and one `packaging`-marked test
-  (R17) that builds a real sdist and asserts `doc/dev/` is genuinely
+  that builds a real sdist and asserts `doc/dev/` is genuinely
   absent from it — a config-only test cannot see `hatchling`'s own
   file-walk behavior.
 - Release-workflow dependencies and permissions were not immutably
@@ -761,7 +747,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   kept as-is since `README.md` documents it specifically). Separately:
   `contents: write` — previously workflow-wide in the old
   `release.yml` — was already scoped to the `publish` job alone as a
-  side effect of folding the release jobs into `ci.yml` (R8); this pass
+  side effect of folding the release jobs into `ci.yml`; this pass
   adds the regression test formalizing it. The Windows inter-job
   artifact now has `retention-days: 1` (it exists only to hand the exe
   from `windows` to `publish` within one run; its durable home is the
