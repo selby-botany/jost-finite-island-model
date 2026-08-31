@@ -7,8 +7,8 @@ below, is the one function that actually writes such a file, in a
 fixed, reproducible format (see its own docstring for exactly what
 "deterministic" means here and why it matters).
 
-Extracted from `fim.cli`'s private `_write_json` (design doc
-`20260819-claude-sonnet-5-graphical-interface.md` §3.7), parallel to
+Extracted from `fim.cli`'s private `_write_json` (`doc/
+fim-gui-design.md` §12), parallel to
 `fim.persistence.manifest.write_manifest`: one shared, deterministic JSON
 writer for both `report.json` (a `fim.engine.FinalReport`, plus the CLI's
 `fim stats` re-analysis reports and `fim.gui`'s own run reports) and a

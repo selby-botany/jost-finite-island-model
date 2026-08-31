@@ -1,4 +1,4 @@
-"""Progress reporting and cancellation for a background run (design §3.4).
+"""Progress reporting and cancellation for a background run (§7 of the GUI design doc).
 
 `fim.persistence.store.TrajectoryStore` is a `Protocol` (structural
 typing, not an ABC), and `fim.engine._run_one`'s generation loop already
@@ -7,14 +7,12 @@ with no `try`/`except` around it — a clean, pre-existing extension point
 `GuiProgressStore`/`LiveProgressStore` decorate rather than a change to
 `fim.engine` itself.
 
-Named `RunCancelledError`, not the design doc's illustrative
-`RunCancelled` — ruff's `N818` (exception names end in `Error`) is part
-of this project's lint gate; the design's code block is a decision
-sketch, not a literal source requirement (§4's own "wireframes ... not
-final visuals" framing applies here too).
+Named `RunCancelledError`, not an earlier prototype's `RunCancelled` —
+ruff's `N818` (exception names end in `Error`) is part of this
+project's lint gate (`doc/fim-gui-design.md` §2).
 
-Two decorators live here, for two execution shapes (design
-`20260821-claude-sonnet-5-graphical-interface.md` §0.5, §3.4):
+Two decorators live here, for two execution shapes (`doc/
+fim-gui-design.md` §7.1, §7.2):
 
 - `GuiProgressStore` — a scalar run, one in-process background thread.
   Holds a `threading.Event` and a callback closure; both are real
@@ -87,7 +85,7 @@ class GuiProgressStore:
         Args:
             inner: The real store every non-cancelled write delegates to.
             on_generation: Called with the generation number and that
-                generation's own rows (design §0.5: the caller's own
+                generation's own rows (the caller's own
                 live-scatter push needs the actual frequency data, not
                 just a bare count — re-reading it back from `inner`
                 would need a path this decorator has no reason to know)
@@ -167,8 +165,7 @@ class LiveProgressStore:
             cancel_path: Checked for existence before every write; one
                 file shared by every replicate in the same batch, so
                 creating it once cancels all of them, matching "Cancel
-                batch" stopping the batch, not one replicate (carried
-                forward from design §4.0 #6).
+                batch" stopping the batch, not one replicate.
         """
         self._inner = inner
         self._progress_path = progress_path
@@ -252,7 +249,7 @@ def read_live_state(
 ) -> ModelState | None:
     """Reconstruct an in-flight replicate's state at a sidecar-confirmed generation.
 
-    Design §3.4, §7.6 — the live-batch counterpart to `fim.reanalyze.
+    The live-batch counterpart to `fim.reanalyze.
     reanalyze_trajectory`: that function requires a completed run's own
     `manifest.json` (written only once, at the very end), so it cannot
     read a replicate that is still running. This reads the same

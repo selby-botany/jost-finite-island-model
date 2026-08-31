@@ -1,16 +1,16 @@
-"""Scan `results/` for recently completed runs, scalar and batch (design
-doc §4.6).
+"""Scan `results/` for recently completed runs, scalar and batch
+(`doc/fim-gui-design.md` §9).
 
-Screen 6's recent-runs list is populated by scanning
+The recent-runs picker is populated by scanning
 `fim.paths.results_directory()` for `*/manifest.json`, reading each with
 `fim.persistence.manifest.read_manifest` (scalar) or
 `fim.persistence.manifest.read_batch_manifest` (batch) — the same files
 `fim stats` and `fim run`'s own batch summary default to. A batch's
-manifest is listed but labeled distinctly ("batch (14/20)", design §0,
-§4.0 #9) rather than treated as something Screen 6 can open directly:
-Screen 4's own "Open replicate" is the path to any one replicate's
-trajectory, since a batch-level manifest has no single trajectory of
-its own to verify or re-analyze (design §3.8, §4.6).
+manifest is listed but labeled distinctly (e.g. "batch (14/20)") rather
+than treated as something the picker can open directly: "Open
+replicate" on a batch's own results table is the path to any one
+replicate's trajectory, since a batch-level manifest has no single
+trajectory of its own to verify or re-analyze.
 """
 
 from __future__ import annotations
@@ -39,12 +39,11 @@ class RecentRun:
             what `list_recent_runs` sorts by.
         label: The mock's own display text: a scalar run's
             `stop_reason` (e.g. "converged"), or a batch's
-            "batch (replicate_count/n_replicates)" (design §4.6's own
+            "batch (replicate_count/n_replicates)" (e.g.
             "batch (14/20)").
         is_batch: Distinguishes a `BatchManifest` entry from a
             `RunManifest` one — Screen 6 uses this to route "Open" to
-            re-analysis for a scalar run, or refuse it for a batch
-            (design §4.0 #9, §4.6).
+            re-analysis for a scalar run, or refuse it for a batch.
     """
 
     run_id: str
@@ -89,7 +88,7 @@ def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]:
 def _recent_run_from_batch_manifest(
     manifest: BatchManifest, directory: Path
 ) -> RecentRun:
-    """Build a batch `RecentRun`, labeled distinctly (design §0, §4.0 #9)."""
+    """Build a batch `RecentRun`, labeled distinctly."""
     n_replicates = manifest.params().n_replicates
     return RecentRun(
         run_id=manifest.run_id,

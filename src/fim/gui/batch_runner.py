@@ -1,5 +1,4 @@
-"""Background-thread batch-run orchestration (design §0.5, §3.4, §3.7 of
-`20260821-claude-sonnet-5-graphical-interface.md`).
+"""Background-thread batch-run orchestration (`doc/fim-gui-design.md` §7.2).
 
 Runs a multi-replicate batch in parallel, as real OS processes, via
 `fim.engine.fim(..., max_workers=N, store_factory=...)` — the same call
@@ -94,10 +93,8 @@ def default_max_workers() -> int:
 
     Matches `cli._cpu_count()` — the CLI's own default (non-`--sequential`)
     parallel batch worker count — so the GUI's default batch behavior is
-    never silently weaker than the CLI's own (design §2.3, H5). Still
-    overridable per call via `start_batch_run`'s `max_workers` argument,
-    which the Batch tab's own parallelism control (design §4.1, not yet
-    built) will eventually expose.
+    never silently weaker than the CLI's own. Still
+    overridable per call via `start_batch_run`'s `max_workers` argument.
     """
     return os.cpu_count() or 1
 
@@ -138,9 +135,9 @@ def start_batch_run(
     Args:
         params: Already-validated parameters with `n_replicates > 1` —
             the screen calling this routes to the scalar runner instead
-            whenever `n_replicates == 1` (design §4.1: "there is no
-            separate 'batch mode' toggle; `n_replicates` *is* the
-            toggle").
+            whenever `n_replicates == 1` (`doc/fim-gui-design.md` §7:
+            there is no separate "batch mode" toggle; `n_replicates`
+            *is* the toggle).
         output_directory: The batch's target directory, passed straight
             to `fim.paths.atomic_directory` by the worker thread.
             Checked for existence synchronously here too, exactly like
@@ -149,9 +146,10 @@ def start_batch_run(
             the caller drains it on its own timer.
         cancel_event: Set by the UI's "Cancel batch" button; translated
             internally into a shared cancellation file every replicate
-            worker's `LiveProgressStore` checks before each write (design
-            §3.4) — nothing about this argument's own meaning changes
-            from the Tk-era sequential runner.
+            worker's `LiveProgressStore` checks before each write
+            (`doc/fim-gui-design.md` §7.2) — nothing about this
+            argument's own meaning changes from the Tk-era sequential
+            runner.
         max_workers: Worker-process count for this batch. **`None` here
             does not mean "run sequentially in-process"** — unlike
             `fim.engine.fim`'s own `max_workers=None` — it means "use
@@ -159,7 +157,7 @@ def start_batch_run(
             the CLI's own default), a deliberate divergence from the
             engine's convention worth stating explicitly rather than
             leaving implicit, since batch execution is parallel by
-            default here (design §0.5, H5).
+            default here.
 
     Returns:
         The started (not yet joined) worker thread.
@@ -202,8 +200,7 @@ def _batch_worker(
     `_EXPECTED_ENGINE_ERRORS`, propagates out of the `with` block and
     `atomic_directory` discards the whole temporary tree — no
     partial-batch save point exists to preserve, matching "Cancel batch"
-    stopping the batch, not one replicate (design §4.0 #6 of the
-    original design, carried forward unchanged by §3.4 of the revision).
+    stopping the batch, not one replicate.
     """
     control_directory = Path(tempfile.mkdtemp(prefix="fim-batch-control-"))
     cancel_path = control_directory / "cancel"
@@ -233,9 +230,8 @@ def _batch_worker(
             # `working_directory` is `atomic_directory`'s own hidden
             # temporary sibling of `output_directory` (a random `mkdtemp`
             # suffix, not derivable from `output_directory` alone) —
-            # posted here, first, so a parent-side poller (design §3.4,
-            # §7.6's "live/parent-side polling loop reading each
-            # replicate's own sidecar") knows where each replicate's
+            # posted here, first, so a parent-side poller
+            # (`doc/fim-gui-design.md` §7.2) knows where each replicate's
             # `.progress` sidecar and `trajectory.jsonl` actually live
             # while the batch is still running, not only once it is
             # published at `output_directory` — an event no reader
@@ -367,7 +363,7 @@ def _prune_orphan_replicate_directories(
     """Remove any replicate directory not among the batch's published results.
 
     Direct parallel of `cli._prune_orphan_replicate_directories`
-    (`src/fim/cli.py:355`; regression fix S1 there) — not a shared
+    (`src/fim/cli.py:355`) — not a shared
     import, per this module's established front-end-boundary convention.
     Necessary now that this module calls `fim(..., max_workers=N)`: under
     real parallelism, `fim.engine._run_batch_parallel` submits a whole
@@ -414,7 +410,7 @@ def _write_batch_artifacts(
     (`fim.gui.runner.write_run_artifacts`, reused rather than duplicated
     — both modules live in the same `fim.gui` package), removing that
     replicate's now-superfluous `.progress` sidecar as its artifacts are
-    written (design §0.5: the published `results/` tree stays exactly
+    written: the published `results/` tree stays exactly
     the CLI's own four-file-per-replicate contract, with no GUI-only
     file left behind once a batch completes successfully — a cancelled
     batch needs no such cleanup, since `atomic_directory` discards the

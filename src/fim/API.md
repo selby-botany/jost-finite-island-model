@@ -1616,32 +1616,31 @@ this package sits relative to the rest of the project.
 # fim.gui.animation
 
 Sample animation frames from a persisted trajectory as raw scatter
-coordinates, not rendered images (design doc §0.5, §3.8 of
-`20260821-claude-sonnet-5-graphical-interface.md`).
+coordinates, not rendered images (`doc/fim-gui-design.md` §8).
 
 A converged run can persist hundreds or thousands of generations, and
 turning every one of them into a separate frame is both slow and
 unnecessary for a human watching a scatter drift. This module samples at
 most `GUI_ANIMATION_MAX_FRAMES` generations, evenly spaced across the
 run's persisted range, always including generation 0 and the final
-generation — unchanged from the design's Tk-era revision — but each
-sampled generation now produces a plain coordinate array
-(`fim.viz.scatter.frequency_points`), not a rendered `Figure`: pywebview's
-animation screen ships the whole sampled set to the page once and drives
-play/pause/scrub entirely with client-side Canvas redraws (§3.5, §3.8),
-so nothing here needs to render anything at all. This also makes
-pre-computation itself cheaper, not just playback: building `max_frames`
-coordinate arrays costs a fraction of what building `max_frames`
-Matplotlib figures did, since no rasterization happens on this path.
+generation — unchanged from an earlier, Tk-era revision of this module
+— but each sampled generation now produces a plain coordinate array
+(`fim.viz.scatter.frequency_points`), not a rendered `Figure`:
+pywebview's own scrubber ships the whole sampled set to the page once
+and drives play/pause/scrub entirely with client-side Canvas redraws
+(`doc/fim-gui-design.md` §5.2, §8), so nothing here needs to render
+anything at all. This also makes pre-computation itself cheaper, not
+just playback: building `max_frames` coordinate arrays costs a
+fraction of what building `max_frames` Matplotlib figures did, since
+no rasterization happens on this path.
 
-Reached only after the same trajectory-integrity check §4.6 already
-performed: Screen 5 is reached only from Screen 3 or Screen 6, both of
-which have already verified the trajectory
-(`fim.reanalyze.reanalyze_trajectory` calls
-`fim.persistence.manifest.verify_trajectory_integrity` itself, and a
-just-completed live run's manifest was just written, never edited). This
-module therefore reads the trajectory directly, trusting the caller,
-rather than re-verifying it a second time.
+Reached only after the trajectory's integrity has already been
+verified — the unified run view's `completed` state, reached either by
+a run that just finished (its manifest was just written, never edited)
+or by opening a persisted run (`fim.reanalyze.reanalyze_trajectory`
+itself calls `fim.persistence.manifest.verify_trajectory_integrity`
+first). This module therefore reads the trajectory directly, trusting
+the caller, rather than re-verifying it a second time.
 
 <a id="fim.gui.animation.AnimationFrame"></a>
 
@@ -1659,11 +1658,12 @@ One sampled animation frame's raw scatter coordinates.
 - `generation` - The persisted generation this frame represents.
 - `points` - `frequency_points`' own return shape — one row per
   (locus, allele) pair, one column per deme. Whoever renders
-  this (the GUI bridge, §3.5) is responsible for any further
-  reduction a high deme count needs (the pairwise-grid or
-  first-deme-pair cases `panels_from_points` itself handles,
-  unified-run-view design §3.6) and for the client-side
-  Canvas draw itself; this module never touches either.
+  this (the GUI bridge, `doc/fim-gui-design.md` §4) is
+  responsible for any further reduction a high deme count
+  needs (the pairwise-grid or first-deme-pair cases
+  `panels_from_points` itself handles) and for the
+  client-side Canvas draw itself; this module never touches
+  either.
 
 <a id="fim.gui.animation.pre_render_frames"></a>
 
@@ -1721,8 +1721,8 @@ Return at most `max_frames` generation numbers, evenly spaced.
   `max_frames` generation numbers, drawn from
   `available_generations`. Always includes the lowest and the
   highest generation number when `max_frames >= 2` and
-  `available_generations` is non-empty (design §3.8: "always
-  including generation 0 and the final generation"). Returns
+  `available_generations` is non-empty (always including
+  generation 0 and the final generation). Returns
   every available generation, sorted, when there are
   `max_frames` or fewer of them. `max_frames <= 0` returns
   `[]`; `max_frames == 1` returns only the highest generation —
@@ -1734,19 +1734,20 @@ Return at most `max_frames` generation numbers, evenly spaced.
 # fim.gui.app
 
 pywebview bootstrap and `Api` bridge — the GUI's own entry point
-(design doc `20260821-claude-sonnet-5-graphical-interface.md` §3.1, §3.2).
+(`doc/fim-gui-design.md` §4).
 
 `fim.launcher` dispatches here for the zero-argument and `--graphical`
 paths, exactly as it dispatched to the Tk build's own `fim.gui.app:main`
-before this migration — the entry point name and shape are stable across
-the toolkit swap (§3.1: "`fim.launcher` does not change at all").
+before the pywebview migration (`doc/fim-gui-design.md` §2) — the
+entry point name and shape are stable across the toolkit swap:
+`fim.launcher` itself did not change at all.
 
 `create_window` and `main` are deliberately separate: `main` blocks
 (`webview.start()` runs the GUI's own event loop until the window
 closes), so no test calls it directly. Every headless test instead calls
 `create_window()` itself, then drives the result with its own
-`webview.start(callback)` — the pattern `§0.3`'s prototype proved works,
-confirmed again directly against this window/bridge before writing this
+`webview.start(callback)`, confirmed directly against this window/bridge
+before writing this
 module (see `test/gui/test_app.py`): `window.evaluate_js(...)` returns
 the raw value of whatever JS expression it evaluates, not the resolved
 value of a Promise that expression happens to produce — a `js_api` call
@@ -1771,7 +1772,8 @@ def format_statistic(value: float | None,
                      digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS) -> str
 ```
 
-Format one `FinalReport` statistic for display (Screen 3, design §4.3).
+Format one `FinalReport` statistic for the completed run view
+(`doc/fim-gui-design.md` §5.2).
 
 A direct parallel to `cli._format_optional` — not a shared import,
 per this package's established front-end-boundary convention
@@ -1795,8 +1797,9 @@ class Api()
 
 The `window.pywebview.api` surface every `webui/*.js` screen calls into.
 
-Grows one method per bridge call as each screen is built (design
-§4); holds almost no state of its own beyond what a given call
+Grows one method per bridge call as each screen is built
+(`doc/fim-gui-design.md` §4.2); holds almost no state of its own
+beyond what a given call
 needs — `_cancel_event` (set by `start_run`, read by `cancel_run`)
 is the one exception, since a running scalar simulation's own
 cancel button has to reach the same `threading.Event` the
@@ -1862,18 +1865,18 @@ def start_run(values: dict[str, str]) -> dict[str, Any]
 Validate the form, then start a run pushing live progress to the page.
 
 Dispatches to a scalar or a real parallel batch run based on
-`params.n_replicates` alone — design §4.1's "there is no
-separate 'batch mode' toggle; `n_replicates` *is* the toggle,"
-so this one bridge method serves both, and `webui/screens/
+`params.n_replicates` alone — there is no separate "batch mode"
+toggle; `n_replicates` *is* the toggle (`doc/fim-gui-design.md`
+§7), so this one bridge method serves both, and `webui/screens/
 input.js`'s own `onRunClicked` never needs to know or care
 which. Either path runs on a background `threading.Thread` so
-this call itself returns immediately; the caller drives Screen 2
-from the pushed `fim.onRun*`/`fim.onBatch*` calls a second
-background thread makes via `window.evaluate_js` as each
-message arrives (design §3.4's "push, not poll" — proven safe
-from an arbitrary background thread, not only `webview.start`'s
-own driver thread, before this method was written; see
-`test/gui/test_running_screen.py`).
+this call itself returns immediately; the caller drives the
+running view from the pushed `fim.onRun*`/`fim.onBatch*` calls
+a second background thread makes via `window.evaluate_js` as
+each message arrives — push, not poll, confirmed safe from an
+arbitrary background thread, not only `webview.start`'s own
+driver thread, before this method was written; see
+`test/gui/test_running_screen.py`.
 
 **Arguments**:
 
@@ -1917,16 +1920,15 @@ that arrives a moment after the run already finished on its own.
 def open_output_folder(path: str) -> None
 ```
 
-Reveal a completed run's output directory (Screen 3, design §4.3).
+Reveal a completed run's output directory in the OS file browser.
 
 **Arguments**:
 
-- `path` - The directory to reveal — `webui/screens/results.js`'s
-  own copy of the `outputDirectory` `onRunDone` last
-  pushed it, not state this bridge tracks itself (design
-  §4.0's "holds almost no state of its own" applies here
-- `too` - nothing about a already-shown results screen
-  needs `Api` to remember which run it was showing).
+- `path` - The directory to reveal — the page's own copy of the
+  `outputDirectory` `onRunDone` last pushed it, not state
+  this bridge tracks itself (`doc/fim-gui-design.md` §4.2:
+  nothing about an already-shown completed run needs
+  `Api` to remember which run it was showing).
 
 <a id="fim.gui.app.Api.get_starter_form"></a>
 
@@ -1936,7 +1938,7 @@ Reveal a completed run's output directory (Screen 3, design §4.3).
 def get_starter_form() -> dict[str, str]
 ```
 
-Return a fresh form's default values (Screen 1, design §3.6, §4.1).
+Return a fresh form's default values.
 
 `config_form.starter_form_values` is the single source of "GUI
 defaults" — the identical values `fim.cli.STARTER_CONFIG` itself
@@ -1951,7 +1953,7 @@ beyond calling it.
 def validate_form(values: dict[str, str]) -> dict[str, Any]
 ```
 
-Validate the form exactly as "Run simulation" would (design §3.6, §4.7).
+Validate the form exactly as "Run simulation" would.
 
 **Arguments**:
 
@@ -1967,10 +1969,10 @@ Validate the form exactly as "Run simulation" would (design §3.6, §4.7).
   `SimulationParams`; otherwise `{"ok": False, "message": ...,
 - `"field"` - ..., "tab": ...}` — `message` is the caught
   `ValueError`'s own text verbatim (matching the CLI's own
-  wording, design §4.7), `field`/`tab` are `None` when the
+  wording), `field`/`tab` are `None` when the
   message names no field this form exposes (an unknown-key
   error, for instance), for the caller to switch to and
-  highlight (§4.0 `2` of the original design) when they are not.
+  highlight when they are not.
 
 <a id="fim.gui.app.Api.get_initial_state_panels"></a>
 
@@ -2041,7 +2043,7 @@ def load_yaml() -> dict[str, Any]
 Browse for and load a YAML config, returning the form values it renders to.
 
 Routes through `fim.cli.load_config` — the identical function
-`fim run` uses (design §3.6) — so a config that runs from the
+`fim run` uses (doc/fim-gui-design.md) — so a config that runs from the
 terminal loads identically here, error for error.
 
 **Returns**:
@@ -2082,7 +2084,7 @@ Validate the form, then save it as a `fim run`-compatible YAML file.
 def get_default_max_workers() -> int
 ```
 
-Return the Batch tab's own default parallel-worker count (design §4.1, H5).
+Return the Batch tab's own default parallel-worker count.
 
 `max_workers` is not a `SimulationParams` field at all — it
 never reaches `form_values_to_payload` — so it has no
@@ -2115,7 +2117,7 @@ back).
 def set_significant_digits(digits: int) -> dict[str, Any]
 ```
 
-Change the GUI's display-rounding precision (View menu, design §4.5).
+Change the GUI's display-rounding precision (View menu).
 
 Purely cosmetic and "no record": every persisted artifact keeps
 full float precision regardless of this value (`_DEFAULT_
@@ -2186,8 +2188,8 @@ than crash the whole push).
 - `first_deme` - 1-based deme number for the X axis, or `None`
   (with `second_deme` also `None`) to clear the selection
   back to the default panel — no UI trigger reaches this
-  any more (simplify-main-plot design dropped the "Show
-  overview" button), but the clearing behavior itself
+  any more (the page's own "Show overview" button was
+  later removed), but the clearing behavior itself
   stays, directly callable and directly tested.
 - `second_deme` - 1-based deme number for the Y axis, or `None`.
 
@@ -2205,7 +2207,7 @@ than crash the whole push).
 def list_recent_runs() -> list[dict[str, Any]]
 ```
 
-List every run under `results/`, newest first (Screen 6, design §4.6).
+List every run under `results/`, newest first (`doc/fim-gui-design.md` §9).
 
 `fim.gui.recent_runs.list_recent_runs` is unchanged from the
 Tk-era build (no `tkinter` import today, needs none tomorrow) —
@@ -2215,8 +2217,8 @@ it and reshaping each `RecentRun` into a JSON-ready dict.
 own platform-correct separator), rather than the page
 concatenating `directory` and `"trajectory.jsonl"` itself —
 string-joining a path client-side would silently produce a
-mixed-separator path on Windows. `None` for a batch row (design
-§0, §4.0 `9`): it has no single trajectory of its own to open.
+mixed-separator path on Windows. `None` for a batch row: it has
+no single trajectory of its own to open.
 
 <a id="fim.gui.app.Api.browse_for_trajectory"></a>
 
@@ -2229,9 +2231,9 @@ def browse_for_trajectory() -> dict[str, Any]
 Browse for a `trajectory.jsonl` via the OS's own native file picker.
 
 `window.create_file_dialog(...)`, not an HTML `<input
-type="file">` — design §4.6's own "a *better* native-feel win
-than Tk's `filedialog.askopenfilename`, since pywebview's
-dialog is the OS's own file picker on every platform."
+type="file">`: a better native-feel win than even Tk's own
+`filedialog.askopenfilename`, since pywebview's dialog is the
+OS's own file picker on every platform.
 
 **Returns**:
 
@@ -2251,14 +2253,15 @@ def open_run(values: dict[str, str]) -> dict[str, Any]
 
 Re-analyze a persisted trajectory, matching `fim stats`'s own semantics.
 
-Reached from Screen 6 (a recent-runs row or a browsed path) or
-Screen 4 ("Open replicate" — the exact same operation over one
-replicate's own `trajectory.jsonl`, design §4.4). The returned
-payload is deliberately shaped exactly like `_drain_run_
-messages`'s own `"done"` payload, so the caller can hand it
-straight to the already-built `window.fim.showResults` —
-design §4.6's "opening a run re-renders Screen 3... unchanged"
-realized here as literal reuse, not a second rendering path.
+Reached from the recent-runs picker (a row, or a browsed path)
+or "Open replicate" on a batch's own results table — the exact
+same operation over one replicate's own `trajectory.jsonl`. The
+returned payload is deliberately shaped exactly like
+`_drain_run_messages`'s own `"done"` payload, so the caller can
+hand it straight to the already-built `window.fim.showResults`
+— opening a run re-renders the unified run view's own
+`completed` state unchanged (§5.2), realized here as literal
+reuse, not a second rendering path.
 
 **Arguments**:
 
@@ -2281,8 +2284,8 @@ realized here as literal reuse, not a second rendering path.
   was given, the generation/q-sweep fields do not parse, or `fim.
   reanalyze.reanalyze_trajectory` itself raises (a
   trajectory-integrity failure, an edited file, or a
-  generation that does not exist — design §4.7's "shown
-  verbatim, matching `fim stats`'s wording").
+  generation that does not exist) — `message` is shown
+  verbatim, matching `fim stats`'s own wording.
 
 <a id="fim.gui.app.Api.get_animation_frames"></a>
 
@@ -2294,7 +2297,8 @@ def get_animation_frames(output_directory: str) -> dict[str, Any]
 
 Sample and ship every animation frame for one run, in a single call.
 
-Design §3.8, §4.5: loads the whole sampled set up front, as raw
+Loads the whole sampled set up front (`doc/fim-gui-design.md`
+§8), as raw
 coordinate data — play, pause, and scrub are then pure
 client-side JavaScript (`webui/screens/animation.js`), with
 zero further Python calls and zero further rendering calls of
@@ -2313,9 +2317,9 @@ any kind during playback.
 - ``{"ok"` - True, "demeCount": ..., "frames": [{"generation",
   "panels"}, ...]}` — one entry per sampled generation, each
   `panels` already in `scatter_panels`' own client-ready shape
-  (`fim.viz.scatter.panels_from_points`, design §3.8: "whoever
-  renders this... is responsible for any further reduction a
-  high deme count needs"). `demeCount` rides along for the
+  (`fim.viz.scatter.panels_from_points`, `doc/fim-gui-design.md`
+- `§12)` - the page is responsible for any further reduction a
+  high deme count needs. `demeCount` rides along for the
   same reason `onRunDone`/`onBatchDone`'s own payloads carry
   it — `animation.js`'s own deme-pair selector needs it to
   populate its two axis dropdowns, exactly like Screens 3/4's
@@ -2334,19 +2338,17 @@ def get_animation_deme_pair_frames(output_directory: str, first_deme: int,
 Recompute one explicit deme-pair panel for every sampled animation frame.
 
 `get_animation_frames`'s own "Compare demes directly" counterpart
-(design §3.8, §4.5) — the same choice Screens 3/4 already offer
-between the default view (a small-multiples pairwise grid for
+— the same choice the completed-run view already offers between
+the default view (a small-multiples pairwise grid for
 `d <= scatter.PAIRWISE_MAX_DEMES`, one Deme-1-vs-Deme-2 panel
-above it, unified-run-view design §3.6) and one explicit raw
-deme pair, extended to the whole animated trajectory rather
-than one static state. Still just one call:
-`webui/screens/animation.js` fires this once, when the user
-picks a pair, not once per frame or once per playback tick —
-design §3.8's own "zero further Python calls... during
-playback" holds exactly as it does for `get_animation_frames`
-itself, since the whole sampled set for that one pair comes
-back together, the same shape the default view's own frames
-already arrived in.
+above it) and one explicit raw deme pair, extended to the whole
+animated trajectory rather than one static state. Still just
+one call: `webui/screens/animation.js` fires this once, when
+the user picks a pair, not once per frame or once per playback
+tick — zero further Python calls happen during playback, the
+same as for `get_animation_frames` itself, since the whole
+sampled set for that one pair comes back together, the same
+shape the default view's own frames already arrived in.
 
 **Arguments**:
 
@@ -2378,11 +2380,11 @@ def get_deme_pair_panel(output_directory: str, first_deme: int,
 
 Recompute one explicit deme-pair 2-D panel for a completed run (Screen 3).
 
-The large-`d` counterpart to Screen 3's own default panel
-(`showResults`'s own `panels[0]`, drawn whenever `d >
-scatter.PAIRWISE_MAX_DEMES` — Deme 1 vs. Deme 2 by default,
-unified-run-view design §3.6): this bridge method lets the user
-switch to any other specific raw deme pair instead, on demand,
+The large-`d` counterpart to the completed-run view's own
+default panel (`showResults`'s own `panels[0]`, drawn whenever
+`d > scatter.PAIRWISE_MAX_DEMES` — Deme 1 vs. Deme 2 by
+default): this bridge method lets the user switch to any other
+specific raw deme pair instead, on demand,
 rather than the page ever computing or requesting every `C(d,
 2)` pair up front (unbounded in `d`, unlike the direct/pairwise
 layout `panels_from_points` already handles automatically for
@@ -2467,10 +2469,10 @@ def ping_from_worker() -> str
 
 Prove a trivial picklable callable survives a real cross-process round trip.
 
-Deliberately proven this early (design §0.5, before `Live
-ProgressStore`/`batch_runner`'s own parallel plumbing, both
-already built and tested, are ever reached through this
-specific pywebview-hosted process): `ProcessPoolExecutor`
+Deliberately proven this early, before `LiveProgressStore`/
+`batch_runner`'s own parallel plumbing (`doc/fim-gui-design.md`
+§7.2), both already built and tested, are ever reached through
+this specific pywebview-hosted process: `ProcessPoolExecutor`
 working at all from inside a GUI application process, not just
 from a plain CLI process, is an assumption worth its own direct
 check rather than only discovering a failure three layers away
@@ -2484,7 +2486,7 @@ inside a real batch run.
 def open_external_link(url: str) -> None
 ```
 
-Open `url` in the OS default browser (in-app help design §4.3).
+Open `url` in the OS default browser (doc/fim-gui-design.md §11).
 
 Every Tier 2 doc link and every bare `http(s)://` link inside a
 Tier 1 doc routes here, never to native `<a>` navigation — an
@@ -2531,7 +2533,7 @@ own equivalent action called the same module the same way.
 def get_about_info() -> dict[str, str]
 ```
 
-Return the static "About fim" facts the Help menu shows (design §4.5).
+Return the static "About fim" facts the Help menu shows.
 
 No bridge state, no network call — `fim.__version__` and the
 project's own already-declared URLs, the same values `pyproject.
@@ -2551,10 +2553,11 @@ Build, but do not show, fim's one pywebview window over `webui/index.html`.
 
 Separate from `main` specifically so tests can drive the window
 themselves via `webview.start(callback)` without ever calling the
-real, blocking `main` — the same "construct real widgets, drive them
+real, blocking `main` — construct real widgets, drive them
 synchronously, never call the real blocking entry point without a
-controlled exit" discipline the design's test plan requires (§6.1,
-§6.4), now against pywebview's own API instead of Tk's.
+controlled exit: the same testing discipline this package has
+always followed (`doc/fim-gui-test-plan.md`), now against
+pywebview's own API instead of Tk's.
 
 **Arguments**:
 
@@ -2606,8 +2609,7 @@ Launch the GUI and block until the window closes.
 
 # fim.gui.batch\_runner
 
-Background-thread batch-run orchestration (design §0.5, §3.4, §3.7 of
-`20260821-claude-sonnet-5-graphical-interface.md`).
+Background-thread batch-run orchestration (`doc/fim-gui-design.md` §7.2).
 
 Runs a multi-replicate batch in parallel, as real OS processes, via
 `fim.engine.fim(..., max_workers=N, store_factory=...)` — the same call
@@ -2654,10 +2656,8 @@ Return the GUI's own default batch worker count.
 
 Matches `cli._cpu_count()` — the CLI's own default (non-`--sequential`)
 parallel batch worker count — so the GUI's default batch behavior is
-never silently weaker than the CLI's own (design §2.3, H5). Still
-overridable per call via `start_batch_run`'s `max_workers` argument,
-which the Batch tab's own parallelism control (design §4.1, not yet
-built) will eventually expose.
+never silently weaker than the CLI's own. Still
+overridable per call via `start_batch_run`'s `max_workers` argument.
 
 <a id="fim.gui.batch_runner.replicate_index"></a>
 
@@ -2708,9 +2708,9 @@ Resolve targets, guard the existing target, and start the worker thread.
 
 - `params` - Already-validated parameters with `n_replicates > 1` —
   the screen calling this routes to the scalar runner instead
-  whenever `n_replicates == 1` (design §4.1: "there is no
-  separate 'batch mode' toggle; `n_replicates` *is* the
-  toggle").
+  whenever `n_replicates == 1` (`doc/fim-gui-design.md` §7:
+  there is no separate "batch mode" toggle; `n_replicates`
+  *is* the toggle).
 - `output_directory` - The batch's target directory, passed straight
   to `fim.paths.atomic_directory` by the worker thread.
   Checked for existence synchronously here too, exactly like
@@ -2719,9 +2719,10 @@ Resolve targets, guard the existing target, and start the worker thread.
   the caller drains it on its own timer.
 - `cancel_event` - Set by the UI's "Cancel batch" button; translated
   internally into a shared cancellation file every replicate
-  worker's `LiveProgressStore` checks before each write (design
-  §3.4) — nothing about this argument's own meaning changes
-  from the Tk-era sequential runner.
+  worker's `LiveProgressStore` checks before each write
+  (`doc/fim-gui-design.md` §7.2) — nothing about this
+  argument's own meaning changes from the Tk-era sequential
+  runner.
 - `max_workers` - Worker-process count for this batch. **`None` here
   does not mean "run sequentially in-process"** — unlike
   `fim.engine.fim`'s own `max_workers=None` — it means "use
@@ -2729,7 +2730,7 @@ Resolve targets, guard the existing target, and start the worker thread.
   the CLI's own default), a deliberate divergence from the
   engine's convention worth stating explicitly rather than
   leaving implicit, since batch execution is parallel by
-  default here (design §0.5, H5).
+  default here.
 
 
 **Returns**:
@@ -2752,28 +2753,26 @@ shapes: a `SimulationParams` instance, a `dict[str, str]` of one string
 per form field (what `screens.input_screen.InputScreen` reads from and
 writes to its widgets), and a `dict[str, object]` payload ready for
 `fim.model.params.SimulationParams.from_mapping` — the identical
-validator `fim.cli` already uses (design doc §3.6). Nothing here
-duplicates a validation rule `from_mapping` already enforces: a
-malformed string is only ever coerced to the right Python type before
-being handed to that one validator, never re-checked against a second,
-GUI-local copy of a rule.
+validator `fim.cli` already uses (`doc/fim-gui-design.md` §6.1).
+Nothing here duplicates a validation rule `from_mapping` already
+enforces: a malformed string is only ever coerced to the right Python
+type before being handed to that one validator, never re-checked
+against a second, GUI-local copy of a rule.
 
 `TABS` groups fields the same way
 [configuration.md](../../doc/configuration.md)'s own section
-headings do (design §3.6, §4.0 `1`). §3.6's cardinality rule decides
-what earns a live widget here at all: O(1) and O(d)/O(loci)-sized
-fields do (a comma-separated text field faithfully represents either);
-a `d`-by-`d` migration matrix, an arbitrary sparse map, a per-locus
-`p_0`, and — narrower cases the design doc does not work through in
-the same detail — a genuinely per-locus `mu` or a `loci` list with
-custom `locus_id`s do not (§2.3). `m` and `p_0` get the read-only
-"loaded from file" badge treatment §4.0 `3` describes when a loaded
-configuration actually uses one; `mu`-per-locus and custom-ID `loci`
-instead raise a clear `ValueError` from `params_to_form_values` (the
-same "edit the YAML file directly" pattern this form has always used
-for a construct it cannot represent at all, load-only badge or not) —
-narrower, later-discovered edge cases than the two the design doc's
-own worked examples cover, not a deliberate scope reduction.
+headings do. The cardinality rule (`doc/fim-gui-design.md` §6.1)
+decides what earns a live widget here at all: O(1) and O(d)/O(loci)-
+sized fields do (a comma-separated text field faithfully represents
+either); a `d`-by-`d` migration matrix, an arbitrary sparse map, a
+per-locus `p_0`, a genuinely per-locus `mu`, or a `loci` list with
+custom `locus_id`s do not. `m` and `p_0` get the read-only "loaded
+from file" badge treatment when a loaded configuration actually uses
+one; `mu`-per-locus and custom-ID `loci` instead raise a clear
+`ValueError` from `params_to_form_values` (the same "edit the YAML
+file directly" pattern this form has always used for a construct it
+cannot represent at all, load-only badge or not) — see `doc/
+fim-gui-design.md` §6.2 for both paths.
 
 <a id="fim.gui.config_form.FormField"></a>
 
@@ -2879,7 +2878,7 @@ Return the tab holding the field a validation error message names.
   first failure rather than collecting every field's own error
   independently), or `None` when the message names no field this
   form can place on any tab (an unknown-key error, for instance)
-  — the caller shows those in the banner alone (design §4.6).
+  — the caller shows those in the banner alone.
 
 <a id="fim.gui.config_form.field_for_error"></a>
 
@@ -2903,8 +2902,7 @@ Return the form field name a validation error message names, if any.
   to that field, or `None` when the message names no exposed field
   (an unknown-key error, an `m`/`m.topology`/`m.rate` message —
   `m` has no single `FormField` of its own — or a construct not
-  yet in scope) — the caller shows those in a banner instead
-  (design §4.6).
+  yet in scope) — the caller shows those in a banner instead.
 
 <a id="fim.gui.config_form.form_values_to_payload"></a>
 
@@ -3150,10 +3148,8 @@ Render a validated `SimulationParams` back into the form's fields.
 - `ValueError` - If `params` uses a construct this form cannot
   represent at all — a per-locus `mu` (`mu_from_params`), or
   a `loci` list with custom, non-default-position
-  `locus_id`s (narrower than the design doc's own worked
-  "loaded" badge examples; §2.3 names an explicit `loci` list
-  with custom ordering as load-only, and this form's one
-  `locus_lengths` field cannot express a custom ID either).
+  `locus_id`s (`doc/fim-gui-design.md` §6.2: this form's one
+  `locus_lengths` field cannot express a custom ID at all).
 
 <a id="fim.gui.config_form.starter_form_values"></a>
 
@@ -3168,8 +3164,8 @@ Return the form's default values, from the CLI's own starter config.
 **Returns**:
 
   The same values `params_to_form_values` would compute for
-  `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults"
-  design §3.6 requires, so a fresh form and `fim init` can never
+  `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults",
+  so a fresh form and `fim init` can never
   drift apart into two documented starting scenarios.
 
 <a id="fim.gui.config_form.payload_to_yaml_text"></a>
@@ -3200,19 +3196,19 @@ Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
 
 # fim.gui.recent\_runs
 
-Scan `results/` for recently completed runs, scalar and batch (design
-doc §4.6).
+Scan `results/` for recently completed runs, scalar and batch
+(`doc/fim-gui-design.md` §9).
 
-Screen 6's recent-runs list is populated by scanning
+The recent-runs picker is populated by scanning
 `fim.paths.results_directory()` for `*/manifest.json`, reading each with
 `fim.persistence.manifest.read_manifest` (scalar) or
 `fim.persistence.manifest.read_batch_manifest` (batch) — the same files
 `fim stats` and `fim run`'s own batch summary default to. A batch's
-manifest is listed but labeled distinctly ("batch (14/20)", design §0,
-§4.0 `9`) rather than treated as something Screen 6 can open directly:
-Screen 4's own "Open replicate" is the path to any one replicate's
-trajectory, since a batch-level manifest has no single trajectory of
-its own to verify or re-analyze (design §3.8, §4.6).
+manifest is listed but labeled distinctly (e.g. "batch (14/20)") rather
+than treated as something the picker can open directly: "Open
+replicate" on a batch's own results table is the path to any one
+replicate's trajectory, since a batch-level manifest has no single
+trajectory of its own to verify or re-analyze.
 
 <a id="fim.gui.recent_runs.RecentRun"></a>
 
@@ -3234,12 +3230,11 @@ One run — scalar or batch — found under `results/`, ready to list.
   what `list_recent_runs` sorts by.
 - `label` - The mock's own display text: a scalar run's
   `stop_reason` (e.g. "converged"), or a batch's
-  "batch (replicate_count/n_replicates)" (design §4.6's own
+  "batch (replicate_count/n_replicates)" (e.g.
   "batch (14/20)").
 - `is_batch` - Distinguishes a `BatchManifest` entry from a
   `RunManifest` one — Screen 6 uses this to route "Open" to
-  re-analysis for a scalar run, or refuse it for a batch
-  (design §4.0 `9`, §4.6).
+  re-analysis for a scalar run, or refuse it for a batch.
 
 <a id="fim.gui.recent_runs.list_recent_runs"></a>
 
@@ -3271,7 +3266,7 @@ Return every run under `results_directory`, newest first.
 
 # fim.gui.runner
 
-Background-thread scalar-run orchestration (design §3.4, §3.7).
+Background-thread scalar-run orchestration (`doc/fim-gui-design.md` §7.1).
 
 `fim.engine.fim` is a single blocking call; a multi-thousand-generation
 run would freeze the Tk main thread for its whole duration. `start_run`
@@ -3280,8 +3275,9 @@ cancellation for free from `fim.gui.store.GuiProgressStore` — no change
 to `fim.engine` at all.
 
 The worker does its work inside `fim.paths.atomic_directory`, the exact
-context manager `cli._command_run_scalar` already uses (§3.7 extracted
-it from the CLI for precisely this shared use): every write lands in a
+context manager `cli._command_run_scalar` already uses (`fim.paths` was
+extracted from the CLI for precisely this shared use — §12): every
+write lands in a
 hidden temporary sibling of `output_directory`, published with one
 atomic rename only if the `with` block exits normally. A cancelled run
 raises `RunCancelledError` out of that block; an unexpected engine error
@@ -3297,7 +3293,7 @@ then `report.json` and `scatter.png` once the run finishes, then —
 last, and only once both are flushed — `manifest.json`, augmented with
 each artifact's SHA-256 digest, the record
 `fim.persistence.manifest.verify_trajectory_integrity` later checks
-against (design §3.7).
+against.
 
 <a id="fim.gui.runner.ProgressThrottle"></a>
 
@@ -3319,7 +3315,7 @@ reported so a run that reaches the hard cap never appears stuck
 short of 100%. A run that instead stops early via convergence still
 gets a correct final state: the worker's own "done"/"cancelled"
 message carries its own generation number independent of this
-throttle (§3.4).
+throttle.
 
 <a id="fim.gui.runner.ProgressThrottle.__init__"></a>
 
@@ -3354,8 +3350,8 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]
 Return the four documented scalar-run artifact paths in one directory.
 
 Deliberately the same four names `cli._run_artifact_targets` uses
-(design §3.7's "the exact same four calls, same target filenames,
-same directory") — a direct parallel, not a shared import, since
+— the exact same four calls, same target filenames, same directory
+— a direct parallel, not a shared import, since
 `cli._run_artifact_targets` is a private module-level function of
 the CLI's own front end.
 
@@ -3377,7 +3373,7 @@ Resolve targets, guard the existing target, and start the worker thread.
 **Arguments**:
 
 - `params` - Already-validated parameters — the screen calling this
-  never hands it an unvalidated payload (design §3.6).
+  never hands it an unvalidated payload.
 - `output_directory` - The run's target artifact directory, passed
   straight to `fim.paths.atomic_directory` by the worker
   thread. Checked for existence synchronously here too, so a
@@ -3418,9 +3414,9 @@ generation-by-generation by the `TrajectoryStore` passed into
 `manifest.json` is written only once every sibling artifact is
 flushed, augmented with each one's SHA-256 digest. The returned
 `Figure` is closed immediately — the caller's worker thread never
-displays it, unlike the results screen, which keeps its own figure
-alive on screen and is responsible for closing that one itself
-(design §3.5's `plt.close` care item). Public rather than
+displays it, unlike the CLI's own `scatter.png` render, which the
+caller keeps alive and is responsible for closing itself. Public
+rather than
 module-private: `fim.gui.batch_runner` reuses this same call, once
 per replicate, rather than duplicating it — both modules live in
 the same `fim.gui` package, unlike the CLI/GUI front-end boundary
@@ -3431,7 +3427,7 @@ instead of shared.
 
 # fim.gui.store
 
-Progress reporting and cancellation for a background run (design §3.4).
+Progress reporting and cancellation for a background run (§7 of the GUI design doc).
 
 `fim.persistence.store.TrajectoryStore` is a `Protocol` (structural
 typing, not an ABC), and `fim.engine._run_one`'s generation loop already
@@ -3440,14 +3436,12 @@ with no `try`/`except` around it — a clean, pre-existing extension point
 `GuiProgressStore`/`LiveProgressStore` decorate rather than a change to
 `fim.engine` itself.
 
-Named `RunCancelledError`, not the design doc's illustrative
-`RunCancelled` — ruff's `N818` (exception names end in `Error`) is part
-of this project's lint gate; the design's code block is a decision
-sketch, not a literal source requirement (§4's own "wireframes ... not
-final visuals" framing applies here too).
+Named `RunCancelledError`, not an earlier prototype's `RunCancelled` —
+ruff's `N818` (exception names end in `Error`) is part of this
+project's lint gate (`doc/fim-gui-design.md` §2).
 
-Two decorators live here, for two execution shapes (design
-`20260821-claude-sonnet-5-graphical-interface.md` §0.5, §3.4):
+Two decorators live here, for two execution shapes (`doc/
+fim-gui-design.md` §7.1, §7.2):
 
 - `GuiProgressStore` — a scalar run, one in-process background thread.
   Holds a `threading.Event` and a callback closure; both are real
@@ -3513,7 +3507,7 @@ Wrap `inner`, reporting each write and honoring `cancel_event`.
 
 - `inner` - The real store every non-cancelled write delegates to.
 - `on_generation` - Called with the generation number and that
-  generation's own rows (design §0.5: the caller's own
+  generation's own rows (the caller's own
   live-scatter push needs the actual frequency data, not
   just a bare count — re-reading it back from `inner`
   would need a path this decorator has no reason to know)
@@ -3600,8 +3594,7 @@ Wrap `inner`, recording progress in and honoring cancellation from disk.
 - `cancel_path` - Checked for existence before every write; one
   file shared by every replicate in the same batch, so
   creating it once cancels all of them, matching "Cancel
-  batch" stopping the batch, not one replicate (carried
-  forward from design §4.0 `6`).
+  batch" stopping the batch, not one replicate.
 
 <a id="fim.gui.store.LiveProgressStore.write_generation"></a>
 
@@ -3680,7 +3673,7 @@ def read_live_state(trajectory_path: Path, run_id: str, generation: int,
 
 Reconstruct an in-flight replicate's state at a sidecar-confirmed generation.
 
-Design §3.4, §7.6 — the live-batch counterpart to `fim.reanalyze.
+The live-batch counterpart to `fim.reanalyze.
 reanalyze_trajectory`: that function requires a completed run's own
 `manifest.json` (written only once, at the very end), so it cannot
 read a replicate that is still running. This reads the same
@@ -3731,7 +3724,7 @@ situations just happened and handing off to the right place: the desktop
 app (`_launch_gui`) or the ordinary command-line parser
 (`fim.cli.main`).
 
-Design doc `20260819-claude-sonnet-5-graphical-interface.md` §5.1: the
+The
 Windows release ships one `.exe`, opened by double-clicking (GUI, no
 arguments), from a terminal (CLI), or via an explicit `--graphical
 [--detach]` flag pair for a shortcut, `.bat` wrapper, or Start Menu tile
@@ -5193,11 +5186,11 @@ than reinvented slightly differently in each front end:
    partway through?" (`atomic_directory`) — see that function's own
    docstring for the answer.
 
-Extracted from `fim.cli` (design doc `20260819-claude-sonnet-5-graphical-
-interface.md` §3.7) so `fim.gui`'s run orchestration resolves the exact same
-`project-root/results/` layout, timestamped default folder naming, and
-atomic-publish-or-nothing guarantee as `fim run`, rather than a second,
-independently maintained copy of this logic. `project_root` is anchored on
+Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
+run orchestration resolves the exact same `project-root/results/`
+layout, timestamped default folder naming, and atomic-publish-or-nothing
+guarantee as `fim run`, rather than a second, independently maintained
+copy of this logic. `project_root` is anchored on
 the `fim` package's own `__init__.py` (`fim.__file__`), not the calling
 module's `__file__`: every caller under `src/fim/`, regardless of how deep
 it sits (`fim/cli.py`, `fim/gui/runner.py`, ...), resolves the identical
@@ -5877,8 +5870,8 @@ below, is the one function that actually writes such a file, in a
 fixed, reproducible format (see its own docstring for exactly what
 "deterministic" means here and why it matters).
 
-Extracted from `fim.cli`'s private `_write_json` (design doc
-`20260819-claude-sonnet-5-graphical-interface.md` §3.7), parallel to
+Extracted from `fim.cli`'s private `_write_json` (`doc/
+fim-gui-design.md` §12), parallel to
 `fim.persistence.manifest.write_manifest`: one shared, deterministic JSON
 writer for both `report.json` (a `fim.engine.FinalReport`, plus the CLI's
 `fim stats` re-analysis reports and `fim.gui`'s own run reports) and a
@@ -6076,7 +6069,7 @@ handed in).
 
 # fim.reanalyze
 
-Re-analyze a persisted trajectory (design doc §3.8).
+Re-analyze a persisted trajectory (`doc/fim-gui-design.md` §12).
 
 Every generation of a completed run is saved to disk, as one row per
 deme/locus/allele combination actually present that generation (in a
@@ -6184,7 +6177,7 @@ needs without re-scanning the file for each one.
 Shared by `reanalyze_trajectory` — which instead filters `rows` to
 just the one selected generation, matching `cli._command_stats`'s
 own exact algorithm — and the animation screen's frame sampler
-(design §3.8: several, evenly spaced generations), which needs
+(`doc/fim-gui-design.md` §8: several, evenly spaced generations), which needs
 every persisted generation's rows available at once; only how many
 of the resulting generations each caller turns into a `ModelState`
 differs.
@@ -6944,10 +6937,11 @@ Return Whitlock (1992)'s generations to halfway recovery.
 time as continuous, as the paper itself does for this formula) for
 `identity_recovery_trajectory` to close half the gap between its
 starting value and `identity_recovery_equilibrium`, regardless of
-which direction it started from (`identity_recovery_trajectory`
-evaluated at this many generations always lands exactly on the
-arithmetic midpoint — see the design doc for a worked numeric check
-in both directions).
+which direction it started from -- a direct consequence of the
+trajectory's own exponential-decay form: `identity_recovery_
+trajectory` evaluated at this many generations always lands
+exactly on the arithmetic midpoint between the two, in either
+direction).
 
 Special-cased at ``m = 1`` (the only way `identity_recovery_rate`
 can be exactly `0`, meaning full replacement every generation, hence
@@ -7459,11 +7453,11 @@ the desktop app's own "Check for updates" menu item) — nothing here ever
 runs automatically in the background, on a timer, or as a side effect of
 an ordinary simulation run.
 
-Extracted from `fim.cli` (design doc `20260819-claude-sonnet-5-graphical-
-interface.md` §3.9) so `fim.gui`'s "Check for updates" action performs
-exactly the same GitHub Releases lookup and version comparison as
-`fim update --check`, rather than a second implementation of the one
-network operation `SECURITY.md`'s threat model permits.
+Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
+"Check for updates" action performs exactly the same GitHub Releases
+lookup and version comparison as `fim update --check`, rather than a
+second implementation of the one network operation `SECURITY.md`'s
+threat model permits.
 
 <a id="fim.update.compare_versions"></a>
 
@@ -7667,7 +7661,7 @@ def frequency_points(state: ModelState) -> FloatArray
 
 Return one row per locus/allele and one column per deme.
 
-Public (graphical-interface migration design doc §3.3, §3.5): the
+Public (`doc/fim-gui-design.md` §12): the
 GUI's bridge calls this directly to get raw scatter coordinates for
 client-side rendering, without going through `plot_frequency_scatter`
 at all — it never builds a `Figure`. `plot_frequency_scatter` itself
@@ -7684,7 +7678,7 @@ def pooled_frequency_points(states: Sequence[ModelState]) -> FloatArray
 
 Pool several states' `frequency_points` into one combined array.
 
-Public (graphical-interface migration design doc §0.5, §3.3): the
+Public (`doc/fim-gui-design.md` §12): the
 GUI's live/batch-results bridge methods call this to build the
 pooled, multi-replicate overlay scatter the reference visualization
 (Lou Jost's `Dear-NolanMarch17Final.pdf` Figs. 1-2) uses — the
@@ -7722,7 +7716,7 @@ def grouped_points(
 
 Collapse coincident points into JSON-ready `{x, y, count, common}` entries.
 
-Public (graphical-interface migration design doc §3.5): the GUI
+Public (`doc/fim-gui-design.md` §12): the GUI
 bridge's own shape for `webui/scatter.js`'s Canvas renderer —
 `marker_groups`' data-only sibling. `marker_groups` itself is
 rewritten in terms of this function's own grouping (below) rather
@@ -7742,7 +7736,7 @@ def marker_groups(
 
 Collapse coincident points and derive marker sizes, colors, and labels.
 
-Public (graphical-interface migration design doc §3.3, §3.5): the
+Public (`doc/fim-gui-design.md` §12): the
 GUI's bridge calls this directly, over `pooled_frequency_points`'s
 output as readily as over one state's own `frequency_points` output
 — coincidence counting has no notion of where a point came from.
@@ -7851,7 +7845,7 @@ Share `scatter_panels`/`pooled_scatter_panels`' own single-panel dispatch.
 rows for `scatter_panels`, or several states' pooled rows for
 `pooled_scatter_panels`; this function does not know or care which.
 
-Public (design §3.8, Milestone W6): `fim.gui.animation.
+Public (Milestone W6, `doc/fim-gui-design.md` §8): `fim.gui.animation.
 pre_render_frames` deliberately stops at a plain `frequency_points`
 array per sampled generation — "whoever renders this... is
 responsible for any further reduction a high deme count needs," by
@@ -7925,7 +7919,7 @@ def pca_project(points: FloatArray) -> FloatArray
 
 Return `points` projected onto its first two principal components.
 
-Public (graphical-interface migration design doc §3.5): the same
+Public (`doc/fim-gui-design.md` §12): the same
 projection `_plot_pca` renders as a `Figure`, factored out so
 `scatter_panels` can reuse the identical math for the data-only
 path rather than a second SVD implementation. `_plot_pca` itself now

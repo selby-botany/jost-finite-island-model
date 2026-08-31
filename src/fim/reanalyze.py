@@ -1,4 +1,4 @@
-"""Re-analyze a persisted trajectory (design doc §3.8).
+"""Re-analyze a persisted trajectory (`doc/fim-gui-design.md` §12).
 
 Every generation of a completed run is saved to disk, as one row per
 deme/locus/allele combination actually present that generation (in a
@@ -137,7 +137,7 @@ def group_rows_by_generation(
     Shared by `reanalyze_trajectory` — which instead filters `rows` to
     just the one selected generation, matching `cli._command_stats`'s
     own exact algorithm — and the animation screen's frame sampler
-    (design §3.8: several, evenly spaced generations), which needs
+    (`doc/fim-gui-design.md` §8: several, evenly spaced generations), which needs
     every persisted generation's rows available at once; only how many
     of the resulting generations each caller turns into a `ModelState`
     differs.

@@ -387,12 +387,11 @@ def _command_run_batch(
 def _command_stats(arguments: argparse.Namespace) -> int:
     """Recompute statistics from a persisted generation.
 
-    Delegates to `fim.reanalyze.reanalyze_trajectory` (design doc
-    `20260819-claude-sonnet-5-graphical-interface.md` §3.8) — the exact
-    algorithm this command has always run, extracted so `fim.gui`'s
-    "open an existing run" (§4.6) and "animated trajectory" (§4.5)
-    screens share it rather than a second, independently maintained
-    copy.
+    Delegates to `fim.reanalyze.reanalyze_trajectory` (`doc/
+    fim-gui-design.md` §12) — the exact algorithm this command has
+    always run, extracted so `fim.gui`'s "open an existing run" (§9)
+    and animated-trajectory (§8) screens share it rather than a second,
+    independently maintained copy.
     """
     trajectory_path = Path(arguments.trajectory)
     manifest_path = Path(arguments.manifest) if arguments.manifest is not None else None

@@ -71,7 +71,7 @@ def plot_frequency_scatter(
     elif state.deme_count <= pairwise_max_demes:
         figure = _plot_pairwise(points, state.deme_count)
     else:
-        # First pair, not PCA (unified-run-view design §3.6) -- the same
+        # First pair, not PCA -- the same
         # default-projection change `panels_from_points` makes for the
         # GUI, applied identically here for consistency: neither the
         # eigenvector-instability argument (moot for one static image)
@@ -97,7 +97,7 @@ def plot_frequency_scatter(
 def frequency_points(state: ModelState) -> FloatArray:
     """Return one row per locus/allele and one column per deme.
 
-    Public (graphical-interface migration design doc §3.3, §3.5): the
+    Public (`doc/fim-gui-design.md` §12): the
     GUI's bridge calls this directly to get raw scatter coordinates for
     client-side rendering, without going through `plot_frequency_scatter`
     at all — it never builds a `Figure`. `plot_frequency_scatter` itself
@@ -135,7 +135,7 @@ def frequency_points(state: ModelState) -> FloatArray:
 def pooled_frequency_points(states: Sequence[ModelState]) -> FloatArray:
     """Pool several states' `frequency_points` into one combined array.
 
-    Public (graphical-interface migration design doc §0.5, §3.3): the
+    Public (`doc/fim-gui-design.md` §12): the
     GUI's live/batch-results bridge methods call this to build the
     pooled, multi-replicate overlay scatter the reference visualization
     (Lou Jost's `Dear-NolanMarch17Final.pdf` Figs. 1-2) uses — the
@@ -168,7 +168,7 @@ def grouped_points(
 ) -> list[dict[str, float | int | bool]]:
     """Collapse coincident points into JSON-ready `{x, y, count, common}` entries.
 
-    Public (graphical-interface migration design doc §3.5): the GUI
+    Public (`doc/fim-gui-design.md` §12): the GUI
     bridge's own shape for `webui/scatter.js`'s Canvas renderer —
     `marker_groups`' data-only sibling. `marker_groups` itself is
     rewritten in terms of this function's own grouping (below) rather
@@ -193,7 +193,7 @@ def marker_groups(
 ) -> tuple[FloatArray, FloatArray, list[str], list[str]]:
     """Collapse coincident points and derive marker sizes, colors, and labels.
 
-    Public (graphical-interface migration design doc §3.3, §3.5): the
+    Public (`doc/fim-gui-design.md` §12): the
     GUI's bridge calls this directly, over `pooled_frequency_points`'s
     output as readily as over one state's own `frequency_points` output
     — coincidence counting has no notion of where a point came from.
@@ -301,7 +301,7 @@ def panels_from_points(
     rows for `scatter_panels`, or several states' pooled rows for
     `pooled_scatter_panels`; this function does not know or care which.
 
-    Public (design §3.8, Milestone W6): `fim.gui.animation.
+    Public (Milestone W6, `doc/fim-gui-design.md` §8): `fim.gui.animation.
     pre_render_frames` deliberately stops at a plain `frequency_points`
     array per sampled generation — "whoever renders this... is
     responsible for any further reduction a high deme count needs," by
@@ -407,7 +407,7 @@ def _panel(
 def pca_project(points: FloatArray) -> FloatArray:
     """Return `points` projected onto its first two principal components.
 
-    Public (graphical-interface migration design doc §3.5): the same
+    Public (`doc/fim-gui-design.md` §12): the same
     projection `_plot_pca` renders as a `Figure`, factored out so
     `scatter_panels` can reuse the identical math for the data-only
     path rather than a second SVD implementation. `_plot_pca` itself now
@@ -501,7 +501,7 @@ def _plot_deme_pair(points: FloatArray, first: int, second: int) -> Figure:
     """Render one caller-chosen pair of deme dimensions.
 
     `_plot_two_dimensional`, generalized to any pair rather than the
-    fixed `d == 2` case (unified-run-view design §3.6): `plot_frequency_
+    fixed `d == 2` case: `plot_frequency_
     scatter`'s own `d > pairwise_max_demes` branch calls this with
     `(0, 1)` as its new default projection, in place of `_plot_pca`.
     """

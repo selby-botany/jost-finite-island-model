@@ -1,17 +1,18 @@
 """pywebview bootstrap and `Api` bridge — the GUI's own entry point
-(design doc `20260821-claude-sonnet-5-graphical-interface.md` §3.1, §3.2).
+(`doc/fim-gui-design.md` §4).
 
 `fim.launcher` dispatches here for the zero-argument and `--graphical`
 paths, exactly as it dispatched to the Tk build's own `fim.gui.app:main`
-before this migration — the entry point name and shape are stable across
-the toolkit swap (§3.1: "`fim.launcher` does not change at all").
+before the pywebview migration (`doc/fim-gui-design.md` §2) — the
+entry point name and shape are stable across the toolkit swap:
+`fim.launcher` itself did not change at all.
 
 `create_window` and `main` are deliberately separate: `main` blocks
 (`webview.start()` runs the GUI's own event loop until the window
 closes), so no test calls it directly. Every headless test instead calls
 `create_window()` itself, then drives the result with its own
-`webview.start(callback)` — the pattern `§0.3`'s prototype proved works,
-confirmed again directly against this window/bridge before writing this
+`webview.start(callback)`, confirmed directly against this window/bridge
+before writing this
 module (see `test/gui/test_app.py`): `window.evaluate_js(...)` returns
 the raw value of whatever JS expression it evaluates, not the resolved
 value of a Promise that expression happens to produce — a `js_api` call
@@ -88,7 +89,7 @@ _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
 _TRAJECTORY_FILE_TYPES = ("trajectory.jsonl files (*.jsonl)", "All files (*.*)")
 
 # The existing `pyproject.toml` `[project.urls] Documentation` value,
-# reused rather than invented (in-app help design §3.2) -- the Help
+# reused rather than invented (doc/fim-gui-design.md §11) -- the Help
 # menu's own "Documentation on GitHub" item, and `get_about_info`'s own
 # repository link, both point here.
 _REPOSITORY_URL = "https://github.com/selby-botany/jost-finite-island-model"
@@ -128,7 +129,7 @@ _START_RUN_COLLISION_MAX_WAIT_SECONDS: Final = 2.0
 
 # How often `_drain_batch_messages` re-polls every in-flight replicate's
 # own `.progress` sidecar between checking `message_queue` for the
-# batch's terminal outcome (design §3.4, §7.6). Coarser than `fim.gui.
+# batch's terminal outcome (`doc/fim-gui-design.md` §7.2). Coarser than `fim.gui.
 # runner.PROGRESS_THROTTLE_INTERVAL_SECONDS` (a scalar run's own,
 # in-process push interval) on purpose: each tick here re-reads a whole
 # `trajectory.jsonl` per currently-reporting replicate
@@ -136,10 +137,10 @@ _START_RUN_COLLISION_MAX_WAIT_SECONDS: Final = 2.0
 # that grows with both replicate count and how far each has run.
 _BATCH_POLL_INTERVAL_SECONDS: Final = 0.5
 
-# The Tk-era `results_screen.py`'s own six named statistics (design
-# §4.3, requirement G3's "all six named statistics") — `FinalReport`
-# also carries `H_ST`, added after that screen was first built; G3
-# names exactly these six, so `H_ST` stays out of the results screen.
+# The six named statistics Milestone G3 (`doc/fim-gui-design.md` §13)
+# established for the results view — `FinalReport` also carries
+# `H_ST`, added after that view was first built; G3 names exactly
+# these six, so `H_ST` stays out of it.
 _RESULT_STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T")
 
 # `format_statistic`'s own bare-call default — `cli._format_optional`'s
@@ -169,7 +170,8 @@ _MAX_SIGNIFICANT_DIGITS: Final = 17
 def format_statistic(
     value: float | None, digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS
 ) -> str:
-    """Format one `FinalReport` statistic for display (Screen 3, design §4.3).
+    """Format one `FinalReport` statistic for the completed run view
+    (`doc/fim-gui-design.md` §5.2).
 
     A direct parallel to `cli._format_optional` — not a shared import,
     per this package's established front-end-boundary convention
@@ -265,10 +267,9 @@ def _reveal_in_file_browser(directory: Path) -> None:
     """Open `directory` in the platform's file browser.
 
     Ported unchanged from the Tk-era `results_screen.py`'s own
-    `_reveal_in_file_browser` (design §4.3: "reuses whatever native
-    folder-opening mechanism the Tk build's `results_screen.py` already
-    implements... that helper is presentation-adjacent but toolkit-
-    independent"). `check=False` throughout: a file browser's own exit
+    `_reveal_in_file_browser`: the same native folder-opening mechanism,
+    just no longer coupled to that screen's own toolkit.
+    `check=False` throughout: a file browser's own exit
     status is not this button's concern, and `explorer.exe` on Windows
     is well known to return a nonzero status for benign reasons.
     """
@@ -283,8 +284,9 @@ def _reveal_in_file_browser(directory: Path) -> None:
 class Api:
     """The `window.pywebview.api` surface every `webui/*.js` screen calls into.
 
-    Grows one method per bridge call as each screen is built (design
-    §4); holds almost no state of its own beyond what a given call
+    Grows one method per bridge call as each screen is built
+    (`doc/fim-gui-design.md` §4.2); holds almost no state of its own
+    beyond what a given call
     needs — `_cancel_event` (set by `start_run`, read by `cancel_run`)
     is the one exception, since a running scalar simulation's own
     cancel button has to reach the same `threading.Event` the
@@ -361,18 +363,18 @@ class Api:
         """Validate the form, then start a run pushing live progress to the page.
 
         Dispatches to a scalar or a real parallel batch run based on
-        `params.n_replicates` alone — design §4.1's "there is no
-        separate 'batch mode' toggle; `n_replicates` *is* the toggle,"
-        so this one bridge method serves both, and `webui/screens/
+        `params.n_replicates` alone — there is no separate "batch mode"
+        toggle; `n_replicates` *is* the toggle (`doc/fim-gui-design.md`
+        §7), so this one bridge method serves both, and `webui/screens/
         input.js`'s own `onRunClicked` never needs to know or care
         which. Either path runs on a background `threading.Thread` so
-        this call itself returns immediately; the caller drives Screen 2
-        from the pushed `fim.onRun*`/`fim.onBatch*` calls a second
-        background thread makes via `window.evaluate_js` as each
-        message arrives (design §3.4's "push, not poll" — proven safe
-        from an arbitrary background thread, not only `webview.start`'s
-        own driver thread, before this method was written; see
-        `test/gui/test_running_screen.py`).
+        this call itself returns immediately; the caller drives the
+        running view from the pushed `fim.onRun*`/`fim.onBatch*` calls
+        a second background thread makes via `window.evaluate_js` as
+        each message arrives — push, not poll, confirmed safe from an
+        arbitrary background thread, not only `webview.start`'s own
+        driver thread, before this method was written; see
+        `test/gui/test_running_screen.py`.
 
         Args:
             values: The same shape `validate_form` accepts, plus (for a
@@ -449,7 +451,10 @@ class Api:
         output_directory: Path,
         values: dict[str, str],
     ) -> dict[str, Any]:
-        """The `n_replicates > 1` half of `start_run` (`fim.gui.batch_runner`, §7.6)."""
+        """The `n_replicates > 1` half of `start_run`.
+
+        See `fim.gui.batch_runner` and `doc/fim-gui-design.md` §7.2.
+        """
         # See `_start_scalar_run`'s identical check for why this comes
         # first, before any side effect.
         window = _active_window()
@@ -502,20 +507,19 @@ class Api:
             self._cancel_event.set()
 
     def open_output_folder(self, path: str) -> None:
-        """Reveal a completed run's output directory (Screen 3, design §4.3).
+        """Reveal a completed run's output directory in the OS file browser.
 
         Args:
-            path: The directory to reveal — `webui/screens/results.js`'s
-                own copy of the `outputDirectory` `onRunDone` last
-                pushed it, not state this bridge tracks itself (design
-                §4.0's "holds almost no state of its own" applies here
-                too: nothing about a already-shown results screen
-                needs `Api` to remember which run it was showing).
+            path: The directory to reveal — the page's own copy of the
+                `outputDirectory` `onRunDone` last pushed it, not state
+                this bridge tracks itself (`doc/fim-gui-design.md` §4.2:
+                nothing about an already-shown completed run needs
+                `Api` to remember which run it was showing).
         """
         self._open_folder(Path(path))
 
     def get_starter_form(self) -> dict[str, str]:
-        """Return a fresh form's default values (Screen 1, design §3.6, §4.1).
+        """Return a fresh form's default values.
 
         `config_form.starter_form_values` is the single source of "GUI
         defaults" — the identical values `fim.cli.STARTER_CONFIG` itself
@@ -525,7 +529,7 @@ class Api:
         return starter_form_values()
 
     def validate_form(self, values: dict[str, str]) -> dict[str, Any]:
-        """Validate the form exactly as "Run simulation" would (design §3.6, §4.7).
+        """Validate the form exactly as "Run simulation" would.
 
         Args:
             values: One string per `config_form.all_fields()` entry, plus
@@ -538,10 +542,10 @@ class Api:
             `SimulationParams`; otherwise `{"ok": False, "message": ...,
             "field": ..., "tab": ...}` — `message` is the caught
             `ValueError`'s own text verbatim (matching the CLI's own
-            wording, design §4.7), `field`/`tab` are `None` when the
+            wording), `field`/`tab` are `None` when the
             message names no field this form exposes (an unknown-key
             error, for instance), for the caller to switch to and
-            highlight (§4.0 #2 of the original design) when they are not.
+            highlight when they are not.
         """
         try:
             payload = form_values_to_payload(values)
@@ -636,7 +640,7 @@ class Api:
         """Browse for and load a YAML config, returning the form values it renders to.
 
         Routes through `fim.cli.load_config` — the identical function
-        `fim run` uses (design §3.6) — so a config that runs from the
+        `fim run` uses (doc/fim-gui-design.md) — so a config that runs from the
         terminal loads identically here, error for error.
 
         Returns:
@@ -696,7 +700,7 @@ class Api:
         return {"ok": True, "path": str(target)}
 
     def get_default_max_workers(self) -> int:
-        """Return the Batch tab's own default parallel-worker count (design §4.1, H5).
+        """Return the Batch tab's own default parallel-worker count.
 
         `max_workers` is not a `SimulationParams` field at all — it
         never reaches `form_values_to_payload` — so it has no
@@ -719,7 +723,7 @@ class Api:
         return self._significant_digits
 
     def set_significant_digits(self, digits: int) -> dict[str, Any]:
-        """Change the GUI's display-rounding precision (View menu, design §4.5).
+        """Change the GUI's display-rounding precision (View menu).
 
         Purely cosmetic and "no record": every persisted artifact keeps
         full float precision regardless of this value (`_DEFAULT_
@@ -788,8 +792,8 @@ class Api:
             first_deme: 1-based deme number for the X axis, or `None`
                 (with `second_deme` also `None`) to clear the selection
                 back to the default panel — no UI trigger reaches this
-                any more (simplify-main-plot design dropped the "Show
-                overview" button), but the clearing behavior itself
+                any more (the page's own "Show overview" button was
+                later removed), but the clearing behavior itself
                 stays, directly callable and directly tested.
             second_deme: 1-based deme number for the Y axis, or `None`.
 
@@ -804,7 +808,7 @@ class Api:
         return {"ok": True}
 
     def list_recent_runs(self) -> list[dict[str, Any]]:
-        """List every run under `results/`, newest first (Screen 6, design §4.6).
+        """List every run under `results/`, newest first (`doc/fim-gui-design.md` §9).
 
         `fim.gui.recent_runs.list_recent_runs` is unchanged from the
         Tk-era build (no `tkinter` import today, needs none tomorrow) —
@@ -814,8 +818,8 @@ class Api:
         own platform-correct separator), rather than the page
         concatenating `directory` and `"trajectory.jsonl"` itself —
         string-joining a path client-side would silently produce a
-        mixed-separator path on Windows. `None` for a batch row (design
-        §0, §4.0 #9): it has no single trajectory of its own to open.
+        mixed-separator path on Windows. `None` for a batch row: it has
+        no single trajectory of its own to open.
         """
         return [
             {
@@ -835,9 +839,9 @@ class Api:
         """Browse for a `trajectory.jsonl` via the OS's own native file picker.
 
         `window.create_file_dialog(...)`, not an HTML `<input
-        type="file">` — design §4.6's own "a *better* native-feel win
-        than Tk's `filedialog.askopenfilename`, since pywebview's
-        dialog is the OS's own file picker on every platform."
+        type="file">`: a better native-feel win than even Tk's own
+        `filedialog.askopenfilename`, since pywebview's dialog is the
+        OS's own file picker on every platform.
 
         Returns:
             `{"ok": True, "path": "..."}` on a real selection;
@@ -859,14 +863,15 @@ class Api:
     def open_run(self, values: dict[str, str]) -> dict[str, Any]:
         """Re-analyze a persisted trajectory, matching `fim stats`'s own semantics.
 
-        Reached from Screen 6 (a recent-runs row or a browsed path) or
-        Screen 4 ("Open replicate" — the exact same operation over one
-        replicate's own `trajectory.jsonl`, design §4.4). The returned
-        payload is deliberately shaped exactly like `_drain_run_
-        messages`'s own `"done"` payload, so the caller can hand it
-        straight to the already-built `window.fim.showResults` —
-        design §4.6's "opening a run re-renders Screen 3... unchanged"
-        realized here as literal reuse, not a second rendering path.
+        Reached from the recent-runs picker (a row, or a browsed path)
+        or "Open replicate" on a batch's own results table — the exact
+        same operation over one replicate's own `trajectory.jsonl`. The
+        returned payload is deliberately shaped exactly like
+        `_drain_run_messages`'s own `"done"` payload, so the caller can
+        hand it straight to the already-built `window.fim.showResults`
+        — opening a run re-renders the unified run view's own
+        `completed` state unchanged (§5.2), realized here as literal
+        reuse, not a second rendering path.
 
         Args:
             values: `{"trajectoryPath": "...", "generationMode":
@@ -886,8 +891,8 @@ class Api:
             was given, the generation/q-sweep fields do not parse, or `fim.
             reanalyze.reanalyze_trajectory` itself raises (a
             trajectory-integrity failure, an edited file, or a
-            generation that does not exist — design §4.7's "shown
-            verbatim, matching `fim stats`'s wording").
+            generation that does not exist) — `message` is shown
+            verbatim, matching `fim stats`'s own wording.
         """
         trajectory_path_text = values.get("trajectoryPath", "")
         if not trajectory_path_text:
@@ -914,7 +919,7 @@ class Api:
             # directly for a missing/unreadable manifest — not a
             # `ValueError` `fim.reanalyze`'s own docstring documents,
             # but exactly the same "shown verbatim, matching `fim
-            # stats`'s wording" (design §4.7) case from this bridge
+            # stats`'s wording" case from this bridge
             # method's own caller's point of view.
             return {"ok": False, "message": str(error)}
         report = reanalyzed.report
@@ -937,7 +942,8 @@ class Api:
     def get_animation_frames(self, output_directory: str) -> dict[str, Any]:
         """Sample and ship every animation frame for one run, in a single call.
 
-        Design §3.8, §4.5: loads the whole sampled set up front, as raw
+        Loads the whole sampled set up front (`doc/fim-gui-design.md`
+        §8), as raw
         coordinate data — play, pause, and scrub are then pure
         client-side JavaScript (`webui/screens/animation.js`), with
         zero further Python calls and zero further rendering calls of
@@ -953,9 +959,9 @@ class Api:
             `{"ok": True, "demeCount": ..., "frames": [{"generation",
             "panels"}, ...]}` — one entry per sampled generation, each
             `panels` already in `scatter_panels`' own client-ready shape
-            (`fim.viz.scatter.panels_from_points`, design §3.8: "whoever
-            renders this... is responsible for any further reduction a
-            high deme count needs"). `demeCount` rides along for the
+            (`fim.viz.scatter.panels_from_points`, `doc/fim-gui-design.md`
+            §12): the page is responsible for any further reduction a
+            high deme count needs. `demeCount` rides along for the
             same reason `onRunDone`/`onBatchDone`'s own payloads carry
             it — `animation.js`'s own deme-pair selector needs it to
             populate its two axis dropdowns, exactly like Screens 3/4's
@@ -989,19 +995,17 @@ class Api:
         """Recompute one explicit deme-pair panel for every sampled animation frame.
 
         `get_animation_frames`'s own "Compare demes directly" counterpart
-        (design §3.8, §4.5) — the same choice Screens 3/4 already offer
-        between the default view (a small-multiples pairwise grid for
+        — the same choice the completed-run view already offers between
+        the default view (a small-multiples pairwise grid for
         `d <= scatter.PAIRWISE_MAX_DEMES`, one Deme-1-vs-Deme-2 panel
-        above it, unified-run-view design §3.6) and one explicit raw
-        deme pair, extended to the whole animated trajectory rather
-        than one static state. Still just one call:
-        `webui/screens/animation.js` fires this once, when the user
-        picks a pair, not once per frame or once per playback tick —
-        design §3.8's own "zero further Python calls... during
-        playback" holds exactly as it does for `get_animation_frames`
-        itself, since the whole sampled set for that one pair comes
-        back together, the same shape the default view's own frames
-        already arrived in.
+        above it) and one explicit raw deme pair, extended to the whole
+        animated trajectory rather than one static state. Still just
+        one call: `webui/screens/animation.js` fires this once, when
+        the user picks a pair, not once per frame or once per playback
+        tick — zero further Python calls happen during playback, the
+        same as for `get_animation_frames` itself, since the whole
+        sampled set for that one pair comes back together, the same
+        shape the default view's own frames already arrived in.
 
         Args:
             output_directory: The run's own artifact directory.
@@ -1044,11 +1048,11 @@ class Api:
     ) -> dict[str, Any]:
         """Recompute one explicit deme-pair 2-D panel for a completed run (Screen 3).
 
-        The large-`d` counterpart to Screen 3's own default panel
-        (`showResults`'s own `panels[0]`, drawn whenever `d >
-        scatter.PAIRWISE_MAX_DEMES` — Deme 1 vs. Deme 2 by default,
-        unified-run-view design §3.6): this bridge method lets the user
-        switch to any other specific raw deme pair instead, on demand,
+        The large-`d` counterpart to the completed-run view's own
+        default panel (`showResults`'s own `panels[0]`, drawn whenever
+        `d > scatter.PAIRWISE_MAX_DEMES` — Deme 1 vs. Deme 2 by
+        default): this bridge method lets the user switch to any other
+        specific raw deme pair instead, on demand,
         rather than the page ever computing or requesting every `C(d,
         2)` pair up front (unbounded in `d`, unlike the direct/pairwise
         layout `panels_from_points` already handles automatically for
@@ -1132,10 +1136,10 @@ class Api:
     def ping_from_worker(self) -> str:
         """Prove a trivial picklable callable survives a real cross-process round trip.
 
-        Deliberately proven this early (design §0.5, before `Live
-        ProgressStore`/`batch_runner`'s own parallel plumbing, both
-        already built and tested, are ever reached through this
-        specific pywebview-hosted process): `ProcessPoolExecutor`
+        Deliberately proven this early, before `LiveProgressStore`/
+        `batch_runner`'s own parallel plumbing (`doc/fim-gui-design.md`
+        §7.2), both already built and tested, are ever reached through
+        this specific pywebview-hosted process: `ProcessPoolExecutor`
         working at all from inside a GUI application process, not just
         from a plain CLI process, is an assumption worth its own direct
         check rather than only discovering a failure three layers away
@@ -1145,7 +1149,7 @@ class Api:
             return executor.submit(_worker_ping).result()
 
     def open_external_link(self, url: str) -> None:
-        """Open `url` in the OS default browser (in-app help design §4.3).
+        """Open `url` in the OS default browser (doc/fim-gui-design.md §11).
 
         Every Tier 2 doc link and every bare `http(s)://` link inside a
         Tier 1 doc routes here, never to native `<a>` navigation — an
@@ -1193,7 +1197,7 @@ class Api:
         }
 
     def get_about_info(self) -> dict[str, str]:
-        """Return the static "About fim" facts the Help menu shows (design §4.5).
+        """Return the static "About fim" facts the Help menu shows.
 
         No bridge state, no network call — `fim.__version__` and the
         project's own already-declared URLs, the same values `pyproject.
@@ -1277,8 +1281,7 @@ def _drain_run_messages(
                 # The six named statistics for this tick's own state
                 # (`runner.py`'s `on_generation`, `message[4]`) — keeps
                 # the running-state stats table live and populated
-                # rather than blank until the run finishes (design §8
-                # Phase G).
+                # rather than blank until the run finishes.
                 "statistics": {
                     name: format_statistic(message[4][name], digits)
                     for name in _RESULT_STATISTIC_NAMES
@@ -1352,8 +1355,8 @@ def _parse_generation(mode: str, generation_text: str) -> int | None:
     """Parse Screen 6's "final"/"choose" generation selector.
 
     Ported directly from the Tk-era `OpenRunScreen._parse_generation`
-    (design §4.6) — the same parsing rule, moved from a private Tk
-    screen method to a module-level function here.
+    — the same parsing rule, moved from a private Tk screen method to
+    a module-level function here.
 
     Args:
         mode: `"final"` (the default) or `"choose"`.
@@ -1381,7 +1384,7 @@ def _parse_differentiation_orders(text: str) -> tuple[float, ...]:
     """Parse Screen 6's optional differentiation-q sweep field.
 
     Ported directly from the Tk-era `OpenRunScreen`'s own module-level
-    `_parse_differentiation_orders` (design §4.6) — unchanged.
+    `_parse_differentiation_orders` — unchanged.
 
     Args:
         text: Zero or more space/comma-separated numbers; empty means
@@ -1435,7 +1438,7 @@ def _push_batch_progress(
     report (`report_for_state` on its just-read state) and pre-formatted
     server-side exactly like `_batch_done_payload`'s own `summary` field
     — keeps the running-state stats table live and populated rather
-    than blank until the batch finishes (design §8 Phase G). Naturally
+    than blank until the batch finishes. Naturally
     empty (`{}`) for the first tick or two, before a second replicate
     has reported anything to summarize yet — `reports_summary` never
     raises for that, unlike `replicate_summary`.
@@ -1505,23 +1508,23 @@ def _batch_done_payload(
     results: tuple[RunResult, ...],
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
 ) -> dict[str, Any]:
-    """Build `fim.onBatchDone`'s own payload from a batch's final results (design §4.4).
+    """Build `fim.onBatchDone`'s own payload from a batch's final results.
 
-    `replicates` is the row data for Screen 4's own table (one row per
-    *published* replicate — `results`' own length, not necessarily
-    `params.n_replicates`: an adaptive `replicate_tolerance` stop can
-    end a batch short of its own cap), including each row's own
-    `trajectoryPath` — joined here, in Python
+    `replicates` is the row data for the completed view's own batch
+    table (one row per *published* replicate — `results`' own length,
+    not necessarily `params.n_replicates`: an adaptive
+    `replicate_tolerance` stop can end a batch short of its own cap),
+    including each row's own `trajectoryPath` — joined here, in Python
     (`batch_runner.replicate_output_directory`), rather than the page
     concatenating `outputDirectory` and a replicate directory name
     itself (the same Windows mixed-separator risk `list_recent_runs`'
-    own docstring names) — for "Open replicate" (design §4.4) to hand
+    own docstring names) — for "Open replicate" to hand
     straight to `Api.open_run` with no path logic of its own. `summary`
     is `replicate_summary`'s own per-statistic confidence interval,
     pre-formatted server-side (`format_statistic`, matching every
-    other statistic this bridge ever sends the page — §3.5's "the
-    client never reimplements Python's own display formatting"
-    extended from Screen 3 to Screen 4) — omitted entirely (an empty
+    other statistic this bridge ever sends the page: the client never
+    reimplements Python's own display formatting, for a batch's own
+    results the same as a scalar run's) — omitted entirely (an empty
     `{}`) if `replicate_summary` itself has too few results to define
     an interval from, its own documented `ValueError` case, not
     something this bridge treats as a real error partway through an
@@ -1620,8 +1623,8 @@ def _drain_batch_messages(
     sidecar"): draining `message_queue` for the batch's own terminal
     outcome, and periodically pushing a pooled live-progress scatter —
     nothing about a batch's own per-generation progress is queued the
-    way a scalar run's is, since it is entirely file-mediated (design
-    §3.4).
+    way a scalar run's is, since it is entirely file-mediated
+    (`doc/fim-gui-design.md` §7.2).
 
     The very first message is always `("started", working_directory)`
     — `batch_runner._batch_worker` posts it before calling `fim(...)`
@@ -1689,10 +1692,11 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
 
     Separate from `main` specifically so tests can drive the window
     themselves via `webview.start(callback)` without ever calling the
-    real, blocking `main` — the same "construct real widgets, drive them
+    real, blocking `main` — construct real widgets, drive them
     synchronously, never call the real blocking entry point without a
-    controlled exit" discipline the design's test plan requires (§6.1,
-    §6.4), now against pywebview's own API instead of Tk's.
+    controlled exit: the same testing discipline this package has
+    always followed (`doc/fim-gui-test-plan.md`), now against
+    pywebview's own API instead of Tk's.
 
     Args:
         api: The `Api` instance to serve as `js_api`. Defaults to a
@@ -1768,16 +1772,15 @@ def _statistic_menu_label(name: str) -> str:
 
 
 def _build_menu(window: webview.Window) -> list[Menu]:
-    """Build the native File/Configure/Run/View/Help menu bar (design §4.5).
+    """Build the native File/Configure/Run/View/Help menu bar.
 
-    Edit and Window are still left out (design §4.5's own "considered,
-    deferred": every text field already gets native Cut/Copy/Paste from
-    the WebView engine itself, and a Window menu has no app-specific
-    value for a single-window tool) — but View is not deferred any
-    longer: "significant digits to display" is a genuine display
-    toggle, unlike anything on offer when that call was first made.
-    Configure is new too, for a different reason — decluttering the
-    input screen's own canvas: the six-tab bar (design §4.1) that used
+    (`doc/fim-gui-design.md` §10.)
+
+    Edit and Window are deliberately left out: every text field already
+    gets native Cut/Copy/Paste from the WebView engine itself, and a
+    Window menu has no app-specific value for a single-window tool.
+    Configure exists to declutter the input view's own canvas: the
+    six-tab bar that used
     to be the only way to reach Population/Migration/Mutation/Initial
     conditions/Convergence/Batch is now hidden (`app.css`'s own `.tab-
     bar { display: none; }`), with this menu as the replacement entry
@@ -1790,14 +1793,14 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     established for `onRunProgress`/`onBatchDone`/etc., extended to a
     `fim.menu` namespace so no new Python business logic exists anywhere
     in this menu: every item reuses an `Api` method or JS-side screen
-    state a screen already tracks (design §4.5's own "the menu is a
-    second entry point into logic that exists, not new logic"). Quit
+    state a screen already tracks — a second entry point into logic
+    that already exists, not new logic. Quit
     alone needs no JS round trip — `window.destroy()` is a window-level
     call, not app state.
 
     The View menu's own "Significant digits" submenu, and Configure's
     own "Deme weighting"/"Mutation model"/"Convergence statistic"
-    submenus (unified-run-view design §3.1.3), are this menu's exception
+    submenus, are this menu's exception
     to "no new Python business logic": each item is a fixed literal
     value, not a reflection of whatever is currently selected —
     pywebview's own `MenuAction` has no portable, dynamic checkmark/
@@ -1850,10 +1853,10 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     # own (now-hidden) tab bar used — one native `MenuAction` per
     # section, each just asking `fim.menu.configureTab` (`screens/
     # input.js`) to open that section's own `modal-<id>` dialog over
-    # whatever the run view currently shows (unified-run-view design
-    # §3.1) — the same modal an invalid field on "Run simulation" opens
-    # for the "jump to the invalid section" case (design §4.0 #2) — no
-    # second, menu-only navigation path.
+    # whatever the run view currently shows (doc/fim-gui-design.md §5)
+    # — the same modal an invalid field on "Run simulation" opens for
+    # the "jump to the invalid section" case — no second, menu-only
+    # navigation path.
     configure_tabs = (
         ("population", "Population"),
         ("migration", "Migration"),
@@ -1862,8 +1865,8 @@ def _build_menu(window: webview.Window) -> list[Menu]:
         ("convergence", "Convergence"),
         ("batch", "Batch"),
     )
-    # Direct value-selector leaves (design §3.1.3, user-approved as the
-    # starting set: "try it and refine it as needed"). `deme_weighting`/
+    # Direct value-selector leaves, the starting set for this menu.
+    # `deme_weighting`/
     # `mutation_model` are genuinely categorical — one `MenuAction` per
     # legal value, `View > Significant digits`-shaped, toggling that one
     # field directly with no modal opened. Convergence statistic is not:
@@ -1922,7 +1925,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             ),
         ],
     )
-    # No "Animate" item (unified-run-view design §3.2.4, §8 Phase E): the
+    # No "Animate" item (`doc/fim-gui-design.md` §5.1): the
     # time slider is simply part of `completed`'s own view now, not a
     # second trigger reachable from a menu.
     run_menu = Menu(

@@ -14,7 +14,7 @@ situations just happened and handing off to the right place: the desktop
 app (`_launch_gui`) or the ordinary command-line parser
 (`fim.cli.main`).
 
-Design doc `20260819-claude-sonnet-5-graphical-interface.md` §5.1: the
+The
 Windows release ships one `.exe`, opened by double-clicking (GUI, no
 arguments), from a terminal (CLI), or via an explicit `--graphical
 [--detach]` flag pair for a shortcut, `.bat` wrapper, or Start Menu tile
@@ -145,14 +145,14 @@ def _launch_gui(*, detach: bool) -> int:
         print("fim: GUI launched (detached)")
         return 0
     if sys.platform == "win32":
-        # PyInstaller's console=True build (§5.1: kept so --help,
+        # PyInstaller's console=True build (kept so --help,
         # --version, and run's progress output still work from a
         # terminal) would otherwise flash a console window behind the
         # GUI on a double-click launch. Applies to every foreground GUI
         # launch path, not only the zero-argument one -- `fim
         # --graphical` from an existing terminal deserves the same
         # no-flashing-console treatment. This is the one genuinely
-        # Windows-specific mechanic in this dispatcher (§8) and has no
+        # Windows-specific mechanic in this dispatcher and has no
         # cross-platform automated coverage of its visual effect — only
         # the release workflow's Windows smoke step and the manual QA
         # checklist exercise it for real.

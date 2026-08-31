@@ -973,10 +973,11 @@ def identity_recovery_half_life(population_size: int, m: float) -> float:
     time as continuous, as the paper itself does for this formula) for
     `identity_recovery_trajectory` to close half the gap between its
     starting value and `identity_recovery_equilibrium`, regardless of
-    which direction it started from (`identity_recovery_trajectory`
-    evaluated at this many generations always lands exactly on the
-    arithmetic midpoint — see the design doc for a worked numeric check
-    in both directions).
+    which direction it started from -- a direct consequence of the
+    trajectory's own exponential-decay form: `identity_recovery_
+    trajectory` evaluated at this many generations always lands
+    exactly on the arithmetic midpoint between the two, in either
+    direction).
 
     Special-cased at ``m = 1`` (the only way `identity_recovery_rate`
     can be exactly `0`, meaning full replacement every generation, hence

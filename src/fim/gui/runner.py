@@ -1,4 +1,4 @@
-"""Background-thread scalar-run orchestration (design §3.4, §3.7).
+"""Background-thread scalar-run orchestration (`doc/fim-gui-design.md` §7.1).
 
 `fim.engine.fim` is a single blocking call; a multi-thousand-generation
 run would freeze the Tk main thread for its whole duration. `start_run`
@@ -7,8 +7,9 @@ cancellation for free from `fim.gui.store.GuiProgressStore` — no change
 to `fim.engine` at all.
 
 The worker does its work inside `fim.paths.atomic_directory`, the exact
-context manager `cli._command_run_scalar` already uses (§3.7 extracted
-it from the CLI for precisely this shared use): every write lands in a
+context manager `cli._command_run_scalar` already uses (`fim.paths` was
+extracted from the CLI for precisely this shared use — §12): every
+write lands in a
 hidden temporary sibling of `output_directory`, published with one
 atomic rename only if the `with` block exits normally. A cancelled run
 raises `RunCancelledError` out of that block; an unexpected engine error
@@ -24,7 +25,7 @@ then `report.json` and `scatter.png` once the run finishes, then —
 last, and only once both are flushed — `manifest.json`, augmented with
 each artifact's SHA-256 digest, the record
 `fim.persistence.manifest.verify_trajectory_integrity` later checks
-against (design §3.7).
+against.
 """
 
 from __future__ import annotations
@@ -60,13 +61,12 @@ from fim.viz.scatter import (
     plot_frequency_scatter,
 )
 
-# The wall-clock throttle interval design §3.4 names ("skip posting if
-# under ~50 ms since the last post").
+# The wall-clock throttle interval: skip posting a progress tick if
+# under ~50 ms have passed since the last post.
 PROGRESS_THROTTLE_INTERVAL_SECONDS: Final = 0.05
 
-# Mirrors `fim.cli.main`'s own catch-all (design §4.6: "matching the
-# CLI's catch-all in main()"), scoped to what a validated `params` and a
-# real `fim.engine.fim` call can actually raise here — `pickle.
+# Mirrors `fim.cli.main`'s own catch-all, scoped to what a validated
+# `params` and a real `fim.engine.fim` call can actually raise here — `pickle.
 # PicklingError` and `yaml.YAMLError` are catch-all members that apply
 # only to `max_workers` batches and config parsing, neither of which
 # this scalar, already-validated worker ever exercises.
@@ -100,7 +100,7 @@ class ProgressThrottle:
     short of 100%. A run that instead stops early via convergence still
     gets a correct final state: the worker's own "done"/"cancelled"
     message carries its own generation number independent of this
-    throttle (§3.4).
+    throttle.
     """
 
     def __init__(
@@ -133,8 +133,8 @@ def run_artifact_targets(directory: Path) -> dict[str, Path]:
     """Return the four documented scalar-run artifact paths in one directory.
 
     Deliberately the same four names `cli._run_artifact_targets` uses
-    (design §3.7's "the exact same four calls, same target filenames,
-    same directory") — a direct parallel, not a shared import, since
+    — the exact same four calls, same target filenames, same directory
+    — a direct parallel, not a shared import, since
     `cli._run_artifact_targets` is a private module-level function of
     the CLI's own front end.
     """
@@ -158,7 +158,7 @@ def start_run(
 
     Args:
         params: Already-validated parameters — the screen calling this
-            never hands it an unvalidated payload (design §3.6).
+            never hands it an unvalidated payload.
         output_directory: The run's target artifact directory, passed
             straight to `fim.paths.atomic_directory` by the worker
             thread. Checked for existence synchronously here too, so a
@@ -228,10 +228,9 @@ def _run_worker(
             panels = panels_from_points(points, state.deme_count)
             # The six named statistics for *this* tick's state, the
             # same `report_for_state` call `Api.get_initial_state_panels`
-            # makes for p_0 (design §8 Phase G's "the stats panel is
-            # always present and populated" — the running state's own
-            # table updates live from this instead of sitting blank
-            # until the run finishes). `converged`/`reason` are both
+            # makes for p_0 — the running state's own stats table
+            # updates live from this instead of sitting blank until the
+            # run finishes. `converged`/`reason` are both
             # placeholders; nothing downstream reads them off a
             # progress tick's own report, only the six numeric fields.
             report = report_for_state(
@@ -258,8 +257,9 @@ def _run_worker(
             )
             if not isinstance(result, RunResult):
                 # n_replicates == 1 is enforced by every path that can
-                # reach this worker (design §2.3: multi-replicate runs
-                # are out of scope for the scalar GUI runner), so
+                # reach this worker — multi-replicate runs are out of
+                # scope for the scalar GUI runner (`doc/fim-gui-design.md`
+                # §7.2 covers the batch path instead), so
                 # `fim()` always takes its scalar branch here — this
                 # guards the invariant rather than silently mishandling
                 # a batch. Raised inside the `with` block so
@@ -286,9 +286,9 @@ def write_run_artifacts(result: RunResult, targets: dict[str, Path]) -> None:
     `manifest.json` is written only once every sibling artifact is
     flushed, augmented with each one's SHA-256 digest. The returned
     `Figure` is closed immediately — the caller's worker thread never
-    displays it, unlike the results screen, which keeps its own figure
-    alive on screen and is responsible for closing that one itself
-    (design §3.5's `plt.close` care item). Public rather than
+    displays it, unlike the CLI's own `scatter.png` render, which the
+    caller keeps alive and is responsible for closing itself. Public
+    rather than
     module-private: `fim.gui.batch_runner` reuses this same call, once
     per replicate, rather than duplicating it — both modules live in
     the same `fim.gui` package, unlike the CLI/GUI front-end boundary

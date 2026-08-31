@@ -1,30 +1,29 @@
 """Sample animation frames from a persisted trajectory as raw scatter
-coordinates, not rendered images (design doc §0.5, §3.8 of
-`20260821-claude-sonnet-5-graphical-interface.md`).
+coordinates, not rendered images (`doc/fim-gui-design.md` §8).
 
 A converged run can persist hundreds or thousands of generations, and
 turning every one of them into a separate frame is both slow and
 unnecessary for a human watching a scatter drift. This module samples at
 most `GUI_ANIMATION_MAX_FRAMES` generations, evenly spaced across the
 run's persisted range, always including generation 0 and the final
-generation — unchanged from the design's Tk-era revision — but each
-sampled generation now produces a plain coordinate array
-(`fim.viz.scatter.frequency_points`), not a rendered `Figure`: pywebview's
-animation screen ships the whole sampled set to the page once and drives
-play/pause/scrub entirely with client-side Canvas redraws (§3.5, §3.8),
-so nothing here needs to render anything at all. This also makes
-pre-computation itself cheaper, not just playback: building `max_frames`
-coordinate arrays costs a fraction of what building `max_frames`
-Matplotlib figures did, since no rasterization happens on this path.
+generation — unchanged from an earlier, Tk-era revision of this module
+— but each sampled generation now produces a plain coordinate array
+(`fim.viz.scatter.frequency_points`), not a rendered `Figure`:
+pywebview's own scrubber ships the whole sampled set to the page once
+and drives play/pause/scrub entirely with client-side Canvas redraws
+(`doc/fim-gui-design.md` §5.2, §8), so nothing here needs to render
+anything at all. This also makes pre-computation itself cheaper, not
+just playback: building `max_frames` coordinate arrays costs a
+fraction of what building `max_frames` Matplotlib figures did, since
+no rasterization happens on this path.
 
-Reached only after the same trajectory-integrity check §4.6 already
-performed: Screen 5 is reached only from Screen 3 or Screen 6, both of
-which have already verified the trajectory
-(`fim.reanalyze.reanalyze_trajectory` calls
-`fim.persistence.manifest.verify_trajectory_integrity` itself, and a
-just-completed live run's manifest was just written, never edited). This
-module therefore reads the trajectory directly, trusting the caller,
-rather than re-verifying it a second time.
+Reached only after the trajectory's integrity has already been
+verified — the unified run view's `completed` state, reached either by
+a run that just finished (its manifest was just written, never edited)
+or by opening a persisted run (`fim.reanalyze.reanalyze_trajectory`
+itself calls `fim.persistence.manifest.verify_trajectory_integrity`
+first). This module therefore reads the trajectory directly, trusting
+the caller, rather than re-verifying it a second time.
 """
 
 from __future__ import annotations
@@ -50,11 +49,12 @@ class AnimationFrame:
         generation: The persisted generation this frame represents.
         points: `frequency_points`' own return shape — one row per
             (locus, allele) pair, one column per deme. Whoever renders
-            this (the GUI bridge, §3.5) is responsible for any further
-            reduction a high deme count needs (the pairwise-grid or
-            first-deme-pair cases `panels_from_points` itself handles,
-            unified-run-view design §3.6) and for the client-side
-            Canvas draw itself; this module never touches either.
+            this (the GUI bridge, `doc/fim-gui-design.md` §4) is
+            responsible for any further reduction a high deme count
+            needs (the pairwise-grid or first-deme-pair cases
+            `panels_from_points` itself handles) and for the
+            client-side Canvas draw itself; this module never touches
+            either.
     """
 
     generation: int
@@ -109,8 +109,8 @@ def select_sample_generations(
         `max_frames` generation numbers, drawn from
         `available_generations`. Always includes the lowest and the
         highest generation number when `max_frames >= 2` and
-        `available_generations` is non-empty (design §3.8: "always
-        including generation 0 and the final generation"). Returns
+        `available_generations` is non-empty (always including
+        generation 0 and the final generation). Returns
         every available generation, sorted, when there are
         `max_frames` or fewer of them. `max_frames <= 0` returns
         `[]`; `max_frames == 1` returns only the highest generation —

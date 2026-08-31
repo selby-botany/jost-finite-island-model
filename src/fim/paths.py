@@ -19,11 +19,11 @@ than reinvented slightly differently in each front end:
    partway through?" (`atomic_directory`) — see that function's own
    docstring for the answer.
 
-Extracted from `fim.cli` (design doc `20260819-claude-sonnet-5-graphical-
-interface.md` §3.7) so `fim.gui`'s run orchestration resolves the exact same
-`project-root/results/` layout, timestamped default folder naming, and
-atomic-publish-or-nothing guarantee as `fim run`, rather than a second,
-independently maintained copy of this logic. `project_root` is anchored on
+Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
+run orchestration resolves the exact same `project-root/results/`
+layout, timestamped default folder naming, and atomic-publish-or-nothing
+guarantee as `fim run`, rather than a second, independently maintained
+copy of this logic. `project_root` is anchored on
 the `fim` package's own `__init__.py` (`fim.__file__`), not the calling
 module's `__file__`: every caller under `src/fim/`, regardless of how deep
 it sits (`fim/cli.py`, `fim/gui/runner.py`, ...), resolves the identical

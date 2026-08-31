@@ -14,11 +14,11 @@ the desktop app's own "Check for updates" menu item) — nothing here ever
 runs automatically in the background, on a timer, or as a side effect of
 an ordinary simulation run.
 
-Extracted from `fim.cli` (design doc `20260819-claude-sonnet-5-graphical-
-interface.md` §3.9) so `fim.gui`'s "Check for updates" action performs
-exactly the same GitHub Releases lookup and version comparison as
-`fim update --check`, rather than a second implementation of the one
-network operation `SECURITY.md`'s threat model permits.
+Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
+"Check for updates" action performs exactly the same GitHub Releases
+lookup and version comparison as `fim update --check`, rather than a
+second implementation of the one network operation `SECURITY.md`'s
+threat model permits.
 """
 
 from __future__ import annotations

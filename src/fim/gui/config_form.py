@@ -5,28 +5,26 @@ shapes: a `SimulationParams` instance, a `dict[str, str]` of one string
 per form field (what `screens.input_screen.InputScreen` reads from and
 writes to its widgets), and a `dict[str, object]` payload ready for
 `fim.model.params.SimulationParams.from_mapping` — the identical
-validator `fim.cli` already uses (design doc §3.6). Nothing here
-duplicates a validation rule `from_mapping` already enforces: a
-malformed string is only ever coerced to the right Python type before
-being handed to that one validator, never re-checked against a second,
-GUI-local copy of a rule.
+validator `fim.cli` already uses (`doc/fim-gui-design.md` §6.1).
+Nothing here duplicates a validation rule `from_mapping` already
+enforces: a malformed string is only ever coerced to the right Python
+type before being handed to that one validator, never re-checked
+against a second, GUI-local copy of a rule.
 
 `TABS` groups fields the same way
 [configuration.md](../../doc/configuration.md)'s own section
-headings do (design §3.6, §4.0 #1). §3.6's cardinality rule decides
-what earns a live widget here at all: O(1) and O(d)/O(loci)-sized
-fields do (a comma-separated text field faithfully represents either);
-a `d`-by-`d` migration matrix, an arbitrary sparse map, a per-locus
-`p_0`, and — narrower cases the design doc does not work through in
-the same detail — a genuinely per-locus `mu` or a `loci` list with
-custom `locus_id`s do not (§2.3). `m` and `p_0` get the read-only
-"loaded from file" badge treatment §4.0 #3 describes when a loaded
-configuration actually uses one; `mu`-per-locus and custom-ID `loci`
-instead raise a clear `ValueError` from `params_to_form_values` (the
-same "edit the YAML file directly" pattern this form has always used
-for a construct it cannot represent at all, load-only badge or not) —
-narrower, later-discovered edge cases than the two the design doc's
-own worked examples cover, not a deliberate scope reduction.
+headings do. The cardinality rule (`doc/fim-gui-design.md` §6.1)
+decides what earns a live widget here at all: O(1) and O(d)/O(loci)-
+sized fields do (a comma-separated text field faithfully represents
+either); a `d`-by-`d` migration matrix, an arbitrary sparse map, a
+per-locus `p_0`, a genuinely per-locus `mu`, or a `loci` list with
+custom `locus_id`s do not. `m` and `p_0` get the read-only "loaded
+from file" badge treatment when a loaded configuration actually uses
+one; `mu`-per-locus and custom-ID `loci` instead raise a clear
+`ValueError` from `params_to_form_values` (the same "edit the YAML
+file directly" pattern this form has always used for a construct it
+cannot represent at all, load-only badge or not) — see `doc/
+fim-gui-design.md` §6.2 for both paths.
 """
 
 from __future__ import annotations
@@ -44,7 +42,7 @@ FieldKind = Literal[
     "int", "float", "int_list", "choice", "optional_float", "float_choice"
 ]
 
-# The two `m` selector modes (design §4.1's radio between a scalar rate
+# The two `m` selector modes (a radio between a scalar rate
 # and a named topology) and the topologies `fim.model.topology` itself
 # accepts — kept here, not imported from there, since the GUI only ever
 # needs the two literal option strings, not the topology machinery.
@@ -109,8 +107,8 @@ POPULATION_FIELDS: Final[tuple[FormField, ...]] = (
 # of its own: it describes how many gene copies migrate each
 # generation (configuration.md's own "Analysis and execution" section
 # groups it with the batch/execution fields, but semantically it is a
-# migration-behavior toggle, not a batch one, and design §4.1's own
-# tab breakdown does not name a tab for it at all — an omission this
+# migration-behavior toggle, not a batch one, and no tab breakdown
+# names a tab for it at all — an omission this
 # implementation resolves by placing it beside `m` rather than
 # inventing a seventh tab for one field).
 MIGRATION_FIELDS: Final[tuple[FormField, ...]] = (
@@ -245,7 +243,7 @@ def tab_for_error(message: str) -> str | None:
         first failure rather than collecting every field's own error
         independently), or `None` when the message names no field this
         form can place on any tab (an unknown-key error, for instance)
-        — the caller shows those in the banner alone (design §4.6).
+        — the caller shows those in the banner alone.
     """
     plain_field = field_for_error(message)
     if plain_field is not None:
@@ -272,8 +270,7 @@ def field_for_error(message: str) -> str | None:
         to that field, or `None` when the message names no exposed field
         (an unknown-key error, an `m`/`m.topology`/`m.rate` message —
         `m` has no single `FormField` of its own — or a construct not
-        yet in scope) — the caller shows those in a banner instead
-        (design §4.6).
+        yet in scope) — the caller shows those in a banner instead.
     """
     for field in all_fields():
         if field.kind == "int_list":
@@ -538,10 +535,8 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         ValueError: If `params` uses a construct this form cannot
             represent at all — a per-locus `mu` (`mu_from_params`), or
             a `loci` list with custom, non-default-position
-            `locus_id`s (narrower than the design doc's own worked
-            "loaded" badge examples; §2.3 names an explicit `loci` list
-            with custom ordering as load-only, and this form's one
-            `locus_lengths` field cannot express a custom ID either).
+            `locus_id`s (`doc/fim-gui-design.md` §6.2: this form's one
+            `locus_lengths` field cannot express a custom ID at all).
     """
     if any(locus.locus_id != index + 1 for index, locus in enumerate(params.loci)):
         raise ValueError(
@@ -588,8 +583,8 @@ def starter_form_values() -> dict[str, str]:
 
     Returns:
         The same values `params_to_form_values` would compute for
-        `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults"
-        design §3.6 requires, so a fresh form and `fim init` can never
+        `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults",
+        so a fresh form and `fim init` can never
         drift apart into two documented starting scenarios.
     """
     starter_params = SimulationParams.from_mapping(yaml.safe_load(STARTER_CONFIG))

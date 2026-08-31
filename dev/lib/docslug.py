@@ -3,9 +3,9 @@
 Extracted from `dev/bin/check-doc-links`'s own `anchor_for` (unchanged
 behavior — a pure refactor) so a second caller, `dev/bin/generate-help-
 html`, can compute the identical anchor for the same heading rather than
-reimplementing the same algorithm a second, possibly drifting way
-(`20260822-claude-sonnet-5-in-app-help-design.md` §4.1's own "one
-slugger, two callers, zero drift"). `check-doc-links` still owns the
+reimplementing the same algorithm a second, possibly drifting way —
+one slugger, two callers, zero drift (`doc/fim-gui-design.md` §11).
+`check-doc-links` still owns the
 one place this anchor's correctness against real GitHub rendering is
 exercised; every other caller trusts it rather than re-deriving it.
 """
