@@ -318,15 +318,39 @@ unless noted:
 | Module | Calls added |
 |---|---|
 | `fim.cli` | Parsed arguments (DEBUG); which command dispatched; config loaded (path, key parameters); each artifact written (path); non-zero exit (ERROR, with the caught exception's own message). |
-| `fim.engine` | Run start (params summary) and end (outcome, elapsed generations) for both scalar and batch; each generation's convergence-monitor decision (DEBUG); replicate start/end inside a batch; adaptive-stop triggered; the finite-alleles-capacity and unpicklable-argument guards already documented as regression-worthy (WARNING, via `warnings.warn` — §8 — since both are caller-actionable). |
-| `fim.model.params` | Validation failure's own field/reason, immediately before the `ValueError` that already carries it is raised (DEBUG — the exception itself remains the actual signal). |
+| `fim.engine` | Run start (params summary) and end (outcome, converged, generation) for both scalar and batch; each generation's convergence-monitor decision (DEBUG, guarded per §9); replicate start/end inside a batch; adaptive-stop triggered (INFO, both the sequential and parallel-worker paths). |
+| `fim.model.params` | *(superseded — see below.)* |
 | `fim.convergence.*` | Criterion evaluated and its own stop/continue decision (DEBUG); final outcome (INFO). |
-| `fim.persistence.*` | Every file write (path, DEBUG); atomic-directory publish and rollback (INFO/WARNING); manifest/trajectory integrity check outcome (DEBUG on success, WARNING on a detected mismatch, mirroring §8's "caller-actionable" test). |
+| `fim.persistence.*` | Every file write (path, DEBUG); manifest/trajectory integrity check outcome (DEBUG on success, WARNING on a detected mismatch, mirroring §8's "caller-actionable" test). |
+| `fim.paths.atomic_directory` | Temporary build directory chosen (DEBUG); publish (INFO); rollback on the caller's own exception (WARNING, naming the exception type). |
 | `fim.viz.*` | Figure saved (path, DEBUG); large-`d` fallback panel selected (DEBUG). |
 | `fim.reanalyze` | Re-analysis start/end (trajectory path, generation selected). |
 | `fim.update` | Network request start/end and outcome (INFO on success, WARNING on failure — this project's own only network call, so its own failure mode deserves visibility by default). |
 | `fim.gui.app`/`runner`/`batch_runner`/`store` | Window/bridge lifecycle events; background thread start/stop; run/batch start, progress-push cadence (DEBUG), done/cancelled/error; every bridge method call (DEBUG, method name only — arguments may contain a full configuration and are not logged by default). |
 | `fim.launcher` | Which of the three dispatch branches fired (DEBUG). |
+
+Two corrections against this table's own first draft, found only once the
+actual call sites were read rather than assumed from their names:
+
+- **The finite-alleles-capacity and unpicklable-argument guards
+  (`fim.model.allele.FiniteAlleleRegistry`/`FiniteAlleleSpace`,
+  `fim.engine._require_picklable`) stay hard errors, never
+  `warnings.warn`.** Each one raises `ValueError`/`RuntimeError`
+  precisely because the run cannot correctly continue past it (an
+  overrun finite-allele capacity, an argument that cannot cross a
+  `max_workers` process boundary) — converting either to a warning
+  would let execution proceed on data §8 already establishes as
+  unsafe to trust. §8's "caller-actionable, not narrative" test picks
+  out conditions a caller might reasonably let pass and act on later;
+  neither of these qualifies.
+- **`fim.model.params` gets no per-raise-site DEBUG call.** Every one
+  of its ~30 `ValueError` sites already carries the exact field/reason
+  in its own message text, and `fim.cli.main`'s own catch-all
+  (`logger.error("fim %s failed: %s", ...)`, §10's `fim.cli` row)
+  already logs that same message at ERROR the moment any of them
+  reaches a real CLI invocation — duplicating it at each raise site
+  would only repeat the same string at a second log level, immediately
+  above where it is already captured, for no added operational value.
 
 ## 11. Testing approach
 

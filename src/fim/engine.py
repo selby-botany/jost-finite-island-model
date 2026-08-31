@@ -98,6 +98,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import pickle
 from collections.abc import Callable, Mapping, Sequence
@@ -133,6 +134,8 @@ from fim.statistics.interval import ConfidenceInterval, confidence_interval
 Clock: TypeAlias = Callable[[], datetime]
 
 _MINIMUM_REPLICATE_SUMMARY_COUNT = 2
+
+logger = logging.getLogger(__name__)
 
 
 class FinalReport(TypedDict):
@@ -424,6 +427,7 @@ def fim(
     # at the bottom of this function.
     if params.n_replicates == 1:
         trajectory_store = store if store is not None else InMemoryTrajectoryStore()
+        logger.debug("fim(): dispatching a single scalar run")
         return _run_one(
             params,
             trajectory_store,
@@ -444,6 +448,11 @@ def fim(
         _require_picklable("clock", run_clock)
         if store_factory is not None:
             _require_picklable("store_factory", store_factory)
+        logger.debug(
+            "fim(): dispatching a %d-replicate batch across up to %d worker(s)",
+            params.n_replicates,
+            max_workers,
+        )
         return _run_batch_parallel(
             params,
             max_workers,
@@ -454,6 +463,9 @@ def fim(
         )
 
     trajectory_store = store if store is not None else InMemoryTrajectoryStore()
+    logger.debug(
+        "fim(): dispatching a %d-replicate sequential batch", params.n_replicates
+    )
     # Replicate i is an independent scalar run with seed + i, preserving the
     # scalar trajectory for the first result and deterministic batch ordering.
     results: list[RunResult] = []
@@ -490,6 +502,11 @@ def fim(
                 _replicate_stopping_values(result, params.convergence_statistics),
             )
             if outcome.stopped:
+                logger.info(
+                    "adaptive replicate stop triggered after %d of %d replicate(s)",
+                    replicate_index + 1,
+                    params.n_replicates,
+                )
                 break
     return tuple(results)
 
@@ -832,6 +849,12 @@ def _run_batch_parallel(
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         while replicate_index < params.n_replicates:
             batch_end = min(replicate_index + max_workers, params.n_replicates)
+            logger.debug(
+                "submitting worker batch: replicates %d..%d of %d",
+                replicate_index + 1,
+                batch_end,
+                params.n_replicates,
+            )
             futures = {}
             for index in range(replicate_index, batch_end):
                 replicate_params = replace(
@@ -862,6 +885,13 @@ def _run_batch_parallel(
                         ),
                     )
                     if outcome.stopped:
+                        logger.info(
+                            "adaptive replicate stop triggered after %d of %d "
+                            "replicate(s) (worker batch overshoot up to %d)",
+                            index + 1,
+                            params.n_replicates,
+                            max_workers - 1,
+                        )
                         return tuple(results)
             replicate_index = batch_end
     return tuple(results)
@@ -883,7 +913,21 @@ def _run_replicate_worker(
     `_require_picklable`'s own docstring — `ProcessPoolExecutor` sends
     this very function, by reference, to each worker process it starts,
     and only a plain, named, module-level function can be sent that way.
+
+    Whether the `logger.debug` call below is actually visible anywhere
+    depends on the worker process's own start method (`multiprocessing`'s
+    own `"fork"`/`"spawn"`/`"forkserver"` — not chosen here, and not
+    something this module controls): a forked worker inherits the parent
+    process's already-`fim.logging_setup.configure`d logging state
+    verbatim (the default on Linux), so this line reaches the same
+    handlers the parent process's own log lines do; a spawned worker (the
+    default on macOS and Windows) starts with a freshly imported,
+    unconfigured `fim` logger — this line still runs, but goes nowhere
+    (`fim.__init__`'s own `NullHandler`) until/unless something
+    reconfigures logging inside that worker process, which nothing here
+    currently does.
     """
+    logger.debug("worker process starting replicate %s", run_id)
     store = (
         store_factory(run_id)
         if store_factory is not None
@@ -939,6 +983,16 @@ def _run_one(
     this function itself has no idea which of the two is calling it, and
     does not need to.
     """
+    logger.info(
+        "replicate %s starting (N=%s, d=%s, m=%s, mu=%s, seed=%s, max_generations=%s)",
+        run_id,
+        params.N,
+        params.d,
+        params.m,
+        params.mu,
+        params.seed,
+        params.max_generations,
+    )
     started_at = _format_timestamp(clock())
     # `PCG64` is the specific, high-quality pseudo-random-number
     # algorithm NumPy recommends as its modern default; seeding it here,
@@ -1002,13 +1056,24 @@ def _run_one(
     # the population's statistics have settled down or the hard
     # generation cap has been reached — `monitor.should_stop()` is the
     # single place either of those two conditions is actually decided.
+    # `isEnabledFor` guards the actual log call, not just its formatting:
+    # `_convergence_values` below is computed unconditionally either way
+    # (the monitor needs it regardless of logging), but skipping the
+    # `logger.debug` call itself when DEBUG is disabled avoids the small,
+    # otherwise-per-generation cost of formatting a message nobody reads
+    # — see `doc/fim-logging-design.md` §9 for why this loop, specifically
+    # (up to `max_generations`, by default 10000), is where that discipline
+    # matters most in this whole codebase.
+    debug_enabled = logger.isEnabledFor(logging.DEBUG)
     while not monitor.should_stop():
         state = step(state, params, registry, rng, finite_alleles=finite_alleles)
         store.write_generation(run_id, state.generation, state.to_rows(run_id))
-        monitor.record(
-            state.generation,
-            _convergence_values(state, params),
-        )
+        values = _convergence_values(state, params)
+        monitor.record(state.generation, values)
+        if debug_enabled:
+            logger.debug(
+                "replicate %s generation %d: %s", run_id, state.generation, values
+            )
 
     outcome = monitor.outcome()
     if outcome.reason is None:
@@ -1029,6 +1094,13 @@ def _run_one(
         reason=outcome.reason.value,
     )
     ended_at = _format_timestamp(clock())
+    logger.info(
+        "replicate %s finished: %s at generation %d (converged=%s)",
+        run_id,
+        outcome.reason.value,
+        state.generation,
+        outcome.converged,
+    )
     # The manifest is this run's own permanent record — not the
     # scientific results themselves (that is `report`, above), but the
     # surrounding bookkeeping proving *when* and *how* those results

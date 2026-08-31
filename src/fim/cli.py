@@ -186,6 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         pickle.PicklingError,
         yaml.YAMLError,
     ) as error:
+        logger.error("fim %s failed: %s", arguments.command, error)
         print(f"fim: error: {error}", file=sys.stderr)
         return 2
     parser.error("a command is required")
@@ -210,6 +211,7 @@ def _command_init(arguments: argparse.Namespace) -> int:
         raise ValueError(f"starter config already exists: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(STARTER_CONFIG, encoding="utf-8")
+    logger.info("wrote starter config: %s", output)
     print(f"Wrote starter config: {output}")
     return 0
 
@@ -225,11 +227,23 @@ def _command_run(arguments: argparse.Namespace) -> int:
     that — see `fim.engine`'s own docstring for why running several
     repeats of the same configuration is useful in the first place.
     """
+    logger.debug("loading config: %s", arguments.config)
     params = load_config(arguments.config)
     output_directory = (
         Path(arguments.output)
         if arguments.output is not None
         else paths.default_output_directory()
+    )
+    logger.debug(
+        "config loaded: N=%s, d=%s, m=%s, mu=%s, seed=%s, n_replicates=%s, "
+        "output_directory=%s",
+        params.N,
+        params.d,
+        params.m,
+        params.mu,
+        params.seed,
+        params.n_replicates,
+        output_directory,
     )
     if params.n_replicates == 1:
         return _command_run_scalar(params, output_directory, arguments.quiet)
@@ -266,6 +280,15 @@ def _command_run_scalar(
     one.
     """
     run_id = deterministic_run_id(params)
+    logger.info(
+        "starting scalar run %s (N=%s, d=%s, m=%s, mu=%s, seed=%s)",
+        run_id,
+        params.N,
+        params.d,
+        params.m,
+        params.mu,
+        params.seed,
+    )
     if not quiet:
         print(
             f"Running {run_id} "
@@ -286,8 +309,16 @@ def _command_run_scalar(
         )
         if not isinstance(output, RunResult):
             raise RuntimeError("scalar CLI run unexpectedly returned a batch")
+        logger.debug("writing run artifacts to %s", working_directory)
         _write_run_artifacts(output, working_directory)
 
+    logger.info(
+        "run %s finished: %s at generation %s (D=%.6g)",
+        run_id,
+        output.report["reason"],
+        output.report["generation"],
+        output.report["D"],
+    )
     if not quiet:
         print(
             f"{output.report['reason'].capitalize()}: generation "
@@ -340,6 +371,9 @@ def _command_run_batch(
         if arguments.sequential
         else (arguments.workers if arguments.workers is not None else _cpu_count())
     )
+    logger.info(
+        "starting batch run %s %s", run_id, _batch_description(params, max_workers)
+    )
     if not arguments.quiet:
         print(f"Running batch {run_id} {_batch_description(params, max_workers)}")
 
@@ -360,6 +394,7 @@ def _command_run_batch(
         if not isinstance(output, tuple):
             raise RuntimeError("batch CLI run unexpectedly returned a scalar result")
         ended_at = _format_timestamp(_utc_now())
+        logger.debug("batch %s: %d replicate(s) returned", run_id, len(output))
 
         published_run_ids = frozenset(result.run_id for result in output)
         _prune_orphan_replicate_directories(
@@ -370,6 +405,7 @@ def _command_run_batch(
             directory = _replicate_output_directory(
                 working_directory, run_id, result.run_id
             )
+            logger.debug("writing replicate artifacts to %s", directory)
             _write_run_artifacts(result, directory)
             artifact_digests[directory.name] = hash_file(directory / "manifest.json")
         write_report(working_directory / "summary.json", replicate_summary(output))
@@ -388,6 +424,7 @@ def _command_run_batch(
             ),
         )
 
+    logger.info("batch %s finished: %d replicate(s)", run_id, len(output))
     if not arguments.quiet:
         print(f"Completed {len(output)} replicate(s)")
         for result in output:
@@ -411,6 +448,11 @@ def _command_stats(arguments: argparse.Namespace) -> int:
     """
     trajectory_path = Path(arguments.trajectory)
     manifest_path = Path(arguments.manifest) if arguments.manifest is not None else None
+    logger.info(
+        "re-analyzing %s (generation=%s)",
+        trajectory_path,
+        arguments.generation if arguments.generation is not None else "final",
+    )
     reanalyzed = reanalyze.reanalyze_trajectory(
         trajectory_path,
         manifest_path=manifest_path,
@@ -424,6 +466,7 @@ def _command_stats(arguments: argparse.Namespace) -> int:
         output_path = Path(arguments.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(f"{rendered}\n", encoding="utf-8")
+        logger.info("wrote re-analysis report: %s", output_path)
     print(rendered)
     return 0
 
@@ -442,14 +485,20 @@ def _command_update(
     """
     if not arguments.check:
         parser.error("fim update requires --check")
+    logger.info("checking for a newer release (current: %s)", __version__)
     latest_tag, release_url = update.latest_release()
     comparison = update.compare_versions(__version__, latest_tag.removeprefix("v"))
     if comparison < 0:
+        logger.info("newer release available: %s", latest_tag)
         print(f"A newer fim release is available: {latest_tag}")
         print(release_url)
     elif comparison == 0:
+        logger.info("fim %s is current", __version__)
         print(f"fim {__version__} is current")
     else:
+        logger.info(
+            "fim %s is newer than the latest release %s", __version__, latest_tag
+        )
         print(f"fim {__version__} is newer than the latest release {latest_tag}")
     return 0
 

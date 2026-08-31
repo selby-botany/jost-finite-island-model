@@ -20,8 +20,11 @@ newline-terminated JSON, not just report.json specifically.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def write_report(path: Path | str, value: Mapping[str, object]) -> None:
@@ -51,3 +54,4 @@ def write_report(path: Path | str, value: Mapping[str, object]) -> None:
     with report_path.open("w", encoding="utf-8", newline="\n") as handle:
         json.dump(dict(value), handle, indent=2, sort_keys=True, allow_nan=False)
         handle.write("\n")
+    logger.debug("wrote report: %s", report_path)

@@ -39,6 +39,7 @@ caller sat at a different depth.
 from __future__ import annotations
 
 import contextlib
+import logging
 import shutil
 import sys
 import tempfile
@@ -49,6 +50,8 @@ from pathlib import Path
 import fim
 
 Clock = Callable[[], datetime]
+
+logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
@@ -131,17 +134,24 @@ def atomic_directory(target: Path) -> Iterator[Path]:
     working_directory = Path(
         tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent)
     )
+    logger.debug("building %s in temporary directory %s", target, working_directory)
     try:
         # Hand the temporary folder to the caller's own `with` block —
         # everything the caller writes during that block goes here, not
         # to `target` itself.
         yield working_directory
-    except BaseException:
+    except BaseException as error:
         # The caller's own code raised something -- discard everything
         # written so far and let the same exception continue propagating
         # unchanged (`raise` with no argument re-raises exactly what was
         # caught, rather than wrapping or replacing it), so a caller
         # further up still sees the real, original error.
+        logger.warning(
+            "rolling back %s after %s: %s",
+            target,
+            type(error).__name__,
+            error,
+        )
         shutil.rmtree(working_directory, ignore_errors=True)
         raise
     else:
@@ -151,6 +161,7 @@ def atomic_directory(target: Path) -> Iterator[Path]:
         # (a moment ago) or exists fully complete (now), with no
         # observable moment in between.
         working_directory.replace(target)
+        logger.info("published %s", target)
 
 
 def default_output_directory(

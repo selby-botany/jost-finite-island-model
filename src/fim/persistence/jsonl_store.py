@@ -16,11 +16,14 @@ once, either to write it or to read it back.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
 from fim.persistence.store import TrajectoryRow, normalize_row
+
+logger = logging.getLogger(__name__)
 
 
 class JSONLTrajectoryStore:
@@ -79,6 +82,18 @@ class JSONLTrajectoryStore:
                 )
                 handle.write("\n")
             handle.flush()
+        # Guarded like `fim.engine._run_one`'s own per-generation loop
+        # (`doc/fim-logging-design.md` §9): this is called once per
+        # generation for the life of a run, so the message is only
+        # formatted when DEBUG is actually enabled.
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "wrote %d row(s) for %s generation %d to %s",
+                len(normalized_rows),
+                run_id,
+                generation,
+                self.path,
+            )
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Yield complete rows matching ``run_id``, oldest first.
@@ -104,6 +119,7 @@ class JSONLTrajectoryStore:
         """
         if not self.path.is_file():
             raise FileNotFoundError(f"trajectory does not exist: {self.path}")
+        logger.debug("reading trajectory %s for run %s", self.path, run_id)
 
         def iterate() -> Iterator[TrajectoryRow]:
             with self.path.open("r", encoding="utf-8") as handle:

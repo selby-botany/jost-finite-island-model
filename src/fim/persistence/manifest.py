@@ -20,12 +20,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn, TypedDict
 
 from fim.model.params import SimulationParams
+
+logger = logging.getLogger(__name__)
 
 # Bumped whenever RunManifest's on-disk shape changes incompatibly. Recorded
 # in every manifest so a future reader can tell which contract wrote it,
@@ -233,6 +236,7 @@ def read_manifest(path: Path | str) -> RunManifest:
     "is this even a JSON object" check.
     """
     manifest_path = Path(path)
+    logger.debug("reading manifest: %s", manifest_path)
     with manifest_path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     if not isinstance(payload, dict):
@@ -261,6 +265,7 @@ def write_manifest(path: Path | str, manifest: RunManifest) -> None:
             allow_nan=False,
         )
         handle.write("\n")
+    logger.debug("wrote manifest: %s", manifest_path)
 
 
 def verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) -> None:
@@ -302,6 +307,15 @@ def verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) ->
     expected = manifest.artifacts["trajectory"]
     actual = hash_file(trajectory_path)
     if actual != expected:
+        logger.warning(
+            "trajectory integrity check failed for %s: expected sha256 %s "
+            "(%d bytes), found %s (%d bytes)",
+            manifest.run_id,
+            expected["sha256"],
+            expected["bytes"],
+            actual["sha256"],
+            actual["bytes"],
+        )
         raise ValueError(
             f"trajectory does not match its manifest: expected sha256 "
             f"{expected['sha256']} ({expected['bytes']} bytes), found "
@@ -309,6 +323,7 @@ def verify_trajectory_integrity(trajectory_path: Path, manifest: RunManifest) ->
             "have been edited, truncated, or replaced since the run "
             "completed"
         )
+    logger.debug("trajectory integrity check passed for %s", manifest.run_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -436,6 +451,7 @@ def read_batch_manifest(path: Path | str) -> BatchManifest:
     The batch-level counterpart to `read_manifest`, above.
     """
     manifest_path = Path(path)
+    logger.debug("reading batch manifest: %s", manifest_path)
     with manifest_path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     if not isinstance(payload, dict):
@@ -459,6 +475,7 @@ def write_batch_manifest(path: Path | str, manifest: BatchManifest) -> None:
             allow_nan=False,
         )
         handle.write("\n")
+    logger.debug("wrote batch manifest: %s", manifest_path)
 
 
 def _optional_artifacts(
