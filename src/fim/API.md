@@ -2606,10 +2606,19 @@ def main() -> int
 
 Launch the GUI and block until the window closes.
 
+Configures logging from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`
+(`doc/fim-logging-design.md` §5) again here, independently of
+`fim.launcher.main`'s own call — reached only via `fim.launcher`'s
+GUI branches in practice, where the environment was already
+validated once, but this keeps the function independently correct
+for any future caller that reaches it another way.
+
 **Returns**:
 
-  0 always — `webview.start()` returning means the user closed the
-  window, not an error condition to report differently.
+  0 on an ordinary close — `webview.start()` returning means the
+  user closed the window, not an error condition to report
+  differently — or 2 if `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` is
+  malformed.
 
 <a id="fim.gui.batch_runner"></a>
 

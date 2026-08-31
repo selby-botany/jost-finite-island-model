@@ -1326,3 +1326,23 @@ def test_save_dialog_path_returns_none_for_root_directory() -> None:
 
 def test_save_dialog_path_returns_none_for_root_string() -> None:
     assert _save_dialog_path("/") is None
+
+
+def test_main_returns_2_on_a_malformed_fim_log_level(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bad `FIM_LOG_LEVEL` fails before any window is ever built.
+
+    `main`'s own `configure()` call is deliberately the very first thing
+    it does (`doc/fim-logging-design.md` §5) — this test relies on that
+    ordering to call the real `main()` safely, with no window/`webview.
+    start()` reached at all: a malformed value raises out of
+    `configure()` before `create_window()` is ever called.
+    """
+    monkeypatch.setenv("FIM_LOG_LEVEL", "verbose")
+
+    status = app_module.main()
+
+    assert status == 2
+    assert "unknown log level 'verbose'" in capsys.readouterr().err

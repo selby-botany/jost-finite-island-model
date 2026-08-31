@@ -81,15 +81,25 @@ pattern for exactly this — so a library-style import that never calls
 `fim.logging_setup.configure()` produces no "no handlers found"
 warning and no output at all.
 
-Three real entry points call `fim.logging_setup.configure()` once,
-before doing anything else: `fim.cli.main` (from its own parsed `-l`/
-`-L` arguments), `fim.gui.app.main` (from `FIM_LOG_LEVEL`/
-`FIM_LOG_OPTIONS`), and `fim.launcher.main` (so the zero-argument and
-`--graphical` GUI paths are covered too, before dispatching to either
-front end) — matching this project's own "the CLI and the GUI are two
-front ends over one core" architecture (`doc/fim-gui-design.md` §1):
-one shared configuration function, called once per real invocation,
-never duplicated per front end.
+Three real entry points call `fim.logging_setup.configure()`, each
+before doing anything else of its own: `fim.launcher.main` (from
+`FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`, unconditionally, before deciding
+which of its own three dispatch branches applies — the one place a
+`fim.launcher`-level DEBUG trace of that decision, §10, can be
+visible at all), `fim.gui.app.main` (again from `FIM_LOG_LEVEL`/
+`FIM_LOG_OPTIONS` — reached only via `fim.launcher`'s own GUI
+branches, so this second call is a no-op in practice, but keeps
+`fim.gui.app.main` independently correct for a caller that reaches it
+directly, e.g. a future test), and `fim.cli.main` (from its own parsed
+`-l`/`-L` arguments). `configure()`'s own idempotent handler-
+replacement (§3.2) means the *last* call in a given process wins in
+full — so a CLI invocation's own `-l`/`-L` (default `warning`) always
+supersedes whatever `fim.launcher` configured from the environment a
+moment earlier, deliberately: `-l`/`-L` are authoritative for a CLI
+invocation, full stop, matching this project's own "the CLI and the
+GUI are two front ends over one core" architecture (`doc/
+fim-gui-design.md` §1) — the environment variables are the GUI path's
+own configuration surface, not a fallback default for the CLI's.
 
 ### 3.2 `fim.logging_setup`
 
@@ -338,19 +348,41 @@ unless noted:
   `-l`/`-L` value exits via `parser.error` (`SystemExit(2)`, a plain
   message on stderr) rather than a traceback.
 - **Keeping `configure()`'s default file resolution off the real
-  checkout during tests.** Any test that calls `fim.cli.main` for real
-  ends up calling `configure()`, which — absent an explicit
-  `-L file=...` — resolves against the real `fim.paths.
-  default_log_file()`, not a test's own `tmp_path`. `test/cli/
-  conftest.py` redirects it, scoped to that directory alone (an
-  autouse fixture in the suite-wide `test/conftest.py` was tried first
-  and rejected: it silently replaced the exact function `test/test_
-  paths.py`'s own dedicated tests need to call for real, confirmed
-  directly by a test failure before this was scoped down). `test/cli/`
-  needed its own `__init__.py` alongside this (matching `test/gui/`'s
+  checkout during tests.** Any test that calls `fim.cli.main`/
+  `fim.launcher.main`/`fim.gui.app.main` for real ends up calling
+  `configure()`, which — absent an explicit `-L file=...`/
+  `FIM_LOG_OPTIONS` — resolves against the real `fim.paths.
+  default_log_file()`, not a test's own `tmp_path`. `test/conftest.py`
+  defines the fix once, as `log_isolation` — a plain, **not** `autouse`
+  fixture (a suite-wide autouse version was tried first and rejected:
+  it silently replaced the exact function `test/test_paths.py`'s own
+  dedicated tests need to call for real, confirmed directly by a test
+  failure before this was scoped down). Every place that actually
+  needs it opts in with its own thin autouse wrapper depending on
+  `log_isolation` by name (ordinary pytest fixture-dependency
+  injection, no import needed — every test under `test/` can already
+  see a fixture `test/conftest.py` defines): `test/cli/conftest.py`
+  (scoped to that directory), `test/test_launcher.py` and `test/test_
+  reanalyze.py` (no subdirectory of their own to scope a conftest.py
+  to), and `test/gui/conftest.py`. `test/cli/` needed its own
+  `__init__.py` alongside its new `conftest.py` (matching `test/gui/`'s
   existing one) so mypy does not see two same-named, unqualified
   `conftest` modules once a second directory-local `conftest.py`
   exists.
+- **A real subprocess is outside every one of those fixtures' own
+  reach.** `test/validation/test_python_wrappers.py`'s own `bin/fim
+  --version` smoke test runs the real executable as a genuinely
+  separate OS process — `monkeypatch` patches objects in *this*
+  process's memory, never a child's — so it kept creating a real
+  `logs/` directory in this checkout even after every in-process
+  fixture above was in place, found only by actually re-running the
+  full suite and checking for the directory afterward, not by
+  inspection. Fixed by setting `FIM_LOG_OPTIONS=file=none` in that
+  subprocess's own environment instead — the one file in the whole
+  suite where an environment variable, not a fixture, is the right
+  tool, since `fim.launcher.main`'s `configure()` call is what runs for
+  a bare `--version` (`argparse`'s own `action="version"` exits before
+  `fim.cli.main`'s own second call is ever reached).
 - **No test asserts exact log message text or count in a
   determinism-sensitive way.** This project's own house rule (`a test
   is a pure function of its commit`) already forbids asserting

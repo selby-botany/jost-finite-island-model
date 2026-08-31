@@ -29,9 +29,15 @@ command still reaches the unmodified CLI parser.
 
 from __future__ import annotations
 
+import logging
 import multiprocessing
+import os
 import sys
 from collections.abc import Sequence
+
+from fim import logging_setup
+
+logger = logging.getLogger(__name__)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -54,12 +60,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns:
         The dispatched entry point's own process-style exit status.
     """
+    # Configured from the environment, not a flag of this module's own:
+    # this dispatcher is reached by every invocation, GUI or CLI alike,
+    # before either front end's own argument parsing (`fim.cli`'s `-l`/
+    # `-L`) has had a chance to run — `doc/fim-logging-design.md` §5.
+    # `fim.cli.main` below reconfigures unconditionally from its own
+    # parsed flags, so this call is what governs the GUI path fully and
+    # this module's own one-line dispatch trace only; it is never the
+    # last word for a CLI invocation.
+    try:
+        logging_setup.configure(
+            os.environ.get("FIM_LOG_LEVEL", "warning"),
+            logging_setup.parse_log_options(os.environ.get("FIM_LOG_OPTIONS")),
+        )
+    except ValueError as error:
+        print(f"fim: error: {error}", file=sys.stderr)
+        return 2
+
     arguments = sys.argv[1:] if argv is None else list(argv)
     if not arguments:
+        logger.debug("dispatching to the GUI (zero-argument launch)")
         return _launch_gui(detach=False)
     if arguments == ["--graphical"]:
+        logger.debug("dispatching to the GUI (--graphical)")
         return _launch_gui(detach=False)
     if arguments in (["--graphical", "--detach"], ["--detach", "--graphical"]):
+        logger.debug("dispatching to the GUI (--graphical --detach)")
         return _launch_gui(detach=True)
     if "--detach" in arguments and "--graphical" not in arguments:
         # A clear, argparse-style usage error rather than a silent no-op
@@ -67,6 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # mutual-exclusivity check already uses in cli.py.
         print("fim: error: --detach requires --graphical", file=sys.stderr)
         return 2
+    logger.debug("dispatching to the CLI parser")
     # Deferred, not because this branch is rare (it is the most common
     # one — every ordinary `fim run`/`fim init`/... invocation reaches
     # it) but so that the GUI branches above never pay for importing

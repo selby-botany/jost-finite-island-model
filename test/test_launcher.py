@@ -35,6 +35,19 @@ import fim.gui.app
 from fim import launcher
 
 
+@pytest.fixture(autouse=True)
+def _isolate_logging(log_isolation: None) -> None:
+    """Opt every test in this file into `test/conftest.py`'s own `log_isolation`.
+
+    `launcher.main` now calls `fim.logging_setup.configure()` for real,
+    unconditionally, before any of the dispatch branches below run —
+    see `log_isolation`'s own docstring for why that matters here, not
+    only for the four things this file actually stubs
+    (`fim.cli.main`/`fim.gui.app.main`/`subprocess.Popen`/
+    `multiprocessing.freeze_support`).
+    """
+
+
 def test_launcher_dispatches_empty_argv_to_the_gui(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -235,6 +248,25 @@ def test_launcher_bare_detach_is_a_usage_error(
 
     assert status == 2
     assert "fim: error: --detach requires --graphical" in capsys.readouterr().err
+
+
+def test_launcher_rejects_a_malformed_fim_log_level(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bad `FIM_LOG_LEVEL` fails before any dispatch decision is made.
+
+    Neither `fim.cli.main` nor `fim.gui.app.main` is stubbed here —
+    reaching either would itself fail the test, since `configure()`
+    (`doc/fim-logging-design.md` §5) is the first thing `main` does,
+    before either dispatch branch runs.
+    """
+    monkeypatch.setenv("FIM_LOG_LEVEL", "verbose")
+
+    status = launcher.main([])
+
+    assert status == 2
+    assert "unknown log level 'verbose'" in capsys.readouterr().err
 
 
 def test_launcher_dispatches_nonempty_sys_argv_to_cli_main_unchanged(

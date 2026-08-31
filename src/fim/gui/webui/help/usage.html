@@ -372,6 +372,11 @@ the CLI, none at all.</p>
 distributions already have installed — see
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/install/README.md">installation alternatives</a> if <code>fim-gui</code> reports it
 is missing rather than opening a window.</p>
+<p>Launched with no flags of its own, the GUI's own operational log is
+configured from two environment variables instead — <code>FIM_LOG_LEVEL</code> and
+<code>FIM_LOG_OPTIONS</code>, the exact equivalents of <code>-l</code>/<code>-L</code> below, set before
+launching (a modified shortcut's own &quot;Target&quot; field, or a wrapper
+script). See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-logging-design.md">operational logging design</a> §5.</p>
 <h2 id="global-flags">Global flags</h2>
 <pre><code class="language-console">fim --help
 fim --version

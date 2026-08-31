@@ -113,6 +113,40 @@ def tiny_params() -> SimulationParams
 
 Return a small, fast configuration for integration tests.
 
+<a id="test.conftest.log_isolation"></a>
+
+#### log\_isolation
+
+```python
+@pytest.fixture
+def log_isolation(tmp_path: Path,
+                  monkeypatch: pytest.MonkeyPatch) -> Iterator[None]
+```
+
+Keep `fim.logging_setup.configure()` off the real checkout — opt-in.
+
+Every real entry point (`fim.cli.main`, `fim.launcher.main`,
+`fim.gui.app.main`) calls `configure()` unconditionally. Absent an
+explicit `-L file=...`/`FIM_LOG_OPTIONS`, that call resolves its own
+default log file against the real, installed `fim` package's own
+checkout root (`fim.paths.project_root`), not whichever test's own
+`tmp_path` happens to be running — confirmed directly, more than
+once, before this fixture existed: left unguarded, a test that
+calls one of those three functions for real writes to this
+repository's own real `logs/` directory on every suite run.
+
+Defined here, at the top level, so every test under `test/` can
+request it by fixture-dependency injection with no import of its
+own — but deliberately **not** `autouse` here: a suite-wide autouse
+version was tried first and rejected, since it silently replaced
+the exact `fim.paths.default_log_file` function `test_paths.py`'s
+own dedicated tests need to call for real (caught by an immediate
+test failure). Each place that actually needs it opts in instead,
+with its own thin autouse wrapper depending on this fixture:
+`test/cli/conftest.py` (scoped to `test/cli/`), `test/test_
+launcher.py` (no subdirectory of its own to scope a conftest.py
+to), and `test/gui/conftest.py` (`doc/fim-logging-design.md` §12).
+
 
 
 <a id="test.test_hypothesis_profile"></a>
@@ -284,6 +318,23 @@ def test_launcher_bare_detach_is_a_usage_error(
 ```
 
 `--detach` without `--graphical` is a clear usage error, not a silent no-op.
+
+<a id="test.test_launcher.test_launcher_rejects_a_malformed_fim_log_level"></a>
+
+#### test\_launcher\_rejects\_a\_malformed\_fim\_log\_level
+
+```python
+def test_launcher_rejects_a_malformed_fim_log_level(
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A bad `FIM_LOG_LEVEL` fails before any dispatch decision is made.
+
+Neither `fim.cli.main` nor `fim.gui.app.main` is stubbed here —
+reaching either would itself fail the test, since `configure()`
+(`doc/fim-logging-design.md` §5) is the first thing `main` does,
+before either dispatch branch runs.
 
 <a id="test.test_launcher.test_launcher_dispatches_nonempty_sys_argv_to_cli_main_unchanged"></a>
 
@@ -1114,15 +1165,15 @@ Release version parsing requires exactly three non-negative integers.
 
 Shared fixtures for `test/cli/` — scoped here, not `test/conftest.py`.
 
-Every test under this directory calls `fim.cli.main`/`fim.launcher.main`
-for real, which ends up calling `fim.logging_setup.configure()`. Scoped
-to `test/cli/` specifically (not the whole suite) because `test/test_
+Every test under this directory calls `fim.cli.main` for real, which
+calls `fim.logging_setup.configure()` unconditionally. Scoped to
+`test/cli/` specifically (not the whole suite) because `test/test_
 paths.py`/`test/test_logging_setup.py` — siblings of this directory,
 not descendants — legitimately need the *real*
 `fim.paths.default_log_file`/`project_root` behavior to test those
-functions themselves; a suite-wide autouse fixture here would silently
-replace the exact function under test in those files instead (confirmed
-directly: it did, once, before this fixture was scoped down to here).
+functions themselves; see `test/conftest.py`'s own `log_isolation`
+fixture for the full reasoning and why that rules out a suite-wide
+autouse fixture.
 
 
 
@@ -3859,6 +3910,24 @@ def test_open_external_link_opens_the_os_default_browser(
 
 The same `_reveal_in_file_browser` precedent this module already
 follows for OS-dispatched actions — no real browser opens in a test.
+
+<a id="gui.test_app_api.test_main_returns_2_on_a_malformed_fim_log_level"></a>
+
+#### test\_main\_returns\_2\_on\_a\_malformed\_fim\_log\_level
+
+```python
+def test_main_returns_2_on_a_malformed_fim_log_level(
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A bad `FIM_LOG_LEVEL` fails before any window is ever built.
+
+`main`'s own `configure()` call is deliberately the very first thing
+it does (`doc/fim-logging-design.md` §5) — this test relies on that
+ordering to call the real `main()` safely, with no window/`webview.
+start()` reached at all: a malformed value raises out of
+`configure()` before `create_window()` is ever called.
 
 
 

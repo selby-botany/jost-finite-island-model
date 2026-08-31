@@ -33,6 +33,8 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
+import os
 import queue
 import subprocess
 import sys
@@ -50,7 +52,7 @@ import yaml
 from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
-from fim import paths, update
+from fim import logging_setup, paths, update
 from fim.cli import load_config
 from fim.engine import (
     RunResult,
@@ -84,6 +86,8 @@ from fim.viz.scatter import (
     pooled_scatter_panels,
     scatter_panels,
 )
+
+logger = logging.getLogger(__name__)
 
 _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
 _TRAJECTORY_FILE_TYPES = ("trajectory.jsonl files (*.jsonl)", "All files (*.*)")
@@ -1993,12 +1997,31 @@ def _build_menu(window: webview.Window) -> list[Menu]:
 def main() -> int:
     """Launch the GUI and block until the window closes.
 
+    Configures logging from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`
+    (`doc/fim-logging-design.md` §5) again here, independently of
+    `fim.launcher.main`'s own call — reached only via `fim.launcher`'s
+    GUI branches in practice, where the environment was already
+    validated once, but this keeps the function independently correct
+    for any future caller that reaches it another way.
+
     Returns:
-        0 always — `webview.start()` returning means the user closed the
-        window, not an error condition to report differently.
+        0 on an ordinary close — `webview.start()` returning means the
+        user closed the window, not an error condition to report
+        differently — or 2 if `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` is
+        malformed.
     """
+    try:
+        logging_setup.configure(
+            os.environ.get("FIM_LOG_LEVEL", "warning"),
+            logging_setup.parse_log_options(os.environ.get("FIM_LOG_OPTIONS")),
+        )
+    except ValueError as error:
+        print(f"fim: error: {error}", file=sys.stderr)
+        return 2
+    logger.info("starting fim %s", fim_version)
     window = create_window()
     webview.start(menu=_build_menu(window))
+    logger.info("window closed")
     return 0
 
 

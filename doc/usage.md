@@ -429,6 +429,12 @@ distributions already have installed — see
 [installation alternatives](../install/README.md) if `fim-gui` reports it
 is missing rather than opening a window.
 
+Launched with no flags of its own, the GUI's own operational log is
+configured from two environment variables instead — `FIM_LOG_LEVEL` and
+`FIM_LOG_OPTIONS`, the exact equivalents of `-l`/`-L` below, set before
+launching (a modified shortcut's own "Target" field, or a wrapper
+script). See [operational logging design](fim-logging-design.md) §5.
+
 ## Global flags
 
 ```console

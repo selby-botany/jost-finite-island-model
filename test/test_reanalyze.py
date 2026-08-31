@@ -20,6 +20,17 @@ from fim import cli, reanalyze
 from fim.persistence.manifest import read_manifest
 
 
+@pytest.fixture(autouse=True)
+def _isolate_logging(log_isolation: None) -> None:
+    """Opt every test in this file into `test/conftest.py`'s own `log_isolation`.
+
+    The one `cli.main(["run", ...])` call below (building a real
+    trajectory to re-analyze) reaches `fim.logging_setup.configure()`
+    the same as any other real `cli.main` call — see `log_isolation`'s
+    own docstring for why that matters here.
+    """
+
+
 def _write_run(tmp_path: Path, **overrides: object) -> Path:
     """Write a tiny deterministic config, run it, and return its output directory."""
     config: dict[str, object] = {

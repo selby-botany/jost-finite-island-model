@@ -304,3 +304,15 @@ def drive_and_read(
 def drive() -> Callable[..., Any]:
     """Bind `drive_and_read` as a fixture, for tests that prefer the fixture style."""
     return drive_and_read
+
+
+@pytest.fixture(autouse=True)
+def _isolate_logging(log_isolation: None) -> None:
+    """Opt every test in this package into `test/conftest.py`'s own `log_isolation`.
+
+    `fim.gui.app.main` calls `fim.logging_setup.configure()` for real;
+    nothing under `test/gui/` calls `main()` itself except a dedicated
+    error-path test in `test_app_api.py` (every other test here drives
+    `create_window()`/`webview.start()` directly, never `main()`), but
+    this stays package-wide so that stays true for any future test too.
+    """

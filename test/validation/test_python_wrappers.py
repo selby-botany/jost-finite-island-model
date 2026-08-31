@@ -13,12 +13,24 @@ FIM_GUI_WRAPPER = PROJECT_ROOT / "bin" / "fim-gui"
 
 
 def _isolated_environment() -> dict[str, str]:
-    """Return an environment without an activated Python virtual environment."""
+    """Return an environment without an activated Python virtual environment.
+
+    `FIM_LOG_OPTIONS=file=none`: a real subprocess is entirely outside
+    every in-process test fixture's own reach (`monkeypatch` patches
+    objects in *this* process's memory, never a child's), so
+    `fim.launcher.main`'s own unconditional `configure()` call
+    (`doc/fim-logging-design.md` §5) would otherwise create and write to
+    this repository's own real `logs/` directory on every subprocess
+    test below — confirmed directly, since this is the one place in the
+    whole suite a real `fim` invocation runs as a genuinely separate
+    process rather than an in-process call a fixture can intercept.
+    """
     return {
         **os.environ,
         "FIM_PYTHON": sys.executable,
         "PATH": os.defpath,
         "PYTHON": "python3",
+        "FIM_LOG_OPTIONS": "file=none",
     }
 
 
