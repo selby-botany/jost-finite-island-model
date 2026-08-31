@@ -24,6 +24,7 @@ instead of engine logic.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,8 @@ from fim.persistence.manifest import (
 )
 from fim.persistence.store import TrajectoryRow
 from fim.statistics.differentiation import differentiation_q
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +201,11 @@ def reanalyze_trajectory(
             replaced since the run completed, has no rows, or the
             requested generation does not exist.
     """
+    logger.info(
+        "re-analyzing %s (generation=%s)",
+        trajectory_path,
+        generation if generation is not None else "final",
+    )
     manifest = read_manifest(
         manifest_path
         if manifest_path is not None
@@ -261,6 +269,11 @@ def reanalyze_trajectory(
             str(order): differentiation_q_for_state(state, params, order)
             for order in differentiation_orders
         }
+    logger.info(
+        "re-analysis of %s at generation %d finished",
+        manifest.run_id,
+        resolved_generation,
+    )
     return ReanalyzedGeneration(
         manifest=manifest, params=params, state=state, report=report
     )

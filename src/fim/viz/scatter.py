@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import Counter
 from collections.abc import Sequence
@@ -23,6 +24,8 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 
 FloatArray: TypeAlias = NDArray[np.float64]
+
+logger = logging.getLogger(__name__)
 
 
 class PcaSummary(TypedDict):
@@ -80,6 +83,12 @@ def plot_frequency_scatter(
         # reference visualization's own complete absence of PCA at any
         # `d` both apply just as much to a static PNG as to a live view.
         # `_plot_pca` stays, reachable directly for whoever wants it.
+        logger.debug(
+            "d=%d exceeds pairwise_max_demes=%d; falling back to the first "
+            "deme pair instead of a full pairwise matrix",
+            state.deme_count,
+            pairwise_max_demes,
+        )
         figure = _plot_deme_pair(points, 0, 1)
     figure.suptitle(_title(params))
     figure.tight_layout()
@@ -91,6 +100,7 @@ def plot_frequency_scatter(
             dpi=150,
             metadata={"Software": "fim"},
         )
+        logger.debug("wrote scatter figure: %s", output_path)
     return figure
 
 

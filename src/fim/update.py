@@ -24,6 +24,7 @@ threat model permits.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Mapping
 from typing import Any, TypeAlias
 from urllib.error import HTTPError, URLError
@@ -37,6 +38,8 @@ RELEASES_API = (
 SEMANTIC_VERSION_PARTS = 3
 
 ReleaseFetcher: TypeAlias = Callable[[], Mapping[str, Any]]
+
+logger = logging.getLogger(__name__)
 
 
 def compare_versions(current: str, latest: str) -> int:
@@ -82,13 +85,17 @@ def fetch_latest_release() -> Mapping[str, Any]:
             "User-Agent": f"fim/{__version__}",
         },
     )
+    logger.debug("fetching %s", RELEASES_API)
     try:
         with urlopen(request, timeout=5) as response:
             payload = json.load(response)
     except (HTTPError, URLError) as error:
+        logger.warning("update check request to %s failed: %s", RELEASES_API, error)
         raise RuntimeError(f"update check failed: {error}") from error
     if not isinstance(payload, Mapping):
+        logger.warning("update check response from %s was not an object", RELEASES_API)
         raise RuntimeError("update check returned a non-object response")
+    logger.debug("received a release response from %s", RELEASES_API)
     return payload
 
 

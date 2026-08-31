@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from fim.model.allele import AlleleId
 from fim.model.state import ModelState
 
 MAX_LEGEND_ALLELES = 12
+
+logger = logging.getLogger(__name__)
 
 
 def plot_convergence_trace(
@@ -114,3 +117,4 @@ def _save(figure: Figure, path: Path | str | None) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=150, metadata={"Software": "fim"})
+    logger.debug("wrote diagnostic figure: %s", output_path)

@@ -448,11 +448,9 @@ def _command_stats(arguments: argparse.Namespace) -> int:
     """
     trajectory_path = Path(arguments.trajectory)
     manifest_path = Path(arguments.manifest) if arguments.manifest is not None else None
-    logger.info(
-        "re-analyzing %s (generation=%s)",
-        trajectory_path,
-        arguments.generation if arguments.generation is not None else "final",
-    )
+    # `fim.reanalyze.reanalyze_trajectory` logs the "re-analyzing ..." INFO
+    # line itself, once, so both this command and every other caller
+    # (`fim.gui`'s own re-analysis screens) get it without duplication.
     reanalyzed = reanalyze.reanalyze_trajectory(
         trajectory_path,
         manifest_path=manifest_path,

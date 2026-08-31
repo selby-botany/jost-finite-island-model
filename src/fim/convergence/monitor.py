@@ -16,6 +16,7 @@ happened, if either yet has.
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -25,6 +26,8 @@ from typing import Literal
 from fim.convergence.criteria import ConvergenceCriterion
 
 Combinator = Literal["any", "all"]
+
+logger = logging.getLogger(__name__)
 
 
 class StopReason(StrEnum):
@@ -265,6 +268,20 @@ class ConvergenceMonitor:
             if self._combinator == "all"
             else any(per_statistic_stable)
         )
+        # Guarded like `fim.engine._run_one`'s own per-generation loop
+        # (`doc/fim-logging-design.md` §9): `record` is called once per
+        # generation (or, for the replicate-batch monitor, once per
+        # replicate) for the life of a run, so this is only formatted
+        # when DEBUG is actually enabled. The terminal outcome itself is
+        # logged by each caller (`fim.engine`), not here, to avoid
+        # logging the same "why did this stop" fact twice.
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "convergence: generation=%d combinator=%s stable=%s",
+                generation,
+                self._combinator,
+                is_stable,
+            )
         # Convergence is checked before the hard cap: if a statistic
         # happens to stabilize on the very generation the cap would
         # also have fired, the run is reported as having converged,
