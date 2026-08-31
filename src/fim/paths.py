@@ -2,7 +2,7 @@
 every front end.
 
 This is where every part of `fim` (the command line, the desktop app,
-every test) goes to answer three small but easy-to-get-wrong questions,
+every test) goes to answer four small but easy-to-get-wrong questions,
 so each one is answered exactly once, the same way everywhere, rather
 than reinvented slightly differently in each front end:
 
@@ -18,6 +18,10 @@ than reinvented slightly differently in each front end:
    leaving a half-written, broken folder behind if something goes wrong
    partway through?" (`atomic_directory`) — see that function's own
    docstring for the answer.
+4. "Where does this program's own operational log go, if nobody said
+   otherwise?" (`log_directory`, `default_log_file`) — a `logs/` folder
+   beside `results/`, under the same resolved project root
+   (`doc/fim-logging-design.md` §6).
 
 Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
 run orchestration resolves the exact same `project-root/results/`
@@ -266,3 +270,36 @@ def results_directory(root: Path | None = None) -> Path:
         `root / "results"`.
     """
     return (root if root is not None else project_root()) / "results"
+
+
+def log_directory(root: Path | None = None) -> Path:
+    """Return the project-local logging directory.
+
+    Sits beside `results_directory()` under the same resolved
+    `project_root()` — one root-resolution rule for everything this
+    program ever writes, including the frozen-app-with-no-writable-cwd
+    fallback `project_root`'s own docstring documents, rather than a
+    second, platform-specific rule invented for logs alone
+    (`doc/fim-logging-design.md` §6).
+
+    Args:
+        root: Optional project root override (default: `project_root()`).
+
+    Returns:
+        `root / "logs"`.
+    """
+    return (root if root is not None else project_root()) / "logs"
+
+
+def default_log_file(root: Path | None = None) -> Path:
+    """Return the default operational log file path.
+
+    Args:
+        root: Optional project root override (default: `project_root()`).
+
+    Returns:
+        `log_directory(root) / "fim.log"` — `fim.logging_setup.configure`'s
+        own default `RotatingFileHandler` target unless `-L file=...`
+        (or `FIM_LOG_OPTIONS`'s own `file=`) names a different path.
+    """
+    return log_directory(root) / "fim.log"

@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+
+# The standard library's own documented "library, not application" pattern
+# (https://docs.python.org/3/howto/logging.html#configuring-logging-for-a-library):
+# every module under this package logs via `logging.getLogger(__name__)`
+# alone and never touches handler/level configuration itself, so importing
+# `fim` -- from a test, from `fim.gui`, from a future library consumer --
+# produces no "no handlers could be found" warning and no output at all
+# unless something explicitly calls `fim.logging_setup.configure()`
+# (`doc/fim-logging-design.md` §3.1).
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
 def _pin_mplconfigdir_for_macos_app_bundle() -> None:

@@ -10,6 +10,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`conftest`](#test.conftest)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
   - [`test_launcher`](#test.test_launcher)
+  - [`test_logging_setup`](#test.test_logging_setup)
   - [`test_metadata`](#test.test_metadata)
   - [`test_mypy_scope`](#test.test_mypy_scope)
   - [`test_paths`](#test.test_paths)
@@ -349,6 +350,229 @@ real attribute.
 
 
 
+<a id="test.test_logging_setup"></a>
+
+# test.test\_logging\_setup
+
+Unit tests for `fim.logging_setup` (`doc/fim-logging-design.md` §11).
+
+Every `configure()` call in this file passes an explicit `file=`
+pointing under `tmp_path`, never the real default (`fim.paths.
+default_log_file()`) — a test suite run must never create or write to
+this project's own `logs/` directory as a side effect. `_isolate_fim_
+logger` (autouse, below) restores the `fim` logger's own handlers,
+level, and propagation after every test, so no test in this file can
+leak a handler into a later, unrelated test elsewhere in the suite.
+
+<a id="test.test_logging_setup.test_resolve_level_accepts_every_standard_name_case_insensitively"></a>
+
+#### test\_resolve\_level\_accepts\_every\_standard\_name\_case\_insensitively
+
+```python
+def test_resolve_level_accepts_every_standard_name_case_insensitively(
+) -> None
+```
+
+Every `logging` level name resolves, regardless of case.
+
+<a id="test.test_logging_setup.test_resolve_level_accepts_the_warn_alias"></a>
+
+#### test\_resolve\_level\_accepts\_the\_warn\_alias
+
+```python
+def test_resolve_level_accepts_the_warn_alias() -> None
+```
+
+`warn` is accepted as the short form of `warning`.
+
+<a id="test.test_logging_setup.test_resolve_level_passes_through_an_already_numeric_level"></a>
+
+#### test\_resolve\_level\_passes\_through\_an\_already\_numeric\_level
+
+```python
+def test_resolve_level_passes_through_an_already_numeric_level() -> None
+```
+
+An int is returned unchanged, not re-interpreted.
+
+<a id="test.test_logging_setup.test_resolve_level_rejects_an_unknown_name"></a>
+
+#### test\_resolve\_level\_rejects\_an\_unknown\_name
+
+```python
+def test_resolve_level_rejects_an_unknown_name() -> None
+```
+
+A typo is a plain `ValueError`, naming the input and the valid set.
+
+<a id="test.test_logging_setup.test_resolve_level_rejects_notset_explicitly"></a>
+
+#### test\_resolve\_level\_rejects\_notset\_explicitly
+
+```python
+def test_resolve_level_rejects_notset_explicitly() -> None
+```
+
+`NOTSET` is a real `logging` level name but not a valid `-l` value.
+
+`logging`'s own `NOTSET` means "defer to a parent logger," a
+configuration nuance this project's own `-l` flag does not expose —
+accepting it here would silently produce a `fim` logger with no
+effective level of its own.
+
+<a id="test.test_logging_setup.test_parse_log_options_returns_an_empty_mapping_for_none_or_empty"></a>
+
+#### test\_parse\_log\_options\_returns\_an\_empty\_mapping\_for\_none\_or\_empty
+
+```python
+def test_parse_log_options_returns_an_empty_mapping_for_none_or_empty(
+) -> None
+```
+
+No `-L` at all parses to no options, not an error.
+
+<a id="test.test_logging_setup.test_parse_log_options_splits_every_recognized_key"></a>
+
+#### test\_parse\_log\_options\_splits\_every\_recognized\_key
+
+```python
+def test_parse_log_options_splits_every_recognized_key() -> None
+```
+
+Every documented key round-trips through parsing untouched.
+
+<a id="test.test_logging_setup.test_parse_log_options_strips_surrounding_whitespace"></a>
+
+#### test\_parse\_log\_options\_strips\_surrounding\_whitespace
+
+```python
+def test_parse_log_options_strips_surrounding_whitespace() -> None
+```
+
+Whitespace around a key, value, or entry is not significant.
+
+<a id="test.test_logging_setup.test_parse_log_options_rejects_an_entry_with_no_equals_sign"></a>
+
+#### test\_parse\_log\_options\_rejects\_an\_entry\_with\_no\_equals\_sign
+
+```python
+def test_parse_log_options_rejects_an_entry_with_no_equals_sign() -> None
+```
+
+A bare `key` with no `=value` is a plain, named `ValueError`.
+
+<a id="test.test_logging_setup.test_parse_log_options_rejects_an_unknown_key"></a>
+
+#### test\_parse\_log\_options\_rejects\_an\_unknown\_key
+
+```python
+def test_parse_log_options_rejects_an_unknown_key() -> None
+```
+
+A typo'd key is rejected outright, never silently ignored.
+
+<a id="test.test_logging_setup.test_configure_attaches_a_file_and_a_stream_handler_by_default"></a>
+
+#### test\_configure\_attaches\_a\_file\_and\_a\_stream\_handler\_by\_default
+
+```python
+def test_configure_attaches_a_file_and_a_stream_handler_by_default(
+        tmp_path: Path) -> None
+```
+
+The default configuration is both handlers, at the requested level.
+
+<a id="test.test_logging_setup.test_configure_is_idempotent_and_never_doubles_handlers"></a>
+
+#### test\_configure\_is\_idempotent\_and\_never\_doubles\_handlers
+
+```python
+def test_configure_is_idempotent_and_never_doubles_handlers(
+        tmp_path: Path) -> None
+```
+
+Calling `configure()` twice replaces handlers, never accumulates them.
+
+<a id="test.test_logging_setup.test_configure_file_none_disables_the_file_handler"></a>
+
+#### test\_configure\_file\_none\_disables\_the\_file\_handler
+
+```python
+def test_configure_file_none_disables_the_file_handler(tmp_path: Path) -> None
+```
+
+`file=none` leaves only the stream handler active.
+
+<a id="test.test_logging_setup.test_configure_stream_none_disables_the_stream_handler"></a>
+
+#### test\_configure\_stream\_none\_disables\_the\_stream\_handler
+
+```python
+def test_configure_stream_none_disables_the_stream_handler(
+        tmp_path: Path) -> None
+```
+
+`stream=none` leaves only the file handler active.
+
+<a id="test.test_logging_setup.test_configure_file_level_and_stream_level_override_independently"></a>
+
+#### test\_configure\_file\_level\_and\_stream\_level\_override\_independently
+
+```python
+def test_configure_file_level_and_stream_level_override_independently(
+        tmp_path: Path) -> None
+```
+
+`file_level`/`stream_level` override `-l`'s value per handler.
+
+<a id="test.test_logging_setup.test_configure_rejects_a_non_integer_max_bytes"></a>
+
+#### test\_configure\_rejects\_a\_non\_integer\_max\_bytes
+
+```python
+def test_configure_rejects_a_non_integer_max_bytes(tmp_path: Path) -> None
+```
+
+A malformed `max_bytes` is a plain `ValueError`, not a crash mid-write.
+
+<a id="test.test_logging_setup.test_configure_creates_the_log_directory_if_missing"></a>
+
+#### test\_configure\_creates\_the\_log\_directory\_if\_missing
+
+```python
+def test_configure_creates_the_log_directory_if_missing(
+        tmp_path: Path) -> None
+```
+
+A missing parent directory is created, not treated as an error.
+
+<a id="test.test_logging_setup.test_configure_applies_a_custom_format_to_both_handlers"></a>
+
+#### test\_configure\_applies\_a\_custom\_format\_to\_both\_handlers
+
+```python
+def test_configure_applies_a_custom_format_to_both_handlers(
+        tmp_path: Path) -> None
+```
+
+`format=` overrides the default formatter on every active handler.
+
+<a id="test.test_logging_setup.test_configure_enables_warnings_capture_through_the_file_handler"></a>
+
+#### test\_configure\_enables\_warnings\_capture\_through\_the\_file\_handler
+
+```python
+def test_configure_enables_warnings_capture_through_the_file_handler(
+        tmp_path: Path) -> None
+```
+
+A real `warnings.warn` call reaches the configured file handler.
+
+Confirms the `logging.captureWarnings` bridge is actually active,
+end to end, rather than only asserting the function was called.
+
+
+
 <a id="test.test_metadata"></a>
 
 # test.test\_metadata
@@ -610,6 +834,37 @@ def test_default_output_directory_uses_results_directory_by_default() -> None
 ```
 
 Omitting `results` falls back to `results_directory()`.
+
+<a id="test.test_paths.test_log_directory_defaults_to_project_root_slash_logs"></a>
+
+#### test\_log\_directory\_defaults\_to\_project\_root\_slash\_logs
+
+```python
+def test_log_directory_defaults_to_project_root_slash_logs() -> None
+```
+
+`log_directory` appends `logs` to the resolved project root, beside `results`.
+
+<a id="test.test_paths.test_log_directory_accepts_a_root_override"></a>
+
+#### test\_log\_directory\_accepts\_a\_root\_override
+
+```python
+def test_log_directory_accepts_a_root_override(tmp_path: Path) -> None
+```
+
+An explicit root bypasses `project_root` entirely.
+
+<a id="test.test_paths.test_default_log_file_is_fim_log_under_the_log_directory"></a>
+
+#### test\_default\_log\_file\_is\_fim\_log\_under\_the\_log\_directory
+
+```python
+def test_default_log_file_is_fim_log_under_the_log_directory(
+        tmp_path: Path) -> None
+```
+
+`default_log_file` names `fim.log` inside `log_directory`.
 
 <a id="test.test_paths.test_atomic_directory_rejects_an_existing_target"></a>
 

@@ -115,6 +115,21 @@ def test_default_output_directory_uses_results_directory_by_default() -> None:
     assert output.name.startswith("run-")
 
 
+def test_log_directory_defaults_to_project_root_slash_logs() -> None:
+    """`log_directory` appends `logs` to the resolved project root, beside `results`."""
+    assert paths.log_directory() == paths.project_root() / "logs"
+
+
+def test_log_directory_accepts_a_root_override(tmp_path: Path) -> None:
+    """An explicit root bypasses `project_root` entirely."""
+    assert paths.log_directory(tmp_path) == tmp_path / "logs"
+
+
+def test_default_log_file_is_fim_log_under_the_log_directory(tmp_path: Path) -> None:
+    """`default_log_file` names `fim.log` inside `log_directory`."""
+    assert paths.default_log_file(tmp_path) == tmp_path / "logs" / "fim.log"
+
+
 def test_atomic_directory_rejects_an_existing_target(tmp_path: Path) -> None:
     """A pre-existing target is refused outright, regardless of its contents.
 

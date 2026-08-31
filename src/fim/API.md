@@ -132,6 +132,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [read\_live\_state](#fim.gui.store.read_live_state)
 * [fim.launcher](#fim.launcher)
   * [main](#fim.launcher.main)
+* [fim.logging\_setup](#fim.logging_setup)
+  * [resolve\_level](#fim.logging_setup.resolve_level)
+  * [parse\_log\_options](#fim.logging_setup.parse_log_options)
+  * [configure](#fim.logging_setup.configure)
 * [fim.model](#fim.model)
 * [fim.model.allele](#fim.model.allele)
   * [founding\_allele\_ids](#fim.model.allele.founding_allele_ids)
@@ -191,6 +195,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [default\_output\_directory](#fim.paths.default_output_directory)
   * [project\_root](#fim.paths.project_root)
   * [results\_directory](#fim.paths.results_directory)
+  * [log\_directory](#fim.paths.log_directory)
+  * [default\_log\_file](#fim.paths.default_log_file)
 * [fim.persistence](#fim.persistence)
 * [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
@@ -3766,6 +3772,122 @@ through to the unmodified CLI parser.
 
   The dispatched entry point's own process-style exit status.
 
+<a id="fim.logging_setup"></a>
+
+# fim.logging\_setup
+
+Central logging configuration for both front ends (`doc/fim-logging-
+design.md` §3.2).
+
+Every module under `fim` logs via `logging.getLogger(__name__)` alone
+and never touches handler or level configuration itself (`fim/__init__.
+py`'s own `NullHandler` is what keeps that safe by default). This is
+the one place that configuration actually happens — called once, with
+already-parsed values, by each of the three real entry points:
+`fim.cli.main` (from its own `-l`/`-L` arguments), `fim.launcher.main`
+and `fim.gui.app.main` (from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`).
+`configure` is idempotent: calling it more than once replaces the
+`fim` logger's own handlers rather than accumulating them, so a test
+(or a future caller) that calls it twice never sees doubled output.
+
+<a id="fim.logging_setup.resolve_level"></a>
+
+#### resolve\_level
+
+```python
+def resolve_level(level: str | int) -> int
+```
+
+Resolve a `-l`-style level name (or an already-numeric level).
+
+**Arguments**:
+
+- `level` - One of `logging`'s own level names, case-insensitively,
+  plus the short alias `warn` for `warning` — or an int, taken
+  as an already-resolved `logging` level (e.g. `logging.DEBUG`)
+  and returned unchanged.
+
+
+**Returns**:
+
+  The matching `logging` module-level integer constant.
+
+
+**Raises**:
+
+- `ValueError` - If `level` is a string that names no known level.
+
+<a id="fim.logging_setup.parse_log_options"></a>
+
+#### parse\_log\_options
+
+```python
+def parse_log_options(text: str | None) -> dict[str, str]
+```
+
+Parse a `-L`/`--log-options`-style `key=value[,key=value]...` string.
+
+Every value is kept as its raw string; `configure` below is what
+interprets each one (an int for `max_bytes`/`backup_count`, a level
+name for `*_level`, and so on) — this function's only job is
+splitting the flag's own text and rejecting a key nothing
+recognizes, the same "a typo is a plain command-line error, not a
+silently wrong log destination" contract `doc/fim-logging-design.md`
+§4.2 documents.
+
+**Arguments**:
+
+- `text` - The flag's raw value, or `None`/empty for no options at
+  all (an empty mapping).
+
+
+**Returns**:
+
+  One string value per recognized key actually present.
+
+
+**Raises**:
+
+- `ValueError` - If an entry has no `=`, or names a key not in
+  `VALID_OPTION_KEYS`.
+
+<a id="fim.logging_setup.configure"></a>
+
+#### configure
+
+```python
+def configure(level: str | int = "warning",
+              options: Mapping[str, str] | None = None) -> None
+```
+
+Configure the `fim` logger's own handlers, level, and the `warnings` bridge.
+
+Builds a rotating file handler (`logs/fim.log` under the resolved
+project root by default — `fim.paths.default_log_file`) and a
+stderr stream handler, each independently disable-able and
+level-overridable via `options` (`doc/fim-logging-design.md` §4.2),
+attaches whichever are active to the `fim` logger (replacing any
+handler a previous call left there), and enables `logging.
+captureWarnings` so `warnings.warn` obeys the same configuration
+(§8) instead of writing to stderr directly.
+
+**Arguments**:
+
+- `level` - The base level (`-l`'s own value) — see `resolve_level`.
+  Applies to both handlers unless `options["file_level"]`/
+  `options["stream_level"]` overrides one specifically.
+- `options` - Already-split key/value pairs (`parse_log_options`'s
+  own return shape) — every key optional, every default
+  documented in `doc/fim-logging-design.md` §4.2.
+
+
+**Raises**:
+
+- `ValueError` - If `level`, `options["file_level"]`, or
+  `options["stream_level"]` names an unknown level, or
+  `options["max_bytes"]`/`options["backup_count"]` is not an
+  integer.
+
 <a id="fim.model"></a>
 
 # fim.model
@@ -5169,7 +5291,7 @@ Project-root, results-directory, and atomic-publish logic, shared by
 every front end.
 
 This is where every part of `fim` (the command line, the desktop app,
-every test) goes to answer three small but easy-to-get-wrong questions,
+every test) goes to answer four small but easy-to-get-wrong questions,
 so each one is answered exactly once, the same way everywhere, rather
 than reinvented slightly differently in each front end:
 
@@ -5185,6 +5307,10 @@ than reinvented slightly differently in each front end:
    leaving a half-written, broken folder behind if something goes wrong
    partway through?" (`atomic_directory`) — see that function's own
    docstring for the answer.
+4. "Where does this program's own operational log go, if nobody said
+   otherwise?" (`log_directory`, `default_log_file`) — a `logs/` folder
+   beside `results/`, under the same resolved project root
+   (`doc/fim-logging-design.md` §6).
 
 Extracted from `fim.cli` (`doc/fim-gui-design.md` §12) so `fim.gui`'s
 run orchestration resolves the exact same `project-root/results/`
@@ -5397,6 +5523,53 @@ run then gets its own timestamped subfolder inside this one).
 **Returns**:
 
   `root / "results"`.
+
+<a id="fim.paths.log_directory"></a>
+
+#### log\_directory
+
+```python
+def log_directory(root: Path | None = None) -> Path
+```
+
+Return the project-local logging directory.
+
+Sits beside `results_directory()` under the same resolved
+`project_root()` — one root-resolution rule for everything this
+program ever writes, including the frozen-app-with-no-writable-cwd
+fallback `project_root`'s own docstring documents, rather than a
+second, platform-specific rule invented for logs alone
+(`doc/fim-logging-design.md` §6).
+
+**Arguments**:
+
+- `root` - Optional project root override (default: `project_root()`).
+
+
+**Returns**:
+
+  `root / "logs"`.
+
+<a id="fim.paths.default_log_file"></a>
+
+#### default\_log\_file
+
+```python
+def default_log_file(root: Path | None = None) -> Path
+```
+
+Return the default operational log file path.
+
+**Arguments**:
+
+- `root` - Optional project root override (default: `project_root()`).
+
+
+**Returns**:
+
+  `log_directory(root) / "fim.log"` — `fim.logging_setup.configure`'s
+  own default `RotatingFileHandler` target unless `-L file=...`
+  (or `FIM_LOG_OPTIONS`'s own `file=`) names a different path.
 
 <a id="fim.persistence"></a>
 
