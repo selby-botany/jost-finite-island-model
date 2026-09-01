@@ -100,9 +100,10 @@ import hashlib
 import json
 import logging
 import math
+import os
 import pickle
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, TypeAlias, TypedDict
@@ -546,6 +547,109 @@ class SequentialAdvancer:
         return newly_stopped
 
 
+def _partition_into_blocks(
+    lanes: Sequence[ReplicaLane], block_count: int
+) -> list[list[ReplicaLane]]:
+    """Split `lanes` into up to `block_count` contiguous, near-equal blocks.
+
+    Dynamic partitioning: computed fresh from whichever lanes happen to
+    be active this tick, not a persistent assignment reused across
+    ticks — see `ThreadedAdvancer`'s own docstring for why a static
+    assignment (decided once, at batch start) is a documented, deferred
+    optimization rather than this stage's own scope. Never returns an
+    empty block: with fewer lanes than `block_count`, each lane gets its
+    own block instead of an emptier partition.
+    """
+    if not lanes:
+        return []
+    actual_block_count = min(block_count, len(lanes))
+    base_size, remainder = divmod(len(lanes), actual_block_count)
+    blocks: list[list[ReplicaLane]] = []
+    start = 0
+    for block_index in range(actual_block_count):
+        size = base_size + (1 if block_index < remainder else 0)
+        blocks.append(list(lanes[start : start + size]))
+        start += size
+    return blocks
+
+
+class ThreadedAdvancer:
+    """Fans `SequentialAdvancer`'s own per-lane stepping out across threads.
+
+    Partitions whichever lanes are active this tick into up to
+    `max_workers` contiguous blocks (`_partition_into_blocks`) and steps
+    each block — sequentially, in order, exactly what `SequentialAdvancer`
+    already does — inside its own thread, via `ThreadPoolExecutor`.
+    Blocks are disjoint (every lane belongs to exactly one), so no two
+    threads ever touch the same lane's own state, RNG, or allele
+    registry at once; the one thing genuinely shared across threads is
+    `store`, made safe by the `threading.Lock` both
+    `fim.persistence.store.InMemoryTrajectoryStore` and
+    `fim.persistence.jsonl_store.JSONLTrajectoryStore` now hold around
+    their own `write_generation`.
+
+    Whether this delivers real wall-clock speedup over
+    `SequentialAdvancer` depends on how much of each generation's own
+    work happens inside NumPy calls that release the GIL versus pure-
+    Python loop overhead — an open, empirical question this class does
+    not itself answer. What it does guarantee: identical results to
+    `SequentialAdvancer` for the same seed, since the actual per-lane
+    computation is the same code (`SequentialAdvancer.advance` itself,
+    called once per block), only fanned out across threads rather than
+    run in one.
+
+    Block assignment is computed fresh every tick from whichever lanes
+    happen to be active (`_partition_into_blocks`), not a persistent,
+    static assignment decided once at batch start — worth revisiting as
+    a later, separately-measured optimization once lane membership is
+    treated as fixed-and-masked rather than genuinely shrinking, but not
+    this class's own current scope.
+    """
+
+    def __init__(self, max_workers: int | None = None) -> None:
+        """Configure how many blocks/threads this advancer fans out across.
+
+        Args:
+            max_workers: Defaults to `os.cpu_count()` (or 1 if that
+                cannot be determined) — the same default reasoning
+                `concurrent.futures.ThreadPoolExecutor` itself uses.
+                Deliberately not the same `max_workers` `fim()`'s own
+                public signature accepts — that one is `LinealBackend`-
+                only (a process count); reusing the name for a thread
+                count here was flagged, not settled, by the design this
+                implements, so this constructor's own parameter is
+                reachable only by building a `GenerationalBackend`
+                directly, not yet through `fim()` itself.
+
+        Raises:
+            ValueError: If `max_workers` is given and is less than 1.
+        """
+        self._max_workers = (
+            max_workers if max_workers is not None else (os.cpu_count() or 1)
+        )
+        if self._max_workers < 1:
+            raise ValueError("max_workers must be at least 1")
+
+    def advance(
+        self,
+        active_lanes: Sequence[ReplicaLane],
+        store: TrajectoryStore,
+    ) -> list[ReplicaLane]:
+        """Step every active lane by one generation, fanned out across threads."""
+        blocks = _partition_into_blocks(active_lanes, self._max_workers)
+        if not blocks:
+            return []
+        sequential = SequentialAdvancer()
+        newly_stopped: list[ReplicaLane] = []
+        with ThreadPoolExecutor(max_workers=len(blocks)) as executor:
+            futures = [
+                executor.submit(sequential.advance, block, store) for block in blocks
+            ]
+            for future in futures:
+                newly_stopped.extend(future.result())
+        return newly_stopped
+
+
 def _build_replica_lane(
     params: SimulationParams,
     replica_index: int,
@@ -816,8 +920,14 @@ def build_engine_backend(
     class tree to maintain.
 
     Args:
-        engine_backend: Which backend to build. `"generational-vector"`
-            is a real, named, planned choice, not yet implemented.
+        engine_backend: Which backend to build. `"generational"` builds
+            `GenerationalBackend(ThreadedAdvancer())` — real thread-based
+            parallelism, not merely the structural reshuffle
+            `SequentialAdvancer` alone would give (still directly
+            available by constructing `GenerationalBackend()` without
+            going through this factory, if a caller wants zero new
+            thread-safety surface). `"generational-vector"` is a real,
+            named, planned choice, not yet implemented.
         jit: Whether the chosen backend should JIT-compile its own
             operators. Meaningful only for `"generational"`/
             `"generational-vector"`, neither of which implements it yet.
@@ -825,7 +935,10 @@ def build_engine_backend(
             restriction, not a temporary gap: `LinealBackend` stays the
             untouched golden reference every other backend's own parity
             tests are checked against (see its own docstring).
-        max_workers: `LinealBackend`-only; ignored by every other backend.
+        max_workers: `LinealBackend`-only; ignored by every other
+            backend. `ThreadedAdvancer`'s own thread count is a separate,
+            not-yet-publicly-reachable knob — see its own docstring for
+            why this name is not reused for it here.
         store_factory: `LinealBackend`-only; ignored by every other backend.
 
     Raises:
@@ -847,7 +960,7 @@ def build_engine_backend(
             raise NotImplementedError(
                 "jit='numba' is not implemented yet for the generational backend"
             )
-        return GenerationalBackend()
+        return GenerationalBackend(ThreadedAdvancer())
     if engine_backend == "generational-vector":
         raise NotImplementedError(
             "the generational-vector backend is not implemented yet"
@@ -984,19 +1097,23 @@ def fim(
             not pass this argument sees no change at all.
             ``"generational"`` reorders *when* each replicate's
             generations are computed (every still-active replicate's own
-            generation advances together, rather than one replicate's
-            whole trajectory finishing before the next starts) without
-            changing what is computed: for the same seed, with
-            `replicate_tolerance` unset, its own trajectory is
-            bit-identical to ``"lineal"``'s. With `replicate_tolerance`
-            set, the two can legitimately choose a different subset of
-            replicates to stop on, since ``"generational"``'s own
-            adaptive stop fires the instant any replicate converges
-            rather than only after a whole replicate (or, under
-            `max_workers`, a whole worker-process batch) completes.
-            ``max_workers``/``store_factory`` above are meaningful only
-            for ``"lineal"``; passing either alongside a different
-            `engine_backend` is a `ValueError`, not a silent no-op.
+            generation advances together, fanned out across a real
+            thread pool, rather than one replicate's whole trajectory
+            finishing before the next starts) without changing what is
+            computed: for the same seed, with `replicate_tolerance`
+            unset, its own trajectory is bit-identical to
+            ``"lineal"``'s, regardless of thread interleaving. With
+            `replicate_tolerance` set, the two can legitimately choose a
+            different subset of replicates to stop on, since
+            ``"generational"``'s own adaptive stop fires the instant any
+            replicate converges rather than only after a whole replicate
+            (or, under `max_workers`, a whole worker-process batch)
+            completes. ``max_workers``/``store_factory`` above are
+            meaningful only for ``"lineal"``; passing either alongside a
+            different `engine_backend` is a `ValueError`, not a silent
+            no-op — ``"generational"``'s own thread count is a separate,
+            not-yet-publicly-reachable knob (see `ThreadedAdvancer`'s own
+            docstring).
             ``"generational-vector"`` is a real, named, planned third
             choice, not yet implemented.
         jit: Whether the chosen backend should JIT-compile its own

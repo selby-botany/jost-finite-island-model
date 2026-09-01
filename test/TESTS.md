@@ -2772,6 +2772,56 @@ def test_build_engine_backend_rejects_unknown_choice() -> None
 
 An unrecognized `engine_backend` is a `ValueError`, not silently ignored.
 
+<a id="engine.test_engine.test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_run"></a>
+
+#### test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_scalar\_run
+
+```python
+def test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_run(
+        tiny_params: SimulationParams) -> None
+```
+
+`ThreadedAdvancer` reproduces `LinealBackend`'s scalar trajectory exactly.
+
+<a id="engine.test_engine.test_generational_backend_with_threaded_advancer_matches_lineal_for_batch"></a>
+
+#### test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_batch
+
+```python
+def test_generational_backend_with_threaded_advancer_matches_lineal_for_batch(
+        tiny_params: SimulationParams) -> None
+```
+
+Real multi-block, multi-thread fan-out still matches `LinealBackend` exactly.
+
+Seven replicates against `max_workers=3` forces `_partition_into_blocks`
+to build blocks of uneven size (3, 2, 2) and actually exercises more
+than one block concurrently — not just the single-block, effectively-
+sequential case a smaller batch could pass by accident.
+
+<a id="engine.test_engine.test_fim_engine_backend_generational_uses_threaded_advancer"></a>
+
+#### test\_fim\_engine\_backend\_generational\_uses\_threaded\_advancer
+
+```python
+def test_fim_engine_backend_generational_uses_threaded_advancer(
+        tiny_params: SimulationParams) -> None
+```
+
+`fim(..., engine_backend="generational")` now runs on `ThreadedAdvancer`
+by default (`build_engine_backend`) — end to end, through the public
+entry point, not just `GenerationalBackend` constructed directly.
+
+<a id="engine.test_engine.test_threaded_advancer_rejects_non_positive_max_workers"></a>
+
+#### test\_threaded\_advancer\_rejects\_non\_positive\_max\_workers
+
+```python
+def test_threaded_advancer_rejects_non_positive_max_workers() -> None
+```
+
+`max_workers` below 1 is rejected at construction, not at first use.
+
 
 
 <a id="group-gui"></a>
@@ -8338,6 +8388,38 @@ def test_in_memory_store_round_trips_rows() -> None
 ```
 
 The protocol contract preserves every public-schema field.
+
+<a id="persistence.test_store.test_in_memory_store_write_generation_is_thread_safe"></a>
+
+#### test\_in\_memory\_store\_write\_generation\_is\_thread\_safe
+
+```python
+def test_in_memory_store_write_generation_is_thread_safe() -> None
+```
+
+Concurrent `write_generation` calls never corrupt or lose rows.
+
+`InMemoryTrajectoryStore._lock` is what this test is actually
+proving exists and works — without it, `list.extend` calls from
+several threads racing on `_rows` risk a lost update, not merely a
+theoretical concern once a free-threaded (no-GIL) CPython build is
+in the picture.
+
+<a id="persistence.test_store.test_jsonl_store_write_generation_is_thread_safe"></a>
+
+#### test\_jsonl\_store\_write\_generation\_is\_thread\_safe
+
+```python
+def test_jsonl_store_write_generation_is_thread_safe(tmp_path: Path) -> None
+```
+
+Concurrent `write_generation` calls never interleave or corrupt JSON Lines.
+
+`JSONLTrajectoryStore._lock` is what this test is actually proving
+exists and works — without it, two threads' own `handle.write()`
+calls on the same file descriptor could interleave mid-line,
+producing a line that is not valid JSON at all (a real corruption,
+not just a lost row).
 
 <a id="persistence.test_store.test_jsonl_store_appends_generations_and_ignores_partial_tail"></a>
 

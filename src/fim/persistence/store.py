@@ -13,6 +13,7 @@ one it actually has.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterable, Iterator, Mapping
 from typing import Any, Protocol, TypedDict
 
@@ -73,11 +74,43 @@ class InMemoryTrajectoryStore:
     a caller (a unit test, or a library user who only wants the final
     result and does not care about a persisted trajectory file) has no
     need to actually write anything to disk.
+
+    One instance may be shared across several concurrently-running
+    replicates (`fim.engine.GenerationalBackend`'s own `ThreadedAdvancer`)
+    — each replicate's own rows are already disambiguated by `run_id`,
+    so the only real hazard is two threads mutating `_rows` at the same
+    moment. `list.extend` happens to be atomic under CPython's own GIL
+    today, but relying on that is relying on an interpreter
+    implementation detail a future free-threaded (no-GIL) CPython build
+    would not honor — `_lock` guards the mutation explicitly instead, so
+    correctness never depends on which CPython build happens to be
+    running this.
     """
 
     def __init__(self) -> None:
         """Initialize an empty store."""
         self._rows: list[TrajectoryRow] = []
+        self._lock = threading.Lock()
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Drop `_lock` before pickling.
+
+        `RunResult.store` crosses a real process boundary under
+        `LinealBackend`'s own `max_workers` path (`ProcessPoolExecutor`
+        pickles a worker's returned `RunResult`, store included, to send
+        it back to the parent process) — a `threading.Lock` cannot be
+        pickled at all, and would not mean anything in a different
+        process even if it could be. `__setstate__` rebuilds a fresh
+        lock on the other side instead.
+        """
+        state = self.__dict__.copy()
+        del state["_lock"]
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore everything but `_lock`, then rebuild a fresh one."""
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
 
     def write_generation(
         self,
@@ -91,11 +124,20 @@ class InMemoryTrajectoryStore:
         ]
         if not generation_rows:
             raise ValueError("a generation must contain at least one row")
-        self._rows.extend(generation_rows)
+        with self._lock:
+            self._rows.extend(generation_rows)
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
-        """Yield rows matching ``run_id`` in insertion order."""
-        return (row.copy() for row in self._rows if row["run_id"] == run_id)
+        """Yield rows matching ``run_id`` in insertion order.
+
+        Snapshots `_rows` under `_lock` before filtering, rather than
+        iterating the live list directly, so a concurrent
+        `write_generation` call from another thread can never produce a
+        torn read.
+        """
+        with self._lock:
+            rows_snapshot = list(self._rows)
+        return (row.copy() for row in rows_snapshot if row["run_id"] == run_id)
 
 
 def normalize_row(

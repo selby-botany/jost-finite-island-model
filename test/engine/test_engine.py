@@ -11,6 +11,7 @@ from fim.engine import (
     LinealBackend,
     RunResult,
     SequentialAdvancer,
+    ThreadedAdvancer,
     build_engine_backend,
     fim,
     replicate_summary,
@@ -1495,3 +1496,91 @@ def test_build_engine_backend_rejects_unknown_choice() -> None:
     """An unrecognized `engine_backend` is a `ValueError`, not silently ignored."""
     with pytest.raises(ValueError, match="unknown engine backend"):
         build_engine_backend("bogus")  # type: ignore[arg-type]
+
+
+# `ThreadedAdvancer` (Stage F3): the Stage 0/1 parity tests above, re-run
+# with real thread interleaving in the mix, proving determinism holds
+# under real concurrency rather than only in principle — the design this
+# implements calls this out explicitly as its own required test, not
+# something the sequential-only tests above already cover.
+
+
+def test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_run(
+    tiny_params: SimulationParams,
+) -> None:
+    """`ThreadedAdvancer` reproduces `LinealBackend`'s scalar trajectory exactly."""
+    lineal_store = InMemoryTrajectoryStore()
+    lineal_result = LinealBackend().run(tiny_params, lineal_store, None, _clock)
+    assert isinstance(lineal_result, RunResult)
+
+    threaded_store = InMemoryTrajectoryStore()
+    threaded_result = GenerationalBackend(ThreadedAdvancer()).run(
+        tiny_params, threaded_store, None, _clock
+    )
+    assert isinstance(threaded_result, RunResult)
+
+    assert threaded_result.report == lineal_result.report
+    assert threaded_result.final_state == lineal_result.final_state
+    assert list(threaded_store.read(threaded_result.run_id)) == list(
+        lineal_store.read(lineal_result.run_id)
+    )
+
+
+def test_generational_backend_with_threaded_advancer_matches_lineal_for_batch(
+    tiny_params: SimulationParams,
+) -> None:
+    """Real multi-block, multi-thread fan-out still matches `LinealBackend` exactly.
+
+    Seven replicates against `max_workers=3` forces `_partition_into_blocks`
+    to build blocks of uneven size (3, 2, 2) and actually exercises more
+    than one block concurrently — not just the single-block, effectively-
+    sequential case a smaller batch could pass by accident.
+    """
+    params = replace(tiny_params, n_replicates=7)
+
+    lineal_store = InMemoryTrajectoryStore()
+    lineal_results = LinealBackend().run(params, lineal_store, None, _clock)
+    assert isinstance(lineal_results, tuple)
+
+    threaded_store = InMemoryTrajectoryStore()
+    threaded_results = GenerationalBackend(ThreadedAdvancer(max_workers=3)).run(
+        params, threaded_store, None, _clock
+    )
+    assert isinstance(threaded_results, tuple)
+
+    assert len(threaded_results) == len(lineal_results) == 7
+    for lineal_result, threaded_result in zip(
+        lineal_results, threaded_results, strict=True
+    ):
+        assert threaded_result.run_id == lineal_result.run_id
+        assert threaded_result.report == lineal_result.report
+        assert threaded_result.final_state == lineal_result.final_state
+        assert list(threaded_store.read(threaded_result.run_id)) == list(
+            lineal_store.read(lineal_result.run_id)
+        )
+
+
+def test_fim_engine_backend_generational_uses_threaded_advancer(
+    tiny_params: SimulationParams,
+) -> None:
+    """`fim(..., engine_backend="generational")` now runs on `ThreadedAdvancer`
+    by default (`build_engine_backend`) — end to end, through the public
+    entry point, not just `GenerationalBackend` constructed directly.
+    """
+    result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+        engine_backend="generational",
+    )
+    assert isinstance(result, RunResult)
+    assert result.report["converged"] in (True, False)
+
+
+def test_threaded_advancer_rejects_non_positive_max_workers() -> None:
+    """`max_workers` below 1 is rejected at construction, not at first use."""
+    with pytest.raises(ValueError, match="max_workers"):
+        ThreadedAdvancer(max_workers=0)

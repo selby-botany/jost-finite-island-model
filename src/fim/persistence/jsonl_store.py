@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,32 @@ class JSONLTrajectoryStore:
             path: JSON Lines file path. Its parent is created on first write.
         """
         self.path = Path(path)
+        # One lock per store instance, held for the whole open-write-flush
+        # block in `write_generation` — without it, two threads writing
+        # concurrently (`fim.engine.GenerationalBackend`'s own
+        # `ThreadedAdvancer`) could interleave their own `handle.write()`
+        # calls on the same underlying file descriptor, garbling lines.
+        self._lock = threading.Lock()
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Drop `_lock` before pickling.
+
+        `RunResult.store` crosses a real process boundary under
+        `fim.engine.LinealBackend`'s own `max_workers` path
+        (`ProcessPoolExecutor` pickles a worker's returned `RunResult`,
+        store included, to send it back to the parent process) — a
+        `threading.Lock` cannot be pickled at all, and would not mean
+        anything in a different process even if it could be.
+        `__setstate__` rebuilds a fresh lock on the other side instead.
+        """
+        state = self.__dict__.copy()
+        del state["_lock"]
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore everything but `_lock`, then rebuild a fresh one."""
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
 
     def write_generation(
         self,
@@ -70,7 +97,7 @@ class JSONLTrajectoryStore:
         if not normalized_rows:
             raise ValueError("a generation must contain at least one row")
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+        with self._lock, self.path.open("a", encoding="utf-8", newline="\n") as handle:
             for row in normalized_rows:
                 handle.write(
                     json.dumps(

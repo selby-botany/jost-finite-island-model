@@ -52,6 +52,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [advance](#fim.engine.Advancer.advance)
   * [SequentialAdvancer](#fim.engine.SequentialAdvancer)
     * [advance](#fim.engine.SequentialAdvancer.advance)
+  * [ThreadedAdvancer](#fim.engine.ThreadedAdvancer)
+    * [\_\_init\_\_](#fim.engine.ThreadedAdvancer.__init__)
+    * [advance](#fim.engine.ThreadedAdvancer.advance)
   * [run\_batch](#fim.engine.run_batch)
   * [GenerationalBackend](#fim.engine.GenerationalBackend)
     * [\_\_init\_\_](#fim.engine.GenerationalBackend.__init__)
@@ -216,6 +219,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
+    * [\_\_getstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__getstate__)
+    * [\_\_setstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__setstate__)
     * [write\_generation](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation)
     * [read](#fim.persistence.jsonl_store.JSONLTrajectoryStore.read)
 * [fim.persistence.manifest](#fim.persistence.manifest)
@@ -246,6 +251,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [read](#fim.persistence.store.TrajectoryStore.read)
   * [InMemoryTrajectoryStore](#fim.persistence.store.InMemoryTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__init__)
+    * [\_\_getstate\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__getstate__)
+    * [\_\_setstate\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__setstate__)
     * [write\_generation](#fim.persistence.store.InMemoryTrajectoryStore.write_generation)
     * [read](#fim.persistence.store.InMemoryTrajectoryStore.read)
   * [normalize\_row](#fim.persistence.store.normalize_row)
@@ -1444,6 +1451,84 @@ Step every active lane by exactly one generation.
 Mirrors one potential iteration of `_run_one`'s own `while not
 monitor.should_stop():` loop, per lane, in order.
 
+<a id="fim.engine.ThreadedAdvancer"></a>
+
+## ThreadedAdvancer Objects
+
+```python
+class ThreadedAdvancer()
+```
+
+Fans `SequentialAdvancer`'s own per-lane stepping out across threads.
+
+Partitions whichever lanes are active this tick into up to
+`max_workers` contiguous blocks (`_partition_into_blocks`) and steps
+each block — sequentially, in order, exactly what `SequentialAdvancer`
+already does — inside its own thread, via `ThreadPoolExecutor`.
+Blocks are disjoint (every lane belongs to exactly one), so no two
+threads ever touch the same lane's own state, RNG, or allele
+registry at once; the one thing genuinely shared across threads is
+`store`, made safe by the `threading.Lock` both
+`fim.persistence.store.InMemoryTrajectoryStore` and
+`fim.persistence.jsonl_store.JSONLTrajectoryStore` now hold around
+their own `write_generation`.
+
+Whether this delivers real wall-clock speedup over
+`SequentialAdvancer` depends on how much of each generation's own
+work happens inside NumPy calls that release the GIL versus pure-
+Python loop overhead — an open, empirical question this class does
+not itself answer. What it does guarantee: identical results to
+`SequentialAdvancer` for the same seed, since the actual per-lane
+computation is the same code (`SequentialAdvancer.advance` itself,
+called once per block), only fanned out across threads rather than
+run in one.
+
+Block assignment is computed fresh every tick from whichever lanes
+happen to be active (`_partition_into_blocks`), not a persistent,
+static assignment decided once at batch start — worth revisiting as
+a later, separately-measured optimization once lane membership is
+treated as fixed-and-masked rather than genuinely shrinking, but not
+this class's own current scope.
+
+<a id="fim.engine.ThreadedAdvancer.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(max_workers: int | None = None) -> None
+```
+
+Configure how many blocks/threads this advancer fans out across.
+
+**Arguments**:
+
+- `max_workers` - Defaults to `os.cpu_count()` (or 1 if that
+  cannot be determined) — the same default reasoning
+  `concurrent.futures.ThreadPoolExecutor` itself uses.
+  Deliberately not the same `max_workers` `fim()`'s own
+  public signature accepts — that one is `LinealBackend`-
+  only (a process count); reusing the name for a thread
+  count here was flagged, not settled, by the design this
+  implements, so this constructor's own parameter is
+  reachable only by building a `GenerationalBackend`
+  directly, not yet through `fim()` itself.
+
+
+**Raises**:
+
+- `ValueError` - If `max_workers` is given and is less than 1.
+
+<a id="fim.engine.ThreadedAdvancer.advance"></a>
+
+#### advance
+
+```python
+def advance(active_lanes: Sequence[ReplicaLane],
+            store: TrajectoryStore) -> list[ReplicaLane]
+```
+
+Step every active lane by one generation, fanned out across threads.
+
 <a id="fim.engine.run_batch"></a>
 
 #### run\_batch
@@ -1546,8 +1631,14 @@ class tree to maintain.
 
 **Arguments**:
 
-- `engine_backend` - Which backend to build. `"generational-vector"`
-  is a real, named, planned choice, not yet implemented.
+- `engine_backend` - Which backend to build. `"generational"` builds
+  `GenerationalBackend(ThreadedAdvancer())` — real thread-based
+  parallelism, not merely the structural reshuffle
+  `SequentialAdvancer` alone would give (still directly
+  available by constructing `GenerationalBackend()` without
+  going through this factory, if a caller wants zero new
+  thread-safety surface). `"generational-vector"` is a real,
+  named, planned choice, not yet implemented.
 - `jit` - Whether the chosen backend should JIT-compile its own
   operators. Meaningful only for `"generational"`/
   `"generational-vector"`, neither of which implements it yet.
@@ -1555,7 +1646,10 @@ class tree to maintain.
   restriction, not a temporary gap: `LinealBackend` stays the
   untouched golden reference every other backend's own parity
   tests are checked against (see its own docstring).
-- `max_workers` - `LinealBackend`-only; ignored by every other backend.
+- `max_workers` - `LinealBackend`-only; ignored by every other
+  backend. `ThreadedAdvancer`'s own thread count is a separate,
+  not-yet-publicly-reachable knob — see its own docstring for
+  why this name is not reused for it here.
 - `store_factory` - `LinealBackend`-only; ignored by every other backend.
 
 
@@ -1701,19 +1795,23 @@ silently disagree.
   not pass this argument sees no change at all.
   ``"generational"`` reorders *when* each replicate's
   generations are computed (every still-active replicate's own
-  generation advances together, rather than one replicate's
-  whole trajectory finishing before the next starts) without
-  changing what is computed: for the same seed, with
-  `replicate_tolerance` unset, its own trajectory is
-  bit-identical to ``"lineal"``'s. With `replicate_tolerance`
-  set, the two can legitimately choose a different subset of
-  replicates to stop on, since ``"generational"``'s own
-  adaptive stop fires the instant any replicate converges
-  rather than only after a whole replicate (or, under
-  `max_workers`, a whole worker-process batch) completes.
-  ``max_workers``/``store_factory`` above are meaningful only
-  for ``"lineal"``; passing either alongside a different
-  `engine_backend` is a `ValueError`, not a silent no-op.
+  generation advances together, fanned out across a real
+  thread pool, rather than one replicate's whole trajectory
+  finishing before the next starts) without changing what is
+- `computed` - for the same seed, with `replicate_tolerance`
+  unset, its own trajectory is bit-identical to
+  ``"lineal"``'s, regardless of thread interleaving. With
+  `replicate_tolerance` set, the two can legitimately choose a
+  different subset of replicates to stop on, since
+  ``"generational"``'s own adaptive stop fires the instant any
+  replicate converges rather than only after a whole replicate
+  (or, under `max_workers`, a whole worker-process batch)
+  completes. ``max_workers``/``store_factory`` above are
+  meaningful only for ``"lineal"``; passing either alongside a
+  different `engine_backend` is a `ValueError`, not a silent
+  no-op — ``"generational"``'s own thread count is a separate,
+  not-yet-publicly-reachable knob (see `ThreadedAdvancer`'s own
+  docstring).
   ``"generational-vector"`` is a real, named, planned third
   choice, not yet implemented.
 - `jit` - Whether the chosen backend should JIT-compile its own
@@ -6026,6 +6124,34 @@ Bind the store to one trajectory file.
 
 - `path` - JSON Lines file path. Its parent is created on first write.
 
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__getstate__"></a>
+
+#### \_\_getstate\_\_
+
+```python
+def __getstate__() -> dict[str, Any]
+```
+
+Drop `_lock` before pickling.
+
+`RunResult.store` crosses a real process boundary under
+`fim.engine.LinealBackend`'s own `max_workers` path
+(`ProcessPoolExecutor` pickles a worker's returned `RunResult`,
+store included, to send it back to the parent process) — a
+`threading.Lock` cannot be pickled at all, and would not mean
+anything in a different process even if it could be.
+`__setstate__` rebuilds a fresh lock on the other side instead.
+
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.__setstate__"></a>
+
+#### \_\_setstate\_\_
+
+```python
+def __setstate__(state: dict[str, Any]) -> None
+```
+
+Restore everything but `_lock`, then rebuild a fresh one.
+
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation"></a>
 
 #### write\_generation
@@ -6549,6 +6675,17 @@ a caller (a unit test, or a library user who only wants the final
 result and does not care about a persisted trajectory file) has no
 need to actually write anything to disk.
 
+One instance may be shared across several concurrently-running
+replicates (`fim.engine.GenerationalBackend`'s own `ThreadedAdvancer`)
+— each replicate's own rows are already disambiguated by `run_id`,
+so the only real hazard is two threads mutating `_rows` at the same
+moment. `list.extend` happens to be atomic under CPython's own GIL
+today, but relying on that is relying on an interpreter
+implementation detail a future free-threaded (no-GIL) CPython build
+would not honor — `_lock` guards the mutation explicitly instead, so
+correctness never depends on which CPython build happens to be
+running this.
+
 <a id="fim.persistence.store.InMemoryTrajectoryStore.__init__"></a>
 
 #### \_\_init\_\_
@@ -6558,6 +6695,34 @@ def __init__() -> None
 ```
 
 Initialize an empty store.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.__getstate__"></a>
+
+#### \_\_getstate\_\_
+
+```python
+def __getstate__() -> dict[str, Any]
+```
+
+Drop `_lock` before pickling.
+
+`RunResult.store` crosses a real process boundary under
+`LinealBackend`'s own `max_workers` path (`ProcessPoolExecutor`
+pickles a worker's returned `RunResult`, store included, to send
+it back to the parent process) — a `threading.Lock` cannot be
+pickled at all, and would not mean anything in a different
+process even if it could be. `__setstate__` rebuilds a fresh
+lock on the other side instead.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.__setstate__"></a>
+
+#### \_\_setstate\_\_
+
+```python
+def __setstate__(state: dict[str, Any]) -> None
+```
+
+Restore everything but `_lock`, then rebuild a fresh one.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.write_generation"></a>
 
@@ -6579,6 +6744,11 @@ def read(run_id: str) -> Iterator[TrajectoryRow]
 ```
 
 Yield rows matching ``run_id`` in insertion order.
+
+Snapshots `_rows` under `_lock` before filtering, rather than
+iterating the live list directly, so a concurrent
+`write_generation` call from another thread can never produce a
+torn read.
 
 <a id="fim.persistence.store.normalize_row"></a>
 
