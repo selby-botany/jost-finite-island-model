@@ -105,7 +105,7 @@ from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, Protocol, TypeAlias, TypedDict
+from typing import Any, Literal, Protocol, TypeAlias, TypedDict
 
 import numpy as np
 
@@ -796,6 +796,65 @@ class GenerationalBackend:
         return results
 
 
+EngineBackendChoice = Literal["lineal", "generational", "generational-vector"]
+JitOption = Literal["off", "numba"]
+
+
+def build_engine_backend(
+    engine_backend: EngineBackendChoice,
+    *,
+    jit: JitOption = "off",
+    max_workers: int | None = None,
+    store_factory: Callable[[str], TrajectoryStore] | None = None,
+) -> EngineBackend:
+    """Return the configured backend `fim()` should run against.
+
+    One function, not a class hierarchy: Python's own first-class
+    functions make a `ConcreteFactory` subclass per backend unnecessary
+    ceremony here — a plain function that reads a choice and returns an
+    object satisfying `EngineBackend`'s shape does the same job with no
+    class tree to maintain.
+
+    Args:
+        engine_backend: Which backend to build. `"generational-vector"`
+            is a real, named, planned choice, not yet implemented.
+        jit: Whether the chosen backend should JIT-compile its own
+            operators. Meaningful only for `"generational"`/
+            `"generational-vector"`, neither of which implements it yet.
+            `"lineal"` never accepts anything but `"off"` — a permanent
+            restriction, not a temporary gap: `LinealBackend` stays the
+            untouched golden reference every other backend's own parity
+            tests are checked against (see its own docstring).
+        max_workers: `LinealBackend`-only; ignored by every other backend.
+        store_factory: `LinealBackend`-only; ignored by every other backend.
+
+    Raises:
+        ValueError: If `engine_backend == "lineal"` and `jit != "off"`,
+            or `engine_backend` names something unrecognized.
+        NotImplementedError: If `engine_backend`/`jit` names a real,
+            planned choice with no working implementation yet.
+    """
+    if engine_backend == "lineal":
+        if jit != "off":
+            raise ValueError(
+                "jit is not offered on the lineal backend — it stays the "
+                "untouched golden reference, see LinealBackend's own "
+                "docstring"
+            )
+        return LinealBackend(max_workers=max_workers, store_factory=store_factory)
+    if engine_backend == "generational":
+        if jit != "off":
+            raise NotImplementedError(
+                "jit='numba' is not implemented yet for the generational backend"
+            )
+        return GenerationalBackend()
+    if engine_backend == "generational-vector":
+        raise NotImplementedError(
+            "the generational-vector backend is not implemented yet"
+        )
+    raise ValueError(f"unknown engine backend: {engine_backend!r}")
+
+
 def fim(
     N: PopulationSize,
     m: Migration,
@@ -808,6 +867,8 @@ def fim(
     clock: Clock | None = None,
     max_workers: int | None = None,
     store_factory: Callable[[str], TrajectoryStore] | None = None,
+    engine_backend: EngineBackendChoice = "lineal",
+    jit: JitOption = "off",
 ) -> SimulationOutput:
     """Run the finite island model until convergence or the hard cap.
 
@@ -915,7 +976,37 @@ def fim(
             from one, never a closure or a `lambda`. Left unset
             (``None``, the default), every replicate falls back to
             sharing whatever `store` was given (or a private, in-memory
-            store if `store` was not given either).
+            store if `store` was not given either). `lineal`-only —
+            see `engine_backend` below.
+        engine_backend: Which engine implementation actually runs this
+            batch. ``"lineal"`` (the default) is every prior release's
+            own behavior, unchanged — every existing caller that does
+            not pass this argument sees no change at all.
+            ``"generational"`` reorders *when* each replicate's
+            generations are computed (every still-active replicate's own
+            generation advances together, rather than one replicate's
+            whole trajectory finishing before the next starts) without
+            changing what is computed: for the same seed, with
+            `replicate_tolerance` unset, its own trajectory is
+            bit-identical to ``"lineal"``'s. With `replicate_tolerance`
+            set, the two can legitimately choose a different subset of
+            replicates to stop on, since ``"generational"``'s own
+            adaptive stop fires the instant any replicate converges
+            rather than only after a whole replicate (or, under
+            `max_workers`, a whole worker-process batch) completes.
+            ``max_workers``/``store_factory`` above are meaningful only
+            for ``"lineal"``; passing either alongside a different
+            `engine_backend` is a `ValueError`, not a silent no-op.
+            ``"generational-vector"`` is a real, named, planned third
+            choice, not yet implemented.
+        jit: Whether the chosen backend should JIT-compile its own
+            operators, for real wall-clock speed rather than a change in
+            what is computed. ``"off"`` (the default) is every prior
+            release's own behavior. Meaningful only under
+            ``engine_backend="generational"``/``"generational-vector"``,
+            neither of which implements it yet; ``"lineal"`` never
+            accepts anything but ``"off"``, permanently — see
+            `build_engine_backend`'s own docstring.
 
     Returns:
         One result, or one independently seeded result per replicate.
@@ -930,19 +1021,33 @@ def fim(
 
     Raises:
         ValueError: If the named arguments disagree with ``params``,
-            `store` and `store_factory` are both given, or `max_workers`
-            is combined with a non-``None`` `store`.
+            `store` and `store_factory` are both given, `max_workers` is
+            combined with a non-``None`` `store`, `max_workers`/
+            `store_factory` are given alongside a non-``"lineal"``
+            `engine_backend`, or `jit` is anything but ``"off"`` under
+            `engine_backend="lineal"`.
+        NotImplementedError: If `engine_backend`/`jit` names a real,
+            planned choice with no working implementation yet — see
+            `build_engine_backend`'s own docstring.
     """
     _validate_public_signature(N, m, mu, d, params)
+    if engine_backend != "lineal" and (
+        max_workers is not None or store_factory is not None
+    ):
+        raise ValueError(
+            "max_workers/store_factory are lineal-backend-only; they have "
+            f"no effect under engine_backend={engine_backend!r}"
+        )
     run_clock = clock if clock is not None else _utc_now
     # `fim()` itself only validates its own public signature and picks a
-    # backend; every actual dispatch decision (scalar vs. sequential
-    # batch vs. process-parallel batch) lives in that backend's own
-    # `run` — today, always `LinealBackend` (see `EngineBackend`'s own
-    # docstring, above, for why this split exists ahead of a second
-    # backend actually landing).
-    backend: EngineBackend = LinealBackend(
-        max_workers=max_workers, store_factory=store_factory
+    # backend (`build_engine_backend`); every actual dispatch decision
+    # (scalar vs. sequential batch vs. process-parallel batch, or the
+    # generation-first driving loop) lives in that backend's own `run`.
+    backend = build_engine_backend(
+        engine_backend,
+        jit=jit,
+        max_workers=max_workers,
+        store_factory=store_factory,
     )
     return backend.run(params, store, run_id, run_clock)
 

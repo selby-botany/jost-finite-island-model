@@ -11,6 +11,7 @@ from fim.engine import (
     LinealBackend,
     RunResult,
     SequentialAdvancer,
+    build_engine_backend,
     fim,
     replicate_summary,
     report_for_state,
@@ -1393,3 +1394,104 @@ def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
     # only replicates 0 and 1 (`-r001`/`-r002`) ever got processed.
     assert [result.run_id for result in first] == ["batch-r001", "batch-r002"]
     assert all(result.report["generation"] == 2 for result in first)
+
+
+# `fim()`'s own `engine_backend`/`jit` keywords (Stage F2): the factory
+# actually reachable by a real caller, not just `build_engine_backend`/
+# `GenerationalBackend` constructed directly the way the tests above do.
+
+
+def test_fim_engine_backend_generational_matches_default(
+    tiny_params: SimulationParams,
+) -> None:
+    """`fim(..., engine_backend="generational")` matches the untouched default."""
+    lineal_result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+    )
+    assert isinstance(lineal_result, RunResult)
+
+    generational_result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+        engine_backend="generational",
+    )
+    assert isinstance(generational_result, RunResult)
+
+    assert generational_result.run_id == lineal_result.run_id
+    assert generational_result.report == lineal_result.report
+    assert generational_result.final_state == lineal_result.final_state
+
+
+def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None:
+    """`jit` is never offered on the lineal backend — a permanent restriction."""
+    with pytest.raises(ValueError, match="lineal backend"):
+        fim(
+            tiny_params.N,
+            tiny_params.m,
+            tiny_params.mu,
+            tiny_params.d,
+            params=tiny_params,
+            jit="numba",
+        )
+
+
+def test_fim_rejects_lineal_only_args_on_other_backends(
+    tiny_params: SimulationParams,
+) -> None:
+    """`max_workers`/`store_factory` are lineal-only — never a silent no-op."""
+    with pytest.raises(ValueError, match="lineal-backend-only"):
+        fim(
+            tiny_params.N,
+            tiny_params.m,
+            tiny_params.mu,
+            tiny_params.d,
+            params=tiny_params,
+            engine_backend="generational",
+            max_workers=2,
+        )
+
+
+def test_fim_generational_vector_not_implemented_yet(
+    tiny_params: SimulationParams,
+) -> None:
+    """`"generational-vector"` is a real, named, planned choice — not yet built."""
+    with pytest.raises(NotImplementedError):
+        fim(
+            tiny_params.N,
+            tiny_params.m,
+            tiny_params.mu,
+            tiny_params.d,
+            params=tiny_params,
+            engine_backend="generational-vector",
+        )
+
+
+def test_fim_generational_jit_not_implemented_yet(
+    tiny_params: SimulationParams,
+) -> None:
+    """`jit="numba"` under `"generational"` is planned, not yet built."""
+    with pytest.raises(NotImplementedError):
+        fim(
+            tiny_params.N,
+            tiny_params.m,
+            tiny_params.mu,
+            tiny_params.d,
+            params=tiny_params,
+            engine_backend="generational",
+            jit="numba",
+        )
+
+
+def test_build_engine_backend_rejects_unknown_choice() -> None:
+    """An unrecognized `engine_backend` is a `ValueError`, not silently ignored."""
+    with pytest.raises(ValueError, match="unknown engine backend"):
+        build_engine_backend("bogus")  # type: ignore[arg-type]

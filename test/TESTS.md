@@ -2708,6 +2708,70 @@ is under test, not real convergence timing. With `replicate_minimum
 lane in ascending order — exactly replicates 0 and 1 — leaving
 replicates 2-4 never even reached.
 
+<a id="engine.test_engine.test_fim_engine_backend_generational_matches_default"></a>
+
+#### test\_fim\_engine\_backend\_generational\_matches\_default
+
+```python
+def test_fim_engine_backend_generational_matches_default(
+        tiny_params: SimulationParams) -> None
+```
+
+`fim(..., engine_backend="generational")` matches the untouched default.
+
+<a id="engine.test_engine.test_fim_rejects_jit_on_lineal"></a>
+
+#### test\_fim\_rejects\_jit\_on\_lineal
+
+```python
+def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None
+```
+
+`jit` is never offered on the lineal backend — a permanent restriction.
+
+<a id="engine.test_engine.test_fim_rejects_lineal_only_args_on_other_backends"></a>
+
+#### test\_fim\_rejects\_lineal\_only\_args\_on\_other\_backends
+
+```python
+def test_fim_rejects_lineal_only_args_on_other_backends(
+        tiny_params: SimulationParams) -> None
+```
+
+`max_workers`/`store_factory` are lineal-only — never a silent no-op.
+
+<a id="engine.test_engine.test_fim_generational_vector_not_implemented_yet"></a>
+
+#### test\_fim\_generational\_vector\_not\_implemented\_yet
+
+```python
+def test_fim_generational_vector_not_implemented_yet(
+        tiny_params: SimulationParams) -> None
+```
+
+`"generational-vector"` is a real, named, planned choice — not yet built.
+
+<a id="engine.test_engine.test_fim_generational_jit_not_implemented_yet"></a>
+
+#### test\_fim\_generational\_jit\_not\_implemented\_yet
+
+```python
+def test_fim_generational_jit_not_implemented_yet(
+        tiny_params: SimulationParams) -> None
+```
+
+`jit="numba"` under `"generational"` is planned, not yet built.
+
+<a id="engine.test_engine.test_build_engine_backend_rejects_unknown_choice"></a>
+
+#### test\_build\_engine\_backend\_rejects\_unknown\_choice
+
+```python
+def test_build_engine_backend_rejects_unknown_choice() -> None
+```
+
+An unrecognized `engine_backend` is a `ValueError`, not silently ignored.
+
 
 
 <a id="group-gui"></a>
