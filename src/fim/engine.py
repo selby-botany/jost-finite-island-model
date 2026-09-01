@@ -105,7 +105,7 @@ from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, TypeAlias, TypedDict
+from typing import Any, Protocol, TypeAlias, TypedDict
 
 import numpy as np
 
@@ -277,6 +277,169 @@ class RunResult:
 SimulationOutput: TypeAlias = RunResult | tuple[RunResult, ...]
 
 
+class EngineBackend(Protocol):
+    """One way of actually running a batch of replicates to completion.
+
+    `fim()` (below) validates its own public arguments, then hands off to
+    exactly one backend's own `run` — today, always `LinealBackend`, the
+    only implementation. This split exists ahead of a second backend
+    actually landing because the engine is already planned to grow more
+    than one way of running the same simulation: a thread-based,
+    generation-first scheduler and a vectorized, array-based one are both
+    designed but not yet built. Naming today's existing behavior as an
+    explicit `EngineBackend` now means a future caller picks among
+    backends through an ordinary keyword argument once those exist,
+    rather than `fim()` growing an ever-larger hardcoded dispatch of its
+    own.
+
+    Every backend takes exactly the same four "what to run, where"
+    arguments — anything about *how* a given backend actually computes
+    (worker-process counts, thread pools, which array representation) is
+    that backend's own constructor's business, not part of this shared
+    contract.
+    """
+
+    def run(
+        self,
+        params: SimulationParams,
+        store: TrajectoryStore | None,
+        run_id: str | None,
+        clock: Clock,
+    ) -> SimulationOutput:
+        """Run every replicate `params` describes; return the result(s)."""
+        ...
+
+
+class LinealBackend:
+    """Today's engine: one replica's whole trajectory, start to finish,
+    computed before any cross-replicate bookkeeping happens — either one
+    at a time, or `max_workers` at a time across real OS processes. See
+    `fim()`'s own docstring, below, for the full behavior; this class's
+    own `run` is that same behavior, unchanged, moved behind
+    `EngineBackend`'s shared contract rather than living directly inside
+    `fim()`.
+    """
+
+    def __init__(
+        self,
+        *,
+        max_workers: int | None = None,
+        store_factory: Callable[[str], TrajectoryStore] | None = None,
+    ) -> None:
+        """Configure this backend's own concurrency and per-replicate storage.
+
+        Args:
+            max_workers: See `fim()`'s own docstring.
+            store_factory: See `fim()`'s own docstring.
+        """
+        self._max_workers = max_workers
+        self._store_factory = store_factory
+
+    def run(
+        self,
+        params: SimulationParams,
+        store: TrajectoryStore | None,
+        run_id: str | None,
+        clock: Clock,
+    ) -> SimulationOutput:
+        """Run `params`'s own replicate(s); see `fim()`'s own docstring."""
+        if store is not None and self._store_factory is not None:
+            raise ValueError("store and store_factory are mutually exclusive")
+        # From here down, this is a three-way dispatch, in order of
+        # increasing complexity: a single run (`n_replicates == 1`, the
+        # common case) goes straight to `_run_one`; a multi-replicate
+        # batch with `max_workers` set hands off to the parallel-worker-
+        # process path (`_run_batch_parallel`); everything else is a
+        # multi-replicate batch run the plain way, one replicate after
+        # another, in the loop at the bottom of this method.
+        if params.n_replicates == 1:
+            trajectory_store = store if store is not None else InMemoryTrajectoryStore()
+            logger.debug("LinealBackend: dispatching a single scalar run")
+            return _run_one(
+                params,
+                trajectory_store,
+                run_id or deterministic_run_id(params),
+                clock,
+            )
+
+        monitor = _replicate_monitor(params)
+        if self._max_workers is not None:
+            if self._max_workers < 1:
+                raise ValueError("max_workers must be at least 1")
+            if store is not None:
+                raise ValueError(
+                    "max_workers requires store=None; a single store instance "
+                    "cannot be shared across worker processes — pass "
+                    "store_factory instead"
+                )
+            _require_picklable("clock", clock)
+            if self._store_factory is not None:
+                _require_picklable("store_factory", self._store_factory)
+            logger.debug(
+                "LinealBackend: dispatching a %d-replicate batch across up to "
+                "%d worker(s)",
+                params.n_replicates,
+                self._max_workers,
+            )
+            return _run_batch_parallel(
+                params,
+                self._max_workers,
+                self._store_factory,
+                run_id,
+                clock,
+                monitor,
+            )
+
+        trajectory_store = store if store is not None else InMemoryTrajectoryStore()
+        logger.debug(
+            "LinealBackend: dispatching a %d-replicate sequential batch",
+            params.n_replicates,
+        )
+        # Replicate i is an independent scalar run with seed + i, preserving the
+        # scalar trajectory for the first result and deterministic batch ordering.
+        results: list[RunResult] = []
+        for replicate_index in range(params.n_replicates):
+            replicate_params = replace(
+                params,
+                seed=params.seed + replicate_index,
+                n_replicates=1,
+            )
+            replicate_run_id = (
+                f"{run_id}-r{replicate_index + 1:03}"
+                if run_id is not None
+                else deterministic_run_id(replicate_params)
+            )
+            # A supplied `store_factory` gives every replicate its own fresh
+            # store, exactly like the parallel path's workers; otherwise every
+            # replicate reuses the one shared `trajectory_store`, unchanged
+            # from every prior release.
+            replicate_store = (
+                self._store_factory(replicate_run_id)
+                if self._store_factory is not None
+                else trajectory_store
+            )
+            result = _run_one(
+                replicate_params,
+                replicate_store,
+                replicate_run_id,
+                clock,
+            )
+            results.append(result)
+            if monitor is not None:
+                outcome = monitor.record(
+                    replicate_index + 1,
+                    _replicate_stopping_values(result, params.convergence_statistics),
+                )
+                if outcome.stopped:
+                    logger.info(
+                        "adaptive replicate stop triggered after %d of %d replicate(s)",
+                        replicate_index + 1,
+                        params.n_replicates,
+                    )
+                    break
+        return tuple(results)
+
+
 def fim(
     N: PopulationSize,
     m: Migration,
@@ -415,100 +578,17 @@ def fim(
             is combined with a non-``None`` `store`.
     """
     _validate_public_signature(N, m, mu, d, params)
-    if store is not None and store_factory is not None:
-        raise ValueError("store and store_factory are mutually exclusive")
     run_clock = clock if clock is not None else _utc_now
-    # From here down, this function is a three-way dispatch, in order of
-    # increasing complexity: a single run (`n_replicates == 1`, the
-    # common case) goes straight to `_run_one`; a multi-replicate batch
-    # with `max_workers` set hands off to the parallel-worker-process
-    # path (`_run_batch_parallel`); everything else is a multi-replicate
-    # batch run the plain way, one replicate after another, in the loop
-    # at the bottom of this function.
-    if params.n_replicates == 1:
-        trajectory_store = store if store is not None else InMemoryTrajectoryStore()
-        logger.debug("fim(): dispatching a single scalar run")
-        return _run_one(
-            params,
-            trajectory_store,
-            run_id or deterministic_run_id(params),
-            run_clock,
-        )
-
-    monitor = _replicate_monitor(params)
-    if max_workers is not None:
-        if max_workers < 1:
-            raise ValueError("max_workers must be at least 1")
-        if store is not None:
-            raise ValueError(
-                "max_workers requires store=None; a single store instance "
-                "cannot be shared across worker processes — pass "
-                "store_factory instead"
-            )
-        _require_picklable("clock", run_clock)
-        if store_factory is not None:
-            _require_picklable("store_factory", store_factory)
-        logger.debug(
-            "fim(): dispatching a %d-replicate batch across up to %d worker(s)",
-            params.n_replicates,
-            max_workers,
-        )
-        return _run_batch_parallel(
-            params,
-            max_workers,
-            store_factory,
-            run_id,
-            run_clock,
-            monitor,
-        )
-
-    trajectory_store = store if store is not None else InMemoryTrajectoryStore()
-    logger.debug(
-        "fim(): dispatching a %d-replicate sequential batch", params.n_replicates
+    # `fim()` itself only validates its own public signature and picks a
+    # backend; every actual dispatch decision (scalar vs. sequential
+    # batch vs. process-parallel batch) lives in that backend's own
+    # `run` — today, always `LinealBackend` (see `EngineBackend`'s own
+    # docstring, above, for why this split exists ahead of a second
+    # backend actually landing).
+    backend: EngineBackend = LinealBackend(
+        max_workers=max_workers, store_factory=store_factory
     )
-    # Replicate i is an independent scalar run with seed + i, preserving the
-    # scalar trajectory for the first result and deterministic batch ordering.
-    results: list[RunResult] = []
-    for replicate_index in range(params.n_replicates):
-        replicate_params = replace(
-            params,
-            seed=params.seed + replicate_index,
-            n_replicates=1,
-        )
-        replicate_run_id = (
-            f"{run_id}-r{replicate_index + 1:03}"
-            if run_id is not None
-            else deterministic_run_id(replicate_params)
-        )
-        # A supplied `store_factory` gives every replicate its own fresh
-        # store, exactly like the parallel path's workers; otherwise every
-        # replicate reuses the one shared `trajectory_store`, unchanged
-        # from every prior release.
-        replicate_store = (
-            store_factory(replicate_run_id)
-            if store_factory is not None
-            else trajectory_store
-        )
-        result = _run_one(
-            replicate_params,
-            replicate_store,
-            replicate_run_id,
-            run_clock,
-        )
-        results.append(result)
-        if monitor is not None:
-            outcome = monitor.record(
-                replicate_index + 1,
-                _replicate_stopping_values(result, params.convergence_statistics),
-            )
-            if outcome.stopped:
-                logger.info(
-                    "adaptive replicate stop triggered after %d of %d replicate(s)",
-                    replicate_index + 1,
-                    params.n_replicates,
-                )
-                break
-    return tuple(results)
+    return backend.run(params, store, run_id, run_clock)
 
 
 def deterministic_run_id(params: SimulationParams) -> str:

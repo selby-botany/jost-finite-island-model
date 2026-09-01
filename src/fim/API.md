@@ -42,6 +42,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.engine](#fim.engine)
   * [FinalReport](#fim.engine.FinalReport)
   * [RunResult](#fim.engine.RunResult)
+  * [EngineBackend](#fim.engine.EngineBackend)
+    * [run](#fim.engine.EngineBackend.run)
+  * [LinealBackend](#fim.engine.LinealBackend)
+    * [\_\_init\_\_](#fim.engine.LinealBackend.__init__)
+    * [run](#fim.engine.LinealBackend.run)
   * [fim](#fim.engine.fim)
   * [deterministic\_run\_id](#fim.engine.deterministic_run_id)
   * [report\_for\_state](#fim.engine.report_for_state)
@@ -1258,6 +1263,90 @@ Fields:
         analyze an earlier generation) already has a handle to it,
         without needing to separately track down which store this
         particular run used.
+
+<a id="fim.engine.EngineBackend"></a>
+
+## EngineBackend Objects
+
+```python
+class EngineBackend(Protocol)
+```
+
+One way of actually running a batch of replicates to completion.
+
+`fim()` (below) validates its own public arguments, then hands off to
+exactly one backend's own `run` — today, always `LinealBackend`, the
+only implementation. This split exists ahead of a second backend
+actually landing because the engine is already planned to grow more
+than one way of running the same simulation: a thread-based,
+generation-first scheduler and a vectorized, array-based one are both
+designed but not yet built. Naming today's existing behavior as an
+explicit `EngineBackend` now means a future caller picks among
+backends through an ordinary keyword argument once those exist,
+rather than `fim()` growing an ever-larger hardcoded dispatch of its
+own.
+
+Every backend takes exactly the same four "what to run, where"
+arguments — anything about *how* a given backend actually computes
+(worker-process counts, thread pools, which array representation) is
+that backend's own constructor's business, not part of this shared
+contract.
+
+<a id="fim.engine.EngineBackend.run"></a>
+
+#### run
+
+```python
+def run(params: SimulationParams, store: TrajectoryStore | None,
+        run_id: str | None, clock: Clock) -> SimulationOutput
+```
+
+Run every replicate `params` describes; return the result(s).
+
+<a id="fim.engine.LinealBackend"></a>
+
+## LinealBackend Objects
+
+```python
+class LinealBackend()
+```
+
+Today's engine: one replica's whole trajectory, start to finish,
+computed before any cross-replicate bookkeeping happens — either one
+at a time, or `max_workers` at a time across real OS processes. See
+`fim()`'s own docstring, below, for the full behavior; this class's
+own `run` is that same behavior, unchanged, moved behind
+`EngineBackend`'s shared contract rather than living directly inside
+`fim()`.
+
+<a id="fim.engine.LinealBackend.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(
+        *,
+        max_workers: int | None = None,
+        store_factory: Callable[[str], TrajectoryStore] | None = None) -> None
+```
+
+Configure this backend's own concurrency and per-replicate storage.
+
+**Arguments**:
+
+- `max_workers` - See `fim()`'s own docstring.
+- `store_factory` - See `fim()`'s own docstring.
+
+<a id="fim.engine.LinealBackend.run"></a>
+
+#### run
+
+```python
+def run(params: SimulationParams, store: TrajectoryStore | None,
+        run_id: str | None, clock: Clock) -> SimulationOutput
+```
+
+Run `params`'s own replicate(s); see `fim()`'s own docstring.
 
 <a id="fim.engine.fim"></a>
 
