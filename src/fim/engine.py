@@ -440,6 +440,362 @@ class LinealBackend:
         return tuple(results)
 
 
+@dataclass(slots=True)
+class ReplicaLane:
+    """One replica's own mutable working state, mid-batch.
+
+    Exactly what `_run_one`'s own local variables already are (`state`,
+    `rng`, `registry`, `finite_alleles`, `monitor`) — a structural change,
+    promoting one function's stack frame into an explicit, named,
+    per-replica object so a batch can hold several side by side and
+    advance them together one generation at a time, rather than running
+    each replica's entire trajectory before starting the next (see
+    `GenerationalBackend`, below). Nothing about what any one lane
+    computes changes because of this.
+    """
+
+    replica_index: int
+    run_id: str
+    params: SimulationParams
+    state: ModelState
+    rng: np.random.Generator
+    registry: AlleleRegistry
+    finite_alleles: FiniteAlleleRegistry | None
+    monitor: ConvergenceMonitor
+    started_at: str
+    active: bool = True
+    result: RunResult | None = None
+
+
+class Advancer(Protocol):
+    """Steps every currently-active lane forward by exactly one generation.
+
+    The single fan-out point `run_batch` (below) delegates to — never
+    calls `step()` itself. `SequentialAdvancer` is currently the only
+    implementation: a plain loop, visiting lanes one at a time, in order.
+    A future thread-pool-backed advancer can implement this same
+    protocol without `run_batch` itself ever changing.
+    """
+
+    def advance(
+        self,
+        active_lanes: Sequence[ReplicaLane],
+        store: TrajectoryStore,
+    ) -> list[ReplicaLane]:
+        """Advance every lane in `active_lanes` by one generation.
+
+        Returns whichever of them just stopped — including a lane whose
+        monitor already reported stopped *before* this call (the
+        generation-zero edge case, where convergence is already
+        satisfied before any generation past zero ever runs), which is
+        returned without being stepped at all.
+        """
+        ...
+
+
+class SequentialAdvancer:
+    """The default `Advancer`: a plain loop, one lane at a time.
+
+    Always correct, with zero new thread-safety surface — a single
+    thread visiting lanes one at a time in a `for` loop cannot race with
+    itself. This is what makes `GenerationalBackend` bit-identical to
+    `LinealBackend` for the same seed (proof: each lane's own generation
+    sequence, RNG draws, and allele-id minting depend only on that
+    lane's own prior state, never on any other lane or on wall-clock
+    order — reordering *when* one lane's generation is computed relative
+    to another's changes nothing about that lane's own result).
+    """
+
+    def advance(
+        self,
+        active_lanes: Sequence[ReplicaLane],
+        store: TrajectoryStore,
+    ) -> list[ReplicaLane]:
+        """Step every active lane by exactly one generation.
+
+        Mirrors one potential iteration of `_run_one`'s own `while not
+        monitor.should_stop():` loop, per lane, in order.
+        """
+        debug_enabled = logger.isEnabledFor(logging.DEBUG)
+        newly_stopped: list[ReplicaLane] = []
+        for lane in active_lanes:
+            if lane.monitor.should_stop():
+                newly_stopped.append(lane)
+                continue
+            lane.state = step(
+                lane.state,
+                lane.params,
+                lane.registry,
+                lane.rng,
+                finite_alleles=lane.finite_alleles,
+            )
+            store.write_generation(
+                lane.run_id, lane.state.generation, lane.state.to_rows(lane.run_id)
+            )
+            values = _convergence_values(lane.state, lane.params)
+            lane.monitor.record(lane.state.generation, values)
+            if debug_enabled:
+                logger.debug(
+                    "replicate %s generation %d: %s",
+                    lane.run_id,
+                    lane.state.generation,
+                    values,
+                )
+            if lane.monitor.should_stop():
+                newly_stopped.append(lane)
+        return newly_stopped
+
+
+def _build_replica_lane(
+    params: SimulationParams,
+    replica_index: int,
+    run_id: str | None,
+    store: TrajectoryStore,
+    clock: Clock,
+) -> ReplicaLane:
+    """Build and seed one replica lane through generation zero.
+
+    Mirrors `_run_one`'s own setup exactly — seed derivation, registry
+    start, finite-alleles construction, generation-zero persistence and
+    convergence recording, in the same order — so a `ReplicaLane`'s
+    subsequent generations, advanced one at a time by an `Advancer`, are
+    bit-identical to what `_run_one` alone would have produced for the
+    same replica. `run_id`/`params` naming for a multi-replicate batch
+    exactly matches `LinealBackend`'s own sequential-batch branch, so the
+    two backends' own run ids agree for the same configuration.
+    """
+    if params.n_replicates == 1:
+        lane_run_id = run_id or deterministic_run_id(params)
+        lane_params = params
+    else:
+        lane_params = replace(params, seed=params.seed + replica_index, n_replicates=1)
+        lane_run_id = (
+            f"{run_id}-r{replica_index + 1:03}"
+            if run_id is not None
+            else deterministic_run_id(lane_params)
+        )
+    logger.info(
+        "replicate %s starting (N=%s, d=%s, m=%s, mu=%s, seed=%s, max_generations=%s)",
+        lane_run_id,
+        lane_params.N,
+        lane_params.d,
+        lane_params.m,
+        lane_params.mu,
+        lane_params.seed,
+        lane_params.max_generations,
+    )
+    started_at = _format_timestamp(clock())
+    rng = np.random.Generator(np.random.PCG64(lane_params.seed))
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(
+            lane_params.convergence_window,
+            lane_params.convergence_tolerance,
+        ),
+        max_generations=lane_params.max_generations,
+        statistics=lane_params.convergence_statistics,
+        combinator=lane_params.convergence_combinator,
+    )
+    state = generate_initial_state(lane_params, rng)
+    highest_initial_id = max(
+        (
+            int(allele_id)
+            for deme in state.frequencies
+            for locus in deme
+            for allele_id in locus
+        ),
+        default=MINTED_ID_START - 1,
+    )
+    registry = AlleleRegistry(start=max(MINTED_ID_START, highest_initial_id + 1))
+    finite_alleles = (
+        FiniteAlleleRegistry(_build_finite_allele_spaces(state, lane_params))
+        if lane_params.mutation_model == "finite_alleles"
+        else None
+    )
+    store.write_generation(lane_run_id, state.generation, state.to_rows(lane_run_id))
+    monitor.record(state.generation, _convergence_values(state, lane_params))
+    return ReplicaLane(
+        replica_index=replica_index,
+        run_id=lane_run_id,
+        params=lane_params,
+        state=state,
+        rng=rng,
+        registry=registry,
+        finite_alleles=finite_alleles,
+        monitor=monitor,
+        started_at=started_at,
+    )
+
+
+def _finalize_replica_lane(
+    lane: ReplicaLane,
+    clock: Clock,
+    store: TrajectoryStore,
+) -> RunResult:
+    """Build this lane's own `RunResult`, once its monitor has stopped.
+
+    Mirrors the tail of `_run_one` exactly — same report/manifest
+    construction, from this lane's own final state and monitor history.
+    """
+    outcome = lane.monitor.outcome()
+    if outcome.reason is None:
+        # Unreachable in practice — see `_run_one`'s own identical guard
+        # for why this is checked explicitly rather than assumed.
+        raise RuntimeError("stopped convergence monitor has no reason")
+    report = report_for_state(
+        lane.state,
+        lane.params,
+        run_id=lane.run_id,
+        converged=outcome.converged,
+        reason=outcome.reason.value,
+    )
+    ended_at = _format_timestamp(clock())
+    logger.info(
+        "replicate %s finished: %s at generation %d (converged=%s)",
+        lane.run_id,
+        outcome.reason.value,
+        lane.state.generation,
+        outcome.converged,
+    )
+    manifest = RunManifest(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        run_id=lane.run_id,
+        parameters=lane.params.to_dict(),
+        started_at=lane.started_at,
+        ended_at=ended_at,
+        converged=outcome.converged,
+        convergence_statistic=lane.params.convergence_statistic,
+        stop_reason=outcome.reason.value,
+        generation=lane.state.generation,
+        generation_count=len(lane.monitor.generations),
+        software_version=__version__,
+    )
+    return RunResult(
+        run_id=lane.run_id,
+        params=lane.params,
+        final_state=lane.state,
+        report=report,
+        convergence_generations=lane.monitor.generations,
+        convergence_history=lane.monitor.history,
+        convergence_histories=lane.monitor.histories,
+        manifest=manifest,
+        store=store,
+    )
+
+
+def _require_lane_result(lane: ReplicaLane) -> RunResult:
+    """Return a finalized lane's own result, or raise if it has none.
+
+    Unreachable in practice: `run_batch`'s own loop always sets `result`
+    in the same step it marks a lane inactive (see `run_batch`, below),
+    so a lane reached here with `active=False` and `result=None` would
+    mean that invariant broke — guarded explicitly rather than assumed,
+    the same discipline `_run_one`'s own "stopped convergence monitor has
+    no reason" guard already uses.
+    """
+    if lane.result is None:
+        raise RuntimeError(f"replicate {lane.run_id} has no result")
+    return lane.result
+
+
+def run_batch(
+    params: SimulationParams,
+    store: TrajectoryStore,
+    run_id: str | None,
+    clock: Clock,
+    advancer: Advancer,
+) -> tuple[RunResult, ...]:
+    """Run every replicate `params` describes, generation-first.
+
+    The generation-first counterpart to `LinealBackend`'s own
+    replica-first dispatch: every currently-active lane's own generation
+    *g* is advanced before any of them moves on to generation *g + 1*
+    (via `advancer.advance`), rather than one replica's entire trajectory
+    running to completion before the next starts. An adaptive
+    `replicate_tolerance` stop (`SimulationParams.replicate_tolerance`;
+    see `_replicate_monitor`) fires the instant any lane stops, not once
+    per whole replicate the way `LinealBackend`'s own sequential batch
+    loop checks it — `stopped_so_far` is this check's own ordinal axis,
+    incremented once per lane that stops, in ascending `replica_index`
+    order among any that stop within the same tick (a deterministic
+    tie-break, not an arbitrary one).
+
+    Every lane owns its own, never-shared `np.random.Generator` and its
+    own `AlleleRegistry` — nothing here ever reads or writes another
+    lane's state, which is what makes the traversal order above safe:
+    reordering *when* one lane's generation is computed relative to
+    another's never changes that lane's own result, only when a shared
+    observer (the cross-replica monitor) gets to see it.
+    """
+    lanes = [
+        _build_replica_lane(params, replica_index, run_id, store, clock)
+        for replica_index in range(params.n_replicates)
+    ]
+    cross_monitor = _replicate_monitor(params)
+    stopped_so_far = 0
+    while any(lane.active for lane in lanes):
+        active_lanes = [lane for lane in lanes if lane.active]
+        newly_stopped = advancer.advance(active_lanes, store)
+        for lane in sorted(newly_stopped, key=lambda lane: lane.replica_index):
+            lane.active = False
+            lane.result = _finalize_replica_lane(lane, clock, store)
+            if cross_monitor is not None:
+                stopped_so_far += 1
+                outcome = cross_monitor.record(
+                    stopped_so_far,
+                    _replicate_stopping_values(
+                        lane.result, params.convergence_statistics
+                    ),
+                )
+                if outcome.stopped:
+                    logger.info(
+                        "adaptive replicate stop triggered after %d of %d replicate(s)",
+                        stopped_so_far,
+                        params.n_replicates,
+                    )
+                    return tuple(
+                        _require_lane_result(lane) for lane in lanes if lane.result
+                    )
+    return tuple(_require_lane_result(lane) for lane in lanes)
+
+
+class GenerationalBackend:
+    """`run_batch`, driven by an injectable `Advancer`.
+
+    Reorders *when* generations are computed (§4.2 of the design this
+    implements) without changing *what* is computed: with the default
+    `SequentialAdvancer`, every replicate's own trajectory is
+    bit-identical to what `LinealBackend` produces for the same seed
+    (proven by `run_batch`'s own docstring; checked directly by this
+    project's own golden-parity tests). A future thread-pool-backed
+    `Advancer` can be passed here to add real concurrency without this
+    class itself changing at all.
+    """
+
+    def __init__(self, advancer: Advancer | None = None) -> None:
+        """Configure which `Advancer` drives this backend's own batches.
+
+        Args:
+            advancer: Defaults to `SequentialAdvancer()` — no new
+                concurrency, matching `LinealBackend`'s own trajectories
+                exactly for the same seed.
+        """
+        self._advancer = advancer if advancer is not None else SequentialAdvancer()
+
+    def run(
+        self,
+        params: SimulationParams,
+        store: TrajectoryStore | None,
+        run_id: str | None,
+        clock: Clock,
+    ) -> SimulationOutput:
+        """Run `params`'s own replicate(s); see `fim()`'s own docstring."""
+        trajectory_store = store if store is not None else InMemoryTrajectoryStore()
+        results = run_batch(params, trajectory_store, run_id, clock, self._advancer)
+        if params.n_replicates == 1:
+            return results[0]
+        return results
+
+
 def fim(
     N: PopulationSize,
     m: Migration,

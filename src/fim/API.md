@@ -47,6 +47,15 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [LinealBackend](#fim.engine.LinealBackend)
     * [\_\_init\_\_](#fim.engine.LinealBackend.__init__)
     * [run](#fim.engine.LinealBackend.run)
+  * [ReplicaLane](#fim.engine.ReplicaLane)
+  * [Advancer](#fim.engine.Advancer)
+    * [advance](#fim.engine.Advancer.advance)
+  * [SequentialAdvancer](#fim.engine.SequentialAdvancer)
+    * [advance](#fim.engine.SequentialAdvancer.advance)
+  * [run\_batch](#fim.engine.run_batch)
+  * [GenerationalBackend](#fim.engine.GenerationalBackend)
+    * [\_\_init\_\_](#fim.engine.GenerationalBackend.__init__)
+    * [run](#fim.engine.GenerationalBackend.run)
   * [fim](#fim.engine.fim)
   * [deterministic\_run\_id](#fim.engine.deterministic_run_id)
   * [report\_for\_state](#fim.engine.report_for_state)
@@ -1338,6 +1347,170 @@ Configure this backend's own concurrency and per-replicate storage.
 - `store_factory` - See `fim()`'s own docstring.
 
 <a id="fim.engine.LinealBackend.run"></a>
+
+#### run
+
+```python
+def run(params: SimulationParams, store: TrajectoryStore | None,
+        run_id: str | None, clock: Clock) -> SimulationOutput
+```
+
+Run `params`'s own replicate(s); see `fim()`'s own docstring.
+
+<a id="fim.engine.ReplicaLane"></a>
+
+## ReplicaLane Objects
+
+```python
+@dataclass(slots=True)
+class ReplicaLane()
+```
+
+One replica's own mutable working state, mid-batch.
+
+Exactly what `_run_one`'s own local variables already are (`state`,
+`rng`, `registry`, `finite_alleles`, `monitor`) — a structural change,
+promoting one function's stack frame into an explicit, named,
+per-replica object so a batch can hold several side by side and
+advance them together one generation at a time, rather than running
+each replica's entire trajectory before starting the next (see
+`GenerationalBackend`, below). Nothing about what any one lane
+computes changes because of this.
+
+<a id="fim.engine.Advancer"></a>
+
+## Advancer Objects
+
+```python
+class Advancer(Protocol)
+```
+
+Steps every currently-active lane forward by exactly one generation.
+
+The single fan-out point `run_batch` (below) delegates to — never
+calls `step()` itself. `SequentialAdvancer` is currently the only
+implementation: a plain loop, visiting lanes one at a time, in order.
+A future thread-pool-backed advancer can implement this same
+protocol without `run_batch` itself ever changing.
+
+<a id="fim.engine.Advancer.advance"></a>
+
+#### advance
+
+```python
+def advance(active_lanes: Sequence[ReplicaLane],
+            store: TrajectoryStore) -> list[ReplicaLane]
+```
+
+Advance every lane in `active_lanes` by one generation.
+
+Returns whichever of them just stopped — including a lane whose
+monitor already reported stopped *before* this call (the
+generation-zero edge case, where convergence is already
+satisfied before any generation past zero ever runs), which is
+returned without being stepped at all.
+
+<a id="fim.engine.SequentialAdvancer"></a>
+
+## SequentialAdvancer Objects
+
+```python
+class SequentialAdvancer()
+```
+
+The default `Advancer`: a plain loop, one lane at a time.
+
+Always correct, with zero new thread-safety surface — a single
+thread visiting lanes one at a time in a `for` loop cannot race with
+itself. This is what makes `GenerationalBackend` bit-identical to
+`LinealBackend` for the same seed (proof: each lane's own generation
+sequence, RNG draws, and allele-id minting depend only on that
+lane's own prior state, never on any other lane or on wall-clock
+order — reordering *when* one lane's generation is computed relative
+to another's changes nothing about that lane's own result).
+
+<a id="fim.engine.SequentialAdvancer.advance"></a>
+
+#### advance
+
+```python
+def advance(active_lanes: Sequence[ReplicaLane],
+            store: TrajectoryStore) -> list[ReplicaLane]
+```
+
+Step every active lane by exactly one generation.
+
+Mirrors one potential iteration of `_run_one`'s own `while not
+monitor.should_stop():` loop, per lane, in order.
+
+<a id="fim.engine.run_batch"></a>
+
+#### run\_batch
+
+```python
+def run_batch(params: SimulationParams, store: TrajectoryStore,
+              run_id: str | None, clock: Clock,
+              advancer: Advancer) -> tuple[RunResult, ...]
+```
+
+Run every replicate `params` describes, generation-first.
+
+The generation-first counterpart to `LinealBackend`'s own
+replica-first dispatch: every currently-active lane's own generation
+*g* is advanced before any of them moves on to generation *g + 1*
+(via `advancer.advance`), rather than one replica's entire trajectory
+running to completion before the next starts. An adaptive
+`replicate_tolerance` stop (`SimulationParams.replicate_tolerance`;
+see `_replicate_monitor`) fires the instant any lane stops, not once
+per whole replicate the way `LinealBackend`'s own sequential batch
+loop checks it — `stopped_so_far` is this check's own ordinal axis,
+incremented once per lane that stops, in ascending `replica_index`
+order among any that stop within the same tick (a deterministic
+tie-break, not an arbitrary one).
+
+Every lane owns its own, never-shared `np.random.Generator` and its
+own `AlleleRegistry` — nothing here ever reads or writes another
+lane's state, which is what makes the traversal order above safe:
+reordering *when* one lane's generation is computed relative to
+another's never changes that lane's own result, only when a shared
+observer (the cross-replica monitor) gets to see it.
+
+<a id="fim.engine.GenerationalBackend"></a>
+
+## GenerationalBackend Objects
+
+```python
+class GenerationalBackend()
+```
+
+`run_batch`, driven by an injectable `Advancer`.
+
+Reorders *when* generations are computed (§4.2 of the design this
+implements) without changing *what* is computed: with the default
+`SequentialAdvancer`, every replicate's own trajectory is
+bit-identical to what `LinealBackend` produces for the same seed
+(proven by `run_batch`'s own docstring; checked directly by this
+project's own golden-parity tests). A future thread-pool-backed
+`Advancer` can be passed here to add real concurrency without this
+class itself changing at all.
+
+<a id="fim.engine.GenerationalBackend.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(advancer: Advancer | None = None) -> None
+```
+
+Configure which `Advancer` drives this backend's own batches.
+
+**Arguments**:
+
+- `advancer` - Defaults to `SequentialAdvancer()` — no new
+  concurrency, matching `LinealBackend`'s own trajectories
+  exactly for the same seed.
+
+<a id="fim.engine.GenerationalBackend.run"></a>
 
 #### run
 

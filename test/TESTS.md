@@ -2662,6 +2662,52 @@ The two features are orthogonal by design (one derives the mutation
 locus) but were built in separate sessions — this is the one place
 that actually exercises them together end to end.
 
+<a id="engine.test_engine.test_generational_backend_matches_lineal_for_scalar_run"></a>
+
+#### test\_generational\_backend\_matches\_lineal\_for\_scalar\_run
+
+```python
+def test_generational_backend_matches_lineal_for_scalar_run(
+        tiny_params: SimulationParams) -> None
+```
+
+`GenerationalBackend` reproduces `LinealBackend`'s scalar trajectory exactly.
+
+<a id="engine.test_engine.test_generational_backend_matches_lineal_for_batch"></a>
+
+#### test\_generational\_backend\_matches\_lineal\_for\_batch
+
+```python
+def test_generational_backend_matches_lineal_for_batch(
+        tiny_params: SimulationParams) -> None
+```
+
+Every replicate's own trajectory is bit-identical between backends,
+in the same order, for a multi-replicate batch with no adaptive stop.
+
+<a id="engine.test_engine.test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal"></a>
+
+#### test\_run\_batch\_cross\_replica\_stop\_fires\_at\_deterministic\_ordinal
+
+```python
+def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None
+```
+
+The adaptive replicate stop fires the instant enough lanes stop,
+with simultaneous stops broken by ascending `replica_index`,
+deterministically across repeated runs.
+
+Both `convergence_tolerance` and `replicate_tolerance` are set
+astronomically large so every criterion is satisfied the instant it
+has *enough* observations, regardless of their actual values — this
+makes every one of the five lanes stop on the identical tick
+(generation `convergence_window - 1 == 2`), simultaneously, by
+construction rather than by chance, so the tie-break itself is what
+is under test, not real convergence timing. With `replicate_minimum
+== 2`, the batch-wide stop then fires while processing the *second*
+lane in ascending order — exactly replicates 0 and 1 — leaving
+replicates 2-4 never even reached.
+
 
 
 <a id="group-gui"></a>

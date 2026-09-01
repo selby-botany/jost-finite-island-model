@@ -1,10 +1,21 @@
 """End-to-end tests for the deterministic library engine."""
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
 
-from fim.engine import FinalReport, RunResult, fim, replicate_summary, report_for_state
+from fim.engine import (
+    FinalReport,
+    GenerationalBackend,
+    LinealBackend,
+    RunResult,
+    SequentialAdvancer,
+    fim,
+    replicate_summary,
+    report_for_state,
+    run_batch,
+)
 from fim.model.allele import MINTED_ID_START, AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import ConvergenceCombinator, SimulationParams
@@ -1262,3 +1273,123 @@ def test_mu_b_combines_with_finite_alleles() -> None:
     assert first_rows == list(second.store.read(second.run_id))
     assert first.report == second.report
     assert {int(row["allele_id"]) for row in first_rows} <= set(range(4))
+
+
+# Golden-parity tests for `GenerationalBackend`: proving the
+# generation-first reframing (`ReplicaLane`/`run_batch`/`SequentialAdvancer`)
+# computes exactly what `LinealBackend` already does, for the same seed —
+# see `run_batch`'s own docstring for why reordering *when* a generation is
+# computed never changes *what* it computes. `replicate_tolerance` is
+# deliberately unset in both of these: with it set, the two backends' own
+# cross-replicate stopping *decisions* can legitimately differ (event-driven
+# vs. once-per-completed-replicate — see `test_run_batch_cross_replica_stop_
+# fires_at_deterministic_ordinal`, below, for that behavior's own dedicated
+# test), so parity is only claimed here for what both backends promise
+# unconditionally: each individual replicate's own trajectory.
+
+
+def test_generational_backend_matches_lineal_for_scalar_run(
+    tiny_params: SimulationParams,
+) -> None:
+    """`GenerationalBackend` reproduces `LinealBackend`'s scalar trajectory exactly."""
+    lineal_store = InMemoryTrajectoryStore()
+    lineal_result = LinealBackend().run(tiny_params, lineal_store, None, _clock)
+    assert isinstance(lineal_result, RunResult)
+
+    generational_store = InMemoryTrajectoryStore()
+    generational_result = GenerationalBackend().run(
+        tiny_params, generational_store, None, _clock
+    )
+    assert isinstance(generational_result, RunResult)
+
+    assert generational_result.run_id == lineal_result.run_id
+    assert generational_result.report == lineal_result.report
+    assert generational_result.final_state == lineal_result.final_state
+    assert (
+        generational_result.convergence_generations
+        == lineal_result.convergence_generations
+    )
+    assert generational_result.convergence_history == lineal_result.convergence_history
+    assert generational_result.manifest == lineal_result.manifest
+    assert list(generational_store.read(generational_result.run_id)) == list(
+        lineal_store.read(lineal_result.run_id)
+    )
+
+
+def test_generational_backend_matches_lineal_for_batch(
+    tiny_params: SimulationParams,
+) -> None:
+    """Every replicate's own trajectory is bit-identical between backends,
+    in the same order, for a multi-replicate batch with no adaptive stop.
+    """
+    params = replace(tiny_params, n_replicates=3)
+
+    lineal_store = InMemoryTrajectoryStore()
+    lineal_results = LinealBackend().run(params, lineal_store, None, _clock)
+    assert isinstance(lineal_results, tuple)
+
+    generational_store = InMemoryTrajectoryStore()
+    generational_results = GenerationalBackend().run(
+        params, generational_store, None, _clock
+    )
+    assert isinstance(generational_results, tuple)
+
+    assert len(generational_results) == len(lineal_results) == 3
+    for lineal_result, generational_result in zip(
+        lineal_results, generational_results, strict=True
+    ):
+        assert generational_result.run_id == lineal_result.run_id
+        assert generational_result.report == lineal_result.report
+        assert generational_result.final_state == lineal_result.final_state
+        assert generational_result.manifest == lineal_result.manifest
+        assert list(generational_store.read(generational_result.run_id)) == list(
+            lineal_store.read(lineal_result.run_id)
+        )
+
+
+def test_run_batch_cross_replica_stop_fires_at_deterministic_ordinal() -> None:
+    """The adaptive replicate stop fires the instant enough lanes stop,
+    with simultaneous stops broken by ascending `replica_index`,
+    deterministically across repeated runs.
+
+    Both `convergence_tolerance` and `replicate_tolerance` are set
+    astronomically large so every criterion is satisfied the instant it
+    has *enough* observations, regardless of their actual values — this
+    makes every one of the five lanes stop on the identical tick
+    (generation `convergence_window - 1 == 2`), simultaneously, by
+    construction rather than by chance, so the tie-break itself is what
+    is under test, not real convergence timing. With `replicate_minimum
+    == 2`, the batch-wide stop then fires while processing the *second*
+    lane in ascending order — exactly replicates 0 and 1 — leaving
+    replicates 2-4 never even reached.
+    """
+    params = SimulationParams(
+        N=20,
+        m=0.1,
+        mu=0.01,
+        d=2,
+        seed=20260901,
+        loci=(LocusSpec(1, 200),),
+        convergence_window=3,
+        convergence_tolerance=1e12,
+        max_generations=50,
+        n_replicates=5,
+        replicate_tolerance=1e12,
+        replicate_minimum=2,
+    )
+
+    first = run_batch(
+        params, InMemoryTrajectoryStore(), "batch", _clock, SequentialAdvancer()
+    )
+    second = run_batch(
+        params, InMemoryTrajectoryStore(), "batch", _clock, SequentialAdvancer()
+    )
+
+    assert [result.run_id for result in first] == [result.run_id for result in second]
+    assert len(first) == 2
+    # An explicit `run_id` derives each lane's own id as `<run_id>-r<NNN>`
+    # (`_build_replica_lane`) — asserting these exact ids doubles as
+    # confirmation that ties broke in ascending `replica_index` order:
+    # only replicates 0 and 1 (`-r001`/`-r002`) ever got processed.
+    assert [result.run_id for result in first] == ["batch-r001", "batch-r002"]
+    assert all(result.report["generation"] == 2 for result in first)
