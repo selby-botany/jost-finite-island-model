@@ -52,6 +52,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Only `fim.model.operators._jit_multinomial_via_binomial` imports this,
+# lazily, and only when a caller explicitly asks for `jit="numba"`
+# (`fim.engine.build_engine_backend`) — never a base dependency, so a
+# plain `pip install` (and the default packaged build) never pulls it
+# in. Design doc `20260901-claude-sonnet-5-fim-engine-backend-factory-
+# design.md` §5.3/§10 Stage F5: `numba` 0.67.0 confirmed to compile
+# scalar `Generator.binomial`/`.random`/`.integers`/`.uniform` calls
+# bit-identically under `nogil=True`, and to build/run correctly under
+# this project's own pinned `pyinstaller==6.*` on macOS (66 MB bundled,
+# one benign warning; Windows not yet verified).
+jit = [
+    "numba==0.67.*",
+]
 dev = [
     "build>=1.2,<1.6",
     "coverage[toml]==7.*",
@@ -169,6 +182,18 @@ ignore_missing_imports = true
 # is the only place this project imports it directly.
 [[tool.mypy.overrides]]
 module = "AppKit.*"
+ignore_missing_imports = true
+
+# numba is an optional extra (`jit`, above) -- unlike AppKit/mpl_toolkits,
+# it does ship its own py.typed marker, but mypy still needs to *find* it
+# to use it, and CI's own default `pip install -e ".[dev]"` does not
+# install the `jit` extra. `fim.model.operators._jit_multinomial_via_
+# binomial`'s own lazy, function-local `import numba` is the only place
+# this project imports it; without this override, mypy would fail with
+# "Cannot find implementation or library stub for module named 'numba'"
+# in any environment that has not separately installed `.[jit]`.
+[[tool.mypy.overrides]]
+module = "numba.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

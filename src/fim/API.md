@@ -51,6 +51,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [Advancer](#fim.engine.Advancer)
     * [advance](#fim.engine.Advancer.advance)
   * [SequentialAdvancer](#fim.engine.SequentialAdvancer)
+    * [\_\_init\_\_](#fim.engine.SequentialAdvancer.__init__)
     * [advance](#fim.engine.SequentialAdvancer.advance)
   * [ThreadedAdvancer](#fim.engine.ThreadedAdvancer)
     * [\_\_init\_\_](#fim.engine.ThreadedAdvancer.__init__)
@@ -1437,6 +1438,26 @@ lane's own prior state, never on any other lane or on wall-clock
 order — reordering *when* one lane's generation is computed relative
 to another's changes nothing about that lane's own result).
 
+<a id="fim.engine.SequentialAdvancer.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(*, jit: bool = False) -> None
+```
+
+Configure whether this advancer's own lanes step with JIT.
+
+**Arguments**:
+
+- `jit` - Passed through to `fim.model.operators.step`'s own
+  `jit` argument on every call — see its docstring.
+  `False` (the default) is every prior release's own
+  behavior, unchanged, and needs no `numba` install at
+  all; `True` still produces a bit-identical trajectory to
+  `False`, for the same seed (`drift`'s own docstring),
+  only with the GIL released during the drift step.
+
 <a id="fim.engine.SequentialAdvancer.advance"></a>
 
 #### advance
@@ -1495,7 +1516,9 @@ this class's own current scope.
 #### \_\_init\_\_
 
 ```python
-def __init__(max_workers: int | None = None) -> None
+def __init__(max_workers: int | None = None,
+             *,
+             jit: JitOption = "off") -> None
 ```
 
 Configure how many blocks/threads this advancer fans out across.
@@ -1512,6 +1535,13 @@ Configure how many blocks/threads this advancer fans out across.
   implements, so this constructor's own parameter is
   reachable only by building a `GenerationalBackend`
   directly, not yet through `fim()` itself.
+- `jit` - Passed through to each block's own `SequentialAdvancer`
+  — see its docstring. ``"numba"`` is what actually lets
+  this class's own thread fan-out deliver real wall-clock
+- `speedup` - `drift`'s own multinomial draw is the only
+  thing this currently JIT-compiles (`fim.model.operators.
+  drift`'s own docstring); `migrate`/`mutate`'s RNG calls
+  stay unjitted and GIL-bound regardless of this setting.
 
 
 **Raises**:
@@ -1640,12 +1670,21 @@ class tree to maintain.
   thread-safety surface). `"generational-vector"` is a real,
   named, planned choice, not yet implemented.
 - `jit` - Whether the chosen backend should JIT-compile its own
-  operators. Meaningful only for `"generational"`/
-  `"generational-vector"`, neither of which implements it yet.
-  `"lineal"` never accepts anything but `"off"` — a permanent
-  restriction, not a temporary gap: `LinealBackend` stays the
-  untouched golden reference every other backend's own parity
-  tests are checked against (see its own docstring).
+  operators. Under `"generational"`, `"numba"` JIT-compiles
+  `drift`'s own multinomial draw (`fim.model.operators.drift`'s
+  own docstring) — bit-identical output to `"off"`, for the
+  same seed, but with the GIL released, which is what lets
+  `ThreadedAdvancer` see real multi-thread speedup;
+  `migrate`/`mutate`'s own RNG calls are not JIT-compiled yet.
+  Needs the optional `numba` dependency installed (``pip
+  install fim[jit]``) — not imported at all unless `jit=
+  "numba"` is actually requested. `"generational-vector"` is a
+  real, named, planned choice, not yet implemented, so `jit`
+  has no effect there yet either way. `"lineal"` never accepts
+  anything but `"off"` — a permanent restriction, not a
+  temporary gap: `LinealBackend` stays the untouched golden
+  reference every other backend's own parity tests are checked
+  against (see its own docstring).
 - `max_workers` - `LinealBackend`-only; ignored by every other
   backend. `ThreadedAdvancer`'s own thread count is a separate,
   not-yet-publicly-reachable knob — see its own docstring for
@@ -1818,10 +1857,13 @@ silently disagree.
   operators, for real wall-clock speed rather than a change in
   what is computed. ``"off"`` (the default) is every prior
   release's own behavior. Meaningful only under
-  ``engine_backend="generational"``/``"generational-vector"``,
-  neither of which implements it yet; ``"lineal"`` never
-  accepts anything but ``"off"``, permanently — see
-  `build_engine_backend`'s own docstring.
+  ``engine_backend="generational"`` today (JIT-compiles
+  `drift`'s own multinomial draw, bit-identical to ``"off"``
+  for the same seed — needs the optional `numba` dependency,
+  ``pip install fim[jit]``); ``"generational-vector"`` does
+  not implement it yet; ``"lineal"`` never accepts anything
+  but ``"off"``, permanently — see `build_engine_backend`'s
+  own docstring.
 
 
 **Returns**:
@@ -4983,8 +5025,11 @@ are applied in a Wright-Fisher-style simulation.
 #### drift
 
 ```python
-def drift(state: ModelState, population_size: PopulationSize,
-          rng: np.random.Generator) -> ModelState
+def drift(state: ModelState,
+          population_size: PopulationSize,
+          rng: np.random.Generator,
+          *,
+          jit: bool = False) -> ModelState
 ```
 
 Resample ``N`` gene copies per deme and locus.
@@ -5011,6 +5056,16 @@ copies.
 - `state` - Post-migration and post-mutation state.
 - `population_size` - Shared or per-deme gene-copy count.
 - `rng` - The run's explicitly threaded random generator.
+- `jit` - When `True`, draw each deme/locus's own counts via
+  `_jit_multinomial_via_binomial` (a Numba-JIT-compiled,
+  `nogil=True` conditional-binomial decomposition) instead of
+  `rng.multinomial` directly — bit-identical output either
+  way (see that function's own docstring for why), but able
+  to run with the GIL released, which is what lets
+  `fim.engine.ThreadedAdvancer` see real multi-thread
+  speedup rather than none at all. `False` (the default) is
+  every prior release's own behavior, unchanged, and needs
+  `numba` installed only when `True`.
 
 
 **Returns**:
@@ -5141,7 +5196,8 @@ def step(state: ModelState,
          registry: AlleleRegistry,
          rng: np.random.Generator,
          *,
-         finite_alleles: FiniteAlleleRegistry | None = None) -> ModelState
+         finite_alleles: FiniteAlleleRegistry | None = None,
+         jit: bool = False) -> ModelState
 ```
 
 Advance one generation in migration, mutation, then drift order.
@@ -5165,6 +5221,13 @@ conventional choice this project follows.
   generation — required when
   ``params.mutation_model == "finite_alleles"``, unused
   otherwise.
+- `jit` - Passed through to `drift`'s own `jit` argument — see its
+  docstring. Only `drift`'s own multinomial draw is
+  JIT-compiled today; `migrate`'s and `mutate`'s own RNG calls
+  are unaffected by this flag, a deliberate, documented scope
+  boundary (drift's is the highest-frequency RNG call in this
+  module — one per deme per locus, every generation — not an
+  oversight of the other two).
 
 
 **Returns**:

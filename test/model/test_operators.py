@@ -13,7 +13,14 @@ from fim.model.allele import (
     FiniteAlleleSpace,
 )
 from fim.model.locus import LocusSpec
-from fim.model.operators import drift, migrate, mutate, step
+from fim.model.operators import (
+    _jit_multinomial_via_binomial,
+    _multinomial_via_binomial,
+    drift,
+    migrate,
+    mutate,
+    step,
+)
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.model.topology import dense_matrix_from_neighbors, stepping_stone_neighbors
@@ -929,3 +936,99 @@ def test_drift_variance_matches_binomial_theory_per_deme_when_n_is_unequal(
             expected_variance,
             abs=5.0 * variance_standard_error,
         )
+
+
+# `_multinomial_via_binomial`/`_jit_multinomial_via_binomial` (JIT
+# feasibility, `20260901-claude-sonnet-5-fim-engine-backend-factory-
+# design.md` §5.3): the whole point of this decomposition is that it
+# reproduces `numpy.random.Generator.multinomial`'s own output
+# bit-for-bit, not merely the same distribution — these tests check
+# exact equality, across many randomized parameter combinations with a
+# fixed master seed (reproducible per commit, not left to real entropy),
+# deliberately including edge cases a hand-picked example could miss:
+# `n == 0`, a single category, and a zero-probability category.
+
+
+def test_multinomial_via_binomial_matches_generator_multinomial_exactly() -> None:
+    """The plain (unjitted) decomposition matches `rng.multinomial` bit-for-bit."""
+    controller = np.random.default_rng(20260901)
+    mismatches = 0
+    for trial in range(1000):
+        seed = int(controller.integers(0, 2**31))
+        category_count = int(controller.integers(2, 12))
+        raw = controller.random(category_count)
+        if trial % 7 == 0:
+            raw[0] = 0.0  # exercise a zero-probability category
+        probabilities = raw / raw.sum()
+        n = int(controller.integers(0, 2000))
+
+        direct = np.random.Generator(np.random.PCG64(seed)).multinomial(
+            n, probabilities
+        )
+        decomposed = _multinomial_via_binomial(
+            np.random.Generator(np.random.PCG64(seed)), n, probabilities
+        )
+        if not (direct == decomposed).all():
+            mismatches += 1
+
+    assert mismatches == 0
+
+
+def test_multinomial_via_binomial_handles_a_single_category() -> None:
+    """A single category has no conditional draw to make — `n` goes there whole."""
+    result = _multinomial_via_binomial(
+        np.random.Generator(np.random.PCG64(1)), 42, np.array([1.0])
+    )
+    assert result.tolist() == [42]
+
+
+def test_multinomial_via_binomial_handles_n_zero() -> None:
+    """Zero individuals to distribute is a legal, all-zero draw."""
+    result = _multinomial_via_binomial(
+        np.random.Generator(np.random.PCG64(1)), 0, np.array([0.3, 0.7])
+    )
+    assert result.tolist() == [0, 0]
+
+
+def test_jit_multinomial_via_binomial_matches_plain_decomposition() -> None:
+    """The Numba-JIT-compiled path is exactly the same function, compiled."""
+    pytest.importorskip("numba")
+    controller = np.random.default_rng(20260902)
+    for _ in range(200):
+        seed = int(controller.integers(0, 2**31))
+        category_count = int(controller.integers(2, 8))
+        raw = controller.random(category_count)
+        probabilities = raw / raw.sum()
+        n = int(controller.integers(0, 500))
+
+        plain = _multinomial_via_binomial(
+            np.random.Generator(np.random.PCG64(seed)), n, probabilities
+        )
+        jitted = _jit_multinomial_via_binomial(
+            np.random.Generator(np.random.PCG64(seed)), n, probabilities
+        )
+        assert plain.tolist() == list(jitted)
+
+
+def test_drift_with_jit_matches_drift_without_jit_bit_for_bit(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`jit=True` changes nothing about `drift`'s own output, for the same seed."""
+    pytest.importorskip("numba")
+    unjitted = drift(_state(), 20, rng(20260901), jit=False)
+    jitted = drift(_state(), 20, rng(20260901), jit=True)
+
+    assert unjitted == jitted
+
+
+def test_step_with_jit_matches_step_without_jit_bit_for_bit(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`jit=True` changes nothing about `step`'s own output either, end to end."""
+    pytest.importorskip("numba")
+    params = SimulationParams(N=20, m=0.2, mu=0.05, d=2, seed=6, loci=_state().loci)
+
+    unjitted = step(_state(), params, AlleleRegistry(), rng(6), jit=False)
+    jitted = step(_state(), params, AlleleRegistry(), rng(6), jit=True)
+
+    assert unjitted == jitted

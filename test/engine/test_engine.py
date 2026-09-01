@@ -1476,22 +1476,6 @@ def test_fim_generational_vector_not_implemented_yet(
         )
 
 
-def test_fim_generational_jit_not_implemented_yet(
-    tiny_params: SimulationParams,
-) -> None:
-    """`jit="numba"` under `"generational"` is planned, not yet built."""
-    with pytest.raises(NotImplementedError):
-        fim(
-            tiny_params.N,
-            tiny_params.m,
-            tiny_params.mu,
-            tiny_params.d,
-            params=tiny_params,
-            engine_backend="generational",
-            jit="numba",
-        )
-
-
 def test_build_engine_backend_rejects_unknown_choice() -> None:
     """An unrecognized `engine_backend` is a `ValueError`, not silently ignored."""
     with pytest.raises(ValueError, match="unknown engine backend"):
@@ -1584,3 +1568,65 @@ def test_threaded_advancer_rejects_non_positive_max_workers() -> None:
     """`max_workers` below 1 is rejected at construction, not at first use."""
     with pytest.raises(ValueError, match="max_workers"):
         ThreadedAdvancer(max_workers=0)
+
+
+# `jit="numba"` (Stage F5): `drift`'s own multinomial decomposition
+# (`fim.model.operators._multinomial_via_binomial`) is bit-identical to
+# `rng.multinomial` (`test/model/test_operators.py`), so a `Generational
+# Backend` running with JIT enabled should be bit-identical to
+# `LinealBackend` too, not merely statistically close — a materially
+# stronger claim than the base `ThreadedAdvancer` parity tests above,
+# and worth its own dedicated check.
+
+
+def test_generational_backend_with_jit_matches_lineal_bit_for_bit(
+    tiny_params: SimulationParams,
+) -> None:
+    """`ThreadedAdvancer(jit="numba")` reproduces `LinealBackend` exactly."""
+    pytest.importorskip("numba")
+    lineal_store = InMemoryTrajectoryStore()
+    lineal_result = LinealBackend().run(tiny_params, lineal_store, None, _clock)
+    assert isinstance(lineal_result, RunResult)
+
+    jit_store = InMemoryTrajectoryStore()
+    jit_result = GenerationalBackend(ThreadedAdvancer(jit="numba")).run(
+        tiny_params, jit_store, None, _clock
+    )
+    assert isinstance(jit_result, RunResult)
+
+    assert jit_result.report == lineal_result.report
+    assert jit_result.final_state == lineal_result.final_state
+    assert list(jit_store.read(jit_result.run_id)) == list(
+        lineal_store.read(lineal_result.run_id)
+    )
+
+
+def test_fim_engine_backend_generational_with_jit_matches_default(
+    tiny_params: SimulationParams,
+) -> None:
+    """`fim(..., engine_backend="generational", jit="numba")` end to end."""
+    pytest.importorskip("numba")
+    lineal_result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+    )
+    assert isinstance(lineal_result, RunResult)
+
+    jit_result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+        engine_backend="generational",
+        jit="numba",
+    )
+    assert isinstance(jit_result, RunResult)
+
+    assert jit_result.report == lineal_result.report
+    assert jit_result.final_state == lineal_result.final_state

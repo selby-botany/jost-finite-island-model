@@ -507,6 +507,20 @@ class SequentialAdvancer:
     to another's changes nothing about that lane's own result).
     """
 
+    def __init__(self, *, jit: bool = False) -> None:
+        """Configure whether this advancer's own lanes step with JIT.
+
+        Args:
+            jit: Passed through to `fim.model.operators.step`'s own
+                `jit` argument on every call — see its docstring.
+                `False` (the default) is every prior release's own
+                behavior, unchanged, and needs no `numba` install at
+                all; `True` still produces a bit-identical trajectory to
+                `False`, for the same seed (`drift`'s own docstring),
+                only with the GIL released during the drift step.
+        """
+        self._jit = jit
+
     def advance(
         self,
         active_lanes: Sequence[ReplicaLane],
@@ -529,6 +543,7 @@ class SequentialAdvancer:
                 lane.registry,
                 lane.rng,
                 finite_alleles=lane.finite_alleles,
+                jit=self._jit,
             )
             store.write_generation(
                 lane.run_id, lane.state.generation, lane.state.to_rows(lane.run_id)
@@ -606,7 +621,9 @@ class ThreadedAdvancer:
     this class's own current scope.
     """
 
-    def __init__(self, max_workers: int | None = None) -> None:
+    def __init__(
+        self, max_workers: int | None = None, *, jit: JitOption = "off"
+    ) -> None:
         """Configure how many blocks/threads this advancer fans out across.
 
         Args:
@@ -620,6 +637,13 @@ class ThreadedAdvancer:
                 implements, so this constructor's own parameter is
                 reachable only by building a `GenerationalBackend`
                 directly, not yet through `fim()` itself.
+            jit: Passed through to each block's own `SequentialAdvancer`
+                — see its docstring. ``"numba"`` is what actually lets
+                this class's own thread fan-out deliver real wall-clock
+                speedup: `drift`'s own multinomial draw is the only
+                thing this currently JIT-compiles (`fim.model.operators.
+                drift`'s own docstring); `migrate`/`mutate`'s RNG calls
+                stay unjitted and GIL-bound regardless of this setting.
 
         Raises:
             ValueError: If `max_workers` is given and is less than 1.
@@ -629,6 +653,7 @@ class ThreadedAdvancer:
         )
         if self._max_workers < 1:
             raise ValueError("max_workers must be at least 1")
+        self._jit = jit
 
     def advance(
         self,
@@ -639,7 +664,7 @@ class ThreadedAdvancer:
         blocks = _partition_into_blocks(active_lanes, self._max_workers)
         if not blocks:
             return []
-        sequential = SequentialAdvancer()
+        sequential = SequentialAdvancer(jit=self._jit == "numba")
         newly_stopped: list[ReplicaLane] = []
         with ThreadPoolExecutor(max_workers=len(blocks)) as executor:
             futures = [
@@ -929,12 +954,21 @@ def build_engine_backend(
             thread-safety surface). `"generational-vector"` is a real,
             named, planned choice, not yet implemented.
         jit: Whether the chosen backend should JIT-compile its own
-            operators. Meaningful only for `"generational"`/
-            `"generational-vector"`, neither of which implements it yet.
-            `"lineal"` never accepts anything but `"off"` — a permanent
-            restriction, not a temporary gap: `LinealBackend` stays the
-            untouched golden reference every other backend's own parity
-            tests are checked against (see its own docstring).
+            operators. Under `"generational"`, `"numba"` JIT-compiles
+            `drift`'s own multinomial draw (`fim.model.operators.drift`'s
+            own docstring) — bit-identical output to `"off"`, for the
+            same seed, but with the GIL released, which is what lets
+            `ThreadedAdvancer` see real multi-thread speedup;
+            `migrate`/`mutate`'s own RNG calls are not JIT-compiled yet.
+            Needs the optional `numba` dependency installed (``pip
+            install fim[jit]``) — not imported at all unless `jit=
+            "numba"` is actually requested. `"generational-vector"` is a
+            real, named, planned choice, not yet implemented, so `jit`
+            has no effect there yet either way. `"lineal"` never accepts
+            anything but `"off"` — a permanent restriction, not a
+            temporary gap: `LinealBackend` stays the untouched golden
+            reference every other backend's own parity tests are checked
+            against (see its own docstring).
         max_workers: `LinealBackend`-only; ignored by every other
             backend. `ThreadedAdvancer`'s own thread count is a separate,
             not-yet-publicly-reachable knob — see its own docstring for
@@ -956,11 +990,7 @@ def build_engine_backend(
             )
         return LinealBackend(max_workers=max_workers, store_factory=store_factory)
     if engine_backend == "generational":
-        if jit != "off":
-            raise NotImplementedError(
-                "jit='numba' is not implemented yet for the generational backend"
-            )
-        return GenerationalBackend(ThreadedAdvancer())
+        return GenerationalBackend(ThreadedAdvancer(jit=jit))
     if engine_backend == "generational-vector":
         raise NotImplementedError(
             "the generational-vector backend is not implemented yet"
@@ -1120,10 +1150,13 @@ def fim(
             operators, for real wall-clock speed rather than a change in
             what is computed. ``"off"`` (the default) is every prior
             release's own behavior. Meaningful only under
-            ``engine_backend="generational"``/``"generational-vector"``,
-            neither of which implements it yet; ``"lineal"`` never
-            accepts anything but ``"off"``, permanently — see
-            `build_engine_backend`'s own docstring.
+            ``engine_backend="generational"`` today (JIT-compiles
+            `drift`'s own multinomial draw, bit-identical to ``"off"``
+            for the same seed — needs the optional `numba` dependency,
+            ``pip install fim[jit]``); ``"generational-vector"`` does
+            not implement it yet; ``"lineal"`` never accepts anything
+            but ``"off"``, permanently — see `build_engine_backend`'s
+            own docstring.
 
     Returns:
         One result, or one independently seeded result per replicate.

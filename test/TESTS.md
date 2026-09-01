@@ -2751,17 +2751,6 @@ def test_fim_generational_vector_not_implemented_yet(
 
 `"generational-vector"` is a real, named, planned choice — not yet built.
 
-<a id="engine.test_engine.test_fim_generational_jit_not_implemented_yet"></a>
-
-#### test\_fim\_generational\_jit\_not\_implemented\_yet
-
-```python
-def test_fim_generational_jit_not_implemented_yet(
-        tiny_params: SimulationParams) -> None
-```
-
-`jit="numba"` under `"generational"` is planned, not yet built.
-
 <a id="engine.test_engine.test_build_engine_backend_rejects_unknown_choice"></a>
 
 #### test\_build\_engine\_backend\_rejects\_unknown\_choice
@@ -2821,6 +2810,28 @@ def test_threaded_advancer_rejects_non_positive_max_workers() -> None
 ```
 
 `max_workers` below 1 is rejected at construction, not at first use.
+
+<a id="engine.test_engine.test_generational_backend_with_jit_matches_lineal_bit_for_bit"></a>
+
+#### test\_generational\_backend\_with\_jit\_matches\_lineal\_bit\_for\_bit
+
+```python
+def test_generational_backend_with_jit_matches_lineal_bit_for_bit(
+        tiny_params: SimulationParams) -> None
+```
+
+`ThreadedAdvancer(jit="numba")` reproduces `LinealBackend` exactly.
+
+<a id="engine.test_engine.test_fim_engine_backend_generational_with_jit_matches_default"></a>
+
+#### test\_fim\_engine\_backend\_generational\_with\_jit\_matches\_default
+
+```python
+def test_fim_engine_backend_generational_with_jit_matches_default(
+        tiny_params: SimulationParams) -> None
+```
+
+`fim(..., engine_backend="generational", jit="numba")` end to end.
 
 
 
@@ -7048,6 +7059,69 @@ def test_drift_variance_matches_binomial_theory_per_deme_when_n_is_unequal(
 ```
 
 Each deme resamples at its own N, not a shared or averaged value.
+
+<a id="model.test_operators.test_multinomial_via_binomial_matches_generator_multinomial_exactly"></a>
+
+#### test\_multinomial\_via\_binomial\_matches\_generator\_multinomial\_exactly
+
+```python
+def test_multinomial_via_binomial_matches_generator_multinomial_exactly(
+) -> None
+```
+
+The plain (unjitted) decomposition matches `rng.multinomial` bit-for-bit.
+
+<a id="model.test_operators.test_multinomial_via_binomial_handles_a_single_category"></a>
+
+#### test\_multinomial\_via\_binomial\_handles\_a\_single\_category
+
+```python
+def test_multinomial_via_binomial_handles_a_single_category() -> None
+```
+
+A single category has no conditional draw to make — `n` goes there whole.
+
+<a id="model.test_operators.test_multinomial_via_binomial_handles_n_zero"></a>
+
+#### test\_multinomial\_via\_binomial\_handles\_n\_zero
+
+```python
+def test_multinomial_via_binomial_handles_n_zero() -> None
+```
+
+Zero individuals to distribute is a legal, all-zero draw.
+
+<a id="model.test_operators.test_jit_multinomial_via_binomial_matches_plain_decomposition"></a>
+
+#### test\_jit\_multinomial\_via\_binomial\_matches\_plain\_decomposition
+
+```python
+def test_jit_multinomial_via_binomial_matches_plain_decomposition() -> None
+```
+
+The Numba-JIT-compiled path is exactly the same function, compiled.
+
+<a id="model.test_operators.test_drift_with_jit_matches_drift_without_jit_bit_for_bit"></a>
+
+#### test\_drift\_with\_jit\_matches\_drift\_without\_jit\_bit\_for\_bit
+
+```python
+def test_drift_with_jit_matches_drift_without_jit_bit_for_bit(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`jit=True` changes nothing about `drift`'s own output, for the same seed.
+
+<a id="model.test_operators.test_step_with_jit_matches_step_without_jit_bit_for_bit"></a>
+
+#### test\_step\_with\_jit\_matches\_step\_without\_jit\_bit\_for\_bit
+
+```python
+def test_step_with_jit_matches_step_without_jit_bit_for_bit(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`jit=True` changes nothing about `step`'s own output either, end to end.
 
 
 

@@ -30,7 +30,7 @@ are applied in a Wright-Fisher-style simulation.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -43,11 +43,94 @@ from fim.model.params import (
 )
 from fim.model.state import FrequencyMap, ModelState
 
+_JIT_MULTINOMIAL_VIA_BINOMIAL: (
+    Callable[[np.random.Generator, int, np.ndarray], np.ndarray] | None
+) = None
+
+
+def _multinomial_via_binomial(
+    rng: np.random.Generator, n: int, probabilities: np.ndarray
+) -> np.ndarray:
+    """Draw one multinomial sample via sequential conditional-binomial draws.
+
+    The standard identity: a multinomial draw of size `n` over
+    categories `p_1 .. p_k` decomposes into `count_1 ~ Binomial(n,
+    p_1)`, then `count_2 ~ Binomial(n - count_1, p_2 / (1 - p_1))`, and
+    so on, the final category absorbing whatever remains. This is not
+    merely *statistically equivalent* to `numpy.random.Generator.
+    multinomial` — confirmed directly, across several thousand
+    randomized seed/parameter combinations (`test/model/
+    test_operators.py`), it reproduces `Generator.multinomial`'s own
+    output bit-for-bit, because NumPy's own internal implementation
+    already uses this identical decomposition. That bit-identity is
+    exactly what makes `_jit_multinomial_via_binomial`, below, a safe
+    drop-in replacement for `rng.multinomial(n, probabilities)`: the
+    only reason this function exists at all is that `Generator.
+    multinomial` itself is something Numba's `@jit` cannot compile,
+    where `Generator.binomial` with scalar arguments is — not because
+    the sampling algorithm itself needed to change.
+
+    Args:
+        rng: The run's explicitly threaded random generator.
+        n: Total count to distribute across categories.
+        probabilities: Row-stochastic (summing to 1) category weights.
+
+    Returns:
+        Integer counts, one per category, summing to `n`.
+    """
+    category_count = probabilities.shape[0]
+    counts = np.empty(category_count, dtype=np.int64)
+    remaining_n = n
+    remaining_p = 1.0
+    for index in range(category_count - 1):
+        target_p = probabilities[index] / remaining_p if remaining_p > 0.0 else 0.0
+        if target_p < 0.0:
+            target_p = 0.0
+        elif target_p > 1.0:
+            target_p = 1.0
+        drawn = rng.binomial(remaining_n, target_p)
+        counts[index] = drawn
+        remaining_n -= drawn
+        remaining_p -= probabilities[index]
+    counts[category_count - 1] = remaining_n
+    return counts
+
+
+def _jit_multinomial_via_binomial(
+    rng: np.random.Generator, n: int, probabilities: np.ndarray
+) -> np.ndarray:
+    """`_multinomial_via_binomial`, JIT-compiled with `nogil=True`.
+
+    `numba` is an optional dependency (``pip install fim[jit]``),
+    imported here and nowhere else in this module — importing `fim.
+    model.operators` never requires it, and only a caller that
+    explicitly passes `jit=True` (`drift`, below, threaded down from
+    `fim()`'s own `jit="numba"` via `step`) ever pays its import/
+    compilation cost or needs it installed at all. Compiled once, on
+    first call, and cached at module level — every call after the first
+    reuses the already-compiled function rather than recompiling.
+
+    Raises:
+        ImportError: If `numba` is not installed. A caller should not
+            reach this function at all unless something upstream already
+            decided `jit=True` was wanted — `fim.engine.
+            build_engine_backend` is the one place that decision is
+            actually made.
+    """
+    global _JIT_MULTINOMIAL_VIA_BINOMIAL  # noqa: PLW0603
+    if _JIT_MULTINOMIAL_VIA_BINOMIAL is None:
+        import numba  # noqa: PLC0415 -- lazy, optional-dependency import
+
+        _JIT_MULTINOMIAL_VIA_BINOMIAL = numba.jit(nogil=True)(_multinomial_via_binomial)
+    return _JIT_MULTINOMIAL_VIA_BINOMIAL(rng, n, probabilities)
+
 
 def drift(
     state: ModelState,
     population_size: PopulationSize,
     rng: np.random.Generator,
+    *,
+    jit: bool = False,
 ) -> ModelState:
     """Resample ``N`` gene copies per deme and locus.
 
@@ -72,6 +155,16 @@ def drift(
         state: Post-migration and post-mutation state.
         population_size: Shared or per-deme gene-copy count.
         rng: The run's explicitly threaded random generator.
+        jit: When `True`, draw each deme/locus's own counts via
+            `_jit_multinomial_via_binomial` (a Numba-JIT-compiled,
+            `nogil=True` conditional-binomial decomposition) instead of
+            `rng.multinomial` directly — bit-identical output either
+            way (see that function's own docstring for why), but able
+            to run with the GIL released, which is what lets
+            `fim.engine.ThreadedAdvancer` see real multi-thread
+            speedup rather than none at all. `False` (the default) is
+            every prior release's own behavior, unchanged, and needs
+            `numba` installed only when `True`.
 
     Returns:
         The next generation with frequencies on a ``1 / N`` grid.
@@ -88,7 +181,11 @@ def drift(
                 count=len(allele_ids),
             )
             probabilities /= probabilities.sum()
-            counts = rng.multinomial(size, probabilities)
+            counts = (
+                _jit_multinomial_via_binomial(rng, size, probabilities)
+                if jit
+                else rng.multinomial(size, probabilities)
+            )
             locus_maps.append(
                 {
                     allele_id: int(count) / size
@@ -299,6 +396,7 @@ def step(
     rng: np.random.Generator,
     *,
     finite_alleles: FiniteAlleleRegistry | None = None,
+    jit: bool = False,
 ) -> ModelState:
     """Advance one generation in migration, mutation, then drift order.
 
@@ -320,6 +418,13 @@ def step(
             generation — required when
             ``params.mutation_model == "finite_alleles"``, unused
             otherwise.
+        jit: Passed through to `drift`'s own `jit` argument — see its
+            docstring. Only `drift`'s own multinomial draw is
+            JIT-compiled today; `migrate`'s and `mutate`'s own RNG calls
+            are unaffected by this flag, a deliberate, documented scope
+            boundary (drift's is the highest-frequency RNG call in this
+            module — one per deme per locus, every generation — not an
+            oversight of the other two).
 
     Returns:
         The next generation.
@@ -333,7 +438,7 @@ def step(
     mutated = mutate(
         migrated, params.mu, params.N, registry, rng, finite_alleles=finite_alleles
     )
-    return drift(mutated, params.N, rng)
+    return drift(mutated, params.N, rng, jit=jit)
 
 
 def _allele_union(frequency_maps: Sequence[FrequencyMap]) -> tuple[AlleleId, ...]:
