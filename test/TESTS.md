@@ -2793,6 +2793,157 @@ def test_build_engine_backend_rejects_unknown_choice() -> None
 
 An unrecognized `engine_backend` is a `ValueError`, not silently ignored.
 
+<a id="engine.test_engine.test_build_engine_backend_auto_requires_params"></a>
+
+#### test\_build\_engine\_backend\_auto\_requires\_params
+
+```python
+def test_build_engine_backend_auto_requires_params() -> None
+```
+
+`"auto"` cannot decide anything without a real `SimulationParams`.
+
+<a id="engine.test_engine.test_build_engine_backend_auto_picks_vector_above_threshold"></a>
+
+#### test\_build\_engine\_backend\_auto\_picks\_vector\_above\_threshold
+
+```python
+def test_build_engine_backend_auto_picks_vector_above_threshold() -> None
+```
+
+Above the cutover, on an eligible config, `"auto"` picks Backend V.
+
+<a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_below_threshold"></a>
+
+#### test\_build\_engine\_backend\_auto\_picks\_generational\_below\_threshold
+
+```python
+def test_build_engine_backend_auto_picks_generational_below_threshold(
+) -> None
+```
+
+Below the cutover, `"auto"` picks Backend G, not Backend V.
+
+<a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_when_vector_ineligible"></a>
+
+#### test\_build\_engine\_backend\_auto\_picks\_generational\_when\_vector\_ineligible
+
+```python
+def test_build_engine_backend_auto_picks_generational_when_vector_ineligible(
+) -> None
+```
+
+A large `d` alone is not enough — `"auto"` still checks V's own scope.
+
+`d=40` clears the default threshold, but `infinite_alleles` (the
+default `mutation_model`) is outside `VectorizedAdvancer`'s own
+scope — `"auto"` must fall back to Backend G here, not raise the
+`ValueError` a direct `"generational-vector"` choice would.
+
+<a id="engine.test_engine.test_build_engine_backend_auto_respects_custom_threshold"></a>
+
+#### test\_build\_engine\_backend\_auto\_respects\_custom\_threshold
+
+```python
+def test_build_engine_backend_auto_respects_custom_threshold() -> None
+```
+
+The cutover is a real, configurable parameter, not a hidden constant.
+
+<a id="engine.test_engine.test_build_engine_backend_auto_rejects_jit_when_resolved_to_vector"></a>
+
+#### test\_build\_engine\_backend\_auto\_rejects\_jit\_when\_resolved\_to\_vector
+
+```python
+def test_build_engine_backend_auto_rejects_jit_when_resolved_to_vector(
+) -> None
+```
+
+`jit="numba"` is still rejected once `"auto"` resolves to Backend V.
+
+<a id="engine.test_engine.test_fim_engine_backend_auto_runs_end_to_end"></a>
+
+#### test\_fim\_engine\_backend\_auto\_runs\_end\_to\_end
+
+```python
+def test_fim_engine_backend_auto_runs_end_to_end(
+        tiny_params: SimulationParams) -> None
+```
+
+`fim(..., engine_backend="auto")` works through the public entry point.
+
+`tiny_params`'s own `d=2` and default `infinite_alleles` model both
+put it outside Backend V's scope — `"auto"` must land on Backend G
+here, and still produce a normal, successful result.
+
+<a id="engine.test_engine.test_fim_engine_backend_auto_reaches_vector_end_to_end"></a>
+
+#### test\_fim\_engine\_backend\_auto\_reaches\_vector\_end\_to\_end
+
+```python
+def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None
+```
+
+`fim(..., engine_backend="auto")` reaches Backend V when the config qualifies.
+
+<a id="engine.test_engine.test_fim_records_the_explicit_engine_backend_in_the_manifest"></a>
+
+#### test\_fim\_records\_the\_explicit\_engine\_backend\_in\_the\_manifest
+
+```python
+def test_fim_records_the_explicit_engine_backend_in_the_manifest(
+        tiny_params: SimulationParams) -> None
+```
+
+`fim(..., engine_backend=...)` stamps that exact choice, not `None`.
+
+<a id="engine.test_engine.test_fim_default_lineal_records_engine_backend_in_the_manifest"></a>
+
+#### test\_fim\_default\_lineal\_records\_engine\_backend\_in\_the\_manifest
+
+```python
+def test_fim_default_lineal_records_engine_backend_in_the_manifest(
+        tiny_params: SimulationParams) -> None
+```
+
+Even the untouched default (`"lineal"`) gets recorded, not left `None`.
+
+<a id="engine.test_engine.test_fim_auto_records_the_resolved_choice_not_the_literal_auto"></a>
+
+#### test\_fim\_auto\_records\_the\_resolved\_choice\_not\_the\_literal\_auto
+
+```python
+def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None
+```
+
+`"auto"`'s own manifest never contains the literal string `"auto"`.
+
+The whole reason this field exists: a runtime-data-dependent choice
+must still be recoverable from the persisted record. Checked at
+both ends of the threshold, on one config.
+
+<a id="engine.test_engine.test_fim_records_jit_in_the_manifest"></a>
+
+#### test\_fim\_records\_jit\_in\_the\_manifest
+
+```python
+def test_fim_records_jit_in_the_manifest(
+        tiny_params: SimulationParams) -> None
+```
+
+`jit="numba"` is recorded exactly, not silently dropped.
+
+<a id="engine.test_engine.test_fim_records_engine_backend_for_every_replicate_in_a_batch"></a>
+
+#### test\_fim\_records\_engine\_backend\_for\_every\_replicate\_in\_a\_batch
+
+```python
+def test_fim_records_engine_backend_for_every_replicate_in_a_batch(
+        tiny_params: SimulationParams) -> None
+```
+
+A multi-replicate batch stamps every replicate's own manifest, not just one.
+
 <a id="engine.test_engine.test_generational_backend_with_threaded_advancer_matches_lineal_for_scalar_run"></a>
 
 #### test\_generational\_backend\_with\_threaded\_advancer\_matches\_lineal\_for\_scalar\_run
@@ -8972,6 +9123,38 @@ def test_manifest_artifacts_default_to_none_and_round_trip_when_present(
 ```
 
 `artifacts` is `None` unless a run actually recorded on-disk digests.
+
+<a id="persistence.test_validation.test_manifest_engine_backend_and_jit_default_to_none_and_round_trip"></a>
+
+#### test\_manifest\_engine\_backend\_and\_jit\_default\_to\_none\_and\_round\_trip
+
+```python
+def test_manifest_engine_backend_and_jit_default_to_none_and_round_trip(
+        tmp_path: Path) -> None
+```
+
+`engine_backend`/`jit` are `None` unless a run actually recorded them.
+
+Mirrors `test_manifest_artifacts_default_to_none_and_round_trip_
+when_present` — same pattern, for the two provenance fields
+`fim()` stamps onto a run's own manifest (`RunManifest.engine_
+backend`'s own docstring; `20260901-claude-sonnet-5-fim-engine-
+backend-factory-design.md` §7.4).
+
+<a id="persistence.test_validation.test_manifest_from_dict_tolerates_missing_engine_backend_and_jit"></a>
+
+#### test\_manifest\_from\_dict\_tolerates\_missing\_engine\_backend\_and\_jit
+
+```python
+def test_manifest_from_dict_tolerates_missing_engine_backend_and_jit() -> None
+```
+
+A manifest written before these fields existed still reads back cleanly.
+
+Backward compatibility, checked directly: `from_dict` on a payload
+with `engine_backend`/`jit` simply absent (not `null`, genuinely
+missing — the exact shape of a manifest written by an older `fim`
+version) must not raise, and both fields must come back `None`.
 
 <a id="persistence.test_validation.test_manifest_artifact_digests_are_validated"></a>
 

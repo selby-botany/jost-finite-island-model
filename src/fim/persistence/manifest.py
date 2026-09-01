@@ -104,6 +104,24 @@ class RunManifest:
     written." `fim stats` (this module's own `verify_trajectory_integrity`)
     uses that digest to refuse a trajectory that was edited, truncated,
     or replaced after the fact.
+
+    `engine_backend`/`jit` record which of `fim.engine`'s own engine
+    implementations, and JIT setting, actually produced this run —
+    `None` for a manifest built by anything that predates this field
+    (an older stored manifest, or a caller building `RunManifest`
+    directly without them). Both stay `str | None` here rather than the
+    engine's own `Literal` types (`EngineBackendChoice`/`JitOption`):
+    this module has no import-time dependency on `fim.engine` today,
+    and a manifest is meant to remain readable even if a future engine
+    version renames or retires a choice this one recorded — a plain
+    string degrades gracefully where a `Literal` reconstruction would
+    not. `engine_backend` always records the *resolved* choice: for a
+    run built with `engine_backend="auto"`, this is whichever of
+    `"generational"`/`"generational-vector"` `"auto"` actually picked,
+    never the literal string `"auto"` itself — the whole reason this
+    field exists is so a runtime-data-dependent choice is not lost
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §7.4).
     """
 
     schema_version: int
@@ -118,6 +136,8 @@ class RunManifest:
     generation_count: int
     software_version: str
     artifacts: Mapping[str, ArtifactDigest] | None = None
+    engine_backend: str | None = None
+    jit: str | None = None
 
     def __post_init__(self) -> None:
         """Validate required manifest identity, terminal, and digest fields."""
@@ -181,6 +201,8 @@ class RunManifest:
                 if self.artifacts is not None
                 else None
             ),
+            "engine_backend": self.engine_backend,
+            "jit": self.jit,
         }
 
     @classmethod
@@ -224,6 +246,8 @@ class RunManifest:
             generation_count=_required_int(convergence, "generation_count", minimum=1),
             software_version=_required_string(value, "software_version"),
             artifacts=_optional_artifacts(value.get("artifacts")),
+            engine_backend=_optional_string(value, "engine_backend"),
+            jit=_optional_string(value, "jit"),
         )
 
 
@@ -576,6 +600,22 @@ def _required_replicate_run_ids(value: Mapping[str, Any]) -> tuple[str, ...]:
             "nonempty strings"
         )
     return tuple(raw_value)
+
+
+def _optional_string(value: Mapping[str, Any], key: str) -> str | None:
+    """Read one optional nonempty string field, or `None` when absent/null.
+
+    Used for `engine_backend`/`jit` — both `None` in any manifest
+    written before those fields existed, so missing/`null` is a normal,
+    valid case here, not an error the way an empty non-`None` string
+    would be.
+    """
+    raw_value = value.get(key)
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, str) or not raw_value:
+        raise ValueError(f"manifest field {key!r} must be a nonempty string or null")
+    return raw_value
 
 
 def _required_string(value: Mapping[str, Any], key: str) -> str:

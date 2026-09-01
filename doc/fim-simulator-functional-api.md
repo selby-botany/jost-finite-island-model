@@ -59,7 +59,8 @@ The one entry point everything else in this project ultimately calls.
 
 - **`fim(N, m, mu, d, *, params, store=None, run_id=None, clock=None,
   max_workers=None, store_factory=None, engine_backend="lineal",
-  jit="off") -> RunResult | tuple[RunResult, ...]`**
+  jit="off", auto_vector_min_d=DEFAULT_AUTO_VECTOR_MIN_D) ->
+  RunResult | tuple[RunResult, ...]`**
   Runs the finite island model to convergence (or the hard generation
   cap), once per replicate. `N`, `m`, `mu`, `d` must equal the same
   fields already inside `params`; the four are repeated in the
@@ -72,34 +73,53 @@ The one entry point everything else in this project ultimately calls.
   `engine_backend` selects which of this project's own engine
   implementations actually runs the batch — `"lineal"` (the default,
   every earlier release's own behavior, unchanged), `"generational"`
-  (real thread-based replicate fan-out), or `"generational-vector"`
+  (real thread-based replicate fan-out), `"generational-vector"`
   (array-native, fused `migrate`/`mutate`/`drift`, statistically — not
-  bit-identically — equivalent to the other two). `"generational-vector"`
-  is scoped to `params.mutation_model="finite_alleles"` and
-  `params.migrant_sampling="continuous"`; a run outside that scope
-  raises `ValueError` naming the violated constraint rather than
-  silently falling back to another backend, and needs the optional
-  `numba` dependency (`pip install fim[jit]`) unconditionally — it has
-  no separate `jit` toggle of its own, so only `jit="off"` (the
-  default) is accepted alongside it. `max_workers`/`store_factory` opt
-  `"lineal"` into running independent replicates across real OS
-  processes rather than one at a time (`clock`/`store_factory` must be
-  plain module-level functions, not closures or lambdas, whenever
-  `max_workers` is set) — meaningful only under `"lineal"`; passing
-  either alongside a different `engine_backend` raises `ValueError`
-  rather than being silently ignored. `jit="numba"` JIT-compiles
-  `"generational"`'s own `drift` step (bit-identical output; needs the
-  optional `numba` dependency, `pip install fim[jit]`) — a real fix for
-  a call-overhead regression an earlier internal attempt had, but not
-  yet a demonstrated wall-clock win for `drift` as a whole (see the
-  engine's own docstrings for the measured detail); `"lineal"` never
-  accepts anything but `jit="off"`.
+  bit-identically — equivalent to the other two), or `"auto"` (picks
+  between `"generational"` and `"generational-vector"` using
+  `params.d`/`auto_vector_min_d`, below — never `"lineal"`).
+  `"generational-vector"` is scoped to `params.mutation_model=
+  "finite_alleles"` and `params.migrant_sampling="continuous"`; a
+  direct `"generational-vector"` choice outside that scope raises
+  `ValueError` naming the violated constraint (`"auto"` falls back to
+  `"generational"` instead, silently, since it is choosing on the
+  caller's behalf), and needs the optional `numba` dependency
+  (`pip install fim[jit]`) unconditionally — it has no separate `jit`
+  toggle of its own, so only `jit="off"` (the default) is accepted
+  alongside it or alongside `"auto"` resolving to it. `max_workers`/
+  `store_factory` opt `"lineal"` into running independent replicates
+  across real OS processes rather than one at a time (`clock`/
+  `store_factory` must be plain module-level functions, not closures or
+  lambdas, whenever `max_workers` is set) — meaningful only under
+  `"lineal"`; passing either alongside a different `engine_backend`
+  raises `ValueError` rather than being silently ignored. `jit="numba"`
+  JIT-compiles `"generational"`'s own `drift` step (bit-identical
+  output; needs the optional `numba` dependency, `pip install
+  fim[jit]`) — a real fix for a call-overhead regression an earlier
+  internal attempt had, but not yet a demonstrated wall-clock win for
+  `drift` as a whole (see the engine's own docstrings for the measured
+  detail); `"lineal"` never accepts anything but `jit="off"`.
+  `auto_vector_min_d` is the deme-count cutover `"auto"` uses to decide
+  — irrelevant under every other `engine_backend`; defaults to
+  `DEFAULT_AUTO_VECTOR_MIN_D` (35), a real benchmark-measured default
+  with known cross-environment caveats (see that constant's own
+  docstring). Whichever backend actually ran — the resolved choice, not
+  the literal string `"auto"` — and whether `jit` was on are both
+  recorded on the returned result's own `manifest.engine_backend`/
+  `manifest.jit`, so a saved run's own record always says what actually
+  produced it, even when the caller asked for `"auto"`.
 - **`build_engine_backend(engine_backend, *, jit="off", max_workers=None,
-  store_factory=None) -> EngineBackend`** — the factory `fim()` itself
-  calls; usually reached through `fim()`'s own keywords above, not
-  called directly, but available for a caller that wants a configured
-  backend object without going through `fim()`'s own full public
-  signature.
+  store_factory=None, params=None,
+  auto_vector_min_d=DEFAULT_AUTO_VECTOR_MIN_D) -> EngineBackend`** — the
+  factory `fim()` itself calls; usually reached through `fim()`'s own
+  keywords above, not called directly, but available for a caller that
+  wants a configured backend object without going through `fim()`'s own
+  full public signature. `params` is required, and only actually read,
+  when `engine_backend="auto"`.
+- **`DEFAULT_AUTO_VECTOR_MIN_D`** — the module-level constant
+  `auto_vector_min_d` defaults to; its own docstring has the full
+  benchmark finding behind the default value and why it is a parameter,
+  not a hardcoded constant.
 - **`EngineBackend`** (a `Protocol`), **`LinealBackend`**,
   **`GenerationalBackend`** — the common backend contract and its two
   current implementations. `LinealBackend` wraps today's own
@@ -263,7 +283,11 @@ directly from a frequency table instead of from a live simulation.
 - **`RunManifest`**, **`read_manifest`**, **`write_manifest`** — a
   finished run's own bookkeeping (parameters, timing, software version,
   and a checksum of its trajectory file, used to detect the trajectory
-  having since been edited, corrupted, or replaced).
+  having since been edited, corrupted, or replaced). `engine_backend`/
+  `jit` record which engine implementation and JIT setting actually
+  produced the run — `None` for anything predating those two fields;
+  `fim()` always resolves and records the real choice, never the
+  literal string `"auto"`.
 
 ## 7. `fim.reanalyze` — re-deriving statistics from a saved trajectory
 

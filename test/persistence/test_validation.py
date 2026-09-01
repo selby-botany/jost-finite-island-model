@@ -273,6 +273,49 @@ def test_manifest_artifacts_default_to_none_and_round_trip_when_present(
     }
 
 
+def test_manifest_engine_backend_and_jit_default_to_none_and_round_trip(
+    tmp_path: Path,
+) -> None:
+    """`engine_backend`/`jit` are `None` unless a run actually recorded them.
+
+    Mirrors `test_manifest_artifacts_default_to_none_and_round_trip_
+    when_present` — same pattern, for the two provenance fields
+    `fim()` stamps onto a run's own manifest (`RunManifest.engine_
+    backend`'s own docstring; `20260901-claude-sonnet-5-fim-engine-
+    backend-factory-design.md` §7.4).
+    """
+    manifest = _manifest()
+    assert manifest.engine_backend is None
+    assert manifest.jit is None
+
+    stamped = replace(manifest, engine_backend="generational-vector", jit="off")
+    path = tmp_path / "manifest.json"
+    write_manifest(path, stamped)
+    restored = read_manifest(path)
+
+    assert restored == stamped
+    assert restored.engine_backend == "generational-vector"
+    assert restored.jit == "off"
+
+
+def test_manifest_from_dict_tolerates_missing_engine_backend_and_jit() -> None:
+    """A manifest written before these fields existed still reads back cleanly.
+
+    Backward compatibility, checked directly: `from_dict` on a payload
+    with `engine_backend`/`jit` simply absent (not `null`, genuinely
+    missing — the exact shape of a manifest written by an older `fim`
+    version) must not raise, and both fields must come back `None`.
+    """
+    value = dict(_manifest().to_dict())
+    del value["engine_backend"]
+    del value["jit"]
+
+    restored = RunManifest.from_dict(value)
+
+    assert restored.engine_backend is None
+    assert restored.jit is None
+
+
 @pytest.mark.parametrize(
     ("digest", "message"),
     [

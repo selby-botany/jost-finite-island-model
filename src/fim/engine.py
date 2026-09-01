@@ -1042,8 +1042,56 @@ class GenerationalBackend:
         return results
 
 
-EngineBackendChoice = Literal["lineal", "generational", "generational-vector"]
+EngineBackendChoice = Literal["lineal", "generational", "generational-vector", "auto"]
 JitOption = Literal["off", "numba"]
+
+DEFAULT_AUTO_VECTOR_MIN_D = 35
+"""`"auto"`'s own default deme-count cutover, below which it never picks
+`"generational-vector"` even when the config is otherwise eligible for it.
+
+Measured, not guessed — the generation-first design's own Stage 4/vector
+design's own Stage V3 deme-axis sweep
+(`20260827-claude-sonnet-5-fim-engine-parallel-refactor-design.md`,
+`20260829-claude-sonnet-5-fim-vector-design.md`) found Backend V crosses
+over from slower than Backend L to clearly faster somewhere between
+`d=30` and `d=40` on the primary benchmarking machine (native macOS,
+Apple Silicon). A follow-on cross-environment check (the same sweep run
+inside a Linux/aarch64 Docker container, at several `--cpus` limits) found
+the *qualitative* direction reproduces — Backend V is still ahead at
+`d=60` — but neither the *exact* threshold nor the *magnitude* survived
+the platform change cleanly: `--cpus` from 1 to 6 showed no clean,
+monotonic trend (ruling out raw CPU-core-count as the dominant driver),
+while the container's own `d=20`/`d=35`/`d=50` spot-check bounced between
+0.76x and 1.50x with no obviously clean crossover at these lighter
+(3-trial) sample sizes. This constant is therefore a considered default
+from the most thoroughly characterized environment, not a portable
+physical constant — see `build_engine_backend`'s own `auto_vector_min_d`
+Args entry for why it is a parameter, not a hardcoded literal.
+"""
+
+
+def _resolve_auto_engine_backend(
+    params: SimulationParams, auto_vector_min_d: int
+) -> Literal["generational", "generational-vector"]:
+    """Resolve `engine_backend="auto"` to a concrete, non-`"auto"` choice.
+
+    Shared by `build_engine_backend` (to know which backend to actually
+    construct) and `fim()` (to know what to record in the run's own
+    manifest as provenance, `RunManifest.engine_backend`) — kept in one
+    place so the two can never silently drift apart on what `"auto"`
+    actually picked for a given `params`. Never resolves to `"lineal"`
+    — see `build_engine_backend`'s own `engine_backend` Args entry for
+    why only the generational-vs-vector axis is automated so far.
+    """
+    vector_eligible = (
+        params.mutation_model == "finite_alleles"
+        and params.migrant_sampling == "continuous"
+    )
+    return (
+        "generational-vector"
+        if vector_eligible and params.d >= auto_vector_min_d
+        else "generational"
+    )
 
 
 def build_engine_backend(
@@ -1052,6 +1100,8 @@ def build_engine_backend(
     jit: JitOption = "off",
     max_workers: int | None = None,
     store_factory: Callable[[str], TrajectoryStore] | None = None,
+    params: SimulationParams | None = None,
+    auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D,
 ) -> EngineBackend:
     """Return the configured backend `fim()` should run against.
 
@@ -1077,6 +1127,11 @@ def build_engine_backend(
             than silently falling back to the dict-based path — needs
             the optional `numba` dependency unconditionally (see `jit`,
             below, for why that is not the same thing as `jit="numba"`).
+            `"auto"` picks between `"generational"` and
+            `"generational-vector"` using `params`/`auto_vector_min_d`
+            (below) — never `"lineal"`, since no data yet characterizes
+            where that boundary sits (see `auto_vector_min_d`'s own
+            entry for why only the L-vs-V axis is automated so far).
         jit: Whether the chosen backend should JIT-compile its own
             operators. Under `"generational"`, `"numba"` JIT-compiles
             `drift`'s own multinomial draw (`fim.model.operators.drift`'s
@@ -1105,13 +1160,47 @@ def build_engine_backend(
             not-yet-publicly-reachable knob — see its own docstring for
             why this name is not reused for it here.
         store_factory: `LinealBackend`-only; ignored by every other backend.
+        params: The run this backend is actually being built for —
+            required, and only actually read, when `engine_backend ==
+            "auto"`, to look at `params.d`/`params.mutation_model`/
+            `params.migrant_sampling` and decide. Every other choice
+            ignores it entirely (a caller building a `"lineal"`/
+            `"generational"`/`"generational-vector"` backend directly
+            never needs to pass a real `SimulationParams` here at all).
+        auto_vector_min_d: The deme-count cutover `"auto"` uses to
+            decide between `"generational"` and `"generational-vector"`
+            — irrelevant, and unused, under every other `engine_backend`
+            value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (35), this
+            project's own best current estimate from a real benchmark
+            sweep (see that constant's own docstring for the full
+            finding, including its cross-environment caveats) —
+            deliberately a parameter, not a hardcoded constant, because
+            a follow-on check (the same sweep, run inside a Docker
+            container instead of natively) found the threshold does
+            *not* port cleanly across platforms: the qualitative
+            direction held, but neither the exact crossover point nor
+            the performance magnitude did. A deployment on
+            meaningfully different hardware should re-run that same
+            characterization and pass its own measured value here
+            rather than trust this default blindly.
 
     Raises:
         ValueError: If `engine_backend == "lineal"` and `jit != "off"`,
-            or `engine_backend` names something unrecognized.
-        NotImplementedError: If `engine_backend`/`jit` names a real,
-            planned choice with no working implementation yet.
+            `engine_backend == "generational-vector"` (or `"auto"`
+            resolves to it) and `jit != "off"`, `engine_backend ==
+            "auto"` and `params` is `None`, or `engine_backend` names
+            something unrecognized.
     """
+    if engine_backend == "auto":
+        if params is None:
+            raise ValueError(
+                "engine_backend='auto' needs params to decide with — pass "
+                "the SimulationParams this backend will actually run"
+            )
+        # Resolve to a concrete choice, then fall through to the same
+        # branches below — never invents a third code path, just picks
+        # which existing one applies.
+        engine_backend = _resolve_auto_engine_backend(params, auto_vector_min_d)
     if engine_backend == "lineal":
         if jit != "off":
             raise ValueError(
@@ -1148,6 +1237,7 @@ def fim(
     store_factory: Callable[[str], TrajectoryStore] | None = None,
     engine_backend: EngineBackendChoice = "lineal",
     jit: JitOption = "off",
+    auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D,
 ) -> SimulationOutput:
     """Run the finite island model until convergence or the hard cap.
 
@@ -1289,6 +1379,11 @@ def fim(
             that scope raises `ValueError` naming which constraint it
             violated, rather than silently falling back to the other
             backends' dict-based path.
+            ``"auto"`` picks between ``"generational"`` and
+            ``"generational-vector"`` on `params`'s own behalf, using
+            `auto_vector_min_d` (below) — never ``"lineal"`` (see
+            `build_engine_backend`'s own docstring for why only this one
+            axis is automated so far).
         jit: Whether the chosen backend should JIT-compile its own
             operators — a change in *how* the result is computed, not
             *what* is computed (bit-identical to ``"off"`` for the same
@@ -1305,6 +1400,14 @@ def fim(
             ``"lineal"`` never accepts anything
             but ``"off"``, permanently — see `build_engine_backend`'s
             own docstring.
+        auto_vector_min_d: The deme-count cutover ``engine_backend=
+            "auto"`` uses to decide between ``"generational"`` and
+            ``"generational-vector"``; ignored under every other
+            `engine_backend` value. Defaults to
+            `DEFAULT_AUTO_VECTOR_MIN_D` — see that constant's own
+            docstring for the full benchmark finding behind the default
+            and its known cross-environment caveats before trusting it
+            on meaningfully different hardware.
 
     Returns:
         One result, or one independently seeded result per replicate.
@@ -1323,10 +1426,9 @@ def fim(
             combined with a non-``None`` `store`, `max_workers`/
             `store_factory` are given alongside a non-``"lineal"``
             `engine_backend`, or `jit` is anything but ``"off"`` under
-            `engine_backend="lineal"`.
-        NotImplementedError: If `engine_backend`/`jit` names a real,
-            planned choice with no working implementation yet — see
-            `build_engine_backend`'s own docstring.
+            `engine_backend="lineal"` (or under `"generational-vector"`,
+            including when `"auto"` resolves to it — see
+            `build_engine_backend`'s own docstring).
     """
     _validate_public_signature(N, m, mu, d, params)
     if engine_backend != "lineal" and (
@@ -1346,8 +1448,38 @@ def fim(
         jit=jit,
         max_workers=max_workers,
         store_factory=store_factory,
+        params=params,
+        auto_vector_min_d=auto_vector_min_d,
     )
-    return backend.run(params, store, run_id, run_clock)
+    output = backend.run(params, store, run_id, run_clock)
+    # Stamp every result's own manifest with which engine actually ran
+    # it — the *resolved* choice, never the literal string "auto", so a
+    # runtime-data-dependent decision is not lost to the persisted
+    # record (`RunManifest.engine_backend`'s own docstring; design doc
+    # §7.4).
+    resolved_engine_backend = (
+        _resolve_auto_engine_backend(params, auto_vector_min_d)
+        if engine_backend == "auto"
+        else engine_backend
+    )
+    if isinstance(output, tuple):
+        return tuple(
+            replace(
+                result,
+                manifest=replace(
+                    result.manifest,
+                    engine_backend=resolved_engine_backend,
+                    jit=jit,
+                ),
+            )
+            for result in output
+        )
+    return replace(
+        output,
+        manifest=replace(
+            output.manifest, engine_backend=resolved_engine_backend, jit=jit
+        ),
+    )
 
 
 def deterministic_run_id(params: SimulationParams) -> str:

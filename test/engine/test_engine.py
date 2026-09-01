@@ -1529,6 +1529,224 @@ def test_build_engine_backend_rejects_unknown_choice() -> None:
         build_engine_backend("bogus")  # type: ignore[arg-type]
 
 
+# `engine_backend="auto"` (Stage F7): picks between `"generational"` and
+# `"generational-vector"` using `params.d`/`auto_vector_min_d` — the
+# generation-first design's own Stage 4/vector design's own Stage V3
+# deme-axis sweep found the real crossover, narrowed to `d≈35`
+# (`DEFAULT_AUTO_VECTOR_MIN_D`). Never resolves to `"lineal"` — see
+# `build_engine_backend`'s own docstring for why only this one axis is
+# automated so far.
+
+
+def test_build_engine_backend_auto_requires_params() -> None:
+    """`"auto"` cannot decide anything without a real `SimulationParams`."""
+    with pytest.raises(ValueError, match="params"):
+        build_engine_backend("auto")
+
+
+def test_build_engine_backend_auto_picks_vector_above_threshold() -> None:
+    """Above the cutover, on an eligible config, `"auto"` picks Backend V."""
+    params = _finite_alleles_vector_params(d=40)
+    backend = build_engine_backend("auto", params=params, auto_vector_min_d=35)
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, VectorizedAdvancer)
+
+
+def test_build_engine_backend_auto_picks_generational_below_threshold() -> None:
+    """Below the cutover, `"auto"` picks Backend G, not Backend V."""
+    params = _finite_alleles_vector_params(d=30)
+    backend = build_engine_backend("auto", params=params, auto_vector_min_d=35)
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, ThreadedAdvancer)
+
+
+def test_build_engine_backend_auto_picks_generational_when_vector_ineligible() -> None:
+    """A large `d` alone is not enough — `"auto"` still checks V's own scope.
+
+    `d=40` clears the default threshold, but `infinite_alleles` (the
+    default `mutation_model`) is outside `VectorizedAdvancer`'s own
+    scope — `"auto"` must fall back to Backend G here, not raise the
+    `ValueError` a direct `"generational-vector"` choice would.
+    """
+    params = replace(
+        _finite_alleles_vector_params(d=40), mutation_model="infinite_alleles"
+    )
+    backend = build_engine_backend("auto", params=params, auto_vector_min_d=35)
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, ThreadedAdvancer)
+
+
+def test_build_engine_backend_auto_respects_custom_threshold() -> None:
+    """The cutover is a real, configurable parameter, not a hidden constant."""
+    params = _finite_alleles_vector_params(d=10)
+    backend = build_engine_backend("auto", params=params, auto_vector_min_d=5)
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, VectorizedAdvancer)
+
+
+def test_build_engine_backend_auto_rejects_jit_when_resolved_to_vector() -> None:
+    """`jit="numba"` is still rejected once `"auto"` resolves to Backend V."""
+    params = _finite_alleles_vector_params(d=40)
+    with pytest.raises(ValueError, match="generational-vector"):
+        build_engine_backend("auto", params=params, auto_vector_min_d=35, jit="numba")
+
+
+def test_fim_engine_backend_auto_runs_end_to_end(
+    tiny_params: SimulationParams,
+) -> None:
+    """`fim(..., engine_backend="auto")` works through the public entry point.
+
+    `tiny_params`'s own `d=2` and default `infinite_alleles` model both
+    put it outside Backend V's scope — `"auto"` must land on Backend G
+    here, and still produce a normal, successful result.
+    """
+    result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+        engine_backend="auto",
+    )
+    assert isinstance(result, RunResult)
+    assert result.report["converged"] in (True, False)
+
+
+def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None:
+    """`fim(..., engine_backend="auto")` reaches Backend V when the config qualifies."""
+    params = _finite_alleles_vector_params(d=40)
+
+    result = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        clock=_clock,
+        engine_backend="auto",
+        auto_vector_min_d=35,
+    )
+    assert isinstance(result, RunResult)
+    assert result.report["converged"] in (True, False)
+
+
+# Manifest provenance (Stage F7): `fim()` stamps every returned result's
+# own manifest with which engine actually ran it — real, load-bearing
+# information for `engine_backend="auto"` specifically, since its own
+# resolved choice is otherwise invisible in the persisted record (design
+# doc §7.4). `LinealBackend`/`GenerationalBackend` constructed and run
+# directly, bypassing `fim()`, never populate these fields themselves
+# (`test_generational_backend_matches_lineal_for_scalar_run`'s own
+# `manifest ==` comparison, above, depends on that staying true).
+
+
+def test_fim_records_the_explicit_engine_backend_in_the_manifest(
+    tiny_params: SimulationParams,
+) -> None:
+    """`fim(..., engine_backend=...)` stamps that exact choice, not `None`."""
+    result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+        engine_backend="generational",
+    )
+    assert isinstance(result, RunResult)
+    assert result.manifest.engine_backend == "generational"
+    assert result.manifest.jit == "off"
+
+
+def test_fim_default_lineal_records_engine_backend_in_the_manifest(
+    tiny_params: SimulationParams,
+) -> None:
+    """Even the untouched default (`"lineal"`) gets recorded, not left `None`."""
+    result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+    )
+    assert isinstance(result, RunResult)
+    assert result.manifest.engine_backend == "lineal"
+
+
+def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None:
+    """`"auto"`'s own manifest never contains the literal string `"auto"`.
+
+    The whole reason this field exists: a runtime-data-dependent choice
+    must still be recoverable from the persisted record. Checked at
+    both ends of the threshold, on one config.
+    """
+    below = _finite_alleles_vector_params(d=30)
+    below_result = fim(
+        below.N,
+        below.m,
+        below.mu,
+        below.d,
+        params=below,
+        clock=_clock,
+        engine_backend="auto",
+        auto_vector_min_d=35,
+    )
+    assert isinstance(below_result, RunResult)
+    assert below_result.manifest.engine_backend == "generational"
+
+    above = _finite_alleles_vector_params(d=40)
+    above_result = fim(
+        above.N,
+        above.m,
+        above.mu,
+        above.d,
+        params=above,
+        clock=_clock,
+        engine_backend="auto",
+        auto_vector_min_d=35,
+    )
+    assert isinstance(above_result, RunResult)
+    assert above_result.manifest.engine_backend == "generational-vector"
+
+
+def test_fim_records_jit_in_the_manifest(tiny_params: SimulationParams) -> None:
+    """`jit="numba"` is recorded exactly, not silently dropped."""
+    pytest.importorskip("numba")
+    result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+        engine_backend="generational",
+        jit="numba",
+    )
+    assert isinstance(result, RunResult)
+    assert result.manifest.jit == "numba"
+
+
+def test_fim_records_engine_backend_for_every_replicate_in_a_batch(
+    tiny_params: SimulationParams,
+) -> None:
+    """A multi-replicate batch stamps every replicate's own manifest, not just one."""
+    params = replace(tiny_params, n_replicates=3)
+    results = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        clock=_clock,
+        engine_backend="generational",
+    )
+    assert isinstance(results, tuple)
+    assert len(results) == 3
+    assert all(result.manifest.engine_backend == "generational" for result in results)
+
+
 # `ThreadedAdvancer` (Stage F3): the Stage 0/1 parity tests above, re-run
 # with real thread interleaving in the mix, proving determinism holds
 # under real concurrency rather than only in principle — the design this
