@@ -72,19 +72,28 @@ The one entry point everything else in this project ultimately calls.
   `engine_backend` selects which of this project's own engine
   implementations actually runs the batch — `"lineal"` (the default,
   every earlier release's own behavior, unchanged), `"generational"`
-  (real thread-based replicate fan-out), or `"generational-vector"` (not
-  yet implemented). `max_workers`/`store_factory` opt `"lineal"` into
-  running independent replicates across real OS processes rather than
-  one at a time (`clock`/`store_factory` must be plain module-level
-  functions, not closures or lambdas, whenever `max_workers` is set) —
-  meaningful only under `"lineal"`; passing either alongside a different
-  `engine_backend` raises `ValueError` rather than being silently
-  ignored. `jit="numba"` JIT-compiles `"generational"`'s own `drift`
-  step (bit-identical output; needs the optional `numba` dependency,
-  `pip install fim[jit]`) — a real fix for a call-overhead regression an
-  earlier internal attempt had, but not yet a demonstrated wall-clock
-  win for `drift` as a whole (see the engine's own docstrings for the
-  measured detail); `"lineal"` never accepts anything but `jit="off"`.
+  (real thread-based replicate fan-out), or `"generational-vector"`
+  (array-native, fused `migrate`/`mutate`/`drift`, statistically — not
+  bit-identically — equivalent to the other two). `"generational-vector"`
+  is scoped to `params.mutation_model="finite_alleles"` and
+  `params.migrant_sampling="continuous"`; a run outside that scope
+  raises `ValueError` naming the violated constraint rather than
+  silently falling back to another backend, and needs the optional
+  `numba` dependency (`pip install fim[jit]`) unconditionally — it has
+  no separate `jit` toggle of its own, so only `jit="off"` (the
+  default) is accepted alongside it. `max_workers`/`store_factory` opt
+  `"lineal"` into running independent replicates across real OS
+  processes rather than one at a time (`clock`/`store_factory` must be
+  plain module-level functions, not closures or lambdas, whenever
+  `max_workers` is set) — meaningful only under `"lineal"`; passing
+  either alongside a different `engine_backend` raises `ValueError`
+  rather than being silently ignored. `jit="numba"` JIT-compiles
+  `"generational"`'s own `drift` step (bit-identical output; needs the
+  optional `numba` dependency, `pip install fim[jit]`) — a real fix for
+  a call-overhead regression an earlier internal attempt had, but not
+  yet a demonstrated wall-clock win for `drift` as a whole (see the
+  engine's own docstrings for the measured detail); `"lineal"` never
+  accepts anything but `jit="off"`.
 - **`build_engine_backend(engine_backend, *, jit="off", max_workers=None,
   store_factory=None) -> EngineBackend`** — the factory `fim()` itself
   calls; usually reached through `fim()`'s own keywords above, not
@@ -99,7 +108,10 @@ The one entry point everything else in this project ultimately calls.
   (`SequentialAdvancer`, no new concurrency — what `GenerationalBackend()`
   defaults to when constructed directly rather than through
   `build_engine_backend`; `ThreadedAdvancer`, real thread-based fan-out —
-  what `engine_backend="generational"` actually builds).
+  what `engine_backend="generational"` actually builds;
+  `VectorizedAdvancer`, array-native fused `migrate`/`mutate`/`drift`
+  scoped to finite-alleles/continuous-migration configs — what
+  `engine_backend="generational-vector"` actually builds).
 - **`run_batch(params, store, run_id, clock, advancer) -> tuple[RunResult, ...]`**,
   **`ReplicaLane`** — the generation-first driving loop `GenerationalBackend`
   calls, and the per-replica working-state object it advances one
