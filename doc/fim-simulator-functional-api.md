@@ -58,7 +58,8 @@ see `doc/fim-gui-test-plan.md`.
 The one entry point everything else in this project ultimately calls.
 
 - **`fim(N, m, mu, d, *, params, store=None, run_id=None, clock=None,
-  max_workers=None, store_factory=None) -> RunResult | tuple[RunResult, ...]`**
+  max_workers=None, store_factory=None, engine_backend="lineal",
+  jit="off") -> RunResult | tuple[RunResult, ...]`**
   Runs the finite island model to convergence (or the hard generation
   cap), once per replicate. `N`, `m`, `mu`, `d` must equal the same
   fields already inside `params`; the four are repeated in the
@@ -68,11 +69,43 @@ The one entry point everything else in this project ultimately calls.
   `params.n_replicates == 1`, otherwise a tuple of one per replicate (or
   fewer, if `params.replicate_tolerance` lets the batch stop early once
   every watched statistic's confidence interval has tightened enough).
-  `max_workers` opts into running independent replicates across real OS
-  processes rather than one at a time; see the function's own docstring
-  for the picklability constraints that come with it (`clock`/
-  `store_factory` must be plain module-level functions, not closures or
-  lambdas, whenever `max_workers` is set).
+  `engine_backend` selects which of this project's own engine
+  implementations actually runs the batch — `"lineal"` (the default,
+  every earlier release's own behavior, unchanged), `"generational"`
+  (real thread-based replicate fan-out), or `"generational-vector"` (not
+  yet implemented). `max_workers`/`store_factory` opt `"lineal"` into
+  running independent replicates across real OS processes rather than
+  one at a time (`clock`/`store_factory` must be plain module-level
+  functions, not closures or lambdas, whenever `max_workers` is set) —
+  meaningful only under `"lineal"`; passing either alongside a different
+  `engine_backend` raises `ValueError` rather than being silently
+  ignored. `jit="numba"` JIT-compiles `"generational"`'s own `drift`
+  step (bit-identical output; needs the optional `numba` dependency,
+  `pip install fim[jit]`) — a real fix for a call-overhead regression an
+  earlier internal attempt had, but not yet a demonstrated wall-clock
+  win for `drift` as a whole (see the engine's own docstrings for the
+  measured detail); `"lineal"` never accepts anything but `jit="off"`.
+- **`build_engine_backend(engine_backend, *, jit="off", max_workers=None,
+  store_factory=None) -> EngineBackend`** — the factory `fim()` itself
+  calls; usually reached through `fim()`'s own keywords above, not
+  called directly, but available for a caller that wants a configured
+  backend object without going through `fim()`'s own full public
+  signature.
+- **`EngineBackend`** (a `Protocol`), **`LinealBackend`**,
+  **`GenerationalBackend`** — the common backend contract and its two
+  current implementations. `LinealBackend` wraps today's own
+  process-based dispatch unchanged; `GenerationalBackend` wraps
+  `run_batch` (below), driven by an injectable `Advancer`
+  (`SequentialAdvancer`, no new concurrency — what `GenerationalBackend()`
+  defaults to when constructed directly rather than through
+  `build_engine_backend`; `ThreadedAdvancer`, real thread-based fan-out —
+  what `engine_backend="generational"` actually builds).
+- **`run_batch(params, store, run_id, clock, advancer) -> tuple[RunResult, ...]`**,
+  **`ReplicaLane`** — the generation-first driving loop `GenerationalBackend`
+  calls, and the per-replica working-state object it advances one
+  generation at a time; for the same seed, with `replicate_tolerance`
+  unset, bit-identical to `LinealBackend`'s own trajectory regardless of
+  which `Advancer` drives it.
 - **`FinalReport`** (a `TypedDict`) — the seven scalar numbers a finished
   run reports, averaged across every tracked locus: `run_id`,
   `generation`, `converged`, `converged_on`, `reason`, and the six

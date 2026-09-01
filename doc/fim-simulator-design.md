@@ -439,7 +439,7 @@ larger than max_generations + 1 (the most generations a run can ever
 record — generation 0 plus max_generations steps) can never fill
 before the generation cap ends the run, and a replicate_minimum
 larger than n<sub>replicates</sub> can never be reached before the batch's own
-replicate cap ends it. SimulationParams.__post_init__ rejects both
+replicate cap ends it. `SimulationParams.__post_init__` rejects both
 at construction rather than letting the run complete and report an
 ordinary-looking capped result with no indication the configured
 stopping rule was unreachable from the start.
@@ -937,6 +937,7 @@ built (§11): each names the one place the change lands.
 | …several statistics had to agree before stopping? | 𝖯["convergence_statistic"] as a list plus 𝖯["convergence_combinator"] (`"all"`/`"any"`) | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
 | …many replicate runs were needed for a confidence interval, without hand-guessing the count? | 𝖯["replicate_tolerance"]: once replicate_minimum replicates exist, the batch stops as soon as every watched statistic's across-replicate Student's-t interval (`fim.statistics.interval`) is that tight, combined by the same convergence_combinator used within a run, with n<sub>replicates</sub> as the hard cap. fim.engine.replicate_summary and the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` and plugs into an unmodified `ConvergenceMonitor`, so the replicate batch loop gains a second stopping rule rather than a second loop |
 | …replicate batches ran faster? | max_workers (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs _run_one unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A store_factory gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
+| …replicate batches ran faster, without process-per-replicate overhead? | `fim()`'s own `engine_backend="generational"` (library only, no CLI flag yet) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency); measured to fix a real per-call overhead regression an earlier internal attempt had, but not yet a proven wall-clock win for `drift` as a whole — the per-generation Python/array marshaling cost, not the draw itself, currently dominates |
 
 ### 9.2 Landing spots for changes that are not built
 
@@ -947,7 +948,7 @@ built (§11): each names the one place the change lands.
 | …the mutation model needed genuine spatial structure (stepwise mutation for microsatellites, where "how far" one allele is from another matters)? | swap the strategy behind `mutate()` again | a different, distance-based model from finite alleles, deliberately not the direction taken (§3.2) |
 | …a different convergence *rule* were needed, rather than a different statistic to watch? | `ConvergenceCriterion` is a pluggable protocol | `ConvergenceMonitor` accepts any object implementing it; `engine.py` constructs the built-in criteria directly, so selecting one from configuration is the only missing piece |
 | …a study needed run outputs at a scale JSONL does not suit? | a second `TrajectoryStore` implementation, Parquet-backed being the obvious candidate | `TrajectoryStore` is already a protocol (§6); nothing outside `persistence/` knows which backend is in use |
-| …the replicate loop itself needed to vectorize, not just parallelize? | a replicate axis through every operator, both allele registries, and the convergence monitor | the deepest item here: unlike max_workers, it changes the shape of the model code rather than the orchestration around it |
+| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme, not just the replicate loop around them (`engine_backend="generational-vector"`)? | array-shaped operators behind the same `ModelState` public shape, landing as a third engine backend alongside today's `"lineal"`/`"generational"` | the deepest item here: unlike `engine_backend="generational"` (built — a real thread-based replicate fan-out, §9.1), this changes the shape of the model code's own arithmetic, not just the orchestration around it, and needs its own reindexing story for infinite alleles' own unbounded, per-generation-ragged identity space |
 
 ## 10. Validation and test strategy
 
