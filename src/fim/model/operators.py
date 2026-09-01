@@ -47,6 +47,122 @@ _JIT_MULTINOMIAL_VIA_BINOMIAL: (
     Callable[[np.random.Generator, int, np.ndarray], np.ndarray] | None
 ) = None
 
+# `_inversion_binomial`'s own reflection cutover: reflecting p -> 1 - p
+# whenever p exceeds this keeps q = min(p, 1 - p) always <= 0.5, which
+# is what keeps the mode -- and so the scan's own worst-case length --
+# bounded by roughly n / 2 rather than n.
+_REFLECT_THRESHOLD = 0.5
+
+
+def _inversion_binomial(rng: np.random.Generator, n: int, p: float) -> int:
+    """Draw one `Binomial(n, p)` count via inverse-CDF ("chop-down") sampling.
+
+    The one genuinely new primitive Stage F8
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §5.4) needs: `numpy.random.Generator.binomial` is *not* a fixed,
+    known-in-advance number of underlying random draws — NumPy picks
+    among several internal algorithms depending on `n`/`p` (inversion
+    for small `n * min(p, 1 - p)`, a rejection method (BTPE) for large
+    values), and a rejection method's own retry loop can consume a
+    different number of bits from the same seed's own bit stream
+    depending on which candidates get rejected — invisible from the
+    caller's own seed/argument values alone. That variability is
+    exactly what stands between today's two backends: Backend L's own
+    dict-based `drift`/`mutate` and Backend V's own array-native
+    versions already draw the same *distributions*, in the same
+    canonical order, but not detectably the same *underlying bits*,
+    because `Generator.binomial`'s own algorithm choice is opaque and
+    can differ in how much of the stream one call actually consumes.
+
+    For any genuine draw (`n > 0`, `0 < p < 1`), this function always
+    does exactly the same thing: draw one `rng.random()` uniform, then
+    walk the `Binomial(n, p)` PMF outward from its own mode until the
+    cumulative probability first reaches that uniform — the textbook
+    inverse-CDF construction. Exactly one `rng.random()` call, always,
+    for that case — no retry loop, no data-dependent stream consumption
+    — which is the actual property this whole unification depends on,
+    not merely "produces the same distribution" (already true of
+    `rng.binomial` itself). The three short-circuits below (`n <= 0`,
+    `p <= 0.0`, `p >= 1.0`) consume *zero* draws instead — still a
+    "fixed, known-in-advance" count in the sense that matters here
+    (which branch applies is knowable from `n`/`p` alone, before any
+    random number is needed at all), just not the same fixed count as
+    the general case.
+
+    **Anchored at the mode, not at `k=0`** — a first version of this
+    function anchored the scan at `pmf(0) = (1 - q)^n` instead, tested,
+    and found genuinely wrong, not just imprecise: for `n` in the
+    thousands (this project's own deme population sizes, `N`, are
+    exactly this shape of number) and `q = min(p, 1 - p)` not tiny,
+    `(1 - q)^n` underflows to an exact `0.0` in `float64` — after that,
+    the forward multiplicative recurrence can only ever multiply zero by
+    finite ratios, so the scan silently returns `n` (or `0`, after
+    reflection) unconditionally, for every `u`, 100% of the time
+    (confirmed directly by a moment-match check before this fix, not
+    merely reasoned about — `test_inversion_binomial_...` covers the
+    exact `n`/`p` combinations that failed). Anchoring at the
+    distribution's own mode instead — where the true probability mass
+    actually is, computed via `math.lgamma`-based log-space binomial
+    coefficients (never underflows for any `n` a real gene-copy count
+    could plausibly be) — keeps every step of the walk outward a
+    well-conditioned ratio of adjacent, comparable-magnitude PMF values,
+    never a product decaying from a literal zero.
+
+    Args:
+        rng: The run's explicitly threaded random generator.
+        n: Number of trials (`n >= 0`).
+        p: Success probability (`0.0 <= p <= 1.0`).
+
+    Returns:
+        A `Binomial(n, p)`-distributed count in `[0, n]`.
+    """
+    if n <= 0 or p <= 0.0:
+        return 0
+    if p >= 1.0:
+        return n
+    u = rng.random()
+    reflect = p > _REFLECT_THRESHOLD
+    q = 1.0 - p if reflect else p
+    mode = min(int((n + 1) * q), n)
+    log_pmf_mode = (
+        math.lgamma(n + 1.0)
+        - math.lgamma(mode + 1.0)
+        - math.lgamma(n - mode + 1.0)
+        + mode * math.log(q)
+        + (n - mode) * math.log1p(-q)
+    )
+    pmf_mode = math.exp(log_pmf_mode)
+
+    # Walk mode -> 0 first (short, stable chain from the mode — never a
+    # product decaying from an underflowed value, unlike the rejected
+    # k=0-anchored version above), collecting every pmf value, then scan
+    # those values 0 -> mode in ascending order to get the *true*
+    # cumulative through the mode (not `pmf_mode` alone — an earlier
+    # version of this function conflated the two, a second, distinct
+    # bug caught the same way: a moment-match test that actually failed
+    # rather than one skipped or hand-waved past).
+    low_pmf = [pmf_mode]
+    current = pmf_mode
+    for k in range(mode, 0, -1):
+        current = current * k / (n - k + 1) * (1.0 - q) / q
+        low_pmf.append(current)
+    low_pmf.reverse()
+    cdf = 0.0
+    for k in range(mode + 1):
+        cdf += low_pmf[k]
+        if cdf >= u:
+            return n - k if reflect else k
+
+    # `u` exceeds the true cumulative through the mode — continue
+    # outward, upward, from that same (now-correct) running total.
+    pmf = pmf_mode
+    k = mode
+    while cdf < u and k < n:
+        k += 1
+        pmf *= (n - k + 1) / k * q / (1.0 - q)
+        cdf += pmf
+    return n - k if reflect else k
+
 
 def _multinomial_via_binomial(
     rng: np.random.Generator, n: int, probabilities: np.ndarray

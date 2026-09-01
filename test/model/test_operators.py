@@ -1,5 +1,6 @@
 """Tests for one-generation update operators."""
 
+import math
 from collections.abc import Callable
 
 import numpy as np
@@ -15,6 +16,7 @@ from fim.model.allele import (
 from fim.model.initial import generate_initial_state
 from fim.model.locus import LocusSpec
 from fim.model.operators import (
+    _inversion_binomial,
     _jit_multinomial_via_binomial,
     _multinomial_via_binomial,
     drift,
@@ -937,6 +939,133 @@ def test_drift_variance_matches_binomial_theory_per_deme_when_n_is_unequal(
             expected_variance,
             abs=5.0 * variance_standard_error,
         )
+
+
+# `_inversion_binomial` (Stage F8, `20260901-claude-sonnet-5-fim-engine-
+# backend-factory-design.md` §5.4): the one genuinely new sampling
+# primitive this whole unified-RNG effort needs — a `Binomial(n, p)`
+# draw that always consumes exactly one `rng.random()` uniform, no
+# retry loop, unlike `rng.binomial` itself (whose own internal
+# algorithm choice, and thus how much of the bit stream one call
+# consumes, is opaque and `n`/`p`-dependent). These tests check the
+# distribution (moment-matched against theory, banded the same way
+# `test_drift_variance_matches_binomial_theory` already is), the
+# "exactly one draw" property directly (not merely assumed), and the
+# specific numerical regression a first, `k=0`-anchored version of this
+# function had — silently, deterministically wrong for realistic deme
+# population sizes — found by exactly this kind of test before it ever
+# reached real simulation code.
+
+
+def test_inversion_binomial_matches_theoretical_mean_and_variance() -> None:
+    """Empirical mean/variance land within a Student's-t band of theory.
+
+    Swept across `n`/`p` combinations spanning several orders of
+    magnitude in `n`, including the exact range
+    (`n` in the thousands, `p` away from the extremes) a first,
+    rejected version of this function returned deterministically wrong
+    output for — see `_inversion_binomial`'s own docstring.
+    """
+    replicates = 3000
+    for n in (1, 5, 50, 200, 1000, 5000, 20000):
+        for p in (0.01, 0.1, 0.3, 0.5, 0.7, 0.9, 0.99):
+            rng = np.random.Generator(np.random.PCG64(hash((n, p)) % 2**31))
+            samples = np.array(
+                [_inversion_binomial(rng, n, p) for _ in range(replicates)]
+            )
+            expected_mean = n * p
+            expected_variance = n * p * (1.0 - p)
+            mean_standard_error = math.sqrt(expected_variance / replicates)
+            assert samples.mean() == pytest.approx(
+                expected_mean, abs=max(6.0 * mean_standard_error, 1e-6)
+            ), f"n={n} p={p}"
+            # The usual normal-approximation formula for the variance of
+            # a *sample variance* itself needs enough effective spread
+            # to hold at all — verified directly, not assumed: even
+            # `numpy.random.Generator.binomial` (unquestionably correct)
+            # fails this same check at n=1, p=0.99, so a failure here at
+            # small `expected_variance` reflects the formula's own
+            # limits, not a real algorithm defect. `>= 5` mirrors the
+            # standard normal-approximation-to-binomial rule of thumb.
+            if expected_variance >= 5.0:
+                variance_standard_error = expected_variance * math.sqrt(
+                    2.0 / (replicates - 1)
+                )
+                assert samples.var(ddof=1) == pytest.approx(
+                    expected_variance, abs=6.0 * variance_standard_error
+                ), f"n={n} p={p}"
+
+
+def test_inversion_binomial_handles_edge_cases() -> None:
+    """`n=0`, `p=0`, and `p=1` are legal, deterministic, no-draw-needed cases."""
+    rng = np.random.Generator(np.random.PCG64(1))
+    assert _inversion_binomial(rng, 0, 0.5) == 0
+    assert _inversion_binomial(rng, 10, 0.0) == 0
+    assert _inversion_binomial(rng, 10, 1.0) == 10
+
+
+def test_inversion_binomial_consumes_exactly_one_uniform_for_a_real_draw() -> None:
+    """The whole unification depends on this: one draw in, one count out.
+
+    Checked directly, not assumed: seed two identical generators, spend
+    one on `_inversion_binomial`, spend the other on one explicit
+    `rng.random()` call (thrown away, standing in for whatever
+    `_inversion_binomial` itself consumed) — if the two generators are
+    still in lockstep afterward, exactly one uniform was consumed either
+    way, confirmed by the *next* value each one produces being
+    identical. Only for `n > 0` and `0 < p < 1` — the genuine-draw case;
+    see the companion test below for the `n=0`/`p=0`/`p=1` short-circuits,
+    which consume zero draws, not one.
+    """
+    for n, p in ((1, 0.5), (37, 0.3), (5000, 0.5), (1, 0.001), (1, 0.999)):
+        seed = 20260901
+        via_inversion = np.random.Generator(np.random.PCG64(seed))
+        _inversion_binomial(via_inversion, n, p)
+
+        via_explicit_draw = np.random.Generator(np.random.PCG64(seed))
+        via_explicit_draw.random()
+
+        assert via_inversion.random() == via_explicit_draw.random(), (n, p)
+
+
+def test_inversion_binomial_short_circuits_consume_zero_draws() -> None:
+    """`n=0`/`p=0`/`p=1` are known in advance from the arguments alone.
+
+    Still a "fixed, known-in-advance" draw count in the sense §5.4
+    actually needs (nothing about *how many* uniforms get consumed
+    depends on a draw's own outcome) — just zero rather than one, since
+    whether `n=0`/`p=0`/`p=1` holds is knowable before any random
+    number is ever needed at all.
+    """
+    for n, p in ((0, 0.5), (10, 0.0), (10, 1.0)):
+        seed = 20260901
+        via_inversion = np.random.Generator(np.random.PCG64(seed))
+        _inversion_binomial(via_inversion, n, p)
+
+        via_untouched = np.random.Generator(np.random.PCG64(seed))
+
+        assert via_inversion.random() == via_untouched.random(), (n, p)
+
+
+def test_inversion_binomial_avoids_the_mode_zero_underflow_regression() -> None:
+    """The exact `n`/`p` combinations a `k=0`-anchored version got 100% wrong.
+
+    Before the mode-anchored fix, every one of these combinations
+    returned `n` (or `0`) unconditionally, for every seed — this test
+    exists specifically to keep that regression from coming back.
+    """
+    regressed_before_fix = ((5000, 0.3), (5000, 0.5), (5000, 0.7), (20000, 0.5))
+    for n, p in regressed_before_fix:
+        rng = np.random.Generator(np.random.PCG64(1))
+        samples = np.array([_inversion_binomial(rng, n, p) for _ in range(500)])
+        expected_mean = n * p
+        # A loose band is enough here: the point is "not stuck at the
+        # boundary," not a tight distributional match (already checked
+        # above) — anything within 20% of the true mean rules out the
+        # specific all-n/all-0 failure mode directly.
+        assert samples.mean() == pytest.approx(expected_mean, rel=0.2), (n, p)
+        assert not (samples == n).all(), (n, p)
+        assert not (samples == 0).all(), (n, p)
 
 
 # `_multinomial_via_binomial`/`_jit_multinomial_via_binomial` (JIT

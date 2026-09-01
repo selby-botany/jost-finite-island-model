@@ -7319,6 +7319,84 @@ def test_drift_variance_matches_binomial_theory_per_deme_when_n_is_unequal(
 
 Each deme resamples at its own N, not a shared or averaged value.
 
+<a id="model.test_operators.test_inversion_binomial_matches_theoretical_mean_and_variance"></a>
+
+#### test\_inversion\_binomial\_matches\_theoretical\_mean\_and\_variance
+
+```python
+def test_inversion_binomial_matches_theoretical_mean_and_variance() -> None
+```
+
+Empirical mean/variance land within a Student's-t band of theory.
+
+Swept across `n`/`p` combinations spanning several orders of
+magnitude in `n`, including the exact range
+(`n` in the thousands, `p` away from the extremes) a first,
+rejected version of this function returned deterministically wrong
+output for — see `_inversion_binomial`'s own docstring.
+
+<a id="model.test_operators.test_inversion_binomial_handles_edge_cases"></a>
+
+#### test\_inversion\_binomial\_handles\_edge\_cases
+
+```python
+def test_inversion_binomial_handles_edge_cases() -> None
+```
+
+`n=0`, `p=0`, and `p=1` are legal, deterministic, no-draw-needed cases.
+
+<a id="model.test_operators.test_inversion_binomial_consumes_exactly_one_uniform_for_a_real_draw"></a>
+
+#### test\_inversion\_binomial\_consumes\_exactly\_one\_uniform\_for\_a\_real\_draw
+
+```python
+def test_inversion_binomial_consumes_exactly_one_uniform_for_a_real_draw(
+) -> None
+```
+
+The whole unification depends on this: one draw in, one count out.
+
+Checked directly, not assumed: seed two identical generators, spend
+one on `_inversion_binomial`, spend the other on one explicit
+`rng.random()` call (thrown away, standing in for whatever
+`_inversion_binomial` itself consumed) — if the two generators are
+still in lockstep afterward, exactly one uniform was consumed either
+way, confirmed by the *next* value each one produces being
+identical. Only for `n > 0` and `0 < p < 1` — the genuine-draw case;
+see the companion test below for the `n=0`/`p=0`/`p=1` short-circuits,
+which consume zero draws, not one.
+
+<a id="model.test_operators.test_inversion_binomial_short_circuits_consume_zero_draws"></a>
+
+#### test\_inversion\_binomial\_short\_circuits\_consume\_zero\_draws
+
+```python
+def test_inversion_binomial_short_circuits_consume_zero_draws() -> None
+```
+
+`n=0`/`p=0`/`p=1` are known in advance from the arguments alone.
+
+Still a "fixed, known-in-advance" draw count in the sense §5.4
+actually needs (nothing about *how many* uniforms get consumed
+depends on a draw's own outcome) — just zero rather than one, since
+whether `n=0`/`p=0`/`p=1` holds is knowable before any random
+number is ever needed at all.
+
+<a id="model.test_operators.test_inversion_binomial_avoids_the_mode_zero_underflow_regression"></a>
+
+#### test\_inversion\_binomial\_avoids\_the\_mode\_zero\_underflow\_regression
+
+```python
+def test_inversion_binomial_avoids_the_mode_zero_underflow_regression(
+) -> None
+```
+
+The exact `n`/`p` combinations a `k=0`-anchored version got 100% wrong.
+
+Before the mode-anchored fix, every one of these combinations
+returned `n` (or `0`) unconditionally, for every seed — this test
+exists specifically to keep that regression from coming back.
+
 <a id="model.test_operators.test_multinomial_via_binomial_matches_generator_multinomial_exactly"></a>
 
 #### test\_multinomial\_via\_binomial\_matches\_generator\_multinomial\_exactly
