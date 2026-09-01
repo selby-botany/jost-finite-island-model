@@ -2923,6 +2923,24 @@ def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None
 
 `fim(..., engine_backend="generational-vector")` works end to end.
 
+<a id="engine.test_engine.test_vectorized_advancer_caches_migration_weights_across_generations"></a>
+
+#### test\_vectorized\_advancer\_caches\_migration\_weights\_across\_generations
+
+```python
+def test_vectorized_advancer_caches_migration_weights_across_generations(
+) -> None
+```
+
+`ReplicaLane.migration_weights` is built once, then reused, not rebuilt.
+
+Found by the Stage 4/Stage V3 benchmark sweep: `symmetric_migration_
+weights`'s own O(d^2) matrix build was being redone every single
+generation, even though `params.m`/deme sizes never change mid-run.
+Checked directly, not just inferred from timing: the exact same
+array object (`is`, not just equal) survives two consecutive
+`advance()` calls.
+
 
 
 <a id="group-gui"></a>

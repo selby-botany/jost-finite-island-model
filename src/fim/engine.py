@@ -460,6 +460,16 @@ class ReplicaLane:
     each replica's entire trajectory before starting the next (see
     `GenerationalBackend`, below). Nothing about what any one lane
     computes changes because of this.
+
+    `migration_weights` is a `VectorizedAdvancer`-only cache: one dense
+    `(d, d)` migration weight matrix per locus, built once (from
+    `symmetric_migration_weights`, or `params.m` itself under a matrix
+    configuration) and reused for the rest of this lane's own run —
+    `params.m`/deme sizes never change mid-run, so recomputing this
+    every generation is pure, avoidable waste (found via the Stage 4/
+    Stage V3 benchmark sweep, `20260827-claude-sonnet-5-fim-engine-
+    parallel-refactor-design.md`'s own §9). Unused by every other
+    `Advancer`; stays `None` for the whole run under those.
     """
 
     replica_index: int
@@ -473,6 +483,7 @@ class ReplicaLane:
     started_at: str
     active: bool = True
     result: RunResult | None = None
+    migration_weights: tuple[np.ndarray, ...] | None = None
 
 
 class Advancer(Protocol):
@@ -702,7 +713,11 @@ class VectorizedAdvancer:
     array (`vectorized_state_to_rows`, bypassing `ModelState` entirely
     for persistence), then converts back to `ModelState` once — not once
     per operator, the shape Stage F5's own investigation found actually
-    dominates an isolated operator's wall-clock time.
+    dominates an isolated operator's wall-clock time. The dense `(d, d)`
+    migration weight matrix is built once per lane and cached on
+    `lane.migration_weights`, not rebuilt every generation — see
+    `ReplicaLane`'s own docstring for the benchmark finding that made
+    this caching necessary, not just a nice-to-have.
 
     Scope, deliberately, matching `fim.model.vectorized`'s own module
     docstring: `SimulationParams.mutation_model == "finite_alleles"`
@@ -738,15 +753,28 @@ class VectorizedAdvancer:
             sizes = np.asarray(
                 _population_sizes(lane.params.N, lane.state.deme_count), dtype=np.int64
             )
-            weights = (
-                symmetric_migration_weights(float(lane.params.m), sizes)
-                if isinstance(lane.params.m, int | float)
-                else np.asarray(lane.params.m, dtype=np.float64)
-            )
+            if lane.migration_weights is None:
+                # `params.m`/deme sizes never change mid-run, so this
+                # dense (d, d) matrix (O(d^2) to build via
+                # `symmetric_migration_weights`, then O(d^2) per
+                # generation again inside `migrate_vectorized`'s own
+                # matmul) is built once per lane and cached on it, not
+                # rebuilt from scratch every generation — the Stage 4/
+                # Stage V3 benchmark sweep found the earlier per-
+                # generation rebuild made Backend V's own d-scaling
+                # measurably worse than the dict-based backends' own
+                # linear-in-d migration formula (`ReplicaLane`'s own
+                # docstring has the full note).
+                weights = (
+                    symmetric_migration_weights(float(lane.params.m), sizes)
+                    if isinstance(lane.params.m, int | float)
+                    else np.asarray(lane.params.m, dtype=np.float64)
+                )
+                lane.migration_weights = (weights,) * len(lane.state.loci)
             vectorized = build_vectorized_state(lane.state)
             stepped = step_vectorized(
                 vectorized,
-                (weights,) * len(lane.state.loci),
+                lane.migration_weights,
                 lane.params.mutation_rates,
                 sizes,
                 lane.rng,

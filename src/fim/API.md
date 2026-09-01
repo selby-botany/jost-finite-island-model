@@ -1402,6 +1402,16 @@ each replica's entire trajectory before starting the next (see
 `GenerationalBackend`, below). Nothing about what any one lane
 computes changes because of this.
 
+`migration_weights` is a `VectorizedAdvancer`-only cache: one dense
+`(d, d)` migration weight matrix per locus, built once (from
+`symmetric_migration_weights`, or `params.m` itself under a matrix
+configuration) and reused for the rest of this lane's own run —
+`params.m`/deme sizes never change mid-run, so recomputing this
+every generation is pure, avoidable waste (found via the Stage 4/
+Stage V3 benchmark sweep, `20260827-claude-sonnet-5-fim-engine-
+parallel-refactor-design.md`'s own §9). Unused by every other
+`Advancer`; stays `None` for the whole run under those.
+
 <a id="fim.engine.Advancer"></a>
 
 ## Advancer Objects
@@ -1602,7 +1612,11 @@ writes that generation's own trajectory rows directly from the dense
 array (`vectorized_state_to_rows`, bypassing `ModelState` entirely
 for persistence), then converts back to `ModelState` once — not once
 per operator, the shape Stage F5's own investigation found actually
-dominates an isolated operator's wall-clock time.
+dominates an isolated operator's wall-clock time. The dense `(d, d)`
+migration weight matrix is built once per lane and cached on
+`lane.migration_weights`, not rebuilt every generation — see
+`ReplicaLane`'s own docstring for the benchmark finding that made
+this caching necessary, not just a nice-to-have.
 
 Scope, deliberately, matching `fim.model.vectorized`'s own module
 docstring: `SimulationParams.mutation_model == "finite_alleles"`

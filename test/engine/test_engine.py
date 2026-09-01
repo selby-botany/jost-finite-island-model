@@ -13,6 +13,7 @@ from fim.engine import (
     SequentialAdvancer,
     ThreadedAdvancer,
     VectorizedAdvancer,
+    _build_replica_lane,
     build_engine_backend,
     fim,
     replicate_summary,
@@ -1800,3 +1801,37 @@ def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:
     )
     assert isinstance(result, RunResult)
     assert result.report["converged"] in (True, False)
+
+
+def test_vectorized_advancer_caches_migration_weights_across_generations() -> None:
+    """`ReplicaLane.migration_weights` is built once, then reused, not rebuilt.
+
+    Found by the Stage 4/Stage V3 benchmark sweep: `symmetric_migration_
+    weights`'s own O(d^2) matrix build was being redone every single
+    generation, even though `params.m`/deme sizes never change mid-run.
+    Checked directly, not just inferred from timing: the exact same
+    array object (`is`, not just equal) survives two consecutive
+    `advance()` calls.
+    """
+    params = _finite_alleles_vector_params(max_generations=3, convergence_window=3)
+    store = InMemoryTrajectoryStore()
+    lane = _build_replica_lane(params, 0, None, store, _clock)
+    # `_build_replica_lane` never populates `migration_weights` itself —
+    # only `VectorizedAdvancer.advance` does, on first use — but that
+    # isn't asserted directly here: mypy narrows a field's type across
+    # an `is None` check and does not invalidate that narrowing across
+    # an opaque method call that mutates it, which would make the
+    # second `advance()` call below a mypy-reported false "unreachable
+    # statement." The two assertions that matter (cache populated;
+    # cache reused, not rebuilt) do not need that initial check.
+    advancer = VectorizedAdvancer()
+
+    advancer.advance([lane], store)
+    first_weights = lane.migration_weights
+    assert first_weights is not None, "cache populated after the first generation"
+
+    advancer.advance([lane], store)
+    second_weights = lane.migration_weights
+    assert second_weights is first_weights, (
+        "same object, not rebuilt, second generation"
+    )
