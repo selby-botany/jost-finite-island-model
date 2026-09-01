@@ -53,6 +53,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_state`](#model.test_state)
   - [`test_state_validation`](#model.test_state_validation)
   - [`test_topology`](#model.test_topology)
+  - [`test_vectorized`](#model.test_vectorized)
 - [`test/persistence/`](#group-persistence)
   - [`test_manifest`](#persistence.test_manifest)
   - [`test_report`](#persistence.test_report)
@@ -8360,6 +8361,144 @@ def test_dense_matrix_from_neighbors_rejects_malformed_maps(
 ```
 
 Every documented validation rule rejects its invalid sparse map.
+
+
+
+<a id="model.test_vectorized"></a>
+
+# model.test\_vectorized
+
+Tests for the bounded-K (finite-alleles) array-native operators.
+
+Statistical, not bit-identical, parity with `fim.model.operators` is the
+correctness bar throughout — see `fim.model.vectorized`'s own module
+docstring for why. Exact/invariant checks (round-tripping, frequency
+sums, target != source) need no tolerance at all and are kept separate
+from the genuinely statistical ones, which use a normal-approximation
+band matching this project's own existing precedent
+(`test_drift_variance_matches_binomial_theory`).
+
+<a id="model.test_vectorized.test_build_and_convert_round_trips"></a>
+
+#### test\_build\_and\_convert\_round\_trips
+
+```python
+def test_build_and_convert_round_trips() -> None
+```
+
+`build_vectorized_state` then converting back reproduces the original exactly.
+
+<a id="model.test_vectorized.test_vectorized_state_to_rows_matches_model_state_to_rows"></a>
+
+#### test\_vectorized\_state\_to\_rows\_matches\_model\_state\_to\_rows
+
+```python
+def test_vectorized_state_to_rows_matches_model_state_to_rows() -> None
+```
+
+The array-native row serializer matches `ModelState.to_rows` exactly.
+
+<a id="model.test_vectorized.test_build_vectorized_state_rejects_an_out_of_range_allele_id"></a>
+
+#### test\_build\_vectorized\_state\_rejects\_an\_out\_of\_range\_allele\_id
+
+```python
+def test_build_vectorized_state_rejects_an_out_of_range_allele_id() -> None
+```
+
+An out-of-range allele id is a configuration error, not silently kept.
+
+<a id="model.test_vectorized.test_migrate_vectorized_matches_dict_based_migrate"></a>
+
+#### test\_migrate\_vectorized\_matches\_dict\_based\_migrate
+
+```python
+def test_migrate_vectorized_matches_dict_based_migrate() -> None
+```
+
+The dense matmul reproduces `fim.model.operators.migrate`'s own blend.
+
+<a id="model.test_vectorized.test_symmetric_migration_weights_rows_are_stochastic"></a>
+
+#### test\_symmetric\_migration\_weights\_rows\_are\_stochastic
+
+```python
+def test_symmetric_migration_weights_rows_are_stochastic() -> None
+```
+
+Every row of the derived weight matrix sums to exactly 1.
+
+<a id="model.test_vectorized.test_drift_vectorized_variance_matches_binomial_theory"></a>
+
+#### test\_drift\_vectorized\_variance\_matches\_binomial\_theory
+
+```python
+def test_drift_vectorized_variance_matches_binomial_theory(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Across many replicate draws, empirical variance matches Binomial(N, p) theory.
+
+Mirrors `test/model/test_operators.py`'s own
+`test_drift_variance_matches_binomial_theory` — same statistical
+bar, applied to the array-native path instead.
+
+<a id="model.test_vectorized.test_mutate_targets_batched_never_selects_its_own_source"></a>
+
+#### test\_mutate\_targets\_batched\_never\_selects\_its\_own\_source
+
+```python
+def test_mutate_targets_batched_never_selects_its_own_source(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Every event's own target differs from its own source, across many trials.
+
+Exercises both branches (recurrence and fresh-mint) by ramping
+`minted_count` from 2 up to `capacity`, and repeats every source id
+across many seeds — the actual, checked invariant the prior version
+of this test claimed in its own name but never inspected.
+
+<a id="model.test_vectorized.test_mutate_vectorized_preserves_frequency_invariants"></a>
+
+#### test\_mutate\_vectorized\_preserves\_frequency\_invariants
+
+```python
+def test_mutate_vectorized_preserves_frequency_invariants(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Repeated mutation keeps every deme's own frequencies a valid distribution.
+
+<a id="model.test_vectorized.test_mutate_vectorized_recurrence_rate_matches_finite_allele_space"></a>
+
+#### test\_mutate\_vectorized\_recurrence\_rate\_matches\_finite\_allele\_space
+
+```python
+def test_mutate_vectorized_recurrence_rate_matches_finite_allele_space(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The vectorized recurrence-vs-mint decision matches `FiniteAlleleSpace` directly.
+
+Builds both a real `FiniteAlleleSpace` and this module's own array
+mirror from the identical initial minted set, then compares the
+*empirical* recurrence rate each produces over many independent
+single-event trials at a fixed, known `minted_count` — the same
+normal-approximation banding this project's own statistical tests
+already use, not just an isolated assertion that the formula looks
+right.
+
+<a id="model.test_vectorized.test_step_vectorized_preserves_frequency_invariants"></a>
+
+#### test\_step\_vectorized\_preserves\_frequency\_invariants
+
+```python
+def test_step_vectorized_preserves_frequency_invariants(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Every deme's own frequencies sum to 1 after a full fused generation.
 
 
 

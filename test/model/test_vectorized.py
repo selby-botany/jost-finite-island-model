@@ -1,0 +1,275 @@
+"""Tests for the bounded-K (finite-alleles) array-native operators.
+
+Statistical, not bit-identical, parity with `fim.model.operators` is the
+correctness bar throughout — see `fim.model.vectorized`'s own module
+docstring for why. Exact/invariant checks (round-tripping, frequency
+sums, target != source) need no tolerance at all and are kept separate
+from the genuinely statistical ones, which use a normal-approximation
+band matching this project's own existing precedent
+(`test_drift_variance_matches_binomial_theory`).
+"""
+
+from collections.abc import Callable
+from dataclasses import replace
+
+import numpy as np
+import pytest
+
+from fim.model.allele import AlleleId, FiniteAlleleSpace
+from fim.model.locus import LocusSpec, finite_allele_capacity
+from fim.model.operators import migrate as migrate_dict
+from fim.model.state import ModelState
+from fim.model.vectorized import (
+    VectorizedLocusState,
+    _mutate_targets_batched,
+    build_vectorized_state,
+    drift_vectorized,
+    migrate_vectorized,
+    mutate_vectorized,
+    step_vectorized,
+    symmetric_migration_weights,
+    vectorized_state_to_model_state,
+    vectorized_state_to_rows,
+)
+
+
+def _finite_alleles_state(deme_count: int = 4, capacity_length: int = 1) -> ModelState:
+    """A multi-deme, single-locus finite-alleles state, evenly spread."""
+    capacity = finite_allele_capacity(capacity_length)
+    return ModelState(
+        loci=(LocusSpec(1, capacity_length),),
+        frequencies=tuple(
+            ({AlleleId(a): 1.0 / capacity for a in range(capacity)},)
+            for _ in range(deme_count)
+        ),
+    )
+
+
+def test_build_and_convert_round_trips() -> None:
+    """`build_vectorized_state` then converting back reproduces the original exactly."""
+    state = _finite_alleles_state()
+
+    vectorized = build_vectorized_state(state)
+    restored = vectorized_state_to_model_state(vectorized)
+
+    assert restored == state
+
+
+def test_vectorized_state_to_rows_matches_model_state_to_rows() -> None:
+    """The array-native row serializer matches `ModelState.to_rows` exactly."""
+    state = _finite_alleles_state()
+    vectorized = build_vectorized_state(state)
+
+    assert vectorized_state_to_rows(vectorized, "run-a") == state.to_rows("run-a")
+
+
+def test_build_vectorized_state_rejects_an_out_of_range_allele_id() -> None:
+    """An out-of-range allele id is a configuration error, not silently kept."""
+    state = ModelState(
+        loci=(LocusSpec(1, 1),),  # capacity 4
+        frequencies=(({AlleleId(99): 1.0},),),
+    )
+    with pytest.raises(ValueError, match=r"outside 0\.\.3"):
+        build_vectorized_state(state)
+
+
+def test_migrate_vectorized_matches_dict_based_migrate() -> None:
+    """The dense matmul reproduces `fim.model.operators.migrate`'s own blend."""
+    state = _finite_alleles_state(deme_count=5)
+    sizes = np.array([10, 20, 30, 40, 50], dtype=np.int64)
+    rate = 0.3
+
+    expected = migrate_dict(state, rate, tuple(int(s) for s in sizes))
+
+    vectorized = build_vectorized_state(state)
+    weights = symmetric_migration_weights(rate, sizes)
+    migrated = migrate_vectorized(vectorized.locus_states[0], weights)
+    vectorized_result = vectorized_state_to_model_state(
+        replace(vectorized, locus_states=(migrated,))
+    )
+
+    for deme in range(5):
+        expected_map = expected.frequency_map(deme, 0)
+        observed_map = vectorized_result.frequency_map(deme, 0)
+        assert set(expected_map) == set(observed_map)
+        for allele_id, value in expected_map.items():
+            assert observed_map[allele_id] == pytest.approx(value, abs=1e-9)
+
+
+def test_symmetric_migration_weights_rows_are_stochastic() -> None:
+    """Every row of the derived weight matrix sums to exactly 1."""
+    sizes = np.array([7, 13, 20, 3], dtype=np.int64)
+    weights = symmetric_migration_weights(0.4, sizes)
+
+    assert weights.sum(axis=1) == pytest.approx(np.ones(4))
+
+
+def test_drift_vectorized_variance_matches_binomial_theory(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Across many replicate draws, empirical variance matches Binomial(N, p) theory.
+
+    Mirrors `test/model/test_operators.py`'s own
+    `test_drift_variance_matches_binomial_theory` — same statistical
+    bar, applied to the array-native path instead.
+    """
+    size = 200
+    probability = 0.3
+    replicates = 4000
+    locus_state = VectorizedLocusState(
+        frequencies=np.array([[probability, 1.0 - probability]]),
+        capacity=2,
+        minted_mask=np.array([True, True]),
+        minted_list=np.array([0, 1]),
+        minted_count=2,
+        next_unminted=2,
+    )
+    sizes = np.array([size], dtype=np.int64)
+
+    observed = np.array(
+        [
+            drift_vectorized(locus_state, sizes, rng(seed)).frequencies[0, 0]
+            for seed in range(replicates)
+        ]
+    )
+    expected_variance = probability * (1.0 - probability) / size
+    variance_standard_error = expected_variance * np.sqrt(2.0 / (replicates - 1))
+    assert np.var(observed, ddof=1) == pytest.approx(
+        expected_variance, abs=5.0 * variance_standard_error
+    )
+
+
+def test_mutate_targets_batched_never_selects_its_own_source(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Every event's own target differs from its own source, across many trials.
+
+    Exercises both branches (recurrence and fresh-mint) by ramping
+    `minted_count` from 2 up to `capacity`, and repeats every source id
+    across many seeds — the actual, checked invariant the prior version
+    of this test claimed in its own name but never inspected.
+    """
+    capacity = 12
+    for minted_count in range(2, capacity + 1):
+        minted_mask = np.zeros(capacity, dtype=np.bool_)
+        minted_mask[:minted_count] = True
+        minted_list = np.zeros(capacity, dtype=np.int64)
+        minted_list[:minted_count] = np.arange(minted_count)
+        for source in range(minted_count):
+            for seed in range(50):
+                targets, *_ = _mutate_targets_batched(
+                    rng(seed + minted_count * 1000 + source * 10_000),
+                    np.array([source], dtype=np.int64),
+                    capacity,
+                    minted_mask.copy(),
+                    minted_list.copy(),
+                    minted_count,
+                    minted_count,
+                )
+                assert targets[0] != source
+
+
+def test_mutate_vectorized_preserves_frequency_invariants(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Repeated mutation keeps every deme's own frequencies a valid distribution."""
+    capacity_length = 2  # capacity 16
+    state = _finite_alleles_state(deme_count=10, capacity_length=capacity_length)
+    vectorized = build_vectorized_state(state)
+    sizes = np.full(10, 500, dtype=np.int64)
+
+    locus_state = vectorized.locus_states[0]
+    generator = rng(1)
+    for _ in range(50):
+        locus_state = mutate_vectorized(locus_state, sizes, 0.05, generator)
+
+    assert np.all(locus_state.frequencies >= 0.0)
+    assert locus_state.frequencies.sum(axis=1) == pytest.approx(np.ones(10))
+
+
+def test_mutate_vectorized_recurrence_rate_matches_finite_allele_space(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The vectorized recurrence-vs-mint decision matches `FiniteAlleleSpace` directly.
+
+    Builds both a real `FiniteAlleleSpace` and this module's own array
+    mirror from the identical initial minted set, then compares the
+    *empirical* recurrence rate each produces over many independent
+    single-event trials at a fixed, known `minted_count` — the same
+    normal-approximation banding this project's own statistical tests
+    already use, not just an isolated assertion that the formula looks
+    right.
+    """
+    capacity = 20
+    initial_minted = tuple(AlleleId(i) for i in range(6))  # minted_count = 6
+    trials = 8000
+
+    reference_recurrences = 0
+    for seed in range(trials):
+        space = FiniteAlleleSpace(capacity, initial_minted)
+        target = space.mutate_target(AlleleId(0), rng(seed))
+        # A recurrence always lands among the already-minted ids (0..5,
+        # excluding the source, 0); a fresh mint always lands on the
+        # next unminted id — deterministically 6, since nothing has been
+        # minted beyond the initial set on this, the very first call.
+        if int(target) < 6:
+            reference_recurrences += 1
+
+    vectorized_recurrences = 0
+    for seed in range(trials):
+        minted_mask = np.zeros(capacity, dtype=np.bool_)
+        minted_mask[:6] = True
+        minted_list = np.zeros(capacity, dtype=np.int64)
+        minted_list[:6] = np.arange(6)
+        locus_state = VectorizedLocusState(
+            frequencies=np.zeros((1, capacity)),
+            capacity=capacity,
+            minted_mask=minted_mask,
+            minted_list=minted_list,
+            minted_count=6,
+            next_unminted=6,
+        )
+        targets, _, _, _, _ = _mutate_targets_batched(
+            rng(seed),
+            np.array([0], dtype=np.int64),
+            capacity,
+            locus_state.minted_mask.copy(),
+            locus_state.minted_list.copy(),
+            locus_state.minted_count,
+            locus_state.next_unminted,
+        )
+        if targets[0] < 6:
+            vectorized_recurrences += 1
+
+    expected_probability = 5 / 19  # (minted_count - 1) / (capacity - 1)
+    standard_error = np.sqrt(expected_probability * (1 - expected_probability) / trials)
+    assert reference_recurrences / trials == pytest.approx(
+        expected_probability, abs=5.0 * standard_error
+    )
+    assert vectorized_recurrences / trials == pytest.approx(
+        expected_probability, abs=5.0 * standard_error
+    )
+    assert reference_recurrences / trials == pytest.approx(
+        vectorized_recurrences / trials, abs=10.0 * standard_error
+    )
+
+
+def test_step_vectorized_preserves_frequency_invariants(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Every deme's own frequencies sum to 1 after a full fused generation."""
+    state = _finite_alleles_state(deme_count=6, capacity_length=1)
+    vectorized = build_vectorized_state(state)
+    sizes = np.full(6, 200, dtype=np.int64)
+    weights = symmetric_migration_weights(0.1, sizes)
+    generator = rng(20260901)
+
+    for _ in range(20):
+        vectorized = step_vectorized(vectorized, (weights,), (0.02,), sizes, generator)
+
+    assert vectorized.generation == 20
+    for locus_state in vectorized.locus_states:
+        assert locus_state.frequencies.sum(axis=1) == pytest.approx(np.ones(6))
+        assert np.all(locus_state.frequencies >= 0.0)
+    restored = vectorized_state_to_model_state(vectorized)
+    restored.validate_support(tuple(int(s) for s in sizes))

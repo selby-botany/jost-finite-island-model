@@ -209,6 +209,20 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.model.topology](#fim.model.topology)
   * [stepping\_stone\_neighbors](#fim.model.topology.stepping_stone_neighbors)
   * [dense\_matrix\_from\_neighbors](#fim.model.topology.dense_matrix_from_neighbors)
+* [fim.model.vectorized](#fim.model.vectorized)
+  * [VectorizedLocusState](#fim.model.vectorized.VectorizedLocusState)
+    * [frequencies](#fim.model.vectorized.VectorizedLocusState.frequencies)
+    * [minted\_mask](#fim.model.vectorized.VectorizedLocusState.minted_mask)
+    * [minted\_list](#fim.model.vectorized.VectorizedLocusState.minted_list)
+  * [VectorizedState](#fim.model.vectorized.VectorizedState)
+  * [build\_vectorized\_state](#fim.model.vectorized.build_vectorized_state)
+  * [vectorized\_state\_to\_model\_state](#fim.model.vectorized.vectorized_state_to_model_state)
+  * [vectorized\_state\_to\_rows](#fim.model.vectorized.vectorized_state_to_rows)
+  * [migrate\_vectorized](#fim.model.vectorized.migrate_vectorized)
+  * [symmetric\_migration\_weights](#fim.model.vectorized.symmetric_migration_weights)
+  * [mutate\_vectorized](#fim.model.vectorized.mutate_vectorized)
+  * [drift\_vectorized](#fim.model.vectorized.drift_vectorized)
+  * [step\_vectorized](#fim.model.vectorized.step_vectorized)
 * [fim.paths](#fim.paths)
   * [atomic\_directory](#fim.paths.atomic_directory)
   * [default\_output\_directory](#fim.paths.default_output_directory)
@@ -5841,6 +5855,272 @@ migrates with nobody — its row is the identity row.
 - `ValueError` - If a deme or neighbor id is outside ``1..d``, a deme
   lists itself as its own neighbor, a weight is outside
   ``[0, 1]``, or one deme's weights sum to more than ``1``.
+
+<a id="fim.model.vectorized"></a>
+
+# fim.model.vectorized
+
+Bounded-K (finite-alleles), array-native migrate/mutate/drift.
+
+Scope, deliberately: the finite-alleles mutation model only (bounded
+`K = finite_allele_capacity(length)` per locus — see `fim.model.locus`).
+Infinite alleles is out of scope here, matching the vector design's own
+"V2 before V1" recommendation: under finite alleles, every allele
+identity at a locus is already a fixed integer in `0 .. K - 1` for the
+whole run, so a dense `(d, K)` array can be allocated once and reused
+generation after generation with no reindexing at all — the genuinely
+hard problem (an unbounded, per-generation-ragged identity space) that
+infinite alleles would require simply does not arise here. Deterministic
+("continuous") migration only — `SimulationParams.migrant_sampling ==
+"stochastic"` is not supported by this path yet, the same kind of
+documented, deliberate scope boundary `fim.model.operators.step`'s own
+`jit` argument already draws around `migrate`/`mutate`.
+
+`ModelState`'s own public shape is untouched by anything in this module:
+`VectorizedState`, below, is a compute-only, internal representation,
+built once from a real `ModelState` and converted back only when a real
+`ModelState` is actually needed (`RunResult.final_state`, a persisted
+trajectory row). `migrate_vectorized`, `mutate_vectorized`, and
+`drift_vectorized` all operate on this same dense representation in
+sequence, with no `ModelState` round-trip between them — which is the
+entire point: the Python-level marshaling to and from `ModelState`'s own
+sparse dict-of-dicts representation, not the random draw itself, is what
+`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §5.3
+found actually dominates `fim.model.operators.drift`'s own wall-clock
+time when it is vectorized or JIT-compiled in isolation, sandwiched
+between two still-dict-based stages. Fusing all three stages here is
+this project's own first real test of that document's §11 open question
+("fusing migrate -> mutate -> drift across stage boundaries").
+
+Statistical, not bit-identical, parity with the dict-based operators in
+`fim.model.operators` is this module's own correctness bar throughout
+(vector design §6) — every function below names, in its own docstring,
+exactly where and why its own random-draw sequence diverges from the
+dict-based original.
+
+<a id="fim.model.vectorized.VectorizedLocusState"></a>
+
+## VectorizedLocusState Objects
+
+```python
+@dataclass(slots=True)
+class VectorizedLocusState()
+```
+
+One locus's own dense working state, mid-batch.
+
+Mirrors `fim.model.allele.FiniteAlleleSpace`'s own bookkeeping
+(`_minted`/`_minted_set`/`_next_unminted`) in array form instead of a
+Python list/set, so it can be threaded through a JIT-compiled target-
+selection call (`_jit_mutate_targets_batched`) — this state is
+entirely independent of any real `FiniteAlleleSpace` instance;
+`build_vectorized_state`, below, reconstructs it directly from a
+`ModelState`'s own generation-zero allele ids, the same way
+`FiniteAlleleSpace.__init__` does.
+
+<a id="fim.model.vectorized.VectorizedLocusState.frequencies"></a>
+
+#### frequencies
+
+(d, capacity) float64, each row sums to 1.0
+
+<a id="fim.model.vectorized.VectorizedLocusState.minted_mask"></a>
+
+#### minted\_mask
+
+(capacity,) bool — has this state ever appeared
+
+<a id="fim.model.vectorized.VectorizedLocusState.minted_list"></a>
+
+#### minted\_list
+
+(capacity,) int64 — minted ids, mint order
+
+<a id="fim.model.vectorized.VectorizedState"></a>
+
+## VectorizedState Objects
+
+```python
+@dataclass(slots=True)
+class VectorizedState()
+```
+
+A whole state's own dense working representation, one locus at a time.
+
+<a id="fim.model.vectorized.build_vectorized_state"></a>
+
+#### build\_vectorized\_state
+
+```python
+def build_vectorized_state(state: ModelState) -> VectorizedState
+```
+
+Build a `VectorizedState` from a real `ModelState`.
+
+The one place this module's own array representation is built from
+(or, via `vectorized_state_to_model_state`, converted back to)
+`ModelState`'s own sparse shape — everything between the two stays
+array-native. Every locus's own `capacity` is fixed for the run
+(`finite_allele_capacity`); the initial minted set is exactly the
+allele ids already present at generation zero, mirroring
+`fim.engine._build_finite_allele_spaces`'s own construction.
+
+**Raises**:
+
+- `ValueError` - If any allele id already present is outside
+  `0 .. capacity - 1` — the same bounds `FiniteAlleleSpace`
+  itself enforces at construction.
+
+<a id="fim.model.vectorized.vectorized_state_to_model_state"></a>
+
+#### vectorized\_state\_to\_model\_state
+
+```python
+def vectorized_state_to_model_state(state: VectorizedState) -> ModelState
+```
+
+Convert back to `ModelState`'s own public, sparse shape.
+
+Called only when a real `ModelState` is actually needed (a run's own
+`final_state`, or a caller outside this module) — not on every
+generation, which is what keeps `migrate_vectorized`/
+`mutate_vectorized`/`drift_vectorized` genuinely fused.
+
+<a id="fim.model.vectorized.vectorized_state_to_rows"></a>
+
+#### vectorized\_state\_to\_rows
+
+```python
+def vectorized_state_to_rows(
+        state: VectorizedState,
+        run_id: str) -> list[dict[str, int | float | str]]
+```
+
+Serialize directly to the public trajectory row schema.
+
+The array-native counterpart to `ModelState.to_rows` — deliberately
+bypasses `vectorized_state_to_model_state` (no sparse dict-of-dicts
+construction just to immediately flatten it back into rows), the
+same "stay array-native as long as possible" principle this whole
+module is built around. Row shape, field order, and the same
+one-based `deme`/`locus_id` numbering match `ModelState.to_rows`
+exactly, so a caller (a `TrajectoryStore`) cannot tell which path
+produced a given row.
+
+<a id="fim.model.vectorized.migrate_vectorized"></a>
+
+#### migrate\_vectorized
+
+```python
+def migrate_vectorized(locus_state: VectorizedLocusState,
+                       weights: np.ndarray) -> VectorizedLocusState
+```
+
+Blend every deme with the migrant pool via one dense matmul.
+
+`F_next = W @ F` — `weights` (`W`, `(d, d)`, row-stochastic:
+self-retention on the diagonal, migrant weights off-diagonal) is
+exactly what `fim.model.operators._migrate_matrix`'s own deterministic
+branch already computes row by row (`blended[allele] =
+sum_source(weight * source_frequency[allele])`); this is the
+identical computation, as the one matrix product the vector design's
+own §5.1 names as the natural generalization. Deterministic
+("continuous") migration only — see this module's own docstring.
+
+<a id="fim.model.vectorized.symmetric_migration_weights"></a>
+
+#### symmetric\_migration\_weights
+
+```python
+def symmetric_migration_weights(rate: float, sizes: np.ndarray) -> np.ndarray
+```
+
+Build the dense `(d, d)` weight matrix for a scalar migration rate.
+
+Derived directly from `fim.model.operators._migrate_symmetric`'s own
+deterministic formula: `pool_i(a) = (total_mass(a) - size_i *
+local_i(a)) / (total_size - size_i)`, `blended_i(a) = (1 - rate) *
+local_i(a) + rate * pool_i(a)`. Expanding `pool_i` in terms of every
+other deme's own frequency gives `W[i, i] = 1 - rate` and, for `j !=
+i`, `W[i, j] = rate * size_j / (total_size - size_i)` — row `i` sums
+to exactly 1 by construction (the migrant weights alone sum to
+`rate`, since `sum_{j != i} size_j == total_size - size_i`).
+
+<a id="fim.model.vectorized.mutate_vectorized"></a>
+
+#### mutate\_vectorized
+
+```python
+def mutate_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
+                      rate: float,
+                      rng: np.random.Generator) -> VectorizedLocusState
+```
+
+Replace a binomially sampled number of copies with new-or-recurring alleles.
+
+The array-native counterpart to `fim.model.operators.mutate`'s own
+finite-alleles branch — same three steps (event count, source
+attribution, target selection), same underlying distributions, but
+not the same random-draw *sequence*: event counts and source
+attribution are drawn with array-valued calls across every deme at
+once rather than one deme at a time, and target selection processes
+every mutating copy across the *whole locus* in one JIT-compiled pass
+(`_jit_mutate_targets_batched`) rather than one dict-based call per
+event. Statistically equivalent, not bit-identical — this module's
+own correctness bar throughout (see the module docstring).
+
+Target selection specifically preserves `FiniteAlleleSpace.
+mutate_target`'s own real, load-bearing choice — a recurrence
+probability that grows as more of the bounded state space fills up,
+which is what lets the finite-alleles model recover infinite-alleles
+behavior as capacity grows (its own docstring) — while replacing its
+"filter the minted list, then index" mechanics with an equivalent
+rejection-sampling form (draw uniformly among currently-minted
+states, redraw only on the rare hit against the excluded source):
+provably the same uniform-over-the-remaining-states distribution,
+array/JIT-friendly where the original's own Python-list filtering is
+not.
+
+<a id="fim.model.vectorized.drift_vectorized"></a>
+
+#### drift\_vectorized
+
+```python
+def drift_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
+                     rng: np.random.Generator) -> VectorizedLocusState
+```
+
+Resample `N` gene copies per deme, across every deme in one pass.
+
+The array-native counterpart to `fim.model.operators.drift` —
+`_vectorized_multinomial_rows` above is the same conditional-binomial
+identity `fim.model.operators._multinomial_via_binomial` uses,
+applied across every row of one dense `(d, capacity)` array at once
+instead of one `rng.multinomial` call per (deme, locus) pair.
+Statistically, not bit-identically, equivalent — see this module's
+own docstring.
+
+<a id="fim.model.vectorized.step_vectorized"></a>
+
+#### step\_vectorized
+
+```python
+def step_vectorized(state: VectorizedState,
+                    weights_per_locus: tuple[np.ndarray, ...],
+                    mutation_rates: tuple[float, ...], sizes: np.ndarray,
+                    rng: np.random.Generator) -> VectorizedState
+```
+
+Advance one generation: migrate, then mutate, then drift, fused.
+
+The array-native counterpart to `fim.model.operators.step` — every
+locus stays a dense array from this call's own start to its own end,
+across all three stages, with no `ModelState` reconstructed in
+between (the actual thing this whole module exists to test — see the
+module's own docstring). `weights_per_locus`/`mutation_rates` are
+already resolved per locus by the caller (`symmetric_migration_weights`
+or an already-row-stochastic matrix; `SimulationParams.mutation_rates`
+itself already resolves a scalar `mu` to one rate per locus).
 
 <a id="fim.paths"></a>
 
