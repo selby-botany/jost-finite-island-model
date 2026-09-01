@@ -101,21 +101,23 @@ def _jit_multinomial_via_binomial(
 ) -> np.ndarray:
     """`_multinomial_via_binomial`, JIT-compiled with `nogil=True`.
 
+    Not used by `drift` itself (see `_drift_counts_batched`'s own
+    docstring for why a per-call version of this regresses wall-clock
+    time rather than improving it) — kept as the direct, one-call-at-a-
+    time building block `_drift_counts_batched` below is proven against,
+    and as the smallest possible reproduction of the underlying
+    bit-identity claim for anything that only needs a single draw.
+
     `numba` is an optional dependency (``pip install fim[jit]``),
     imported here and nowhere else in this module — importing `fim.
     model.operators` never requires it, and only a caller that
-    explicitly passes `jit=True` (`drift`, below, threaded down from
-    `fim()`'s own `jit="numba"` via `step`) ever pays its import/
+    explicitly requests JIT-compiled drift ever pays its import/
     compilation cost or needs it installed at all. Compiled once, on
     first call, and cached at module level — every call after the first
     reuses the already-compiled function rather than recompiling.
 
     Raises:
-        ImportError: If `numba` is not installed. A caller should not
-            reach this function at all unless something upstream already
-            decided `jit=True` was wanted — `fim.engine.
-            build_engine_backend` is the one place that decision is
-            actually made.
+        ImportError: If `numba` is not installed.
     """
     global _JIT_MULTINOMIAL_VIA_BINOMIAL  # noqa: PLW0603
     if _JIT_MULTINOMIAL_VIA_BINOMIAL is None:
@@ -123,6 +125,180 @@ def _jit_multinomial_via_binomial(
 
         _JIT_MULTINOMIAL_VIA_BINOMIAL = numba.jit(nogil=True)(_multinomial_via_binomial)
     return _JIT_MULTINOMIAL_VIA_BINOMIAL(rng, n, probabilities)
+
+
+_JIT_DRIFT_COUNTS_BATCHED: (
+    Callable[[np.random.Generator, np.ndarray, np.ndarray, np.ndarray], np.ndarray]
+    | None
+) = None
+
+
+def _drift_counts_batched(
+    rng: np.random.Generator,
+    ns: np.ndarray,
+    offsets: np.ndarray,
+    probabilities_flat: np.ndarray,
+) -> np.ndarray:
+    """Draw every (deme, locus) pair's own multinomial sample in one pass.
+
+    A single per-(deme, locus) call to `_jit_multinomial_via_binomial`
+    (what an earlier version of `drift`'s own `jit=True` path did,
+    tagged `spike/jit-per-deme-call-overhead`) is a measured wall-clock
+    *regression*, not a win: at this project's own reference scale, the
+    fixed cost of crossing the Python/Numba call boundary once per pair
+    — hundreds to tens of thousands of times per run — dominates the
+    tiny amount of actual compute (at most a handful of binomial draws)
+    each individual call does. This function removes that specific
+    regression by paying the call-boundary crossing exactly once per
+    *generation* instead of once per pair — every pair's own probability
+    vector is packed into one flat `float64` buffer, with `offsets`
+    marking where each pair's own slice starts and ends (a ragged-array-
+    as-flat-buffer-plus-offsets layout, since different (deme, locus)
+    pairs can have different segregating-allele counts), and the loop
+    over pairs, and the conditional-binomial loop within each pair, both
+    happen *inside* one JIT-compiled call.
+
+    Measured honestly, this is not a clean win for `drift` as a whole,
+    though — only a fix for the specific regression above. Once the
+    one-time JIT compilation cost is correctly excluded (paid once per
+    process, not once per generation), the compiled call itself is fast,
+    but `drift`'s own overall wall-clock time across a realistic range of
+    allele diversity (`K` from 2 to 256, `d=100` demes) lands within
+    roughly 0.9x-1.1x of the unjitted path either way — a wash, not a
+    win. The reason: building `probabilities_flat`/`offsets` before this
+    call and unpacking `counts_flat` back into per-deme frequency maps
+    after it are both still ordinary Python-level work over `ModelState`'s
+    own sparse dict-of-dicts representation, done as two separate full
+    passes over every pair instead of the unjitted path's one interleaved
+    pass — and at this project's reference scale, that Python-level
+    marshaling cost, not the random draw itself, is what actually
+    dominates `drift`'s own wall-clock time. JIT-compiling the draw
+    cannot fix a bottleneck that was never in the draw. See
+    `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §5.3
+    for the full measurement history (including the initial, misleadingly
+    optimistic benchmark that did not account for this) and what it
+    implies for whether `jit="numba"` alone, without a wider array-native
+    pipeline, is worth using at all.
+
+    Bit-identity to `drift`'s own unjitted path depends on visiting
+    pairs, and categories within a pair, in the identical order that
+    path does (`_build_flat_drift_buffers`, below, builds `ns`/
+    `offsets`/`probabilities_flat` in exactly that deme-major,
+    locus-minor order) — reusing `_multinomial_via_binomial`'s own
+    per-pair algorithm unchanged, just inlined into one call instead of
+    invoked once per pair, is what keeps the underlying RNG consumption
+    (and thus the result) identical to calling `rng.multinomial` once
+    per pair in sequence.
+
+    Args:
+        rng: The run's explicitly threaded random generator.
+        ns: One total count per pair, in visiting order.
+        offsets: Length ``len(ns) + 1``; pair `i`'s own probabilities
+            (and, on return, its own counts) occupy
+            ``probabilities_flat[offsets[i]:offsets[i + 1]]``.
+        probabilities_flat: Every pair's own row-stochastic probability
+            vector, concatenated in the same order as `ns`.
+
+    Returns:
+        Integer counts, same flat layout as `probabilities_flat`, each
+        pair's own slice summing to that pair's own `ns` entry.
+    """
+    counts_flat = np.empty(probabilities_flat.shape[0], dtype=np.int64)
+    pair_count = ns.shape[0]
+    for pair_index in range(pair_count):
+        start = offsets[pair_index]
+        end = offsets[pair_index + 1]
+        remaining_n = ns[pair_index]
+        remaining_p = 1.0
+        for position in range(start, end - 1):
+            p = probabilities_flat[position]
+            target_p = p / remaining_p if remaining_p > 0.0 else 0.0
+            if target_p < 0.0:
+                target_p = 0.0
+            elif target_p > 1.0:
+                target_p = 1.0
+            drawn = rng.binomial(remaining_n, target_p)
+            counts_flat[position] = drawn
+            remaining_n -= drawn
+            remaining_p -= p
+        counts_flat[end - 1] = remaining_n
+    return counts_flat
+
+
+def _jit_drift_counts_batched(
+    rng: np.random.Generator,
+    ns: np.ndarray,
+    offsets: np.ndarray,
+    probabilities_flat: np.ndarray,
+) -> np.ndarray:
+    """`_drift_counts_batched`, JIT-compiled with `nogil=True`.
+
+    This, not `_jit_multinomial_via_binomial` called once per pair, is
+    what `drift`'s own `jit=True` path actually calls. It removes the
+    naive per-pair version's own measured ~5x wall-clock *regression*
+    (`spike/jit-per-deme-call-overhead`) — but, measured honestly, does
+    not turn `drift` into a clear net win on its own; see
+    `_drift_counts_batched`'s own docstring for the full, corrected
+    measurement and why. Lazily imports and compiles `numba` exactly
+    like `_jit_multinomial_via_binomial` does, and for the same reason.
+
+    Raises:
+        ImportError: If `numba` is not installed.
+    """
+    global _JIT_DRIFT_COUNTS_BATCHED  # noqa: PLW0603
+    if _JIT_DRIFT_COUNTS_BATCHED is None:
+        import numba  # noqa: PLC0415 -- lazy, optional-dependency import
+
+        _JIT_DRIFT_COUNTS_BATCHED = numba.jit(nogil=True)(_drift_counts_batched)
+    return _JIT_DRIFT_COUNTS_BATCHED(rng, ns, offsets, probabilities_flat)
+
+
+def _build_flat_drift_buffers(
+    state: ModelState, sizes: tuple[int, ...]
+) -> tuple[list[tuple[AlleleId, ...]], np.ndarray, np.ndarray, np.ndarray]:
+    """Flatten every (deme, locus) pair's own allele ids/size/probabilities.
+
+    Visits pairs in exactly the same deme-major, locus-minor order
+    `drift`'s own unjitted loop does — the order `_drift_counts_batched`
+    depends on for bit-identity (its own docstring).
+
+    Returns:
+        A tuple of: each pair's own allele ids (for unpacking counts
+        back into frequency maps afterward), the per-pair `ns` array,
+        the `offsets` array, and the concatenated `probabilities_flat`
+        array — see `_drift_counts_batched`'s own docstring for what
+        each of the last three actually holds.
+    """
+    allele_ids_per_pair: list[tuple[AlleleId, ...]] = []
+    ns: list[int] = []
+    probability_chunks: list[np.ndarray] = []
+    for deme, size in zip(state.frequencies, sizes, strict=True):
+        for frequency_map in deme:
+            allele_ids = tuple(frequency_map)
+            probabilities = np.fromiter(
+                frequency_map.values(),
+                dtype=np.float64,
+                count=len(allele_ids),
+            )
+            probabilities /= probabilities.sum()
+            allele_ids_per_pair.append(allele_ids)
+            ns.append(size)
+            probability_chunks.append(probabilities)
+
+    offsets = np.zeros(len(probability_chunks) + 1, dtype=np.int64)
+    for index, chunk in enumerate(probability_chunks):
+        offsets[index + 1] = offsets[index] + chunk.shape[0]
+    probabilities_flat = (
+        np.concatenate(probability_chunks)
+        if probability_chunks
+        else np.empty(0, dtype=np.float64)
+    )
+    return (
+        allele_ids_per_pair,
+        np.asarray(ns, dtype=np.int64),
+        offsets,
+        probabilities_flat,
+    )
 
 
 def drift(
@@ -155,49 +331,75 @@ def drift(
         state: Post-migration and post-mutation state.
         population_size: Shared or per-deme gene-copy count.
         rng: The run's explicitly threaded random generator.
-        jit: When `True`, draw each deme/locus's own counts via
-            `_jit_multinomial_via_binomial` (a Numba-JIT-compiled,
-            `nogil=True` conditional-binomial decomposition) instead of
-            `rng.multinomial` directly — bit-identical output either
-            way (see that function's own docstring for why), but able
-            to run with the GIL released, which is what lets
-            `fim.engine.ThreadedAdvancer` see real multi-thread
-            speedup rather than none at all. `False` (the default) is
-            every prior release's own behavior, unchanged, and needs
-            `numba` installed only when `True`.
+        jit: When `True`, draw every (deme, locus) pair's own counts in
+            one Numba-JIT-compiled, `nogil=True` call
+            (`_jit_drift_counts_batched`) instead of one
+            `rng.multinomial` call per pair — bit-identical output
+            either way (see `_drift_counts_batched`'s own docstring for
+            why), and free of GIL-release concerns during the compiled
+            call itself. Measured honestly, this is not yet a clear
+            standalone win for `drift`: it fixes a real, separately
+            measured regression an earlier per-pair-call version had,
+            but the compiled draw was never `drift`'s own dominant cost
+            at this project's reference scale — the Python-level
+            marshaling to and from `ModelState`'s own sparse
+            representation is, and `jit=True` does not remove that (see
+            `_drift_counts_batched`'s own docstring for the full,
+            measured picture). `False` (the default) is every prior
+            release's own behavior, unchanged, and needs `numba`
+            installed only when `True`.
 
     Returns:
         The next generation with frequencies on a ``1 / N`` grid.
     """
     sizes = _population_sizes(population_size, state.deme_count)
-    demes: list[tuple[Mapping[AlleleId, float], ...]] = []
-    for deme, size in zip(state.frequencies, sizes, strict=True):
-        locus_maps: list[Mapping[AlleleId, float]] = []
-        for frequency_map in deme:
-            allele_ids = tuple(frequency_map)
-            probabilities = np.fromiter(
-                frequency_map.values(),
-                dtype=np.float64,
-                count=len(allele_ids),
-            )
-            probabilities /= probabilities.sum()
-            counts = (
-                _jit_multinomial_via_binomial(rng, size, probabilities)
-                if jit
-                else rng.multinomial(size, probabilities)
-            )
-            locus_maps.append(
-                {
-                    allele_id: int(count) / size
-                    for allele_id, count in zip(
-                        allele_ids,
-                        counts,
-                        strict=True,
-                    )
-                    if count
-                }
-            )
-        demes.append(tuple(locus_maps))
+    if jit:
+        allele_ids_per_pair, ns, offsets, probabilities_flat = (
+            _build_flat_drift_buffers(state, sizes)
+        )
+        counts_flat = _jit_drift_counts_batched(rng, ns, offsets, probabilities_flat)
+        demes: list[tuple[Mapping[AlleleId, float], ...]] = []
+        pair_index = 0
+        for deme, size in zip(state.frequencies, sizes, strict=True):
+            locus_maps: list[Mapping[AlleleId, float]] = []
+            for _frequency_map in deme:
+                allele_ids = allele_ids_per_pair[pair_index]
+                start, end = offsets[pair_index], offsets[pair_index + 1]
+                counts = counts_flat[start:end]
+                locus_maps.append(
+                    {
+                        allele_id: int(count) / size
+                        for allele_id, count in zip(allele_ids, counts, strict=True)
+                        if count
+                    }
+                )
+                pair_index += 1
+            demes.append(tuple(locus_maps))
+    else:
+        demes = []
+        for deme, size in zip(state.frequencies, sizes, strict=True):
+            locus_maps = []
+            for frequency_map in deme:
+                allele_ids = tuple(frequency_map)
+                probabilities = np.fromiter(
+                    frequency_map.values(),
+                    dtype=np.float64,
+                    count=len(allele_ids),
+                )
+                probabilities /= probabilities.sum()
+                counts = rng.multinomial(size, probabilities)
+                locus_maps.append(
+                    {
+                        allele_id: int(count) / size
+                        for allele_id, count in zip(
+                            allele_ids,
+                            counts,
+                            strict=True,
+                        )
+                        if count
+                    }
+                )
+            demes.append(tuple(locus_maps))
     result = ModelState(
         loci=state.loci,
         frequencies=tuple(demes),

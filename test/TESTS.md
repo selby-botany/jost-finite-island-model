@@ -7123,6 +7123,26 @@ def test_step_with_jit_matches_step_without_jit_bit_for_bit(
 
 `jit=True` changes nothing about `step`'s own output either, end to end.
 
+<a id="model.test_operators.test_drift_with_jit_matches_without_jit_across_many_generations_and_demes"></a>
+
+#### test\_drift\_with\_jit\_matches\_without\_jit\_across\_many\_generations\_and\_demes
+
+```python
+def test_drift_with_jit_matches_without_jit_across_many_generations_and_demes(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The batched, ragged (deme, locus) flat-buffer path stays bit-identical.
+
+`_state()`'s own fixture (2 demes, 1 locus) barely exercises
+`_build_flat_drift_buffers`'s own ragged, varying-category-count
+layout — this test uses many demes and loci, run across enough
+generations that some (deme, locus) pairs lose alleles to drift
+entirely (shrinking their own category count generation to
+generation, changing every later `offsets` slice's own width), which
+is exactly the shape most likely to expose an indexing bug in the
+flat-buffer-plus-offsets packing/unpacking if one existed.
+
 
 
 <a id="model.test_params"></a>

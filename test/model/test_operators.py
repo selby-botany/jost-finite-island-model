@@ -12,6 +12,7 @@ from fim.model.allele import (
     FiniteAlleleRegistry,
     FiniteAlleleSpace,
 )
+from fim.model.initial import generate_initial_state
 from fim.model.locus import LocusSpec
 from fim.model.operators import (
     _jit_multinomial_via_binomial,
@@ -1032,3 +1033,37 @@ def test_step_with_jit_matches_step_without_jit_bit_for_bit(
     jitted = step(_state(), params, AlleleRegistry(), rng(6), jit=True)
 
     assert unjitted == jitted
+
+
+def test_drift_with_jit_matches_without_jit_across_many_generations_and_demes(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The batched, ragged (deme, locus) flat-buffer path stays bit-identical.
+
+    `_state()`'s own fixture (2 demes, 1 locus) barely exercises
+    `_build_flat_drift_buffers`'s own ragged, varying-category-count
+    layout — this test uses many demes and loci, run across enough
+    generations that some (deme, locus) pairs lose alleles to drift
+    entirely (shrinking their own category count generation to
+    generation, changing every later `offsets` slice's own width), which
+    is exactly the shape most likely to expose an indexing bug in the
+    flat-buffer-plus-offsets packing/unpacking if one existed.
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=25,
+        m=0.15,
+        mu=0.02,
+        d=12,
+        seed=20260901,
+        loci=(LocusSpec(1, 50), LocusSpec(2, 30), LocusSpec(3, 80)),
+    )
+    state = generate_initial_state(params, rng(20260901))
+
+    unjitted_rng = rng(7)
+    jitted_rng = rng(7)
+    for _ in range(40):
+        unjitted_state = drift(state, params.N, unjitted_rng, jit=False)
+        jitted_state = drift(state, params.N, jitted_rng, jit=True)
+        assert unjitted_state == jitted_state
+        state = unjitted_state

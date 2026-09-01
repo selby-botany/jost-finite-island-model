@@ -638,12 +638,18 @@ class ThreadedAdvancer:
                 reachable only by building a `GenerationalBackend`
                 directly, not yet through `fim()` itself.
             jit: Passed through to each block's own `SequentialAdvancer`
-                — see its docstring. ``"numba"`` is what actually lets
-                this class's own thread fan-out deliver real wall-clock
-                speedup: `drift`'s own multinomial draw is the only
-                thing this currently JIT-compiles (`fim.model.operators.
-                drift`'s own docstring); `migrate`/`mutate`'s RNG calls
-                stay unjitted and GIL-bound regardless of this setting.
+                — see its docstring. ``"numba"`` JIT-compiles `drift`'s
+                own multinomial draw (`fim.model.operators.drift`'s own
+                docstring) — bit-identical, and no longer regresses
+                wall-clock time the way an earlier, per-pair-call version
+                measurably did, but is not yet shown to be a clear
+                standalone win either: `drift`'s own dominant cost at
+                this project's reference scale is marshaling to and from
+                `ModelState`'s sparse representation, not the compiled
+                draw itself, so this setting alone should not be assumed
+                to speed up `ThreadedAdvancer`'s own thread fan-out in
+                practice. `migrate`/`mutate`'s RNG calls stay unjitted
+                and GIL-bound regardless of this setting either way.
 
         Raises:
             ValueError: If `max_workers` is given and is less than 1.
@@ -957,16 +963,21 @@ def build_engine_backend(
             operators. Under `"generational"`, `"numba"` JIT-compiles
             `drift`'s own multinomial draw (`fim.model.operators.drift`'s
             own docstring) — bit-identical output to `"off"`, for the
-            same seed, but with the GIL released, which is what lets
-            `ThreadedAdvancer` see real multi-thread speedup;
-            `migrate`/`mutate`'s own RNG calls are not JIT-compiled yet.
-            Needs the optional `numba` dependency installed (``pip
-            install fim[jit]``) — not imported at all unless `jit=
-            "numba"` is actually requested. `"generational-vector"` is a
-            real, named, planned choice, not yet implemented, so `jit`
-            has no effect there yet either way. `"lineal"` never accepts
-            anything but `"off"` — a permanent restriction, not a
-            temporary gap: `LinealBackend` stays the untouched golden
+            same seed. Not yet shown to be a standalone wall-clock win,
+            though: it fixes a real, separately measured regression an
+            earlier, per-pair-call version had, but `drift`'s own
+            dominant cost at this project's reference scale is
+            marshaling to and from `ModelState`'s sparse representation,
+            not the compiled draw itself (`drift`'s own docstring has
+            the full measurement). `migrate`/`mutate`'s own RNG calls
+            are not JIT-compiled at all. Needs the optional `numba`
+            dependency installed (``pip install fim[jit]``) — not
+            imported at all unless `jit="numba"` is actually requested.
+            `"generational-vector"` is a real, named, planned choice, not
+            yet implemented, so `jit` has no effect there yet either way.
+            `"lineal"` never accepts anything but `"off"` — a permanent
+            restriction, not a temporary gap: `LinealBackend` stays the
+            untouched golden
             reference every other backend's own parity tests are checked
             against (see its own docstring).
         max_workers: `LinealBackend`-only; ignored by every other
@@ -1147,14 +1158,16 @@ def fim(
             ``"generational-vector"`` is a real, named, planned third
             choice, not yet implemented.
         jit: Whether the chosen backend should JIT-compile its own
-            operators, for real wall-clock speed rather than a change in
-            what is computed. ``"off"`` (the default) is every prior
-            release's own behavior. Meaningful only under
-            ``engine_backend="generational"`` today (JIT-compiles
-            `drift`'s own multinomial draw, bit-identical to ``"off"``
-            for the same seed — needs the optional `numba` dependency,
-            ``pip install fim[jit]``); ``"generational-vector"`` does
-            not implement it yet; ``"lineal"`` never accepts anything
+            operators — a change in *how* the result is computed, not
+            *what* is computed (bit-identical to ``"off"`` for the same
+            seed), and not yet shown to be a wall-clock win on its own
+            (see `build_engine_backend`'s own docstring). ``"off"`` (the
+            default) is every prior release's own behavior. Meaningful
+            only under ``engine_backend="generational"`` today
+            (JIT-compiles `drift`'s own multinomial draw — needs the
+            optional `numba` dependency, ``pip install fim[jit]``);
+            ``"generational-vector"`` does not implement it yet;
+            ``"lineal"`` never accepts anything
             but ``"off"``, permanently — see `build_engine_backend`'s
             own docstring.
 
