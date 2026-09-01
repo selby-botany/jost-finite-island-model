@@ -15,20 +15,36 @@ documented, deliberate scope boundary `fim.model.operators.step`'s own
 `jit` argument already draws around `migrate`/`mutate`.
 
 `ModelState`'s own public shape is untouched by anything in this module:
-`VectorizedState`, below, is a compute-only, internal representation,
-built once from a real `ModelState` and converted back only when a real
-`ModelState` is actually needed (`RunResult.final_state`, a persisted
-trajectory row). `migrate_vectorized`, `mutate_vectorized`, and
-`drift_vectorized` all operate on this same dense representation in
-sequence, with no `ModelState` round-trip between them — which is the
-entire point: the Python-level marshaling to and from `ModelState`'s own
-sparse dict-of-dicts representation, not the random draw itself, is what
-`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §5.3
-found actually dominates `fim.model.operators.drift`'s own wall-clock
-time when it is vectorized or JIT-compiled in isolation, sandwiched
-between two still-dict-based stages. Fusing all three stages here is
-this project's own first real test of that document's §11 open question
-("fusing migrate -> mutate -> drift across stage boundaries").
+`VectorizedState`, below, is a compute-only, internal representation.
+`migrate_vectorized`, `mutate_vectorized`, and `drift_vectorized` all
+operate on this same dense representation in sequence within one
+generation, with no `ModelState` round-trip between them — the first
+real test of `20260901-claude-sonnet-5-fim-engine-backend-factory-
+design.md` §11's "fusing migrate -> mutate -> drift across stage
+boundaries" open question. `fim.engine.VectorizedAdvancer`, the one
+caller, still converts to and from `ModelState` once per generation
+(not once per operator, but not zero times either — `ReplicaLane.state`
+is `ModelState`-typed across the whole batch driving loop, a real,
+measured, secondary cost this module does not eliminate on its own).
+
+That within-generation fusion alone was not enough to make the whole
+pipeline competitive with the dict-based backends once actually
+benchmarked end to end, though: the real, measured dominant cost turned
+out to be neither the random draw nor that per-generation round-trip,
+but a *third* thing — `mutate_vectorized`/`drift_vectorized`'s own
+shared multinomial-decomposition helper issuing one array-valued
+`rng.binomial` call per allele-id category, `capacity - 1` times per
+invocation, each call vectorized only across `d` demes at a time. With
+`d` typically far smaller than `capacity`, per-call NumPy dispatch
+overhead dominated the actual compute — profiled directly, not assumed,
+the same "tested, not just reasoned about" discipline this project's
+own JIT work already established for `drift`'s dict-based path. Fixed
+by JIT-compiling that helper into one call covering the entire `(d,
+capacity)` grid at once (`_jit_multinomial_rows_batched`, below) — the
+exact same "batch every unit of work into one call, don't call once per
+small unit of it" lesson `fim.model.operators`'s own `_drift_counts_
+batched` already had to learn, rediscovered here independently on a
+second function before being generalized.
 
 Statistical, not bit-identical, parity with the dict-based operators in
 `fim.model.operators` is this module's own correctness bar throughout
@@ -54,6 +70,10 @@ _JIT_MUTATE_TARGETS_BATCHED: (
         tuple[np.ndarray, np.ndarray, np.ndarray, int, int],
     ]
     | None
+) = None
+
+_JIT_MULTINOMIAL_ROWS_BATCHED: (
+    Callable[[np.random.Generator, np.ndarray, np.ndarray], np.ndarray] | None
 ) = None
 
 
@@ -144,10 +164,14 @@ def build_vectorized_state(state: ModelState) -> VectorizedState:
 def vectorized_state_to_model_state(state: VectorizedState) -> ModelState:
     """Convert back to `ModelState`'s own public, sparse shape.
 
-    Called only when a real `ModelState` is actually needed (a run's own
-    `final_state`, or a caller outside this module) — not on every
-    generation, which is what keeps `migrate_vectorized`/
-    `mutate_vectorized`/`drift_vectorized` genuinely fused.
+    `migrate_vectorized`/`mutate_vectorized`/`drift_vectorized`
+    themselves never call this — the fusion within one generation this
+    module's own docstring describes holds regardless of how often a
+    caller converts back. `fim.engine.VectorizedAdvancer`, the one real
+    caller, does call this once per generation (`ReplicaLane.state` is
+    `ModelState`-typed across its whole batch driving loop), not only
+    when a real `ModelState` is externally needed — a real, measured,
+    secondary cost this module's own docstring already accounts for.
     """
     deme_count = state.locus_states[0].frequencies.shape[0] if state.locus_states else 0
     demes = []
@@ -206,7 +230,7 @@ def vectorized_state_to_rows(
     return rows
 
 
-def _vectorized_multinomial_rows(
+def _multinomial_rows_batched(
     rng: np.random.Generator, sizes: np.ndarray, probabilities: np.ndarray
 ) -> np.ndarray:
     """Draw one multinomial sample per row, each row its own `p` vector.
@@ -217,13 +241,30 @@ def _vectorized_multinomial_rows(
     per-pair, dict-based case). This reproduces the same distribution,
     per row, via the multinomial-as-sequential-conditional-binomial
     identity (`fim.model.operators._multinomial_via_binomial`'s own
-    docstring — the same identity, applied here across an entire `(d,
-    capacity)` array at once via array-valued `rng.binomial` calls,
-    rather than to one row at a time). Array-valued `rng.binomial` does
-    not compile under Numba (confirmed directly during Stage F5's own
-    spike), so this stays plain NumPy — already fast, since each of the
-    `capacity - 1` calls is one native, C-level, vectorized draw across
-    every row at once, not a Python-level loop over rows.
+    docstring), scalar-at-a-time across both the deme axis and the
+    category axis — deliberately, not one array-valued `rng.binomial`
+    call per category the way an earlier version of this function did.
+
+    That earlier, array-valued version measured *slower* than the
+    dict-based `LinealBackend` at this project's own reference scale
+    (`d=20`, `capacity=256`, 300 generations) once actually benchmarked
+    end to end, not just reasoned about: each of its `capacity - 1`
+    array-valued `rng.binomial` calls is one genuinely vectorized draw,
+    but only across `d` rows at a time — with `d` typically far smaller
+    than `capacity`, per-call NumPy dispatch overhead, repeated
+    `capacity - 1` times per invocation, dominated the actual compute.
+    The exact same "batch every unit of work into one call, don't call
+    once per small unit of it" lesson `drift`'s own `_drift_counts_
+    batched` already had to learn the hard way (its own docstring)
+    applies here too, just discovered on a second, independent function
+    rather than generalized from the first: this scalar nested-loop
+    form exists to be JIT-compiled (`_jit_multinomial_rows_batched`,
+    below) into one call covering the *entire* `(d, capacity)` grid,
+    with no Python- or NumPy-dispatch-level overhead paid per category
+    or per deme at all. A scalar `Generator.binomial` compiles under
+    `nogil=True`; an array-valued one does not (confirmed during Stage
+    F5's own spike, `fim.model.operators`'s own module docstring) — this
+    function's own scalar form is what makes that compilation possible.
 
     Args:
         rng: The run's explicitly threaded random generator.
@@ -236,22 +277,41 @@ def _vectorized_multinomial_rows(
         own `sizes` entry.
     """
     deme_count, capacity = probabilities.shape
-    remaining_n = sizes.astype(np.int64).copy()
-    remaining_p = np.ones(deme_count, dtype=np.float64)
     counts = np.empty((deme_count, capacity), dtype=np.int64)
-    for column in range(capacity - 1):
-        column_p = np.divide(
-            probabilities[:, column],
-            remaining_p,
-            out=np.zeros(deme_count, dtype=np.float64),
-            where=remaining_p > 0,
-        )
-        drawn = rng.binomial(remaining_n, np.clip(column_p, 0.0, 1.0))
-        counts[:, column] = drawn
-        remaining_n -= drawn
-        remaining_p -= probabilities[:, column]
-    counts[:, -1] = remaining_n
+    for deme_index in range(deme_count):
+        remaining_n = sizes[deme_index]
+        remaining_p = 1.0
+        for column in range(capacity - 1):
+            column_p = probabilities[deme_index, column]
+            fraction = column_p / remaining_p if remaining_p > 0.0 else 0.0
+            fraction = min(max(fraction, 0.0), 1.0)
+            drawn = rng.binomial(remaining_n, fraction)
+            counts[deme_index, column] = drawn
+            remaining_n -= drawn
+            remaining_p -= column_p
+        counts[deme_index, capacity - 1] = remaining_n
     return counts
+
+
+def _jit_multinomial_rows_batched(
+    rng: np.random.Generator, sizes: np.ndarray, probabilities: np.ndarray
+) -> np.ndarray:
+    """`_multinomial_rows_batched`, JIT-compiled with `nogil=True`.
+
+    `numba` is an optional dependency (`pip install fim[jit]`), imported
+    here and nowhere else in this module — importing `fim.model.
+    vectorized` never requires it. Compiled once, on first call, and
+    cached at module level, exactly like `_jit_mutate_targets_batched`.
+
+    Raises:
+        ImportError: If `numba` is not installed.
+    """
+    global _JIT_MULTINOMIAL_ROWS_BATCHED  # noqa: PLW0603
+    if _JIT_MULTINOMIAL_ROWS_BATCHED is None:
+        import numba  # noqa: PLC0415 -- lazy, optional-dependency import
+
+        _JIT_MULTINOMIAL_ROWS_BATCHED = numba.jit(nogil=True)(_multinomial_rows_batched)
+    return _JIT_MULTINOMIAL_ROWS_BATCHED(rng, sizes, probabilities)
 
 
 def migrate_vectorized(
@@ -333,7 +393,7 @@ def mutate_vectorized(
     retained_mass = 1.0 - event_counts / sizes
     new_frequencies = locus_state.frequencies * retained_mass[:, None]
 
-    source_counts = _vectorized_multinomial_rows(
+    source_counts = _jit_multinomial_rows_batched(
         rng, event_counts, locus_state.frequencies
     )
     event_deme, event_source = np.nonzero(source_counts)
@@ -458,14 +518,14 @@ def drift_vectorized(
     """Resample `N` gene copies per deme, across every deme in one pass.
 
     The array-native counterpart to `fim.model.operators.drift` —
-    `_vectorized_multinomial_rows` above is the same conditional-binomial
-    identity `fim.model.operators._multinomial_via_binomial` uses,
-    applied across every row of one dense `(d, capacity)` array at once
-    instead of one `rng.multinomial` call per (deme, locus) pair.
-    Statistically, not bit-identically, equivalent — see this module's
-    own docstring.
+    `_jit_multinomial_rows_batched` above is the same conditional-
+    binomial identity `fim.model.operators._multinomial_via_binomial`
+    uses, applied across the entire `(d, capacity)` array in one
+    JIT-compiled call instead of one `rng.multinomial` call per (deme,
+    locus) pair. Statistically, not bit-identically, equivalent — see
+    this module's own docstring.
     """
-    counts = _vectorized_multinomial_rows(rng, sizes, locus_state.frequencies)
+    counts = _jit_multinomial_rows_batched(rng, sizes, locus_state.frequencies)
     return replace(locus_state, frequencies=counts / sizes[:, None])
 
 

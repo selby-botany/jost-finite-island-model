@@ -5939,20 +5939,36 @@ documented, deliberate scope boundary `fim.model.operators.step`'s own
 `jit` argument already draws around `migrate`/`mutate`.
 
 `ModelState`'s own public shape is untouched by anything in this module:
-`VectorizedState`, below, is a compute-only, internal representation,
-built once from a real `ModelState` and converted back only when a real
-`ModelState` is actually needed (`RunResult.final_state`, a persisted
-trajectory row). `migrate_vectorized`, `mutate_vectorized`, and
-`drift_vectorized` all operate on this same dense representation in
-sequence, with no `ModelState` round-trip between them — which is the
-entire point: the Python-level marshaling to and from `ModelState`'s own
-sparse dict-of-dicts representation, not the random draw itself, is what
-`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §5.3
-found actually dominates `fim.model.operators.drift`'s own wall-clock
-time when it is vectorized or JIT-compiled in isolation, sandwiched
-between two still-dict-based stages. Fusing all three stages here is
-this project's own first real test of that document's §11 open question
-("fusing migrate -> mutate -> drift across stage boundaries").
+`VectorizedState`, below, is a compute-only, internal representation.
+`migrate_vectorized`, `mutate_vectorized`, and `drift_vectorized` all
+operate on this same dense representation in sequence within one
+generation, with no `ModelState` round-trip between them — the first
+real test of `20260901-claude-sonnet-5-fim-engine-backend-factory-
+design.md` §11's "fusing migrate -> mutate -> drift across stage
+boundaries" open question. `fim.engine.VectorizedAdvancer`, the one
+caller, still converts to and from `ModelState` once per generation
+(not once per operator, but not zero times either — `ReplicaLane.state`
+is `ModelState`-typed across the whole batch driving loop, a real,
+measured, secondary cost this module does not eliminate on its own).
+
+That within-generation fusion alone was not enough to make the whole
+pipeline competitive with the dict-based backends once actually
+benchmarked end to end, though: the real, measured dominant cost turned
+out to be neither the random draw nor that per-generation round-trip,
+but a *third* thing — `mutate_vectorized`/`drift_vectorized`'s own
+shared multinomial-decomposition helper issuing one array-valued
+`rng.binomial` call per allele-id category, `capacity - 1` times per
+invocation, each call vectorized only across `d` demes at a time. With
+`d` typically far smaller than `capacity`, per-call NumPy dispatch
+overhead dominated the actual compute — profiled directly, not assumed,
+the same "tested, not just reasoned about" discipline this project's
+own JIT work already established for `drift`'s dict-based path. Fixed
+by JIT-compiling that helper into one call covering the entire `(d,
+capacity)` grid at once (`_jit_multinomial_rows_batched`, below) — the
+exact same "batch every unit of work into one call, don't call once per
+small unit of it" lesson `fim.model.operators`'s own `_drift_counts_
+batched` already had to learn, rediscovered here independently on a
+second function before being generalized.
 
 Statistical, not bit-identical, parity with the dict-based operators in
 `fim.model.operators` is this module's own correctness bar throughout
@@ -6043,10 +6059,14 @@ def vectorized_state_to_model_state(state: VectorizedState) -> ModelState
 
 Convert back to `ModelState`'s own public, sparse shape.
 
-Called only when a real `ModelState` is actually needed (a run's own
-`final_state`, or a caller outside this module) — not on every
-generation, which is what keeps `migrate_vectorized`/
-`mutate_vectorized`/`drift_vectorized` genuinely fused.
+`migrate_vectorized`/`mutate_vectorized`/`drift_vectorized`
+themselves never call this — the fusion within one generation this
+module's own docstring describes holds regardless of how often a
+caller converts back. `fim.engine.VectorizedAdvancer`, the one real
+caller, does call this once per generation (`ReplicaLane.state` is
+`ModelState`-typed across its whole batch driving loop), not only
+when a real `ModelState` is externally needed — a real, measured,
+secondary cost this module's own docstring already accounts for.
 
 <a id="fim.model.vectorized.vectorized_state_to_rows"></a>
 
@@ -6155,12 +6175,12 @@ def drift_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
 Resample `N` gene copies per deme, across every deme in one pass.
 
 The array-native counterpart to `fim.model.operators.drift` —
-`_vectorized_multinomial_rows` above is the same conditional-binomial
-identity `fim.model.operators._multinomial_via_binomial` uses,
-applied across every row of one dense `(d, capacity)` array at once
-instead of one `rng.multinomial` call per (deme, locus) pair.
-Statistically, not bit-identically, equivalent — see this module's
-own docstring.
+`_jit_multinomial_rows_batched` above is the same conditional-
+binomial identity `fim.model.operators._multinomial_via_binomial`
+uses, applied across the entire `(d, capacity)` array in one
+JIT-compiled call instead of one `rng.multinomial` call per (deme,
+locus) pair. Statistically, not bit-identically, equivalent — see
+this module's own docstring.
 
 <a id="fim.model.vectorized.step_vectorized"></a>
 
