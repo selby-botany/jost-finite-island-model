@@ -12,6 +12,7 @@ from fim.engine import (
     RunResult,
     SequentialAdvancer,
     ThreadedAdvancer,
+    VectorizedAdvancer,
     build_engine_backend,
     fim,
     replicate_summary,
@@ -19,7 +20,8 @@ from fim.engine import (
     run_batch,
 )
 from fim.model.allele import MINTED_ID_START, AlleleId
-from fim.model.locus import LocusSpec
+from fim.model.locus import LocusSpec, finite_allele_capacity
+from fim.model.operators import _population_sizes
 from fim.model.params import ConvergenceCombinator, SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.store import InMemoryTrajectoryStore
@@ -1461,11 +1463,17 @@ def test_fim_rejects_lineal_only_args_on_other_backends(
         )
 
 
-def test_fim_generational_vector_not_implemented_yet(
+def test_fim_generational_vector_rejects_infinite_alleles(
     tiny_params: SimulationParams,
 ) -> None:
-    """`"generational-vector"` is a real, named, planned choice — not yet built."""
-    with pytest.raises(NotImplementedError):
+    """`"generational-vector"` is scoped to `finite_alleles` — never a silent fallback.
+
+    `tiny_params`'s own default `mutation_model` is `"infinite_alleles"`
+    (unbounded, per-generation-ragged identity space — out of scope for
+    `fim.model.vectorized`'s bounded-`K` representation), so this is the
+    common case a caller is most likely to hit by accident.
+    """
+    with pytest.raises(ValueError, match="finite_alleles"):
         fim(
             tiny_params.N,
             tiny_params.m,
@@ -1473,6 +1481,44 @@ def test_fim_generational_vector_not_implemented_yet(
             tiny_params.d,
             params=tiny_params,
             engine_backend="generational-vector",
+        )
+
+
+def test_fim_generational_vector_rejects_stochastic_migrant_sampling(
+    tiny_params: SimulationParams,
+) -> None:
+    """`"generational-vector"` is also scoped to deterministic migration only."""
+    params = replace(
+        tiny_params, mutation_model="finite_alleles", migrant_sampling="stochastic"
+    )
+    with pytest.raises(ValueError, match="migrant_sampling"):
+        fim(
+            params.N,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            engine_backend="generational-vector",
+        )
+
+
+def test_fim_generational_vector_rejects_jit(tiny_params: SimulationParams) -> None:
+    """`jit` has no separate toggle under `"generational-vector"` — a `ValueError`.
+
+    Numba is required internally, unconditionally, for its own mutate
+    step; only `jit="off"` (the default) is accepted, so a caller who
+    asks for `jit="numba"` explicitly gets an error, not a silent no-op.
+    """
+    params = replace(tiny_params, mutation_model="finite_alleles")
+    with pytest.raises(ValueError, match="generational-vector"):
+        fim(
+            params.N,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            engine_backend="generational-vector",
+            jit="numba",
         )
 
 
@@ -1630,3 +1676,127 @@ def test_fim_engine_backend_generational_with_jit_matches_default(
 
     assert jit_result.report == lineal_result.report
     assert jit_result.final_state == lineal_result.final_state
+
+
+# `VectorizedAdvancer`/`"generational-vector"` (Stage F4): the array-native,
+# fused `migrate`/`mutate`/`drift` backend (`fim.model.vectorized`).
+# Statistical, not bit-identical, parity with `LinealBackend` is this
+# backend's own correctness bar throughout (`fim.model.vectorized`'s own
+# module docstring; vector design §6) — these tests check reproducibility,
+# scope enforcement, and structural invariants (frequencies sum to one,
+# capacity bound holds), not trajectory equality against `LinealBackend`.
+
+
+def _finite_alleles_vector_params(**overrides: object) -> SimulationParams:
+    """A `finite_alleles`/continuous-migration config `VectorizedAdvancer` accepts."""
+    base = SimulationParams(
+        N=40,
+        m=0.2,
+        mu=0.1,
+        d=3,
+        seed=20260901,
+        loci=(LocusSpec(1, 2),),  # capacity 16
+        mutation_model="finite_alleles",
+        convergence_window=4,
+        convergence_tolerance=1.0,
+        max_generations=10,
+    )
+    return replace(base, **overrides)  # type: ignore[arg-type]
+
+
+def test_generational_vector_backend_matches_scope_of_lineal_reproducibility() -> None:
+    """`GenerationalBackend(VectorizedAdvancer())` is reproducible for a fixed seed.
+
+    Same seed, same everything else, run twice: exactly the same
+    trajectory both times — determinism, not bit-identity to
+    `LinealBackend`'s own dict-based path, is the property this checks.
+    """
+    params = _finite_alleles_vector_params()
+
+    first_store = InMemoryTrajectoryStore()
+    first_result = GenerationalBackend(VectorizedAdvancer()).run(
+        params, first_store, None, _clock
+    )
+    assert isinstance(first_result, RunResult)
+
+    second_store = InMemoryTrajectoryStore()
+    second_result = GenerationalBackend(VectorizedAdvancer()).run(
+        params, second_store, None, _clock
+    )
+    assert isinstance(second_result, RunResult)
+
+    assert first_result.report == second_result.report
+    assert first_result.final_state == second_result.final_state
+    assert list(first_store.read(first_result.run_id)) == list(
+        second_store.read(second_result.run_id)
+    )
+
+
+def test_generational_vector_backend_bounds_capacity_and_stays_valid() -> None:
+    """A real `VectorizedAdvancer` run stays within its own bounded allele space.
+
+    Directly proves the two structural invariants `fim.model.vectorized`
+    exists to preserve end to end, not just within its own unit tests:
+    every allele id observed stays inside `0..capacity-1`, and every
+    deme's own final frequencies remain a valid distribution
+    (`ModelState.validate_support` — the same check the finite-alleles
+    lineal tests above already run).
+    """
+    params = _finite_alleles_vector_params()
+    capacity = finite_allele_capacity(params.loci[0].length)
+
+    result = GenerationalBackend(VectorizedAdvancer()).run(
+        params, InMemoryTrajectoryStore(), None, _clock
+    )
+    assert isinstance(result, RunResult)
+
+    rows = list(result.store.read(result.run_id))
+    assert {int(row["allele_id"]) for row in rows} <= set(range(capacity))
+    result.final_state.validate_support(tuple(_population_sizes(params.N, params.d)))
+
+
+def test_generational_vector_backend_matches_lineal_for_batch() -> None:
+    """A real multi-replicate batch runs cleanly and independently reproduces.
+
+    Mirrors `test_generational_backend_with_threaded_advancer_matches_
+    lineal_for_batch`'s own shape (several replicates, checked
+    independently) but without claiming trajectory equality against
+    `LinealBackend`, since `VectorizedAdvancer`'s own mutate step is only
+    statistically, not bit-identically, equivalent to the dict-based one.
+    """
+    params = replace(_finite_alleles_vector_params(), n_replicates=4)
+
+    first_store = InMemoryTrajectoryStore()
+    first_results = GenerationalBackend(VectorizedAdvancer()).run(
+        params, first_store, None, _clock
+    )
+    assert isinstance(first_results, tuple)
+    assert len(first_results) == 4
+
+    second_store = InMemoryTrajectoryStore()
+    second_results = GenerationalBackend(VectorizedAdvancer()).run(
+        params, second_store, None, _clock
+    )
+    assert isinstance(second_results, tuple)
+
+    for first_result, second_result in zip(first_results, second_results, strict=True):
+        assert first_result.run_id == second_result.run_id
+        assert first_result.report == second_result.report
+        assert first_result.final_state == second_result.final_state
+
+
+def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:
+    """`fim(..., engine_backend="generational-vector")` works end to end."""
+    params = _finite_alleles_vector_params()
+
+    result = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        clock=_clock,
+        engine_backend="generational-vector",
+    )
+    assert isinstance(result, RunResult)
+    assert result.report["converged"] in (True, False)

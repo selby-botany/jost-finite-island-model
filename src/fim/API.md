@@ -56,6 +56,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ThreadedAdvancer](#fim.engine.ThreadedAdvancer)
     * [\_\_init\_\_](#fim.engine.ThreadedAdvancer.__init__)
     * [advance](#fim.engine.ThreadedAdvancer.advance)
+  * [VectorizedAdvancer](#fim.engine.VectorizedAdvancer)
+    * [advance](#fim.engine.VectorizedAdvancer.advance)
   * [run\_batch](#fim.engine.run_batch)
   * [GenerationalBackend](#fim.engine.GenerationalBackend)
     * [\_\_init\_\_](#fim.engine.GenerationalBackend.__init__)
@@ -1579,6 +1581,47 @@ def advance(active_lanes: Sequence[ReplicaLane],
 
 Step every active lane by one generation, fanned out across threads.
 
+<a id="fim.engine.VectorizedAdvancer"></a>
+
+## VectorizedAdvancer Objects
+
+```python
+class VectorizedAdvancer()
+```
+
+Steps every currently-active lane forward by one generation, fused.
+
+The one `Advancer` that actually answers
+`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+§11's own "fusing `migrate` -> `mutate` -> `drift` across stage
+boundaries" open question: converts each lane's own `ModelState` to
+`fim.model.vectorized.VectorizedState` once, runs the whole
+generation's migrate/mutate/drift sequence array-native
+(`step_vectorized`) with no `ModelState` reconstructed in between,
+writes that generation's own trajectory rows directly from the dense
+array (`vectorized_state_to_rows`, bypassing `ModelState` entirely
+for persistence), then converts back to `ModelState` once — not once
+per operator, the shape Stage F5's own investigation found actually
+dominates an isolated operator's wall-clock time.
+
+Scope, deliberately, matching `fim.model.vectorized`'s own module
+docstring: `SimulationParams.mutation_model == "finite_alleles"`
+(bounded `K`, no reindexing problem) and `migrant_sampling ==
+"continuous"` (deterministic migration) only. A lane outside that
+scope raises `ValueError` immediately, naming which constraint it
+violated — never a silent fallback to the dict-based path.
+
+<a id="fim.engine.VectorizedAdvancer.advance"></a>
+
+#### advance
+
+```python
+def advance(active_lanes: Sequence[ReplicaLane],
+            store: TrajectoryStore) -> list[ReplicaLane]
+```
+
+Step every active lane by one generation, fused and array-native.
+
 <a id="fim.engine.run_batch"></a>
 
 #### run\_batch
@@ -1687,8 +1730,15 @@ class tree to maintain.
   `SequentialAdvancer` alone would give (still directly
   available by constructing `GenerationalBackend()` without
   going through this factory, if a caller wants zero new
-  thread-safety surface). `"generational-vector"` is a real,
-  named, planned choice, not yet implemented.
+  thread-safety surface). `"generational-vector"` builds
+  `GenerationalBackend(VectorizedAdvancer())` — array-native,
+  fused `migrate`/`mutate`/`drift` (`fim.model.vectorized`'s
+  own module docstring); scoped to `mutation_model=
+  "finite_alleles"` and `migrant_sampling="continuous"` only,
+  raising `ValueError` for any lane outside that scope rather
+  than silently falling back to the dict-based path — needs
+  the optional `numba` dependency unconditionally (see `jit`,
+  below, for why that is not the same thing as `jit="numba"`).
 - `jit` - Whether the chosen backend should JIT-compile its own
   operators. Under `"generational"`, `"numba"` JIT-compiles
   `drift`'s own multinomial draw (`fim.model.operators.drift`'s
@@ -1703,11 +1753,13 @@ class tree to maintain.
   are not JIT-compiled at all. Needs the optional `numba`
   dependency installed (``pip install fim[jit]``) — not
   imported at all unless `jit="numba"` is actually requested.
-  `"generational-vector"` is a real, named, planned choice, not
-  yet implemented, so `jit` has no effect there yet either way.
-  `"lineal"` never accepts anything but `"off"` — a permanent
-  restriction, not a temporary gap: `LinealBackend` stays the
-  untouched golden
+  `"generational-vector"` has no separate toggle for this yet
+  — its own mutate step always requires `numba` internally,
+  regardless of this argument, so only `jit="off"` (the
+  default) is accepted there; passing `jit="numba"` raises
+  `ValueError`, not a silent no-op. `"lineal"` never accepts
+  anything but `"off"` — a permanent restriction, not a
+  temporary gap: `LinealBackend` stays the untouched golden
   reference every other backend's own parity tests are checked
   against (see its own docstring).
 - `max_workers` - `LinealBackend`-only; ignored by every other
@@ -1876,8 +1928,15 @@ silently disagree.
   no-op — ``"generational"``'s own thread count is a separate,
   not-yet-publicly-reachable knob (see `ThreadedAdvancer`'s own
   docstring).
-  ``"generational-vector"`` is a real, named, planned third
-  choice, not yet implemented.
+  ``"generational-vector"`` is a real, working third choice —
+  array-native, fused `migrate`/`mutate`/`drift`
+  (`fim.model.vectorized`), statistically (not bit-identically)
+  equivalent to the other two, scoped to
+  `mutation_model="finite_alleles"` and
+  `migrant_sampling="continuous"` only; a replicate outside
+  that scope raises `ValueError` naming which constraint it
+  violated, rather than silently falling back to the other
+  backends' dict-based path.
 - `jit` - Whether the chosen backend should JIT-compile its own
   operators — a change in *how* the result is computed, not
   *what* is computed (bit-identical to ``"off"`` for the same
@@ -1887,7 +1946,10 @@ silently disagree.
   only under ``engine_backend="generational"`` today
   (JIT-compiles `drift`'s own multinomial draw — needs the
   optional `numba` dependency, ``pip install fim[jit]``);
-  ``"generational-vector"`` does not implement it yet;
+  ``"generational-vector"`` has no separate toggle for this —
+  its own mutate step always requires `numba` internally
+  regardless of this argument, so only ``"off"`` (the default)
+  is accepted there, and passing ``"numba"`` is a `ValueError`;
   ``"lineal"`` never accepts anything
   but ``"off"``, permanently — see `build_engine_backend`'s
   own docstring.

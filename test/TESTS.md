@@ -2741,16 +2741,47 @@ def test_fim_rejects_lineal_only_args_on_other_backends(
 
 `max_workers`/`store_factory` are lineal-only — never a silent no-op.
 
-<a id="engine.test_engine.test_fim_generational_vector_not_implemented_yet"></a>
+<a id="engine.test_engine.test_fim_generational_vector_rejects_infinite_alleles"></a>
 
-#### test\_fim\_generational\_vector\_not\_implemented\_yet
+#### test\_fim\_generational\_vector\_rejects\_infinite\_alleles
 
 ```python
-def test_fim_generational_vector_not_implemented_yet(
+def test_fim_generational_vector_rejects_infinite_alleles(
         tiny_params: SimulationParams) -> None
 ```
 
-`"generational-vector"` is a real, named, planned choice — not yet built.
+`"generational-vector"` is scoped to `finite_alleles` — never a silent fallback.
+
+`tiny_params`'s own default `mutation_model` is `"infinite_alleles"`
+(unbounded, per-generation-ragged identity space — out of scope for
+`fim.model.vectorized`'s bounded-`K` representation), so this is the
+common case a caller is most likely to hit by accident.
+
+<a id="engine.test_engine.test_fim_generational_vector_rejects_stochastic_migrant_sampling"></a>
+
+#### test\_fim\_generational\_vector\_rejects\_stochastic\_migrant\_sampling
+
+```python
+def test_fim_generational_vector_rejects_stochastic_migrant_sampling(
+        tiny_params: SimulationParams) -> None
+```
+
+`"generational-vector"` is also scoped to deterministic migration only.
+
+<a id="engine.test_engine.test_fim_generational_vector_rejects_jit"></a>
+
+#### test\_fim\_generational\_vector\_rejects\_jit
+
+```python
+def test_fim_generational_vector_rejects_jit(
+        tiny_params: SimulationParams) -> None
+```
+
+`jit` has no separate toggle under `"generational-vector"` — a `ValueError`.
+
+Numba is required internally, unconditionally, for its own mutate
+step; only `jit="off"` (the default) is accepted, so a caller who
+asks for `jit="numba"` explicitly gets an error, not a silent no-op.
 
 <a id="engine.test_engine.test_build_engine_backend_rejects_unknown_choice"></a>
 
@@ -2833,6 +2864,64 @@ def test_fim_engine_backend_generational_with_jit_matches_default(
 ```
 
 `fim(..., engine_backend="generational", jit="numba")` end to end.
+
+<a id="engine.test_engine.test_generational_vector_backend_matches_scope_of_lineal_reproducibility"></a>
+
+#### test\_generational\_vector\_backend\_matches\_scope\_of\_lineal\_reproducibility
+
+```python
+def test_generational_vector_backend_matches_scope_of_lineal_reproducibility(
+) -> None
+```
+
+`GenerationalBackend(VectorizedAdvancer())` is reproducible for a fixed seed.
+
+Same seed, same everything else, run twice: exactly the same
+trajectory both times — determinism, not bit-identity to
+`LinealBackend`'s own dict-based path, is the property this checks.
+
+<a id="engine.test_engine.test_generational_vector_backend_bounds_capacity_and_stays_valid"></a>
+
+#### test\_generational\_vector\_backend\_bounds\_capacity\_and\_stays\_valid
+
+```python
+def test_generational_vector_backend_bounds_capacity_and_stays_valid() -> None
+```
+
+A real `VectorizedAdvancer` run stays within its own bounded allele space.
+
+Directly proves the two structural invariants `fim.model.vectorized`
+exists to preserve end to end, not just within its own unit tests:
+every allele id observed stays inside `0..capacity-1`, and every
+deme's own final frequencies remain a valid distribution
+(`ModelState.validate_support` — the same check the finite-alleles
+lineal tests above already run).
+
+<a id="engine.test_engine.test_generational_vector_backend_matches_lineal_for_batch"></a>
+
+#### test\_generational\_vector\_backend\_matches\_lineal\_for\_batch
+
+```python
+def test_generational_vector_backend_matches_lineal_for_batch() -> None
+```
+
+A real multi-replicate batch runs cleanly and independently reproduces.
+
+Mirrors `test_generational_backend_with_threaded_advancer_matches_
+lineal_for_batch`'s own shape (several replicates, checked
+independently) but without claiming trajectory equality against
+`LinealBackend`, since `VectorizedAdvancer`'s own mutate step is only
+statistically, not bit-identically, equivalent to the dict-based one.
+
+<a id="engine.test_engine.test_fim_engine_backend_generational_vector_runs_end_to_end"></a>
+
+#### test\_fim\_engine\_backend\_generational\_vector\_runs\_end\_to\_end
+
+```python
+def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None
+```
+
+`fim(..., engine_backend="generational-vector")` works end to end.
 
 
 
