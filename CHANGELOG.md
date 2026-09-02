@@ -65,6 +65,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A `replicate_minimum` left above `n_replicates` (the GUI's own "new
+  run" form pre-populates both from the shipped defaults, so simply
+  changing `n_replicates` without separately touching `replicate_
+  minimum` was enough to trigger this) is now silently capped at
+  `n_replicates` instead of raising `ValueError` — a real regression
+  the `n_replicates`/`replicate_tolerance` default change above
+  introduced for exactly this combination, found by every GUI batch
+  test failing in CI immediately after that change shipped.
+
 ---
 
 ## [1.2.0] - 2026-08-31
