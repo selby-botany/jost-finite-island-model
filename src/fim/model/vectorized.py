@@ -50,26 +50,68 @@ Statistical, not bit-identical, parity with the dict-based operators in
 `fim.model.operators` was this module's own original correctness bar
 throughout (vector design §6) — every function below names, in its own
 docstring, exactly where and why its own random-draw sequence diverges
-from the dict-based original. **`migrate_vectorized`/`drift_vectorized`
-now clear a materially higher bar, as of Stage F8**
-(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §5.4):
-`migrate_vectorized` was always exact (deterministic, no randomness in
-"continuous" mode), and `drift_vectorized` now draws via the identical
-`_inversion_binomial`-based algorithm, in the identical order, that
-`fim.model.operators.drift`'s own dict-based path uses — checked
-directly (`test/model/test_vectorized.py`, `test_drift_vectorized_
-matches_dict_based_drift_exactly`), the two backends' own resulting
-frequencies now match *exactly*, across many seeds, not merely within
-a statistical band. `mutate_vectorized`'s own event-count and source-
-attribution draws are unified the identical way (`mutate_vectorized`'s
-own docstring); its own target-selection step is **not** — the order
-`_jit_mutate_targets_batched` processes mutating copies in has not
-been checked against `fim.model.operators.mutate`'s own dict-based
-per-source, per-event loop, deliberately out of scope for this stage's
-own first pass — so `mutate_vectorized` as a whole stays on the
-original, statistical-parity bar this paragraph's own first sentence
-describes for that one remaining step, not the stronger one
-`drift_vectorized` now meets.
+from the dict-based original. **`migrate_vectorized`, `drift_vectorized`,
+and `mutate_vectorized` all clear a materially higher bar, as of Stage
+F8** (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+§5.4): each now draws via the identical `_inversion_binomial`-based
+algorithm, in the identical order, that `fim.model.operators`'s own
+dict-based path uses (`migrate_vectorized` was always exact — no
+randomness at all in "continuous" mode) — checked directly, given an
+identical starting state and an identically seeded `rng`, across many
+seeds and a deliberately non-saturated capacity
+(`test_drift_vectorized_matches_dict_based_drift_exactly*`,
+`test_mutate_vectorized_matches_dict_based_mutate_exactly`,
+`test/model/test_vectorized.py`).
+
+**That per-operator proof alone was not enough to make a full,
+multi-generation `fim.engine` run agree with the dict-based backends
+either — a second, separate, more serious bug sat between "every
+operator is exact in isolation" and "a real run produces the same
+trajectory," found only by actually running one end to end, not
+inferred from the operator-level tests.** `build_vectorized_state`,
+below, used to re-derive each locus's own finite-alleles minted
+bookkeeping (`minted_mask`/`minted_list`/`minted_count`/`next_
+unminted`) from scratch every time it was called, using only whichever
+allele ids were currently present in the `ModelState` handed to it —
+and `fim.engine.VectorizedAdvancer` calls it once *every generation*
+(`ReplicaLane`'s own docstring). Any allele minted and then driven to
+extinction — including within the very generation it was minted in,
+the ordinary fate of a brand-new mutant sitting at `1/N` frequency, not
+a rare one — was silently forgotten, letting this backend re-mint an
+identity `FiniteAlleleSpace`'s own dict-based bookkeeping had already
+permanently retired, and systematically undercounting `minted_count`
+(hence biasing `_mutate_targets_batched`'s own `recurrence_probability`
+low). Measured directly: one real generation of a real run left the
+dict-based path's own `next_unminted` at `12` while re-deriving it from
+that generation's own output alone gave `2`. Fixed by carrying that
+bookkeeping forward across generations instead of re-deriving it
+(`build_vectorized_state`'s own `previous_locus_states` argument has
+the full mechanism); `fim.engine.ReplicaLane.vectorized_locus_states`
+is the persistence point.
+
+With that fixed, a full run *is* bit-identical to `LinealBackend` when
+migration is off (`test_generational_vector_backend_matches_lineal_
+exactly_without_migration`, `test/engine/test_engine.py`) — but not
+in general with migration active: `migrate_vectorized`'s own dense
+matmul and `fim.model.operators.migrate`'s own dict-based blend are
+two different, both fully deterministic, floating-point reduction
+orders for the identical computation (BLAS's own summation order is
+not obligated to match a hand-written sequential one), and that
+sub-ULP disagreement occasionally sits close enough to a discrete
+draw's own decision boundary to flip it — measured directly, 23 of 30
+seeds with migration active diverged from `LinealBackend` within the
+first three generations. This is the honest limit `20260901-...-
+design.md` §5.4 names explicitly ("agreeing to within floating-point
+tolerance... not full bit-identity end to end") and not eliminable
+without giving up the vectorized/BLAS performance this backend exists
+for. What actually matters, and what makes the divergence acceptable
+rather than a defect, is that it carries no directional bias — checked
+directly, not assumed, by comparing each backend's own mean `D`/`G_ST`
+across many independently seeded replicates
+(`test_generational_vector_backend_matches_lineal_statistically`): a
+small sample can show a borderline gap, but it narrows back to noise
+as the sample grows, which is what an unbiased alternate realization
+looks like and a real bias would not.
 """
 
 from __future__ import annotations
@@ -134,22 +176,81 @@ class VectorizedState:
     generation: int
 
 
-def build_vectorized_state(state: ModelState) -> VectorizedState:
+def build_vectorized_state(
+    state: ModelState,
+    *,
+    previous_locus_states: tuple[VectorizedLocusState, ...] | None = None,
+) -> VectorizedState:
     """Build a `VectorizedState` from a real `ModelState`.
 
     The one place this module's own array representation is built from
     (or, via `vectorized_state_to_model_state`, converted back to)
     `ModelState`'s own sparse shape — everything between the two stays
     array-native. Every locus's own `capacity` is fixed for the run
-    (`finite_allele_capacity`); the initial minted set is exactly the
-    allele ids already present at generation zero, mirroring
-    `fim.engine._build_finite_allele_spaces`'s own construction.
+    (`finite_allele_capacity`); the initial minted set (`previous_
+    locus_states` not given) is exactly the allele ids already present
+    at generation zero, mirroring `fim.engine._build_finite_allele_
+    spaces`'s own construction.
+
+    Args:
+        state: The generation to build a dense array view of. Only
+            frequencies are read from this — the minted bookkeeping
+            below is not re-derived from it once `previous_locus_
+            states` is given.
+        previous_locus_states: This lane's own `VectorizedLocusState`
+            sequence from the *previous* generation's own `step_
+            vectorized` output, one per locus, if this is not the
+            first generation. When given, `minted_mask`/`minted_list`/
+            `minted_count`/`next_unminted` are carried forward from it
+            directly (copied, not aliased) rather than re-derived from
+            `state`'s own currently-present allele ids.
+
+            This parameter exists to fix a real, confirmed correctness
+            bug: re-deriving "which states have ever been minted"
+            from `state` alone — the shape every caller used before
+            this parameter existed — silently forgets any allele that
+            was minted and then drifted to extinction, including
+            *within the same generation it was minted in* (a fresh
+            mutant at `1/N` frequency is routinely lost to the very
+            next drift step). `FiniteAlleleSpace`'s own dict-based
+            bookkeeping never forgets a minted identity, no matter how
+            long ago it went extinct — measured directly, one real
+            generation of a real run left the dict-based path's own
+            `next_unminted` at `12` while re-deriving it from that same
+            generation's own output alone gave `2`, since three of
+            those twelve ids had been minted and gone extinct within
+            that one generation alone. Without carrying the bookkeeping
+            forward, `fim.engine.VectorizedAdvancer` (the one caller
+            that runs more than a single generation) would re-mint
+            already-retired identities every time this happened, and
+            `minted_count` would run systematically undercounted,
+            biasing `_mutate_targets_batched`'s own `recurrence_
+            probability` low — not a rare edge case, since "a new
+            low-frequency mutant does not survive its own first drift
+            step" is the normal outcome, not a corner one. Found via a
+            direct, multi-generation `LinealBackend`-vs-`GenerationalBackend
+            (VectorizedAdvancer())` probe on a real config: the two
+            backends' own trajectories matched exactly for generation 0
+            and 1, then diverged starting at generation 2 — exactly the
+            generation after the first such within-generation
+            extinction, and not before.
 
     Raises:
         ValueError: If any allele id already present is outside
             `0 .. capacity - 1` — the same bounds `FiniteAlleleSpace`
-            itself enforces at construction.
+            itself enforces at construction. Also if `previous_locus_
+            states` is given with a different length or a different
+            `capacity` per locus than `state.loci` implies — a caller
+            passing state from a different run or a different locus
+            configuration is a real bug, not a case to paper over.
     """
+    if previous_locus_states is not None and len(previous_locus_states) != len(
+        state.loci
+    ):
+        raise ValueError(
+            f"previous_locus_states has {len(previous_locus_states)} entries, "
+            f"expected one per locus ({len(state.loci)})"
+        )
     locus_states = []
     for locus_index, locus in enumerate(state.loci):
         capacity = finite_allele_capacity(locus.length)
@@ -165,19 +266,46 @@ def build_vectorized_state(state: ModelState) -> VectorizedState:
                     )
                 frequencies[deme_index, int(allele_id)] = frequency
                 minted_ids.add(int(allele_id))
-        sorted_minted = sorted(minted_ids)
-        minted_mask = np.zeros(capacity, dtype=np.bool_)
-        minted_mask[sorted_minted] = True
-        minted_list = np.zeros(capacity, dtype=np.int64)
-        minted_list[: len(sorted_minted)] = sorted_minted
+        if previous_locus_states is not None:
+            previous = previous_locus_states[locus_index]
+            if previous.capacity != capacity:
+                raise ValueError(
+                    f"previous_locus_states[{locus_index}] has capacity "
+                    f"{previous.capacity}, expected {capacity}"
+                )
+            # Every allele id currently present must already be known to
+            # the carried-forward bookkeeping -- if one isn't, the
+            # bookkeeping and the state have drifted apart (a caller
+            # bug, e.g. mismatched lanes), not a case to silently patch
+            # over by re-deriving from `state` after all.
+            missing = minted_ids - {
+                int(a) for a in previous.minted_list[: previous.minted_count]
+            }
+            if missing:
+                raise ValueError(
+                    f"previous_locus_states[{locus_index}] does not know "
+                    f"about allele id(s) {sorted(missing)} present in state"
+                )
+            minted_mask = previous.minted_mask.copy()
+            minted_list = previous.minted_list.copy()
+            minted_count = previous.minted_count
+            next_unminted = previous.next_unminted
+        else:
+            sorted_minted = sorted(minted_ids)
+            minted_mask = np.zeros(capacity, dtype=np.bool_)
+            minted_mask[sorted_minted] = True
+            minted_list = np.zeros(capacity, dtype=np.int64)
+            minted_list[: len(sorted_minted)] = sorted_minted
+            minted_count = len(sorted_minted)
+            next_unminted = 0
         locus_states.append(
             VectorizedLocusState(
                 frequencies=frequencies,
                 capacity=capacity,
                 minted_mask=minted_mask,
                 minted_list=minted_list,
-                minted_count=len(sorted_minted),
-                next_unminted=0,
+                minted_count=minted_count,
+                next_unminted=next_unminted,
             )
         )
     return VectorizedState(

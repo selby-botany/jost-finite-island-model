@@ -1,5 +1,6 @@
 """End-to-end tests for the deterministic library engine."""
 
+import statistics
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -1985,17 +1986,19 @@ def test_generational_vector_backend_bounds_capacity_and_stays_valid() -> None:
     result.final_state.validate_support(tuple(_population_sizes(params.N, params.d)))
 
 
-def test_generational_vector_backend_matches_lineal_for_batch() -> None:
+def test_generational_vector_backend_batch_is_independently_reproducible() -> None:
     """A real multi-replicate batch runs cleanly and independently reproduces.
 
     Mirrors `test_generational_backend_with_threaded_advancer_matches_
     lineal_for_batch`'s own shape (several replicates, checked
     independently) but checks each `VectorizedAdvancer` run against
-    *itself*, not against `LinealBackend` — Stage F8 proved `migrate`/
-    `mutate`/`drift` bit-identical to the dict-based path at the
-    operator level (`fim.model.vectorized`'s own module docstring), but
-    no test yet exercises that equivalence through a full multi-
-    generation, multi-replicate `fim.engine` run end to end.
+    *itself* (same params, same seed, run twice), not against
+    `LinealBackend` — this test's own name previously claimed the
+    latter without actually checking it; see `test_generational_
+    vector_backend_matches_lineal_statistically`, below, for the real
+    cross-backend comparison, and `test_generational_vector_backend_
+    matches_lineal_exactly_without_migration` for the case where a
+    full multi-generation run *is* checked bit-for-bit.
     """
     pytest.importorskip("numba")
     params = replace(_finite_alleles_vector_params(), n_replicates=4)
@@ -2017,6 +2020,133 @@ def test_generational_vector_backend_matches_lineal_for_batch() -> None:
         assert first_result.run_id == second_result.run_id
         assert first_result.report == second_result.report
         assert first_result.final_state == second_result.final_state
+
+
+def test_generational_vector_backend_matches_lineal_exactly_without_migration() -> None:
+    """A full multi-generation run matches `LinealBackend` bit-for-bit when `m=0`.
+
+    The real, end-to-end proof this project's own operator-level exact-
+    match tests (`test/model/test_vectorized.py`) never actually
+    exercised: `fim.engine.VectorizedAdvancer` round-trips each lane's
+    own state through `build_vectorized_state`/`vectorized_state_to_
+    model_state` every generation (`ReplicaLane`'s own docstring), and
+    a real correctness bug in the first of those — re-deriving finite-
+    alleles minted bookkeeping from scratch every generation, silently
+    forgetting any allele minted and then driven extinct within the
+    same generation it was minted in — meant this never actually held,
+    even though every individual operator had been proven exact in
+    isolation. Fixed by carrying the bookkeeping forward
+    (`build_vectorized_state`'s own `previous_locus_states` argument);
+    confirmed directly, not assumed, with `m=0` here specifically to
+    remove `migrate`'s own floating-point reduction-order divergence
+    from the picture (`migrate_vectorized`'s dense matmul and `migrate`'s
+    dict-based blend are two different, both-deterministic reduction
+    orders for the same computation — a separate, accepted residual
+    `test_generational_vector_backend_matches_lineal_statistically`,
+    below, exists to characterize, not eliminate).
+    """
+    pytest.importorskip("numba")
+    params = replace(_finite_alleles_vector_params(d=3), m=0.0, max_generations=10)
+
+    lineal_store = InMemoryTrajectoryStore()
+    lineal_result = LinealBackend().run(params, lineal_store, None, _clock)
+    assert isinstance(lineal_result, RunResult)
+
+    vector_store = InMemoryTrajectoryStore()
+    vector_result = GenerationalBackend(VectorizedAdvancer()).run(
+        params, vector_store, None, _clock
+    )
+    assert isinstance(vector_result, RunResult)
+
+    assert vector_result.report == lineal_result.report
+    assert vector_result.final_state == lineal_result.final_state
+    assert list(vector_store.read(vector_result.run_id)) == list(
+        lineal_store.read(lineal_result.run_id)
+    )
+
+
+def test_generational_vector_backend_matches_lineal_statistically() -> None:
+    """Aggregate differentiation statistics agree with `LinealBackend`, at scale.
+
+    With migration active, a full multi-generation run is *not*
+    bit-for-bit identical to `LinealBackend` in general — `migrate`'s
+    own floating-point reduction-order divergence (dense matmul vs.
+    dict-based blend, `test_generational_vector_backend_matches_
+    lineal_exactly_without_migration`'s own docstring) occasionally sits
+    close enough to a discrete draw's own decision boundary to flip it,
+    and that one flip changes which allele identities exist from that
+    generation forward — measured directly across 30 seeds with
+    migration active, 23 diverged from `LinealBackend` within the first
+    three generations. That is expected, not a defect: the vector
+    design's own original correctness bar for this backend was always
+    "statistically, not bit-identically, equivalent" (`fim.model.
+    vectorized`'s own module docstring), and Stage F8 only ever
+    strengthened that to full bit-identity for the *individual
+    operators* feeding a shared, identical starting state, not for a
+    full run's own compounding sequence of independent decision points.
+
+    What actually matters is whether that per-seed divergence is a
+    genuine, unbiased alternate realization of the same underlying
+    random process, or a *systematic* bias — the same distinction that
+    made the minted-bookkeeping bug (fixed alongside this test) a real
+    defect and this residual floating-point one not: checked directly,
+    not assumed, via the same normal-approximation-band methodology
+    this project's own `test_drift_vectorized_variance_matches_
+    binomial_theory` already established, comparing each backend's own
+    mean `D`/`G_ST` across 200 independently seeded replicates. A
+    smaller sample (40, then 200, at a longer horizon) showed a
+    borderline-significant gap that a larger one (600) resolved back to
+    noise — recorded honestly rather than only reporting the
+    comfortable number: real bias would have gotten *more* precisely
+    measured as the sample grew, not smaller.
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=40,
+        m=0.1,
+        mu=0.05,
+        d=4,
+        seed=13579,
+        loci=(LocusSpec(1, 2),),
+        mutation_model="finite_alleles",
+        convergence_tolerance=0.0,
+        convergence_window=21,
+        max_generations=20,
+        n_replicates=200,
+    )
+
+    lineal_results = fim(
+        params.N, params.m, params.mu, params.d, params=params, engine_backend="lineal"
+    )
+    vector_results = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        engine_backend="generational-vector",
+    )
+    assert isinstance(lineal_results, tuple)
+    assert isinstance(vector_results, tuple)
+
+    def _as_float(value: float | None) -> float:
+        # `G_ST` alone can be `None` (`DifferentiationReport`'s own
+        # docstring) -- never for this config (real differentiation
+        # signal, every replicate), so a real `None` here is a genuine
+        # test-setup bug, not a case to special-case around.
+        assert value is not None
+        return value
+
+    for stat in ("D", "G_ST"):
+        lineal_values = [_as_float(result.report[stat]) for result in lineal_results]
+        vector_values = [_as_float(result.report[stat]) for result in vector_results]
+        lineal_mean = statistics.fmean(lineal_values)
+        vector_mean = statistics.fmean(vector_values)
+        standard_error = (
+            statistics.variance(lineal_values) / len(lineal_values)
+            + statistics.variance(vector_values) / len(vector_values)
+        ) ** 0.5
+        assert vector_mean == pytest.approx(lineal_mean, abs=5.0 * standard_error), stat
 
 
 def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:

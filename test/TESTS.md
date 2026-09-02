@@ -3048,12 +3048,13 @@ deme's own final frequencies remain a valid distribution
 (`ModelState.validate_support` — the same check the finite-alleles
 lineal tests above already run).
 
-<a id="engine.test_engine.test_generational_vector_backend_matches_lineal_for_batch"></a>
+<a id="engine.test_engine.test_generational_vector_backend_batch_is_independently_reproducible"></a>
 
-#### test\_generational\_vector\_backend\_matches\_lineal\_for\_batch
+#### test\_generational\_vector\_backend\_batch\_is\_independently\_reproducible
 
 ```python
-def test_generational_vector_backend_matches_lineal_for_batch() -> None
+def test_generational_vector_backend_batch_is_independently_reproducible(
+) -> None
 ```
 
 A real multi-replicate batch runs cleanly and independently reproduces.
@@ -3061,11 +3062,86 @@ A real multi-replicate batch runs cleanly and independently reproduces.
 Mirrors `test_generational_backend_with_threaded_advancer_matches_
 lineal_for_batch`'s own shape (several replicates, checked
 independently) but checks each `VectorizedAdvancer` run against
-*itself*, not against `LinealBackend` — Stage F8 proved `migrate`/
-`mutate`/`drift` bit-identical to the dict-based path at the
-operator level (`fim.model.vectorized`'s own module docstring), but
-no test yet exercises that equivalence through a full multi-
-generation, multi-replicate `fim.engine` run end to end.
+*itself* (same params, same seed, run twice), not against
+`LinealBackend` — this test's own name previously claimed the
+latter without actually checking it; see `test_generational_
+vector_backend_matches_lineal_statistically`, below, for the real
+cross-backend comparison, and `test_generational_vector_backend_
+matches_lineal_exactly_without_migration` for the case where a
+full multi-generation run *is* checked bit-for-bit.
+
+<a id="engine.test_engine.test_generational_vector_backend_matches_lineal_exactly_without_migration"></a>
+
+#### test\_generational\_vector\_backend\_matches\_lineal\_exactly\_without\_migration
+
+```python
+def test_generational_vector_backend_matches_lineal_exactly_without_migration(
+) -> None
+```
+
+A full multi-generation run matches `LinealBackend` bit-for-bit when `m=0`.
+
+The real, end-to-end proof this project's own operator-level exact-
+match tests (`test/model/test_vectorized.py`) never actually
+exercised: `fim.engine.VectorizedAdvancer` round-trips each lane's
+own state through `build_vectorized_state`/`vectorized_state_to_
+model_state` every generation (`ReplicaLane`'s own docstring), and
+a real correctness bug in the first of those — re-deriving finite-
+alleles minted bookkeeping from scratch every generation, silently
+forgetting any allele minted and then driven extinct within the
+same generation it was minted in — meant this never actually held,
+even though every individual operator had been proven exact in
+isolation. Fixed by carrying the bookkeeping forward
+(`build_vectorized_state`'s own `previous_locus_states` argument);
+confirmed directly, not assumed, with `m=0` here specifically to
+remove `migrate`'s own floating-point reduction-order divergence
+from the picture (`migrate_vectorized`'s dense matmul and `migrate`'s
+dict-based blend are two different, both-deterministic reduction
+orders for the same computation — a separate, accepted residual
+`test_generational_vector_backend_matches_lineal_statistically`,
+below, exists to characterize, not eliminate).
+
+<a id="engine.test_engine.test_generational_vector_backend_matches_lineal_statistically"></a>
+
+#### test\_generational\_vector\_backend\_matches\_lineal\_statistically
+
+```python
+def test_generational_vector_backend_matches_lineal_statistically() -> None
+```
+
+Aggregate differentiation statistics agree with `LinealBackend`, at scale.
+
+With migration active, a full multi-generation run is *not*
+bit-for-bit identical to `LinealBackend` in general — `migrate`'s
+own floating-point reduction-order divergence (dense matmul vs.
+dict-based blend, `test_generational_vector_backend_matches_
+lineal_exactly_without_migration`'s own docstring) occasionally sits
+close enough to a discrete draw's own decision boundary to flip it,
+and that one flip changes which allele identities exist from that
+generation forward — measured directly across 30 seeds with
+migration active, 23 diverged from `LinealBackend` within the first
+three generations. That is expected, not a defect: the vector
+design's own original correctness bar for this backend was always
+"statistically, not bit-identically, equivalent" (`fim.model.
+vectorized`'s own module docstring), and Stage F8 only ever
+strengthened that to full bit-identity for the *individual
+operators* feeding a shared, identical starting state, not for a
+full run's own compounding sequence of independent decision points.
+
+What actually matters is whether that per-seed divergence is a
+genuine, unbiased alternate realization of the same underlying
+random process, or a *systematic* bias — the same distinction that
+made the minted-bookkeeping bug (fixed alongside this test) a real
+defect and this residual floating-point one not: checked directly,
+not assumed, via the same normal-approximation-band methodology
+this project's own `test_drift_vectorized_variance_matches_
+binomial_theory` already established, comparing each backend's own
+mean `D`/`G_ST` across 200 independently seeded replicates. A
+smaller sample (40, then 200, at a longer horizon) showed a
+borderline-significant gap that a larger one (600) resolved back to
+noise — recorded honestly rather than only reporting the
+comfortable number: real bias would have gotten *more* precisely
+measured as the sample grew, not smaller.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_vector_runs_end_to_end"></a>
 
@@ -11677,6 +11753,41 @@ def read(run_id: str) -> Iterator[TrajectoryRow]
 ```
 
 Yield nothing; no trajectory is retained.
+
+<a id="validation.test_simulator_equilibrium.test_engine_reproduces_part_vi_equilibrium_via_generational_backend"></a>
+
+#### test\_engine\_reproduces\_part\_vi\_equilibrium\_via\_generational\_backend
+
+```python
+def test_engine_reproduces_part_vi_equilibrium_via_generational_backend(
+) -> None
+```
+
+`engine_backend="generational"` reproduces the same published-value comparison.
+
+Every one of this file's own `@pytest.mark.slow` published-value
+scenarios below runs through the default `"lineal"` backend only —
+reasonably, since `fim.engine`'s own design already gives Backend L
+and Backend G a *general*, structural bit-identity proof
+(`test_generational_backend_matches_lineal_for_scalar_run`/`_for_
+batch`, `test/engine/test_engine.py`): G calls the identical dict-
+based operators as L, in the identical per-deme order, only
+reordering *across* replicas — a config-independent guarantee, not
+one that needs re-confirming scenario by scenario. Re-running all
+five slow scenarios again through `"generational"` would add real
+CI time (this project's own `test/bin` history already fought one
+slow-suite timeout) for zero new information.
+
+This one spot-check exists for what the general proof does *not*
+automatically cover: the multi-locus (8 independently tracked loci),
+real-differentiation-statistics shape this file's own helpers
+actually exercise, which the smaller, single-locus `tiny_params`-
+based tests never do. Deliberately small and fast (2 replicates, 20
+generations — not `@pytest.mark.slow`) and deliberately an *exact*
+comparison, not a statistical one: since L and G are already proven
+bit-identical in general, there is nothing to band here — either
+this config reproduces that identically too, or the general proof
+has a real, narrower exception this specific shape exposes.
 
 <a id="validation.test_simulator_equilibrium.test_mutation_survival_matches_brute_force_binomial_second_moment"></a>
 

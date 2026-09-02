@@ -128,6 +128,7 @@ from fim.model.operators import _population_sizes, step
 from fim.model.params import Migration, MutationRate, PopulationSize, SimulationParams
 from fim.model.state import ModelState
 from fim.model.vectorized import (
+    VectorizedLocusState,
     build_vectorized_state,
     step_vectorized,
     symmetric_migration_weights,
@@ -470,6 +471,23 @@ class ReplicaLane:
     Stage V3 benchmark sweep, `20260827-claude-sonnet-5-fim-engine-
     parallel-refactor-design.md`'s own §9). Unused by every other
     `Advancer`; stays `None` for the whole run under those.
+
+    `vectorized_locus_states` is also a `VectorizedAdvancer`-only cache,
+    for a correctness reason rather than a performance one: each
+    locus's own finite-alleles minted bookkeeping (`minted_mask`/
+    `minted_list`/`minted_count`/`next_unminted`) must persist across
+    generations exactly the way `FiniteAlleleRegistry`'s own dict-based
+    state already does for `LinealBackend`/`GenerationalBackend`'s
+    default advancer. Re-deriving that bookkeeping from `state` alone,
+    every generation, silently forgets any allele minted and then
+    driven extinct — including within the very generation it was
+    minted in, the normal outcome for a fresh low-frequency mutant, not
+    a rare one — which both re-mints identities `LinealBackend` has
+    permanently retired and undercounts `minted_count`
+    (`fim.model.vectorized.build_vectorized_state`'s own `previous_
+    locus_states` argument has the full argument and a directly
+    measured example). Unused by every other `Advancer`; stays `None`
+    for the whole run under those.
     """
 
     replica_index: int
@@ -484,6 +502,7 @@ class ReplicaLane:
     active: bool = True
     result: RunResult | None = None
     migration_weights: tuple[np.ndarray, ...] | None = None
+    vectorized_locus_states: tuple[VectorizedLocusState, ...] | None = None
 
 
 class Advancer(Protocol):
@@ -771,7 +790,9 @@ class VectorizedAdvancer:
                     else np.asarray(lane.params.m, dtype=np.float64)
                 )
                 lane.migration_weights = (weights,) * len(lane.state.loci)
-            vectorized = build_vectorized_state(lane.state)
+            vectorized = build_vectorized_state(
+                lane.state, previous_locus_states=lane.vectorized_locus_states
+            )
             stepped = step_vectorized(
                 vectorized,
                 lane.migration_weights,
@@ -784,6 +805,7 @@ class VectorizedAdvancer:
                 stepped.generation,
                 vectorized_state_to_rows(stepped, lane.run_id),
             )
+            lane.vectorized_locus_states = stepped.locus_states
             lane.state = vectorized_state_to_model_state(stepped)
             values = _convergence_values(lane.state, lane.params)
             lane.monitor.record(lane.state.generation, values)
