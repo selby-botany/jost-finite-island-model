@@ -186,6 +186,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "src/fim/engine.py" = ["N803"]
+"dev/bin/benchmark-engines" = ["N803"]
 "test/**/*.py" = ["ARG001", "PLR2004", "S101"]
 
 [tool.mypy]

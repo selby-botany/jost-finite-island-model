@@ -1,0 +1,422 @@
+#!/usr/bin/env python3
+"""Characterize engine wall-clock time across the parameter space.
+
+Measures how `engine_backend="lineal"`/`"generational"`/
+`"generational-vector"` scale as one `SimulationParams` field sweeps
+across a range of values, holding every other field fixed -- normalized
+throughout to `L_1`: a single-lineage (`n_replicates=1`) `"lineal"` run
+at the *same* swept value, so the reported numbers answer "how many
+single-lineage-run-equivalents does this batch cost," not just raw
+seconds (machine-independent in the sense that the ratio, not the
+absolute time, is the number worth comparing across machines/sessions --
+the raw seconds are recorded too, for anyone who wants them).
+
+Default sweep is `d` (deme count) -- the axis `auto_vector_min_d`
+(`fim.engine`) already exists to threshold, and the one the project
+owner asked this tool to characterize first. `--sweep N|mu|m|
+loci-length` characterizes the other candidate scaling factors named
+directly (population size, mutation/migration rate, locus
+length/capacity) -- run each independently; this tool does not attempt
+a full multi-factor grid (out of scope, and combinatorially large).
+
+`"generational"` here means exactly what `fim(engine_backend=
+"generational")` gives a real caller: `GenerationalBackend(
+ThreadedAdvancer())`, default `max_workers` (`os.cpu_count()`) --
+deliberately not an idealized single-threaded measurement, so this
+tool's own G numbers already reflect whatever real thread-count
+behavior `ThreadedAdvancer` actually has on this machine, regressions
+included (see `20260901-claude-sonnet-5-fim-engine-backend-factory-
+design.md` S11's own "System-resource behavior" finding: post-Stage-F8,
+`ThreadedAdvancer` delivers little to no real speedup at this project's
+own reference scale -- this tool's own G/L_1 ratio is expected to show
+that directly, not hide it behind an idealized number).
+
+Every point is the median of `--trials` independent, freshly-built runs
+(not re-timing a warm cache) -- median-of-N, matching this project's
+own established sweep methodology (the d>=35 crossover finding used the
+same discipline after a first, discarded single-trial attempt showed
+30-40% run-to-run swings). `"generational-vector"` pays a one-time numba
+JIT compile cost on first use; this tool issues one untimed warm-up call
+before its own first V measurement so that cost never contaminates a
+reported trial (the exact mistake this project's own history already
+made once and had to catch).
+
+"Machine-saturated" (the project owner's own phrasing): this tool does
+not itself pin CPU affinity or launch background load -- it assumes the
+caller runs it on an otherwise-idle machine (this project's own
+established sweep discipline: "run in isolation, no unrelated process
+competing for CPU") and records `os.cpu_count()`/`os.getloadavg()` in
+its own output as a fingerprint of what "saturated" meant for that run,
+so a future comparison can tell whether two runs are actually
+comparable rather than assuming so.
+
+`--output` writes a full evidence file for whoever runs this, but its
+own results (unlike `calibrate-statistical-bands`'s own JSON) are not
+committed to this repository -- machine-specific timing numbers would
+go stale the moment anyone runs this on different hardware, exactly
+the reasoning `auto_vector_min_d`'s own docstring already gives for
+being a caller-supplied parameter rather than a hardcoded constant.
+Findings worth keeping get written up as prose (this project's own
+established practice for every prior benchmark sweep), not as a
+versioned raw-numbers artifact.
+
+Usage:
+    dev/bin/benchmark-engines --sweep d \\
+        --values 4,10,20,35,50,80,120 --replicates 16 \\
+        --generations 100 --trials 3 \\
+        --output /tmp/benchmark-d-sweep.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import platform
+import statistics
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from importlib.metadata import version as installed_version
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "src"))
+
+from fim.engine import (  # noqa: E402
+    EngineBackendChoice,
+    build_engine_backend,
+)
+from fim.model.locus import LocusSpec  # noqa: E402
+from fim.model.params import SimulationParams  # noqa: E402
+from fim.persistence.store import InMemoryTrajectoryStore  # noqa: E402
+
+SweepField = str  # one of "d", "N", "mu", "m", "loci-length"
+
+DEFAULT_D = 60
+DEFAULT_N = 500
+DEFAULT_MU = 0.001
+DEFAULT_M = 0.05
+DEFAULT_LOCUS_LENGTH = 4  # capacity = 4**4 = 256, this project's own reference scale
+
+
+def _clock() -> datetime:
+    """Return a fixed manifest timestamp -- irrelevant to a timing run."""
+    return datetime(2026, 9, 2, tzinfo=UTC)
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkPoint:
+    """One swept value's own measured backend times, in seconds."""
+
+    swept_field: str
+    swept_value: float
+    d: int
+    lineal_single_seconds: float
+    generational_seconds: float | None
+    vector_seconds: float | None
+    vector_skip_reason: str | None
+
+
+def _base_params(
+    *,
+    d: int = DEFAULT_D,
+    N: int = DEFAULT_N,
+    mu: float = DEFAULT_MU,
+    m: float = DEFAULT_M,
+    locus_length: int = DEFAULT_LOCUS_LENGTH,
+    n_replicates: int,
+    max_generations: int,
+    seed: int,
+) -> SimulationParams:
+    """Build a reference-scale `SimulationParams`, one field at a time overridable."""
+    return SimulationParams(
+        N=N,
+        m=m,
+        mu=mu,
+        d=d,
+        seed=seed,
+        loci=(LocusSpec(1, locus_length),),
+        mutation_model="finite_alleles",
+        migrant_sampling="continuous",
+        max_generations=max_generations,
+        n_replicates=n_replicates,
+        convergence_tolerance=0.0,
+        convergence_window=max_generations + 1,
+    )
+
+
+def _run_once(engine_backend: EngineBackendChoice, params: SimulationParams) -> float:
+    """Run one full batch, return elapsed wall-clock seconds."""
+    backend = build_engine_backend(engine_backend)
+    store = InMemoryTrajectoryStore()
+    start = time.perf_counter()
+    backend.run(params, store, None, _clock)
+    return time.perf_counter() - start
+
+
+def _median_of(
+    engine_backend: EngineBackendChoice, params: SimulationParams, trials: int
+) -> float:
+    """Median wall-clock seconds across `trials` independent runs."""
+    samples = [_run_once(engine_backend, params) for _ in range(trials)]
+    return statistics.median(samples)
+
+
+def _measure_point(
+    field: SweepField,
+    value: float,
+    *,
+    replicates: int,
+    generations: int,
+    trials: int,
+    seed: int,
+    warmed_up_vector: list[bool],
+) -> BenchmarkPoint:
+    """Measure one swept value's own L_1/G/V times."""
+    d = int(value) if field == "d" else DEFAULT_D
+    n = int(value) if field == "N" else DEFAULT_N
+    mu = float(value) if field == "mu" else DEFAULT_MU
+    m = float(value) if field == "m" else DEFAULT_M
+    locus_length = int(value) if field == "loci-length" else DEFAULT_LOCUS_LENGTH
+    if field not in {"d", "N", "mu", "m", "loci-length"}:
+        raise ValueError(f"unknown sweep field: {field}")
+
+    single_params = _base_params(
+        d=d,
+        N=n,
+        mu=mu,
+        m=m,
+        locus_length=locus_length,
+        n_replicates=1,
+        max_generations=generations,
+        seed=seed,
+    )
+    batch_params = replace(single_params, n_replicates=replicates)
+
+    lineal_seconds = _median_of("lineal", single_params, trials)
+    generational_seconds = _median_of("generational", batch_params, trials)
+
+    vector_seconds: float | None = None
+    vector_skip_reason: str | None = None
+    try:
+        if not warmed_up_vector[0]:
+            _run_once("generational-vector", batch_params)  # untimed JIT warm-up
+            warmed_up_vector[0] = True
+        vector_seconds = _median_of("generational-vector", batch_params, trials)
+    except ValueError as exc:  # config outside Backend V's own enforced scope
+        vector_skip_reason = str(exc)
+    except ImportError as exc:  # numba not installed
+        vector_skip_reason = f"numba unavailable: {exc}"
+
+    return BenchmarkPoint(
+        swept_field=field,
+        swept_value=value,
+        d=d,
+        lineal_single_seconds=lineal_seconds,
+        generational_seconds=generational_seconds,
+        vector_seconds=vector_seconds,
+        vector_skip_reason=vector_skip_reason,
+    )
+
+
+def _environment_fingerprint() -> dict[str, object]:
+    """Return interpreter/platform/package/load-average fingerprint for this run."""
+    fingerprint: dict[str, object] = {
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "cpu_count": os.cpu_count(),
+    }
+    try:
+        fingerprint["load_average_1min"] = os.getloadavg()[0]
+    except (OSError, AttributeError):  # not available on this platform
+        fingerprint["load_average_1min"] = None
+    for package in ("numpy", "numba"):
+        try:
+            fingerprint[f"{package}_version"] = installed_version(package)
+        except Exception:  # best-effort: a fingerprint, not a gate
+            fingerprint[f"{package}_version"] = "unavailable"
+    try:
+        fingerprint["git_commit"] = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except Exception:  # best-effort
+        fingerprint["git_commit"] = "unknown"
+    return fingerprint
+
+
+def _print_table(points: list[BenchmarkPoint]) -> None:
+    """Print a human-readable summary table to stdout."""
+    header = (
+        f"{'value':>10} {'L_1 (s)':>10} {'G (s)':>10} {'G/L_1':>9} "
+        f"{'V (s)':>10} {'V/L_1':>9} {'faster':>8}"
+    )
+    print(header)
+    print("-" * len(header))
+    for point in points:
+        g_ratio = (
+            f"{point.generational_seconds / point.lineal_single_seconds:.2f}"
+            if point.generational_seconds
+            else "n/a"
+        )
+        if point.vector_seconds is not None:
+            v_seconds = f"{point.vector_seconds:.3f}"
+            v_ratio = f"{point.vector_seconds / point.lineal_single_seconds:.2f}"
+        else:
+            v_seconds = "skip"
+            v_ratio = "n/a"
+        if point.generational_seconds and point.vector_seconds:
+            faster = "V" if point.vector_seconds < point.generational_seconds else "G"
+        else:
+            faster = "n/a"
+        g_seconds = (
+            f"{point.generational_seconds:.3f}" if point.generational_seconds else "n/a"
+        )
+        print(
+            f"{point.swept_value:>10.4g} {point.lineal_single_seconds:>10.3f} "
+            f"{g_seconds:>10} {g_ratio:>9} {v_seconds:>10} {v_ratio:>9} {faster:>8}"
+        )
+
+
+def _render_data(
+    field: SweepField,
+    points: list[BenchmarkPoint],
+    fingerprint: dict[str, object],
+    fixed: dict[str, object],
+) -> dict[str, object]:
+    """Render the full machine-readable benchmark payload."""
+    return {
+        "schema_version": 1,
+        "generator": {
+            "name": "Claude Code",
+            "version": "Claude Sonnet 5",
+            "model_token": "claude-sonnet-5",
+            "provider": "Anthropic",
+            "generation_date": datetime.now(UTC).date().isoformat(),
+            "responsibility": "other",
+            "script": "dev/bin/benchmark-engines",
+        },
+        "fim_version": (ROOT / "version.txt").read_text(encoding="utf-8").strip(),
+        "environment": fingerprint,
+        "swept_field": field,
+        "fixed_params": fixed,
+        "points": [
+            {
+                "swept_value": point.swept_value,
+                "d": point.d,
+                "lineal_single_seconds": point.lineal_single_seconds,
+                "generational_seconds": point.generational_seconds,
+                "generational_ratio_to_l1": (
+                    point.generational_seconds / point.lineal_single_seconds
+                    if point.generational_seconds
+                    else None
+                ),
+                "vector_seconds": point.vector_seconds,
+                "vector_ratio_to_l1": (
+                    point.vector_seconds / point.lineal_single_seconds
+                    if point.vector_seconds
+                    else None
+                ),
+                "vector_skip_reason": point.vector_skip_reason,
+            }
+            for point in points
+        ],
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the sweep named by argv, print a table, optionally write JSON."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--sweep",
+        choices=["d", "N", "mu", "m", "loci-length"],
+        default="d",
+        help="Which SimulationParams field to sweep (default: d).",
+    )
+    parser.add_argument(
+        "--values",
+        required=True,
+        help="Comma-separated values to sweep across, e.g. 4,10,20,35,50,80.",
+    )
+    parser.add_argument(
+        "--replicates",
+        type=int,
+        default=16,
+        help="Batch size for the generational/generational-vector runs (default: 16).",
+    )
+    parser.add_argument(
+        "--generations",
+        type=int,
+        default=100,
+        help="max_generations for every run (default: 100).",
+    )
+    parser.add_argument(
+        "--trials",
+        type=int,
+        default=3,
+        help="Independent runs per point; the reported time is their median "
+        "(default: 3).",
+    )
+    parser.add_argument("--seed", type=int, default=20260902, help="Base RNG seed.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Optional path to write the full machine-readable JSON payload.",
+    )
+    args = parser.parse_args(argv)
+
+    values = [float(v) for v in args.values.split(",")]
+    warmed_up_vector = [False]
+    points = [
+        _measure_point(
+            args.sweep,
+            value,
+            replicates=args.replicates,
+            generations=args.generations,
+            trials=args.trials,
+            seed=args.seed,
+            warmed_up_vector=warmed_up_vector,
+        )
+        for value in values
+    ]
+
+    print(
+        f"Sweeping {args.sweep} over {values} "
+        f"(replicates={args.replicates}, generations={args.generations}, "
+        f"trials={args.trials})"
+    )
+    _print_table(points)
+
+    if args.output is not None:
+        fingerprint = _environment_fingerprint()
+        fixed = {
+            "N": DEFAULT_N,
+            "mu": DEFAULT_MU,
+            "m": DEFAULT_M,
+            "locus_length": DEFAULT_LOCUS_LENGTH,
+            "d": DEFAULT_D,
+            "replicates": args.replicates,
+            "generations": args.generations,
+            "trials": args.trials,
+            "seed": args.seed,
+        }
+        payload = _render_data(args.sweep, points, fingerprint, fixed)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print(f"\nWrote {args.output}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

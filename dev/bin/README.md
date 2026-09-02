@@ -3,6 +3,7 @@
 - [Maintainer scripts](#maintainer-scripts)
   - [Why generated files exist at all](#why-generated-files-exist-at-all)
   - [At a glance](#at-a-glance)
+  - [`benchmark-engines`](#benchmark-engines)
   - [`calibrate-statistical-bands`](#calibrate-statistical-bands)
   - [`check-doc-links`](#check-doc-links)
   - [`compare-against-hierfstat`](#compare-against-hierfstat)
@@ -12,7 +13,7 @@
   - [`validate-repository`](#validate-repository)
   - [Related documents](#related-documents)
 
-These six commands keep the project trustworthy: they make sure the
+These seven commands keep the project trustworthy: they make sure the
 documentation you read matches the code that actually runs, that a
 release's own history is recorded accurately, and that no credential or
 badly formed file ever gets committed. None of them run a simulation --
@@ -58,6 +59,7 @@ run by hand.
 
 | Command | What it does |
 |---|---|
+| [`benchmark-engines`](#benchmark-engines) | Times how long each `engine_backend` choice takes as one setting (deme count, population size, mutation/migration rate, locus length) sweeps across a range, so a choice between them can be made from evidence instead of a guess |
 | [`calibrate-statistical-bands`](#calibrate-statistical-bands) | Re-measures how much random variation is normal for the three published-science validation scenarios, so the tests that check the simulator against them use an honest, evidence-based tolerance |
 | [`check-doc-links`](#check-doc-links) | Confirms every link between documentation pages actually goes somewhere, and that no page is orphaned with nothing linking to it |
 | [`compare-against-hierfstat`](#compare-against-hierfstat) | Runs an independently-written simulator (hierfstat, an R package, inside Docker) alongside this project's own, and prints how closely the two agree |
@@ -68,6 +70,71 @@ run by hand.
 
 Every command supports `-h`/`--help` for the same explanation you are
 reading now, plus its exact command-line syntax.
+
+## `benchmark-engines`
+
+**What it does:** Runs the same simulation several times over, at
+several different values of one setting you choose (deme count by
+default; population size, mutation rate, migration rate, and locus
+length are the other options), and times how long each of the three
+engines (`"lineal"`, `"generational"`, `"generational-vector"`) takes.
+Every number it reports is normalized against `"lineal"` run with a
+single lineage at that same setting -- so instead of raw seconds (which
+depend entirely on whatever computer happens to run it), you get "how
+many single-lineage-run-equivalents did this batch cost," a number
+that means roughly the same thing on a different machine, or a year
+from now on faster hardware.
+
+**Why it matters:** This project offers a choice between three engines
+that trade determinism, speed, and memory use against each other in
+ways that are not obvious from reading the code alone (see the
+[developer guide](../../doc/developer.md) for what each one actually
+does differently) -- and the right choice genuinely depends on how big
+a simulation you are running, not on a fixed rule. `engine_backend=
+"auto"` already picks between two of them using a threshold
+(`auto_vector_min_d`) that was measured, once, on one specific machine;
+this script is how that measurement gets made in the first place, and
+how it gets checked again later if the underlying code changes in a way
+that might move it (this project's own history already has one example:
+a correctness fix to how randomness is drawn turned out to also change
+how much benefit multi-threading provides -- exactly the kind of thing
+this script is meant to catch, by measuring directly rather than
+trusting an old number).
+
+**When to run it:** Whenever you want real evidence for how the engines
+compare at a scale you actually care about, or whenever you suspect a
+recent code change might have shifted that balance. Not run
+automatically by any test, build, or release step -- like
+`calibrate-statistical-bands` below, a benchmark that ran on every push
+would make timing-sensitive CI results depend on how busy the CI
+runner happened to be that day, not on the code. Run it on an otherwise
+idle machine for a trustworthy result (a browser doing something in the
+background, another simulation running at the same time, or a laptop on
+battery-saving mode can all skew the numbers).
+
+**Usage:**
+
+```console
+dev/bin/benchmark-engines --sweep d --values 4,10,20,35,50,80,120 \
+    --replicates 16 --generations 100 --trials 3 \
+    --output /tmp/benchmark-d-sweep.json
+```
+
+`--sweep` picks which setting varies (`d`, `N`, `mu`, `m`, or
+`loci-length`); `--values` is the comma-separated list of values to try
+for it. `--replicates` and `--generations` size each individual
+simulation run; `--trials` is how many times each one is repeated (the
+*middle* value across those repeats is what gets reported, which is
+more resistant to one unlucky, unrelated slowdown than an average
+would be). `--output` is optional -- without it, you get the printed
+table only; with it, you also get a JSON file recording the full
+result, including which computer produced it and when, so a later
+comparison can tell whether two runs are actually measuring the same
+thing. That file is not meant to be committed to this repository —
+timing numbers are only meaningful for the machine that produced them;
+a finding worth keeping belongs in prose (a design document, an issue,
+a commit message), the way every earlier benchmark sweep in this
+project's own history was recorded.
 
 ## `calibrate-statistical-bands`
 
