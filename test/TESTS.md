@@ -8706,12 +8706,17 @@ Every documented validation rule rejects its invalid sparse map.
 
 Tests for the bounded-K (finite-alleles) array-native operators.
 
-Statistical, not bit-identical, parity with `fim.model.operators` is the
-correctness bar throughout — see `fim.model.vectorized`'s own module
-docstring for why. Exact/invariant checks (round-tripping, frequency
-sums, target != source) need no tolerance at all and are kept separate
-from the genuinely statistical ones, which use a normal-approximation
-band matching this project's own existing precedent
+Statistical, not bit-identical, parity with `fim.model.operators` was
+this module's own original correctness bar — see `fim.model.vectorized`'s
+own module docstring for why, and for which functions now clear a
+materially higher bar as of Stage F8 (exact numerical agreement, not
+merely statistical, for `migrate_vectorized`/`drift_vectorized`
+specifically — `test_drift_vectorized_matches_dict_based_drift_exactly`,
+below). Exact/invariant checks (round-tripping, frequency sums, target
+!= source) need no tolerance at all and are kept separate from the
+genuinely statistical ones (still needed for `mutate_vectorized`, not
+yet unified), which use a normal-approximation band matching this
+project's own existing precedent
 (`test_drift_variance_matches_binomial_theory`).
 
 <a id="model.test_vectorized.test_build_and_convert_round_trips"></a>
@@ -8753,6 +8758,32 @@ def test_migrate_vectorized_matches_dict_based_migrate() -> None
 ```
 
 The dense matmul reproduces `fim.model.operators.migrate`'s own blend.
+
+<a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly"></a>
+
+#### test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly
+
+```python
+def test_drift_vectorized_matches_dict_based_drift_exactly(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Stage F8's own deliverable: not statistical parity — exact agreement.
+
+`fim.model.operators.drift` and `drift_vectorized` both draw via
+the identical mode-anchored inversion-binomial algorithm now
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+§5.4), in the identical ascending-allele-id order — `drift`'s own
+dict-based path via `sorted(frequency_map)`, this module's own
+dense array natively. Checked directly, across many seeds and a
+deme count large enough that some demes draw more real (non-
+short-circuited) categories than others: given the identical
+starting state and an identically seeded `rng`, the two backends'
+own resulting frequencies match *exactly*, not merely within a
+statistical band — the counts underneath are literally the same
+integers, not just close. This is the actual, concrete proof the
+whole unified-RNG effort exists to deliver, not yet attempted
+before this test.
 
 <a id="model.test_vectorized.test_symmetric_migration_weights_rows_are_stochastic"></a>
 

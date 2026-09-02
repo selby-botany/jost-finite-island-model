@@ -761,7 +761,14 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
     assert any_result.report["converged"]
     assert all_result.report["converged"]
     assert any_result.report["generation"] == 5
-    assert all_result.report["generation"] == 15
+    # 20, not the pre-Stage-F8 value of 15: `drift` now draws via
+    # `_inversion_binomial` in ascending-allele-id order rather than
+    # `rng.multinomial` in dict-insertion order — a deliberate,
+    # accepted change to this seed's own specific trajectory (design
+    # doc §5.4's own "accept the break"), confirmed deterministic (not
+    # flaky) by re-running this exact test in isolation before updating
+    # the expected value.
+    assert all_result.report["generation"] == 20
     assert any_result.report["generation"] < all_result.report["generation"]
 
 

@@ -243,6 +243,67 @@ def _jit_multinomial_via_binomial(
     return _JIT_MULTINOMIAL_VIA_BINOMIAL(rng, n, probabilities)
 
 
+def _multinomial_via_inversion_binomial(
+    rng: np.random.Generator, n: int, probabilities: np.ndarray
+) -> np.ndarray:
+    """Draw one multinomial sample via `_inversion_binomial`, category by category.
+
+    The same sequential conditional-binomial decomposition
+    `_multinomial_via_binomial` (above) uses, with one deliberate
+    difference: each category's own count comes from `_inversion_
+    binomial`, not `rng.binomial`. That is the actual mechanism Stage
+    F8 (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §5.4, "one RNG scheme for every backend") needs — a fixed,
+    known-in-advance number of uniforms per draw, which `rng.binomial`
+    itself does not guarantee (its own internal algorithm choice is
+    opaque and `n`/`p`-dependent; `_inversion_binomial`'s own docstring
+    has the full argument). Deliberately **not** bit-identical to
+    `rng.multinomial`/`_multinomial_via_binomial` — a different
+    underlying binomial algorithm necessarily produces a different
+    specific sample for the same seed, even though both target the
+    identical distribution (`_inversion_binomial`'s own docstring; the
+    accepted cost of Stage F8, `20260901-...-design.md` §5.4's own "the
+    real cost, named plainly").
+
+    `drift`'s own `jit=False` path calls this directly, in place of
+    `rng.multinomial`; `_drift_counts_batched`'s own inner loop performs
+    the equivalent computation for the `jit=True` path, batched across
+    every (deme, locus) pair rather than calling this once per pair —
+    the two paths use the identical underlying primitive and decompose
+    the identical way, which is what makes them bit-identical to each
+    other (see `drift`'s own docstring), not merely close.
+
+    Args:
+        rng: The run's explicitly threaded random generator.
+        n: Total count to distribute across categories.
+        probabilities: Row-stochastic (summing to 1) category weights,
+            already in whatever order the caller has fixed as
+            canonical — this function draws in exactly that order and
+            has no opinion of its own about what the right order is
+            (see `drift`'s own docstring for what canonical means
+            there).
+
+    Returns:
+        Integer counts, one per category, summing to `n`.
+    """
+    category_count = probabilities.shape[0]
+    counts = np.empty(category_count, dtype=np.int64)
+    remaining_n = n
+    remaining_p = 1.0
+    for index in range(category_count - 1):
+        target_p = probabilities[index] / remaining_p if remaining_p > 0.0 else 0.0
+        if target_p < 0.0:
+            target_p = 0.0
+        elif target_p > 1.0:
+            target_p = 1.0
+        drawn = _inversion_binomial(rng, remaining_n, target_p)
+        counts[index] = drawn
+        remaining_n -= drawn
+        remaining_p -= probabilities[index]
+    counts[category_count - 1] = remaining_n
+    return counts
+
+
 _JIT_DRIFT_COUNTS_BATCHED: (
     Callable[[np.random.Generator, np.ndarray, np.ndarray, np.ndarray], np.ndarray]
     | None
@@ -300,11 +361,16 @@ def _drift_counts_batched(
     pairs, and categories within a pair, in the identical order that
     path does (`_build_flat_drift_buffers`, below, builds `ns`/
     `offsets`/`probabilities_flat` in exactly that deme-major,
-    locus-minor order) — reusing `_multinomial_via_binomial`'s own
-    per-pair algorithm unchanged, just inlined into one call instead of
-    invoked once per pair, is what keeps the underlying RNG consumption
-    (and thus the result) identical to calling `rng.multinomial` once
-    per pair in sequence.
+    locus-minor, ascending-allele-id order) and on drawing each
+    category's own count via `_inversion_binomial` rather than
+    `rng.binomial` — the same primitive `drift`'s own unjitted path
+    uses via `_multinomial_via_inversion_binomial`, inlined here into
+    one JIT-compiled call instead of invoked once per pair. This is
+    Stage F8's own canonical, cross-backend-unified draw
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §5.4) — no longer bit-identical to `rng.multinomial` itself
+    (`_multinomial_via_binomial`, above, still is, and is kept for that
+    reason, but is no longer what `drift` actually calls).
 
     Args:
         rng: The run's explicitly threaded random generator.
@@ -319,6 +385,61 @@ def _drift_counts_batched(
         Integer counts, same flat layout as `probabilities_flat`, each
         pair's own slice summing to that pair's own `ns` entry.
     """
+
+    # `_inversion_binomial`, as a nested closure, not a call to the
+    # actual module-level function — see that function's own docstring
+    # for the algorithm and why it exists. Nested, not called directly,
+    # for the same reason `_multinomial_via_binomial`'s own
+    # decomposition is inlined rather than called from here: Numba's
+    # `nopython` mode cannot compile a call to a plain, undecorated
+    # module-level Python function as an internal callee (confirmed
+    # directly — attempting to call `_inversion_binomial` from here
+    # raised `numba.core.errors.TypingError: Untyped global name`), and
+    # decorating `_inversion_binomial` itself with `@numba.jit` at
+    # module level would force every caller — including every
+    # `jit=False` one — to pay `numba`'s own import cost, violating
+    # this module's own "numba stays fully optional, imported only when
+    # explicitly requested" invariant. A *nested* function, by
+    # contrast, compiles fine — Numba treats it as part of the
+    # enclosing function's own compiled body, not a separate global
+    # callee — and keeps this duplication's own complexity out of
+    # `_drift_counts_batched`'s own top-level body.
+    def draw_one(n: int, p: float) -> int:
+        if n <= 0 or p <= 0.0:
+            return 0
+        if p >= 1.0:
+            return n
+        u = rng.random()
+        reflect = p > _REFLECT_THRESHOLD
+        q = 1.0 - p if reflect else p
+        mode = min(int((n + 1) * q), n)
+        log_pmf_mode = (
+            math.lgamma(n + 1.0)
+            - math.lgamma(mode + 1.0)
+            - math.lgamma(n - mode + 1.0)
+            + mode * math.log(q)
+            + (n - mode) * math.log1p(-q)
+        )
+        pmf_mode = math.exp(log_pmf_mode)
+        low_pmf = [pmf_mode]
+        current = pmf_mode
+        for offset in range(mode, 0, -1):
+            current = current * offset / (n - offset + 1) * (1.0 - q) / q
+            low_pmf.append(current)
+        low_pmf.reverse()
+        cdf = 0.0
+        for candidate in range(mode + 1):
+            cdf += low_pmf[candidate]
+            if cdf >= u:
+                return n - candidate if reflect else candidate
+        pmf = pmf_mode
+        candidate = mode
+        while cdf < u and candidate < n:
+            candidate += 1
+            pmf *= (n - candidate + 1) / candidate * q / (1.0 - q)
+            cdf += pmf
+        return n - candidate if reflect else candidate
+
     counts_flat = np.empty(probabilities_flat.shape[0], dtype=np.int64)
     pair_count = ns.shape[0]
     for pair_index in range(pair_count):
@@ -333,7 +454,7 @@ def _drift_counts_batched(
                 target_p = 0.0
             elif target_p > 1.0:
                 target_p = 1.0
-            drawn = rng.binomial(remaining_n, target_p)
+            drawn = draw_one(remaining_n, target_p)
             counts_flat[position] = drawn
             remaining_n -= drawn
             remaining_p -= p
@@ -374,25 +495,40 @@ def _build_flat_drift_buffers(
 ) -> tuple[list[tuple[AlleleId, ...]], np.ndarray, np.ndarray, np.ndarray]:
     """Flatten every (deme, locus) pair's own allele ids/size/probabilities.
 
-    Visits pairs in exactly the same deme-major, locus-minor order
-    `drift`'s own unjitted loop does — the order `_drift_counts_batched`
-    depends on for bit-identity (its own docstring).
+    Visits pairs in deme-major, locus-minor order, and — within each
+    pair — categories in **ascending allele-id order**, not
+    `frequency_map`'s own insertion order: the order `_drift_counts_
+    batched` depends on for bit-identity, but also, independently, the
+    order Backend V's own dense array representation always uses
+    (`fim.model.vectorized`, indexed `0 .. capacity - 1` natively).
+    `frequency_map`'s own insertion order tracks each allele's first
+    appearance *in that specific deme*, which drifts out of numeric
+    order once recurrence events happen — sorting here is what actually
+    makes "canonical order" a well-defined, cross-backend-shared thing
+    rather than an artifact of one backend's own internal bookkeeping
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §11, "what canonical draw order actually means once allele
+    recurrence is in play"). Scoped narrowly and deliberately: this
+    reorders only the ephemeral probability vector built here for the
+    draw itself — `state`'s own `frequency_map` dicts, and everything
+    else that reads them (`ModelState.to_rows`, persistence), are
+    untouched.
 
     Returns:
-        A tuple of: each pair's own allele ids (for unpacking counts
-        back into frequency maps afterward), the per-pair `ns` array,
-        the `offsets` array, and the concatenated `probabilities_flat`
-        array — see `_drift_counts_batched`'s own docstring for what
-        each of the last three actually holds.
+        A tuple of: each pair's own allele ids, in ascending order (for
+        unpacking counts back into frequency maps afterward), the
+        per-pair `ns` array, the `offsets` array, and the concatenated
+        `probabilities_flat` array — see `_drift_counts_batched`'s own
+        docstring for what each of the last three actually holds.
     """
     allele_ids_per_pair: list[tuple[AlleleId, ...]] = []
     ns: list[int] = []
     probability_chunks: list[np.ndarray] = []
     for deme, size in zip(state.frequencies, sizes, strict=True):
         for frequency_map in deme:
-            allele_ids = tuple(frequency_map)
+            allele_ids = tuple(sorted(frequency_map))
             probabilities = np.fromiter(
-                frequency_map.values(),
+                (frequency_map[allele_id] for allele_id in allele_ids),
                 dtype=np.float64,
                 count=len(allele_ids),
             )
@@ -434,14 +570,33 @@ def drift(
     kind of finite, random draw from the previous generation's own
     frequencies. This function is what actually performs that draw: for
     every deme and locus, it treats the current frequency map as the
-    probabilities of a `numpy.random.Generator.multinomial` draw of
-    size `N` (multinomial being the many-outcomes generalization of the
-    familiar two-outcome binomial coin flip), then converts the drawn
-    integer counts back into frequencies — which, unlike migration's or
-    mutation's smooth, continuous frequency changes, always land
-    exactly on the ``1 / N`` grid (a frequency of, say, `3/50`, never
-    `3.2/50`), since they came from literally counting whole gene
-    copies.
+    probabilities of a multinomial draw of size `N` (multinomial being
+    the many-outcomes generalization of the familiar two-outcome
+    binomial coin flip), then converts the drawn integer counts back
+    into frequencies — which, unlike migration's or mutation's smooth,
+    continuous frequency changes, always land exactly on the ``1 / N``
+    grid (a frequency of, say, `3/50`, never `3.2/50`), since they came
+    from literally counting whole gene copies.
+
+    **Not `rng.multinomial` itself, deliberately, as of Stage F8**
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §5.4): both branches below decompose the multinomial draw into
+    sequential conditional-binomial draws via `_inversion_binomial`
+    (`_multinomial_via_inversion_binomial` for `jit=False`,
+    `_drift_counts_batched` for `jit=True`), visiting categories in
+    ascending allele-id order rather than `frequency_map`'s own
+    insertion order — the one shared algorithm, in the one canonical
+    order, this project's array-native Backend V (`fim.model.
+    vectorized`) also uses, which is what makes cross-backend numerical
+    agreement possible at all (`_inversion_binomial`'s own docstring
+    has the full argument for why `rng.multinomial`/`rng.binomial`
+    themselves cannot give this property). No longer bit-identical to
+    `rng.multinomial`'s own output for the same seed — an accepted,
+    deliberate cost, not an oversight (§5.4's own "the real cost, named
+    plainly"; `_multinomial_via_binomial`, this module's own earlier,
+    still-correct-and-tested building block, is what stayed
+    bit-identical to `rng.multinomial`, and is kept for that reason,
+    just no longer what this function calls).
 
     Args:
         state: Post-migration and post-mutation state.
@@ -449,21 +604,23 @@ def drift(
         rng: The run's explicitly threaded random generator.
         jit: When `True`, draw every (deme, locus) pair's own counts in
             one Numba-JIT-compiled, `nogil=True` call
-            (`_jit_drift_counts_batched`) instead of one
-            `rng.multinomial` call per pair — bit-identical output
-            either way (see `_drift_counts_batched`'s own docstring for
-            why), and free of GIL-release concerns during the compiled
-            call itself. Measured honestly, this is not yet a clear
-            standalone win for `drift`: it fixes a real, separately
-            measured regression an earlier per-pair-call version had,
-            but the compiled draw was never `drift`'s own dominant cost
-            at this project's reference scale — the Python-level
-            marshaling to and from `ModelState`'s own sparse
-            representation is, and `jit=True` does not remove that (see
-            `_drift_counts_batched`'s own docstring for the full,
-            measured picture). `False` (the default) is every prior
-            release's own behavior, unchanged, and needs `numba`
-            installed only when `True`.
+            (`_jit_drift_counts_batched`) instead of one call per pair
+            — bit-identical output either way (both branches now share
+            the identical primitive and visiting order, not merely
+            happen to agree — see `_drift_counts_batched`'s own
+            docstring), and free of GIL-release concerns during the
+            compiled call itself. Measured honestly, this is not yet a
+            clear standalone win for `drift`: it fixes a real,
+            separately measured regression an earlier per-pair-call
+            version had, but the compiled draw was never `drift`'s own
+            dominant cost at this project's reference scale — the
+            Python-level marshaling to and from `ModelState`'s own
+            sparse representation is, and `jit=True` does not remove
+            that (see `_drift_counts_batched`'s own docstring for the
+            full, measured picture). `False` (the default) is every
+            prior release's own behavior *shape*, unchanged, though no
+            longer its own exact numeric output (see above) — needs
+            `numba` installed only when `True`.
 
     Returns:
         The next generation with frequencies on a ``1 / N`` grid.
@@ -496,14 +653,14 @@ def drift(
         for deme, size in zip(state.frequencies, sizes, strict=True):
             locus_maps = []
             for frequency_map in deme:
-                allele_ids = tuple(frequency_map)
+                allele_ids = tuple(sorted(frequency_map))
                 probabilities = np.fromiter(
-                    frequency_map.values(),
+                    (frequency_map[allele_id] for allele_id in allele_ids),
                     dtype=np.float64,
                     count=len(allele_ids),
                 )
                 probabilities /= probabilities.sum()
-                counts = rng.multinomial(size, probabilities)
+                counts = _multinomial_via_inversion_binomial(rng, size, probabilities)
                 locus_maps.append(
                     {
                         allele_id: int(count) / size

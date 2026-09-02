@@ -5216,14 +5216,33 @@ up exactly 5 heads, and a deme's `N` gene copies are exactly that
 kind of finite, random draw from the previous generation's own
 frequencies. This function is what actually performs that draw: for
 every deme and locus, it treats the current frequency map as the
-probabilities of a `numpy.random.Generator.multinomial` draw of
-size `N` (multinomial being the many-outcomes generalization of the
-familiar two-outcome binomial coin flip), then converts the drawn
-integer counts back into frequencies — which, unlike migration's or
-mutation's smooth, continuous frequency changes, always land
-exactly on the ``1 / N`` grid (a frequency of, say, `3/50`, never
-`3.2/50`), since they came from literally counting whole gene
-copies.
+probabilities of a multinomial draw of size `N` (multinomial being
+the many-outcomes generalization of the familiar two-outcome
+binomial coin flip), then converts the drawn integer counts back
+into frequencies — which, unlike migration's or mutation's smooth,
+continuous frequency changes, always land exactly on the ``1 / N``
+grid (a frequency of, say, `3/50`, never `3.2/50`), since they came
+from literally counting whole gene copies.
+
+**Not `rng.multinomial` itself, deliberately, as of Stage F8**
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+§5.4): both branches below decompose the multinomial draw into
+sequential conditional-binomial draws via `_inversion_binomial`
+(`_multinomial_via_inversion_binomial` for `jit=False`,
+`_drift_counts_batched` for `jit=True`), visiting categories in
+ascending allele-id order rather than `frequency_map`'s own
+insertion order — the one shared algorithm, in the one canonical
+order, this project's array-native Backend V (`fim.model.
+vectorized`) also uses, which is what makes cross-backend numerical
+agreement possible at all (`_inversion_binomial`'s own docstring
+has the full argument for why `rng.multinomial`/`rng.binomial`
+themselves cannot give this property). No longer bit-identical to
+`rng.multinomial`'s own output for the same seed — an accepted,
+deliberate cost, not an oversight (§5.4's own "the real cost, named
+plainly"; `_multinomial_via_binomial`, this module's own earlier,
+still-correct-and-tested building block, is what stayed
+bit-identical to `rng.multinomial`, and is kept for that reason,
+just no longer what this function calls).
 
 **Arguments**:
 
@@ -5232,21 +5251,23 @@ copies.
 - `rng` - The run's explicitly threaded random generator.
 - `jit` - When `True`, draw every (deme, locus) pair's own counts in
   one Numba-JIT-compiled, `nogil=True` call
-  (`_jit_drift_counts_batched`) instead of one
-  `rng.multinomial` call per pair — bit-identical output
-  either way (see `_drift_counts_batched`'s own docstring for
-  why), and free of GIL-release concerns during the compiled
-  call itself. Measured honestly, this is not yet a clear
-  standalone win for `drift`: it fixes a real, separately
-  measured regression an earlier per-pair-call version had,
-  but the compiled draw was never `drift`'s own dominant cost
-  at this project's reference scale — the Python-level
-  marshaling to and from `ModelState`'s own sparse
-  representation is, and `jit=True` does not remove that (see
-  `_drift_counts_batched`'s own docstring for the full,
-  measured picture). `False` (the default) is every prior
-  release's own behavior, unchanged, and needs `numba`
-  installed only when `True`.
+  (`_jit_drift_counts_batched`) instead of one call per pair
+  — bit-identical output either way (both branches now share
+  the identical primitive and visiting order, not merely
+  happen to agree — see `_drift_counts_batched`'s own
+  docstring), and free of GIL-release concerns during the
+  compiled call itself. Measured honestly, this is not yet a
+  clear standalone win for `drift`: it fixes a real,
+  separately measured regression an earlier per-pair-call
+  version had, but the compiled draw was never `drift`'s own
+  dominant cost at this project's reference scale — the
+  Python-level marshaling to and from `ModelState`'s own
+  sparse representation is, and `jit=True` does not remove
+  that (see `_drift_counts_batched`'s own docstring for the
+  full, measured picture). `False` (the default) is every
+  prior release's own behavior *shape*, unchanged, though no
+  longer its own exact numeric output (see above) — needs
+  `numba` installed only when `True`.
 
 
 **Returns**:
@@ -6056,10 +6077,25 @@ batched` already had to learn, rediscovered here independently on a
 second function before being generalized.
 
 Statistical, not bit-identical, parity with the dict-based operators in
-`fim.model.operators` is this module's own correctness bar throughout
-(vector design §6) — every function below names, in its own docstring,
-exactly where and why its own random-draw sequence diverges from the
-dict-based original.
+`fim.model.operators` was this module's own original correctness bar
+throughout (vector design §6) — every function below names, in its own
+docstring, exactly where and why its own random-draw sequence diverges
+from the dict-based original. **`migrate_vectorized`/`drift_vectorized`
+now clear a materially higher bar, as of Stage F8**
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §5.4):
+`migrate_vectorized` was always exact (deterministic, no randomness in
+"continuous" mode), and `drift_vectorized` now draws via the identical
+`_inversion_binomial`-based algorithm, in the identical order, that
+`fim.model.operators.drift`'s own dict-based path uses — checked
+directly (`test/model/test_vectorized.py`, `test_drift_vectorized_
+matches_dict_based_drift_exactly`), the two backends' own resulting
+frequencies now match *exactly*, across many seeds, not merely within
+a statistical band. `mutate_vectorized` has **not** been unified this
+way — its own event-count draw (`rng.binomial`) and target-selection
+logic remain untouched, deliberately out of scope for this stage's own
+first pass — so it stays on the original, statistical-parity bar this
+paragraph's own first sentence describes, not the stronger one
+`drift_vectorized` now meets.
 
 <a id="fim.model.vectorized.VectorizedLocusState"></a>
 
@@ -6260,12 +6296,13 @@ def drift_vectorized(locus_state: VectorizedLocusState, sizes: np.ndarray,
 Resample `N` gene copies per deme, across every deme in one pass.
 
 The array-native counterpart to `fim.model.operators.drift` —
-`_jit_multinomial_rows_batched` above is the same conditional-
-binomial identity `fim.model.operators._multinomial_via_binomial`
-uses, applied across the entire `(d, capacity)` array in one
-JIT-compiled call instead of one `rng.multinomial` call per (deme,
-locus) pair. Statistically, not bit-identically, equivalent — see
-this module's own docstring.
+`_jit_multinomial_rows_batched` above uses the same conditional-
+binomial decomposition and the same `_inversion_binomial` primitive
+`drift`'s own dict-based path now uses (Stage F8), applied across
+the entire `(d, capacity)` array in one JIT-compiled call. See this
+module's own docstring, and `_multinomial_rows_batched`'s own, for
+exactly what property that gives this function relative to
+`drift`'s own output for the same seed.
 
 <a id="fim.model.vectorized.step_vectorized"></a>
 

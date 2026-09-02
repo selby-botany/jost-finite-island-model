@@ -1,11 +1,16 @@
 """Tests for the bounded-K (finite-alleles) array-native operators.
 
-Statistical, not bit-identical, parity with `fim.model.operators` is the
-correctness bar throughout — see `fim.model.vectorized`'s own module
-docstring for why. Exact/invariant checks (round-tripping, frequency
-sums, target != source) need no tolerance at all and are kept separate
-from the genuinely statistical ones, which use a normal-approximation
-band matching this project's own existing precedent
+Statistical, not bit-identical, parity with `fim.model.operators` was
+this module's own original correctness bar — see `fim.model.vectorized`'s
+own module docstring for why, and for which functions now clear a
+materially higher bar as of Stage F8 (exact numerical agreement, not
+merely statistical, for `migrate_vectorized`/`drift_vectorized`
+specifically — `test_drift_vectorized_matches_dict_based_drift_exactly`,
+below). Exact/invariant checks (round-tripping, frequency sums, target
+!= source) need no tolerance at all and are kept separate from the
+genuinely statistical ones (still needed for `mutate_vectorized`, not
+yet unified), which use a normal-approximation band matching this
+project's own existing precedent
 (`test_drift_variance_matches_binomial_theory`).
 """
 
@@ -17,6 +22,7 @@ import pytest
 
 from fim.model.allele import AlleleId, FiniteAlleleSpace
 from fim.model.locus import LocusSpec, finite_allele_capacity
+from fim.model.operators import drift as drift_dict
 from fim.model.operators import migrate as migrate_dict
 from fim.model.state import ModelState
 from fim.model.vectorized import (
@@ -94,6 +100,48 @@ def test_migrate_vectorized_matches_dict_based_migrate() -> None:
         assert set(expected_map) == set(observed_map)
         for allele_id, value in expected_map.items():
             assert observed_map[allele_id] == pytest.approx(value, abs=1e-9)
+
+
+def test_drift_vectorized_matches_dict_based_drift_exactly(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Stage F8's own deliverable: not statistical parity — exact agreement.
+
+    `fim.model.operators.drift` and `drift_vectorized` both draw via
+    the identical mode-anchored inversion-binomial algorithm now
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §5.4), in the identical ascending-allele-id order — `drift`'s own
+    dict-based path via `sorted(frequency_map)`, this module's own
+    dense array natively. Checked directly, across many seeds and a
+    deme count large enough that some demes draw more real (non-
+    short-circuited) categories than others: given the identical
+    starting state and an identically seeded `rng`, the two backends'
+    own resulting frequencies match *exactly*, not merely within a
+    statistical band — the counts underneath are literally the same
+    integers, not just close. This is the actual, concrete proof the
+    whole unified-RNG effort exists to deliver, not yet attempted
+    before this test.
+    """
+    for seed in range(20):
+        state = _finite_alleles_state(deme_count=6, capacity_length=1)
+        sizes = np.array([12, 30, 7, 100, 1, 55], dtype=np.int64)
+
+        expected = drift_dict(state, tuple(int(s) for s in sizes), rng(seed))
+
+        vectorized = build_vectorized_state(state)
+        observed_vectorized = drift_vectorized(
+            vectorized.locus_states[0], sizes, rng(seed)
+        )
+        observed = vectorized_state_to_model_state(
+            replace(vectorized, locus_states=(observed_vectorized,))
+        )
+
+        for deme in range(6):
+            expected_map = expected.frequency_map(deme, 0)
+            observed_map = observed.frequency_map(deme, 0)
+            assert set(expected_map) == set(observed_map), (seed, deme)
+            for allele_id, value in expected_map.items():
+                assert observed_map[allele_id] == value, (seed, deme, allele_id)
 
 
 def test_symmetric_migration_weights_rows_are_stochastic() -> None:

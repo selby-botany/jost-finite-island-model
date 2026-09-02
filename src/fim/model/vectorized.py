@@ -47,14 +47,30 @@ batched` already had to learn, rediscovered here independently on a
 second function before being generalized.
 
 Statistical, not bit-identical, parity with the dict-based operators in
-`fim.model.operators` is this module's own correctness bar throughout
-(vector design §6) — every function below names, in its own docstring,
-exactly where and why its own random-draw sequence diverges from the
-dict-based original.
+`fim.model.operators` was this module's own original correctness bar
+throughout (vector design §6) — every function below names, in its own
+docstring, exactly where and why its own random-draw sequence diverges
+from the dict-based original. **`migrate_vectorized`/`drift_vectorized`
+now clear a materially higher bar, as of Stage F8**
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §5.4):
+`migrate_vectorized` was always exact (deterministic, no randomness in
+"continuous" mode), and `drift_vectorized` now draws via the identical
+`_inversion_binomial`-based algorithm, in the identical order, that
+`fim.model.operators.drift`'s own dict-based path uses — checked
+directly (`test/model/test_vectorized.py`, `test_drift_vectorized_
+matches_dict_based_drift_exactly`), the two backends' own resulting
+frequencies now match *exactly*, across many seeds, not merely within
+a statistical band. `mutate_vectorized` has **not** been unified this
+way — its own event-count draw (`rng.binomial`) and target-selection
+logic remain untouched, deliberately out of scope for this stage's own
+first pass — so it stays on the original, statistical-parity bar this
+paragraph's own first sentence describes, not the stronger one
+`drift_vectorized` now meets.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
@@ -75,6 +91,11 @@ _JIT_MUTATE_TARGETS_BATCHED: (
 _JIT_MULTINOMIAL_ROWS_BATCHED: (
     Callable[[np.random.Generator, np.ndarray, np.ndarray], np.ndarray] | None
 ) = None
+
+# Mirrors `fim.model.operators._REFLECT_THRESHOLD` — kept as its own
+# copy here rather than imported, matching the nested-closure
+# duplication `_multinomial_rows_batched`'s own inline comment explains.
+_REFLECT_THRESHOLD = 0.5
 
 
 @dataclass(slots=True)
@@ -240,10 +261,35 @@ def _multinomial_rows_batched(
     `fim.model.operators` docstring covers this same gap for the
     per-pair, dict-based case). This reproduces the same distribution,
     per row, via the multinomial-as-sequential-conditional-binomial
-    identity (`fim.model.operators._multinomial_via_binomial`'s own
-    docstring), scalar-at-a-time across both the deme axis and the
+    identity, scalar-at-a-time across both the deme axis and the
     category axis — deliberately, not one array-valued `rng.binomial`
     call per category the way an earlier version of this function did.
+
+    **Draws via the same mode-anchored inversion-binomial algorithm as
+    `fim.model.operators._inversion_binomial`, not `rng.binomial`, as
+    of Stage F8**
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §5.4) — reimplemented here as a nested closure (`draw_one`, below)
+    rather than calling that function directly: Numba's `nopython`
+    mode cannot compile a call to a plain, undecorated, cross-module
+    Python function as an internal callee (confirmed directly), and
+    decorating `_inversion_binomial` itself with `@numba.jit` would
+    force every caller, including every `jit=False` one anywhere in
+    `fim.model.operators`, to pay `numba`'s own import cost — the exact
+    "numba stays fully optional" invariant that module's own docstring
+    already establishes. `fim.model.operators.drift`'s own dict-based
+    path uses the identical algorithm, visited in the identical order
+    that path's own `sorted(frequency_map)` produces: this function's
+    own `column` loop already runs `0 .. capacity - 1` in ascending
+    order, which *is* ascending allele-id order natively, no reindexing
+    needed on this side. A category with exactly zero probability (an
+    allele not currently present at that deme) makes `draw_one` return
+    `0` without consuming any draw at all — which is what keeps this
+    full `0 .. capacity - 1` sweep numerically equivalent to the
+    dict-based path's own shorter, present-alleles-only sequence: every
+    *real* draw lines up, in the same order, against the same
+    accumulated `remaining_n`/`remaining_p`, with the skipped
+    categories on this side costing nothing on either side.
 
     That earlier, array-valued version measured *slower* than the
     dict-based `LinealBackend` at this project's own reference scale
@@ -276,6 +322,51 @@ def _multinomial_rows_batched(
         `(d, capacity)` int64 counts, each row summing to that row's
         own `sizes` entry.
     """
+
+    # `fim.model.operators._inversion_binomial`, as a nested closure,
+    # not a call to that actual function — Numba's `nopython` mode
+    # cannot compile a call to a plain, undecorated module-level Python
+    # function as an internal callee (confirmed directly, and for the
+    # identical reason `fim.model.operators._drift_counts_batched` does
+    # the same thing — see its own inline comment); a *nested* function
+    # compiles fine, since Numba treats it as part of the enclosing
+    # function's own compiled body, not a separate global callee.
+    def draw_one(n: int, p: float) -> int:
+        if n <= 0 or p <= 0.0:
+            return 0
+        if p >= 1.0:
+            return n
+        u = rng.random()
+        reflect = p > _REFLECT_THRESHOLD
+        q = 1.0 - p if reflect else p
+        mode = min(int((n + 1) * q), n)
+        log_pmf_mode = (
+            math.lgamma(n + 1.0)
+            - math.lgamma(mode + 1.0)
+            - math.lgamma(n - mode + 1.0)
+            + mode * math.log(q)
+            + (n - mode) * math.log1p(-q)
+        )
+        pmf_mode = math.exp(log_pmf_mode)
+        low_pmf = [pmf_mode]
+        current = pmf_mode
+        for offset in range(mode, 0, -1):
+            current = current * offset / (n - offset + 1) * (1.0 - q) / q
+            low_pmf.append(current)
+        low_pmf.reverse()
+        cdf = 0.0
+        for candidate in range(mode + 1):
+            cdf += low_pmf[candidate]
+            if cdf >= u:
+                return n - candidate if reflect else candidate
+        pmf = pmf_mode
+        candidate = mode
+        while cdf < u and candidate < n:
+            candidate += 1
+            pmf *= (n - candidate + 1) / candidate * q / (1.0 - q)
+            cdf += pmf
+        return n - candidate if reflect else candidate
+
     deme_count, capacity = probabilities.shape
     counts = np.empty((deme_count, capacity), dtype=np.int64)
     for deme_index in range(deme_count):
@@ -285,7 +376,7 @@ def _multinomial_rows_batched(
             column_p = probabilities[deme_index, column]
             fraction = column_p / remaining_p if remaining_p > 0.0 else 0.0
             fraction = min(max(fraction, 0.0), 1.0)
-            drawn = rng.binomial(remaining_n, fraction)
+            drawn = draw_one(remaining_n, fraction)
             counts[deme_index, column] = drawn
             remaining_n -= drawn
             remaining_p -= column_p
@@ -518,12 +609,13 @@ def drift_vectorized(
     """Resample `N` gene copies per deme, across every deme in one pass.
 
     The array-native counterpart to `fim.model.operators.drift` —
-    `_jit_multinomial_rows_batched` above is the same conditional-
-    binomial identity `fim.model.operators._multinomial_via_binomial`
-    uses, applied across the entire `(d, capacity)` array in one
-    JIT-compiled call instead of one `rng.multinomial` call per (deme,
-    locus) pair. Statistically, not bit-identically, equivalent — see
-    this module's own docstring.
+    `_jit_multinomial_rows_batched` above uses the same conditional-
+    binomial decomposition and the same `_inversion_binomial` primitive
+    `drift`'s own dict-based path now uses (Stage F8), applied across
+    the entire `(d, capacity)` array in one JIT-compiled call. See this
+    module's own docstring, and `_multinomial_rows_batched`'s own, for
+    exactly what property that gives this function relative to
+    `drift`'s own output for the same seed.
     """
     counts = _jit_multinomial_rows_batched(rng, sizes, locus_state.frequencies)
     return replace(locus_state, frequencies=counts / sizes[:, None])
