@@ -247,15 +247,18 @@ def test_mutate_vectorized_matches_dict_based_mutate_exactly(
     vectorized`'s own module/function docstrings) —
     `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
     §5.4's "one RNG scheme for every backend" reaching `mutate`, not
-    just `drift`. Three separate divergence sources had to be found and
+    just `drift`. Four separate divergence sources had to be found and
     fixed to get here, none of them visible from a single-deme test
     alone: a per-step-batched vs. per-deme-interleaved draw order once
-    more than one deme was involved, a rejection-sampling vs. fixed-
-    draw mismatch in the recurrence branch, and this same partial-
-    capacity normalization bug `drift_vectorized`'s own analogous test
-    above exists to catch. Uses `_partial_finite_alleles_state` for the
-    same reason that one does — a saturated capacity cannot exercise
-    the normalization bug at all.
+    more than one deme was involved; a rejection-sampling vs. fixed-
+    draw mismatch in the recurrence branch; this same partial-capacity
+    normalization bug `drift_vectorized`'s own analogous test above
+    exists to catch; and a missing final `fsum`-based renormalization
+    step `mutate_vectorized` never replicated from `operators.mutate`'s
+    own `_normalize` (`mutate_vectorized`'s own docstring has the full
+    argument for the last one). Uses `_partial_finite_alleles_state` for
+    the same reason the drift test above does — a saturated capacity
+    cannot exercise the normalization bug at all.
     """
     pytest.importorskip("numba")
     capacity_length = 2
@@ -393,68 +396,51 @@ def test_mutate_vectorized_preserves_frequency_invariants(
 def test_mutate_vectorized_recurrence_rate_matches_finite_allele_space(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """The vectorized recurrence-vs-mint decision matches `FiniteAlleleSpace` directly.
+    """The vectorized target draw matches `FiniteAlleleSpace` exactly, not its rate.
 
-    Builds both a real `FiniteAlleleSpace` and this module's own array
-    mirror from the identical initial minted set, then compares the
-    *empirical* recurrence rate each produces over many independent
-    single-event trials at a fixed, known `minted_count` — the same
-    normal-approximation banding this project's own statistical tests
-    already use, not just an isolated assertion that the formula looks
-    right.
+    An earlier version of this test only compared the *empirical*
+    recurrence rate each backend produced over many independent trials,
+    via a normal-approximation band — a real check, but a weaker one
+    than this project's own Stage F8 unification work now supports.
+    `_mutate_targets_batched`'s own recurrence branch was proven, this
+    same session, to replicate `FiniteAlleleSpace.mutate_target`'s own
+    filter-then-index mechanism via the "exclude one element, shift the
+    drawn index" trick (`_mutate_targets_batched`'s own inline comment
+    has the full argument) — so for the identical starting minted set
+    and an identically seeded `rng`, the two must return the *exact
+    same target*, every single trial, not merely agree on the rate
+    across many. Checked directly across several `(minted_count,
+    source, seed)` combinations, not assumed from the mechanism
+    argument alone — a `pytest.approx`/standard-error band only proves
+    the two distributions look similar; it cannot prove the two
+    functions actually draw the same value for the same input, which is
+    the property `test_mutate_vectorized_matches_dict_based_mutate_
+    exactly` (above) actually depends on holding at this lower level
+    too.
     """
     capacity = 20
-    initial_minted = tuple(AlleleId(i) for i in range(6))  # minted_count = 6
-    trials = 8000
 
-    reference_recurrences = 0
-    for seed in range(trials):
-        space = FiniteAlleleSpace(capacity, initial_minted)
-        target = space.mutate_target(AlleleId(0), rng(seed))
-        # A recurrence always lands among the already-minted ids (0..5,
-        # excluding the source, 0); a fresh mint always lands on the
-        # next unminted id — deterministically 6, since nothing has been
-        # minted beyond the initial set on this, the very first call.
-        if int(target) < 6:
-            reference_recurrences += 1
-
-    vectorized_recurrences = 0
-    for seed in range(trials):
+    for minted_count in (2, 6, 12, capacity):
+        minted = tuple(AlleleId(i) for i in range(minted_count))
         minted_mask = np.zeros(capacity, dtype=np.bool_)
-        minted_mask[:6] = True
+        minted_mask[:minted_count] = True
         minted_list = np.zeros(capacity, dtype=np.int64)
-        minted_list[:6] = np.arange(6)
-        locus_state = VectorizedLocusState(
-            frequencies=np.zeros((1, capacity)),
-            capacity=capacity,
-            minted_mask=minted_mask,
-            minted_list=minted_list,
-            minted_count=6,
-            next_unminted=6,
-        )
-        targets, _, _, _, _ = _mutate_targets_batched(
-            rng(seed),
-            np.array([0], dtype=np.int64),
-            capacity,
-            locus_state.minted_mask.copy(),
-            locus_state.minted_list.copy(),
-            locus_state.minted_count,
-            locus_state.next_unminted,
-        )
-        if targets[0] < 6:
-            vectorized_recurrences += 1
+        minted_list[:minted_count] = np.arange(minted_count)
+        for source in range(minted_count):
+            for seed in range(200):
+                space = FiniteAlleleSpace(capacity, minted)
+                expected = int(space.mutate_target(AlleleId(source), rng(seed)))
 
-    expected_probability = 5 / 19  # (minted_count - 1) / (capacity - 1)
-    standard_error = np.sqrt(expected_probability * (1 - expected_probability) / trials)
-    assert reference_recurrences / trials == pytest.approx(
-        expected_probability, abs=5.0 * standard_error
-    )
-    assert vectorized_recurrences / trials == pytest.approx(
-        expected_probability, abs=5.0 * standard_error
-    )
-    assert reference_recurrences / trials == pytest.approx(
-        vectorized_recurrences / trials, abs=10.0 * standard_error
-    )
+                targets, _, _, _, _ = _mutate_targets_batched(
+                    rng(seed),
+                    np.array([source], dtype=np.int64),
+                    capacity,
+                    minted_mask.copy(),
+                    minted_list.copy(),
+                    minted_count,
+                    minted_count,
+                )
+                assert int(targets[0]) == expected, (minted_count, source, seed)
 
 
 def test_step_vectorized_preserves_frequency_invariants(
