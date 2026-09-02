@@ -38,13 +38,21 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     assert params.convergence_window == PARAMETER_DEFAULTS["convergence_window"]
     assert params.convergence_tolerance == PARAMETER_DEFAULTS["convergence_tolerance"]
     assert params.max_generations == PARAMETER_DEFAULTS["max_generations"]
-    assert params.replicate_tolerance is None
+    assert params.n_replicates == PARAMETER_DEFAULTS["n_replicates"]
+    assert params.n_replicates == 200
+    assert params.replicate_tolerance == PARAMETER_DEFAULTS["replicate_tolerance"]
+    assert params.replicate_tolerance == 0.01
     assert params.replicate_minimum == PARAMETER_DEFAULTS["replicate_minimum"]
     assert params.replicate_confidence == PARAMETER_DEFAULTS["replicate_confidence"]
     assert params.migrant_sampling == PARAMETER_DEFAULTS["migrant_sampling"]
     assert params.migrant_sampling == "continuous"
     assert params.mutation_model == PARAMETER_DEFAULTS["mutation_model"]
     assert params.mutation_model == "infinite_alleles"
+    assert params.engine_backend == PARAMETER_DEFAULTS["engine_backend"]
+    assert params.engine_backend == "lineal"
+    assert params.jit == PARAMETER_DEFAULTS["jit"]
+    assert params.jit == "off"
+    assert params.auto_vector_min_d == PARAMETER_DEFAULTS["auto_vector_min_d"]
 
 
 @pytest.mark.parametrize(
@@ -405,16 +413,43 @@ def test_post_init_validation_covers_all_scalar_contracts(
         SimulationParams.from_mapping({**_valid_config(), **updates})
 
 
-def test_replicate_tolerance_round_trips_and_is_omitted_when_unset() -> None:
-    """`replicate_tolerance` only appears in `to_dict()` once configured."""
+def test_replicate_tolerance_round_trips_unconditionally() -> None:
+    """`replicate_tolerance` always round-trips exactly, `None` included.
+
+    An absent `replicate_tolerance` key means "use the default"
+    (`DEFAULT_REPLICATE_TOLERANCE`, `0.01`) now, not "disabled" — that
+    default is a real, non-`None` number. `to_dict()` always includes
+    `replicate_tolerance` unconditionally (`null` for `None`), unlike
+    `initial_frequencies` (still omitted when `None`, since `None` is
+    still *that* field's own default): omitting a `None`
+    `replicate_tolerance` the same way would silently turn an explicit
+    "disabled" into "use the default" the next time the dict round-trips
+    through `from_mapping` — a real bug this project's own test suite
+    caught directly (several tests build a batch config via
+    `{**tiny_params.to_dict(), "n_replicates": N}`, which depends on
+    `to_dict()` preserving `tiny_params`'s own explicit `replicate_
+    tolerance=None` losslessly).
+    """
     default_params = SimulationParams.from_mapping(_valid_config())
-    assert "replicate_tolerance" not in default_params.to_dict()
+    assert (
+        default_params.replicate_tolerance == PARAMETER_DEFAULTS["replicate_tolerance"]
+    )
+    assert default_params.to_dict()["replicate_tolerance"] == 0.01
+    assert SimulationParams.from_mapping(default_params.to_dict()) == default_params
 
     tightened = SimulationParams.from_mapping(
-        {**_valid_config(), "replicate_tolerance": 0.01}
+        {**_valid_config(), "replicate_tolerance": 0.02}
     )
-    assert tightened.replicate_tolerance == 0.01
-    assert tightened.to_dict()["replicate_tolerance"] == 0.01
+    assert tightened.replicate_tolerance == 0.02
+    assert tightened.to_dict()["replicate_tolerance"] == 0.02
+    assert SimulationParams.from_mapping(tightened.to_dict()) == tightened
+
+    disabled = SimulationParams.from_mapping(
+        {**_valid_config(), "replicate_tolerance": None}
+    )
+    assert disabled.replicate_tolerance is None
+    assert disabled.to_dict()["replicate_tolerance"] is None
+    assert SimulationParams.from_mapping(disabled.to_dict()) == disabled
 
 
 def test_required_and_conflicting_configuration_keys_are_named() -> None:

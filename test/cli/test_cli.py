@@ -31,6 +31,17 @@ def _write_config(path: Path, **updates: object) -> None:
         "convergence_window": 4,
         "convergence_tolerance": 1.0,
         "max_generations": 10,
+        "n_replicates": 1,
+        # `None`, not omitted: an omitted `replicate_tolerance` now means
+        # "use the default" (`DEFAULT_REPLICATE_TOLERANCE`, a real
+        # number), not "disabled" — a caller overriding `n_replicates`
+        # to a small explicit count below `replicate_minimum`'s own
+        # default (`10`) without also disabling the adaptive stop would
+        # otherwise hit `SimulationParams`'s own "replicate_minimum
+        # cannot exceed n_replicates" rejection. This fixture's own
+        # small, explicit `n_replicates` overrides are exact fixed-count
+        # batches, not adaptive ones.
+        "replicate_tolerance": None,
     }
     config.update(updates)
     path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -240,6 +251,8 @@ def test_run_accepts_a_per_base_mutation_rate(tmp_path: Path) -> None:
         "convergence_window": 4,
         "convergence_tolerance": 1.0,
         "max_generations": 10,
+        "n_replicates": 1,
+        "replicate_tolerance": None,
     }
     config.write_text(yaml.safe_dump(config_body, sort_keys=False), encoding="utf-8")
 

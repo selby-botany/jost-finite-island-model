@@ -45,9 +45,65 @@ ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
 MigrantSampling = Literal["continuous", "stochastic"]
 MutationModel = Literal["infinite_alleles", "finite_alleles"]
+EngineBackend = Literal["lineal", "generational", "generational-vector", "auto"]
+Jit = Literal["off", "numba"]
 InitialFrequencies = tuple[tuple[Mapping[AlleleId, float], ...], ...]
 
 DEFAULT_LOCUS_LENGTH: Final = 200
+DEFAULT_AUTO_VECTOR_MIN_D: Final = 35
+"""`"auto"`'s own default deme-count cutover, below which it never picks
+`"generational-vector"` even when the config is otherwise eligible for it.
+
+Lives here, not in `fim.engine`, because it is a `SimulationParams` field
+default like any other (`convergence_window`'s own `50`, `max_generations`'s
+own `10_000`) — `fim.engine` imports it from here rather than the other way
+around, matching this project's own one-directional dependency rule (the
+engine depends on the model; the model depends on nothing in the engine).
+
+Measured, not guessed — the generation-first design's own Stage 4/vector
+design's own Stage V3 deme-axis sweep found Backend V crosses over from
+slower than Backend L to clearly faster somewhere between `d=30` and
+`d=40` on the primary benchmarking machine. **This default has not been
+re-measured since a later correctness fix
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10
+Stage F8) changed the underlying performance picture materially — a
+2026-09-02 re-measurement (`dev/bin/benchmark-engines`) found
+`"generational-vector"` already ahead at `d=4`, the smallest value
+tested, not just past this threshold.** Kept at `35` rather than changed
+alongside that finding: altering a shipped default needs its own
+deliberate confirmation, not a silent edit. `auto_vector_min_d` stays a
+caller-supplied `SimulationParams` field for exactly this kind of
+drift — see `dev/bin/benchmark-engines --sweep d` to re-characterize it
+on any given machine.
+"""
+DEFAULT_N_REPLICATES: Final = 200
+"""How many independently seeded replicates a run tries by default.
+
+Not `1` — the most useful ordinary use of this tool is a measurement
+*with* a confidence interval (`replicate_tolerance`, below), not a
+single point estimate, so that is what an unconfigured run now does by
+default: run up to `DEFAULT_N_REPLICATES` replicates, stopping early
+once `DEFAULT_REPLICATE_TOLERANCE` is reached. `200` is a generous cap,
+not an expectation of always reaching it — chosen to match this
+project's own worked examples and test scenarios that already use a
+comparable count for a real confidence interval, giving the adaptive
+stop (`replicate_minimum` onward) real room to tighten before the cap
+would ever bind. A caller who wants the old single-run behavior back
+sets `n_replicates: 1` explicitly, same as always; nothing about what an
+explicit `n_replicates` means has changed, only what an *absent* one now
+means.
+"""
+DEFAULT_REPLICATE_TOLERANCE: Final = 0.01
+"""Default early-stopping half-width for a replicate batch.
+
+Matches `convergence_tolerance`'s own default (`0.01`) deliberately —
+the same tightness applied one layer up, to the across-replicate mean
+instead of the within-run trailing window. Paired with
+`DEFAULT_N_REPLICATES` above: together they make an unconfigured run
+compute a real confidence interval by default rather than a single,
+uncertainty-free-looking point estimate.
+"""
+
 PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "n_loci": 1,
     "locus_lengths": DEFAULT_LOCUS_LENGTH,
@@ -59,11 +115,15 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "convergence_window": 50,
     "convergence_tolerance": 0.01,
     "max_generations": 10_000,
-    "n_replicates": 1,
+    "n_replicates": DEFAULT_N_REPLICATES,
+    "replicate_tolerance": DEFAULT_REPLICATE_TOLERANCE,
     "replicate_minimum": 10,
     "replicate_confidence": 0.95,
     "migrant_sampling": "continuous",
     "mutation_model": "infinite_alleles",
+    "engine_backend": "lineal",
+    "jit": "off",
+    "auto_vector_min_d": DEFAULT_AUTO_VECTOR_MIN_D,
 }
 
 _CONFIG_KEYS: Final = frozenset(
@@ -89,6 +149,9 @@ _CONFIG_KEYS: Final = frozenset(
         "replicate_tolerance",
         "replicate_minimum",
         "replicate_confidence",
+        "engine_backend",
+        "jit",
+        "auto_vector_min_d",
         "migrant_sampling",
         "mutation_model",
         "p_0",
@@ -148,19 +211,24 @@ class SimulationParams:
         convergence_window: Trailing stability-window length.
         convergence_tolerance: Maximum half-window mean difference.
         max_generations: Hard generation safety cap.
-        n_replicates: Number of independently seeded runs. With
-            `replicate_tolerance` unset (the default), exactly this many
-            run. With `replicate_tolerance` set, this is instead the hard
-            replicate-count cap — see `replicate_tolerance`.
-        replicate_tolerance: Opt-in early-stopping half-width, in the same
-            units as each watched `convergence_statistic`. ``None`` (the
-            default) preserves prior behavior exactly: `n_replicates`
-            always runs in full. Set to a number to stop once every
-            watched statistic's across-replicate Student's-t confidence
-            interval has tightened to at most this half-width (per
-            `convergence_combinator`, exactly like within-run
-            convergence), or `n_replicates` is reached, whichever comes
-            first.
+        n_replicates: Number of independently seeded runs — the hard cap
+            a replicate batch runs up to. Defaults to
+            `DEFAULT_N_REPLICATES` (`200`), not `1`: the ordinary useful
+            result from this tool is a measurement with a confidence
+            interval, not an uncertainty-free-looking single point, so an
+            unconfigured run now behaves that way by default. Set to `1`
+            explicitly for the old single-run behavior.
+        replicate_tolerance: Early-stopping half-width, in the same units
+            as each watched `convergence_statistic`. Defaults to
+            `DEFAULT_REPLICATE_TOLERANCE` (`0.01`, matching
+            `convergence_tolerance`'s own default) — an unconfigured run
+            stops as soon as every watched statistic's across-replicate
+            Student's-t confidence interval has tightened to at most this
+            half-width (per `convergence_combinator`, exactly like
+            within-run convergence), or `n_replicates` is reached,
+            whichever comes first. Set explicitly to `None` (or, in a
+            YAML/JSON config, simply omitted alongside `n_replicates: 1`)
+            to run a fixed count in full with no adaptive stop.
         replicate_minimum: Fewest replicates before tightness is even
             checked, guarding against a lucky-early-tight fluke — the
             replicate-layer analog of `convergence_window`. Only
@@ -181,6 +249,33 @@ class SimulationParams:
             bounded state space (`fim.model.locus.finite_allele_capacity`)
             and a mutation can recur to a state already present elsewhere
             in the run. See `fim.model.allele.FiniteAlleleSpace`.
+        engine_backend: Which of `fim.engine`'s own three interchangeable
+            engine implementations actually drives the run — "lineal"
+            (default, the reference implementation), "generational"
+            (thread-parallel, bit-identical to "lineal"), or
+            "generational-vector" (array-native, fastest at a large
+            deme count, requires `mutation_model="finite_alleles"` and
+            `migrant_sampling="continuous"`), or "auto" to pick between
+            "generational"/"generational-vector" from `d` and
+            `auto_vector_min_d` — never "lineal", see that field's own
+            entry. This never changes what a run converges to, only how
+            it gets there; see `doc/fim-simulator-design.md`'s own §4.6
+            for the full "what/why/how".
+        jit: Whether the chosen `engine_backend` should JIT-compile its
+            own random draws via the optional `numba` dependency — "off"
+            (default) or "numba". Meaningful for "lineal"/"generational"
+            only; "generational-vector" always requires `numba`
+            regardless of this setting, and "lineal" never accepts
+            anything but "off" (a permanent restriction — see
+            `fim.engine.LinealBackend`'s own docstring).
+        auto_vector_min_d: The deme-count threshold `engine_backend=
+            "auto"` uses to choose "generational-vector" over
+            "generational". Only meaningful when `engine_backend` is
+            "auto"; ignored otherwise. Defaults to
+            `DEFAULT_AUTO_VECTOR_MIN_D` — see that constant's own
+            docstring for why it is a considered default, not a
+            portable physical constant, and how to re-measure it on a
+            given machine.
         initial_frequencies: Optional explicit deme/locus frequency table.
     """
 
@@ -200,12 +295,15 @@ class SimulationParams:
     convergence_window: int = 50
     convergence_tolerance: float = 0.01
     max_generations: int = 10_000
-    n_replicates: int = 1
-    replicate_tolerance: float | None = None
+    n_replicates: int = DEFAULT_N_REPLICATES
+    replicate_tolerance: float | None = DEFAULT_REPLICATE_TOLERANCE
     replicate_minimum: int = 10
     replicate_confidence: float = 0.95
     migrant_sampling: MigrantSampling = "continuous"
     mutation_model: MutationModel = "infinite_alleles"
+    engine_backend: EngineBackend = "lineal"
+    jit: Jit = "off"
+    auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D
     initial_frequencies: InitialFrequencies | None = None
 
     def __post_init__(self) -> None:
@@ -302,6 +400,13 @@ class SimulationParams:
             raise ValueError(
                 "mutation_model must be 'infinite_alleles' or 'finite_alleles'"
             )
+        _validate_engine_backend(
+            engine_backend=self.engine_backend,
+            jit=self.jit,
+            auto_vector_min_d=self.auto_vector_min_d,
+            mutation_model=self.mutation_model,
+            migrant_sampling=self.migrant_sampling,
+        )
 
         initial_frequencies = _normalize_initial_frequencies(
             self.initial_frequencies,
@@ -427,13 +532,27 @@ class SimulationParams:
             "convergence_tolerance": self.convergence_tolerance,
             "max_generations": self.max_generations,
             "n_replicates": self.n_replicates,
+            # Always present, unlike `initial_frequencies` below (whose
+            # own default is still `None`, so omitting a `None` value
+            # there is still lossless): `replicate_tolerance`'s own
+            # default is a real number now (`DEFAULT_REPLICATE_
+            # TOLERANCE`), so an absent key and an explicit `None` no
+            # longer mean the same thing to `from_mapping` — omitting
+            # `None` here would silently turn a caller's own explicit
+            # "disabled" into "use the default" on the next round trip
+            # through `from_mapping`. Always including it, `null` for
+            # `None`, keeps `from_mapping(params.to_dict()) == params`
+            # true unconditionally, matching this method's own
+            # docstring.
+            "replicate_tolerance": self.replicate_tolerance,
             "replicate_minimum": self.replicate_minimum,
             "replicate_confidence": self.replicate_confidence,
             "migrant_sampling": self.migrant_sampling,
             "mutation_model": self.mutation_model,
+            "engine_backend": self.engine_backend,
+            "jit": self.jit,
+            "auto_vector_min_d": self.auto_vector_min_d,
         }
-        if self.replicate_tolerance is not None:
-            result["replicate_tolerance"] = self.replicate_tolerance
         if self.initial_frequencies is not None:
             result["p_0"] = [
                 [
@@ -553,7 +672,16 @@ class SimulationParams:
             ),
             replicate_tolerance=_parse_optional_float(
                 "replicate_tolerance",
-                config.get("replicate_tolerance"),
+                config["replicate_tolerance"]
+                if "replicate_tolerance" in config
+                # Absent means "use the default", not "disabled" — those
+                # are different things now that the default is a real
+                # number (`DEFAULT_REPLICATE_TOLERANCE`), not `None`.
+                # Write `replicate_tolerance: null` explicitly in a YAML/
+                # JSON config for the old "run n_replicates in full, no
+                # adaptive stop" behavior; omitting the key entirely now
+                # means "use the default tolerance," not "disable it."
+                else PARAMETER_DEFAULTS["replicate_tolerance"],
             ),
             replicate_minimum=_parse_int(
                 "replicate_minimum",
@@ -579,6 +707,25 @@ class SimulationParams:
                 config.get(
                     "mutation_model",
                     PARAMETER_DEFAULTS["mutation_model"],
+                ),
+            ),
+            engine_backend=_parse_engine_backend(
+                config.get(
+                    "engine_backend",
+                    PARAMETER_DEFAULTS["engine_backend"],
+                ),
+            ),
+            jit=_parse_jit(
+                config.get(
+                    "jit",
+                    PARAMETER_DEFAULTS["jit"],
+                ),
+            ),
+            auto_vector_min_d=_parse_int(
+                "auto_vector_min_d",
+                config.get(
+                    "auto_vector_min_d",
+                    PARAMETER_DEFAULTS["auto_vector_min_d"],
                 ),
             ),
             initial_frequencies=_parse_initial_frequencies(config.get("p_0")),
@@ -998,6 +1145,25 @@ def _parse_mutation_model(value: Any) -> MutationModel:
     raise ValueError("mutation_model must be 'infinite_alleles' or 'finite_alleles'")
 
 
+def _parse_engine_backend(value: Any) -> EngineBackend:
+    """Parse the four supported engine-backend choices."""
+    parsed = _parse_string("engine_backend", value)
+    if parsed in {"lineal", "generational", "generational-vector", "auto"}:
+        return cast(EngineBackend, parsed)
+    raise ValueError(
+        "engine_backend must be 'lineal', 'generational', "
+        "'generational-vector', or 'auto'"
+    )
+
+
+def _parse_jit(value: Any) -> Jit:
+    """Parse the two supported JIT settings."""
+    parsed = _parse_string("jit", value)
+    if parsed in {"off", "numba"}:
+        return cast(Jit, parsed)
+    raise ValueError("jit must be 'off' or 'numba'")
+
+
 def _parse_mutation_rate(value: Any) -> MutationRate:
     """Parse a scalar or per-locus list of mutation-rate probabilities.
 
@@ -1083,6 +1249,50 @@ def _validate_finite_allele_capacity(
                 f"finite_alleles capacity ({capacity}) for length "
                 f"{locus.length}"
             )
+
+
+def _validate_engine_backend(
+    *,
+    engine_backend: EngineBackend,
+    jit: Jit,
+    auto_vector_min_d: int,
+    mutation_model: MutationModel,
+    migrant_sampling: MigrantSampling,
+) -> None:
+    """Reject an engine_backend/jit combination the engine would refuse anyway.
+
+    Checked here, at config-parse time, rather than only once a run
+    actually starts and `fim.engine.LinealBackend`/`VectorizedAdvancer`
+    raise the same complaint deep inside a call stack: a config this
+    obviously self-contradictory should never get far enough to start a
+    run at all. Mirrors `fim.engine.build_engine_backend`'s own rules
+    exactly (`20260901-claude-sonnet-5-fim-engine-backend-factory-
+    design.md` §7.5) rather than reimplementing them differently — kept
+    in sync by `test/model/test_params.py`'s own cross-check against
+    that function's source.
+    """
+    if engine_backend not in {"lineal", "generational", "generational-vector", "auto"}:
+        raise ValueError(
+            "engine_backend must be 'lineal', 'generational', "
+            "'generational-vector', or 'auto'"
+        )
+    if jit not in {"off", "numba"}:
+        raise ValueError("jit must be 'off' or 'numba'")
+    _require_integer("auto_vector_min_d", auto_vector_min_d, minimum=1)
+    if engine_backend == "lineal" and jit != "off":
+        raise ValueError("engine_backend 'lineal' only accepts jit='off'")
+    if engine_backend == "generational-vector" and jit != "off":
+        raise ValueError(
+            "engine_backend 'generational-vector' only accepts jit='off' "
+            "(it requires numba unconditionally, regardless of jit)"
+        )
+    if engine_backend == "generational-vector" and not (
+        mutation_model == "finite_alleles" and migrant_sampling == "continuous"
+    ):
+        raise ValueError(
+            "engine_backend 'generational-vector' requires "
+            "mutation_model='finite_alleles' and migrant_sampling='continuous'"
+        )
 
 
 def _validate_stopping_rules(

@@ -35,7 +35,15 @@ def rng() -> Callable[[int], np.random.Generator]:
 
 @pytest.fixture
 def tiny_params() -> SimulationParams:
-    """Return a small, fast configuration for integration tests."""
+    """Return a small, fast, single-run configuration for integration tests.
+
+    `n_replicates=1`/`replicate_tolerance=None` explicitly, not
+    `SimulationParams`'s own current defaults (`200`/`0.01`) — this
+    fixture's whole point is one small, fast, ordinary scalar run; a
+    caller that actually wants to test replicate-batch behavior should
+    build that configuration itself, not get it by accident from every
+    other test that happens to share this fixture.
+    """
     return SimulationParams(
         N=20,
         m=0.1,
@@ -46,6 +54,8 @@ def tiny_params() -> SimulationParams:
         convergence_window=4,
         convergence_tolerance=1.0,
         max_generations=10,
+        n_replicates=1,
+        replicate_tolerance=None,
     )
 
 

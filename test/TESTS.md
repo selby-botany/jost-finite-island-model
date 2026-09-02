@@ -112,7 +112,14 @@ Return the only sanctioned deterministic RNG factory for tests.
 def tiny_params() -> SimulationParams
 ```
 
-Return a small, fast configuration for integration tests.
+Return a small, fast, single-run configuration for integration tests.
+
+`n_replicates=1`/`replicate_tolerance=None` explicitly, not
+`SimulationParams`'s own current defaults (`200`/`0.01`) — this
+fixture's whole point is one small, fast, ordinary scalar run; a
+caller that actually wants to test replicate-batch behavior should
+build that configuration itself, not get it by accident from every
+other test that happens to share this fixture.
 
 <a id="test.conftest.log_isolation"></a>
 
@@ -7929,15 +7936,29 @@ def test_post_init_validation_covers_all_scalar_contracts(
 
 Every scalar validation rule rejects its documented invalid input.
 
-<a id="model.test_params.test_replicate_tolerance_round_trips_and_is_omitted_when_unset"></a>
+<a id="model.test_params.test_replicate_tolerance_round_trips_unconditionally"></a>
 
-#### test\_replicate\_tolerance\_round\_trips\_and\_is\_omitted\_when\_unset
+#### test\_replicate\_tolerance\_round\_trips\_unconditionally
 
 ```python
-def test_replicate_tolerance_round_trips_and_is_omitted_when_unset() -> None
+def test_replicate_tolerance_round_trips_unconditionally() -> None
 ```
 
-`replicate_tolerance` only appears in `to_dict()` once configured.
+`replicate_tolerance` always round-trips exactly, `None` included.
+
+An absent `replicate_tolerance` key means "use the default"
+(`DEFAULT_REPLICATE_TOLERANCE`, `0.01`) now, not "disabled" — that
+default is a real, non-`None` number. `to_dict()` always includes
+`replicate_tolerance` unconditionally (`null` for `None`), unlike
+`initial_frequencies` (still omitted when `None`, since `None` is
+still *that* field's own default): omitting a `None`
+`replicate_tolerance` the same way would silently turn an explicit
+"disabled" into "use the default" the next time the dict round-trips
+through `from_mapping` — a real bug this project's own test suite
+caught directly (several tests build a batch config via
+`{**tiny_params.to_dict(), "n_replicates": N}`, which depends on
+`to_dict()` preserving `tiny_params`'s own explicit `replicate_
+tolerance=None` losslessly).
 
 <a id="model.test_params.test_required_and_conflicting_configuration_keys_are_named"></a>
 

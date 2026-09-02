@@ -78,6 +78,8 @@ def _write_run(tmp_path: Path, *, d: int = 2) -> Path:
         "convergence_window": 8,
         "convergence_tolerance": 1e-6,
         "max_generations": 12,
+        "n_replicates": 1,
+        "replicate_tolerance": None,
     }
     config_path = tmp_path / "run.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")

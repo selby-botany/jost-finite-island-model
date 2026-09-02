@@ -62,7 +62,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [GenerationalBackend](#fim.engine.GenerationalBackend)
     * [\_\_init\_\_](#fim.engine.GenerationalBackend.__init__)
     * [run](#fim.engine.GenerationalBackend.run)
-  * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.engine.DEFAULT_AUTO_VECTOR_MIN_D)
   * [build\_engine\_backend](#fim.engine.build_engine_backend)
   * [fim](#fim.engine.fim)
   * [deterministic\_run\_id](#fim.engine.deterministic_run_id)
@@ -191,6 +190,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [mutate](#fim.model.operators.mutate)
   * [step](#fim.model.operators.step)
 * [fim.model.params](#fim.model.params)
+  * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D)
+  * [DEFAULT\_N\_REPLICATES](#fim.model.params.DEFAULT_N_REPLICATES)
+  * [DEFAULT\_REPLICATE\_TOLERANCE](#fim.model.params.DEFAULT_REPLICATE_TOLERANCE)
   * [SimulationParams](#fim.model.params.SimulationParams)
     * [\_\_post\_init\_\_](#fim.model.params.SimulationParams.__post_init__)
     * [convergence\_statistics](#fim.model.params.SimulationParams.convergence_statistics)
@@ -1732,32 +1734,6 @@ def run(params: SimulationParams, store: TrajectoryStore | None,
 
 Run `params`'s own replicate(s); see `fim()`'s own docstring.
 
-<a id="fim.engine.DEFAULT_AUTO_VECTOR_MIN_D"></a>
-
-#### DEFAULT\_AUTO\_VECTOR\_MIN\_D
-
-`"auto"`'s own default deme-count cutover, below which it never picks
-`"generational-vector"` even when the config is otherwise eligible for it.
-
-Measured, not guessed — the generation-first design's own Stage 4/vector
-design's own Stage V3 deme-axis sweep
-(`20260827-claude-sonnet-5-fim-engine-parallel-refactor-design.md`,
-`20260829-claude-sonnet-5-fim-vector-design.md`) found Backend V crosses
-over from slower than Backend L to clearly faster somewhere between
-`d=30` and `d=40` on the primary benchmarking machine (native macOS,
-Apple Silicon). A follow-on cross-environment check (the same sweep run
-inside a Linux/aarch64 Docker container, at several `--cpus` limits) found
-the *qualitative* direction reproduces — Backend V is still ahead at
-`d=60` — but neither the *exact* threshold nor the *magnitude* survived
-the platform change cleanly: `--cpus` from 1 to 6 showed no clean,
-monotonic trend (ruling out raw CPU-core-count as the dominant driver),
-while the container's own `d=20`/`d=35`/`d=50` spot-check bounced between
-0.76x and 1.50x with no obviously clean crossover at these lighter
-(3-trial) sample sizes. This constant is therefore a considered default
-from the most thoroughly characterized environment, not a portable
-physical constant — see `build_engine_backend`'s own `auto_vector_min_d`
-Args entry for why it is a parameter, not a hardcoded literal.
-
 <a id="fim.engine.build_engine_backend"></a>
 
 #### build\_engine\_backend
@@ -1880,10 +1856,9 @@ def fim(N: PopulationSize,
         clock: Clock | None = None,
         max_workers: int | None = None,
         store_factory: Callable[[str], TrajectoryStore] | None = None,
-        engine_backend: EngineBackendChoice = "lineal",
-        jit: JitOption = "off",
-        auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D
-        ) -> SimulationOutput
+        engine_backend: EngineBackendChoice | None = None,
+        jit: JitOption | None = None,
+        auto_vector_min_d: int | None = None) -> SimulationOutput
 ```
 
 Run the finite island model until convergence or the hard cap.
@@ -1996,9 +1971,18 @@ silently disagree.
   store if `store` was not given either). `lineal`-only —
   see `engine_backend` below.
 - `engine_backend` - Which engine implementation actually runs this
-  batch. ``"lineal"`` (the default) is every prior release's
-  own behavior, unchanged — every existing caller that does
-  not pass this argument sees no change at all.
+  batch. Left unset (``None``, the default), falls back to
+  `params.engine_backend` — a real `SimulationParams` field
+  (config-file/CLI exposed, see `doc/configuration.md`), so a
+  caller who only builds `params` and never touches this
+  argument still gets whatever `params` itself asked for.
+  Passing this argument explicitly overrides `params` for this
+  one call, the same relationship `N`/`m`/`mu`/`d` have to
+  `params`, without the "must agree" requirement those four
+  enforce — this one is a pure override, not a redundant
+  cross-check. ``"lineal"`` (both `params`'s own default and
+  this project's original, single-engine behavior) means every
+  caller that sets neither sees no change at all.
   ``"generational"`` reorders *when* each replicate's
   generations are computed (every still-active replicate's own
   generation advances together, fanned out across a real
@@ -2020,13 +2004,16 @@ silently disagree.
   docstring).
   ``"generational-vector"`` is a real, working third choice —
   array-native, fused `migrate`/`mutate`/`drift`
-  (`fim.model.vectorized`), statistically (not bit-identically)
-  equivalent to the other two, scoped to
+  (`fim.model.vectorized`), scoped to
   `mutation_model="finite_alleles"` and
   `migrant_sampling="continuous"` only; a replicate outside
   that scope raises `ValueError` naming which constraint it
   violated, rather than silently falling back to the other
-  backends' dict-based path.
+  backends' dict-based path. Matches the other two backends
+  exactly (same seed, bit-identical) when migration is off;
+  with migration active, matches them statistically instead
+  (no directional bias, not row-for-row) — see
+  `fim.model.vectorized`'s own module docstring for why.
   ``"auto"`` picks between ``"generational"`` and
   ``"generational-vector"`` on `params`'s own behalf, using
   `auto_vector_min_d` (below) — never ``"lineal"`` (see
@@ -2035,27 +2022,28 @@ silently disagree.
 - `jit` - Whether the chosen backend should JIT-compile its own
   operators — a change in *how* the result is computed, not
   *what* is computed (bit-identical to ``"off"`` for the same
-  seed), and not yet shown to be a wall-clock win on its own
-  (see `build_engine_backend`'s own docstring). ``"off"`` (the
-  default) is every prior release's own behavior. Meaningful
-  only under ``engine_backend="generational"`` today
-  (JIT-compiles `drift`'s own multinomial draw — needs the
-  optional `numba` dependency, ``pip install fim[jit]``);
-  ``"generational-vector"`` has no separate toggle for this —
-  its own mutate step always requires `numba` internally
-  regardless of this argument, so only ``"off"`` (the default)
-  is accepted there, and passing ``"numba"`` is a `ValueError`;
-  ``"lineal"`` never accepts anything
-  but ``"off"``, permanently — see `build_engine_backend`'s
-  own docstring.
+  seed). Left unset (``None``, the default), falls back to
+  `params.jit`, the same relationship `engine_backend` above
+  has to `params.engine_backend`. Meaningful only under
+  ``engine_backend="generational"`` today (JIT-compiles
+  `drift`'s own multinomial draw — needs the optional `numba`
+  dependency, ``pip install fim[jit]``); ``"generational-
+  vector"`` has no separate toggle for this — its own mutate
+  step always requires `numba` internally regardless of this
+  argument, so only ``"off"`` (the default) is accepted there,
+  and passing ``"numba"`` is a `ValueError`; ``"lineal"`` never
+  accepts anything but ``"off"``, permanently — see
+  `build_engine_backend`'s own docstring.
 - `auto_vector_min_d` - The deme-count cutover ``engine_backend=
   "auto"`` uses to decide between ``"generational"`` and
   ``"generational-vector"``; ignored under every other
-  `engine_backend` value. Defaults to
-  `DEFAULT_AUTO_VECTOR_MIN_D` — see that constant's own
-  docstring for the full benchmark finding behind the default
-  and its known cross-environment caveats before trusting it
-  on meaningfully different hardware.
+  `engine_backend` value. Left unset (``None``, the default),
+  falls back to `params.auto_vector_min_d` — see
+  `DEFAULT_AUTO_VECTOR_MIN_D`'s own docstring
+  (`fim.model.params`) for the full benchmark finding behind
+  that field's own default and its known cross-environment
+  caveats before trusting it on meaningfully different
+  hardware.
 
 
 **Returns**:
@@ -5490,6 +5478,68 @@ validated `SimulationParams`. See `doc/configuration.md` for what each
 configuration field means and its accepted range, in plain language,
 independent of this file's own more code-oriented documentation.
 
+<a id="fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D"></a>
+
+#### DEFAULT\_AUTO\_VECTOR\_MIN\_D
+
+`"auto"`'s own default deme-count cutover, below which it never picks
+`"generational-vector"` even when the config is otherwise eligible for it.
+
+Lives here, not in `fim.engine`, because it is a `SimulationParams` field
+default like any other (`convergence_window`'s own `50`, `max_generations`'s
+own `10_000`) — `fim.engine` imports it from here rather than the other way
+around, matching this project's own one-directional dependency rule (the
+engine depends on the model; the model depends on nothing in the engine).
+
+Measured, not guessed — the generation-first design's own Stage 4/vector
+design's own Stage V3 deme-axis sweep found Backend V crosses over from
+slower than Backend L to clearly faster somewhere between `d=30` and
+`d=40` on the primary benchmarking machine. **This default has not been
+re-measured since a later correctness fix
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10
+Stage F8) changed the underlying performance picture materially — a
+2026-09-02 re-measurement (`dev/bin/benchmark-engines`) found
+`"generational-vector"` already ahead at `d=4`, the smallest value
+tested, not just past this threshold.** Kept at `35` rather than changed
+alongside that finding: altering a shipped default needs its own
+deliberate confirmation, not a silent edit. `auto_vector_min_d` stays a
+caller-supplied `SimulationParams` field for exactly this kind of
+drift — see `dev/bin/benchmark-engines --sweep d` to re-characterize it
+on any given machine.
+
+<a id="fim.model.params.DEFAULT_N_REPLICATES"></a>
+
+#### DEFAULT\_N\_REPLICATES
+
+How many independently seeded replicates a run tries by default.
+
+Not `1` — the most useful ordinary use of this tool is a measurement
+*with* a confidence interval (`replicate_tolerance`, below), not a
+single point estimate, so that is what an unconfigured run now does by
+default: run up to `DEFAULT_N_REPLICATES` replicates, stopping early
+once `DEFAULT_REPLICATE_TOLERANCE` is reached. `200` is a generous cap,
+not an expectation of always reaching it — chosen to match this
+project's own worked examples and test scenarios that already use a
+comparable count for a real confidence interval, giving the adaptive
+stop (`replicate_minimum` onward) real room to tighten before the cap
+would ever bind. A caller who wants the old single-run behavior back
+sets `n_replicates: 1` explicitly, same as always; nothing about what an
+explicit `n_replicates` means has changed, only what an *absent* one now
+means.
+
+<a id="fim.model.params.DEFAULT_REPLICATE_TOLERANCE"></a>
+
+#### DEFAULT\_REPLICATE\_TOLERANCE
+
+Default early-stopping half-width for a replicate batch.
+
+Matches `convergence_tolerance`'s own default (`0.01`) deliberately —
+the same tightness applied one layer up, to the across-replicate mean
+instead of the within-run trailing window. Paired with
+`DEFAULT_N_REPLICATES` above: together they make an unconfigured run
+compute a real confidence interval by default rather than a single,
+uncertainty-free-looking point estimate.
+
 <a id="fim.model.params.SimulationParams"></a>
 
 ## SimulationParams Objects
@@ -5548,19 +5598,24 @@ functions that actually use each one.
 - `convergence_window` - Trailing stability-window length.
 - `convergence_tolerance` - Maximum half-window mean difference.
 - `max_generations` - Hard generation safety cap.
-- `n_replicates` - Number of independently seeded runs. With
-  `replicate_tolerance` unset (the default), exactly this many
-  run. With `replicate_tolerance` set, this is instead the hard
-  replicate-count cap — see `replicate_tolerance`.
-- `replicate_tolerance` - Opt-in early-stopping half-width, in the same
-  units as each watched `convergence_statistic`. ``None`` (the
-  default) preserves prior behavior exactly: `n_replicates`
-  always runs in full. Set to a number to stop once every
-  watched statistic's across-replicate Student's-t confidence
-  interval has tightened to at most this half-width (per
-  `convergence_combinator`, exactly like within-run
-  convergence), or `n_replicates` is reached, whichever comes
-  first.
+- `n_replicates` - Number of independently seeded runs — the hard cap
+  a replicate batch runs up to. Defaults to
+  `DEFAULT_N_REPLICATES` (`200`), not `1`: the ordinary useful
+  result from this tool is a measurement with a confidence
+  interval, not an uncertainty-free-looking single point, so an
+  unconfigured run now behaves that way by default. Set to `1`
+  explicitly for the old single-run behavior.
+- `replicate_tolerance` - Early-stopping half-width, in the same units
+  as each watched `convergence_statistic`. Defaults to
+  `DEFAULT_REPLICATE_TOLERANCE` (`0.01`, matching
+  `convergence_tolerance`'s own default) — an unconfigured run
+  stops as soon as every watched statistic's across-replicate
+  Student's-t confidence interval has tightened to at most this
+  half-width (per `convergence_combinator`, exactly like
+  within-run convergence), or `n_replicates` is reached,
+  whichever comes first. Set explicitly to `None` (or, in a
+  YAML/JSON config, simply omitted alongside `n_replicates: 1`)
+  to run a fixed count in full with no adaptive stop.
 - `replicate_minimum` - Fewest replicates before tightness is even
   checked, guarding against a lucky-early-tight fluke — the
   replicate-layer analog of `convergence_window`. Only
@@ -5581,6 +5636,33 @@ functions that actually use each one.
   bounded state space (`fim.model.locus.finite_allele_capacity`)
   and a mutation can recur to a state already present elsewhere
   in the run. See `fim.model.allele.FiniteAlleleSpace`.
+- `engine_backend` - Which of `fim.engine`'s own three interchangeable
+  engine implementations actually drives the run — "lineal"
+  (default, the reference implementation), "generational"
+  (thread-parallel, bit-identical to "lineal"), or
+  "generational-vector" (array-native, fastest at a large
+  deme count, requires `mutation_model="finite_alleles"` and
+  `migrant_sampling="continuous"`), or "auto" to pick between
+  "generational"/"generational-vector" from `d` and
+  `auto_vector_min_d` — never "lineal", see that field's own
+  entry. This never changes what a run converges to, only how
+  it gets there; see `doc/fim-simulator-design.md`'s own §4.6
+  for the full "what/why/how".
+- `jit` - Whether the chosen `engine_backend` should JIT-compile its
+  own random draws via the optional `numba` dependency — "off"
+  (default) or "numba". Meaningful for "lineal"/"generational"
+  only; "generational-vector" always requires `numba`
+  regardless of this setting, and "lineal" never accepts
+  anything but "off" (a permanent restriction — see
+  `fim.engine.LinealBackend`'s own docstring).
+- `auto_vector_min_d` - The deme-count threshold `engine_backend=
+  "auto"` uses to choose "generational-vector" over
+  "generational". Only meaningful when `engine_backend` is
+  "auto"; ignored otherwise. Defaults to
+  `DEFAULT_AUTO_VECTOR_MIN_D` — see that constant's own
+  docstring for why it is a considered default, not a
+  portable physical constant, and how to re-measure it on a
+  given machine.
 - `initial_frequencies` - Optional explicit deme/locus frequency table.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>

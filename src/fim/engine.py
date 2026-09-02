@@ -125,7 +125,15 @@ from fim.model.allele import (
 from fim.model.initial import generate_initial_state
 from fim.model.locus import finite_allele_capacity
 from fim.model.operators import _population_sizes, step
-from fim.model.params import Migration, MutationRate, PopulationSize, SimulationParams
+from fim.model.params import (
+    DEFAULT_AUTO_VECTOR_MIN_D,
+    Migration,
+    MutationRate,
+    PopulationSize,
+    SimulationParams,
+)
+from fim.model.params import EngineBackend as ModelEngineBackend
+from fim.model.params import Jit as ModelJit
 from fim.model.state import ModelState
 from fim.model.vectorized import (
     VectorizedLocusState,
@@ -1064,32 +1072,19 @@ class GenerationalBackend:
         return results
 
 
-EngineBackendChoice = Literal["lineal", "generational", "generational-vector", "auto"]
-JitOption = Literal["off", "numba"]
-
-DEFAULT_AUTO_VECTOR_MIN_D = 35
-"""`"auto"`'s own default deme-count cutover, below which it never picks
-`"generational-vector"` even when the config is otherwise eligible for it.
-
-Measured, not guessed — the generation-first design's own Stage 4/vector
-design's own Stage V3 deme-axis sweep
-(`20260827-claude-sonnet-5-fim-engine-parallel-refactor-design.md`,
-`20260829-claude-sonnet-5-fim-vector-design.md`) found Backend V crosses
-over from slower than Backend L to clearly faster somewhere between
-`d=30` and `d=40` on the primary benchmarking machine (native macOS,
-Apple Silicon). A follow-on cross-environment check (the same sweep run
-inside a Linux/aarch64 Docker container, at several `--cpus` limits) found
-the *qualitative* direction reproduces — Backend V is still ahead at
-`d=60` — but neither the *exact* threshold nor the *magnitude* survived
-the platform change cleanly: `--cpus` from 1 to 6 showed no clean,
-monotonic trend (ruling out raw CPU-core-count as the dominant driver),
-while the container's own `d=20`/`d=35`/`d=50` spot-check bounced between
-0.76x and 1.50x with no obviously clean crossover at these lighter
-(3-trial) sample sizes. This constant is therefore a considered default
-from the most thoroughly characterized environment, not a portable
-physical constant — see `build_engine_backend`'s own `auto_vector_min_d`
-Args entry for why it is a parameter, not a hardcoded literal.
-"""
+# `EngineBackendChoice`/`JitOption`/`DEFAULT_AUTO_VECTOR_MIN_D` are
+# defined in `fim.model.params` (as `EngineBackend`/`Jit`/the same
+# constant name), not here, and re-exported under these names for every
+# existing importer — `SimulationParams.engine_backend`/`.jit`/
+# `.auto_vector_min_d` are real fields there now (config-file/CLI
+# exposed), so their defaults belong beside every other `SimulationParams`
+# field default, not duplicated here. This module still owns everything
+# about what each choice *does*; `fim.model.params` only owns the closed
+# set of legal values and their defaults — matching this project's own
+# one-directional dependency rule (the engine depends on the model, the
+# model depends on nothing in the engine).
+EngineBackendChoice = ModelEngineBackend
+JitOption = ModelJit
 
 
 def _resolve_auto_engine_backend(
@@ -1257,9 +1252,9 @@ def fim(
     clock: Clock | None = None,
     max_workers: int | None = None,
     store_factory: Callable[[str], TrajectoryStore] | None = None,
-    engine_backend: EngineBackendChoice = "lineal",
-    jit: JitOption = "off",
-    auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D,
+    engine_backend: EngineBackendChoice | None = None,
+    jit: JitOption | None = None,
+    auto_vector_min_d: int | None = None,
 ) -> SimulationOutput:
     """Run the finite island model until convergence or the hard cap.
 
@@ -1370,9 +1365,18 @@ def fim(
             store if `store` was not given either). `lineal`-only —
             see `engine_backend` below.
         engine_backend: Which engine implementation actually runs this
-            batch. ``"lineal"`` (the default) is every prior release's
-            own behavior, unchanged — every existing caller that does
-            not pass this argument sees no change at all.
+            batch. Left unset (``None``, the default), falls back to
+            `params.engine_backend` — a real `SimulationParams` field
+            (config-file/CLI exposed, see `doc/configuration.md`), so a
+            caller who only builds `params` and never touches this
+            argument still gets whatever `params` itself asked for.
+            Passing this argument explicitly overrides `params` for this
+            one call, the same relationship `N`/`m`/`mu`/`d` have to
+            `params`, without the "must agree" requirement those four
+            enforce — this one is a pure override, not a redundant
+            cross-check. ``"lineal"`` (both `params`'s own default and
+            this project's original, single-engine behavior) means every
+            caller that sets neither sees no change at all.
             ``"generational"`` reorders *when* each replicate's
             generations are computed (every still-active replicate's own
             generation advances together, fanned out across a real
@@ -1394,13 +1398,16 @@ def fim(
             docstring).
             ``"generational-vector"`` is a real, working third choice —
             array-native, fused `migrate`/`mutate`/`drift`
-            (`fim.model.vectorized`), statistically (not bit-identically)
-            equivalent to the other two, scoped to
+            (`fim.model.vectorized`), scoped to
             `mutation_model="finite_alleles"` and
             `migrant_sampling="continuous"` only; a replicate outside
             that scope raises `ValueError` naming which constraint it
             violated, rather than silently falling back to the other
-            backends' dict-based path.
+            backends' dict-based path. Matches the other two backends
+            exactly (same seed, bit-identical) when migration is off;
+            with migration active, matches them statistically instead
+            (no directional bias, not row-for-row) — see
+            `fim.model.vectorized`'s own module docstring for why.
             ``"auto"`` picks between ``"generational"`` and
             ``"generational-vector"`` on `params`'s own behalf, using
             `auto_vector_min_d` (below) — never ``"lineal"`` (see
@@ -1409,27 +1416,28 @@ def fim(
         jit: Whether the chosen backend should JIT-compile its own
             operators — a change in *how* the result is computed, not
             *what* is computed (bit-identical to ``"off"`` for the same
-            seed), and not yet shown to be a wall-clock win on its own
-            (see `build_engine_backend`'s own docstring). ``"off"`` (the
-            default) is every prior release's own behavior. Meaningful
-            only under ``engine_backend="generational"`` today
-            (JIT-compiles `drift`'s own multinomial draw — needs the
-            optional `numba` dependency, ``pip install fim[jit]``);
-            ``"generational-vector"`` has no separate toggle for this —
-            its own mutate step always requires `numba` internally
-            regardless of this argument, so only ``"off"`` (the default)
-            is accepted there, and passing ``"numba"`` is a `ValueError`;
-            ``"lineal"`` never accepts anything
-            but ``"off"``, permanently — see `build_engine_backend`'s
-            own docstring.
+            seed). Left unset (``None``, the default), falls back to
+            `params.jit`, the same relationship `engine_backend` above
+            has to `params.engine_backend`. Meaningful only under
+            ``engine_backend="generational"`` today (JIT-compiles
+            `drift`'s own multinomial draw — needs the optional `numba`
+            dependency, ``pip install fim[jit]``); ``"generational-
+            vector"`` has no separate toggle for this — its own mutate
+            step always requires `numba` internally regardless of this
+            argument, so only ``"off"`` (the default) is accepted there,
+            and passing ``"numba"`` is a `ValueError`; ``"lineal"`` never
+            accepts anything but ``"off"``, permanently — see
+            `build_engine_backend`'s own docstring.
         auto_vector_min_d: The deme-count cutover ``engine_backend=
             "auto"`` uses to decide between ``"generational"`` and
             ``"generational-vector"``; ignored under every other
-            `engine_backend` value. Defaults to
-            `DEFAULT_AUTO_VECTOR_MIN_D` — see that constant's own
-            docstring for the full benchmark finding behind the default
-            and its known cross-environment caveats before trusting it
-            on meaningfully different hardware.
+            `engine_backend` value. Left unset (``None``, the default),
+            falls back to `params.auto_vector_min_d` — see
+            `DEFAULT_AUTO_VECTOR_MIN_D`'s own docstring
+            (`fim.model.params`) for the full benchmark finding behind
+            that field's own default and its known cross-environment
+            caveats before trusting it on meaningfully different
+            hardware.
 
     Returns:
         One result, or one independently seeded result per replicate.
@@ -1453,6 +1461,20 @@ def fim(
             `build_engine_backend`'s own docstring).
     """
     _validate_public_signature(N, m, mu, d, params)
+    # An explicit argument always wins; otherwise fall back to `params`'s
+    # own field of the same name — real `SimulationParams` fields (see
+    # `doc/configuration.md`), not orphaned duplicates of these
+    # arguments' own former hardcoded defaults. `params` itself already
+    # validated all three together (`SimulationParams.__post_init__`
+    # via `_validate_engine_backend`), so nothing further to check here
+    # beyond what `build_engine_backend` already does for a directly
+    # constructed value.
+    if engine_backend is None:
+        engine_backend = params.engine_backend
+    if jit is None:
+        jit = params.jit
+    if auto_vector_min_d is None:
+        auto_vector_min_d = params.auto_vector_min_d
     if engine_backend != "lineal" and (
         max_workers is not None or store_factory is not None
     ):

@@ -911,6 +911,7 @@ def _run_engine_replicates(
         convergence_window=horizon + 1,
         max_generations=horizon,
         n_replicates=replicates,
+        replicate_tolerance=None,
         initial_frequencies=initial_frequencies,
     )
     results = fim(

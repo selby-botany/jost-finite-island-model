@@ -51,6 +51,8 @@ def _tiny_config() -> dict[str, object]:
         "convergence_window": 4,
         "convergence_tolerance": 1.0,
         "max_generations": 10,
+        "n_replicates": 1,
+        "replicate_tolerance": None,
     }
 
 
@@ -570,6 +572,8 @@ def test_g_st_convergence_falls_back_to_the_cap_at_total_fixation() -> None:
         convergence_window=2,
         convergence_tolerance=0.0,
         max_generations=2,
+        n_replicates=1,
+        replicate_tolerance=None,
         initial_frequencies=(
             ({AlleleId(0): 1.0},),
             ({AlleleId(0): 1.0},),
@@ -712,6 +716,8 @@ def test_multi_statistic_run_watches_and_reports_every_statistic() -> None:
         convergence_window=6,
         convergence_tolerance=0.02,
         max_generations=60,
+        n_replicates=1,
+        replicate_tolerance=None,
     )
 
     first = _run(params)
@@ -751,6 +757,8 @@ def test_any_combinator_can_stop_earlier_than_all() -> None:
             convergence_window=6,
             convergence_tolerance=0.02,
             max_generations=60,
+            n_replicates=1,
+            replicate_tolerance=None,
         )
 
     any_params = _params("any")
@@ -785,6 +793,8 @@ def test_mutation_ids_follow_high_explicit_initial_id() -> None:
         initial_allele_count=1,
         convergence_window=2,
         max_generations=1,
+        n_replicates=1,
+        replicate_tolerance=None,
         initial_frequencies=(
             ({AlleleId(MINTED_ID_START): 1.0},),
             ({AlleleId(MINTED_ID_START): 1.0},),
@@ -815,6 +825,8 @@ def test_unequal_deme_sizes_run_is_reproducible_and_bounds_support() -> None:
         convergence_window=4,
         convergence_tolerance=1.0,
         max_generations=8,
+        n_replicates=1,
+        replicate_tolerance=None,
     )
 
     first = _run(params)
@@ -899,6 +911,8 @@ def test_asymmetric_migration_matrix_run_is_reproducible() -> None:
         convergence_window=4,
         convergence_tolerance=1.0,
         max_generations=8,
+        n_replicates=1,
+        replicate_tolerance=None,
     )
 
     first = _run(params)
@@ -1050,6 +1064,8 @@ def test_multi_locus_run_with_unequal_lengths_is_reproducible() -> None:
         convergence_window=4,
         convergence_tolerance=1.0,
         max_generations=8,
+        n_replicates=1,
+        replicate_tolerance=None,
     )
 
     first = _run(params)
@@ -1080,6 +1096,8 @@ def test_stepping_stone_topology_run_is_reproducible() -> None:
             "convergence_window": 4,
             "convergence_tolerance": 1.0,
             "max_generations": 8,
+            "n_replicates": 1,
+            "replicate_tolerance": None,
         }
     )
 
@@ -1112,6 +1130,8 @@ def test_stochastic_migrant_sampling_run_is_reproducible() -> None:
             "convergence_window": 4,
             "convergence_tolerance": 1.0,
             "max_generations": 8,
+            "n_replicates": 1,
+            "replicate_tolerance": None,
         }
     )
 
@@ -1141,6 +1161,8 @@ def test_default_migrant_sampling_is_unaffected_by_the_stochastic_option() -> No
         "convergence_window": 4,
         "convergence_tolerance": 1.0,
         "max_generations": 8,
+        "n_replicates": 1,
+        "replicate_tolerance": None,
     }
     implicit = SimulationParams.from_mapping(base_config)
     explicit = SimulationParams.from_mapping(
@@ -1176,6 +1198,8 @@ def test_finite_alleles_run_is_reproducible_and_bounds_capacity() -> None:
             "convergence_window": 4,
             "convergence_tolerance": 1.0,
             "max_generations": 10,
+            "n_replicates": 1,
+            "replicate_tolerance": None,
         }
     )
 
@@ -1206,6 +1230,8 @@ def test_default_mutation_model_is_unaffected_by_the_finite_alleles_option() -> 
         "convergence_window": 4,
         "convergence_tolerance": 1.0,
         "max_generations": 8,
+        "n_replicates": 1,
+        "replicate_tolerance": None,
     }
     implicit = SimulationParams.from_mapping(base_config)
     explicit = SimulationParams.from_mapping(
@@ -1241,6 +1267,8 @@ def test_mu_b_run_matches_the_equivalent_explicit_per_locus_mu() -> None:
         "convergence_window": 4,
         "convergence_tolerance": 1.0,
         "max_generations": 8,
+        "n_replicates": 1,
+        "replicate_tolerance": None,
     }
     via_mu_b = SimulationParams.from_mapping({**base_config, "mu_b": mu_b})
     via_expanded_mu = SimulationParams.from_mapping(
@@ -1276,6 +1304,8 @@ def test_mu_b_combines_with_finite_alleles() -> None:
             "convergence_window": 4,
             "convergence_tolerance": 1.0,
             "max_generations": 10,
+            "n_replicates": 1,
+            "replicate_tolerance": None,
         }
     )
 
@@ -1917,7 +1947,14 @@ def test_fim_engine_backend_generational_with_jit_matches_default(
 
 
 def _finite_alleles_vector_params(**overrides: object) -> SimulationParams:
-    """A `finite_alleles`/continuous-migration config `VectorizedAdvancer` accepts."""
+    """A `finite_alleles`/continuous-migration config `VectorizedAdvancer` accepts.
+
+    `n_replicates=1`/`replicate_tolerance=None` explicitly, not
+    `SimulationParams`'s own current defaults (`200`/`0.01`) — every
+    caller of this helper except one explicit override
+    (`test_generational_vector_backend_batch_is_independently_
+    reproducible`) wants a single scalar run.
+    """
     base = SimulationParams(
         N=40,
         m=0.2,
@@ -1929,6 +1966,8 @@ def _finite_alleles_vector_params(**overrides: object) -> SimulationParams:
         convergence_window=4,
         convergence_tolerance=1.0,
         max_generations=10,
+        n_replicates=1,
+        replicate_tolerance=None,
     )
     return replace(base, **overrides)  # type: ignore[arg-type]
 
@@ -2113,6 +2152,14 @@ def test_generational_vector_backend_matches_lineal_statistically() -> None:
         convergence_window=21,
         max_generations=20,
         n_replicates=200,
+        # Explicit, not `SimulationParams`'s own current default
+        # (`0.01`): this test's own paired-mean comparison needs the
+        # exact same fixed replicate count run by both backends,
+        # deliberately not an adaptive stop that could legitimately fire
+        # at a different replicate count for each (their per-replicate
+        # values differ slightly under migration by design — that
+        # divergence is exactly what this test measures).
+        replicate_tolerance=None,
     )
 
     lineal_results = fim(

@@ -28,6 +28,8 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
         "convergence_window": 8,
         "convergence_tolerance": 1e-6,
         "max_generations": 12,
+        "n_replicates": 1,
+        "replicate_tolerance": None,
     }
     config.update(overrides)
     config_path = tmp_path / "run.yaml"
