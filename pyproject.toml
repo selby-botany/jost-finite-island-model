@@ -64,14 +64,27 @@ dependencies = [
 # at all (`fim.model.vectorized`'s own module docstring), so unlike
 # Backend L/G there is no non-JIT fallback to degrade to. Test coverage
 # for both paths uses `pytest.importorskip("numba")` (`test/model/
-# test_vectorized.py`, `test/engine/test_engine.py`) so the base `[dev]`
-# CI configuration — deliberately `numba`-free — still exercises every
-# non-Backend-V code path and skips only what genuinely cannot run
-# without it, rather than failing outright (found live: `numba` absent
-# from CI's own `[dev]` install broke every Backend-V-touching test the
-# first time any of Backend V's own code was actually pushed, since it
-# had only ever been tested locally, where `numba` happened to already
-# be installed). Design doc `20260901-claude-sonnet-5-fim-engine-
+# test_vectorized.py`, `test/engine/test_engine.py`) so a `numba`-free
+# install still exercises every non-Backend-V code path and skips only
+# what genuinely cannot run without it, rather than failing outright
+# (found live: `numba` absent from CI's own `[dev]`-only install broke
+# every Backend-V-touching test the first time any of Backend V's own
+# code was actually pushed, `24e905e`, since it had only ever been
+# tested locally, where `numba` happened to already be installed). That
+# fix alone was not enough, though: `.github/workflows/ci.yml`'s own
+# coverage-gated `build` job still installed `[dev]` only, so the very
+# same skips it exists to make clean also made a large, genuinely
+# untested slice of `vectorized.py` invisible to `--cov-fail-under=90`
+# (50% line coverage measured directly) rather than counted against it
+# — masked for one push by `coverage.py`'s own rounding of the
+# displayed/compared percentage, then not (`20260901-claude-sonnet-5-
+# fim-engine-backend-factory-design.md` §10 Stage F9). Fixed by having
+# that one job install `[dev,jit]` instead, so Backend V's own code
+# gets real exercise and real coverage in the job that gates on it; no
+# other job installs `[jit]`, and none needs to — `numba` staying a true
+# optional extra for actual installs is a property of the package's own
+# dependency graph, not of what this one job's own venv happens to
+# have. Design doc `20260901-claude-sonnet-5-fim-engine-
 # backend-factory-design.md` §5.3/§10 Stage F5: `numba` 0.67.0 confirmed
 # to compile scalar `Generator.binomial`/`.random`/`.integers`/
 # `.uniform` calls bit-identically under `nogil=True`, and to build/run

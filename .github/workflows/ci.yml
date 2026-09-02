@@ -56,7 +56,25 @@ jobs:
               xvfb gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-soup-3.0 \
               libwebkit2gtk-4.1-0 libgirepository1.0-dev libcairo2-dev \
               pkg-config
-      - run: python -m pip install -e ".[dev]"
+      # `jit` (numba) alongside `dev`: this is the one job that gates
+      # `--cov-fail-under=90`, and `fim.model.vectorized`'s own
+      # JIT-batched helpers (`drift_vectorized`/`mutate_vectorized`/
+      # `step_vectorized`/`VectorizedAdvancer`) import `numba`
+      # unconditionally whenever Backend V runs at all -- with `numba`
+      # absent, `pytest.importorskip("numba")` skips all of it cleanly
+      # (no crash, see `24e905e`), but that leaves a large, genuinely
+      # untested slice of `vectorized.py` (down to 50% line coverage
+      # measured directly, `20260901-claude-sonnet-5-fim-engine-backend-
+      # factory-design.md` §10 Stage F9) counted as "missing" by the
+      # coverage gate below -- not a coverage-accounting quirk, real
+      # code this job was never actually exercising. `numba`'s own
+      # optional-extra status for actual installs is untouched by this
+      # (no other job here installs `.[jit]` either, and none needs to:
+      # `pip install fim` without it, and every `jit="numba"`/
+      # `engine_backend="generational-vector"` code path staying purely
+      # opt-in, are both properties of the package's own dependency
+      # graph, not of what this one CI job happens to have installed).
+      - run: python -m pip install -e ".[dev,jit]"
       # Split into two named, separately timed/budgeted steps rather
       # than one opaque `./build --ci` step: the fast step re-runs the
       # same deterministic layer `--ci` also covers (`build`'s own
