@@ -73,6 +73,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the `n_replicates`/`replicate_tolerance` default change above
   introduced for exactly this combination, found by every GUI batch
   test failing in CI immediately after that change shipped.
+- `"generational"` (`ThreadedAdvancer`) no longer rebuilds its own
+  thread pool every generation — a real, measured ~2.5x wall-clock
+  improvement at this project's own reference scale, entirely from
+  removing repeated OS thread creation/teardown that used to happen on
+  every tick regardless of thread count. Real multi-thread scaling
+  remains limited for other reasons (documented in the design doc, not
+  yet addressed).
 
 ---
 
