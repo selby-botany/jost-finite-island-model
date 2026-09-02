@@ -73,11 +73,17 @@ The one entry point everything else in this project ultimately calls.
   `engine_backend` selects which of this project's own engine
   implementations actually runs the batch — `"lineal"` (the default,
   every earlier release's own behavior, unchanged), `"generational"`
-  (real thread-based replicate fan-out), `"generational-vector"`
-  (array-native, fused `migrate`/`mutate`/`drift`, statistically — not
-  bit-identically — equivalent to the other two), or `"auto"` (picks
-  between `"generational"` and `"generational-vector"` using
-  `params.d`/`auto_vector_min_d`, below — never `"lineal"`).
+  (real thread-based replicate fan-out, bit-identical trajectory to
+  `"lineal"` for the same seed), `"generational-vector"` (array-native,
+  fused `migrate`/`mutate`/`drift`; matches `"lineal"` exactly, same
+  seed, when migration is off, and matches it statistically — same
+  mean differentiation statistics across many seeds, not necessarily
+  the same individual trajectory — when migration is active, since its
+  own dense-matrix migration blend and `"lineal"`'s own arithmetic are
+  two different, equally valid floating-point paths to the same
+  computation), or `"auto"` (picks between `"generational"` and
+  `"generational-vector"` using `params.d`/`auto_vector_min_d`, below —
+  never `"lineal"`).
   `"generational-vector"` is scoped to `params.mutation_model=
   "finite_alleles"` and `params.migrant_sampling="continuous"`; a
   direct `"generational-vector"` choice outside that scope raises
@@ -136,8 +142,11 @@ The one entry point everything else in this project ultimately calls.
   **`ReplicaLane`** — the generation-first driving loop `GenerationalBackend`
   calls, and the per-replica working-state object it advances one
   generation at a time; for the same seed, with `replicate_tolerance`
-  unset, bit-identical to `LinealBackend`'s own trajectory regardless of
-  which `Advancer` drives it.
+  unset, bit-identical to `LinealBackend`'s own trajectory under
+  `SequentialAdvancer`/`ThreadedAdvancer` — not under `VectorizedAdvancer`
+  in general, which matches exactly only when migration is off (see
+  `engine_backend`'s own entry above for what "statistically" means the
+  rest of the time).
 - **`FinalReport`** (a `TypedDict`) — the seven scalar numbers a finished
   run reports, averaged across every tracked locus: `run_id`,
   `generation`, `converged`, `converged_on`, `reason`, and the six
@@ -344,6 +353,6 @@ generator-name: Claude Code
 generator-version: Claude Sonnet 5
 generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
-generation-date: 2026-08-30
-generator-responsibility: primary
+generation-date: 2026-09-02
+generator-responsibility: revision
 ```

@@ -8,6 +8,38 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `fim()` gains an `engine_backend` keyword selecting which of three
+  engine implementations actually runs a batch, all behind the same
+  public API and producing the same `RunResult`/`FinalReport` shape:
+  `"lineal"` (the default, every earlier release's own behavior,
+  unchanged), `"generational"` (real thread-based replicate fan-out,
+  bit-identical trajectory to `"lineal"` for the same seed), and
+  `"generational-vector"` (array-native, fused `migrate`/`mutate`/
+  `drift` for the bounded-K finite-alleles model, scoped to
+  `mutation_model="finite_alleles"` and `migrant_sampling="continuous"`
+  — a config outside that scope raises `ValueError` naming the
+  violated constraint). `"generational-vector"` matches `"lineal"`
+  exactly, same seed, when migration is off; with migration active it
+  matches statistically rather than bit-for-bit (the same mean
+  differentiation statistics across many seeds, confirmed to carry no
+  directional bias) rather than necessarily the same individual
+  trajectory, since its own dense-matrix migration blend and
+  `"lineal"`'s own arithmetic are two different, equally valid
+  floating-point paths to the identical computation. A fourth choice,
+  `"auto"`, picks between `"generational"` and `"generational-vector"`
+  based on deme count (`auto_vector_min_d`, default 35 — measured to be
+  roughly where `"generational-vector"`'s own fixed per-generation
+  overhead stops outweighing `"lineal"`'s linear-in-`d` cost) and
+  config eligibility, never `"lineal"`. `jit="numba"` additionally
+  JIT-compiles `"generational"`'s own `drift` step (optional `numba`
+  dependency, `pip install fim[jit]`; bit-identical output).
+  `"generational-vector"` needs the same optional dependency
+  unconditionally, with no separate `jit` toggle of its own. Whichever
+  backend actually ran — the resolved choice, never the literal string
+  `"auto"` — and whether `jit` was on are both recorded on the run's
+  own `manifest.engine_backend`/`manifest.jit`. Library-only for now;
+  no CLI flag yet.
+
 ### Changed
 
 ### Fixed
