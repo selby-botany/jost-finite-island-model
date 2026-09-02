@@ -94,7 +94,11 @@ _OUTCOME_TIMEOUT_SECONDS = 40.0
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # Mirrors `test/gui/test_results_screen.py`'s own `_SET_TINY_FIELDS`
-# (itself mirroring `test/conftest.py`'s `tiny_params` fixture).
+# (itself mirroring `test/conftest.py`'s `tiny_params` fixture),
+# including the `n_replicates` override — see that module's own
+# comment for why leaving `field-n_replicates` at the form's own
+# pre-populated `200` default silently submits a real batch run
+# instead of one fast scalar run.
 _SET_TINY_FIELDS = """
 function setField(name, value) {
     const field = document.getElementById(`field-${name}`);
@@ -110,6 +114,7 @@ setField('locus_lengths', '200');
 setField('convergence_window', '4');
 setField('convergence_tolerance', '1.0');
 setField('max_generations', '10');
+setField('n_replicates', '1');
 """
 
 # A real, previously-reproduced defect this constant exists to close:

@@ -52,7 +52,18 @@ _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # Mirrors `test/conftest.py`'s `tiny_params` fixture field for field, so
 # the run converges (or hits its own small generation cap) almost
-# immediately — see this module's own docstring.
+# immediately — see this module's own docstring. `n_replicates` must be
+# set explicitly, even though `tiny_params` itself leaves it at `1`:
+# `params.n_replicates > 1` is the GUI's own scalar-vs-batch toggle
+# (`fim.gui.app.Api.start_run`), and the "new run" form's own
+# `field-n_replicates` now pre-populates from `SimulationParams`'s own
+# real default (`200`, `fim.cli.STARTER_CONFIG` never overrides it) —
+# leaving this field untouched silently submits a real 200-replicate
+# batch run through the real form instead of the one fast scalar run
+# this whole module exists to drive. Regression, found directly: a
+# stale `field-n_replicates` value blanks `results-outcome` (the batch
+# branch of `enterCompletedState` always does) and can blow past a
+# fixed wait budget calibrated for one small run, not two hundred.
 _SET_TINY_FIELDS = """
 function setField(name, value) {
     const field = document.getElementById(`field-${name}`);
@@ -68,6 +79,7 @@ setField('locus_lengths', '200');
 setField('convergence_window', '4');
 setField('convergence_tolerance', '1.0');
 setField('max_generations', '10');
+setField('n_replicates', '1');
 """
 
 
