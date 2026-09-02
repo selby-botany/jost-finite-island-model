@@ -37,10 +37,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unconditionally, with no separate `jit` toggle of its own. Whichever
   backend actually ran — the resolved choice, never the literal string
   `"auto"` — and whether `jit` was on are both recorded on the run's
-  own `manifest.engine_backend`/`manifest.jit`. Library-only for now;
-  no CLI flag yet.
+  own `manifest.engine_backend`/`manifest.jit`.
+- `engine_backend`, `jit`, and `auto_vector_min_d` are now real
+  `SimulationParams` fields, reachable from a `fim run` YAML config
+  (previously Python-API-only, `fim()` keyword arguments with no
+  config-file surface). See `doc/configuration.md`'s own "Engine
+  backend and JIT" section for every accepted value, and `doc/
+  fim-simulator-design.md`'s own §4.6 for when each one is actually
+  worth reaching for.
 
 ### Changed
+
+- `n_replicates`'s own default changes from `1` to `200`, and
+  `replicate_tolerance`'s own default changes from unset (`None`) to
+  `0.01` (matching `convergence_tolerance`'s own default) — an
+  unconfigured run now computes a real, adaptively-stopped confidence
+  interval by default instead of a single, uncertainty-free-looking
+  point estimate. An explicit `n_replicates: 1` still gives the exact
+  same single-run behavior as before; an explicit `replicate_tolerance:
+  null` disables the adaptive stop entirely (an absent
+  `replicate_tolerance` key now means "use the `0.01` default," not
+  "disabled" — those were the same thing when `None` was the default).
+  `SimulationParams.to_dict()` now always includes `replicate_tolerance`
+  (`null` for `None`), never omits it, so `from_mapping(params.to_dict())
+  == params` holds unconditionally regardless of which default is
+  current.
 
 ### Fixed
 
