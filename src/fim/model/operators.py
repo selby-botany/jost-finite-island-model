@@ -775,6 +775,18 @@ def mutate(
     Existing allele mass is reduced proportionally, avoiding an extra drift
     sample in the mutation stage.
 
+    **Not `rng.binomial`/`rng.multinomial` themselves, deliberately, as
+    of Stage F8** (`20260901-claude-sonnet-5-fim-engine-backend-
+    factory-design.md` §5.4) — the event count draws via `_inversion_
+    binomial`, and the finite-alleles source-attribution draw (below)
+    decomposes via `_multinomial_via_inversion_binomial`, visiting
+    `frequency_map`'s own alleles in ascending allele-id order rather
+    than its own insertion order — the same primitive and canonical
+    order `drift`'s own docstring describes, extended here to `mutate`.
+    No longer bit-identical to `rng.binomial`/`rng.multinomial`'s own
+    output for the same seed, the same accepted cost as `drift`'s own
+    docstring already names.
+
     Args:
         state: Post-migration state.
         mu: Per-copy mutation probability — shared by every locus, or one
@@ -809,7 +821,7 @@ def mutate(
         for frequency_map, locus, rate in zip(
             deme, state.loci, mutation_rates, strict=True
         ):
-            event_count = int(rng.binomial(size, rate))
+            event_count = _inversion_binomial(rng, size, rate)
             if event_count == 0:
                 locus_maps.append(dict(frequency_map))
                 continue
@@ -839,14 +851,16 @@ def mutate(
                 # can coincide with another event's target, or with mass
                 # already retained above, so contributions accumulate
                 # rather than overwrite.
-                allele_ids = tuple(frequency_map)
+                allele_ids = tuple(sorted(frequency_map))
                 probabilities = np.fromiter(
-                    frequency_map.values(),
+                    (frequency_map[allele_id] for allele_id in allele_ids),
                     dtype=np.float64,
                     count=len(allele_ids),
                 )
                 probabilities /= probabilities.sum()
-                source_counts = rng.multinomial(event_count, probabilities)
+                source_counts = _multinomial_via_inversion_binomial(
+                    rng, event_count, probabilities
+                )
                 for source_id, source_count in zip(
                     allele_ids, source_counts, strict=True
                 ):

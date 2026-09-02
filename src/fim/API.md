@@ -5361,6 +5361,18 @@ the run (see `fim.model.allele.FiniteAlleleSpace`).
 Existing allele mass is reduced proportionally, avoiding an extra drift
 sample in the mutation stage.
 
+**Not `rng.binomial`/`rng.multinomial` themselves, deliberately, as
+of Stage F8** (`20260901-claude-sonnet-5-fim-engine-backend-
+factory-design.md` §5.4) — the event count draws via `_inversion_
+binomial`, and the finite-alleles source-attribution draw (below)
+decomposes via `_multinomial_via_inversion_binomial`, visiting
+`frequency_map`'s own alleles in ascending allele-id order rather
+than its own insertion order — the same primitive and canonical
+order `drift`'s own docstring describes, extended here to `mutate`.
+No longer bit-identical to `rng.binomial`/`rng.multinomial`'s own
+output for the same seed, the same accepted cost as `drift`'s own
+docstring already names.
+
 **Arguments**:
 
 - `state` - Post-migration state.
@@ -6090,11 +6102,15 @@ now clear a materially higher bar, as of Stage F8**
 directly (`test/model/test_vectorized.py`, `test_drift_vectorized_
 matches_dict_based_drift_exactly`), the two backends' own resulting
 frequencies now match *exactly*, across many seeds, not merely within
-a statistical band. `mutate_vectorized` has **not** been unified this
-way — its own event-count draw (`rng.binomial`) and target-selection
-logic remain untouched, deliberately out of scope for this stage's own
-first pass — so it stays on the original, statistical-parity bar this
-paragraph's own first sentence describes, not the stronger one
+a statistical band. `mutate_vectorized`'s own event-count and source-
+attribution draws are unified the identical way (`mutate_vectorized`'s
+own docstring); its own target-selection step is **not** — the order
+`_jit_mutate_targets_batched` processes mutating copies in has not
+been checked against `fim.model.operators.mutate`'s own dict-based
+per-source, per-event loop, deliberately out of scope for this stage's
+own first pass — so `mutate_vectorized` as a whole stays on the
+original, statistical-parity bar this paragraph's own first sentence
+describes for that one remaining step, not the stronger one
 `drift_vectorized` now meets.
 
 <a id="fim.model.vectorized.VectorizedLocusState"></a>
@@ -6263,14 +6279,26 @@ Replace a binomially sampled number of copies with new-or-recurring alleles.
 
 The array-native counterpart to `fim.model.operators.mutate`'s own
 finite-alleles branch — same three steps (event count, source
-attribution, target selection), same underlying distributions, but
-not the same random-draw *sequence*: event counts and source
-attribution are drawn with array-valued calls across every deme at
-once rather than one deme at a time, and target selection processes
-every mutating copy across the *whole locus* in one JIT-compiled pass
-(`_jit_mutate_targets_batched`) rather than one dict-based call per
-event. Statistically equivalent, not bit-identical — this module's
-own correctness bar throughout (see the module docstring).
+attribution, target selection), same underlying distributions.
+
+**Event count and source attribution now use the identical
+primitive and order `fim.model.operators.mutate`'s own dict-based
+path does, as of Stage F8**
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+§5.4): event counts are drawn one deme at a time, in ascending deme
+order, via `_inversion_binomial` — not one array-valued `rng.
+binomial` call across every deme at once, since `mutate`'s own
+dict-based path visits demes the same way and this is what keeps
+the two in lockstep; source attribution already goes through
+`_jit_multinomial_rows_batched` (this module's own function,
+above), which draws via the identical primitive in ascending
+allele-id order. Target selection is **not** unified this way —
+`_jit_mutate_targets_batched`, below, processes every mutating copy
+across the whole locus in one JIT-compiled pass, in an order that
+has not been checked against `mutate`'s own dict-based per-source,
+per-event loop — statistically equivalent, not bit-identical, for
+that step specifically (this module's own correctness bar for
+everything not explicitly named above — see the module docstring).
 
 Target selection specifically preserves `FiniteAlleleSpace.
 mutate_target`'s own real, load-bearing choice — a recurrence
