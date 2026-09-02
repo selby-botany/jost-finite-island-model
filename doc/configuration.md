@@ -13,6 +13,7 @@ the [project overview](../README.md) for installation.
 - [Initial conditions](#initial-conditions)
 - [Convergence](#convergence)
 - [Analysis and execution](#analysis-and-execution)
+- [Engine backend and JIT (Python only, not a YAML key)](#engine-backend-and-jit-python-only-not-a-yaml-key)
 - [Validation summary](#validation-summary)
 
 ## Complete example
@@ -522,6 +523,75 @@ idealized continuous fraction. It adds one random process to the pipeline
 still resamples every gene copy exactly once per generation) — see
 [the simulator design, §9](fim-simulator-design.md#9-extensibility-where-the-next-what-if-lands)
 for why the two don't compound.
+
+## Engine backend and JIT (Python only, not a YAML key)
+
+Everything above this section is a **science** setting — it changes what
+gets computed. `engine_backend` and `jit` are different: they change *how*
+the computation runs, not what it computes. Every `SimulationParams` field
+above is still validated and honored exactly the same way regardless of
+which engine backend actually executes it.
+
+**Not a `fim run` YAML key.** Unlike every setting above, `engine_backend`
+and `jit` cannot go in your YAML config file today — `fim run` always uses
+the same default engine, and there is no flag to change that from the
+command line either. Putting `engine_backend: generational-vector` in your
+YAML alongside `N`, `d`, `m`, and so on is rejected, the same as any other
+key `fim run` does not recognize (see [Validation
+summary](#validation-summary) below). This is a real, current gap, not an
+oversight in this reference: the feature exists only for someone calling
+`fim` as a Python library directly, not yet for a `fim run` YAML file.
+
+**What the three choices are, in plain terms:**
+
+- `"lineal"` (the default, and the only one `fim run`/the GUI use today):
+  the straightforward, reference implementation. Every replicate runs on
+  its own, one after another (or in separate worker processes if you ask
+  for that — see [n<sub>replicates</sub>](#nreplicates) above).
+- `"generational"`: the same computation, restructured to advance every
+  replicate one generation at a time together, spread across threads
+  instead of processes. Produces bit-for-bit identical results to
+  `"lineal"` for the same inputs.
+- `"generational-vector"`: the same computation again, this time done with
+  whole-array math instead of one calculation per deme — the fastest
+  option once a run has enough demes for that to matter, but only for
+  runs using mutation_model: finite_alleles and migrant_sampling:
+  continuous (see those settings above); anything else raises an error
+  rather than silently falling back. Needs an extra, optional piece of
+  software installed (`numba`) that a plain install of this project does
+  not include.
+
+**Why you might care, even if you never write a line of Python
+yourself:** if a run through `fim run` is taking uncomfortably long —
+especially one with a large number of demes (`d`) — that slowness is a
+property of the default engine, not of the science being simulated; the
+same configuration can run meaningfully faster under a different engine
+choice. You do not need to understand *how* they differ to benefit from
+this, only that the option exists, and that reaching it today means
+either asking someone comfortable with Python to run your configuration
+that way, or asking for this project's CLI/YAML support for it to be
+built (tracked as a known gap, not a "never").
+
+**How to use it today**, for a reader comfortable calling Python
+directly:
+
+```python
+from fim import fim
+
+fim(
+    N=450, m=0.001, mu=0.00003, d=80,
+    seed=20260814,
+    engine_backend="generational-vector",
+)
+```
+
+For the full decision guide — when each engine is actually worth
+reaching for, and what evidence backs that — see [the simulator design's
+own section on choosing an engine
+backend](fim-simulator-design.md#46-choosing-an-engine-backend). For the
+exact keyword syntax, every accepted value, and every guarantee each one
+does and does not make, see [the functional API
+reference](fim-simulator-functional-api.md).
 
 ## Validation summary
 

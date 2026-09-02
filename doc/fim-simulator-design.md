@@ -16,6 +16,7 @@
     - [4.3 The parameter bag (P)](#43-the-parameter-bag-p)
     - [4.4 Language and library choice](#44-language-and-library-choice)
     - [4.5 Packaging and distribution](#45-packaging-and-distribution)
+    - [4.6 Choosing an engine backend](#46-choosing-an-engine-backend)
   - [5. Module layout](#5-module-layout)
   - [6. Persistence design](#6-persistence-design)
   - [7. Statistics module](#7-statistics-module)
@@ -527,6 +528,84 @@ new one-file executable attached to a versioned GitHub Release, downloaded
 and manually swapped in place — no installer, no background updater. The
 engineering and release reference covers both in full.
 
+### 4.6 Choosing an engine backend
+
+*Worth reading if a run is taking longer than you'd like, or you plan
+to reproduce someone else's exact numbers — otherwise safe to skip.*
+
+**What.** Everything in §3–§4.5 above describes *what gets computed*: a
+generation-update pipeline (Migrate → Mutate → Drift) driven by a
+`SimulationParams` config. That computation can be *carried out* three
+different ways, all producing the same science, differing only in how
+fast they run and how strictly they guarantee to match each other bit
+for bit. This is the `engine_backend` setting — a keyword to `fim()`,
+not a science parameter, and orthogonal to every value described
+elsewhere in this document: changing it never changes what a run
+converges to, only how long getting there takes.
+
+**Where.** `engine_backend` lives entirely inside `fim.engine` (§5) — it
+selects which of three implementations actually drives the generation
+loop underneath `engine.fim()`. It has no effect on, and is invisible
+to, every other module: the statistics module, the visualization
+module, and the persisted trajectory format are all identical regardless
+of which engine produced the run. Today it is reachable only by calling
+`fim()` directly from Python — see [`doc/configuration.md`'s own note on
+this](configuration.md#engine-backend-and-jit-python-only-not-a-yaml-key)
+for the current CLI/YAML gap.
+
+**Why three, not one "fast mode."** A single "just make it faster"
+switch would either have to compromise the reference implementation's
+own simplicity (the thing every other backend is checked against) or
+silently accept a different answer for the same seed — neither is
+acceptable here (§2's own reproducibility requirement). Instead, the
+default engine (`"lineal"`) stays deliberately simple and untouched,
+permanently the reference every other engine's own output is checked
+against, while two faster alternatives sit beside it, opt-in:
+
+- **`"generational"`** restructures the *same* computation to advance
+  every replicate in a batch one generation at a time, together, spread
+  across real threads rather than one replicate finishing before the
+  next starts. Same answer, same seed, provably bit-for-bit — it is a
+  different *order* of doing identical arithmetic, not different
+  arithmetic.
+- **`"generational-vector"`** goes further: instead of one calculation
+  per deme (a Python loop), it does the whole deme-by-allele
+  calculation as one array operation, the way a spreadsheet computes an
+  entire column at once instead of cell by cell. This is where the real
+  speed lives for a large number of demes — and where the guarantee
+  changes shape (below).
+
+**How to decide — the short version:** if you never touch Python and
+just run `fim run` on a YAML file, this section does not apply to you
+yet (no CLI flag exists). If you do call `fim()` directly and a run
+with a lot of demes (`d`) feels slow, `"generational-vector"` is worth
+trying first — [§9.1's own table
+row](#91-variations-reachable-from-configuration) has the exact,
+measured evidence for when it wins and by how much, and that evidence
+is updated as this project re-measures it, not a one-time guess. If you
+need every run to match `"lineal"`'s own trajectory exactly, keep
+reading before switching: `"generational"` always matches exactly;
+`"generational-vector"` matches exactly only when migration is off
+(`m: 0`) and matches statistically, with no directional bias but not
+row-for-row, once migration is active — see [the functional API
+reference](fim-simulator-functional-api.md) for the precise guarantee
+each one makes, and never guess at this from the name alone.
+
+**A caution from this project's own history, worth knowing before you
+lean on either faster engine:** the exact same code change that made
+`"generational-vector"`'s own output provably match `"lineal"` (closing
+a real, subtle correctness gap — see the [developer
+guide](developer.md#engine-backends) for the full story) also,
+unexpectedly, cost `"generational"` most of its own threading benefit —
+a real, measured regression this project found by re-benchmarking after
+the fact, not something anyone designed on purpose or has fixed yet.
+Correctness was, and remains, the non-negotiable side of that trade.
+Practically: today, `"generational-vector"` is the one worth reaching
+for when a run is slow; `"generational"`'s own thread count is not
+currently buying much. §9.1's table carries the up-to-date measured
+numbers behind this — check there rather than trusting this paragraph's
+own words to stay current forever.
+
 ## 5. Module layout
 
 *Implementer detail — optional for the botanist.*
@@ -940,9 +1019,9 @@ built (§11): each names the one place the change lands.
 | …several statistics had to agree before stopping? | 𝖯["convergence_statistic"] as a list plus 𝖯["convergence_combinator"] (`"all"`/`"any"`) | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
 | …many replicate runs were needed for a confidence interval, without hand-guessing the count? | 𝖯["replicate_tolerance"]: once replicate_minimum replicates exist, the batch stops as soon as every watched statistic's across-replicate Student's-t interval (`fim.statistics.interval`) is that tight, combined by the same convergence_combinator used within a run, with n<sub>replicates</sub> as the hard cap. fim.engine.replicate_summary and the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` and plugs into an unmodified `ConvergenceMonitor`, so the replicate batch loop gains a second stopping rule rather than a second loop |
 | …replicate batches ran faster? | max_workers (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs _run_one unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A store_factory gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
-| …replicate batches ran faster, without process-per-replicate overhead? | `fim()`'s own `engine_backend="generational"` (library only, no CLI flag yet) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency); measured to fix a real per-call overhead regression an earlier internal attempt had, but not yet a proven wall-clock win for `drift` as a whole — the per-generation Python/array marshaling cost, not the draw itself, currently dominates. Threading itself is also `d`-dependent, not a flat win: measured to actively hurt at small `d` (dispatch overhead dominates a handful of demes' worth of work) and help more as thread count rises the larger `d` gets — stays an explicit, opt-in choice rather than becoming the default for exactly this reason |
-| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme, for the bounded-K (finite-alleles) mutation model? | `fim()`'s own `engine_backend="generational-vector"` (library only, no CLI flag yet), scoped to `mutation_model="finite_alleles"` and `migrant_sampling="continuous"` — a config outside that scope raises `ValueError` naming the violated constraint | a third engine implementation, `VectorizedAdvancer`, converts each replicate's own state to a dense `(deme, allele)` array once per generation and runs `migrate`/`mutate`/`drift` fused on that array (`fim.model.vectorized`). Matches the other two backends exactly, same seed, when migration is off; with migration active, matches them statistically rather than bit-for-bit (same mean differentiation statistics across many seeds, confirmed to carry no directional bias, not necessarily the same individual trajectory) — its own dense-matrix migration blend and the dict-based backends' own arithmetic are two different, equally valid floating-point paths to the identical computation, occasionally landing on opposite sides of a discrete draw's own decision boundary. Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). Measured against `"lineal"` across a deme-count sweep, not one fixed scale: performance **crosses over** as `d` grows — slower than `"lineal"` for `d` up to roughly 30, clearly faster (roughly 1.2x-1.65x, varying between benchmark runs) from around `d≈35` on — driven by `"lineal"`'s own per-deme Python loop cost growing linearly in `d` while this backend's fixed per-generation overhead (the `ModelState` round-trip) does not; pick `"generational-vector"` for large-`d` scenarios specifically, not as a universal default |
-| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d`, instead of by hand? | `fim()`'s own `engine_backend="auto"` (library only, no CLI flag yet), with `auto_vector_min_d` (default 35) as the configurable cutover | picks `"generational-vector"` when `d` clears the cutover *and* the config is otherwise eligible for it (`finite_alleles`/continuous migration), `"generational"` otherwise — never `"lineal"`, since no benchmark data yet characterizes that boundary. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it |
+| …replicate batches ran faster, without process-per-replicate overhead? | `fim()`'s own `engine_backend="generational"` (library only, no CLI flag yet) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency); genuinely faster single-threaded (roughly 1.7x, `dev/bin/benchmark-engines`, 2026-09-02) but not a thread-scaling fix — `migrate`'s/`mutate`'s own RNG calls stay unjitted regardless. **Re-measured 2026-09-02, superseding an earlier "helps more as thread count rises with `d`" claim this row previously made**: a thread-count sweep at `d=60` found *no* real speedup at any thread count from 1 to 14, under either `mutation_model`, with or without `jit="numba"` — flat to actively worse than one thread past 4-6 threads. Root cause, found by profiling: the RNG primitive `drift` now uses to stay bit-identical with the other two backends (`_inversion_binomial`, added to close a real correctness gap — [§4.6](#46-choosing-an-engine-backend), [developer guide](developer.md#engine-backends)) is pure Python and holds the GIL almost the entire time `drift` runs, which was not true of what it replaced. A real, known, presently-unaddressed cost of that correctness fix — not a design flaw in threading itself, and not fixed here: doing so needs its own JIT-compiled, `nogil=True`, bit-identical replacement for `migrate`'s/`mutate`'s own RNG calls too |
+| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme, for the bounded-K (finite-alleles) mutation model? | `fim()`'s own `engine_backend="generational-vector"` (library only, no CLI flag yet), scoped to `mutation_model="finite_alleles"` and `migrant_sampling="continuous"` — a config outside that scope raises `ValueError` naming the violated constraint | a third engine implementation, `VectorizedAdvancer`, converts each replicate's own state to a dense `(deme, allele)` array once per generation and runs `migrate`/`mutate`/`drift` fused on that array (`fim.model.vectorized`). Matches the other two backends exactly, same seed, when migration is off; with migration active, matches them statistically rather than bit-for-bit (same mean differentiation statistics across many seeds, confirmed to carry no directional bias, not necessarily the same individual trajectory) — its own dense-matrix migration blend and the dict-based backends' own arithmetic are two different, equally valid floating-point paths to the identical computation, occasionally landing on opposite sides of a discrete draw's own decision boundary. Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). **Re-measured 2026-09-02** (`dev/bin/benchmark-engines`, normalized to a single-lineage `"lineal"` run at the same `d`, not to a same-size `"lineal"` batch the way an earlier measurement here was): across `d` from 4 to 80, `"generational-vector"` was the faster of the two batch-capable engines at *every* point tested, the advantage narrowing as `d` grows rather than only appearing past a threshold — a real change from the previously-recorded "slower until roughly `d=30`" finding, not a refinement of it, and directly a consequence of the `"generational"` regression in the row above: with `"generational"` no longer getting a real thread-count benefit at any `d`, there is little of an early-`d` advantage left for `"generational-vector"` to be behind. `auto_vector_min_d`'s own default (next row) is very likely stale evidence given this — flagged there, not changed here without further characterization |
+| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d`, instead of by hand? | `fim()`'s own `engine_backend="auto"` (library only, no CLI flag yet), with `auto_vector_min_d` (default 35) as the configurable cutover | picks `"generational-vector"` when `d` clears the cutover *and* the config is otherwise eligible for it (`finite_alleles`/continuous migration), `"generational"` otherwise — never `"lineal"`, since no benchmark data yet characterizes that boundary. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. **The default `35` was measured before the RNG-correctness fix described in the two rows above landed, and the 2026-09-02 re-measurement found `"generational-vector"` already ahead at `d=4`, the smallest value tested** — the constant has not been changed (a deliberate choice needs its own confirmation, not a silent edit alongside a documentation pass), but it should not be trusted as current evidence until re-characterized; `auto_vector_min_d` stays a caller-supplied parameter for exactly this kind of drift, not a hardcoded literal, so overriding it is already possible without a code change |
 
 ### 9.2 Landing spots for changes that are not built
 
@@ -1208,6 +1287,34 @@ computational cost, cross-frame instability once the GUI animates a
 run, and interpretability, all of which argue against a projection.
 PCA remains directly callable in `viz/scatter.py` for an exploratory
 view; it is simply not the automatic choice at any `d`.
+
+```text
+generator-name: Claude Code
+generator-version: Claude Sonnet 5
+generator-model-token: claude-sonnet-5
+generator-provider: Anthropic
+generation-date: 2026-09-02
+generator-responsibility: revision
+```
+
+Added §4.6, "Choosing an engine backend" — the multi-backend engine
+architecture (§9.1's own table already had the exact, measured
+per-choice detail, but nothing in this document explained what the
+three backends are, why three exist rather than one, or how to decide
+between them, in language aimed at a reader deciding whether to care
+rather than an implementer). Re-measured and corrected all three
+`engine_backend`-related rows in §9.1 against `dev/bin/benchmark-engines`
+(new, this session): a real regression found by direct profiling —
+`"generational"`'s own `ThreadedAdvancer` delivers no measurable
+speedup at any thread count today, a change from what this document
+previously recorded, traced to the same RNG-unification correctness fix
+that made `"generational-vector"`'s own output match the other two
+backends exactly (without migration) — and a consequence of it:
+`"generational-vector"` now measures ahead of the other batch-capable
+engine at every deme count tested, including the smallest, materially
+earlier than the `d≈35` crossover this document previously recorded.
+`auto_vector_min_d`'s shipped default is flagged as likely-stale
+evidence in §9.1's own table; not changed here.
 
 ```text
 generator-name: Claude Code

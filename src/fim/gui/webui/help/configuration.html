@@ -11,6 +11,7 @@ the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 <li><a href="#initial-conditions">Initial conditions</a></li>
 <li><a href="#convergence">Convergence</a></li>
 <li><a href="#analysis-and-execution">Analysis and execution</a></li>
+<li><a href="#engine-backend-and-jit-python-only-not-a-yaml-key">Engine backend and JIT (Python only, not a YAML key)</a></li>
 <li><a href="#validation-summary">Validation summary</a></li>
 </ul>
 <h2 id="complete-example">Complete example</h2>
@@ -446,6 +447,67 @@ idealized continuous fraction. It adds one random process to the pipeline
 still resamples every gene copy exactly once per generation) — see
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#9-extensibility-where-the-next-what-if-lands">the simulator design, §9</a>
 for why the two don't compound.</p>
+<h2 id="engine-backend-and-jit-python-only-not-a-yaml-key">Engine backend and JIT (Python only, not a YAML key)</h2>
+<p>Everything above this section is a <strong>science</strong> setting — it changes what
+gets computed. <code>engine_backend</code> and <code>jit</code> are different: they change <em>how</em>
+the computation runs, not what it computes. Every <code>SimulationParams</code> field
+above is still validated and honored exactly the same way regardless of
+which engine backend actually executes it.</p>
+<p><strong>Not a <code>fim run</code> YAML key.</strong> Unlike every setting above, <code>engine_backend</code>
+and <code>jit</code> cannot go in your YAML config file today — <code>fim run</code> always uses
+the same default engine, and there is no flag to change that from the
+command line either. Putting <code>engine_backend: generational-vector</code> in your
+YAML alongside <code>N</code>, <code>d</code>, <code>m</code>, and so on is rejected, the same as any other
+key <code>fim run</code> does not recognize (see <a href="#validation-summary">Validation
+summary</a> below). This is a real, current gap, not an
+oversight in this reference: the feature exists only for someone calling
+<code>fim</code> as a Python library directly, not yet for a <code>fim run</code> YAML file.</p>
+<p><strong>What the three choices are, in plain terms:</strong></p>
+<ul>
+<li><code>&quot;lineal&quot;</code> (the default, and the only one <code>fim run</code>/the GUI use today):
+the straightforward, reference implementation. Every replicate runs on
+its own, one after another (or in separate worker processes if you ask
+for that — see <a href="#nreplicates">n<sub>replicates</sub></a> above).</li>
+<li><code>&quot;generational&quot;</code>: the same computation, restructured to advance every
+replicate one generation at a time together, spread across threads
+instead of processes. Produces bit-for-bit identical results to
+<code>&quot;lineal&quot;</code> for the same inputs.</li>
+<li><code>&quot;generational-vector&quot;</code>: the same computation again, this time done with
+whole-array math instead of one calculation per deme — the fastest
+option once a run has enough demes for that to matter, but only for
+runs using mutation_model: finite_alleles and migrant_sampling:
+continuous (see those settings above); anything else raises an error
+rather than silently falling back. Needs an extra, optional piece of
+software installed (<code>numba</code>) that a plain install of this project does
+not include.</li>
+</ul>
+<p><strong>Why you might care, even if you never write a line of Python
+yourself:</strong> if a run through <code>fim run</code> is taking uncomfortably long —
+especially one with a large number of demes (<code>d</code>) — that slowness is a
+property of the default engine, not of the science being simulated; the
+same configuration can run meaningfully faster under a different engine
+choice. You do not need to understand <em>how</em> they differ to benefit from
+this, only that the option exists, and that reaching it today means
+either asking someone comfortable with Python to run your configuration
+that way, or asking for this project's CLI/YAML support for it to be
+built (tracked as a known gap, not a &quot;never&quot;).</p>
+<p><strong>How to use it today</strong>, for a reader comfortable calling Python
+directly:</p>
+<pre><code class="language-python">from fim import fim
+
+fim(
+    N=450, m=0.001, mu=0.00003, d=80,
+    seed=20260814,
+    engine_backend=&quot;generational-vector&quot;,
+)
+</code></pre>
+<p>For the full decision guide — when each engine is actually worth
+reaching for, and what evidence backs that — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">the simulator design's
+own section on choosing an engine
+backend</a>. For the
+exact keyword syntax, every accepted value, and every guarantee each one
+does and does not make, see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-functional-api.md">the functional API
+reference</a>.</p>
 <h2 id="validation-summary">Validation summary</h2>
 <table>
 <thead>
