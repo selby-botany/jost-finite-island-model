@@ -650,13 +650,22 @@ class ThreadedAdvancer:
 
     Whether this delivers real wall-clock speedup over
     `SequentialAdvancer` depends on how much of each generation's own
-    work happens inside NumPy calls that release the GIL versus pure-
-    Python loop overhead — an open, empirical question this class does
-    not itself answer. What it does guarantee: identical results to
-    `SequentialAdvancer` for the same seed, since the actual per-lane
-    computation is the same code (`SequentialAdvancer.advance` itself,
-    called once per block), only fanned out across threads rather than
-    run in one.
+    work happens inside NumPy/JIT calls that release the GIL versus
+    pure-Python loop overhead — measured, not merely open, as of
+    `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    S10 items 10a/10c: at this project's own reference scale, `drift`'s
+    own `_inversion_binomial` primitive (needed to keep this backend
+    bit-identical to `LinealBackend`, see below) is pure Python and
+    holds the GIL for nearly all of `drift`'s own wall-clock time, and
+    `migrate`'s/`mutate`'s own RNG calls are unjitted and GIL-bound
+    regardless of `jit`, so this class delivers little to no real
+    speedup today — a real, quantified, presently-unresolved regression
+    against an earlier, pre-Stage-F8 measurement, not a design flaw in
+    threading itself. What this class does guarantee, unconditionally:
+    identical results to `SequentialAdvancer` for the same seed, since
+    the actual per-lane computation is the same code
+    (`SequentialAdvancer.advance` itself, called once per block), only
+    fanned out across threads rather than run in one.
 
     Block assignment is computed fresh every tick from whichever lanes
     happen to be active (`_partition_into_blocks`), not a persistent,
@@ -705,6 +714,28 @@ class ThreadedAdvancer:
         if self._max_workers < 1:
             raise ValueError("max_workers must be at least 1")
         self._jit = jit
+        # Built lazily, on first `advance()` call, and reused for every
+        # subsequent tick of this `ThreadedAdvancer`'s own lifetime,
+        # rather than a fresh `ThreadPoolExecutor` (and its own OS
+        # thread spin-up/tear-down) every single generation — a real,
+        # measured cost, not a hypothetical one (design doc
+        # `20260901-claude-sonnet-5-fim-engine-backend-factory-
+        # design.md` S10 item 10a: a 150-generation run at a high
+        # thread count pays 150 rounds of this if it is not cached).
+        # Always built at `self._max_workers` size regardless of how
+        # many lanes are active on the *first* tick — harmless, since
+        # `advance()` never submits more than `len(blocks)` (already
+        # capped at `self._max_workers`) tasks to it on any given tick;
+        # an idle worker thread costs nothing beyond its own OS
+        # resources, and Python's own `concurrent.futures` registers an
+        # `atexit` hook that joins every outstanding executor's threads
+        # before the process exits, so leaving this open for this
+        # object's own lifetime (never explicitly shut down) is safe,
+        # not a leak. `_sequential` is cached the same way — its own
+        # `__init__` only stores a `bool`, but there is no reason to
+        # reallocate one every tick either.
+        self._executor: ThreadPoolExecutor | None = None
+        self._sequential = SequentialAdvancer(jit=jit == "numba")
 
     def advance(
         self,
@@ -715,14 +746,15 @@ class ThreadedAdvancer:
         blocks = _partition_into_blocks(active_lanes, self._max_workers)
         if not blocks:
             return []
-        sequential = SequentialAdvancer(jit=self._jit == "numba")
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
         newly_stopped: list[ReplicaLane] = []
-        with ThreadPoolExecutor(max_workers=len(blocks)) as executor:
-            futures = [
-                executor.submit(sequential.advance, block, store) for block in blocks
-            ]
-            for future in futures:
-                newly_stopped.extend(future.result())
+        futures = [
+            self._executor.submit(self._sequential.advance, block, store)
+            for block in blocks
+        ]
+        for future in futures:
+            newly_stopped.extend(future.result())
         return newly_stopped
 
 

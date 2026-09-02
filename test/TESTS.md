@@ -3009,6 +3009,28 @@ def test_threaded_advancer_rejects_non_positive_max_workers() -> None
 
 `max_workers` below 1 is rejected at construction, not at first use.
 
+<a id="engine.test_engine.test_threaded_advancer_reuses_its_own_executor_across_ticks"></a>
+
+#### test\_threaded\_advancer\_reuses\_its\_own\_executor\_across\_ticks
+
+```python
+def test_threaded_advancer_reuses_its_own_executor_across_ticks(
+        tiny_params: SimulationParams) -> None
+```
+
+`ThreadedAdvancer` builds one `ThreadPoolExecutor`, not one per generation.
+
+Regression test: `advance()` used to build a fresh
+`ThreadPoolExecutor` (and a fresh `SequentialAdvancer`) on every
+call — a real, measured cost across a multi-generation batch
+(design doc `20260901-claude-sonnet-5-fim-engine-backend-factory-
+design.md` S10 item 10a). Runs a real multi-generation batch (not a
+single `advance()` call in isolation, the same "a full run is not
+the same thing as its own parts" discipline this project's own
+Stage F8 minted-state bug already taught) and confirms the exact
+same `ThreadPoolExecutor`/`SequentialAdvancer` objects served every
+tick, by identity.
+
 <a id="engine.test_engine.test_generational_backend_with_jit_matches_lineal_bit_for_bit"></a>
 
 #### test\_generational\_backend\_with\_jit\_matches\_lineal\_bit\_for\_bit

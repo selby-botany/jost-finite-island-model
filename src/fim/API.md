@@ -1542,13 +1542,22 @@ their own `write_generation`.
 
 Whether this delivers real wall-clock speedup over
 `SequentialAdvancer` depends on how much of each generation's own
-work happens inside NumPy calls that release the GIL versus pure-
-Python loop overhead — an open, empirical question this class does
-not itself answer. What it does guarantee: identical results to
-`SequentialAdvancer` for the same seed, since the actual per-lane
-computation is the same code (`SequentialAdvancer.advance` itself,
-called once per block), only fanned out across threads rather than
-run in one.
+work happens inside NumPy/JIT calls that release the GIL versus
+pure-Python loop overhead — measured, not merely open, as of
+`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+S10 items 10a/10c: at this project's own reference scale, `drift`'s
+own `_inversion_binomial` primitive (needed to keep this backend
+bit-identical to `LinealBackend`, see below) is pure Python and
+holds the GIL for nearly all of `drift`'s own wall-clock time, and
+`migrate`'s/`mutate`'s own RNG calls are unjitted and GIL-bound
+regardless of `jit`, so this class delivers little to no real
+speedup today — a real, quantified, presently-unresolved regression
+against an earlier, pre-Stage-F8 measurement, not a design flaw in
+threading itself. What this class does guarantee, unconditionally:
+identical results to `SequentialAdvancer` for the same seed, since
+the actual per-lane computation is the same code
+(`SequentialAdvancer.advance` itself, called once per block), only
+fanned out across threads rather than run in one.
 
 Block assignment is computed fresh every tick from whichever lanes
 happen to be active (`_partition_into_blocks`), not a persistent,

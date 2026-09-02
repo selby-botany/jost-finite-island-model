@@ -1885,6 +1885,51 @@ def test_threaded_advancer_rejects_non_positive_max_workers() -> None:
         ThreadedAdvancer(max_workers=0)
 
 
+def test_threaded_advancer_reuses_its_own_executor_across_ticks(
+    tiny_params: SimulationParams,
+) -> None:
+    """`ThreadedAdvancer` builds one `ThreadPoolExecutor`, not one per generation.
+
+    Regression test: `advance()` used to build a fresh
+    `ThreadPoolExecutor` (and a fresh `SequentialAdvancer`) on every
+    call — a real, measured cost across a multi-generation batch
+    (design doc `20260901-claude-sonnet-5-fim-engine-backend-factory-
+    design.md` S10 item 10a). Runs a real multi-generation batch (not a
+    single `advance()` call in isolation, the same "a full run is not
+    the same thing as its own parts" discipline this project's own
+    Stage F8 minted-state bug already taught) and confirms the exact
+    same `ThreadPoolExecutor`/`SequentialAdvancer` objects served every
+    tick, by identity.
+    """
+    params = replace(tiny_params, n_replicates=3, max_generations=5)
+    advancer = ThreadedAdvancer(max_workers=2)
+    store = InMemoryTrajectoryStore()
+    lanes = [
+        _build_replica_lane(params, index, None, store, _clock)
+        for index in range(params.n_replicates)
+    ]
+
+    # Not asserted directly (`advancer._executor is None` here would
+    # narrow mypy's own static type for the rest of this function to
+    # the literal `None`, since it cannot see `advance()`'s own
+    # internal mutation of that attribute) -- the loop below already
+    # confirms the executor exists, and stays the same object, from
+    # the first tick onward.
+    seen_executors: set[int] = set()
+    seen_sequentials: set[int] = set()
+    while any(lane.active for lane in lanes):
+        active_lanes = [lane for lane in lanes if lane.active]
+        newly_stopped = advancer.advance(active_lanes, store)
+        assert advancer._executor is not None
+        seen_executors.add(id(advancer._executor))
+        seen_sequentials.add(id(advancer._sequential))
+        for lane in newly_stopped:
+            lane.active = False
+
+    assert len(seen_executors) == 1
+    assert len(seen_sequentials) == 1
+
+
 # `jit="numba"` (Stage F5): `drift`'s own multinomial decomposition
 # (`fim.model.operators._multinomial_via_binomial`) is bit-identical to
 # `rng.multinomial` (`test/model/test_operators.py`), so a `Generational
