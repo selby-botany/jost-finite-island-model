@@ -69,7 +69,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from fim.engine import fim
+from fim.engine import EngineBackendChoice, fim
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import InitialFrequencies, Migration, SimulationParams
@@ -847,6 +847,7 @@ def _run_engine_replicates(
     replicates: int,
     seed: int,
     initial_frequencies: InitialFrequencies | None = None,
+    engine_backend: EngineBackendChoice = "lineal",
 ) -> tuple[ModelState, ...]:
     """Run the real engine and return every replicate's own final state.
 
@@ -882,6 +883,17 @@ def _run_engine_replicates(
         seed: Base seed; replicate ``i`` uses ``seed + i``.
         initial_frequencies: Optional explicit start; otherwise the default
             Dirichlet founding condition is used.
+        engine_backend: Which backend actually runs this scenario —
+            `"lineal"` (every existing caller's own default, unchanged)
+            or `"generational"`. Never `"generational-vector"`/`"auto"`
+            here: every scenario in this file uses the default
+            `mutation_model="infinite_alleles"`, which `Vectorized
+            Advancer` does not support at all (an enforced `ValueError`,
+            not a gap to work around) — `"generational"` is the one
+            other backend actually reachable from this helper's own
+            scenarios, added specifically to let a caller confirm a
+            published-value comparison holds for it too, not just for
+            `"lineal"`.
 
     Returns:
         Every replicate's own final `ModelState`, in replicate order.
@@ -901,7 +913,15 @@ def _run_engine_replicates(
         n_replicates=replicates,
         initial_frequencies=initial_frequencies,
     )
-    results = fim(population_size, m, mu, d, params=params, store=_DiscardingStore())
+    results = fim(
+        population_size,
+        m,
+        mu,
+        d,
+        params=params,
+        store=_DiscardingStore(),
+        engine_backend=engine_backend,
+    )
     replicate_results = results if isinstance(results, tuple) else (results,)
     return tuple(result.final_state for result in replicate_results)
 
@@ -917,6 +937,7 @@ def _run_engine_pooled(
     replicates: int,
     seed: int,
     initial_frequencies: InitialFrequencies | None = None,
+    engine_backend: EngineBackendChoice = "lineal",
 ) -> tuple[list[float], list[float]]:
     """Run the real engine and return per-replicate pooled ``(G_ST, D)``.
 
@@ -936,6 +957,7 @@ def _run_engine_pooled(
         replicates=replicates,
         seed=seed,
         initial_frequencies=initial_frequencies,
+        engine_backend=engine_backend,
     )
     g_values: list[float] = []
     d_values: list[float] = []
@@ -944,6 +966,58 @@ def _run_engine_pooled(
         g_values.append(g_st)
         d_values.append(jost_d)
     return g_values, d_values
+
+
+def test_engine_reproduces_part_vi_equilibrium_via_generational_backend() -> None:
+    """`engine_backend="generational"` reproduces the same published-value comparison.
+
+    Every one of this file's own `@pytest.mark.slow` published-value
+    scenarios below runs through the default `"lineal"` backend only —
+    reasonably, since `fim.engine`'s own design already gives Backend L
+    and Backend G a *general*, structural bit-identity proof
+    (`test_generational_backend_matches_lineal_for_scalar_run`/`_for_
+    batch`, `test/engine/test_engine.py`): G calls the identical dict-
+    based operators as L, in the identical per-deme order, only
+    reordering *across* replicas — a config-independent guarantee, not
+    one that needs re-confirming scenario by scenario. Re-running all
+    five slow scenarios again through `"generational"` would add real
+    CI time (this project's own `test/bin` history already fought one
+    slow-suite timeout) for zero new information.
+
+    This one spot-check exists for what the general proof does *not*
+    automatically cover: the multi-locus (8 independently tracked loci),
+    real-differentiation-statistics shape this file's own helpers
+    actually exercise, which the smaller, single-locus `tiny_params`-
+    based tests never do. Deliberately small and fast (2 replicates, 20
+    generations — not `@pytest.mark.slow`) and deliberately an *exact*
+    comparison, not a statistical one: since L and G are already proven
+    bit-identical in general, there is nothing to band here — either
+    this config reproduces that identically too, or the general proof
+    has a real, narrower exception this specific shape exposes.
+    """
+    lineal_states = _run_engine_replicates(
+        population_size=100,
+        m=0.01,
+        mu=0.005,
+        d=4,
+        n_loci=8,
+        horizon=20,
+        replicates=2,
+        seed=707000,
+        engine_backend="lineal",
+    )
+    generational_states = _run_engine_replicates(
+        population_size=100,
+        m=0.01,
+        mu=0.005,
+        d=4,
+        n_loci=8,
+        horizon=20,
+        replicates=2,
+        seed=707000,
+        engine_backend="generational",
+    )
+    assert generational_states == lineal_states
 
 
 def _run_engine_pooled_shannon(
