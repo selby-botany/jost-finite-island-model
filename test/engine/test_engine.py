@@ -1622,6 +1622,7 @@ def test_fim_engine_backend_auto_runs_end_to_end(
 
 def test_fim_engine_backend_auto_reaches_vector_end_to_end() -> None:
     """`fim(..., engine_backend="auto")` reaches Backend V when the config qualifies."""
+    pytest.importorskip("numba")
     params = _finite_alleles_vector_params(d=40)
 
     result = fim(
@@ -1689,6 +1690,7 @@ def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None:
     must still be recoverable from the persisted record. Checked at
     both ends of the threshold, on one config.
     """
+    pytest.importorskip("numba")
     below = _finite_alleles_vector_params(d=30)
     below_result = fim(
         below.N,
@@ -1937,6 +1939,7 @@ def test_generational_vector_backend_matches_scope_of_lineal_reproducibility() -
     trajectory both times — determinism, not bit-identity to
     `LinealBackend`'s own dict-based path, is the property this checks.
     """
+    pytest.importorskip("numba")
     params = _finite_alleles_vector_params()
 
     first_store = InMemoryTrajectoryStore()
@@ -1968,6 +1971,7 @@ def test_generational_vector_backend_bounds_capacity_and_stays_valid() -> None:
     (`ModelState.validate_support` — the same check the finite-alleles
     lineal tests above already run).
     """
+    pytest.importorskip("numba")
     params = _finite_alleles_vector_params()
     capacity = finite_allele_capacity(params.loci[0].length)
 
@@ -1986,10 +1990,14 @@ def test_generational_vector_backend_matches_lineal_for_batch() -> None:
 
     Mirrors `test_generational_backend_with_threaded_advancer_matches_
     lineal_for_batch`'s own shape (several replicates, checked
-    independently) but without claiming trajectory equality against
-    `LinealBackend`, since `VectorizedAdvancer`'s own mutate step is only
-    statistically, not bit-identically, equivalent to the dict-based one.
+    independently) but checks each `VectorizedAdvancer` run against
+    *itself*, not against `LinealBackend` — Stage F8 proved `migrate`/
+    `mutate`/`drift` bit-identical to the dict-based path at the
+    operator level (`fim.model.vectorized`'s own module docstring), but
+    no test yet exercises that equivalence through a full multi-
+    generation, multi-replicate `fim.engine` run end to end.
     """
+    pytest.importorskip("numba")
     params = replace(_finite_alleles_vector_params(), n_replicates=4)
 
     first_store = InMemoryTrajectoryStore()
@@ -2013,6 +2021,7 @@ def test_generational_vector_backend_matches_lineal_for_batch() -> None:
 
 def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:
     """`fim(..., engine_backend="generational-vector")` works end to end."""
+    pytest.importorskip("numba")
     params = _finite_alleles_vector_params()
 
     result = fim(
@@ -2038,6 +2047,7 @@ def test_vectorized_advancer_caches_migration_weights_across_generations() -> No
     array object (`is`, not just equal) survives two consecutive
     `advance()` calls.
     """
+    pytest.importorskip("numba")
     params = _finite_alleles_vector_params(max_generations=3, convergence_window=3)
     store = InMemoryTrajectoryStore()
     lane = _build_replica_lane(params, 0, None, store, _clock)

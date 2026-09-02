@@ -3060,9 +3060,12 @@ A real multi-replicate batch runs cleanly and independently reproduces.
 
 Mirrors `test_generational_backend_with_threaded_advancer_matches_
 lineal_for_batch`'s own shape (several replicates, checked
-independently) but without claiming trajectory equality against
-`LinealBackend`, since `VectorizedAdvancer`'s own mutate step is only
-statistically, not bit-identically, equivalent to the dict-based one.
+independently) but checks each `VectorizedAdvancer` run against
+*itself*, not against `LinealBackend` — Stage F8 proved `migrate`/
+`mutate`/`drift` bit-identical to the dict-based path at the
+operator level (`fim.model.vectorized`'s own module docstring), but
+no test yet exercises that equivalence through a full multi-
+generation, multi-replicate `fim.engine` run end to end.
 
 <a id="engine.test_engine.test_fim_engine_backend_generational_vector_runs_end_to_end"></a>
 

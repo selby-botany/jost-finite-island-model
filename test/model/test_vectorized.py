@@ -169,6 +169,7 @@ def test_drift_vectorized_matches_dict_based_drift_exactly(
     whole unified-RNG effort exists to deliver, not yet attempted
     before this test.
     """
+    pytest.importorskip("numba")
     for seed in range(20):
         state = _finite_alleles_state(deme_count=6, capacity_length=1)
         sizes = np.array([12, 30, 7, 100, 1, 55], dtype=np.int64)
@@ -210,6 +211,7 @@ def test_drift_vectorized_matches_dict_based_drift_exactly_with_partial_capacity
     catch real cross-backend mismatches before the fix landed (found
     via a direct scratch probe, not assumed).
     """
+    pytest.importorskip("numba")
     for seed in range(20):
         state = _partial_finite_alleles_state(
             deme_count=5, capacity_length=2, minted_count=6
@@ -255,6 +257,7 @@ def test_mutate_vectorized_matches_dict_based_mutate_exactly(
     same reason that one does — a saturated capacity cannot exercise
     the normalization bug at all.
     """
+    pytest.importorskip("numba")
     capacity_length = 2
     capacity = finite_allele_capacity(capacity_length)
     initial_minted = tuple(AlleleId(i) for i in range(6))
@@ -311,6 +314,7 @@ def test_drift_vectorized_variance_matches_binomial_theory(
     `test_drift_variance_matches_binomial_theory` — same statistical
     bar, applied to the array-native path instead.
     """
+    pytest.importorskip("numba")
     size = 200
     probability = 0.3
     replicates = 4000
@@ -371,6 +375,7 @@ def test_mutate_vectorized_preserves_frequency_invariants(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
     """Repeated mutation keeps every deme's own frequencies a valid distribution."""
+    pytest.importorskip("numba")
     capacity_length = 2  # capacity 16
     state = _finite_alleles_state(deme_count=10, capacity_length=capacity_length)
     vectorized = build_vectorized_state(state)
@@ -456,6 +461,7 @@ def test_step_vectorized_preserves_frequency_invariants(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
     """Every deme's own frequencies sum to 1 after a full fused generation."""
+    pytest.importorskip("numba")
     state = _finite_alleles_state(deme_count=6, capacity_length=1)
     vectorized = build_vectorized_state(state)
     sizes = np.full(6, 200, dtype=np.int64)
