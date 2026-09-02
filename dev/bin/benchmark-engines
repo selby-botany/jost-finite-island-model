@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
 """Characterize engine wall-clock time across the parameter space.
 
-Measures how `engine_backend="lineal"`/`"generational"`/
-`"generational-vector"` scale as one `SimulationParams` field sweeps
-across a range of values, holding every other field fixed -- normalized
-throughout to `L_1`: a single-lineage (`n_replicates=1`) `"lineal"` run
-at the *same* swept value, so the reported numbers answer "how many
-single-lineage-run-equivalents does this batch cost," not just raw
-seconds (machine-independent in the sense that the ratio, not the
-absolute time, is the number worth comparing across machines/sessions --
-the raw seconds are recorded too, for anyone who wants them).
+Measures how `engine_backend="lineal"`/`"generational"` (both
+`jit="off"` and `jit="numba"`)/`"generational-vector"` scale as one
+`SimulationParams` field sweeps across a range of values, holding every
+other field fixed. `L_1` -- a single-lineage (`n_replicates=1`)
+`"lineal"` run at the *same* swept value -- is a pure normalization
+divisor, not itself a series to plot: every other column is reported
+both in raw seconds and as a ratio to `L_1`, so the reported numbers
+answer "how many single-lineage-run-equivalents does this batch cost,"
+machine-independent in the sense that the ratio, not the absolute time,
+is the number worth comparing across machines/sessions. `L_batch`
+(`"lineal"` run at the *same* batch size as every other engine measured
+here) is the real fourth data series -- how the reference engine itself
+scales, on the same footing as G and V, not left implicit inside what
+they get divided by. Four backend/JIT combinations are measured at
+every point: `L_batch`, `"generational"` with `jit="off"`,
+`"generational"` with `jit="numba"`, and `"generational-vector"`
+(always effectively JIT'd; has no `jit="off"` mode) -- enough to plot
+t(sweep value) for every engine and JIT setting this project currently
+offers.
 
 Default sweep is `d` (deme count) -- the axis `auto_vector_min_d`
 (`fim.engine`) already exists to threshold, and the one the project
@@ -35,11 +45,13 @@ Every point is the median of `--trials` independent, freshly-built runs
 (not re-timing a warm cache) -- median-of-N, matching this project's
 own established sweep methodology (the d>=35 crossover finding used the
 same discipline after a first, discarded single-trial attempt showed
-30-40% run-to-run swings). `"generational-vector"` pays a one-time numba
-JIT compile cost on first use; this tool issues one untimed warm-up call
-before its own first V measurement so that cost never contaminates a
-reported trial (the exact mistake this project's own history already
-made once and had to catch).
+30-40% run-to-run swings). `"generational"` with `jit="numba"` and
+`"generational-vector"` each pay their own one-time numba JIT compile
+cost on first use -- two independent compiled functions, not one; this
+tool issues one untimed warm-up call before each one's own first
+measurement so neither cost ever contaminates a reported trial (the
+exact mistake this project's own history already made once and had to
+catch).
 
 "Machine-saturated" (the project owner's own phrasing): this tool does
 not itself pin CPU affinity or launch background load -- it assumes the
@@ -87,6 +99,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from fim.engine import (  # noqa: E402
     EngineBackendChoice,
+    JitOption,
     build_engine_backend,
 )
 from fim.model.locus import LocusSpec  # noqa: E402
@@ -109,13 +122,23 @@ def _clock() -> datetime:
 
 @dataclass(frozen=True, slots=True)
 class BenchmarkPoint:
-    """One swept value's own measured backend times, in seconds."""
+    """One swept value's own measured backend times, in seconds.
+
+    `lineal_single_seconds` (`L_1`) is a pure normalization divisor, not
+    itself a series to plot -- `lineal_batch_seconds` (`L_batch`, the
+    same batch size every other engine is measured at, run through
+    `"lineal"` itself) is the real fourth data series: how the
+    reference engine's own batch cost scales, on the same axis as G and
+    V, not hidden behind L_1's own role as a denominator.
+    """
 
     swept_field: str
     swept_value: float
     d: int
     lineal_single_seconds: float
-    generational_seconds: float | None
+    lineal_batch_seconds: float
+    generational_jit_off_seconds: float | None
+    generational_jit_numba_seconds: float | None
     vector_seconds: float | None
     vector_skip_reason: str | None
 
@@ -131,7 +154,13 @@ def _base_params(
     max_generations: int,
     seed: int,
 ) -> SimulationParams:
-    """Build a reference-scale `SimulationParams`, one field at a time overridable."""
+    """Build a reference-scale `SimulationParams`, one field at a time overridable.
+
+    `replicate_tolerance=None` explicitly, not `SimulationParams`'s own
+    current default (a real number) -- a benchmark needs every point to
+    run an exact, fixed replicate count, never an adaptive early stop
+    that would make the very thing being timed vary from run to run.
+    """
     return SimulationParams(
         N=N,
         m=m,
@@ -143,14 +172,20 @@ def _base_params(
         migrant_sampling="continuous",
         max_generations=max_generations,
         n_replicates=n_replicates,
+        replicate_tolerance=None,
         convergence_tolerance=0.0,
         convergence_window=max_generations + 1,
     )
 
 
-def _run_once(engine_backend: EngineBackendChoice, params: SimulationParams) -> float:
+def _run_once(
+    engine_backend: EngineBackendChoice,
+    params: SimulationParams,
+    *,
+    jit: JitOption = "off",
+) -> float:
     """Run one full batch, return elapsed wall-clock seconds."""
-    backend = build_engine_backend(engine_backend)
+    backend = build_engine_backend(engine_backend, jit=jit)
     store = InMemoryTrajectoryStore()
     start = time.perf_counter()
     backend.run(params, store, None, _clock)
@@ -158,10 +193,14 @@ def _run_once(engine_backend: EngineBackendChoice, params: SimulationParams) -> 
 
 
 def _median_of(
-    engine_backend: EngineBackendChoice, params: SimulationParams, trials: int
+    engine_backend: EngineBackendChoice,
+    params: SimulationParams,
+    trials: int,
+    *,
+    jit: JitOption = "off",
 ) -> float:
     """Median wall-clock seconds across `trials` independent runs."""
-    samples = [_run_once(engine_backend, params) for _ in range(trials)]
+    samples = [_run_once(engine_backend, params, jit=jit) for _ in range(trials)]
     return statistics.median(samples)
 
 
@@ -173,9 +212,20 @@ def _measure_point(
     generations: int,
     trials: int,
     seed: int,
+    warmed_up_generational_numba: list[bool],
     warmed_up_vector: list[bool],
 ) -> BenchmarkPoint:
-    """Measure one swept value's own L_1/G/V times."""
+    """Measure one swept value's own L_1/L_batch/G(off)/G(numba)/V times.
+
+    `warmed_up_generational_numba` and `warmed_up_vector` are two
+    separate flags, not one shared flag: `"generational"`'s own
+    `jit="numba"` JIT-compiles `drift`'s standalone multinomial draw
+    (`fim.model.operators._jit_drift_counts_batched` and friends);
+    `"generational-vector"`'s own JIT compiles a different function
+    entirely (`fim.model.vectorized`'s own batched decomposition) — two
+    independent one-time compile costs, each needing its own untimed
+    warm-up call, not one flag standing in for both.
+    """
     d = int(value) if field == "d" else DEFAULT_D
     n = int(value) if field == "N" else DEFAULT_N
     mu = float(value) if field == "mu" else DEFAULT_MU
@@ -196,8 +246,20 @@ def _measure_point(
     )
     batch_params = replace(single_params, n_replicates=replicates)
 
-    lineal_seconds = _median_of("lineal", single_params, trials)
-    generational_seconds = _median_of("generational", batch_params, trials)
+    lineal_single_seconds = _median_of("lineal", single_params, trials)
+    lineal_batch_seconds = _median_of("lineal", batch_params, trials)
+    generational_jit_off_seconds = _median_of("generational", batch_params, trials)
+
+    generational_jit_numba_seconds: float | None = None
+    try:
+        if not warmed_up_generational_numba[0]:
+            _run_once("generational", batch_params, jit="numba")  # untimed warm-up
+            warmed_up_generational_numba[0] = True
+        generational_jit_numba_seconds = _median_of(
+            "generational", batch_params, trials, jit="numba"
+        )
+    except ImportError:  # numba not installed
+        generational_jit_numba_seconds = None
 
     vector_seconds: float | None = None
     vector_skip_reason: str | None = None
@@ -215,8 +277,10 @@ def _measure_point(
         swept_field=field,
         swept_value=value,
         d=d,
-        lineal_single_seconds=lineal_seconds,
-        generational_seconds=generational_seconds,
+        lineal_single_seconds=lineal_single_seconds,
+        lineal_batch_seconds=lineal_batch_seconds,
+        generational_jit_off_seconds=generational_jit_off_seconds,
+        generational_jit_numba_seconds=generational_jit_numba_seconds,
         vector_seconds=vector_seconds,
         vector_skip_reason=vector_skip_reason,
     )
@@ -252,36 +316,56 @@ def _environment_fingerprint() -> dict[str, object]:
     return fingerprint
 
 
+def _ratio(seconds: float | None, l1_seconds: float) -> str:
+    """Format `seconds / l1_seconds`, or `"n/a"` when `seconds` is `None`."""
+    return f"{seconds / l1_seconds:.2f}" if seconds is not None else "n/a"
+
+
+def _seconds(seconds: float | None, *, skip: str = "n/a") -> str:
+    """Format `seconds` to three decimals, or `skip` when `None`."""
+    return f"{seconds:.3f}" if seconds is not None else skip
+
+
 def _print_table(points: list[BenchmarkPoint]) -> None:
-    """Print a human-readable summary table to stdout."""
+    """Print a human-readable summary table to stdout.
+
+    `L_1` is a pure normalization divisor (every `/L_1` column is
+    relative to it) — `L_batch` is the real fourth engine series,
+    `"lineal"` run at the same batch size as every other engine here,
+    so its own scaling is visible on the same axis as G and V rather
+    than only implicit in what they are divided by.
+    """
     header = (
-        f"{'value':>10} {'L_1 (s)':>10} {'G (s)':>10} {'G/L_1':>9} "
-        f"{'V (s)':>10} {'V/L_1':>9} {'faster':>8}"
+        f"{'value':>10} {'L_1(s)':>8} {'L_b(s)':>8} {'L_b/L1':>7} "
+        f"{'G-off(s)':>9} {'/L1':>6} {'G-jit(s)':>9} {'/L1':>6} "
+        f"{'V(s)':>8} {'/L1':>6} {'fastest':>8}"
     )
     print(header)
     print("-" * len(header))
     for point in points:
-        g_ratio = (
-            f"{point.generational_seconds / point.lineal_single_seconds:.2f}"
-            if point.generational_seconds
-            else "n/a"
-        )
-        if point.vector_seconds is not None:
-            v_seconds = f"{point.vector_seconds:.3f}"
-            v_ratio = f"{point.vector_seconds / point.lineal_single_seconds:.2f}"
-        else:
-            v_seconds = "skip"
-            v_ratio = "n/a"
-        if point.generational_seconds and point.vector_seconds:
-            faster = "V" if point.vector_seconds < point.generational_seconds else "G"
-        else:
-            faster = "n/a"
-        g_seconds = (
-            f"{point.generational_seconds:.3f}" if point.generational_seconds else "n/a"
-        )
+        candidates = {
+            "L": point.lineal_batch_seconds,
+            "G-off": point.generational_jit_off_seconds,
+            "G-jit": point.generational_jit_numba_seconds,
+            "V": point.vector_seconds,
+        }
+        real_candidates = {
+            name: seconds for name, seconds in candidates.items() if seconds is not None
+        }
+        fastest = min(real_candidates, key=lambda name: real_candidates[name])
+        l1 = point.lineal_single_seconds
         print(
-            f"{point.swept_value:>10.4g} {point.lineal_single_seconds:>10.3f} "
-            f"{g_seconds:>10} {g_ratio:>9} {v_seconds:>10} {v_ratio:>9} {faster:>8}"
+            f"{point.swept_value:>10.4g} "
+            f"{l1:>8.3f} "
+            f"{point.lineal_batch_seconds:>8.3f} "
+            f"{point.lineal_batch_seconds / l1:>7.2f} "
+            f"{_seconds(point.generational_jit_off_seconds):>9} "
+            f"{_ratio(point.generational_jit_off_seconds, l1):>6} "
+            f"{_seconds(point.generational_jit_numba_seconds):>9} "
+            f"{_ratio(point.generational_jit_numba_seconds, l1):>6} "
+            f"{_seconds(point.vector_seconds, skip='skip'):>8} "
+            f"{_ratio(point.vector_seconds, l1):>6} "
+            f"{fastest:>8}"
         )
 
 
@@ -292,8 +376,12 @@ def _render_data(
     fixed: dict[str, object],
 ) -> dict[str, object]:
     """Render the full machine-readable benchmark payload."""
+
+    def _ratio_or_none(seconds: float | None, l1_seconds: float) -> float | None:
+        return seconds / l1_seconds if seconds is not None else None
+
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generator": {
             "name": "Claude Code",
             "version": "Claude Sonnet 5",
@@ -312,17 +400,21 @@ def _render_data(
                 "swept_value": point.swept_value,
                 "d": point.d,
                 "lineal_single_seconds": point.lineal_single_seconds,
-                "generational_seconds": point.generational_seconds,
-                "generational_ratio_to_l1": (
-                    point.generational_seconds / point.lineal_single_seconds
-                    if point.generational_seconds
-                    else None
+                "lineal_batch_seconds": point.lineal_batch_seconds,
+                "lineal_batch_ratio_to_l1": (
+                    point.lineal_batch_seconds / point.lineal_single_seconds
+                ),
+                "generational_jit_off_seconds": point.generational_jit_off_seconds,
+                "generational_jit_off_ratio_to_l1": _ratio_or_none(
+                    point.generational_jit_off_seconds, point.lineal_single_seconds
+                ),
+                "generational_jit_numba_seconds": point.generational_jit_numba_seconds,
+                "generational_jit_numba_ratio_to_l1": _ratio_or_none(
+                    point.generational_jit_numba_seconds, point.lineal_single_seconds
                 ),
                 "vector_seconds": point.vector_seconds,
-                "vector_ratio_to_l1": (
-                    point.vector_seconds / point.lineal_single_seconds
-                    if point.vector_seconds
-                    else None
+                "vector_ratio_to_l1": _ratio_or_none(
+                    point.vector_seconds, point.lineal_single_seconds
                 ),
                 "vector_skip_reason": point.vector_skip_reason,
             }
@@ -374,6 +466,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     values = [float(v) for v in args.values.split(",")]
+    warmed_up_generational_numba = [False]
     warmed_up_vector = [False]
     points = [
         _measure_point(
@@ -383,6 +476,7 @@ def main(argv: list[str] | None = None) -> int:
             generations=args.generations,
             trials=args.trials,
             seed=args.seed,
+            warmed_up_generational_numba=warmed_up_generational_numba,
             warmed_up_vector=warmed_up_vector,
         )
         for value in values

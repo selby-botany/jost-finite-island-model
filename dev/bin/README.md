@@ -76,14 +76,16 @@ reading now, plus its exact command-line syntax.
 **What it does:** Runs the same simulation several times over, at
 several different values of one setting you choose (deme count by
 default; population size, mutation rate, migration rate, and locus
-length are the other options), and times how long each of the three
-engines (`"lineal"`, `"generational"`, `"generational-vector"`) takes.
-Every number it reports is normalized against `"lineal"` run with a
-single lineage at that same setting -- so instead of raw seconds (which
-depend entirely on whatever computer happens to run it), you get "how
-many single-lineage-run-equivalents did this batch cost," a number
-that means roughly the same thing on a different machine, or a year
-from now on faster hardware.
+length are the other options), and times four ways of running it: the
+reference engine (`"lineal"`) at the same batch size as the others,
+`"generational"` both without and with its optional speed-up switch
+turned on, and `"generational-vector"`. Every one of those is also
+reported as a ratio against `"lineal"` run with a *single* lineage at
+that same setting -- so instead of raw seconds (which depend entirely
+on whatever computer happens to run it), you also get "how many
+single-lineage-run-equivalents did this batch cost," a number that
+means roughly the same thing on a different machine, or a year from
+now on faster hardware.
 
 **Why it matters:** This project offers a choice between three engines
 that trade determinism, speed, and memory use against each other in
