@@ -320,8 +320,15 @@ def _multinomial_rows_batched(
     Args:
         rng: The run's explicitly threaded random generator.
         sizes: `(d,)` int64 — each row's own total count.
-        probabilities: `(d, capacity)` row-stochastic (a row with no
-            gene copies at all may be all zero).
+        probabilities: `(d, capacity)`, each row nonnegative — normalized
+            internally over its own nonzero (present) entries, not
+            assumed to already sum to 1.0 across the full `capacity`
+            width (a row with no gene copies at all may be all zero).
+            Callers should pass raw frequencies as-is rather than pre-
+            normalizing over the full row themselves; see this
+            function's own inline comment for why pre-normalizing over
+            `capacity` elements, rather than letting this function sum
+            only the present ones, is not bit-equivalent.
 
     Returns:
         `(d, capacity)` int64 counts, each row summing to that row's
@@ -373,19 +380,88 @@ def _multinomial_rows_batched(
         return n - candidate if reflect else candidate
 
     deme_count, capacity = probabilities.shape
-    counts = np.empty((deme_count, capacity), dtype=np.int64)
+    # Zero-initialized, not `np.empty`: the inner loop below deliberately
+    # stops at each row's own last nonzero-probability column, leaving
+    # every column after it untouched. Those trailing columns must read
+    # back as 0, not whatever garbage `np.empty` happened to leave there.
+    counts = np.zeros((deme_count, capacity), dtype=np.int64)
     for deme_index in range(deme_count):
+        # The dict-based `LinealBackend` decomposition (`_multinomial_
+        # via_inversion_binomial`, `fim.model.operators`) only ever
+        # iterates over the alleles actually PRESENT in that deme's own
+        # `frequency_map` -- its last category is whichever present
+        # allele sorts highest, and that category never draws (it just
+        # absorbs whatever `remaining_n` is left). This function's own
+        # `probabilities` row is dense over the FULL `capacity`, not
+        # just the present alleles, so "the last column" and "the last
+        # PRESENT column" are different things whenever the deme's
+        # locus has not minted every capacity slot -- which is the
+        # common case, not an edge case. Unconditionally treating
+        # `capacity - 1` as the no-draw column (the original form of
+        # this loop) draws one spurious extra uniform whenever the true
+        # last-present column sits below `capacity - 1` and still has
+        # `remaining_n > 0` when reached: real output values can still
+        # coincidentally match that day (as the very first deme in a
+        # multi-deme cross-backend probe did), but the two backends'
+        # RNG streams are now permanently out of step, corrupting every
+        # later deme's own draws. Found via a 2-deme trace where deme 0
+        # matched exactly and deme 1 did not. Scanning for the row's own
+        # last nonzero column, and stopping the draw loop there exactly
+        # as the dict-based path stops at its own last present allele,
+        # restores the same category count and the same "final category
+        # never draws" placement on both sides.
+        last_nonzero = 0
+        present_sum = 0.0
+        for column in range(capacity):
+            column_p = probabilities[deme_index, column]
+            if column_p > 0.0:
+                last_nonzero = column
+                present_sum += column_p
+        # Normalize over the present-only sum computed just above, not
+        # by assuming the row already sums to exactly 1.0. NumPy's own
+        # reduction is not associative: summing a length-`capacity` row
+        # padded with zeros beyond the last present column gives a
+        # different last bit than summing just the present values,
+        # because the terms get grouped differently even though the
+        # trailing zeros individually contribute nothing -- confirmed
+        # directly (`probs16.sum() != probs16[:6].sum()` for six equal
+        # 1/6 entries padded to a 16-wide row, one ULP apart). The dict-
+        # based `LinealBackend` decomposition (`operators.mutate`'s own
+        # `probabilities /= probabilities.sum()`) does this in two
+        # separate steps: divide the whole array by its own sum once,
+        # THEN run the draw loop with `remaining_p` starting at a clean
+        # `1.0`. An earlier version of this fix collapsed that into one
+        # step -- dividing each column directly by `remaining_p`, itself
+        # initialized to `present_sum` rather than `1.0` -- which is
+        # algebraically the same fraction but NOT the same floating-
+        # point computation (`(x/s) / ((s-y)/s)` vs `x/(s-y)` are not
+        # bit-identical), and a direct primitive-level comparison caught
+        # it still diverging (2907/6000 mismatches) even after that
+        # first attempt. Replicating the dict-based path's own two-step
+        # shape exactly -- normalize each column against `present_sum`
+        # once, then track `remaining_p` from a clean `1.0` the same way
+        # `operators.mutate` does -- is what actually closes it. This is
+        # the same latent gap `drift_vectorized` carries too (it also
+        # passes a capacity-wide, not present-only, row here) -- fixing
+        # it in this one shared function closes it for both callers, not
+        # just the one that surfaced it.
         remaining_n = sizes[deme_index]
         remaining_p = 1.0
-        for column in range(capacity - 1):
-            column_p = probabilities[deme_index, column]
+        for column in range(capacity):
+            if column == last_nonzero:
+                counts[deme_index, column] = remaining_n
+                break
+            column_p = (
+                probabilities[deme_index, column] / present_sum
+                if present_sum > 0.0
+                else 0.0
+            )
             fraction = column_p / remaining_p if remaining_p > 0.0 else 0.0
             fraction = min(max(fraction, 0.0), 1.0)
             drawn = draw_one(remaining_n, fraction)
             counts[deme_index, column] = drawn
             remaining_n -= drawn
             remaining_p -= column_p
-        counts[deme_index, capacity - 1] = remaining_n
     return counts
 
 
@@ -462,73 +538,139 @@ def mutate_vectorized(
 
     The array-native counterpart to `fim.model.operators.mutate`'s own
     finite-alleles branch — same three steps (event count, source
-    attribution, target selection), same underlying distributions.
-
-    **Event count and source attribution now use the identical
-    primitive and order `fim.model.operators.mutate`'s own dict-based
-    path does, as of Stage F8**
+    attribution, target selection), same underlying distributions, and,
+    as of Stage F8
     (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-    §5.4): event counts are drawn one deme at a time, in ascending deme
-    order, via `_inversion_binomial` — not one array-valued `rng.
-    binomial` call across every deme at once, since `mutate`'s own
-    dict-based path visits demes the same way and this is what keeps
-    the two in lockstep; source attribution already goes through
-    `_jit_multinomial_rows_batched` (this module's own function,
-    above), which draws via the identical primitive in ascending
-    allele-id order. Target selection is **not** unified this way —
-    `_jit_mutate_targets_batched`, below, processes every mutating copy
-    across the whole locus in one JIT-compiled pass, in an order that
-    has not been checked against `mutate`'s own dict-based per-source,
-    per-event loop — statistically equivalent, not bit-identical, for
-    that step specifically (this module's own correctness bar for
-    everything not explicitly named above — see the module docstring).
+    §5.4), the identical primitive and the identical *interleaving*.
+
+    **Interleaved per deme, deliberately, not batched by step across
+    every deme first.** An earlier version of this function drew every
+    deme's own event count first, then every deme's own source
+    attribution, then every event's own target, in three separate
+    passes — each pass individually using the unified primitive and a
+    plausible-looking canonical order (ascending deme, then ascending
+    allele id), but *as a whole* still consuming this lane's own `rng`
+    in a different sequence than `mutate`'s own dict-based path does,
+    which interleaves all three steps *within* each deme before moving
+    to the next (draw deme 0's own event count, then its own source
+    attribution, then all of deme 0's own targets, only then deme 1's
+    own event count, and so on). Found by a direct cross-backend test,
+    not caught by reasoning about each step in isolation — the
+    single-deme case matched exactly from the very first attempt (both
+    orderings agree trivially when there is only one deme to interleave
+    with), which is what let the batched-by-step version pass every
+    test written against it up to that point; a multi-deme test caught
+    the real divergence. Fixed by looping over demes explicitly, in
+    ascending order, running all three of one deme's own steps before
+    moving to the next — the real cost this pays, not minimized: each
+    of `_jit_multinomial_rows_batched`/`_jit_mutate_targets_batched` is
+    now called once per deme with active mutation events rather than
+    once per generation across every deme at once, reintroducing some
+    of the per-call overhead Stage F5's own investigation found
+    dominant for a structurally similar case (`fim.model.operators.
+    _drift_counts_batched`'s own docstring) — accepted here because
+    `mutate`'s own event counts are typically far smaller than
+    `drift`'s own full per-deme resampling (`mu` is a small
+    probability), so this operator's own share of a generation's total
+    cost is small enough that the correctness this buys is judged
+    worth it; not separately re-benchmarked end to end as part of this
+    change.
 
     Target selection specifically preserves `FiniteAlleleSpace.
     mutate_target`'s own real, load-bearing choice — a recurrence
     probability that grows as more of the bounded state space fills up,
     which is what lets the finite-alleles model recover infinite-alleles
-    behavior as capacity grows (its own docstring) — while replacing its
-    "filter the minted list, then index" mechanics with an equivalent
-    rejection-sampling form (draw uniformly among currently-minted
-    states, redraw only on the rare hit against the excluded source):
-    provably the same uniform-over-the-remaining-states distribution,
-    array/JIT-friendly where the original's own Python-list filtering is
-    not.
+    behavior as capacity grows (its own docstring), and, as of the same
+    Stage F8 pass, the identical single-fixed-draw mechanism
+    `FiniteAlleleSpace.mutate_target`'s own recurrence branch uses
+    (`_mutate_targets_batched`'s own inline comment has the full
+    argument for why an earlier, statistically-equivalent-but-not-
+    same-draw-count rejection-sampling version needed replacing too).
+
+    Two more, independent divergence sources remained even after both
+    of the above were fixed, neither one to do with the random draw
+    itself: a rare (roughly 1-in-150 demes, at this project's own
+    reference scale), floating-point-boundary-triggered mismatch traced
+    to source attribution's own probability normalization
+    (`_multinomial_rows_batched`'s own inline comment in this module has
+    the full argument), and a small, systematic ULP-level drift from
+    `mutate`'s own final `_normalize` rescaling step, which this
+    function did not originally replicate at all (this function's own
+    inline comment right after the `np.add.at` call has that argument).
+    Closing both is what makes this function's own output agree with
+    `mutate`'s dict-based path *exactly* now, not merely "almost
+    always" — checked directly
+    (`test_mutate_vectorized_matches_dict_based_mutate_exactly`,
+    `test/model/test_vectorized.py`), across 30 seeds and a deliberately
+    non-saturated capacity, not assumed from the first two fixes alone.
     """
-    event_counts = np.array(
-        [_inversion_binomial(rng, int(size), rate) for size in sizes],
-        dtype=np.int64,
-    )
-    if not event_counts.any():
-        return locus_state
-    retained_mass = 1.0 - event_counts / sizes
-    new_frequencies = locus_state.frequencies * retained_mass[:, None]
+    new_frequencies = locus_state.frequencies.copy()
+    minted_mask = locus_state.minted_mask.copy()
+    minted_list = locus_state.minted_list.copy()
+    minted_count = locus_state.minted_count
+    next_unminted = locus_state.next_unminted
+    capacity = locus_state.capacity
 
-    source_counts = _jit_multinomial_rows_batched(
-        rng, event_counts, locus_state.frequencies
-    )
-    event_deme, event_source = np.nonzero(source_counts)
-    counts = source_counts[event_deme, event_source]
-    event_deme = np.repeat(event_deme, counts)
-    event_source = np.repeat(event_source, counts)
+    for deme in range(sizes.shape[0]):
+        size = int(sizes[deme])
+        event_count = _inversion_binomial(rng, size, rate)
+        if event_count == 0:
+            continue
+        retained_mass = 1.0 - event_count / size
+        new_frequencies[deme] *= retained_mass
 
-    targets, minted_mask, minted_list, minted_count, next_unminted = (
-        _jit_mutate_targets_batched(
+        # No explicit re-normalization needed here: `_multinomial_rows_
+        # batched`/`_jit_multinomial_rows_batched` normalize internally
+        # over each row's own present (nonzero) prefix -- see that
+        # function's own inline comment for why summing over the full,
+        # zero-padded `capacity` width first (an earlier version of
+        # this call site did exactly that) is not equivalent, down to
+        # the last bit.
+        source_counts = _jit_multinomial_rows_batched(
             rng,
-            event_source.astype(np.int64),
-            locus_state.capacity,
-            locus_state.minted_mask.copy(),
-            locus_state.minted_list.copy(),
-            locus_state.minted_count,
-            locus_state.next_unminted,
+            np.array([event_count], dtype=np.int64),
+            locus_state.frequencies[deme : deme + 1],
+        )[0]
+        event_sources = np.repeat(np.arange(capacity, dtype=np.int64), source_counts)
+
+        targets, minted_mask, minted_list, minted_count, next_unminted = (
+            _jit_mutate_targets_batched(
+                rng,
+                event_sources,
+                capacity,
+                minted_mask,
+                minted_list,
+                minted_count,
+                next_unminted,
+            )
         )
-    )
-    event_frequency = 1.0 / sizes[event_deme]
-    np.add.at(new_frequencies, (event_deme, targets), event_frequency)
+        event_frequency = 1.0 / size
+        np.add.at(new_frequencies[deme], targets, event_frequency)
+
+        # `operators.mutate`'s own dict-based path renormalizes each
+        # locus's frequency map with `_normalize` (`math.fsum`-based,
+        # correctly rounded) after applying every mutation event,
+        # guarding against floating-point total-mass drift accumulating
+        # across many generations of repeated multiplicative scaling.
+        # `drift`/`drift_vectorized`'s own clean integer-count-over-
+        # `size` grid never needs this (dividing the same integer by
+        # the same `size` lands on the same bits on both backends), but
+        # `mutate`'s own output is not on a clean grid -- without this
+        # step, this function's own final values can differ from
+        # `mutate`'s by a few ULPs, found directly via a 30-seed exact-
+        # match test (`test_mutate_vectorized_matches_dict_based_mutate_
+        # exactly`), not assumed. `math.fsum`, not `.sum()`, matches
+        # `_normalize`'s own choice of summation algorithm exactly --
+        # confirmed directly that trailing zero-padding is inert under
+        # `math.fsum` even though it is *not* inert under NumPy's own
+        # pairwise `.sum()` (`_multinomial_rows_batched`'s own inline
+        # comment has that separate finding).
+        total = math.fsum(new_frequencies[deme].tolist())
+        new_frequencies[deme] /= total
 
     return VectorizedLocusState(
         frequencies=new_frequencies,
-        capacity=locus_state.capacity,
+        capacity=capacity,
         minted_mask=minted_mask,
         minted_list=minted_list,
         minted_count=minted_count,
@@ -550,7 +692,13 @@ def _mutate_targets_batched(
     A direct array/loop translation of `FiniteAlleleSpace.mutate_target`,
     called once per event in `sources` rather than once from `mutate`'s
     own dict-based loop — see `mutate_vectorized`'s own docstring for
-    what is, and is not, preserved exactly.
+    what is, and is not, preserved exactly. As of Stage F8
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §5.4), the recurrence branch's own random-draw count exactly
+    matches `FiniteAlleleSpace.mutate_target`'s — one `rng.integers()`
+    call, never a variable number — via the same "exclude one element,
+    shift the drawn index past it" construction that branch's own
+    inline comment explains in full.
 
     Args:
         rng: The run's explicitly threaded random generator.
@@ -575,12 +723,39 @@ def _mutate_targets_batched(
         current = sources[event_index]
         recurrence_probability = (minted_count - 1) / (capacity - 1)
         if recurrence_probability > 0.0 and rng.random() < recurrence_probability:
-            while True:
-                candidate_index = int(rng.integers(0, minted_count))
-                candidate = minted_list[candidate_index]
-                if candidate != current:
-                    targets[event_index] = candidate
+            # `FiniteAlleleSpace.mutate_target`'s own dict-based
+            # recurrence branch filters `current` out of the minted
+            # list first (`[a for a in minted if a != current]`), then
+            # draws one fixed index into that shrunk, `minted_count -
+            # 1`-sized list — never a second draw. An earlier version
+            # of this function drew directly into the *unfiltered*
+            # `minted_count`-sized list and rejected/redrew whenever it
+            # landed on `current` — statistically equivalent (uniform
+            # over the same `minted_count - 1` remaining states either
+            # way), but not the same *number of draws*, found by a
+            # direct cross-backend test (95 mismatches across 15
+            # seeds, `test/model/test_vectorized.py`'s own commit
+            # history) before this fix, not assumed correct. Fixed by
+            # replicating the filter-then-index mechanism exactly, via
+            # the standard "exclude one element" index-shift trick
+            # instead of an actual list filter: find `current`'s own
+            # position in `minted_list[0:minted_count]` (a linear
+            # scan — `current` is guaranteed present, since it is a
+            # real mutation event's own source), draw one fixed index
+            # into the `minted_count - 1`-sized space with that one
+            # position removed, and shift the drawn index past it when
+            # the draw lands at or beyond it — exactly what indexing
+            # into the filtered list would return, without ever
+            # constructing it.
+            current_index = 0
+            for candidate_index in range(minted_count):
+                if minted_list[candidate_index] == current:
+                    current_index = candidate_index
                     break
+            drawn_index = int(rng.integers(0, minted_count - 1))
+            if drawn_index >= current_index:
+                drawn_index += 1
+            targets[event_index] = minted_list[drawn_index]
         else:
             while minted_mask[next_unminted]:
                 next_unminted += 1

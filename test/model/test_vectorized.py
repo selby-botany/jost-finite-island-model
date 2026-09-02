@@ -4,14 +4,16 @@ Statistical, not bit-identical, parity with `fim.model.operators` was
 this module's own original correctness bar — see `fim.model.vectorized`'s
 own module docstring for why, and for which functions now clear a
 materially higher bar as of Stage F8 (exact numerical agreement, not
-merely statistical, for `migrate_vectorized`/`drift_vectorized`
-specifically — `test_drift_vectorized_matches_dict_based_drift_exactly`,
-below). Exact/invariant checks (round-tripping, frequency sums, target
-!= source) need no tolerance at all and are kept separate from the
-genuinely statistical ones (still needed for `mutate_vectorized`, not
-yet unified), which use a normal-approximation band matching this
-project's own existing precedent
-(`test_drift_variance_matches_binomial_theory`).
+merely statistical): `migrate_vectorized`, `drift_vectorized`, and, as
+of this module's own `test_mutate_vectorized_matches_dict_based_mutate_
+exactly`, `mutate_vectorized` too — every operator `fim.engine`'s run
+loop actually calls now agrees with its dict-based counterpart exactly,
+not just statistically. Exact/invariant checks (round-tripping,
+frequency sums, target != source) need no tolerance at all and are kept
+separate from the remaining genuinely statistical ones (still present
+for the properties that were never meant to be exact, like distributional
+variance), which use a normal-approximation band matching this project's
+own existing precedent (`test_drift_variance_matches_binomial_theory`).
 """
 
 from collections.abc import Callable
@@ -20,10 +22,16 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from fim.model.allele import AlleleId, FiniteAlleleSpace
+from fim.model.allele import (
+    AlleleId,
+    AlleleRegistry,
+    FiniteAlleleRegistry,
+    FiniteAlleleSpace,
+)
 from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.operators import drift as drift_dict
 from fim.model.operators import migrate as migrate_dict
+from fim.model.operators import mutate as mutate_dict
 from fim.model.state import ModelState
 from fim.model.vectorized import (
     VectorizedLocusState,
@@ -40,12 +48,51 @@ from fim.model.vectorized import (
 
 
 def _finite_alleles_state(deme_count: int = 4, capacity_length: int = 1) -> ModelState:
-    """A multi-deme, single-locus finite-alleles state, evenly spread."""
+    """A multi-deme, single-locus finite-alleles state, evenly spread.
+
+    Fills every capacity slot — deliberately the *saturated* case. A
+    cross-backend probe run over only this shape once passed 20 seeds
+    clean (`test_drift_vectorized_matches_dict_based_drift_exactly`'s
+    own earlier form) while a real ULP-level normalization bug sat
+    underneath it undetected, because "the last present allele" and
+    "the last capacity slot" always coincide when nothing is unminted.
+    Use `_partial_finite_alleles_state`, not this one, for any new test
+    meant to catch that class of bug — see its own docstring.
+    """
     capacity = finite_allele_capacity(capacity_length)
     return ModelState(
         loci=(LocusSpec(1, capacity_length),),
         frequencies=tuple(
             ({AlleleId(a): 1.0 / capacity for a in range(capacity)},)
+            for _ in range(deme_count)
+        ),
+    )
+
+
+def _partial_finite_alleles_state(
+    deme_count: int, capacity_length: int, minted_count: int
+) -> ModelState:
+    """A multi-deme, single-locus finite-alleles state with capacity to spare.
+
+    Unlike `_finite_alleles_state` above, only the first `minted_count`
+    of `finite_allele_capacity(capacity_length)` states are ever
+    minted — the realistic case for any locus whose mutation rate or
+    generation count hasn't yet filled its whole state space, and the
+    specific shape that exposed a real cross-backend normalization bug
+    (`_multinomial_rows_batched`'s own inline comment in
+    `fim.model.vectorized`): the dict-based backend normalizes a
+    probability array over exactly the present alleles, while the
+    array-native backend's dense row is `capacity`-wide with the unused
+    slots at exactly `0.0` — summing over the wider, zero-padded row is
+    not bit-identical to summing over the present-only one, even though
+    the extra terms are mathematically inert.
+    """
+    capacity = finite_allele_capacity(capacity_length)
+    assert 0 < minted_count <= capacity
+    return ModelState(
+        loci=(LocusSpec(1, capacity_length),),
+        frequencies=tuple(
+            ({AlleleId(a): 1.0 / minted_count for a in range(minted_count)},)
             for _ in range(deme_count)
         ),
     )
@@ -137,6 +184,109 @@ def test_drift_vectorized_matches_dict_based_drift_exactly(
         )
 
         for deme in range(6):
+            expected_map = expected.frequency_map(deme, 0)
+            observed_map = observed.frequency_map(deme, 0)
+            assert set(expected_map) == set(observed_map), (seed, deme)
+            for allele_id, value in expected_map.items():
+                assert observed_map[allele_id] == value, (seed, deme, allele_id)
+
+
+def test_drift_vectorized_matches_dict_based_drift_exactly_with_partial_capacity(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The same exact-agreement proof, but with capacity to spare.
+
+    `test_drift_vectorized_matches_dict_based_drift_exactly` above only
+    ever exercises a *saturated* capacity (`_finite_alleles_state` mints
+    every state-space slot) — a real gap, because a normalization bug
+    in `_multinomial_rows_batched` (`fim.model.vectorized`'s own inline
+    comment) stayed invisible under that shape specifically: "the last
+    present allele" and "the last capacity slot" are the same column
+    when nothing is unminted, so the bug's own precondition (a present
+    allele short of `capacity - 1`, with `remaining_n` still positive
+    when the array-native decomposition reaches it) never arose. This
+    test uses `_partial_finite_alleles_state` instead — 6 of 16 states
+    minted per deme — which does exercise that precondition, and did
+    catch real cross-backend mismatches before the fix landed (found
+    via a direct scratch probe, not assumed).
+    """
+    for seed in range(20):
+        state = _partial_finite_alleles_state(
+            deme_count=5, capacity_length=2, minted_count=6
+        )
+        sizes = np.array([20, 45, 8, 100, 3], dtype=np.int64)
+
+        expected = drift_dict(state, tuple(int(s) for s in sizes), rng(seed))
+
+        vectorized = build_vectorized_state(state)
+        observed_vectorized = drift_vectorized(
+            vectorized.locus_states[0], sizes, rng(seed)
+        )
+        observed = vectorized_state_to_model_state(
+            replace(vectorized, locus_states=(observed_vectorized,))
+        )
+
+        for deme in range(5):
+            expected_map = expected.frequency_map(deme, 0)
+            observed_map = observed.frequency_map(deme, 0)
+            assert set(expected_map) == set(observed_map), (seed, deme)
+            for allele_id, value in expected_map.items():
+                assert observed_map[allele_id] == value, (seed, deme, allele_id)
+
+
+def test_mutate_vectorized_matches_dict_based_mutate_exactly(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`mutate`'s own version of the `drift` exact-agreement proof.
+
+    `fim.model.operators.mutate` and `mutate_vectorized` now draw via
+    the identical event-count, source-attribution, *and* target-
+    selection mechanism, in the identical per-deme order (`mutate_
+    vectorized`'s own module/function docstrings) —
+    `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §5.4's "one RNG scheme for every backend" reaching `mutate`, not
+    just `drift`. Three separate divergence sources had to be found and
+    fixed to get here, none of them visible from a single-deme test
+    alone: a per-step-batched vs. per-deme-interleaved draw order once
+    more than one deme was involved, a rejection-sampling vs. fixed-
+    draw mismatch in the recurrence branch, and this same partial-
+    capacity normalization bug `drift_vectorized`'s own analogous test
+    above exists to catch. Uses `_partial_finite_alleles_state` for the
+    same reason that one does — a saturated capacity cannot exercise
+    the normalization bug at all.
+    """
+    capacity_length = 2
+    capacity = finite_allele_capacity(capacity_length)
+    initial_minted = tuple(AlleleId(i) for i in range(6))
+    deme_count = 5
+    sizes = np.array([20, 45, 8, 100, 3], dtype=np.int64)
+    mu = 0.1
+
+    for seed in range(30):
+        state = _partial_finite_alleles_state(
+            deme_count=deme_count, capacity_length=capacity_length, minted_count=6
+        )
+        finite_alleles = FiniteAlleleRegistry(
+            {1: FiniteAlleleSpace(capacity, initial_minted)}
+        )
+        expected = mutate_dict(
+            state,
+            mu,
+            tuple(int(s) for s in sizes),
+            AlleleRegistry(),
+            rng(seed),
+            finite_alleles=finite_alleles,
+        )
+
+        vectorized = build_vectorized_state(state)
+        observed_vectorized = mutate_vectorized(
+            vectorized.locus_states[0], sizes, mu, rng(seed)
+        )
+        observed = vectorized_state_to_model_state(
+            replace(vectorized, locus_states=(observed_vectorized,))
+        )
+
+        for deme in range(deme_count):
             expected_map = expected.frequency_map(deme, 0)
             observed_map = observed.frequency_map(deme, 0)
             assert set(expected_map) == set(observed_map), (seed, deme)

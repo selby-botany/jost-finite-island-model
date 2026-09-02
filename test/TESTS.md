@@ -8710,14 +8710,16 @@ Statistical, not bit-identical, parity with `fim.model.operators` was
 this module's own original correctness bar — see `fim.model.vectorized`'s
 own module docstring for why, and for which functions now clear a
 materially higher bar as of Stage F8 (exact numerical agreement, not
-merely statistical, for `migrate_vectorized`/`drift_vectorized`
-specifically — `test_drift_vectorized_matches_dict_based_drift_exactly`,
-below). Exact/invariant checks (round-tripping, frequency sums, target
-!= source) need no tolerance at all and are kept separate from the
-genuinely statistical ones (still needed for `mutate_vectorized`, not
-yet unified), which use a normal-approximation band matching this
-project's own existing precedent
-(`test_drift_variance_matches_binomial_theory`).
+merely statistical): `migrate_vectorized`, `drift_vectorized`, and, as
+of this module's own `test_mutate_vectorized_matches_dict_based_mutate_
+exactly`, `mutate_vectorized` too — every operator `fim.engine`'s run
+loop actually calls now agrees with its dict-based counterpart exactly,
+not just statistically. Exact/invariant checks (round-tripping,
+frequency sums, target != source) need no tolerance at all and are kept
+separate from the remaining genuinely statistical ones (still present
+for the properties that were never meant to be exact, like distributional
+variance), which use a normal-approximation band matching this project's
+own existing precedent (`test_drift_variance_matches_binomial_theory`).
 
 <a id="model.test_vectorized.test_build_and_convert_round_trips"></a>
 
@@ -8784,6 +8786,58 @@ statistical band — the counts underneath are literally the same
 integers, not just close. This is the actual, concrete proof the
 whole unified-RNG effort exists to deliver, not yet attempted
 before this test.
+
+<a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly_with_partial_capacity"></a>
+
+#### test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly\_with\_partial\_capacity
+
+```python
+def test_drift_vectorized_matches_dict_based_drift_exactly_with_partial_capacity(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The same exact-agreement proof, but with capacity to spare.
+
+`test_drift_vectorized_matches_dict_based_drift_exactly` above only
+ever exercises a *saturated* capacity (`_finite_alleles_state` mints
+every state-space slot) — a real gap, because a normalization bug
+in `_multinomial_rows_batched` (`fim.model.vectorized`'s own inline
+comment) stayed invisible under that shape specifically: "the last
+present allele" and "the last capacity slot" are the same column
+when nothing is unminted, so the bug's own precondition (a present
+allele short of `capacity - 1`, with `remaining_n` still positive
+when the array-native decomposition reaches it) never arose. This
+test uses `_partial_finite_alleles_state` instead — 6 of 16 states
+minted per deme — which does exercise that precondition, and did
+catch real cross-backend mismatches before the fix landed (found
+via a direct scratch probe, not assumed).
+
+<a id="model.test_vectorized.test_mutate_vectorized_matches_dict_based_mutate_exactly"></a>
+
+#### test\_mutate\_vectorized\_matches\_dict\_based\_mutate\_exactly
+
+```python
+def test_mutate_vectorized_matches_dict_based_mutate_exactly(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`mutate`'s own version of the `drift` exact-agreement proof.
+
+`fim.model.operators.mutate` and `mutate_vectorized` now draw via
+the identical event-count, source-attribution, *and* target-
+selection mechanism, in the identical per-deme order (`mutate_
+vectorized`'s own module/function docstrings) —
+`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+§5.4's "one RNG scheme for every backend" reaching `mutate`, not
+just `drift`. Three separate divergence sources had to be found and
+fixed to get here, none of them visible from a single-deme test
+alone: a per-step-batched vs. per-deme-interleaved draw order once
+more than one deme was involved, a rejection-sampling vs. fixed-
+draw mismatch in the recurrence branch, and this same partial-
+capacity normalization bug `drift_vectorized`'s own analogous test
+above exists to catch. Uses `_partial_finite_alleles_state` for the
+same reason that one does — a saturated capacity cannot exercise
+the normalization bug at all.
 
 <a id="model.test_vectorized.test_symmetric_migration_weights_rows_are_stochastic"></a>
 

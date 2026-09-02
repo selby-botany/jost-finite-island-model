@@ -6279,38 +6279,71 @@ Replace a binomially sampled number of copies with new-or-recurring alleles.
 
 The array-native counterpart to `fim.model.operators.mutate`'s own
 finite-alleles branch — same three steps (event count, source
-attribution, target selection), same underlying distributions.
-
-**Event count and source attribution now use the identical
-primitive and order `fim.model.operators.mutate`'s own dict-based
-path does, as of Stage F8**
+attribution, target selection), same underlying distributions, and,
+as of Stage F8
 (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-§5.4): event counts are drawn one deme at a time, in ascending deme
-order, via `_inversion_binomial` — not one array-valued `rng.
-binomial` call across every deme at once, since `mutate`'s own
-dict-based path visits demes the same way and this is what keeps
-the two in lockstep; source attribution already goes through
-`_jit_multinomial_rows_batched` (this module's own function,
-above), which draws via the identical primitive in ascending
-allele-id order. Target selection is **not** unified this way —
-`_jit_mutate_targets_batched`, below, processes every mutating copy
-across the whole locus in one JIT-compiled pass, in an order that
-has not been checked against `mutate`'s own dict-based per-source,
-per-event loop — statistically equivalent, not bit-identical, for
-that step specifically (this module's own correctness bar for
-everything not explicitly named above — see the module docstring).
+§5.4), the identical primitive and the identical *interleaving*.
+
+**Interleaved per deme, deliberately, not batched by step across
+every deme first.** An earlier version of this function drew every
+deme's own event count first, then every deme's own source
+attribution, then every event's own target, in three separate
+passes — each pass individually using the unified primitive and a
+plausible-looking canonical order (ascending deme, then ascending
+allele id), but *as a whole* still consuming this lane's own `rng`
+in a different sequence than `mutate`'s own dict-based path does,
+which interleaves all three steps *within* each deme before moving
+to the next (draw deme 0's own event count, then its own source
+attribution, then all of deme 0's own targets, only then deme 1's
+own event count, and so on). Found by a direct cross-backend test,
+not caught by reasoning about each step in isolation — the
+single-deme case matched exactly from the very first attempt (both
+orderings agree trivially when there is only one deme to interleave
+with), which is what let the batched-by-step version pass every
+test written against it up to that point; a multi-deme test caught
+the real divergence. Fixed by looping over demes explicitly, in
+ascending order, running all three of one deme's own steps before
+moving to the next — the real cost this pays, not minimized: each
+of `_jit_multinomial_rows_batched`/`_jit_mutate_targets_batched` is
+now called once per deme with active mutation events rather than
+once per generation across every deme at once, reintroducing some
+of the per-call overhead Stage F5's own investigation found
+dominant for a structurally similar case (`fim.model.operators.
+_drift_counts_batched`'s own docstring) — accepted here because
+`mutate`'s own event counts are typically far smaller than
+`drift`'s own full per-deme resampling (`mu` is a small
+probability), so this operator's own share of a generation's total
+cost is small enough that the correctness this buys is judged
+worth it; not separately re-benchmarked end to end as part of this
+change.
 
 Target selection specifically preserves `FiniteAlleleSpace.
 mutate_target`'s own real, load-bearing choice — a recurrence
 probability that grows as more of the bounded state space fills up,
 which is what lets the finite-alleles model recover infinite-alleles
-behavior as capacity grows (its own docstring) — while replacing its
-"filter the minted list, then index" mechanics with an equivalent
-rejection-sampling form (draw uniformly among currently-minted
-states, redraw only on the rare hit against the excluded source):
-provably the same uniform-over-the-remaining-states distribution,
-array/JIT-friendly where the original's own Python-list filtering is
-not.
+behavior as capacity grows (its own docstring), and, as of the same
+Stage F8 pass, the identical single-fixed-draw mechanism
+`FiniteAlleleSpace.mutate_target`'s own recurrence branch uses
+(`_mutate_targets_batched`'s own inline comment has the full
+argument for why an earlier, statistically-equivalent-but-not-
+same-draw-count rejection-sampling version needed replacing too).
+
+Two more, independent divergence sources remained even after both
+of the above were fixed, neither one to do with the random draw
+itself: a rare (roughly 1-in-150 demes, at this project's own
+reference scale), floating-point-boundary-triggered mismatch traced
+to source attribution's own probability normalization
+(`_multinomial_rows_batched`'s own inline comment in this module has
+the full argument), and a small, systematic ULP-level drift from
+`mutate`'s own final `_normalize` rescaling step, which this
+function did not originally replicate at all (this function's own
+inline comment right after the `np.add.at` call has that argument).
+Closing both is what makes this function's own output agree with
+`mutate`'s dict-based path *exactly* now, not merely "almost
+always" — checked directly
+(`test_mutate_vectorized_matches_dict_based_mutate_exactly`,
+`test/model/test_vectorized.py`), across 30 seeds and a deliberately
+non-saturated capacity, not assumed from the first two fixes alone.
 
 <a id="fim.model.vectorized.drift_vectorized"></a>
 
