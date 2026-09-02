@@ -1415,22 +1415,37 @@ Stage V3 benchmark sweep, `20260827-claude-sonnet-5-fim-engine-
 parallel-refactor-design.md`'s own §9). Unused by every other
 `Advancer`; stays `None` for the whole run under those.
 
-`vectorized_locus_states` is also a `VectorizedAdvancer`-only cache,
-for a correctness reason rather than a performance one: each
+`vectorized_state` is also a `VectorizedAdvancer`-only cache — the
+live, dense `VectorizedState` this lane is actually stepping,
+carried forward generation to generation via `step_vectorized`
+directly, with `state` (the `ModelState` below) left untouched
+mid-run rather than reconstructed from it every tick. Two things
+used to force a `ModelState` round trip every generation: (1) each
 locus's own finite-alleles minted bookkeeping (`minted_mask`/
-`minted_list`/`minted_count`/`next_unminted`) must persist across
-generations exactly the way `FiniteAlleleRegistry`'s own dict-based
-state already does for `LinealBackend`/`GenerationalBackend`'s
-default advancer. Re-deriving that bookkeeping from `state` alone,
-every generation, silently forgets any allele minted and then
-driven extinct — including within the very generation it was
-minted in, the normal outcome for a fresh low-frequency mutant, not
-a rare one — which both re-mints identities `LinealBackend` has
-permanently retired and undercounts `minted_count`
+`minted_list`/`minted_count`/`next_unminted`) needed to persist
+across generations exactly the way `FiniteAlleleRegistry`'s own
+dict-based state already does for `LinealBackend`/
+`GenerationalBackend`'s default advancer — re-deriving it from
+`state` alone, every generation, silently forgets any allele minted
+and then driven extinct (including within the very generation it
+was minted in, the normal outcome for a fresh low-frequency mutant,
+not a rare one), both re-minting identities `LinealBackend` has
+permanently retired and undercounting `minted_count`; and (2)
+`_convergence_values` itself needed a `ModelState` to read.
+Caching the whole `VectorizedState` here (not just the locus
+bookkeeping) fixes both at once: `step_vectorized` already threads
+a `VectorizedLocusState`'s own minted bookkeeping through unchanged
 (`fim.model.vectorized.build_vectorized_state`'s own `previous_
-locus_states` argument has the full argument and a directly
-measured example). Unused by every other `Advancer`; stays `None`
-for the whole run under those.
+locus_states` argument has the original bug and a directly measured
+example — this field is what made that fix persist-able across
+ticks in the first place), and `_convergence_values_vectorized`
+reads statistics straight from this cached state's own dense
+arrays, so `state` only needs rebuilding once, when the lane
+actually stops (measured directly: at a large capacity, the
+reconstruction this avoids on every other tick was ~40% of that
+tick's own wall-clock time — `20260901-claude-sonnet-5-fim-engine-
+backend-factory-design.md` §11). Unused by every other `Advancer`;
+stays `None` for the whole run under those.
 
 <a id="fim.engine.Advancer"></a>
 
@@ -1633,19 +1648,29 @@ Steps every currently-active lane forward by one generation, fused.
 The one `Advancer` that actually answers
 `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
 §11's own "fusing `migrate` -> `mutate` -> `drift` across stage
-boundaries" open question: converts each lane's own `ModelState` to
-`fim.model.vectorized.VectorizedState` once, runs the whole
-generation's migrate/mutate/drift sequence array-native
-(`step_vectorized`) with no `ModelState` reconstructed in between,
-writes that generation's own trajectory rows directly from the dense
-array (`vectorized_state_to_rows`, bypassing `ModelState` entirely
-for persistence), then converts back to `ModelState` once — not once
-per operator, the shape Stage F5's own investigation found actually
-dominates an isolated operator's wall-clock time. The dense `(d, d)`
-migration weight matrix is built once per lane and cached on
-`lane.migration_weights`, not rebuilt every generation — see
-`ReplicaLane`'s own docstring for the benchmark finding that made
-this caching necessary, not just a nice-to-have.
+boundaries" open question — and, since that same design's own §11
+was reopened once this generation-to-generation cost was actually
+measured, its "across-generation fusion" question too: each lane's
+own `ModelState` is converted to `fim.model.vectorized.
+VectorizedState` exactly once, the first tick it is ever advanced
+(`lane.vectorized_state`, cached on the lane itself — see
+`ReplicaLane`'s own docstring), then every subsequent generation's
+migrate/mutate/drift sequence (`step_vectorized`) runs directly on
+that same cached array, feeding straight into the next tick with no
+`ModelState` in between at all. Trajectory rows are written
+directly from the dense array (`vectorized_state_to_rows`), and
+convergence statistics are read directly from it too
+(`_convergence_values_vectorized`) — a real `ModelState` is only
+ever reconstructed once per lane, when that lane's own monitor
+reports it has stopped, for the report/`RunResult` machinery that
+genuinely needs one. Measured directly, not assumed: at a large
+capacity, the per-tick reconstruction this removes was itself ~40%
+of that tick's own wall-clock time — larger than the biology
+(`step_vectorized` itself) it was sitting next to. The dense
+`(d, d)` migration weight matrix is likewise built once per lane and
+cached on `lane.migration_weights`, not rebuilt every generation —
+see `ReplicaLane`'s own docstring for the benchmark finding that
+made this caching necessary, not just a nice-to-have.
 
 Scope, deliberately, matching `fim.model.vectorized`'s own module
 docstring: `SimulationParams.mutation_model == "finite_alleles"`
@@ -6174,10 +6199,17 @@ generation, with no `ModelState` round-trip between them — the first
 real test of `20260901-claude-sonnet-5-fim-engine-backend-factory-
 design.md` §11's "fusing migrate -> mutate -> drift across stage
 boundaries" open question. `fim.engine.VectorizedAdvancer`, the one
-caller, still converts to and from `ModelState` once per generation
-(not once per operator, but not zero times either — `ReplicaLane.state`
-is `ModelState`-typed across the whole batch driving loop, a real,
-measured, secondary cost this module does not eliminate on its own).
+caller, originally converted to and from `ModelState` once *every*
+generation regardless (`ReplicaLane.state` was `ModelState`-typed
+across the whole batch driving loop) — a real, separately measured
+secondary cost this module's own within-generation fusion did nothing
+about, since it sat entirely outside `step_vectorized`. Fixed since:
+`fim.engine.ReplicaLane.vectorized_state` now caches the live
+`VectorizedState` itself across generations, and `VectorizedAdvancer`
+reads convergence statistics straight off it
+(`_convergence_values_vectorized`), so `vectorized_state_to_model_
+state` (below) is only ever called once per lane, when it actually
+stops — not once per generation.
 
 That within-generation fusion alone was not enough to make the whole
 pipeline competitive with the dict-based backends once actually
@@ -6238,8 +6270,11 @@ dict-based path's own `next_unminted` at `12` while re-deriving it from
 that generation's own output alone gave `2`. Fixed by carrying that
 bookkeeping forward across generations instead of re-deriving it
 (`build_vectorized_state`'s own `previous_locus_states` argument has
-the full mechanism); `fim.engine.ReplicaLane.vectorized_locus_states`
-is the persistence point.
+the full mechanism, still used for a lane's first generation);
+`fim.engine.ReplicaLane.vectorized_state` is the persistence point —
+every generation after the first reuses that cached `VectorizedState`
+directly, via `step_vectorized`, so `build_vectorized_state` is not
+even called again for the rest of that lane's own run.
 
 With that fixed, a full run *is* bit-identical to `LinealBackend` when
 migration is off (`test_generational_vector_backend_matches_lineal_
@@ -6406,10 +6441,13 @@ Convert back to `ModelState`'s own public, sparse shape.
 themselves never call this — the fusion within one generation this
 module's own docstring describes holds regardless of how often a
 caller converts back. `fim.engine.VectorizedAdvancer`, the one real
-caller, does call this once per generation (`ReplicaLane.state` is
-`ModelState`-typed across its whole batch driving loop), not only
-when a real `ModelState` is externally needed — a real, measured,
-secondary cost this module's own docstring already accounts for.
+caller, calls this exactly once per lane, only when that lane's own
+monitor reports it has stopped (`ReplicaLane.vectorized_state`
+carries the live array state across every generation in between) —
+not once per generation, which this module's own docstring records
+as a real, measured cost this function used to be paid for
+needlessly, on every tick, for a run that might last hundreds of
+them.
 
 <a id="fim.model.vectorized.vectorized_state_to_rows"></a>
 

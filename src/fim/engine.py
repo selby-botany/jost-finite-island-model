@@ -137,6 +137,7 @@ from fim.model.params import Jit as ModelJit
 from fim.model.state import ModelState
 from fim.model.vectorized import (
     VectorizedLocusState,
+    VectorizedState,
     build_vectorized_state,
     step_vectorized,
     symmetric_migration_weights,
@@ -480,22 +481,37 @@ class ReplicaLane:
     parallel-refactor-design.md`'s own §9). Unused by every other
     `Advancer`; stays `None` for the whole run under those.
 
-    `vectorized_locus_states` is also a `VectorizedAdvancer`-only cache,
-    for a correctness reason rather than a performance one: each
+    `vectorized_state` is also a `VectorizedAdvancer`-only cache — the
+    live, dense `VectorizedState` this lane is actually stepping,
+    carried forward generation to generation via `step_vectorized`
+    directly, with `state` (the `ModelState` below) left untouched
+    mid-run rather than reconstructed from it every tick. Two things
+    used to force a `ModelState` round trip every generation: (1) each
     locus's own finite-alleles minted bookkeeping (`minted_mask`/
-    `minted_list`/`minted_count`/`next_unminted`) must persist across
-    generations exactly the way `FiniteAlleleRegistry`'s own dict-based
-    state already does for `LinealBackend`/`GenerationalBackend`'s
-    default advancer. Re-deriving that bookkeeping from `state` alone,
-    every generation, silently forgets any allele minted and then
-    driven extinct — including within the very generation it was
-    minted in, the normal outcome for a fresh low-frequency mutant, not
-    a rare one — which both re-mints identities `LinealBackend` has
-    permanently retired and undercounts `minted_count`
+    `minted_list`/`minted_count`/`next_unminted`) needed to persist
+    across generations exactly the way `FiniteAlleleRegistry`'s own
+    dict-based state already does for `LinealBackend`/
+    `GenerationalBackend`'s default advancer — re-deriving it from
+    `state` alone, every generation, silently forgets any allele minted
+    and then driven extinct (including within the very generation it
+    was minted in, the normal outcome for a fresh low-frequency mutant,
+    not a rare one), both re-minting identities `LinealBackend` has
+    permanently retired and undercounting `minted_count`; and (2)
+    `_convergence_values` itself needed a `ModelState` to read.
+    Caching the whole `VectorizedState` here (not just the locus
+    bookkeeping) fixes both at once: `step_vectorized` already threads
+    a `VectorizedLocusState`'s own minted bookkeeping through unchanged
     (`fim.model.vectorized.build_vectorized_state`'s own `previous_
-    locus_states` argument has the full argument and a directly
-    measured example). Unused by every other `Advancer`; stays `None`
-    for the whole run under those.
+    locus_states` argument has the original bug and a directly measured
+    example — this field is what made that fix persist-able across
+    ticks in the first place), and `_convergence_values_vectorized`
+    reads statistics straight from this cached state's own dense
+    arrays, so `state` only needs rebuilding once, when the lane
+    actually stops (measured directly: at a large capacity, the
+    reconstruction this avoids on every other tick was ~40% of that
+    tick's own wall-clock time — `20260901-claude-sonnet-5-fim-engine-
+    backend-factory-design.md` §11). Unused by every other `Advancer`;
+    stays `None` for the whole run under those.
     """
 
     replica_index: int
@@ -510,7 +526,7 @@ class ReplicaLane:
     active: bool = True
     result: RunResult | None = None
     migration_weights: tuple[np.ndarray, ...] | None = None
-    vectorized_locus_states: tuple[VectorizedLocusState, ...] | None = None
+    vectorized_state: VectorizedState | None = None
 
 
 class Advancer(Protocol):
@@ -764,19 +780,29 @@ class VectorizedAdvancer:
     The one `Advancer` that actually answers
     `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
     §11's own "fusing `migrate` -> `mutate` -> `drift` across stage
-    boundaries" open question: converts each lane's own `ModelState` to
-    `fim.model.vectorized.VectorizedState` once, runs the whole
-    generation's migrate/mutate/drift sequence array-native
-    (`step_vectorized`) with no `ModelState` reconstructed in between,
-    writes that generation's own trajectory rows directly from the dense
-    array (`vectorized_state_to_rows`, bypassing `ModelState` entirely
-    for persistence), then converts back to `ModelState` once — not once
-    per operator, the shape Stage F5's own investigation found actually
-    dominates an isolated operator's wall-clock time. The dense `(d, d)`
-    migration weight matrix is built once per lane and cached on
-    `lane.migration_weights`, not rebuilt every generation — see
-    `ReplicaLane`'s own docstring for the benchmark finding that made
-    this caching necessary, not just a nice-to-have.
+    boundaries" open question — and, since that same design's own §11
+    was reopened once this generation-to-generation cost was actually
+    measured, its "across-generation fusion" question too: each lane's
+    own `ModelState` is converted to `fim.model.vectorized.
+    VectorizedState` exactly once, the first tick it is ever advanced
+    (`lane.vectorized_state`, cached on the lane itself — see
+    `ReplicaLane`'s own docstring), then every subsequent generation's
+    migrate/mutate/drift sequence (`step_vectorized`) runs directly on
+    that same cached array, feeding straight into the next tick with no
+    `ModelState` in between at all. Trajectory rows are written
+    directly from the dense array (`vectorized_state_to_rows`), and
+    convergence statistics are read directly from it too
+    (`_convergence_values_vectorized`) — a real `ModelState` is only
+    ever reconstructed once per lane, when that lane's own monitor
+    reports it has stopped, for the report/`RunResult` machinery that
+    genuinely needs one. Measured directly, not assumed: at a large
+    capacity, the per-tick reconstruction this removes was itself ~40%
+    of that tick's own wall-clock time — larger than the biology
+    (`step_vectorized` itself) it was sitting next to. The dense
+    `(d, d)` migration weight matrix is likewise built once per lane and
+    cached on `lane.migration_weights`, not rebuilt every generation —
+    see `ReplicaLane`'s own docstring for the benchmark finding that
+    made this caching necessary, not just a nice-to-have.
 
     Scope, deliberately, matching `fim.model.vectorized`'s own module
     docstring: `SimulationParams.mutation_model == "finite_alleles"`
@@ -830,11 +856,16 @@ class VectorizedAdvancer:
                     else np.asarray(lane.params.m, dtype=np.float64)
                 )
                 lane.migration_weights = (weights,) * len(lane.state.loci)
-            vectorized = build_vectorized_state(
-                lane.state, previous_locus_states=lane.vectorized_locus_states
-            )
+            if lane.vectorized_state is None:
+                # Only the very first tick this lane is ever advanced —
+                # `lane.state` is still the real generation-zero
+                # `ModelState` `_build_replica_lane` constructed it
+                # from. Every subsequent tick steps `lane.vectorized_
+                # state` (set below) directly; `build_vectorized_state`
+                # is never called again for this lane.
+                lane.vectorized_state = build_vectorized_state(lane.state)
             stepped = step_vectorized(
-                vectorized,
+                lane.vectorized_state,
                 lane.migration_weights,
                 lane.params.mutation_rates,
                 sizes,
@@ -845,11 +876,16 @@ class VectorizedAdvancer:
                 stepped.generation,
                 vectorized_state_to_rows(stepped, lane.run_id),
             )
-            lane.vectorized_locus_states = stepped.locus_states
-            lane.state = vectorized_state_to_model_state(stepped)
-            values = _convergence_values(lane.state, lane.params)
-            lane.monitor.record(lane.state.generation, values)
+            lane.vectorized_state = stepped
+            values = _convergence_values_vectorized(stepped, lane.params)
+            lane.monitor.record(stepped.generation, values)
             if lane.monitor.should_stop():
+                # `lane.state` (`ModelState`) has been left stale, at
+                # whichever generation it was last built for, this
+                # whole time — materialize a real one now, the one
+                # point something outside this array-native loop
+                # (`_finalize_replica_lane`) actually needs it.
+                lane.state = vectorized_state_to_model_state(stepped)
                 newly_stopped.append(lane)
         return newly_stopped
 
@@ -2229,6 +2265,37 @@ def _convergence_values(
     return values
 
 
+def _convergence_values_vectorized(
+    state: VectorizedState,
+    params: SimulationParams,
+) -> dict[str, float]:
+    """`_convergence_values`'s own array-native counterpart.
+
+    `VectorizedAdvancer.advance` calls this instead of `_convergence_
+    values`, specifically so a whole generation's convergence check
+    never has to reconstruct a `ModelState` (`vectorized_state_to_
+    model_state`) just to immediately reshape it back into `statistics_
+    report`'s own per-deme frequency-dict input — the same "stay
+    array-native as long as possible" principle `vectorized_state_to_
+    rows` already established for persistence, applied here to the
+    other consumer that used to force that same round trip every tick
+    (`ReplicaLane`'s own docstring has the measured cost this removes).
+    Otherwise identical to `_convergence_values`: same watched-statistic
+    selection, same locus-averaging, same "an undefined `G_ST` this
+    generation is omitted, not substituted" rule.
+    """
+    locus_reports = tuple(
+        _statistics_for_locus_vectorized(locus_state, params)
+        for locus_state in state.locus_states
+    )
+    values: dict[str, float] = {}
+    for statistic in params.convergence_statistics:
+        value = _mean_statistic_across_loci(locus_reports, statistic)
+        if value is not None:
+            values[statistic] = value
+    return values
+
+
 def _replicate_monitor(params: SimulationParams) -> ConvergenceMonitor | None:
     """Return the adaptive replicate-batch monitor, or ``None`` when unused.
 
@@ -2443,6 +2510,35 @@ def _statistics_for_locus(
             ).items()
         }
         for deme_index in range(state.deme_count)
+    ]
+    weights: Sequence[float] | None = (
+        params.population_sizes if params.deme_weighting == "size" else None
+    )
+    return statistics_report(table, weights)
+
+
+def _statistics_for_locus_vectorized(
+    locus_state: VectorizedLocusState,
+    params: SimulationParams,
+) -> DifferentiationReport:
+    """`_statistics_for_locus`'s own array-native counterpart.
+
+    Builds the exact same per-deme frequency-dict input `statistics_
+    report` expects, straight off `locus_state`'s own dense `(d,
+    capacity)` array via `np.flatnonzero` — the identical present-
+    alleles-only extraction `vectorized_state_to_rows` already uses for
+    persistence — rather than from a `ModelState`'s own sparse
+    `frequency_map`. Computes nothing statistical itself, exactly like
+    `_statistics_for_locus`; `deme_weighting`'s own meaning is
+    unchanged.
+    """
+    frequencies = locus_state.frequencies
+    table: list[Mapping[Any, Any]] = [
+        {
+            int(allele_id): float(frequencies[deme_index, allele_id])
+            for allele_id in np.flatnonzero(frequencies[deme_index])
+        }
+        for deme_index in range(frequencies.shape[0])
     ]
     weights: Sequence[float] | None = (
         params.population_sizes if params.deme_weighting == "size" else None

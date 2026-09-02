@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from fim import engine
 from fim.engine import (
     FinalReport,
     GenerationalBackend,
@@ -26,6 +27,7 @@ from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.operators import _population_sizes
 from fim.model.params import ConvergenceCombinator, SimulationParams
 from fim.model.state import ModelState
+from fim.model.vectorized import build_vectorized_state, vectorized_state_to_model_state
 from fim.persistence.store import InMemoryTrajectoryStore
 
 
@@ -2121,17 +2123,19 @@ def test_generational_vector_backend_matches_lineal_exactly_without_migration() 
 
     The real, end-to-end proof this project's own operator-level exact-
     match tests (`test/model/test_vectorized.py`) never actually
-    exercised: `fim.engine.VectorizedAdvancer` round-trips each lane's
-    own state through `build_vectorized_state`/`vectorized_state_to_
-    model_state` every generation (`ReplicaLane`'s own docstring), and
-    a real correctness bug in the first of those — re-deriving finite-
+    exercised: `fim.engine.VectorizedAdvancer` calls `build_vectorized_
+    state` once, on a lane's own first tick, then steps that cached
+    `VectorizedState` (`ReplicaLane.vectorized_state`) directly for
+    every generation after — and a real correctness bug in the earlier,
+    per-generation-rebuild version of that path — re-deriving finite-
     alleles minted bookkeeping from scratch every generation, silently
     forgetting any allele minted and then driven extinct within the
     same generation it was minted in — meant this never actually held,
     even though every individual operator had been proven exact in
     isolation. Fixed by carrying the bookkeeping forward
-    (`build_vectorized_state`'s own `previous_locus_states` argument);
-    confirmed directly, not assumed, with `m=0` here specifically to
+    (`build_vectorized_state`'s own `previous_locus_states` argument,
+    still used for that one first-tick call); confirmed directly, not
+    assumed, with `m=0` here specifically to
     remove `migrate`'s own floating-point reduction-order divergence
     from the picture (`migrate_vectorized`'s dense matmul and `migrate`'s
     dict-based blend are two different, both-deterministic reduction
@@ -2157,6 +2161,84 @@ def test_generational_vector_backend_matches_lineal_exactly_without_migration() 
     assert list(vector_store.read(vector_result.run_id)) == list(
         lineal_store.read(lineal_result.run_id)
     )
+
+
+def test_vectorized_advancer_builds_a_lanes_state_only_once_each_way(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`VectorizedAdvancer` converts a lane's state once each way, not every tick.
+
+    Regression test: `advance()` used to call `build_vectorized_state`
+    (rebuilding `VectorizedState` from `ModelState`) and `vectorized_
+    state_to_model_state` (the reverse) on *every* generation, for
+    every lane — a real, measured cost, larger than the biology it sat
+    next to at a large capacity (design doc `20260901-claude-sonnet-5-
+    fim-engine-backend-factory-design.md` §11's own reopened "across-
+    generation fusion" question). `ReplicaLane.vectorized_state` now
+    caches the live array state across generations, so each direction
+    should be paid exactly once per lane for a whole run: forward, on
+    that lane's own first tick; backward, once it stops. Counts real
+    calls by wrapping (not replacing) both functions, so this also
+    exercises a real multi-generation, multi-replicate batch end to
+    end, not a mocked-out one.
+
+    `lane.state` (`ModelState`) itself is checked too: it must stay
+    exactly the generation-zero object `_build_replica_lane` built,
+    completely untouched, for every tick before a lane stops — proof
+    that nothing mid-run reassigns it via some other path than the one
+    counted call above.
+    """
+    pytest.importorskip("numba")
+    params = replace(
+        _finite_alleles_vector_params(d=3), n_replicates=3, max_generations=6
+    )
+
+    build_call_count = 0
+
+    def _counting_build_vectorized_state(*args: object, **kwargs: object) -> object:
+        nonlocal build_call_count
+        build_call_count += 1
+        return build_vectorized_state(*args, **kwargs)  # type: ignore[arg-type]
+
+    reconstruct_call_count = 0
+
+    def _counting_vectorized_state_to_model_state(
+        *args: object, **kwargs: object
+    ) -> object:
+        nonlocal reconstruct_call_count
+        reconstruct_call_count += 1
+        return vectorized_state_to_model_state(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(
+        engine, "build_vectorized_state", _counting_build_vectorized_state
+    )
+    monkeypatch.setattr(
+        engine,
+        "vectorized_state_to_model_state",
+        _counting_vectorized_state_to_model_state,
+    )
+
+    advancer = VectorizedAdvancer()
+    store = InMemoryTrajectoryStore()
+    lanes = [
+        _build_replica_lane(params, index, None, store, _clock)
+        for index in range(params.n_replicates)
+    ]
+    initial_model_states = {lane.replica_index: lane.state for lane in lanes}
+
+    while any(lane.active for lane in lanes):
+        active_lanes = [lane for lane in lanes if lane.active]
+        newly_stopped = advancer.advance(active_lanes, store)
+        for lane in active_lanes:
+            if lane not in newly_stopped:
+                assert lane.state is initial_model_states[lane.replica_index]
+        for lane in newly_stopped:
+            lane.active = False
+
+    assert build_call_count == params.n_replicates
+    assert reconstruct_call_count == params.n_replicates
+    for lane in lanes:
+        assert lane.state is not initial_model_states[lane.replica_index]
 
 
 def test_generational_vector_backend_matches_lineal_statistically() -> None:

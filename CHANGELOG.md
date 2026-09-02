@@ -80,6 +80,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   every tick regardless of thread count. Real multi-thread scaling
   remains limited for other reasons (documented in the design doc, not
   yet addressed).
+- `"generational-vector"` (`VectorizedAdvancer`) no longer reconstructs
+  a `ModelState` every generation just to immediately read a statistic
+  off it — a real, measured ~37% wall-clock reduction at a large
+  finite-alleles capacity, where that reconstruction alone was larger
+  than the actual migrate/mutate/drift step it sat next to. Convergence
+  statistics are now computed directly from the same dense array
+  representation the step itself already produces; a real `ModelState`
+  is materialized once per replicate, only when it stops, not once per
+  generation. No change to what any run computes (existing bit-for-bit
+  and statistical parity tests against `"lineal"` pass unchanged).
 
 ---
 
