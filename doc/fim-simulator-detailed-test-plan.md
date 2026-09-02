@@ -318,35 +318,46 @@ tested directly, independent of `SimulationParams`'s config-sugar layer
   and a hand-authored one-based sparse neighbor map (`{deme: {neighbor:
   weight}}`) is accepted directly; both malformed-shape variants are
   validated with field-naming errors.
-- **Replicate-batch keys** (design §9): n<sub>replicates</sub>,
-  replicate_minimum, and replicate_confidence each apply their
-  documented default, and a zero replicate count, a negative or
+- **Replicate-batch keys** (design §9): n<sub>replicates</sub> defaults to
+  `200` and replicate_tolerance to `0.01` (matching convergence_tolerance's
+  own default) — not `1`/unset — so an unconfigured run computes a real
+  confidence interval by default rather than a single point estimate;
+  replicate_minimum and replicate_confidence keep their own documented
+  defaults (`10`, `0.95`). A zero replicate count, a negative or
   non-finite replicate_tolerance, a replicate_minimum below 2, and an
   unsupported confidence level are each rejected by name.
-  replicate_tolerance round-trips when set and stays absent from
-  to_dict() when unset, so an adaptive batch is distinguishable from a
-  fixed-count one in a persisted manifest.
-- **Stopping rules that can never fire**: two
-  cross-field checks, both raised from _validate_stopping_rules.
-  convergence_window is rejected once it exceeds
+  replicate_tolerance always round-trips through to_dict() now
+  (`null` for an explicit `None`, never omitted) — omitting it when
+  `None` was safe only while `None` was also the field's own default;
+  once it stopped being the default, an absent key and an explicit
+  `null` stopped meaning the same thing, so `to_dict()` must say which
+  one it is rather than collapsing them.
+- **A stopping rule that can never fire**: convergence_window is
+  rejected (_validate_stopping_rules) once it exceeds
   max_generations + 1 — the most generations a run can ever record
   (generation 0 plus max_generations steps) — since a trailing
   window that large could never fill before the generation cap ends
-  the run. replicate_minimum is rejected once it exceeds
-  n<sub>replicates</sub> whenever replicate_tolerance is set and
-  n<sub>replicates</sub> > 1, since the adaptive criterion could never even be
-  evaluated before the batch's own n<sub>replicates</sub> cap ends it (the
-  n<sub>replicates</sub> > 1 guard exists only so `fim.engine`'s internal
-  per-replicate `dataclasses.replace()` reconstruction — which forces
-  n<sub>replicates</sub>=1 while copying the two fields through unchanged —
-  does not spuriously trip this check on every adaptive batch's own
-  replicates; the adaptive machinery is provably inert at
-  n<sub>replicates</sub> == 1). Covered by a parametrized case in this file's
-  own scalar-contract table (window) and by [`test/engine/test_engine.py::test_replicate_minimum_exceeding_n_replicates_is_rejected`](../test/TESTS.md#engine.test_engine.test_replicate_minimum_exceeding_n_replicates_is_rejected)
-  (replicate), which also documents the *legal* neighbor this rule is
+  the run. Covered by a parametrized case in this file's own
+  scalar-contract table.
+- **replicate_minimum above n<sub>replicates</sub> is clamped, not
+  rejected**: previously a `_validate_stopping_rules` rejection
+  (structurally the same shape as the convergence_window check above —
+  the adaptive criterion could never be evaluated before the batch's
+  own n<sub>replicates</sub> cap ends it) — changed once replicate_tolerance
+  stopped defaulting to `None`: the identical combination now arises
+  from nothing more deliberate than setting a small n<sub>replicates</sub>
+  without separately thinking about replicate_minimum at all, found
+  live when every GUI batch test that only ever sets n<sub>replicates</sub>
+  failed exactly this way in CI (`jost-finite-island-model` run
+  33656031751). `SimulationParams.__post_init__` now silently clamps
+  replicate_minimum down to n<sub>replicates</sub> instead (a no-op at
+  n<sub>replicates</sub> == 1, where the adaptive machinery is provably
+  inert regardless). Covered by [`test_replicate_minimum_above_n_replicates_is_clamped_not_rejected`](../test/TESTS.md#model.test_params.test_replicate_minimum_above_n_replicates_is_clamped_not_rejected)
+  and, end to end, by [`test/engine/test_engine.py::test_replicate_minimum_above_n_replicates_runs_to_completion`](../test/TESTS.md#engine.test_engine.test_replicate_minimum_above_n_replicates_runs_to_completion),
+  which also documents the *legal* neighbor this behavior is
   distinguished from — [`test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic`](../test/TESTS.md#engine.test_engine.test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic),
-  where the criterion is evaluable but never satisfied
-  rather than never evaluable at all.
+  where the criterion is evaluable but never satisfied rather than
+  never evaluable at all.
 - **Explicit initial frequencies (p<sub>0</sub>)**: normalized and losslessly
   serialized; the parser names malformed inputs precisely; shape and
   probability-vector validation is exercised per deme/locus; support

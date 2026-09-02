@@ -354,20 +354,6 @@ def test_mu_and_mu_b_are_mutually_exclusive_and_one_is_required() -> None:
         ({"replicate_tolerance": -1.0}, "non-negative"),
         ({"replicate_tolerance": float("nan")}, "finite"),
         ({"replicate_minimum": 1}, "replicate_minimum"),
-        (
-            # replicate_minimum unreachable within n_replicates — the
-            # engine-flavored regression test for this same rule lives in
-            # `test/engine/test_engine.py::
-            # test_replicate_minimum_exceeding_n_replicates_is_rejected`,
-            # which also documents the *legal* n_replicates-cap fallback
-            # this rule is distinguished from.
-            {
-                "n_replicates": 3,
-                "replicate_minimum": 100,
-                "replicate_tolerance": 0.0,
-            },
-            "replicate_minimum cannot exceed n_replicates",
-        ),
         ({"replicate_confidence": 0.80}, "replicate_confidence"),
         ({"migrant_sampling": "binomial"}, "migrant_sampling"),
         ({"mutation_model": "stepwise"}, "mutation_model"),
@@ -411,6 +397,51 @@ def test_post_init_validation_covers_all_scalar_contracts(
     """Every scalar validation rule rejects its documented invalid input."""
     with pytest.raises(ValueError, match=message):
         SimulationParams.from_mapping({**_valid_config(), **updates})
+
+
+def test_replicate_minimum_above_n_replicates_is_clamped_not_rejected() -> None:
+    """An unreachable replicate_minimum is silently capped at n_replicates.
+
+    Previously rejected outright (`ValueError`) — changed once
+    `replicate_tolerance` stopped defaulting to `None`: the same
+    combination now arises from nothing more deliberate than setting a
+    small `n_replicates` without separately thinking about `replicate_
+    minimum` at all (this project's own CI found every GUI batch test
+    hitting exactly this, `jost-finite-island-model` run 33656031751).
+    The engine-flavored regression test for this same behavior lives in
+    `test/engine/test_engine.py::
+    test_replicate_minimum_above_n_replicates_runs_to_completion`.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "n_replicates": 3,
+            "replicate_minimum": 100,
+            "replicate_tolerance": 0.0,
+        }
+    )
+    assert params.n_replicates == 3
+    assert params.replicate_minimum == 3
+
+    # A replicate_minimum already <= n_replicates is left exactly as given.
+    unaffected = SimulationParams.from_mapping(
+        {
+            **_valid_config(),
+            "n_replicates": 10,
+            "replicate_minimum": 3,
+            "replicate_tolerance": 0.0,
+        }
+    )
+    assert unaffected.replicate_minimum == 3
+
+    # n_replicates=1 is untouched regardless — adaptive stopping is
+    # already inert there, and replicate_minimum's own floor (>= 2)
+    # would otherwise make a naive `min(replicate_minimum, n_replicates)`
+    # produce an out-of-range value.
+    scalar = SimulationParams.from_mapping(
+        {**_valid_config(), "n_replicates": 1, "replicate_minimum": 100}
+    )
+    assert scalar.replicate_minimum == 100
 
 
 def test_replicate_tolerance_round_trips_unconditionally() -> None:

@@ -232,7 +232,9 @@ class SimulationParams:
         replicate_minimum: Fewest replicates before tightness is even
             checked, guarding against a lucky-early-tight fluke — the
             replicate-layer analog of `convergence_window`. Only
-            meaningful when `replicate_tolerance` is set.
+            meaningful when `replicate_tolerance` is set; silently
+            clamped down to `n_replicates` if given larger, rather than
+            rejected (`__post_init__`'s own comment has the reasoning).
         replicate_confidence: Two-tailed confidence level for
             `replicate_tolerance`'s interval — ``0.90``, ``0.95`` (the
             default), or ``0.99``. Only meaningful when
@@ -388,9 +390,11 @@ class SimulationParams:
         _validate_stopping_rules(
             convergence_window=self.convergence_window,
             max_generations=self.max_generations,
-            replicate_tolerance=self.replicate_tolerance,
-            replicate_minimum=self.replicate_minimum,
-            n_replicates=self.n_replicates,
+        )
+        object.__setattr__(
+            self,
+            "replicate_minimum",
+            _clamp_replicate_minimum(self.replicate_minimum, self.n_replicates),
         )
         if self.replicate_confidence not in {0.90, 0.95, 0.99}:
             raise ValueError("replicate_confidence must be 0.90, 0.95, or 0.99")
@@ -1299,32 +1303,38 @@ def _validate_stopping_rules(
     *,
     convergence_window: int,
     max_generations: int,
-    replicate_tolerance: float | None,
-    replicate_minimum: int,
-    n_replicates: int,
 ) -> None:
-    """Reject a stopping rule that structurally can never fire.
+    """Reject a within-run stopping rule that structurally can never fire.
 
-    Both checks compare a trailing-window size against the largest
-    sample that rule's own criterion could ever see — not whether
-    convergence is *likely*, only whether it is *possible* at all.
-    Accepting either misconfiguration would silently and permanently
-    change nothing about the run's actual behavior (it already always
-    hits its cap), while reporting that outcome as an ordinary,
-    unremarkable non-convergence rather than the unreachable stopping
-    condition it actually is.
+    Compares the trailing-window size against the largest sample that
+    criterion could ever see — not whether convergence is *likely*,
+    only whether it is *possible* at all. Accepting the misconfiguration
+    would silently and permanently change nothing about the run's own
+    actual behavior (it already always hits its cap), while reporting
+    that outcome as an ordinary, unremarkable non-convergence rather
+    than the unreachable stopping condition it actually is.
+
+    The replicate-layer analog of this check (`replicate_minimum`
+    exceeding `n_replicates`) used to live here too, as a hard
+    rejection — removed (`__post_init__` now silently clamps
+    `replicate_minimum` down to `n_replicates` instead, see its own
+    comment there) once `replicate_tolerance` stopped defaulting to
+    `None`: rejecting became a landmine for any caller who set a small
+    `n_replicates` without separately thinking about `replicate_
+    minimum` at all, not just the deliberate-opt-in misconfiguration it
+    was built to catch — found live, not assumed (every GUI batch test
+    that only ever sets `n_replicates` failed exactly this way in CI,
+    `jost-finite-island-model` run 33656031751, the first time this
+    code path ran anywhere other than this project's own test suite,
+    which had — by then — already been taught to set every relevant
+    field explicitly everywhere it cared about batch size).
 
     Args:
         convergence_window: Trailing within-run stability-window length.
         max_generations: Hard generation safety cap.
-        replicate_tolerance: Opt-in adaptive-replicate-batching half-width,
-            or ``None`` when unused.
-        replicate_minimum: Fewest replicates before adaptive tightness is
-            checked.
-        n_replicates: Replicate-count hard cap.
 
     Raises:
-        ValueError: If either window could never fill before its cap.
+        ValueError: If the window could never fill before the cap.
     """
     # Generation 0 is always recorded before the run loop's first step, so
     # a run watching `max_generations` records at most `max_generations +
@@ -1338,26 +1348,33 @@ def _validate_stopping_rules(
             "window this large can never fill before the generation cap "
             "stops the run, so convergence could never be detected)"
         )
-    # Unlike the generation-indexed window above, replicates are numbered
-    # 1 .. n_replicates (fim.engine's batch loop passes
-    # `replicate_index + 1`), so at most `n_replicates` -- not
-    # `n_replicates + 1` -- replicate outcomes are ever recorded. Gated on
-    # `replicate_tolerance` being set *and* `n_replicates > 1`:
-    # replicate_minimum's default (10) would otherwise reject the
-    # ordinary n_replicates=1 default, and fim.engine's own per-replicate
-    # reconstruction (`dataclasses.replace(params, ..., n_replicates=1)`,
-    # which copies replicate_minimum/replicate_tolerance through
-    # unchanged) would otherwise reject every adaptive batch's own
-    # replicates -- adaptive stopping is already inert at n_replicates=1
-    # regardless of these two fields' values, since `fim()` returns via
-    # `_run_one` before ever constructing a replicate monitor.
-    if (
-        replicate_tolerance is not None
-        and n_replicates > 1
-        and replicate_minimum > n_replicates
-    ):
-        raise ValueError(
-            "replicate_minimum cannot exceed n_replicates (adaptive "
-            "stopping could never be evaluated before the replicate cap "
-            "ends the batch)"
-        )
+
+
+_MIN_MEANINGFUL_REPLICATE_COUNT: Final = 2
+
+
+def _clamp_replicate_minimum(replicate_minimum: int, n_replicates: int) -> int:
+    """Cap replicate_minimum at n_replicates, silently, not by rejecting the config.
+
+    A `replicate_minimum` above `n_replicates` would make the adaptive
+    stop structurally unreachable (the hard cap always ends the batch
+    first) -- clamped here rather than raised, since this project's own
+    CI found it can arise from nothing more deliberate than a caller
+    setting `n_replicates` to something small without separately
+    thinking about `replicate_minimum` at all (every GUI batch test
+    that only ever sets `n_replicates` failed exactly this way,
+    `jost-finite-island-model` run 33656031751, the first time this code
+    path ran anywhere other than this project's own test suite — which
+    had, by then, already been taught to set every relevant field
+    explicitly). The ordinary case now that `replicate_tolerance`
+    defaults to a real value, not `None` — this interaction used to be
+    a deliberate opt-in combination worth flagging as a likely mistake;
+    it no longer reliably is one. A no-op whenever `replicate_minimum`
+    is already `<= n_replicates`, and at `n_replicates == 1` regardless
+    of this field's own value (adaptive stopping is already inert
+    there, since `fim()` returns via `_run_one` before ever
+    constructing a replicate monitor).
+    """
+    if n_replicates < _MIN_MEANINGFUL_REPLICATE_COUNT:
+        return replicate_minimum
+    return min(replicate_minimum, n_replicates)

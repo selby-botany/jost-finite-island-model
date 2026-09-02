@@ -2135,26 +2135,34 @@ def test_replicate_tolerance_can_stop_before_the_cap() -> None
 
 A generous tolerance stops as soon as `replicate_minimum` is reached.
 
-<a id="engine.test_engine.test_replicate_minimum_exceeding_n_replicates_is_rejected"></a>
+<a id="engine.test_engine.test_replicate_minimum_above_n_replicates_runs_to_completion"></a>
 
-#### test\_replicate\_minimum\_exceeding\_n\_replicates\_is\_rejected
+#### test\_replicate\_minimum\_above\_n\_replicates\_runs\_to\_completion
 
 ```python
-def test_replicate_minimum_exceeding_n_replicates_is_rejected() -> None
+def test_replicate_minimum_above_n_replicates_runs_to_completion() -> None
 ```
 
-`replicate_minimum` unreachable within `n_replicates` fails at construction.
+`replicate_minimum` above `n_replicates` is clamped, not rejected.
 
-Regression test: `replicate_minimum=100` with `n_replicates=3`
-used to be accepted and silently fall back to the `n_replicates`
-hard cap every time (adaptive stopping could never even be
-evaluated, let alone fire) — a config that can never do what it
-describes is now rejected up front instead of running to completion
-and reporting an ordinary-looking "batch ended" result.
-`test_replicate_tolerance_never_stops_on_a_permanently_undefined_
-statistic` covers the *legal* way a batch falls back to the
-`n_replicates` cap (a criterion that is evaluable but never
-satisfied, rather than one that is never evaluable at all).
+Regression test, superseding an earlier version of this same test
+that asserted the *opposite*: `replicate_minimum=100` with
+`n_replicates=3` used to raise `ValueError` at construction
+(adaptive stopping could never even be evaluated, let alone fire,
+so the config was rejected as describing something structurally
+impossible). Changed once `replicate_tolerance` stopped defaulting
+to `None` (`fim.model.params.SimulationParams.__post_init__`'s own
+comment has the full reasoning): the identical combination now
+arises from nothing more deliberate than setting a small `n_
+replicates` without separately thinking about `replicate_minimum`
+at all — found live, not assumed, when every GUI batch test that
+only ever sets `n_replicates` failed exactly this way in CI
+(`jost-finite-island-model` run 33656031751). `replicate_minimum`
+is now silently clamped down to `n_replicates` instead, so the
+adaptive check becomes reachable at the last possible replicate
+rather than never — this test confirms the clamp (`params.
+replicate_minimum == 3`, not `100`) and that the batch actually
+completes with the full `n_replicates` count, not fewer.
 
 <a id="engine.test_engine.test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic"></a>
 
@@ -7848,20 +7856,6 @@ Exactly one of `mu`/`mu_b` must be given — never both, never neither.
         ({
             "replicate_minimum": 1
         }, "replicate_minimum"),
-        (
-            # replicate_minimum unreachable within n_replicates — the
-            # engine-flavored regression test for this same rule lives in
-            # `test/engine/test_engine.py::
-            # test_replicate_minimum_exceeding_n_replicates_is_rejected`,
-            # which also documents the *legal* n_replicates-cap fallback
-            # this rule is distinguished from.
-            {
-                "n_replicates": 3,
-                "replicate_minimum": 100,
-                "replicate_tolerance": 0.0,
-            },
-            "replicate_minimum cannot exceed n_replicates",
-        ),
         ({
             "replicate_confidence": 0.80
         }, "replicate_confidence"),
@@ -7935,6 +7929,27 @@ def test_post_init_validation_covers_all_scalar_contracts(
 ```
 
 Every scalar validation rule rejects its documented invalid input.
+
+<a id="model.test_params.test_replicate_minimum_above_n_replicates_is_clamped_not_rejected"></a>
+
+#### test\_replicate\_minimum\_above\_n\_replicates\_is\_clamped\_not\_rejected
+
+```python
+def test_replicate_minimum_above_n_replicates_is_clamped_not_rejected(
+) -> None
+```
+
+An unreachable replicate_minimum is silently capped at n_replicates.
+
+Previously rejected outright (`ValueError`) — changed once
+`replicate_tolerance` stopped defaulting to `None`: the same
+combination now arises from nothing more deliberate than setting a
+small `n_replicates` without separately thinking about `replicate_
+minimum` at all (this project's own CI found every GUI batch test
+hitting exactly this, `jost-finite-island-model` run 33656031751).
+The engine-flavored regression test for this same behavior lives in
+`test/engine/test_engine.py::
+test_replicate_minimum_above_n_replicates_runs_to_completion`.
 
 <a id="model.test_params.test_replicate_tolerance_round_trips_unconditionally"></a>
 

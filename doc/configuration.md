@@ -486,10 +486,11 @@ replicate_minimum: 20
 The fewest replicates before replicate_tolerance is even checked — the
 replicate-layer analog of convergence_window, guarding against a
 lucky-early-tight fluke from too small a sample. Only meaningful when
-replicate_tolerance is set. Whenever it is set together with
-n<sub>replicates</sub> greater than one, replicate_minimum is rejected if it
-exceeds n<sub>replicates</sub>: adaptive stopping could never be evaluated
-before the replicate cap ends the batch.
+replicate_tolerance is set. A value larger than n<sub>replicates</sub> is
+silently capped at n<sub>replicates</sub> rather than rejected — setting
+n<sub>replicates</sub> to something small without separately thinking about
+replicate_minimum is an ordinary, common thing to do, not a mistake
+worth an error for.
 
 ### replicate_confidence
 
@@ -645,7 +646,7 @@ on your own hardware.
 | replicate_tolerance negative or non-finite | rejected |
 | replicate_minimum less than 2 | rejected |
 | convergence_window greater than max_generations + 1 | rejected |
-| replicate_minimum greater than n<sub>replicates</sub> (with replicate_tolerance set and n<sub>replicates</sub> > 1) | rejected |
+| replicate_minimum greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
 | replicate_confidence not `0.90`, `0.95`, or `0.99` | rejected |
 | engine_backend not `lineal`, `generational`, `generational-vector`, or `auto` | rejected |
 | jit not `off` or `numba` | rejected |

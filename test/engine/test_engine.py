@@ -224,31 +224,41 @@ def test_replicate_tolerance_can_stop_before_the_cap() -> None:
     assert len(output) == 3
 
 
-def test_replicate_minimum_exceeding_n_replicates_is_rejected() -> None:
-    """`replicate_minimum` unreachable within `n_replicates` fails at construction.
+def test_replicate_minimum_above_n_replicates_runs_to_completion() -> None:
+    """`replicate_minimum` above `n_replicates` is clamped, not rejected.
 
-    Regression test: `replicate_minimum=100` with `n_replicates=3`
-    used to be accepted and silently fall back to the `n_replicates`
-    hard cap every time (adaptive stopping could never even be
-    evaluated, let alone fire) — a config that can never do what it
-    describes is now rejected up front instead of running to completion
-    and reporting an ordinary-looking "batch ended" result.
-    `test_replicate_tolerance_never_stops_on_a_permanently_undefined_
-    statistic` covers the *legal* way a batch falls back to the
-    `n_replicates` cap (a criterion that is evaluable but never
-    satisfied, rather than one that is never evaluable at all).
+    Regression test, superseding an earlier version of this same test
+    that asserted the *opposite*: `replicate_minimum=100` with
+    `n_replicates=3` used to raise `ValueError` at construction
+    (adaptive stopping could never even be evaluated, let alone fire,
+    so the config was rejected as describing something structurally
+    impossible). Changed once `replicate_tolerance` stopped defaulting
+    to `None` (`fim.model.params.SimulationParams.__post_init__`'s own
+    comment has the full reasoning): the identical combination now
+    arises from nothing more deliberate than setting a small `n_
+    replicates` without separately thinking about `replicate_minimum`
+    at all — found live, not assumed, when every GUI batch test that
+    only ever sets `n_replicates` failed exactly this way in CI
+    (`jost-finite-island-model` run 33656031751). `replicate_minimum`
+    is now silently clamped down to `n_replicates` instead, so the
+    adaptive check becomes reachable at the last possible replicate
+    rather than never — this test confirms the clamp (`params.
+    replicate_minimum == 3`, not `100`) and that the batch actually
+    completes with the full `n_replicates` count, not fewer.
     """
-    with pytest.raises(
-        ValueError, match="replicate_minimum cannot exceed n_replicates"
-    ):
-        SimulationParams.from_mapping(
-            {
-                **_tiny_config(),
-                "n_replicates": 3,
-                "replicate_minimum": 100,
-                "replicate_tolerance": 0.0,
-            }
-        )
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 3,
+            "replicate_minimum": 100,
+            "replicate_tolerance": 1000.0,
+        }
+    )
+    assert params.replicate_minimum == 3
+
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+    assert len(output) == 3
 
 
 def test_replicate_tolerance_never_stops_on_a_permanently_undefined_statistic() -> None:

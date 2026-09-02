@@ -413,10 +413,11 @@ replicate_minimum: 20
 <p>The fewest replicates before replicate_tolerance is even checked — the
 replicate-layer analog of convergence_window, guarding against a
 lucky-early-tight fluke from too small a sample. Only meaningful when
-replicate_tolerance is set. Whenever it is set together with
-n<sub>replicates</sub> greater than one, replicate_minimum is rejected if it
-exceeds n<sub>replicates</sub>: adaptive stopping could never be evaluated
-before the replicate cap ends the batch.</p>
+replicate_tolerance is set. A value larger than n<sub>replicates</sub> is
+silently capped at n<sub>replicates</sub> rather than rejected — setting
+n<sub>replicates</sub> to something small without separately thinking about
+replicate_minimum is an ordinary, common thing to do, not a mistake
+worth an error for.</p>
 <h3 id="replicateconfidence">replicate_confidence</h3>
 <ul>
 <li><strong>Type:</strong> <code>0.90</code>, <code>0.95</code>, or <code>0.99</code></li>
@@ -626,8 +627,8 @@ on your own hardware.</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>replicate_minimum greater than n<sub>replicates</sub> (with replicate_tolerance set and n<sub>replicates</sub> &gt; 1)</td>
-<td>rejected</td>
+<td>replicate_minimum greater than n<sub>replicates</sub></td>
+<td>silently capped at n<sub>replicates</sub></td>
 </tr>
 <tr>
 <td>replicate_confidence not <code>0.90</code>, <code>0.95</code>, or <code>0.99</code></td>

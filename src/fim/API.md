@@ -5619,7 +5619,9 @@ functions that actually use each one.
 - `replicate_minimum` - Fewest replicates before tightness is even
   checked, guarding against a lucky-early-tight fluke — the
   replicate-layer analog of `convergence_window`. Only
-  meaningful when `replicate_tolerance` is set.
+  meaningful when `replicate_tolerance` is set; silently
+  clamped down to `n_replicates` if given larger, rather than
+  rejected (`__post_init__`'s own comment has the reasoning).
 - `replicate_confidence` - Two-tailed confidence level for
   `replicate_tolerance`'s interval — ``0.90``, ``0.95`` (the
   default), or ``0.99``. Only meaningful when
