@@ -4,6 +4,7 @@
   - [Why generated files exist at all](#why-generated-files-exist-at-all)
   - [At a glance](#at-a-glance)
   - [`benchmark-engines`](#benchmark-engines)
+  - [`calibrate-auto-threshold`](#calibrate-auto-threshold)
   - [`calibrate-statistical-bands`](#calibrate-statistical-bands)
   - [`check-doc-links`](#check-doc-links)
   - [`compare-against-hierfstat`](#compare-against-hierfstat)
@@ -13,7 +14,7 @@
   - [`validate-repository`](#validate-repository)
   - [Related documents](#related-documents)
 
-These seven commands keep the project trustworthy: they make sure the
+These eight commands keep the project trustworthy: they make sure the
 documentation you read matches the code that actually runs, that a
 release's own history is recorded accurately, and that no credential or
 badly formed file ever gets committed. None of them run a simulation --
@@ -60,6 +61,7 @@ run by hand.
 | Command | What it does |
 |---|---|
 | [`benchmark-engines`](#benchmark-engines) | Times how long each `engine_backend` choice takes as one setting (deme count, population size, mutation/migration rate, locus length) sweeps across a range, so a choice between them can be made from evidence instead of a guess |
+| [`calibrate-auto-threshold`](#calibrate-auto-threshold) | Measures, on your own machine, the deme count above which `engine_backend: auto` should switch engines — the shipped default was measured on a different machine and this project's own history has already found it can go stale |
 | [`calibrate-statistical-bands`](#calibrate-statistical-bands) | Re-measures how much random variation is normal for the three published-science validation scenarios, so the tests that check the simulator against them use an honest, evidence-based tolerance |
 | [`check-doc-links`](#check-doc-links) | Confirms every link between documentation pages actually goes somewhere, and that no page is orphaned with nothing linking to it |
 | [`compare-against-hierfstat`](#compare-against-hierfstat) | Runs an independently-written simulator (hierfstat, an R package, inside Docker) alongside this project's own, and prints how closely the two agree |
@@ -137,6 +139,59 @@ timing numbers are only meaningful for the machine that produced them;
 a finding worth keeping belongs in prose (a design document, an issue,
 a commit message), the way every earlier benchmark sweep in this
 project's own history was recorded.
+
+## `calibrate-auto-threshold`
+
+**What it does:** Reuses `benchmark-engines`'s own measuring code to
+sweep deme count (`d`) specifically, comparing `"generational"` against
+`"generational-vector"` at each value, and reports the smallest `d`
+above which `"generational-vector"` reliably wins on your own machine
+right now — the number `engine_backend: auto` should actually use for
+its own `auto_vector_min_d` setting.
+
+**Why it matters:** `auto_vector_min_d`'s own shipped default (`35`)
+was measured once, on one specific machine, before this project's own
+`drift` step changed in a way that turned out to shift the real
+crossover point materially (see `doc/fim-simulator-design.md`'s own
+§4.6/§9.1) — a stale number a config quietly trusts unless someone
+re-measures it. This script is that re-measurement, made real and
+repeatable rather than a one-off, unretained pass whose own method
+nobody could check later. It is honest about a real possibility this
+project's own history has already run into on some machines:
+`"generational-vector"` sometimes wins at *every* deme count tested,
+with no crossover to find in that range at all — this script says so
+plainly (and suggests trying smaller values) rather than picking the
+smallest number it happened to test and presenting that as a real
+measurement.
+
+**When to run it:** Whenever you want a real, evidence-based
+`auto_vector_min_d` for the specific machine your own simulations
+actually run on, or whenever you suspect a code change might have
+moved the threshold (this project's own history already has one
+example of exactly that). Not run automatically by any test, build, or
+release step, for the same reason `benchmark-engines` is not — timing
+numbers depend on how busy your own machine is at the moment, not on
+the code, so a result belongs to a deliberate, by-hand run on an
+otherwise idle machine.
+
+**Usage:**
+
+```console
+dev/bin/calibrate-auto-threshold \
+    --d-values 4,10,20,30,40,60,80,120 --replicates 16 \
+    --generations 100 --trials 3 \
+    --output /tmp/auto-vector-min-d-evidence.json
+```
+
+Every flag has a sensible default (shown by `--help`); running the
+command with no arguments at all sweeps a reasonable default range of
+deme counts. If it finds a real threshold, add `auto_vector_min_d:
+<the number it found>` to your own YAML config to actually use it —
+this script only measures and reports; it does not change any config
+file, cache, or default on your behalf. `--output` is optional, the
+same as `benchmark-engines`'s own — the file it writes is meant for you
+to read, not for this project to commit or for `fim()` to load
+automatically.
 
 ## `calibrate-statistical-bands`
 

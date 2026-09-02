@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+"""Measure this machine's own `auto_vector_min_d` crossover, locally.
+
+`engine_backend="auto"` picks `"generational-vector"` over
+`"generational"` once a run's own deme count (`d`) clears
+`auto_vector_min_d` (`fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D`,
+shipped default `35`). That default was measured once, on one specific
+machine, before Stage F8's own RNG-unification work changed
+`"generational"`'s own real-world performance materially (design doc
+`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` S11) --
+a same-session re-measurement (`dev/bin/benchmark-engines`) already
+found the shipped `35` is very likely stale evidence. This script is
+the "measure it locally, on the machine that is actually going to run
+it" answer, matching `dev/bin/calibrate-statistical-bands`'s own
+established precedent (a real, versioned measurement procedure, not a
+one-off, unretained pass) -- applied to a performance threshold instead
+of a statistical tolerance band.
+
+**What "the crossover" means, precisely, and why this script may not
+find one.** At each swept `d`, this script measures `"generational"`
+(`jit="off"`, matching what `engine_backend="auto"` actually builds --
+`"auto"` never sets `jit` on your behalf) against `"generational-
+vector"`, both at the same batch size. The *sustained* crossover is the
+smallest swept `d` at or above which `"generational-vector"` wins at
+every larger swept `d` too -- a single flip is not enough, since this
+project's own benchmark history already found run-to-run noise real
+enough to produce one. **If `"generational-vector"` wins at every `d`
+tested, there is no crossover to report in that range** -- this
+project's own d-sweep and N-sweep evidence (design doc S10 item 10b)
+already found exactly this on one machine, at every tested `d` from 4
+to 80. This script reports that honestly (a null threshold, with the
+raw ratios, not a fabricated number) rather than picking the smallest
+tested value and calling it a measurement. Locus length/allele-space
+capacity is a real, separate, *not* handled by this script's own
+`d`-only sweep: the same S10 item 10b found a genuine crossover on that
+axis instead, one `engine_backend="auto"` does not currently account
+for at all (it reads only `d`) -- recorded as a real gap, not silently
+folded into this tool's own scope.
+
+This script never writes anything `fim()` itself reads automatically --
+`auto_vector_min_d` is a real `SimulationParams` field now
+(`doc/configuration.md`), so applying a calibrated value means adding
+`auto_vector_min_d: <measured value>` to your own YAML config, or
+passing it to `fim()` directly; there is no separate cache-loading
+wiring to build or maintain, and no cache-staleness question to design
+around (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+S11's own "not scoped" note on this is resolved by simply not needing
+one).
+
+Usage:
+    dev/bin/calibrate-auto-threshold \\
+        --d-values 4,10,20,30,40,60,80,120 --replicates 16 \\
+        --generations 100 --trials 3 \\
+        --output /tmp/auto-vector-min-d-evidence.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import platform
+import subprocess
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+from types import ModuleType
+
+ROOT = Path(__file__).resolve().parents[2]
+BENCHMARK_MODULE_PATH = ROOT / "dev" / "bin" / "benchmark-engines"
+
+
+def _load_benchmark_module() -> ModuleType:
+    """Import `dev/bin/benchmark-engines` by file path.
+
+    Loaded directly from its own path (matching `dev/bin/calibrate-
+    statistical-bands`'s own `_load_scenario_module` precedent) rather
+    than duplicating its `_base_params`/`_run_once`/`_median_of` helpers
+    a second, driftable way -- this script measures with the *exact*
+    same reference-scale config and timing methodology, guaranteed, not
+    a hand-copied approximation of it. `benchmark-engines` has no `.py`
+    suffix (it is a directly executed `dev/bin/` command, not an
+    importable package module), so `spec_from_file_location` cannot
+    infer a source loader from its extension the way it did for
+    `calibrate-statistical-bands`'s own `.py`-suffixed target — an
+    explicit `SourceFileLoader` sidesteps that.
+    """
+    loader = importlib.machinery.SourceFileLoader(
+        "fim_benchmark_engines", str(BENCHMARK_MODULE_PATH)
+    )
+    spec = importlib.util.spec_from_file_location(
+        "fim_benchmark_engines", BENCHMARK_MODULE_PATH, loader=loader
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load module at {BENCHMARK_MODULE_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    # `benchmark-engines` decorates a dataclass under `from __future__
+    # import annotations` -- resolving its own deferred field
+    # annotations looks the module up via `sys.modules[cls.__module__]`,
+    # which fails with a confusing `AttributeError` unless the module is
+    # registered here first, before `exec_module` runs the class body.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _sustained_crossover(d_values: list[int], vector_wins: list[bool]) -> int | None:
+    """Return the smallest `d` where G wins, but every larger tested `d` has V win.
+
+    A genuine *interior* transition, not just "V happened to win
+    everywhere tested" (that case, and "G happened to win everywhere,"
+    and "no stable point at all," are each reported honestly, and
+    differently, by `_report_threshold` instead — a caller checking
+    `all(vector_wins)`/`not any(vector_wins)` first, before treating a
+    `None` return here as "inconclusive," is expected). A single flip
+    is not enough evidence on its own either (this project's own
+    benchmark history found real run-to-run noise) -- this requires the
+    win to hold at every subsequently *larger* swept value too, not
+    just the one point it first appears at. Returns `None` if `vector_
+    wins[0]` is already `True` (nothing to cross — see above) or if no
+    sustained point exists at all.
+    """
+    if not vector_wins or vector_wins[0]:
+        return None
+    for index in range(1, len(d_values)):
+        if all(vector_wins[index:]):
+            return d_values[index]
+    return None
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build this script's own CLI argument parser."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--d-values",
+        default="4,10,20,30,40,60,80,120",
+        help="Comma-separated deme counts to sweep (default: 4,10,20,30,40,60,80,120).",
+    )
+    parser.add_argument(
+        "--replicates",
+        type=int,
+        default=16,
+        help="Batch size for the generational/generational-vector runs (default: 16).",
+    )
+    parser.add_argument(
+        "--generations",
+        type=int,
+        default=100,
+        help="max_generations for every run (default: 100).",
+    )
+    parser.add_argument(
+        "--trials",
+        type=int,
+        default=3,
+        help="Independent runs per point; the reported time is their "
+        "median (default: 3).",
+    )
+    parser.add_argument("--seed", type=int, default=20260902, help="Base RNG seed.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Optional path to write the full machine-readable evidence JSON.",
+    )
+    return parser
+
+
+def _run_sweep(
+    benchmark: ModuleType,
+    d_values: list[int],
+    *,
+    replicates: int,
+    generations: int,
+    trials: int,
+    seed: int,
+) -> tuple[list[float], list[float], list[bool]]:
+    """Sweep `d`, printing each point, and return the raw per-`d` results."""
+    print(f"{'d':>6} {'G-off(s)':>10} {'V(s)':>10} {'winner':>8}")
+    print("-" * 38)
+
+    generational_seconds: list[float] = []
+    vector_seconds: list[float] = []
+    vector_wins: list[bool] = []
+    warmed_up = False
+    for d in d_values:
+        single_params = benchmark._base_params(
+            d=d, n_replicates=1, max_generations=generations, seed=seed
+        )
+        batch_params = benchmark.replace(single_params, n_replicates=replicates)
+
+        g_seconds = benchmark._median_of("generational", batch_params, trials)
+        if not warmed_up:
+            benchmark._run_once("generational-vector", batch_params)
+            warmed_up = True
+        v_seconds = benchmark._median_of("generational-vector", batch_params, trials)
+
+        generational_seconds.append(g_seconds)
+        vector_seconds.append(v_seconds)
+        vector_wins.append(v_seconds < g_seconds)
+        winner = "V" if vector_wins[-1] else "G"
+        print(f"{d:>6} {g_seconds:>10.3f} {v_seconds:>10.3f} {winner:>8}")
+
+    return generational_seconds, vector_seconds, vector_wins
+
+
+def _report_threshold(
+    d_values: list[int], vector_wins: list[bool], threshold: int | None
+) -> None:
+    """Print the sustained-crossover result, or an honest explanation of its absence."""
+    print()
+    if threshold is not None:
+        print(
+            f"Sustained crossover found: auto_vector_min_d = {threshold} "
+            f"(generational-vector wins at every tested d >= {threshold})"
+        )
+        print(f"Add `auto_vector_min_d: {threshold}` to your own config to use it.")
+    elif all(vector_wins):
+        print(
+            "No crossover found: generational-vector won at every tested "
+            f"d (as low as {d_values[0]}). This machine's own real "
+            "threshold may be lower than this sweep's own smallest value "
+            "-- re-run with smaller --d-values to look for it, or treat "
+            f"{d_values[0]} as a conservative floor rather than a "
+            "measured threshold."
+        )
+    elif not any(vector_wins):
+        print(
+            "No crossover found: generational won at every tested d (up "
+            f"to {d_values[-1]}). Either this workload never benefits "
+            "from generational-vector in this range, or the true "
+            "threshold is higher -- re-run with larger --d-values."
+        )
+    else:
+        print(
+            "No *sustained* crossover found: generational-vector wins at "
+            "some tested d values but not consistently from any point "
+            "onward (real run-to-run noise, or a genuinely unstable "
+            "boundary on this machine) -- treat this sweep's own results "
+            "as inconclusive rather than picking one flip."
+        )
+
+
+def _environment_fingerprint() -> dict[str, object]:
+    """Return interpreter/platform/git fingerprint for this run."""
+    fingerprint: dict[str, object] = {
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+    }
+    try:
+        fingerprint["git_commit"] = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except Exception:  # best-effort
+        fingerprint["git_commit"] = "unknown"
+    return fingerprint
+
+
+def _write_evidence(
+    output: Path,
+    *,
+    d_values: list[int],
+    generational_seconds: list[float],
+    vector_seconds: list[float],
+    vector_wins: list[bool],
+    threshold: int | None,
+) -> None:
+    """Write the full machine-readable evidence payload to `output`."""
+    payload = {
+        "schema_version": 1,
+        "generator": {
+            "name": "Claude Code",
+            "version": "Claude Sonnet 5",
+            "model_token": "claude-sonnet-5",
+            "provider": "Anthropic",
+            "generation_date": datetime.now(UTC).date().isoformat(),
+            "responsibility": "other",
+            "script": "dev/bin/calibrate-auto-threshold",
+        },
+        "environment": _environment_fingerprint(),
+        "d_values": d_values,
+        "generational_seconds": generational_seconds,
+        "vector_seconds": vector_seconds,
+        "vector_wins": vector_wins,
+        "sustained_crossover_auto_vector_min_d": threshold,
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(f"\nWrote {output}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Sweep `d`, find the sustained G-vs-V crossover, report it honestly."""
+    args = _build_parser().parse_args(argv)
+    d_values = sorted(int(value) for value in args.d_values.split(","))
+    benchmark = _load_benchmark_module()
+
+    print(
+        f"Sweeping d over {d_values} (jit='off' generational vs. "
+        f"generational-vector, replicates={args.replicates}, "
+        f"generations={args.generations}, trials={args.trials})"
+    )
+    generational_seconds, vector_seconds, vector_wins = _run_sweep(
+        benchmark,
+        d_values,
+        replicates=args.replicates,
+        generations=args.generations,
+        trials=args.trials,
+        seed=args.seed,
+    )
+
+    threshold = _sustained_crossover(d_values, vector_wins)
+    _report_threshold(d_values, vector_wins, threshold)
+
+    if args.output is not None:
+        _write_evidence(
+            args.output,
+            d_values=d_values,
+            generational_seconds=generational_seconds,
+            vector_seconds=vector_seconds,
+            vector_wins=vector_wins,
+            threshold=threshold,
+        )
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
