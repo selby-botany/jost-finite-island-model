@@ -13,7 +13,7 @@ the [project overview](../README.md) for installation.
 - [Initial conditions](#initial-conditions)
 - [Convergence](#convergence)
 - [Analysis and execution](#analysis-and-execution)
-- [Engine backend and JIT (Python only, not a YAML key)](#engine-backend-and-jit-python-only-not-a-yaml-key)
+- [Engine backend and JIT](#engine-backend-and-jit)
 - [Validation summary](#validation-summary)
 
 ## Complete example
@@ -434,25 +434,28 @@ E<sub>ST</sub>.
 ### n<sub>replicates</sub>
 
 - **Type:** positive integer
-- **Default:** `1`
+- **Default:** `200`
 
 n<sub>replicates</sub> runs that many independently seeded scalar runs — seeds
 `seed`, `seed + 1`, and so on — through both the library API
 (`fim.engine.fim`, returning one `RunResult` per replicate) and the CLI
 (`fim run`, writing one `replicate-NNN/` subdirectory per replicate; see
-[Using `fim`](usage.md#run-a-simulation)). With replicate_tolerance unset
-(the default), exactly n<sub>replicates</sub> run. With it set, n<sub>replicates</sub>
-instead becomes the hard cap on an adaptive stop — see replicate_tolerance
-below.
+[Using `fim`](usage.md#run-a-simulation)). This is a hard cap, not a
+target: replicate_tolerance (below) defaults to a real value too, so an
+unconfigured run stops well short of `200` for most configurations,
+adaptively, once its own confidence interval is tight enough — set
+n<sub>replicates</sub>: `1` explicitly for a single, ordinary scalar run with no
+batching at all (replicate_tolerance is a no-op at n<sub>replicates</sub> `1`
+either way).
 
 ### replicate_tolerance
 
-- **Type:** non-negative finite number, or omitted
-- **Default:** unset (fixed-count batching; see n<sub>replicates</sub>)
+- **Type:** non-negative finite number, or `null` to disable
+- **Default:** `0.01` (matches convergence_tolerance's own default)
 
-Opt-in early stopping for a replicate batch (n<sub>replicates</sub> greater than
-one): once at least replicate_minimum replicates have run, stop as soon
-as every statistic named in convergence_statistic has an across-replicate
+Early stopping for a replicate batch (n<sub>replicates</sub> greater than one):
+once at least replicate_minimum replicates have run, stop as soon as
+every statistic named in convergence_statistic has an across-replicate
 Student's-t confidence interval (mean of that statistic's own final value
 across replicates so far) with a half-width at most replicate_tolerance
 — combined across several watched statistics by convergence_combinator,
@@ -462,6 +465,12 @@ non-adaptively-stopped result. This is the mechanism that answers "how many
 replicate runs are needed for a confidence interval" without guessing a
 fixed count in advance — see each statistic's realized interval in
 `summary.json` (CLI) or fim.engine.replicate_summary (library).
+
+An **explicit** `replicate_tolerance: null` disables the adaptive stop
+entirely — n<sub>replicates</sub> then always runs in full, exactly the
+behavior a config written before this field had a default got by
+default. This is different from simply omitting the key, which now
+means "use the `0.01` default," not "disabled."
 
 ```yaml
 n_replicates: 200          # hard cap
@@ -524,74 +533,93 @@ still resamples every gene copy exactly once per generation) — see
 [the simulator design, §9](fim-simulator-design.md#9-extensibility-where-the-next-what-if-lands)
 for why the two don't compound.
 
-## Engine backend and JIT (Python only, not a YAML key)
+## Engine backend and JIT
 
 Everything above this section is a **science** setting — it changes what
-gets computed. `engine_backend` and `jit` are different: they change *how*
-the computation runs, not what it computes. Every `SimulationParams` field
-above is still validated and honored exactly the same way regardless of
-which engine backend actually executes it.
+gets computed. `engine_backend`, `jit`, and `auto_vector_min_d` are
+different: they change *how* the computation runs, not what it computes.
+Every `SimulationParams` field above is still validated and honored
+exactly the same way regardless of which engine backend actually
+executes it — changing these three never changes what a run converges
+to, only how long getting there takes.
 
-**Not a `fim run` YAML key.** Unlike every setting above, `engine_backend`
-and `jit` cannot go in your YAML config file today — `fim run` always uses
-the same default engine, and there is no flag to change that from the
-command line either. Putting `engine_backend: generational-vector` in your
-YAML alongside `N`, `d`, `m`, and so on is rejected, the same as any other
-key `fim run` does not recognize (see [Validation
-summary](#validation-summary) below). This is a real, current gap, not an
-oversight in this reference: the feature exists only for someone calling
-`fim` as a Python library directly, not yet for a `fim run` YAML file.
+### engine_backend
 
-**What the three choices are, in plain terms:**
+- **Type:** `lineal`, `generational`, `generational-vector`, or `auto`
+- **Default:** `lineal`
 
-- `"lineal"` (the default, and the only one `fim run`/the GUI use today):
-  the straightforward, reference implementation. Every replicate runs on
-  its own, one after another (or in separate worker processes if you ask
-  for that — see [n<sub>replicates</sub>](#nreplicates) above).
-- `"generational"`: the same computation, restructured to advance every
+Which of three interchangeable engine implementations actually drives
+the run:
+
+- `lineal` (the default): the straightforward, reference
+  implementation. Every replicate runs on its own, one after another
+  (or in separate worker processes if you ask for that — see
+  [n<sub>replicates</sub>](#nreplicates) above).
+- `generational`: the same computation, restructured to advance every
   replicate one generation at a time together, spread across threads
   instead of processes. Produces bit-for-bit identical results to
-  `"lineal"` for the same inputs.
-- `"generational-vector"`: the same computation again, this time done with
-  whole-array math instead of one calculation per deme — the fastest
-  option once a run has enough demes for that to matter, but only for
-  runs using mutation_model: finite_alleles and migrant_sampling:
-  continuous (see those settings above); anything else raises an error
-  rather than silently falling back. Needs an extra, optional piece of
-  software installed (`numba`) that a plain install of this project does
-  not include.
+  `lineal` for the same inputs.
+- `generational-vector`: the same computation again, this time done
+  with whole-array math instead of one calculation per deme — the
+  fastest option once a run has enough demes for that to matter, but
+  only for runs using mutation_model: finite_alleles and
+  migrant_sampling: continuous (see those settings above); any other
+  combination is rejected up front, at config-load time, rather than
+  accepted and failing later. Needs an extra, optional piece of
+  software (`numba`) that a plain `pip install fim` does not include —
+  install `fim[jit]` instead to add it. Matches `lineal`/`generational`
+  exactly (same seed, bit-for-bit) when
+  migration (`m`) is off; with migration active, matches them
+  statistically instead (same average result across many seeds, no
+  systematic bias, but not necessarily the identical trajectory for one
+  specific seed).
+- `auto`: picks `generational` or `generational-vector` automatically,
+  from `d` and `auto_vector_min_d` (below) — never `lineal`.
 
-**Why you might care, even if you never write a line of Python
-yourself:** if a run through `fim run` is taking uncomfortably long —
+**Why you might care:** if a run is taking uncomfortably long —
 especially one with a large number of demes (`d`) — that slowness is a
-property of the default engine, not of the science being simulated; the
+property of the chosen engine, not of the science being simulated; the
 same configuration can run meaningfully faster under a different engine
-choice. You do not need to understand *how* they differ to benefit from
-this, only that the option exists, and that reaching it today means
-either asking someone comfortable with Python to run your configuration
-that way, or asking for this project's CLI/YAML support for it to be
-built (tracked as a known gap, not a "never").
+choice. `generational-vector` is the one worth reaching for first at a
+large `d`; see [the simulator design's own section on choosing an
+engine backend](fim-simulator-design.md#46-choosing-an-engine-backend)
+for the full decision guide and the measured evidence behind it.
 
-**How to use it today**, for a reader comfortable calling Python
-directly:
-
-```python
-from fim import fim
-
-fim(
-    N=450, m=0.001, mu=0.00003, d=80,
-    seed=20260814,
-    engine_backend="generational-vector",
-)
+```yaml
+engine_backend: generational-vector
+mutation_model: finite_alleles
+migrant_sampling: continuous
 ```
 
-For the full decision guide — when each engine is actually worth
-reaching for, and what evidence backs that — see [the simulator design's
-own section on choosing an engine
-backend](fim-simulator-design.md#46-choosing-an-engine-backend). For the
-exact keyword syntax, every accepted value, and every guarantee each one
-does and does not make, see [the functional API
-reference](fim-simulator-functional-api.md).
+### jit
+
+- **Type:** `off` or `numba`
+- **Default:** `off`
+
+Whether the chosen engine_backend should additionally JIT-compile its
+own random draws, via the same optional `numba` dependency
+`generational-vector` always needs. Meaningful only under
+`engine_backend: generational` (speeds up part of that engine's own
+work, though marshaling cost elsewhere in the pipeline currently
+dominates more than the draw itself); `lineal` never accepts anything
+but `off`, permanently; `generational-vector` always requires `numba`
+regardless of this setting, so it too only accepts `off` here (there is
+no separate toggle to turn off what it already needs unconditionally).
+
+### auto_vector_min_d
+
+- **Type:** integer at least 1
+- **Default:** `35`
+
+The deme-count threshold `engine_backend: auto` uses to choose
+`generational-vector` over `generational`. Ignored under every other
+`engine_backend` value. This default was measured on one specific
+machine, some time ago — see [the simulator design's own section on
+choosing an engine
+backend](fim-simulator-design.md#46-choosing-an-engine-backend) for how
+current that measurement still is, and `dev/bin/benchmark-engines`
+(a maintainer tool, see `dev/bin/README.md`) for how to re-measure it
+on your own hardware.
 
 ## Validation summary
 
@@ -619,3 +647,8 @@ reference](fim-simulator-functional-api.md).
 | convergence_window greater than max_generations + 1 | rejected |
 | replicate_minimum greater than n<sub>replicates</sub> (with replicate_tolerance set and n<sub>replicates</sub> > 1) | rejected |
 | replicate_confidence not `0.90`, `0.95`, or `0.99` | rejected |
+| engine_backend not `lineal`, `generational`, `generational-vector`, or `auto` | rejected |
+| jit not `off` or `numba` | rejected |
+| auto_vector_min_d less than 1 | rejected |
+| jit: numba with engine_backend: lineal or generational-vector | rejected |
+| engine_backend: generational-vector without mutation_model: finite_alleles and migrant_sampling: continuous | rejected |

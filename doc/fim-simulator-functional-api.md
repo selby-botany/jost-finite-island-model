@@ -58,9 +58,8 @@ see `doc/fim-gui-test-plan.md`.
 The one entry point everything else in this project ultimately calls.
 
 - **`fim(N, m, mu, d, *, params, store=None, run_id=None, clock=None,
-  max_workers=None, store_factory=None, engine_backend="lineal",
-  jit="off", auto_vector_min_d=DEFAULT_AUTO_VECTOR_MIN_D) ->
-  RunResult | tuple[RunResult, ...]`**
+  max_workers=None, store_factory=None, engine_backend=None, jit=None,
+  auto_vector_min_d=None) -> RunResult | tuple[RunResult, ...]`**
   Runs the finite island model to convergence (or the hard generation
   cap), once per replicate. `N`, `m`, `mu`, `d` must equal the same
   fields already inside `params`; the four are repeated in the
@@ -70,9 +69,17 @@ The one entry point everything else in this project ultimately calls.
   `params.n_replicates == 1`, otherwise a tuple of one per replicate (or
   fewer, if `params.replicate_tolerance` lets the batch stop early once
   every watched statistic's confidence interval has tightened enough).
-  `engine_backend` selects which of this project's own engine
-  implementations actually runs the batch — `"lineal"` (the default,
-  every earlier release's own behavior, unchanged), `"generational"`
+  `engine_backend`/`jit`/`auto_vector_min_d` each default to `None`
+  here, meaning "read `params.engine_backend`/`params.jit`/
+  `params.auto_vector_min_d` instead" — real `SimulationParams` fields
+  now (config-file/CLI reachable, `doc/configuration.md`), not
+  duplicate-of-nothing keyword arguments; passing one of these three
+  explicitly overrides `params` for that one call only, a pure
+  override with no "must agree" requirement (unlike `N`/`m`/`mu`/`d`
+  above). `engine_backend` selects which of this project's own engine
+  implementations actually runs the batch — `"lineal"` (`params`'s own
+  default too, every earlier release's own behavior, unchanged),
+  `"generational"`
   (real thread-based replicate fan-out, bit-identical trajectory to
   `"lineal"` for the same seed), `"generational-vector"` (array-native,
   fused `migrate`/`mutate`/`drift`; matches `"lineal"` exactly, same
@@ -106,8 +113,9 @@ The one entry point everything else in this project ultimately calls.
   `drift` as a whole (see the engine's own docstrings for the measured
   detail); `"lineal"` never accepts anything but `jit="off"`.
   `auto_vector_min_d` is the deme-count cutover `"auto"` uses to decide
-  — irrelevant under every other `engine_backend`; defaults to
-  `DEFAULT_AUTO_VECTOR_MIN_D` (35), a real benchmark-measured default
+  — irrelevant under every other `engine_backend`; `params.
+  auto_vector_min_d`'s own default is `DEFAULT_AUTO_VECTOR_MIN_D` (35,
+  defined in `fim.model.params`), a real benchmark-measured default
   with known cross-environment caveats (see that constant's own
   docstring). Whichever backend actually ran — the resolved choice, not
   the literal string `"auto"` — and whether `jit` was on are both

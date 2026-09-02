@@ -11,7 +11,7 @@ the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-i
 <li><a href="#initial-conditions">Initial conditions</a></li>
 <li><a href="#convergence">Convergence</a></li>
 <li><a href="#analysis-and-execution">Analysis and execution</a></li>
-<li><a href="#engine-backend-and-jit-python-only-not-a-yaml-key">Engine backend and JIT (Python only, not a YAML key)</a></li>
+<li><a href="#engine-backend-and-jit">Engine backend and JIT</a></li>
 <li><a href="#validation-summary">Validation summary</a></li>
 </ul>
 <h2 id="complete-example">Complete example</h2>
@@ -366,24 +366,27 @@ E<sub>ST</sub>.</p>
 <h3 id="nreplicates">n<sub>replicates</sub></h3>
 <ul>
 <li><strong>Type:</strong> positive integer</li>
-<li><strong>Default:</strong> <code>1</code></li>
+<li><strong>Default:</strong> <code>200</code></li>
 </ul>
 <p>n<sub>replicates</sub> runs that many independently seeded scalar runs — seeds
 <code>seed</code>, <code>seed + 1</code>, and so on — through both the library API
 (<code>fim.engine.fim</code>, returning one <code>RunResult</code> per replicate) and the CLI
 (<code>fim run</code>, writing one <code>replicate-NNN/</code> subdirectory per replicate; see
-<a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation">Using <code>fim</code></a>). With replicate_tolerance unset
-(the default), exactly n<sub>replicates</sub> run. With it set, n<sub>replicates</sub>
-instead becomes the hard cap on an adaptive stop — see replicate_tolerance
-below.</p>
+<a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation">Using <code>fim</code></a>). This is a hard cap, not a
+target: replicate_tolerance (below) defaults to a real value too, so an
+unconfigured run stops well short of <code>200</code> for most configurations,
+adaptively, once its own confidence interval is tight enough — set
+n<sub>replicates</sub>: <code>1</code> explicitly for a single, ordinary scalar run with no
+batching at all (replicate_tolerance is a no-op at n<sub>replicates</sub> <code>1</code>
+either way).</p>
 <h3 id="replicatetolerance">replicate_tolerance</h3>
 <ul>
-<li><strong>Type:</strong> non-negative finite number, or omitted</li>
-<li><strong>Default:</strong> unset (fixed-count batching; see n<sub>replicates</sub>)</li>
+<li><strong>Type:</strong> non-negative finite number, or <code>null</code> to disable</li>
+<li><strong>Default:</strong> <code>0.01</code> (matches convergence_tolerance's own default)</li>
 </ul>
-<p>Opt-in early stopping for a replicate batch (n<sub>replicates</sub> greater than
-one): once at least replicate_minimum replicates have run, stop as soon
-as every statistic named in convergence_statistic has an across-replicate
+<p>Early stopping for a replicate batch (n<sub>replicates</sub> greater than one):
+once at least replicate_minimum replicates have run, stop as soon as
+every statistic named in convergence_statistic has an across-replicate
 Student's-t confidence interval (mean of that statistic's own final value
 across replicates so far) with a half-width at most replicate_tolerance
 — combined across several watched statistics by convergence_combinator,
@@ -393,6 +396,11 @@ non-adaptively-stopped result. This is the mechanism that answers &quot;how many
 replicate runs are needed for a confidence interval&quot; without guessing a
 fixed count in advance — see each statistic's realized interval in
 <code>summary.json</code> (CLI) or fim.engine.replicate_summary (library).</p>
+<p>An <strong>explicit</strong> <code>replicate_tolerance: null</code> disables the adaptive stop
+entirely — n<sub>replicates</sub> then always runs in full, exactly the
+behavior a config written before this field had a default got by
+default. This is different from simply omitting the key, which now
+means &quot;use the <code>0.01</code> default,&quot; not &quot;disabled.&quot;</p>
 <pre><code class="language-yaml">n_replicates: 200          # hard cap
 replicate_tolerance: 0.02  # stop once every watched statistic is this tight
 replicate_minimum: 20
@@ -447,67 +455,87 @@ idealized continuous fraction. It adds one random process to the pipeline
 still resamples every gene copy exactly once per generation) — see
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#9-extensibility-where-the-next-what-if-lands">the simulator design, §9</a>
 for why the two don't compound.</p>
-<h2 id="engine-backend-and-jit-python-only-not-a-yaml-key">Engine backend and JIT (Python only, not a YAML key)</h2>
+<h2 id="engine-backend-and-jit">Engine backend and JIT</h2>
 <p>Everything above this section is a <strong>science</strong> setting — it changes what
-gets computed. <code>engine_backend</code> and <code>jit</code> are different: they change <em>how</em>
-the computation runs, not what it computes. Every <code>SimulationParams</code> field
-above is still validated and honored exactly the same way regardless of
-which engine backend actually executes it.</p>
-<p><strong>Not a <code>fim run</code> YAML key.</strong> Unlike every setting above, <code>engine_backend</code>
-and <code>jit</code> cannot go in your YAML config file today — <code>fim run</code> always uses
-the same default engine, and there is no flag to change that from the
-command line either. Putting <code>engine_backend: generational-vector</code> in your
-YAML alongside <code>N</code>, <code>d</code>, <code>m</code>, and so on is rejected, the same as any other
-key <code>fim run</code> does not recognize (see <a href="#validation-summary">Validation
-summary</a> below). This is a real, current gap, not an
-oversight in this reference: the feature exists only for someone calling
-<code>fim</code> as a Python library directly, not yet for a <code>fim run</code> YAML file.</p>
-<p><strong>What the three choices are, in plain terms:</strong></p>
+gets computed. <code>engine_backend</code>, <code>jit</code>, and <code>auto_vector_min_d</code> are
+different: they change <em>how</em> the computation runs, not what it computes.
+Every <code>SimulationParams</code> field above is still validated and honored
+exactly the same way regardless of which engine backend actually
+executes it — changing these three never changes what a run converges
+to, only how long getting there takes.</p>
+<h3 id="enginebackend">engine_backend</h3>
 <ul>
-<li><code>&quot;lineal&quot;</code> (the default, and the only one <code>fim run</code>/the GUI use today):
-the straightforward, reference implementation. Every replicate runs on
-its own, one after another (or in separate worker processes if you ask
-for that — see <a href="#nreplicates">n<sub>replicates</sub></a> above).</li>
-<li><code>&quot;generational&quot;</code>: the same computation, restructured to advance every
+<li><strong>Type:</strong> <code>lineal</code>, <code>generational</code>, <code>generational-vector</code>, or <code>auto</code></li>
+<li><strong>Default:</strong> <code>lineal</code></li>
+</ul>
+<p>Which of three interchangeable engine implementations actually drives
+the run:</p>
+<ul>
+<li><code>lineal</code> (the default): the straightforward, reference
+implementation. Every replicate runs on its own, one after another
+(or in separate worker processes if you ask for that — see
+<a href="#nreplicates">n<sub>replicates</sub></a> above).</li>
+<li><code>generational</code>: the same computation, restructured to advance every
 replicate one generation at a time together, spread across threads
 instead of processes. Produces bit-for-bit identical results to
-<code>&quot;lineal&quot;</code> for the same inputs.</li>
-<li><code>&quot;generational-vector&quot;</code>: the same computation again, this time done with
-whole-array math instead of one calculation per deme — the fastest
-option once a run has enough demes for that to matter, but only for
-runs using mutation_model: finite_alleles and migrant_sampling:
-continuous (see those settings above); anything else raises an error
-rather than silently falling back. Needs an extra, optional piece of
-software installed (<code>numba</code>) that a plain install of this project does
-not include.</li>
+<code>lineal</code> for the same inputs.</li>
+<li><code>generational-vector</code>: the same computation again, this time done
+with whole-array math instead of one calculation per deme — the
+fastest option once a run has enough demes for that to matter, but
+only for runs using mutation_model: finite_alleles and
+migrant_sampling: continuous (see those settings above); any other
+combination is rejected up front, at config-load time, rather than
+accepted and failing later. Needs an extra, optional piece of
+software (<code>numba</code>) that a plain <code>pip install fim</code> does not include —
+install <code>fim[jit]</code> instead to add it. Matches <code>lineal</code>/<code>generational</code>
+exactly (same seed, bit-for-bit) when
+migration (<code>m</code>) is off; with migration active, matches them
+statistically instead (same average result across many seeds, no
+systematic bias, but not necessarily the identical trajectory for one
+specific seed).</li>
+<li><code>auto</code>: picks <code>generational</code> or <code>generational-vector</code> automatically,
+from <code>d</code> and <code>auto_vector_min_d</code> (below) — never <code>lineal</code>.</li>
 </ul>
-<p><strong>Why you might care, even if you never write a line of Python
-yourself:</strong> if a run through <code>fim run</code> is taking uncomfortably long —
+<p><strong>Why you might care:</strong> if a run is taking uncomfortably long —
 especially one with a large number of demes (<code>d</code>) — that slowness is a
-property of the default engine, not of the science being simulated; the
+property of the chosen engine, not of the science being simulated; the
 same configuration can run meaningfully faster under a different engine
-choice. You do not need to understand <em>how</em> they differ to benefit from
-this, only that the option exists, and that reaching it today means
-either asking someone comfortable with Python to run your configuration
-that way, or asking for this project's CLI/YAML support for it to be
-built (tracked as a known gap, not a &quot;never&quot;).</p>
-<p><strong>How to use it today</strong>, for a reader comfortable calling Python
-directly:</p>
-<pre><code class="language-python">from fim import fim
-
-fim(
-    N=450, m=0.001, mu=0.00003, d=80,
-    seed=20260814,
-    engine_backend=&quot;generational-vector&quot;,
-)
+choice. <code>generational-vector</code> is the one worth reaching for first at a
+large <code>d</code>; see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">the simulator design's own section on choosing an
+engine backend</a>
+for the full decision guide and the measured evidence behind it.</p>
+<pre><code class="language-yaml">engine_backend: generational-vector
+mutation_model: finite_alleles
+migrant_sampling: continuous
 </code></pre>
-<p>For the full decision guide — when each engine is actually worth
-reaching for, and what evidence backs that — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">the simulator design's
-own section on choosing an engine
-backend</a>. For the
-exact keyword syntax, every accepted value, and every guarantee each one
-does and does not make, see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-functional-api.md">the functional API
-reference</a>.</p>
+<h3 id="jit">jit</h3>
+<ul>
+<li><strong>Type:</strong> <code>off</code> or <code>numba</code></li>
+<li><strong>Default:</strong> <code>off</code></li>
+</ul>
+<p>Whether the chosen engine_backend should additionally JIT-compile its
+own random draws, via the same optional <code>numba</code> dependency
+<code>generational-vector</code> always needs. Meaningful only under
+<code>engine_backend: generational</code> (speeds up part of that engine's own
+work, though marshaling cost elsewhere in the pipeline currently
+dominates more than the draw itself); <code>lineal</code> never accepts anything
+but <code>off</code>, permanently; <code>generational-vector</code> always requires <code>numba</code>
+regardless of this setting, so it too only accepts <code>off</code> here (there is
+no separate toggle to turn off what it already needs unconditionally).</p>
+<h3 id="autovectormind">auto_vector_min_d</h3>
+<ul>
+<li><strong>Type:</strong> integer at least 1</li>
+<li><strong>Default:</strong> <code>35</code></li>
+</ul>
+<p>The deme-count threshold <code>engine_backend: auto</code> uses to choose
+<code>generational-vector</code> over <code>generational</code>. Ignored under every other
+<code>engine_backend</code> value. This default was measured on one specific
+machine, some time ago — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">the simulator design's own section on
+choosing an engine
+backend</a> for how
+current that measurement still is, and <code>dev/bin/benchmark-engines</code>
+(a maintainer tool, see <code>dev/bin/README.md</code>) for how to re-measure it
+on your own hardware.</p>
 <h2 id="validation-summary">Validation summary</h2>
 <table>
 <thead>
@@ -603,6 +631,26 @@ reference</a>.</p>
 </tr>
 <tr>
 <td>replicate_confidence not <code>0.90</code>, <code>0.95</code>, or <code>0.99</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>engine_backend not <code>lineal</code>, <code>generational</code>, <code>generational-vector</code>, or <code>auto</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>jit not <code>off</code> or <code>numba</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>auto_vector_min_d less than 1</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>jit: numba with engine_backend: lineal or generational-vector</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>engine_backend: generational-vector without mutation_model: finite_alleles and migrant_sampling: continuous</td>
 <td>rejected</td>
 </tr>
 </tbody>
