@@ -9307,6 +9307,24 @@ deme weighting as specified by their definitions. ``deme_weights`` is
 applied only to ``E_ST``; pass relative deme sizes to request its native
 size-weighted form.
 
+Validates `table` exactly once, then computes every field from that
+one already-validated `demes` tuple directly, via each statistic's
+own private `_..._from_demes` core — not by calling the public
+`h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st` functions, which would each
+independently re-validate (and, for `g_st`/`jost_d`, re-derive
+`H_S`/`H_T` a second time) the identical data this function already
+validated at its own top. Measured, not assumed, to be a real cost:
+profiling `_convergence_values_vectorized`'s own reference-scale hot
+path found roughly eleven full validation passes over the same table
+per call before this fix (`20260903-claude-sonnet-5-fim-vg-
+performance-campaign-design.md` §6.1 item 3) — one here, plus one
+inside each of `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st`, plus a
+further two apiece inside `g_st`/`jost_d`'s own internal `h_s`/`h_t`
+calls. Every public statistic function's own standalone behavior for
+a caller who invokes it directly, with genuinely unvalidated input,
+is unchanged by this — only the redundant re-validation *through
+this function* is gone.
+
 <a id="fim.statistics.interval"></a>
 
 # fim.statistics.interval

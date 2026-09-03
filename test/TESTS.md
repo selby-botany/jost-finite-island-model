@@ -10346,6 +10346,49 @@ def test_malformed_frequency_tables_and_weights_are_rejected() -> None
 
 Malformed frequency tables and weights produce specific errors.
 
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_matches_every_independently_validated_function"></a>
+
+#### test\_statistics\_report\_matches\_every\_independently\_validated\_function
+
+```python
+def test_statistics_report_matches_every_independently_validated_function(
+) -> None
+```
+
+The single-validation fast path agrees with each public function.
+
+`statistics_report` no longer computes `H_S`/`H_T`/`G_ST`/`D`/
+`E_ST`/`K_ST` by calling the public `h_s`/`h_t`/`g_st`/`jost_d`/
+`e_st`/`k_st` functions (`20260903-claude-sonnet-5-fim-vg-
+performance-campaign-design.md` §6.1 item 3) — each of those,
+called directly here instead, independently re-validates the
+same table from scratch and (for `g_st`/`jost_d`) recomputes
+`H_S`/`H_T` from scratch too, so agreement here is a genuine
+cross-check of the refactored fast path's own math, not
+circular. `test_golden_statistics`, above, already proves this
+for seven hand-picked fixtures; this proves it for tables that
+exercise ragged widths and private alleles the fixtures may not.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_validates_the_table_exactly_once"></a>
+
+#### test\_statistics\_report\_validates\_the\_table\_exactly\_once
+
+```python
+def test_statistics_report_validates_the_table_exactly_once() -> None
+```
+
+The redundant re-validation this stage removed stays removed.
+
+Direct mechanism-level proof, not just a matching-output proof:
+before this fix, one `statistics_report` call validated the same
+table roughly eleven times over — once itself, once each inside
+`h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st`, and a further two
+inside `g_st`'s/`jost_d`'s own internal `h_s`/`h_t` calls
+(measured directly by profiling `_convergence_values_
+vectorized`'s own reference-scale hot path, not assumed from
+reading the code alone). Counts real calls across a table with
+several demes, not just that the final numbers happen to match.
+
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_differentiation_statistics_are_bounded"></a>
 
 #### test\_differentiation\_statistics\_are\_bounded

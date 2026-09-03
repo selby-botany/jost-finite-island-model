@@ -342,6 +342,30 @@ def hill_number(frequencies: Mapping[Any, Any], order: float | int) -> float:
     return _hill(deme, _validate_order(order))
 
 
+def _h_s_from_demes(
+    demes: tuple[dict[int, float], ...], weights: tuple[float, ...]
+) -> float:
+    """`h_s`'s own real math, given already-validated `demes`/`weights`.
+
+    Split out so `statistics_report` and every other function in this
+    module that itself needs `H_S` (`g_st`, `jost_d`) can compute it
+    without paying `_validate_table`/`_validate_weights` a second (or
+    third) time on data that was already validated moments earlier by
+    the very same call chain — a real, measured cost this module's own
+    every public function used to repeat independently, found by
+    profiling `_convergence_values_vectorized`'s own reference-scale
+    hot path (`20260903-claude-sonnet-5-fim-vg-performance-campaign-
+    design.md` §6.1 item 3), not assumed. Never call this with
+    unvalidated input; `h_s`, below, is the public, validating entry
+    point for that.
+    """
+    value = fsum(
+        weight * (1.0 - fsum(freq * freq for freq in deme.values()))
+        for deme, weight in zip(demes, weights, strict=True)
+    )
+    return _bounded(value, "H_S")
+
+
 def h_s(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     """Return weighted mean within-deme expected heterozygosity ``H_S``.
 
@@ -355,11 +379,20 @@ def h_s(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     """
     demes = _validate_table(table)
     weights = _validate_weights(len(demes), deme_weights)
-    value = fsum(
-        weight * (1.0 - fsum(freq * freq for freq in deme.values()))
-        for deme, weight in zip(demes, weights, strict=True)
-    )
-    return _bounded(value, "H_S")
+    return _h_s_from_demes(demes, weights)
+
+
+def _h_t_from_demes(
+    demes: tuple[dict[int, float], ...], weights: tuple[float, ...]
+) -> float:
+    """`h_t`'s own real math, given already-validated `demes`/`weights`.
+
+    Split out for the identical reason `_h_s_from_demes`'s own docstring
+    gives — never call this with unvalidated input; `h_t`, below, is the
+    public, validating entry point.
+    """
+    pooled = _pooled(demes, weights)
+    return _bounded(1.0 - fsum(freq * freq for freq in pooled.values()), "H_T")
 
 
 def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
@@ -376,8 +409,7 @@ def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     """
     demes = _validate_table(table)
     weights = _validate_weights(len(demes), deme_weights)
-    pooled = _pooled(demes, weights)
-    return _bounded(1.0 - fsum(freq * freq for freq in pooled.values()), "H_T")
+    return _h_t_from_demes(demes, weights)
 
 
 def h_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
@@ -458,6 +490,23 @@ def within_hill_number(
     return float(power_sum ** (1.0 / (1.0 - validated_order)))
 
 
+def _g_st_from_demes(total: float, within: float) -> float | None:
+    """`g_st`'s own real math, given already-computed `H_T`/`H_S`.
+
+    Split out for the identical reason `_h_s_from_demes`'s own docstring
+    gives — `statistics_report` computes `H_S`/`H_T` exactly once
+    (`_h_s_from_demes`/`_h_t_from_demes`, above) and passes the two
+    resulting floats straight in here, rather than this function
+    recomputing them a second time (which the previous version of `g_st`
+    did, by calling the public `h_s`/`h_t` — themselves each a fresh
+    `_validate_table` call over data `statistics_report`'s own caller
+    had already validated once).
+    """
+    if total == 0.0:
+        return None
+    return _bounded((total - within) / total, "G_ST")
+
+
 def g_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float | None:
     """Return ``G_ST`` or ``None`` when total heterozygosity is zero.
 
@@ -476,11 +525,10 @@ def g_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float | Non
     """
     demes = _validate_table(table)
     _require_multiple_demes(demes)
-    within = h_s(demes, deme_weights)
-    total = h_t(demes, deme_weights)
-    if total == 0.0:
-        return None
-    return _bounded((total - within) / total, "G_ST")
+    weights = _validate_weights(len(demes), deme_weights)
+    within = _h_s_from_demes(demes, weights)
+    total = _h_t_from_demes(demes, weights)
+    return _g_st_from_demes(total, within)
 
 
 def d_m(table: FrequencyTable) -> float:
@@ -588,6 +636,18 @@ def g_st_log(table: FrequencyTable, deme_weights: DemeWeights = None) -> float |
     return _bounded(value, "G_ST_log")
 
 
+def _jost_d_from_demes(
+    demes: tuple[dict[int, float], ...], within: float, total: float
+) -> float:
+    """`jost_d`'s own real math, given already-computed `H_S`/`H_T`.
+
+    Split out for the identical reason `_g_st_from_demes`'s own
+    docstring gives.
+    """
+    value = ((total - within) / (1.0 - within)) * len(demes) / (len(demes) - 1)
+    return _bounded(value, "D")
+
+
 def jost_d(table: FrequencyTable) -> float:
     """Return Jost's ``D`` using the required equal weighting of demes.
 
@@ -605,10 +665,27 @@ def jost_d(table: FrequencyTable) -> float:
     """
     demes = _validate_table(table)
     _require_multiple_demes(demes)
-    within = h_s(demes)
-    total = h_t(demes)
-    value = ((total - within) / (1.0 - within)) * len(demes) / (len(demes) - 1)
-    return _bounded(value, "D")
+    weights = _validate_weights(len(demes), None)
+    within = _h_s_from_demes(demes, weights)
+    total = _h_t_from_demes(demes, weights)
+    return _jost_d_from_demes(demes, within, total)
+
+
+def _e_st_from_demes(
+    demes: tuple[dict[int, float], ...], weights: tuple[float, ...]
+) -> float:
+    """`e_st`'s own real math, given already-validated `demes`/`weights`.
+
+    Split out for the identical reason `_h_s_from_demes`'s own docstring
+    gives — never call this with unvalidated input; `e_st`, below, is
+    the public, validating entry point.
+    """
+    total_entropy = _entropy(_pooled(demes, weights))
+    within_entropy = fsum(
+        weight * _entropy(deme) for deme, weight in zip(demes, weights, strict=True)
+    )
+    weight_entropy = -fsum(weight * log(weight) for weight in weights)
+    return _bounded((total_entropy - within_entropy) / weight_entropy, "E_ST")
 
 
 def e_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
@@ -631,12 +708,31 @@ def e_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     demes = _validate_table(table)
     _require_multiple_demes(demes)
     weights = _validate_weights(len(demes), deme_weights)
-    total_entropy = _entropy(_pooled(demes, weights))
-    within_entropy = fsum(
-        weight * _entropy(deme) for deme, weight in zip(demes, weights, strict=True)
+    return _e_st_from_demes(demes, weights)
+
+
+def _k_st_from_demes(demes: tuple[dict[int, float], ...]) -> float:
+    """`k_st`'s own real math, given an already-validated `demes` tuple.
+
+    Split out for the identical reason `_h_s_from_demes`'s own docstring
+    gives — never call this with unvalidated input; `k_st`, below, is
+    the public, validating entry point.
+    """
+    mean_allele_count = fsum(
+        sum(frequency > 0.0 for frequency in deme.values()) for deme in demes
+    ) / len(demes)
+    total_allele_count = len(
+        {
+            allele_id
+            for deme in demes
+            for allele_id, frequency in deme.items()
+            if frequency
+        }
     )
-    weight_entropy = -fsum(weight * log(weight) for weight in weights)
-    return _bounded((total_entropy - within_entropy) / weight_entropy, "E_ST")
+    value = 1.0 - (total_allele_count / mean_allele_count - len(demes)) / (
+        1.0 - len(demes)
+    )
+    return _bounded(value, "K_ST")
 
 
 def k_st(table: FrequencyTable) -> float:
@@ -655,21 +751,7 @@ def k_st(table: FrequencyTable) -> float:
     """
     demes = _validate_table(table)
     _require_multiple_demes(demes)
-    mean_allele_count = fsum(
-        sum(frequency > 0.0 for frequency in deme.values()) for deme in demes
-    ) / len(demes)
-    total_allele_count = len(
-        {
-            allele_id
-            for deme in demes
-            for allele_id, frequency in deme.items()
-            if frequency
-        }
-    )
-    value = 1.0 - (total_allele_count / mean_allele_count - len(demes)) / (
-        1.0 - len(demes)
-    )
-    return _bounded(value, "K_ST")
+    return _k_st_from_demes(demes)
 
 
 def differentiation_q(
@@ -1386,19 +1468,43 @@ def statistics_report(
     deme weighting as specified by their definitions. ``deme_weights`` is
     applied only to ``E_ST``; pass relative deme sizes to request its native
     size-weighted form.
+
+    Validates `table` exactly once, then computes every field from that
+    one already-validated `demes` tuple directly, via each statistic's
+    own private `_..._from_demes` core — not by calling the public
+    `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st` functions, which would each
+    independently re-validate (and, for `g_st`/`jost_d`, re-derive
+    `H_S`/`H_T` a second time) the identical data this function already
+    validated at its own top. Measured, not assumed, to be a real cost:
+    profiling `_convergence_values_vectorized`'s own reference-scale hot
+    path found roughly eleven full validation passes over the same table
+    per call before this fix (`20260903-claude-sonnet-5-fim-vg-
+    performance-campaign-design.md` §6.1 item 3) — one here, plus one
+    inside each of `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st`, plus a
+    further two apiece inside `g_st`/`jost_d`'s own internal `h_s`/`h_t`
+    calls. Every public statistic function's own standalone behavior for
+    a caller who invokes it directly, with genuinely unvalidated input,
+    is unchanged by this — only the redundant re-validation *through
+    this function* is gone.
     """
     demes = _validate_table(table)
     _require_multiple_demes(demes)
-    within = h_s(demes)
-    total = h_t(demes)
+    equal_weights = _validate_weights(len(demes), None)
+    within = _h_s_from_demes(demes, equal_weights)
+    total = _h_t_from_demes(demes, equal_weights)
+    entropy_weights = (
+        equal_weights
+        if deme_weights is None
+        else _validate_weights(len(demes), deme_weights)
+    )
     return {
         "H_S": within,
         "H_T": total,
         "H_ST": _bounded((total - within) / (1.0 - within), "H_ST"),
-        "G_ST": g_st(demes),
-        "D": jost_d(demes),
-        "E_ST": e_st(demes, deme_weights),
-        "K_ST": k_st(demes),
+        "G_ST": _g_st_from_demes(total, within),
+        "D": _jost_d_from_demes(demes, within, total),
+        "E_ST": _e_st_from_demes(demes, entropy_weights),
+        "K_ST": _k_st_from_demes(demes),
     }
 
 

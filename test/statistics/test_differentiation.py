@@ -8,9 +8,11 @@ import unittest
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
+from unittest.mock import patch
 
 from fim.statistics import (
     d_m,
+    differentiation,
     differentiation_q,
     e_st,
     equilibrium_d,
@@ -34,6 +36,7 @@ from fim.statistics import (
     total_hill_number,
     within_hill_number,
 )
+from fim.statistics.differentiation import FrequencyTable
 
 DATA_DIRECTORY = Path(__file__).parents[1] / "data" / "statistics"
 
@@ -151,6 +154,76 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                 self.assertRaisesRegex((TypeError, ValueError), message),
             ):
                 h_s(table, weights)
+
+    def test_statistics_report_matches_every_independently_validated_function(
+        self,
+    ) -> None:
+        """The single-validation fast path agrees with each public function.
+
+        `statistics_report` no longer computes `H_S`/`H_T`/`G_ST`/`D`/
+        `E_ST`/`K_ST` by calling the public `h_s`/`h_t`/`g_st`/`jost_d`/
+        `e_st`/`k_st` functions (`20260903-claude-sonnet-5-fim-vg-
+        performance-campaign-design.md` §6.1 item 3) — each of those,
+        called directly here instead, independently re-validates the
+        same table from scratch and (for `g_st`/`jost_d`) recomputes
+        `H_S`/`H_T` from scratch too, so agreement here is a genuine
+        cross-check of the refactored fast path's own math, not
+        circular. `test_golden_statistics`, above, already proves this
+        for seven hand-picked fixtures; this proves it for tables that
+        exercise ragged widths and private alleles the fixtures may not.
+        """
+        tables: list[list[dict[int, float]]] = [
+            [{0: 0.5, 1: 0.5}, {0: 0.25, 2: 0.75}],
+            [{0: 1.0}, {1: 0.5, 2: 0.5}, {0: 0.2, 1: 0.3, 2: 0.5}],
+            [{0: 0.1, 1: 0.9}, {0: 0.9, 1: 0.1}, {1: 1.0}, {0: 0.5, 2: 0.5}],
+        ]
+        for table in tables:
+            with self.subTest(table=table):
+                report = statistics_report(table)
+                report_values = cast("dict[str, float | None]", dict(report))
+                expected = {
+                    "H_S": h_s(table),
+                    "H_T": h_t(table),
+                    "H_ST": h_st(table),
+                    "G_ST": g_st(table),
+                    "D": jost_d(table),
+                    "E_ST": e_st(table),
+                    "K_ST": k_st(table),
+                }
+                for name, expected_value in expected.items():
+                    observed_value = report_values[name]
+                    assert observed_value is not None
+                    assert expected_value is not None
+                    self.assertAlmostEqual(observed_value, expected_value, places=12)
+
+    def test_statistics_report_validates_the_table_exactly_once(self) -> None:
+        """The redundant re-validation this stage removed stays removed.
+
+        Direct mechanism-level proof, not just a matching-output proof:
+        before this fix, one `statistics_report` call validated the same
+        table roughly eleven times over — once itself, once each inside
+        `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st`, and a further two
+        inside `g_st`'s/`jost_d`'s own internal `h_s`/`h_t` calls
+        (measured directly by profiling `_convergence_values_
+        vectorized`'s own reference-scale hot path, not assumed from
+        reading the code alone). Counts real calls across a table with
+        several demes, not just that the final numbers happen to match.
+        """
+        table = [{0: 0.5, 1: 0.5}, {0: 0.25, 2: 0.75}, {0: 0.4, 1: 0.6}]
+        original = differentiation._validate_table
+        call_count = 0
+
+        def counting_validate_table(
+            frequency_table: FrequencyTable,
+        ) -> tuple[dict[int, float], ...]:
+            nonlocal call_count
+            call_count += 1
+            return original(frequency_table)
+
+        with patch.object(differentiation, "_validate_table", counting_validate_table):
+            differentiation.statistics_report(table)
+
+        self.assertEqual(call_count, 1)
 
     def test_differentiation_statistics_are_bounded(self) -> None:
         """All defined scalar differentiation measures stay inside [0, 1]."""
