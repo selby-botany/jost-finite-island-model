@@ -1565,15 +1565,24 @@ Whether this delivers real wall-clock speedup over
 work happens inside NumPy/JIT calls that release the GIL versus
 pure-Python loop overhead — measured, not merely open, as of
 `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
-S10 items 10a/10c: at this project's own reference scale, `drift`'s
+§10 items 10a/10c: at this project's own reference scale, `drift`'s
 own `_inversion_binomial` primitive (needed to keep this backend
 bit-identical to `LinealBackend`, see below) is pure Python and
-holds the GIL for nearly all of `drift`'s own wall-clock time, and
-`migrate`'s/`mutate`'s own RNG calls are unjitted and GIL-bound
-regardless of `jit`, so this class delivers little to no real
-speedup today — a real, quantified, presently-unresolved regression
-against an earlier, pre-Stage-F8 measurement, not a design flaw in
-threading itself. What this class does guarantee, unconditionally:
+holds the GIL for nearly all of `drift`'s own wall-clock time. That
+measurement predates §10 item 10e's own stages 1-3b (2026-09-03):
+`migrate`'s own scalar-rate, continuous-migration path and `mutate`'s
+own event-count draw, whole-generation minting, source attribution,
+and (below a per-locus capacity bound) target selection are now
+`nogil`-compiled too, under `jit=True` — the "unjitted and GIL-bound
+regardless of `jit`" claim this paragraph made through 2026-09-02 is
+no longer an accurate description of the code. Whether that
+translates into real wall-clock thread scaling is a genuinely
+different, re-measured-not-yet question — `20260903-claude-sonnet-
+5-fim-vg-performance-campaign-design.md` §6.3 item 1 schedules the
+re-sweep this claim now depends on; until that lands, treat this
+class's own real-world thread-scaling behavior as unmeasured against
+the current code, not as either the old regression or a new win.
+What this class does guarantee, unconditionally:
 identical results to `SequentialAdvancer` for the same seed, since
 the actual per-lane computation is the same code
 (`SequentialAdvancer.advance` itself, called once per block), only

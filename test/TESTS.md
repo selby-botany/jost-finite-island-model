@@ -3022,6 +3022,66 @@ def test_generational_backend_with_jit_matches_lineal_bit_for_bit(
 
 `ThreadedAdvancer(jit="numba")` reproduces `LinealBackend` exactly.
 
+<a id="engine.test_engine.test_generational_backend_with_sequential_advancer_jit_matches_lineal_for_batch"></a>
+
+#### test\_generational\_backend\_with\_sequential\_advancer\_jit\_matches\_lineal\_for\_batch
+
+```python
+def test_generational_backend_with_sequential_advancer_jit_matches_lineal_for_batch(
+        tiny_params: SimulationParams) -> None
+```
+
+`SequentialAdvancer(jit=True)` reproduces `LinealBackend` exactly, as a batch.
+
+Default infinite-alleles model, default continuous migration —
+stages 1-3 in full: `migrate`'s own batched blend, `mutate`'s own
+batched event-count draw and whole-generation minting reservation.
+A real multi-replicate batch (`n_replicates=3`), not a single lane,
+so `run_batch`'s own lane-dispatch loop is genuinely exercised, not
+just `SequentialAdvancer.advance`'s own single-lane path.
+
+<a id="engine.test_engine.test_sequential_advancer_jit_matches_lineal_under_finite_alleles"></a>
+
+#### test\_sequential\_advancer\_jit\_matches\_lineal\_under\_finite\_alleles
+
+```python
+def test_sequential_advancer_jit_matches_lineal_under_finite_alleles(
+        tiny_params: SimulationParams) -> None
+```
+
+The same round-trip parity holds under the finite-alleles model too.
+
+A short locus (`length=2`, capacity 16) deliberately, not `tiny_
+params`'s own `length=200` (capacity `4**200`) — a capacity that
+large would silently stay under `_MAX_JIT_FINITE_ALLELE_CAPACITY`'s
+own bound every single time, meaning this test would never actually
+exercise the batched target-selection kernel (stage 3b) at all, only
+the already-covered event-count/source-attribution paths. `mutate`'s
+own event-count batching stays off here regardless (`finite_alleles`
+given — see `mutate`'s own `jit` docstring), so this specifically
+proves the source-attribution and target-selection halves survive
+the real batch-driving loop, across several demes and several real
+generations, not just `mutate`'s own already-covered single-call
+tests.
+
+<a id="engine.test_engine.test_sequential_advancer_jit_matches_lineal_under_stochastic_migration"></a>
+
+#### test\_sequential\_advancer\_jit\_matches\_lineal\_under\_stochastic\_migration
+
+```python
+def test_sequential_advancer_jit_matches_lineal_under_stochastic_migration(
+        tiny_params: SimulationParams) -> None
+```
+
+Round-trip parity holds when `migrate`'s own `jit` path is ineligible too.
+
+`migrant_sampling="stochastic"` takes `migrate`'s own batched path
+out of scope entirely (`migrate`'s own `jit` docstring) — combined
+with `mutation_model="finite_alleles"`, this is the "more than one
+operator's own `jit` support is simultaneously out of scope, in the
+same real run" case none of stages 1-3b's own tests exercised
+together, only ever one operator's own ineligibility at a time.
+
 <a id="engine.test_engine.test_fim_engine_backend_generational_with_jit_matches_default"></a>
 
 #### test\_fim\_engine\_backend\_generational\_with\_jit\_matches\_default

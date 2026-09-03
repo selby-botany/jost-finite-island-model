@@ -1963,6 +1963,149 @@ def test_generational_backend_with_jit_matches_lineal_bit_for_bit(
     )
 
 
+# Stage 4 of `20260901-claude-sonnet-5-fim-engine-backend-factory-
+# design.md` §10 item 10e's own phased plan: a full multi-generation
+# round-trip parity test across the whole `step` pipeline (migrate,
+# mutate, drift, in order), driven through the real `GenerationalBackend`/
+# `SequentialAdvancer`/`run_batch` integration — not `step()` called
+# directly in a hand-rolled test loop the way every stage 1-3b test
+# above already does. Stage F8's own minted-bookkeeping bug (§10 Stage
+# F8, "a real, serious, previously-unknown bug found by actually running
+# a full multi-generation batch end to end, not caught by any per-
+# operator exact-match test") is the reason this step exists as its own
+# stage, not folded into stage 3b's own already-large test list — a
+# per-operator test proves an operator is correct in isolation, not that
+# the real batch-driving loop wires lanes/rng/`finite_alleles` together
+# correctly.
+
+
+def test_generational_backend_with_sequential_advancer_jit_matches_lineal_for_batch(
+    tiny_params: SimulationParams,
+) -> None:
+    """`SequentialAdvancer(jit=True)` reproduces `LinealBackend` exactly, as a batch.
+
+    Default infinite-alleles model, default continuous migration —
+    stages 1-3 in full: `migrate`'s own batched blend, `mutate`'s own
+    batched event-count draw and whole-generation minting reservation.
+    A real multi-replicate batch (`n_replicates=3`), not a single lane,
+    so `run_batch`'s own lane-dispatch loop is genuinely exercised, not
+    just `SequentialAdvancer.advance`'s own single-lane path.
+    """
+    pytest.importorskip("numba")
+    params = replace(tiny_params, n_replicates=3)
+
+    lineal_store = InMemoryTrajectoryStore()
+    lineal_results = LinealBackend().run(params, lineal_store, None, _clock)
+    assert isinstance(lineal_results, tuple)
+
+    jit_store = InMemoryTrajectoryStore()
+    jit_results = GenerationalBackend(SequentialAdvancer(jit=True)).run(
+        params, jit_store, None, _clock
+    )
+    assert isinstance(jit_results, tuple)
+
+    assert len(jit_results) == len(lineal_results) == 3
+    for lineal_result, jit_result in zip(lineal_results, jit_results, strict=True):
+        assert jit_result.run_id == lineal_result.run_id
+        assert jit_result.report == lineal_result.report
+        assert jit_result.final_state == lineal_result.final_state
+        assert jit_result.manifest == lineal_result.manifest
+        assert list(jit_store.read(jit_result.run_id)) == list(
+            lineal_store.read(lineal_result.run_id)
+        )
+
+
+def test_sequential_advancer_jit_matches_lineal_under_finite_alleles(
+    tiny_params: SimulationParams,
+) -> None:
+    """The same round-trip parity holds under the finite-alleles model too.
+
+    A short locus (`length=2`, capacity 16) deliberately, not `tiny_
+    params`'s own `length=200` (capacity `4**200`) — a capacity that
+    large would silently stay under `_MAX_JIT_FINITE_ALLELE_CAPACITY`'s
+    own bound every single time, meaning this test would never actually
+    exercise the batched target-selection kernel (stage 3b) at all, only
+    the already-covered event-count/source-attribution paths. `mutate`'s
+    own event-count batching stays off here regardless (`finite_alleles`
+    given — see `mutate`'s own `jit` docstring), so this specifically
+    proves the source-attribution and target-selection halves survive
+    the real batch-driving loop, across several demes and several real
+    generations, not just `mutate`'s own already-covered single-call
+    tests.
+    """
+    pytest.importorskip("numba")
+    params = replace(
+        tiny_params,
+        d=4,
+        mutation_model="finite_alleles",
+        loci=(LocusSpec(1, 2),),  # capacity 16
+        n_replicates=3,
+    )
+
+    lineal_store = InMemoryTrajectoryStore()
+    lineal_results = LinealBackend().run(params, lineal_store, None, _clock)
+    assert isinstance(lineal_results, tuple)
+
+    jit_store = InMemoryTrajectoryStore()
+    jit_results = GenerationalBackend(SequentialAdvancer(jit=True)).run(
+        params, jit_store, None, _clock
+    )
+    assert isinstance(jit_results, tuple)
+
+    assert len(jit_results) == len(lineal_results) == 3
+    for lineal_result, jit_result in zip(lineal_results, jit_results, strict=True):
+        assert jit_result.run_id == lineal_result.run_id
+        assert jit_result.report == lineal_result.report
+        assert jit_result.final_state == lineal_result.final_state
+        assert jit_result.manifest == lineal_result.manifest
+        assert list(jit_store.read(jit_result.run_id)) == list(
+            lineal_store.read(lineal_result.run_id)
+        )
+
+
+def test_sequential_advancer_jit_matches_lineal_under_stochastic_migration(
+    tiny_params: SimulationParams,
+) -> None:
+    """Round-trip parity holds when `migrate`'s own `jit` path is ineligible too.
+
+    `migrant_sampling="stochastic"` takes `migrate`'s own batched path
+    out of scope entirely (`migrate`'s own `jit` docstring) — combined
+    with `mutation_model="finite_alleles"`, this is the "more than one
+    operator's own `jit` support is simultaneously out of scope, in the
+    same real run" case none of stages 1-3b's own tests exercised
+    together, only ever one operator's own ineligibility at a time.
+    """
+    pytest.importorskip("numba")
+    params = replace(
+        tiny_params,
+        d=4,
+        mutation_model="finite_alleles",
+        migrant_sampling="stochastic",
+        loci=(LocusSpec(1, 2),),  # capacity 16
+        n_replicates=3,
+    )
+
+    lineal_store = InMemoryTrajectoryStore()
+    lineal_results = LinealBackend().run(params, lineal_store, None, _clock)
+    assert isinstance(lineal_results, tuple)
+
+    jit_store = InMemoryTrajectoryStore()
+    jit_results = GenerationalBackend(SequentialAdvancer(jit=True)).run(
+        params, jit_store, None, _clock
+    )
+    assert isinstance(jit_results, tuple)
+
+    assert len(jit_results) == len(lineal_results) == 3
+    for lineal_result, jit_result in zip(lineal_results, jit_results, strict=True):
+        assert jit_result.run_id == lineal_result.run_id
+        assert jit_result.report == lineal_result.report
+        assert jit_result.final_state == lineal_result.final_state
+        assert jit_result.manifest == lineal_result.manifest
+        assert list(jit_store.read(jit_result.run_id)) == list(
+            lineal_store.read(lineal_result.run_id)
+        )
+
+
 def test_fim_engine_backend_generational_with_jit_matches_default(
     tiny_params: SimulationParams,
 ) -> None:
