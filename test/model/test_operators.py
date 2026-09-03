@@ -16,8 +16,11 @@ from fim.model.allele import (
 from fim.model.initial import generate_initial_state
 from fim.model.locus import LocusSpec
 from fim.model.operators import (
+    _build_migrate_symmetric_buffers,
     _inversion_binomial,
+    _jit_migrate_symmetric_blend,
     _jit_multinomial_via_binomial,
+    _migrate_symmetric_blend_batched,
     _multinomial_via_binomial,
     drift,
     migrate,
@@ -687,6 +690,155 @@ def test_symmetric_migration_uses_population_size_weights() -> None:
     migrated = migrate(state, 1.0, (10, 30))
     assert migrated.frequency_map(0, 0) == {AlleleId(1): 1.0}
     assert migrated.frequency_map(1, 0) == {AlleleId(0): 1.0}
+
+
+def test_jit_migrate_symmetric_blend_matches_plain_batched_computation() -> None:
+    """The Numba-JIT-compiled kernel is exactly the same function, compiled.
+
+    Isolates the compilation layer from the array-vs-dict question the
+    tests below cover: this only asks whether `_jit_migrate_symmetric_
+    blend` (compiled) and `_migrate_symmetric_blend_batched` (plain)
+    agree with each other, given the identical, realistic ragged buffers
+    `_build_migrate_symmetric_buffers` produces for a real multi-locus
+    state — the same isolation `test_jit_multinomial_via_binomial_
+    matches_plain_decomposition` already does for drift's own compiled
+    primitive.
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=30,
+        m=0.2,
+        mu=0.02,
+        d=10,
+        seed=20260903,
+        loci=(LocusSpec(1, 50), LocusSpec(2, 30), LocusSpec(3, 80)),
+    )
+    state = generate_initial_state(params, np.random.default_rng(20260903))
+    sizes_array = np.full(state.deme_count, 30.0, dtype=np.float64)
+    other_weights = np.full(
+        state.deme_count, 30.0 * (state.deme_count - 1), dtype=np.float64
+    )
+    _, widths, offsets, frequencies_flat = _build_migrate_symmetric_buffers(state)
+
+    plain = _migrate_symmetric_blend_batched(
+        0.2, sizes_array, other_weights, widths, offsets, frequencies_flat
+    )
+    jitted = _jit_migrate_symmetric_blend(
+        0.2, sizes_array, other_weights, widths, offsets, frequencies_flat
+    )
+
+    assert plain.tolist() == jitted.tolist()
+
+
+def test_migrate_with_jit_matches_migrate_without_jit_bit_for_bit() -> None:
+    """`jit=True` changes nothing about `migrate`'s own output, for any rate.
+
+    Unlike `drift`'s own jit argument, `migrate`'s deterministic path
+    consumes no RNG at all, so there is no stream-consumption-order
+    question to test here — only whether the array-native kernel's own
+    floating-point arithmetic reproduces the dict-based loop's own
+    arithmetic exactly (see `_migrate_symmetric_blend_batched`'s own
+    docstring for why it does, by construction).
+    """
+    pytest.importorskip("numba")
+    for rate in (0.0, 0.1, 0.35, 1.0):
+        unjitted = migrate(_state(), rate, jit=False)
+        jitted = migrate(_state(), rate, jit=True)
+        assert unjitted == jitted, rate
+
+
+def test_migrate_with_jit_matches_without_jit_across_many_demes_and_loci() -> None:
+    """The ragged, per-locus flat-buffer path stays bit-identical.
+
+    `_state()`'s own fixture (2 demes, 1 locus, both alleles present
+    everywhere) barely exercises the ragged, varying-per-locus-width
+    layout `_build_migrate_symmetric_buffers` builds — this test uses
+    many demes and several loci of different capacities (and so,
+    already at generation zero via `generate_initial_state`'s own
+    per-locus allele space, different segregating-allele counts),
+    exactly the shape most likely to expose an indexing bug in the
+    flat-buffer-plus-offsets packing/unpacking if one existed.
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=40,
+        m=0.25,
+        mu=0.02,
+        d=12,
+        seed=20260903,
+        loci=(LocusSpec(1, 50), LocusSpec(2, 30), LocusSpec(3, 80)),
+    )
+    state = generate_initial_state(params, np.random.default_rng(20260903))
+
+    unjitted = migrate(state, params.m, params.N, jit=False)
+    jitted = migrate(state, params.m, params.N, jit=True)
+
+    assert unjitted == jitted
+
+
+def test_migrate_jit_is_silently_ignored_for_a_full_matrix() -> None:
+    """`jit=True` with a full weight matrix falls back, not an error.
+
+    `migrate`'s own `jit` support is scoped to the scalar-rate,
+    deterministic case only (`20260901-claude-sonnet-5-fim-engine-
+    backend-factory-design.md` §10 item 10e, stage 1) — a matrix `m`
+    must keep working exactly as before, silently, not raise.
+    """
+    pytest.importorskip("numba")
+    matrix = ((0.75, 0.25), (0.25, 0.75))
+
+    without_jit = migrate(_state(), matrix)
+    with_jit_requested = migrate(_state(), matrix, jit=True)
+
+    assert without_jit == with_jit_requested
+
+
+def test_migrate_jit_is_silently_ignored_for_stochastic_sampling(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`jit=True` with an `rng` (stochastic migrant sampling) falls back too.
+
+    Same scope boundary as the matrix case above, checked against the
+    other axis `migrate`'s own `jit` argument does not cover: the
+    opt-in stochastic-migrant-count model still consumes `rng` calls
+    identically either way, so both calls, given the same seed, must
+    produce the same draws.
+    """
+    pytest.importorskip("numba")
+    without_jit = migrate(_state(), 0.3, (20, 20), rng=rng(20260903), jit=False)
+    with_jit_requested = migrate(_state(), 0.3, (20, 20), rng=rng(20260903), jit=True)
+
+    assert without_jit == with_jit_requested
+
+
+def test_step_with_migrate_jit_matches_without_jit_across_many_generations(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`step`'s own migrate stage stays bit-identical under `jit=True` too.
+
+    Runs several real generations (migrate, mutate, drift, in order) so
+    `migrate`'s own jit path sees the naturally shrinking, unequal
+    per-locus allele sets drift/mutate actually produce over time, not
+    only generation zero's own freshly generated state.
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=25,
+        m=0.2,
+        mu=0.02,
+        d=10,
+        seed=20260903,
+        loci=(LocusSpec(1, 40), LocusSpec(2, 60)),
+    )
+    state = generate_initial_state(params, rng(20260903))
+
+    unjitted_rng = rng(11)
+    jitted_rng = rng(11)
+    for _ in range(20):
+        unjitted_state = step(state, params, AlleleRegistry(), unjitted_rng, jit=False)
+        jitted_state = step(state, params, AlleleRegistry(), jitted_rng, jit=True)
+        assert unjitted_state == jitted_state
+        state = unjitted_state
 
 
 def test_migrate_stochastic_requires_population_size(

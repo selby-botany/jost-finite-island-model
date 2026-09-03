@@ -5322,7 +5322,8 @@ def migrate(state: ModelState,
             m: Migration,
             population_size: PopulationSize | None = None,
             *,
-            rng: np.random.Generator | None = None) -> ModelState
+            rng: np.random.Generator | None = None,
+            jit: bool = False) -> ModelState
 ```
 
 Blend each deme with the current all-other-deme migrant pool.
@@ -5357,6 +5358,23 @@ are designed to quantify.
   generation to generation — while migrant *composition* stays
   the existing deterministic, weighted pool average. Requires
   ``population_size``.
+- `jit` - When `True`, and only when eligible (`m` a plain scalar rate
+  and `rng` is `None` — the default, deterministic "continuous"
+  migration path), blend every locus's own dense (deme, allele)
+  frequency block in one Numba-JIT-compiled, `nogil=True` call
+  (`_migrate_symmetric_jit`) instead of the ordinary per-deme
+  dict loop — bit-identical output either way (see
+  `_migrate_symmetric_jit`'s own docstring for the argument),
+  and free of GIL-release concerns during the compiled call
+  itself. Silently ignored, not an error, for a full custom
+  weight matrix or the opt-in stochastic-migrant-count model —
+  unlike `VectorizedAdvancer`'s own hard config-scope
+  `ValueError` (`fim.engine`), `jit` here is purely a
+  same-output performance hint, exactly like `drift`'s own
+  `jit` argument already is, not a behavioral mode switch, so
+  an ineligible combination just keeps using the existing,
+  always-correct dict-based path rather than failing. Needs
+  `numba` installed only when both `True` and eligible.
 
 
 **Returns**:
@@ -5474,13 +5492,15 @@ conventional choice this project follows.
   generation — required when
   ``params.mutation_model == "finite_alleles"``, unused
   otherwise.
-- `jit` - Passed through to `drift`'s own `jit` argument — see its
-  docstring. Only `drift`'s own multinomial draw is
-  JIT-compiled today; `migrate`'s and `mutate`'s own RNG calls
-  are unaffected by this flag, a deliberate, documented scope
-  boundary (drift's is the highest-frequency RNG call in this
-  module — one per deme per locus, every generation — not an
-  oversight of the other two).
+- `jit` - Passed through to `drift`'s own `jit` argument (see its
+  docstring) and, since `20260901-claude-sonnet-5-fim-engine-
+  backend-factory-design.md` §10 item 10e's own stage 1, to
+  `migrate`'s own `jit` argument too — silently a no-op there
+  for a full custom weight matrix or stochastic migrant
+  sampling (see `migrate`'s own docstring), real for the
+  default scalar-rate, deterministic case. `mutate`'s own RNG
+  calls remain unaffected by this flag — 10e's own stage 2
+  and 3, not yet built.
 
 
 **Returns**:

@@ -688,6 +688,7 @@ def migrate(
     population_size: PopulationSize | None = None,
     *,
     rng: np.random.Generator | None = None,
+    jit: bool = False,
 ) -> ModelState:
     """Blend each deme with the current all-other-deme migrant pool.
 
@@ -720,6 +721,23 @@ def migrate(
             generation to generation — while migrant *composition* stays
             the existing deterministic, weighted pool average. Requires
             ``population_size``.
+        jit: When `True`, and only when eligible (`m` a plain scalar rate
+            and `rng` is `None` — the default, deterministic "continuous"
+            migration path), blend every locus's own dense (deme, allele)
+            frequency block in one Numba-JIT-compiled, `nogil=True` call
+            (`_migrate_symmetric_jit`) instead of the ordinary per-deme
+            dict loop — bit-identical output either way (see
+            `_migrate_symmetric_jit`'s own docstring for the argument),
+            and free of GIL-release concerns during the compiled call
+            itself. Silently ignored, not an error, for a full custom
+            weight matrix or the opt-in stochastic-migrant-count model —
+            unlike `VectorizedAdvancer`'s own hard config-scope
+            `ValueError` (`fim.engine`), `jit` here is purely a
+            same-output performance hint, exactly like `drift`'s own
+            `jit` argument already is, not a behavioral mode switch, so
+            an ineligible combination just keeps using the existing,
+            always-correct dict-based path rather than failing. Needs
+            `numba` installed only when both `True` and eligible.
 
     Returns:
         A state at the same generation containing post-migration frequencies.
@@ -738,7 +756,7 @@ def migrate(
         symmetric_sizes = (
             matrix_sizes if matrix_sizes is not None else (1,) * state.deme_count
         )
-        demes = _migrate_symmetric(state, float(m), symmetric_sizes, rng=rng)
+        demes = _migrate_symmetric(state, float(m), symmetric_sizes, rng=rng, jit=jit)
     else:
         demes = _migrate_matrix(state, m, sizes=matrix_sizes, rng=rng)
     return ModelState(
@@ -907,13 +925,15 @@ def step(
             generation — required when
             ``params.mutation_model == "finite_alleles"``, unused
             otherwise.
-        jit: Passed through to `drift`'s own `jit` argument — see its
-            docstring. Only `drift`'s own multinomial draw is
-            JIT-compiled today; `migrate`'s and `mutate`'s own RNG calls
-            are unaffected by this flag, a deliberate, documented scope
-            boundary (drift's is the highest-frequency RNG call in this
-            module — one per deme per locus, every generation — not an
-            oversight of the other two).
+        jit: Passed through to `drift`'s own `jit` argument (see its
+            docstring) and, since `20260901-claude-sonnet-5-fim-engine-
+            backend-factory-design.md` §10 item 10e's own stage 1, to
+            `migrate`'s own `jit` argument too — silently a no-op there
+            for a full custom weight matrix or stochastic migrant
+            sampling (see `migrate`'s own docstring), real for the
+            default scalar-rate, deterministic case. `mutate`'s own RNG
+            calls remain unaffected by this flag — 10e's own stage 2
+            and 3, not yet built.
 
     Returns:
         The next generation.
@@ -923,7 +943,7 @@ def step(
     # rng draws and every existing reproducible run is bit-for-bit
     # unaffected by this feature's existence.
     migration_rng = rng if params.migrant_sampling == "stochastic" else None
-    migrated = migrate(state, params.m, params.N, rng=migration_rng)
+    migrated = migrate(state, params.m, params.N, rng=migration_rng, jit=jit)
     mutated = mutate(
         migrated, params.mu, params.N, registry, rng, finite_alleles=finite_alleles
     )
@@ -1025,12 +1045,275 @@ def _migrate_matrix(
     return tuple(result)
 
 
+_JIT_MIGRATE_SYMMETRIC_BLEND: (
+    Callable[
+        [float, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+        np.ndarray,
+    ]
+    | None
+) = None
+
+
+def _build_migrate_symmetric_buffers(
+    state: ModelState,
+) -> tuple[list[tuple[AlleleId, ...]], np.ndarray, np.ndarray, np.ndarray]:
+    """Flatten every locus's own dense (deme, allele) frequency block.
+
+    Each locus has its own segregating-allele count (`_allele_union`'s
+    own union across every deme at that locus, this generation), so — the
+    same ragged-array-as-flat-buffer-plus-offsets layout
+    `_build_flat_drift_buffers` already uses one axis over (`_migrate_
+    symmetric_blend_batched`'s own docstring has the consumer side) —
+    every locus's own `(deme_count, width)` block is flattened row-major
+    (deme-major within the block, matching the deme-ascending
+    accumulation order `_migrate_symmetric_blend_batched` depends on for
+    bit-identity) and concatenated into one buffer, with `offsets`
+    marking where each locus's own block starts. `widths` gives Numba's
+    own compiled loop the one extra integer it needs per locus that a
+    ``block.shape`` lookup would otherwise supply.
+
+    Allele indices within a locus are assigned in ascending allele-id
+    order — not required for correctness here (see `_migrate_symmetric_
+    blend_batched`'s own docstring: no computation in this stage depends
+    on allele visiting order, only deme visiting order does), chosen
+    only for consistency with the project's own established canonical
+    order (`_build_flat_drift_buffers`'s own docstring; Backend V's dense
+    arrays are always indexed the same way).
+
+    Returns:
+        Each locus's own allele ids in ascending order (for unpacking
+        the blended result back into frequency maps afterward), the
+        per-locus `widths` array, the `offsets` array (length
+        `state.locus_count + 1`), and the concatenated `frequencies_flat`
+        array — see `_migrate_symmetric_blend_batched`'s own docstring
+        for how the last three are consumed.
+    """
+    allele_ids_per_locus: list[tuple[AlleleId, ...]] = []
+    widths: list[int] = []
+    blocks: list[np.ndarray] = []
+    for locus_index in range(state.locus_count):
+        frequency_maps = tuple(
+            state.frequency_map(deme_index, locus_index)
+            for deme_index in range(state.deme_count)
+        )
+        allele_ids = tuple(sorted(_allele_union(frequency_maps)))
+        width = len(allele_ids)
+        block = np.zeros((state.deme_count, width), dtype=np.float64)
+        for deme_index, frequency_map in enumerate(frequency_maps):
+            for allele_index, allele_id in enumerate(allele_ids):
+                value = frequency_map.get(allele_id)
+                if value is not None:
+                    block[deme_index, allele_index] = value
+        allele_ids_per_locus.append(allele_ids)
+        widths.append(width)
+        blocks.append(block.reshape(-1))
+    offsets = np.zeros(len(blocks) + 1, dtype=np.int64)
+    for index, block in enumerate(blocks):
+        offsets[index + 1] = offsets[index] + block.shape[0]
+    frequencies_flat = (
+        np.concatenate(blocks) if blocks else np.empty(0, dtype=np.float64)
+    )
+    return (
+        allele_ids_per_locus,
+        np.asarray(widths, dtype=np.int64),
+        offsets,
+        frequencies_flat,
+    )
+
+
+def _migrate_symmetric_blend_batched(
+    rate: float,
+    sizes: np.ndarray,
+    other_weights: np.ndarray,
+    widths: np.ndarray,
+    offsets: np.ndarray,
+    frequencies_flat: np.ndarray,
+) -> np.ndarray:
+    """Blend every locus's own dense (deme, allele) frequency block in one pass.
+
+    The array-shaped, two-phase restatement of `_migrate_symmetric`'s
+    own `rng is None` loop above, deliberately **not** a
+    `sizes @ frequencies` matrix product: BLAS's own internal reduction
+    order for a matmul does not, in general, match a plain left-to-right
+    running sum, so a matmul-based version would trade this stage's own
+    bit-identity goal for a speed difference nothing here actually
+    needs (`migrate`'s own `jit` docstring; unlike Backend V's own
+    `migrate_vectorized`, §5.1 of the vector design, this stage does not
+    need BLAS's own throughput — it needs a same-output, GIL-releasing
+    compiled replacement for an existing dict loop). Phase one, per
+    locus, per allele: accumulate ``mass[a] = sum_i sizes[i] *
+    frequencies[i, a]`` by walking every deme in ascending order,
+    ``i = 0 .. deme_count - 1`` — the identical order, and the identical
+    per-term floating-point operation, `_migrate_symmetric`'s own
+    dict-based accumulation already uses (`mass.get(allele_id, 0.0) +
+    size * frequency`, visited deme-major). The two loops are not
+    literally the same code, but are bit-identical by construction:
+    IEEE 754 addition of an exact `+0.0` never changes a finite running
+    total's own bit pattern, so this loop's explicit ``sizes[i] * 0.0``
+    contribution from a deme where allele `a` is absent (this function's
+    own dense input always holds an exact `0.0` there, never skips a
+    cell) reproduces precisely the dict-based loop's own implicit
+    "skip this deme's contribution entirely" behavior — same running
+    total, same rounding, at every step. Phase two, per destination deme
+    `i`, per allele `a`: the same three-line formula `_migrate_
+    symmetric`'s own dict-based branch already uses (``pool = (mass[a] -
+    sizes[i] * local) / other_weights[i]``, ``blended = (1 - rate) *
+    local + rate * pool``), evaluated once per `(i, a)` cell — no
+    reduction at all here, so no ordering question to begin with. The
+    caller (`_migrate_symmetric_jit`) still finishes every locus/
+    destination's own result through the unmodified `_normalize` — whose
+    own `math.fsum`-based sum is exact and therefore order-independent —
+    so the two phases above are the *only* places this whole path could
+    diverge from the dict-based one, and both are shown bit-identical
+    above, not merely close.
+
+    Args:
+        rate: The scalar migration rate (``_migrate_symmetric``'s own
+            already-validated ``rate != 0.0`` — the caller never invokes
+            this for the ``rate == 0.0`` short-circuit).
+        sizes: Every deme's own gene-copy count, as `float64` (exact for
+            any population size a real run uses — see
+            `_migrate_symmetric_jit`'s own docstring).
+        other_weights: ``total_size - sizes[i]`` per deme, precomputed
+            once by the caller.
+        widths: Each locus's own segregating-allele count, in the same
+            order `offsets` uses.
+        offsets: Length ``widths.shape[0] + 1``; locus `j`'s own
+            ``(deme_count, widths[j])`` block, flattened row-major,
+            occupies ``frequencies_flat[offsets[j]:offsets[j + 1]]``.
+        frequencies_flat: Every locus's own dense frequency block,
+            concatenated in the same order as `widths`/`offsets` — see
+            `_build_migrate_symmetric_buffers`'s own docstring for the
+            exact layout.
+
+    Returns:
+        The blended result, same flat layout as `frequencies_flat`
+        — not yet normalized (`_migrate_symmetric_jit` finishes that
+        through `_normalize`, exactly as the dict-based path does).
+    """
+    blended_flat = np.empty_like(frequencies_flat)
+    deme_count = sizes.shape[0]
+    locus_count = widths.shape[0]
+    for locus_index in range(locus_count):
+        width = widths[locus_index]
+        base = offsets[locus_index]
+        mass = np.zeros(width, dtype=np.float64)
+        for allele_index in range(width):
+            total = 0.0
+            for deme_index in range(deme_count):
+                total += (
+                    sizes[deme_index]
+                    * frequencies_flat[base + deme_index * width + allele_index]
+                )
+            mass[allele_index] = total
+        for deme_index in range(deme_count):
+            weight = other_weights[deme_index]
+            size = sizes[deme_index]
+            for allele_index in range(width):
+                position = base + deme_index * width + allele_index
+                local = frequencies_flat[position]
+                pool = (mass[allele_index] - size * local) / weight
+                blended_flat[position] = (1.0 - rate) * local + rate * pool
+    return blended_flat
+
+
+def _jit_migrate_symmetric_blend(
+    rate: float,
+    sizes: np.ndarray,
+    other_weights: np.ndarray,
+    widths: np.ndarray,
+    offsets: np.ndarray,
+    frequencies_flat: np.ndarray,
+) -> np.ndarray:
+    """`_migrate_symmetric_blend_batched`, JIT-compiled with `nogil=True`.
+
+    No internal call to another project-defined function happens inside
+    `_migrate_symmetric_blend_batched` (unlike `_drift_counts_batched`,
+    which needs `_inversion_binomial`'s own algorithm and so duplicates
+    it as a nested closure — see that function's own docstring for why),
+    so this compiles directly, the same lazy, cached, `nogil=True`
+    pattern as `_jit_multinomial_via_binomial`. `numba` is an optional
+    dependency (``pip install fim[jit]``), imported here and nowhere else
+    in this function — only a caller that explicitly requests
+    `migrate(..., jit=True)` on an eligible (scalar-rate, deterministic)
+    call ever pays its import/compilation cost or needs it installed at
+    all. Compiled once, on first call, and cached at module level.
+
+    Raises:
+        ImportError: If `numba` is not installed.
+    """
+    global _JIT_MIGRATE_SYMMETRIC_BLEND  # noqa: PLW0603
+    if _JIT_MIGRATE_SYMMETRIC_BLEND is None:
+        import numba  # noqa: PLC0415 -- lazy, optional-dependency import
+
+        _JIT_MIGRATE_SYMMETRIC_BLEND = numba.jit(nogil=True)(
+            _migrate_symmetric_blend_batched
+        )
+    return _JIT_MIGRATE_SYMMETRIC_BLEND(
+        rate, sizes, other_weights, widths, offsets, frequencies_flat
+    )
+
+
+def _migrate_symmetric_jit(
+    state: ModelState, rate: float, sizes: tuple[int, ...]
+) -> tuple[tuple[Mapping[AlleleId, float], ...], ...]:
+    """`_migrate_symmetric`'s own ``rng is None`` branch, `nogil`-JIT-compiled.
+
+    Bit-identical to that branch for the same state, not merely
+    close — the one genuine reduction in the whole computation (the
+    per-locus, per-allele size-weighted `mass` sum) is reproduced term
+    for term, in the identical deme-ascending order, and every other
+    step is either a single per-cell formula (no reduction, hence no
+    ordering question) or `_normalize`'s own already-exact,
+    order-independent `math.fsum` — see `_migrate_symmetric_blend_
+    batched`'s own docstring for the full argument. Called only from
+    `_migrate_symmetric`'s own ``rng is None and jit`` branch — the
+    ``rate == 0.0`` short-circuit above it already returns before this
+    function would ever be reached with nothing to blend.
+
+    Args:
+        state: Current generation.
+        rate: The scalar migration rate.
+        sizes: Every deme's own gene-copy count.
+
+    Returns:
+        The same nested-tuple-of-frequency-maps shape
+        `_migrate_symmetric`'s own dict-based branch returns.
+    """
+    sizes_array = np.asarray(sizes, dtype=np.float64)
+    total_size = float(sum(sizes))
+    other_weights = total_size - sizes_array
+    allele_ids_per_locus, widths, offsets, frequencies_flat = (
+        _build_migrate_symmetric_buffers(state)
+    )
+    blended_flat = _jit_migrate_symmetric_blend(
+        rate, sizes_array, other_weights, widths, offsets, frequencies_flat
+    )
+    result: list[tuple[Mapping[AlleleId, float], ...]] = []
+    for destination in range(state.deme_count):
+        locus_maps: list[Mapping[AlleleId, float]] = []
+        for locus_index in range(state.locus_count):
+            allele_ids = allele_ids_per_locus[locus_index]
+            width = int(widths[locus_index])
+            base = int(offsets[locus_index])
+            start = base + destination * width
+            row = blended_flat[start : start + width]
+            blended = {
+                allele_id: float(value)
+                for allele_id, value in zip(allele_ids, row, strict=True)
+            }
+            locus_maps.append(_normalize(blended))
+        result.append(tuple(locus_maps))
+    return tuple(result)
+
+
 def _migrate_symmetric(
     state: ModelState,
     rate: float,
     sizes: tuple[int, ...],
     *,
     rng: np.random.Generator | None = None,
+    jit: bool = False,
 ) -> tuple[tuple[Mapping[AlleleId, float], ...], ...]:
     """Apply scalar all-other-deme migration in ``O(d * A)`` time.
 
@@ -1048,12 +1331,23 @@ def _migrate_symmetric(
     instead drawn from ``Binomial(size, rate)`` (see ``_blend``); the two
     branches are kept fully separate below so the default path's
     floating-point arithmetic is untouched by the new one.
+
+    Args:
+        jit: When `True` and `rng is None`, dispatch to
+            `_migrate_symmetric_jit` instead of the dict-based loop
+            below — see `migrate`'s own `jit` argument. Ignored (not an
+            error) when `rng` is given; the stochastic path stays
+            dict-based, out of this stage's own scope
+            (`20260901-claude-sonnet-5-fim-engine-backend-factory-
+            design.md` §10 item 10e's own phased plan, stage 1).
     """
     if rate == 0.0:
         return tuple(
             tuple(dict(frequency_map) for frequency_map in deme)
             for deme in state.frequencies
         )
+    if rng is None and jit:
+        return _migrate_symmetric_jit(state, rate, sizes)
     total_size = float(sum(sizes))
     global_mass: list[dict[AlleleId, float]] = []
     for locus_index in range(state.locus_count):

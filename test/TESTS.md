@@ -7270,6 +7270,111 @@ def test_symmetric_migration_uses_population_size_weights() -> None
 
 Unequal demes contribute migrants in proportion to their copy counts.
 
+<a id="model.test_operators.test_jit_migrate_symmetric_blend_matches_plain_batched_computation"></a>
+
+#### test\_jit\_migrate\_symmetric\_blend\_matches\_plain\_batched\_computation
+
+```python
+def test_jit_migrate_symmetric_blend_matches_plain_batched_computation(
+) -> None
+```
+
+The Numba-JIT-compiled kernel is exactly the same function, compiled.
+
+Isolates the compilation layer from the array-vs-dict question the
+tests below cover: this only asks whether `_jit_migrate_symmetric_
+blend` (compiled) and `_migrate_symmetric_blend_batched` (plain)
+agree with each other, given the identical, realistic ragged buffers
+`_build_migrate_symmetric_buffers` produces for a real multi-locus
+state — the same isolation `test_jit_multinomial_via_binomial_
+matches_plain_decomposition` already does for drift's own compiled
+primitive.
+
+<a id="model.test_operators.test_migrate_with_jit_matches_migrate_without_jit_bit_for_bit"></a>
+
+#### test\_migrate\_with\_jit\_matches\_migrate\_without\_jit\_bit\_for\_bit
+
+```python
+def test_migrate_with_jit_matches_migrate_without_jit_bit_for_bit() -> None
+```
+
+`jit=True` changes nothing about `migrate`'s own output, for any rate.
+
+Unlike `drift`'s own jit argument, `migrate`'s deterministic path
+consumes no RNG at all, so there is no stream-consumption-order
+question to test here — only whether the array-native kernel's own
+floating-point arithmetic reproduces the dict-based loop's own
+arithmetic exactly (see `_migrate_symmetric_blend_batched`'s own
+docstring for why it does, by construction).
+
+<a id="model.test_operators.test_migrate_with_jit_matches_without_jit_across_many_demes_and_loci"></a>
+
+#### test\_migrate\_with\_jit\_matches\_without\_jit\_across\_many\_demes\_and\_loci
+
+```python
+def test_migrate_with_jit_matches_without_jit_across_many_demes_and_loci(
+) -> None
+```
+
+The ragged, per-locus flat-buffer path stays bit-identical.
+
+`_state()`'s own fixture (2 demes, 1 locus, both alleles present
+everywhere) barely exercises the ragged, varying-per-locus-width
+layout `_build_migrate_symmetric_buffers` builds — this test uses
+many demes and several loci of different capacities (and so,
+already at generation zero via `generate_initial_state`'s own
+per-locus allele space, different segregating-allele counts),
+exactly the shape most likely to expose an indexing bug in the
+flat-buffer-plus-offsets packing/unpacking if one existed.
+
+<a id="model.test_operators.test_migrate_jit_is_silently_ignored_for_a_full_matrix"></a>
+
+#### test\_migrate\_jit\_is\_silently\_ignored\_for\_a\_full\_matrix
+
+```python
+def test_migrate_jit_is_silently_ignored_for_a_full_matrix() -> None
+```
+
+`jit=True` with a full weight matrix falls back, not an error.
+
+`migrate`'s own `jit` support is scoped to the scalar-rate,
+deterministic case only (`20260901-claude-sonnet-5-fim-engine-
+backend-factory-design.md` §10 item 10e, stage 1) — a matrix `m`
+must keep working exactly as before, silently, not raise.
+
+<a id="model.test_operators.test_migrate_jit_is_silently_ignored_for_stochastic_sampling"></a>
+
+#### test\_migrate\_jit\_is\_silently\_ignored\_for\_stochastic\_sampling
+
+```python
+def test_migrate_jit_is_silently_ignored_for_stochastic_sampling(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`jit=True` with an `rng` (stochastic migrant sampling) falls back too.
+
+Same scope boundary as the matrix case above, checked against the
+other axis `migrate`'s own `jit` argument does not cover: the
+opt-in stochastic-migrant-count model still consumes `rng` calls
+identically either way, so both calls, given the same seed, must
+produce the same draws.
+
+<a id="model.test_operators.test_step_with_migrate_jit_matches_without_jit_across_many_generations"></a>
+
+#### test\_step\_with\_migrate\_jit\_matches\_without\_jit\_across\_many\_generations
+
+```python
+def test_step_with_migrate_jit_matches_without_jit_across_many_generations(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`step`'s own migrate stage stays bit-identical under `jit=True` too.
+
+Runs several real generations (migrate, mutate, drift, in order) so
+`migrate`'s own jit path sees the naturally shrinking, unequal
+per-locus allele sets drift/mutate actually produce over time, not
+only generation zero's own freshly generated state.
+
 <a id="model.test_operators.test_migrate_stochastic_requires_population_size"></a>
 
 #### test\_migrate\_stochastic\_requires\_population\_size
