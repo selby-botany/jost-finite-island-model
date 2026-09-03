@@ -95,6 +95,44 @@ class AlleleRegistry:
         self._next += 1
         return allele_id
 
+    def next_k_ids(self, k: int) -> np.ndarray:
+        """Reserve ``k`` consecutive, never-before-returned allele identities.
+
+        The vectorized counterpart to `next_id`, designed but never
+        built in `20260829-claude-sonnet-5-fim-vector-design.md` §5.2 —
+        built here for `20260901-claude-sonnet-5-fim-engine-backend-
+        factory-design.md` §10 item 10e's own stage 3 (batching
+        `mutate`'s own infinite-alleles minting across a whole
+        generation instead of one `next_id()` call per event). The
+        correctness guarantee `next_id`'s own docstring states —
+        "every call returns something no earlier call ever returned" —
+        constrains only the *reservation*, a single, genuinely
+        sequential integer read-modify-write, not how the reserved
+        block of `k` identities gets constructed afterward: `k`
+        sequential `next_id()` calls and one `next_k_ids(k)` call return
+        bit-identical values, in the same order, since both are exactly
+        ``base, base + 1, ..., base + k - 1`` — the only difference is
+        that this method pays the sequential counter's own cost once,
+        not `k` times.
+
+        Args:
+            k: Number of identities to reserve. `0` is valid and
+                reserves nothing, advancing the counter by zero.
+
+        Returns:
+            A `(k,)` `int64` array of consecutive identities, the same
+            values `k` consecutive `next_id()` calls would have
+            returned, in the same order.
+
+        Raises:
+            ValueError: If `k` is negative.
+        """
+        if k < 0:
+            raise ValueError("next_k_ids() requires a non-negative k")
+        base = self._next
+        self._next += k
+        return base + np.arange(k, dtype=np.int64)
+
 
 class FiniteAlleleSpace:
     """One locus's bounded allele-state space under the K-allele model.

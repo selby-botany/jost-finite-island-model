@@ -163,6 +163,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [AlleleRegistry](#fim.model.allele.AlleleRegistry)
     * [\_\_init\_\_](#fim.model.allele.AlleleRegistry.__init__)
     * [next\_id](#fim.model.allele.AlleleRegistry.next_id)
+    * [next\_k\_ids](#fim.model.allele.AlleleRegistry.next_k_ids)
   * [FiniteAlleleSpace](#fim.model.allele.FiniteAlleleSpace)
     * [\_\_init\_\_](#fim.model.allele.FiniteAlleleSpace.__init__)
     * [mutate\_target](#fim.model.allele.FiniteAlleleSpace.mutate_target)
@@ -4738,6 +4739,50 @@ def next_id() -> AlleleId
 
 Return a new allele identity that has never been returned before.
 
+<a id="fim.model.allele.AlleleRegistry.next_k_ids"></a>
+
+#### next\_k\_ids
+
+```python
+def next_k_ids(k: int) -> np.ndarray
+```
+
+Reserve ``k`` consecutive, never-before-returned allele identities.
+
+The vectorized counterpart to `next_id`, designed but never
+built in `20260829-claude-sonnet-5-fim-vector-design.md` §5.2 —
+built here for `20260901-claude-sonnet-5-fim-engine-backend-
+factory-design.md` §10 item 10e's own stage 3 (batching
+`mutate`'s own infinite-alleles minting across a whole
+generation instead of one `next_id()` call per event). The
+correctness guarantee `next_id`'s own docstring states —
+"every call returns something no earlier call ever returned" —
+constrains only the *reservation*, a single, genuinely
+sequential integer read-modify-write, not how the reserved
+block of `k` identities gets constructed afterward: `k`
+sequential `next_id()` calls and one `next_k_ids(k)` call return
+bit-identical values, in the same order, since both are exactly
+``base, base + 1, ..., base + k - 1`` — the only difference is
+that this method pays the sequential counter's own cost once,
+not `k` times.
+
+**Arguments**:
+
+- `k` - Number of identities to reserve. `0` is valid and
+  reserves nothing, advancing the counter by zero.
+
+
+**Returns**:
+
+  A `(k,)` `int64` array of consecutive identities, the same
+  values `k` consecutive `next_id()` calls would have
+  returned, in the same order.
+
+
+**Raises**:
+
+- `ValueError` - If `k` is negative.
+
 <a id="fim.model.allele.FiniteAlleleSpace"></a>
 
 ## FiniteAlleleSpace Objects
@@ -5452,37 +5497,58 @@ docstring already names.
   the existing allele each one came from, sampled proportionally
   to that allele's current share, exactly like the proportional
   mass reduction below already assumes.
-- `jit` - When `True` and `finite_alleles is None` (the default,
-  infinite-alleles model — see below for why the finite-
-  alleles model is out of scope), draw every `(deme, locus)`
-  pair's own event count in one Numba-JIT-compiled,
-  `nogil=True` call (`_jit_mutate_event_counts_batched`)
-  instead of one `_inversion_binomial` call per pair —
-  bit-identical output either way (this is stage 2 of
+- `jit` - When `True`, speeds up both mutation models, in two
+  different, independently scoped ways — see stage 3 of
   `20260901-claude-sonnet-5-fim-engine-backend-factory-
-  design.md` §10 item 10e's own phased plan; only the *event-
-  count draw* is batched — the proportional mass reduction
-  just below reads a precomputed scalar either way and needs
-  no batching of its own to benefit, and allele minting/
-  target-selection, stage 3, are untouched). Silently
-  ignored, not an error, when `finite_alleles` is given —
-  `registry.next_id()` (the infinite-alleles model's own
-  minting call) is a pure counter that consumes no `rng` draw
-  at all, so precomputing every pair's own event count up
-  front never changes what else that pair's own remaining
-  work draws from `rng` in between — but the finite-alleles
-  model's own per-event source-attribution
+  design.md` §10 item 10e's own phased plan for the full
+  account of why the two ways differ this much.
+
+  Under the default infinite-alleles model
+  (`finite_alleles is None`): every `(deme, locus)` pair's
+  own event count is drawn in one Numba-JIT-compiled,
+  `nogil=True` call (`_jit_mutate_event_counts_batched`,
+  stage 2) instead of one `_inversion_binomial` call per
+  pair, *and* every minted allele identity this whole call
+  needs, across every pair, is reserved in one
+  `AlleleRegistry.next_k_ids` call instead of one
+  `registry.next_id()` call per event (stage 3) — safe to
+  batch this broadly because `registry.next_id`/`next_k_ids`
+  are pure counters that consume no `rng` draw at all, so
+  precomputing every pair's own event count and every
+  minted ID up front never changes what else that pair's own
+  remaining work draws from `rng` in between. Bit-identical
+  output either way.
+
+  Under the opt-in finite-alleles model (`finite_alleles`
+- `given)` - **not** batched across pairs, deliberately — the
+  per-event source-attribution
   (`_multinomial_via_inversion_binomial`) and target
-  selection (`finite_alleles.mutate_target`) *do* draw from
-  `rng`, interleaved with each pair's own processing in the
-  unjitted loop below; precomputing every pair's own event
-  count up front would draw a later pair's own count before
-  an earlier pair's own finite-alleles draws happen,
-  desyncing the two paths from the very first pair with more
-  than one event (confirmed directly — an initial version of
-  this fix applied unconditionally and a bit-identity test
-  caught the divergence). Needs `numba` installed only when
-  `True` and eligible.
+  selection (`finite_alleles.mutate_target`) both draw from
+  `rng`, interleaved with each pair's own event-count draw in
+  the unjitted loop below; precomputing any of those up front
+  for a whole generation would draw a later pair's own count
+  before an earlier pair's own finite-alleles draws happen,
+  desyncing the two paths (confirmed directly — an initial
+  version of stage 2 applied event-count batching
+  unconditionally and a bit-identity test caught the
+  divergence immediately). What stage 3 *does* speed up here,
+  safely, because it changes nothing about call count, order,
+  or position: the source-attribution draw itself is compiled
+  (`_jit_multinomial_via_inversion_binomial`) as a direct,
+  one-call-at-a-time, `nogil`-releasing drop-in for the same
+  call, in the same place, in the same per-pair loop —
+  bit-identical output, real but partial benefit (target
+  selection, `finite_alleles.mutate_target`, still runs
+  unjitted; a real array-native replacement already exists
+  for it, `fim.model.vectorized._jit_mutate_targets_batched`,
+  proven exactly matching — not adopted here because that
+  kernel assumes a bounded, array-representable `capacity`,
+  where this function's own dict-based path must keep
+  supporting arbitrarily large capacities, including the
+  astronomical ones `FiniteAlleleSpace`'s own docstring
+  names; reusing it safely needs a new capacity-bound
+  eligibility gate, not built in this stage). Needs `numba`
+  installed only when `True`.
 
 
 **Returns**:
@@ -5526,17 +5592,20 @@ conventional choice this project follows.
   otherwise.
 - `jit` - Passed through to `drift`'s own `jit` argument (see its
   docstring) and, since `20260901-claude-sonnet-5-fim-engine-
-  backend-factory-design.md` §10 item 10e's own stages 1-2,
+  backend-factory-design.md` §10 item 10e's own stages 1-3,
   to `migrate`'s and `mutate`'s own `jit` arguments too —
   silently a no-op in `migrate` for a full custom weight
   matrix or stochastic migrant sampling (see `migrate`'s own
   docstring), real for the default scalar-rate, deterministic
-  case; real in `mutate` for its own event-count draw under
-  the default infinite-alleles model, silently a no-op under
-  the opt-in finite-alleles model instead (see `mutate`'s own
-  `jit` docstring for why), with `mutate`'s own allele
-  minting/target-selection RNG calls unaffected by this flag
-  either way — 10e's own stage 3, not yet built.
+  case; real in `mutate` under both mutation models, though
+  in different amounts — full event-count *and* minting
+  batching under the default infinite-alleles model, only the
+  source-attribution draw compiled (not batched) under the
+  opt-in finite-alleles model, with `finite_alleles.mutate_
+  target`'s own target-selection RNG calls still unaffected
+  by this flag either way (see `mutate`'s own `jit` docstring
+  for the full account of why the two models differ this
+  much).
 
 
 **Returns**:

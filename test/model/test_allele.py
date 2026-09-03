@@ -46,6 +46,43 @@ def test_registry_returns_strictly_increasing_unique_ids() -> None:
     )
 
 
+def test_next_k_ids_matches_that_many_sequential_next_id_calls() -> None:
+    """`next_k_ids(k)` returns exactly what `k` `next_id()` calls would.
+
+    Checked against a real oracle, not just reasoned about: two
+    independent registries, one driven `k` times through `next_id()`,
+    the other once through `next_k_ids(k)`, must reserve the identical
+    block, in the identical order, and leave the counter at the
+    identical next value afterward.
+    """
+    for k in (0, 1, 5, 100):
+        sequential_registry = AlleleRegistry()
+        sequential = [int(sequential_registry.next_id()) for _ in range(k)]
+
+        batched_registry = AlleleRegistry()
+        batched = batched_registry.next_k_ids(k)
+
+        assert batched.tolist() == sequential
+        assert int(sequential_registry.next_id()) == int(batched_registry.next_id())
+
+
+def test_next_k_ids_composes_with_next_id() -> None:
+    """A `next_k_ids` reservation and a later `next_id()` call never collide."""
+    registry = AlleleRegistry()
+    first_batch = registry.next_k_ids(10)
+    single = registry.next_id()
+    second_batch = registry.next_k_ids(5)
+
+    all_ids = [*first_batch.tolist(), int(single), *second_batch.tolist()]
+    assert all_ids == list(range(MINTED_ID_START, MINTED_ID_START + 16))
+
+
+def test_next_k_ids_rejects_negative_k() -> None:
+    """A negative reservation count is a caller error, not a silent no-op."""
+    with pytest.raises(ValueError, match="non-negative"):
+        AlleleRegistry().next_k_ids(-1)
+
+
 def test_founding_and_mutant_ranges_do_not_overlap() -> None:
     """Locus-relative founders cannot collide with mutants."""
     founders = founding_allele_ids(10)

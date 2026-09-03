@@ -20,10 +20,14 @@ from fim.model.operators import (
     _inversion_binomial,
     _jit_migrate_symmetric_blend,
     _jit_multinomial_via_binomial,
+    _jit_multinomial_via_inversion_binomial,
     _jit_mutate_event_counts_batched,
     _migrate_symmetric_blend_batched,
+    _mint_infinite_allele_ids,
     _multinomial_via_binomial,
+    _multinomial_via_inversion_binomial,
     _mutate_event_counts_batched,
+    _next_mutate_event_count,
     drift,
     migrate,
     mutate,
@@ -527,6 +531,92 @@ def test_jit_mutate_event_counts_batched_matches_plain_decomposition() -> None:
         assert plain.tolist() == list(jitted)
 
 
+def test_jit_multinomial_via_inversion_binomial_matches_plain_decomposition() -> None:
+    """The Numba-JIT-compiled kernel matches the original, not just its own twin.
+
+    Mirrors `test_jit_multinomial_via_binomial_matches_plain_
+    decomposition`'s own structure, but compares against
+    `_multinomial_via_inversion_binomial` — the function `mutate`'s
+    own finite-alleles branch actually calls — rather than the older,
+    `rng.binomial`-based `_multinomial_via_binomial`. The real risk
+    this isolates: `_jit_multinomial_via_inversion_binomial`'s own
+    inner `draw_one` closure duplicates `_inversion_binomial`'s
+    algorithm rather than calling it (`nopython` mode cannot compile a
+    call to a plain module-level function — see either function's own
+    docstring), so this checks the duplication stayed faithful, not
+    merely that compiling changes nothing.
+    """
+    pytest.importorskip("numba")
+    controller = np.random.default_rng(20260903)
+    for _ in range(200):
+        seed = int(controller.integers(0, 2**31))
+        category_count = int(controller.integers(2, 8))
+        raw = controller.random(category_count)
+        probabilities = raw / raw.sum()
+        n = int(controller.integers(0, 500))
+
+        plain = _multinomial_via_inversion_binomial(
+            np.random.Generator(np.random.PCG64(seed)), n, probabilities
+        )
+        jitted = _jit_multinomial_via_inversion_binomial(
+            np.random.Generator(np.random.PCG64(seed)), n, probabilities
+        )
+        assert plain.tolist() == list(jitted)
+
+
+def test_next_mutate_event_count_reads_batched_array_or_draws_inline(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The small helper `mutate` delegates event-count selection to.
+
+    Direct unit coverage for `_next_mutate_event_count`, split out of
+    `mutate`'s own body purely to keep that function's branch count
+    readable (stage 3's own commit message has the full reasoning) —
+    covered indirectly by every `mutate`-level test above, but this
+    project's own testing standard is one function, one direct test.
+    """
+    batched = np.array([3, 0, 7], dtype=np.int64)
+    assert _next_mutate_event_count(rng(1), 100, 0.1, batched, 0) == 3
+    assert _next_mutate_event_count(rng(1), 100, 0.1, batched, 2) == 7
+
+    generator = rng(20260903)
+    expected = _inversion_binomial(rng(20260903), 100, 0.1)
+    assert _next_mutate_event_count(generator, 100, 0.1, None, 0) == expected
+
+
+def test_mint_infinite_allele_ids_reads_reserved_slice_or_mints_inline() -> None:
+    """The small helper `mutate` delegates infinite-alleles minting to.
+
+    Direct unit coverage for `_mint_infinite_allele_ids`, split out for
+    the same reason `_next_mutate_event_count`'s own test above is.
+    """
+    reserved = AlleleRegistry().next_k_ids(5)
+    mutated: dict[AlleleId, float] = {}
+    next_offset = _mint_infinite_allele_ids(
+        mutated, AlleleRegistry(), 3, 0.5, reserved, 0
+    )
+    assert next_offset == 3
+    assert mutated == {
+        AlleleId(int(reserved[0])): 0.5,
+        AlleleId(int(reserved[1])): 0.5,
+        AlleleId(int(reserved[2])): 0.5,
+    }
+
+    # `minted_ids=None` mints one at a time via `registry.next_id()`,
+    # exactly as every prior release did — a fresh registry's own first
+    # two identities are known in advance (`MINTED_ID_START`, `+ 1`), so
+    # this is checked directly against those values, not just a count.
+    unbatched: dict[AlleleId, float] = {}
+    unbatched_offset = _mint_infinite_allele_ids(
+        unbatched, AlleleRegistry(), 2, 0.5, None, 7
+    )
+    assert unbatched_offset == 7  # unchanged -- no reservation to advance past
+    assert unbatched == {
+        AlleleId(MINTED_ID_START): 0.5,
+        AlleleId(MINTED_ID_START + 1): 0.5,
+    }
+
+
 def test_mutate_with_jit_matches_mutate_without_jit_bit_for_bit(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
@@ -543,22 +633,30 @@ def test_mutate_with_jit_matches_mutate_without_jit_bit_for_bit(
     assert unjitted == jitted
 
 
-def test_mutate_with_jit_is_silently_ignored_under_finite_alleles(
+def test_mutate_with_jit_under_finite_alleles_matches_without_jit_bit_for_bit(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """`jit=True` under the finite-alleles model falls back, not an error.
+    """`jit=True` under the finite-alleles model changes what runs, not the result.
 
-    `mutate`'s own `jit` support is scoped to the infinite-alleles model
-    only (`20260901-claude-sonnet-5-fim-engine-backend-factory-
-    design.md` §10 item 10e, stage 2's own docstring) — the finite-
-    alleles model's own per-event source-attribution/target-selection
-    draws interleave with the event-count draw in a way batching it up
-    front would desync, so `finite_alleles` given must keep working
-    exactly as before, silently, not raise. A fresh `FiniteAlleleSpace`
-    per call, not a shared one — `mutate_target` mutates its own
-    internal minted-state bookkeeping, so reusing one instance across
-    two separate `mutate()` calls would make the second call's own
-    result depend on the first call's own side effects, not on `jit`.
+    Stage 2 scoped `jit`'s event-count batching to the infinite-alleles
+    model only — the finite-alleles model's own per-event source-
+    attribution/target-selection draws interleave with the event-count
+    draw in a way batching it up front would desync (`20260901-claude-
+    sonnet-5-fim-engine-backend-factory-design.md` §10 item 10e, stage
+    2's own docstring). Stage 3 does give the finite-alleles model a
+    real, if partial, `jit` benefit anyway: the source-attribution draw
+    itself is compiled as a same-position, one-call-at-a-time drop-in
+    (`_jit_multinomial_via_inversion_binomial`), leaving the event-count
+    draw and target selection (`finite_alleles.mutate_target`) both
+    unaffected — bit-identical output either way, checked here, not
+    "unaffected" the way stage 2 alone left it (`mutate`'s own `jit`
+    docstring has the full account). A fresh `FiniteAlleleSpace` per
+    call, not a shared one — `mutate_target` mutates its own internal
+    minted-state bookkeeping, so reusing one instance across two
+    separate `mutate()` calls would make the second call's own result
+    depend on the first call's own side effects, not on `jit` (the real
+    bug an earlier version of this test itself had, per this stage's
+    own commit history).
     """
     pytest.importorskip("numba")
 
@@ -591,14 +689,16 @@ def test_mutate_with_jit_is_silently_ignored_under_finite_alleles(
 def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
-    """The flat, per-pair event-count batching stays bit-identical at scale.
+    """The flat, per-pair event-count and minting batching stay bit-identical at scale.
 
     `_state()`'s own fixture (2 demes, 1 locus) barely exercises the
     `(deme, locus)` flat layout `_mutate_event_counts_batched` depends
-    on visiting in deme-major, locus-minor order — this uses many demes
-    and several loci of different mutation rates (including one exact
-    `0.0` rate, `_inversion_binomial`'s own zero-draw short-circuit)
-    against a freshly generated, already-ragged initial state, mirroring
+    on visiting in deme-major, locus-minor order, or `_mint_infinite_
+    allele_ids`'s own running `minted_offset` across many pairs — this
+    uses many demes and several loci of different mutation rates
+    (including one exact `0.0` rate, `_inversion_binomial`'s own
+    zero-draw short-circuit) against a freshly generated, already-ragged
+    initial state, mirroring
     stage 1's own analogous `migrate` test
     (`test_migrate_with_jit_matches_without_jit_across_many_demes_and_
     loci`) in shape: one realistic-scale call, not a chained multi-
