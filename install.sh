@@ -19,6 +19,18 @@ repo="selby-botany/jost-finite-island-model"
 install_dir="${FIM_INSTALL_DIR:-${HOME}/.local/bin}"
 data_dir="${XDG_DATA_HOME:-${HOME}/.local/share}"
 
+# Script-global, deliberately not `local` to `main` below: the `trap
+# ... EXIT` set inside `main` fires when the whole script exits, which
+# happens *after* `main` itself has already returned -- a `local`
+# `tmp_dir` would already be out of scope by then, making `"${tmp_dir}"`
+# genuinely unbound under `set -o nounset` on every successful run (the
+# install itself completes first; only the trap-driven cleanup fails,
+# right at the very end -- confirmed directly, not assumed, against a
+# real `curl -sSL ... | bash` run on a real host: `Installed fim 1.2.0`
+# and both binaries print/land correctly, then `bash: line 1: tmp_dir:
+# unbound variable`).
+tmp_dir=""
+
 # Print an error to stderr and exit 1.
 # Args:
 #   $1: message
@@ -128,7 +140,7 @@ DESKTOP_ENTRY
 main() {
     check_platform
 
-    local version tmp_dir binary_path fim_path fim_gui_path
+    local version binary_path fim_path fim_gui_path
     version=$(resolve_version)
     tmp_dir=$(mktemp -d)
     trap 'rm -rf "${tmp_dir}"' EXIT

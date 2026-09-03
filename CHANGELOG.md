@@ -90,6 +90,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is materialized once per replicate, only when it stops, not once per
   generation. No change to what any run computes (existing bit-for-bit
   and statistical parity tests against `"lineal"` pass unchanged).
+- `install.sh` no longer fails at the very end of an otherwise-successful
+  install with `bash: line 1: tmp_dir: unbound variable`. `tmp_dir` was
+  declared `local` to `main`, but the `trap ... EXIT` referencing it
+  fires only once the whole script exits — after `main` has already
+  returned and the local has gone out of scope — so cleanup failed
+  under `set -o nounset` on every run, real or fake. `tmp_dir` is now a
+  script-global; confirmed against a real end-to-end dry run (exit 0,
+  no stray error, temp directory actually removed).
 
 ---
 
