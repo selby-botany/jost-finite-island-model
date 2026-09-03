@@ -2856,6 +2856,50 @@ def test_build_engine_backend_auto_rejects_jit_when_resolved_to_vector(
 
 `jit="numba"` is still rejected once `"auto"` resolves to Backend V.
 
+<a id="engine.test_engine.test_build_engine_backend_auto_picks_generational_above_capacity_ceiling"></a>
+
+#### test\_build\_engine\_backend\_auto\_picks\_generational\_above\_capacity\_ceiling
+
+```python
+def test_build_engine_backend_auto_picks_generational_above_capacity_ceiling(
+) -> None
+```
+
+A large `d` alone is not enough — capacity above the ceiling still falls back.
+
+`d=40` clears `auto_vector_min_d` and `mutation_model`/
+`migrant_sampling` are eligible, but `length=6` (capacity `4096`)
+exceeds `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`1024`) — the exact
+loci-length-sweep region already found `"generational-vector"`
+losing at.
+
+<a id="engine.test_engine.test_build_engine_backend_auto_respects_custom_capacity_ceiling"></a>
+
+#### test\_build\_engine\_backend\_auto\_respects\_custom\_capacity\_ceiling
+
+```python
+def test_build_engine_backend_auto_respects_custom_capacity_ceiling() -> None
+```
+
+The capacity ceiling is a real, configurable parameter, not a hidden constant.
+
+<a id="engine.test_engine.test_build_engine_backend_auto_needs_every_locus_within_capacity"></a>
+
+#### test\_build\_engine\_backend\_auto\_needs\_every\_locus\_within\_capacity
+
+```python
+def test_build_engine_backend_auto_needs_every_locus_within_capacity() -> None
+```
+
+One oversized locus disqualifies the whole run, not just its own locus.
+
+Mirrors how `mutation_model`/`migrant_sampling` eligibility already
+disqualifies the whole run from a single violated property — this
+checks the same "one disqualifying property anywhere" logic applies
+across `params.loci`, not just within one field: a small, eligible
+first locus does not rescue a run whose *second* locus exceeds the
+ceiling.
+
 <a id="engine.test_engine.test_fim_engine_backend_auto_runs_end_to_end"></a>
 
 #### test\_fim\_engine\_backend\_auto\_runs\_end\_to\_end
@@ -8198,6 +8242,7 @@ The public P-bag defaults remain synchronized with the design.
         ("N", 0, "N must be at least 1"),
         ("deme_weighting", "wrong", "deme_weighting"),
         ("convergence_window", 1, "convergence_window"),
+        ("auto_vector_max_capacity", 0, "auto_vector_max_capacity"),
     ],
 )
 def test_invalid_values_name_the_offending_field(key: str, value: object,
@@ -8235,6 +8280,23 @@ def test_initial_allele_count_is_bounded_by_the_smallest_deme_n() -> None
 ```
 
 Unequal per-deme N constrains founding alleles by the smallest deme.
+
+<a id="model.test_params.test_auto_vector_max_capacity_is_a_real_field_and_round_trips"></a>
+
+#### test\_auto\_vector\_max\_capacity\_is\_a\_real\_field\_and\_round\_trips
+
+```python
+def test_auto_vector_max_capacity_is_a_real_field_and_round_trips() -> None
+```
+
+`auto_vector_max_capacity` is caller-configurable, not a hidden constant.
+
+`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+§6.1 item 2 — a non-default value specifically, not just the
+default `test_mapping_round_trip_is_lossless` (above) already
+exercises for every field at once, so a wiring mistake that
+happened to leave this field permanently pinned to its own default
+could not hide behind that test alone.
 
 <a id="model.test_params.test_mapping_round_trip_is_lossless"></a>
 

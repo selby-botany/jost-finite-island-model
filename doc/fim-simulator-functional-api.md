@@ -59,7 +59,8 @@ The one entry point everything else in this project ultimately calls.
 
 - **`fim(N, m, mu, d, *, params, store=None, run_id=None, clock=None,
   max_workers=None, store_factory=None, engine_backend=None, jit=None,
-  auto_vector_min_d=None) -> RunResult | tuple[RunResult, ...]`**
+  auto_vector_min_d=None, auto_vector_max_capacity=None) -> RunResult |
+  tuple[RunResult, ...]`**
   Runs the finite island model to convergence (or the hard generation
   cap), once per replicate. `N`, `m`, `mu`, `d` must equal the same
   fields already inside `params`; the four are repeated in the
@@ -69,14 +70,15 @@ The one entry point everything else in this project ultimately calls.
   `params.n_replicates == 1`, otherwise a tuple of one per replicate (or
   fewer, if `params.replicate_tolerance` lets the batch stop early once
   every watched statistic's confidence interval has tightened enough).
-  `engine_backend`/`jit`/`auto_vector_min_d` each default to `None`
-  here, meaning "read `params.engine_backend`/`params.jit`/
-  `params.auto_vector_min_d` instead" — real `SimulationParams` fields
-  now (config-file/CLI reachable, `doc/configuration.md`), not
-  duplicate-of-nothing keyword arguments; passing one of these three
-  explicitly overrides `params` for that one call only, a pure
-  override with no "must agree" requirement (unlike `N`/`m`/`mu`/`d`
-  above). `engine_backend` selects which of this project's own engine
+  `engine_backend`/`jit`/`auto_vector_min_d`/`auto_vector_max_capacity`
+  each default to `None` here, meaning "read `params.engine_backend`/
+  `params.jit`/`params.auto_vector_min_d`/`params.auto_vector_max_
+  capacity` instead" — real `SimulationParams` fields now (config-file/
+  CLI reachable, `doc/configuration.md`), not duplicate-of-nothing
+  keyword arguments; passing one of these four explicitly overrides
+  `params` for that one call only, a pure override with no "must agree"
+  requirement (unlike `N`/`m`/`mu`/`d` above). `engine_backend` selects
+  which of this project's own engine
   implementations actually runs the batch — `"lineal"` (`params`'s own
   default too, every earlier release's own behavior, unchanged),
   `"generational"`
@@ -89,8 +91,9 @@ The one entry point everything else in this project ultimately calls.
   own dense-matrix migration blend and `"lineal"`'s own arithmetic are
   two different, equally valid floating-point paths to the same
   computation), or `"auto"` (picks between `"generational"` and
-  `"generational-vector"` using `params.d`/`auto_vector_min_d`, below —
-  never `"lineal"`).
+  `"generational-vector"` using `params.d`/`auto_vector_min_d` and
+  every locus's own capacity against `params.auto_vector_max_capacity`,
+  both below — never `"lineal"`).
   `"generational-vector"` is scoped to `params.mutation_model=
   "finite_alleles"` and `params.migrant_sampling="continuous"`; a
   direct `"generational-vector"` choice outside that scope raises
@@ -117,23 +120,35 @@ The one entry point everything else in this project ultimately calls.
   auto_vector_min_d`'s own default is `DEFAULT_AUTO_VECTOR_MIN_D` (35,
   defined in `fim.model.params`), a real benchmark-measured default
   with known cross-environment caveats (see that constant's own
-  docstring). Whichever backend actually ran — the resolved choice, not
+  docstring). `auto_vector_max_capacity` is the per-locus capacity
+  ceiling `"auto"` uses alongside it — every locus in `params.loci`
+  must be at most this value for `"auto"` to pick `"generational-
+  vector"`, regardless of `d`; `params.auto_vector_max_capacity`'s own
+  default is `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (1024), likewise a real
+  benchmark-measured default with the same caveats. Whichever backend
+  actually ran — the resolved choice, not
   the literal string `"auto"` — and whether `jit` was on are both
   recorded on the returned result's own `manifest.engine_backend`/
   `manifest.jit`, so a saved run's own record always says what actually
   produced it, even when the caller asked for `"auto"`.
 - **`build_engine_backend(engine_backend, *, jit="off", max_workers=None,
   store_factory=None, params=None,
-  auto_vector_min_d=DEFAULT_AUTO_VECTOR_MIN_D) -> EngineBackend`** — the
-  factory `fim()` itself calls; usually reached through `fim()`'s own
-  keywords above, not called directly, but available for a caller that
-  wants a configured backend object without going through `fim()`'s own
-  full public signature. `params` is required, and only actually read,
-  when `engine_backend="auto"`.
+  auto_vector_min_d=DEFAULT_AUTO_VECTOR_MIN_D,
+  auto_vector_max_capacity=DEFAULT_AUTO_VECTOR_MAX_CAPACITY) ->
+  EngineBackend`** — the factory `fim()` itself calls; usually reached
+  through `fim()`'s own keywords above, not called directly, but
+  available for a caller that wants a configured backend object without
+  going through `fim()`'s own full public signature. `params` is
+  required, and only actually read, when `engine_backend="auto"`.
 - **`DEFAULT_AUTO_VECTOR_MIN_D`** — the module-level constant
   `auto_vector_min_d` defaults to; its own docstring has the full
   benchmark finding behind the default value and why it is a parameter,
   not a hardcoded constant.
+- **`DEFAULT_AUTO_VECTOR_MAX_CAPACITY`** — the module-level constant
+  `auto_vector_max_capacity` defaults to; its own docstring has the
+  full benchmark finding behind the default value, the same "parameter,
+  not a hardcoded constant" reasoning `DEFAULT_AUTO_VECTOR_MIN_D`
+  already carries.
 - **`EngineBackend`** (a `Protocol`), **`LinealBackend`**,
   **`GenerationalBackend`** — the common backend contract and its two
   current implementations. `LinealBackend` wraps today's own
@@ -361,6 +376,6 @@ generator-name: Claude Code
 generator-version: Claude Sonnet 5
 generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
-generation-date: 2026-09-02
+generation-date: 2026-09-03
 generator-responsibility: revision
 ```

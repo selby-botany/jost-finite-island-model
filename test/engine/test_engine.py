@@ -1641,6 +1641,61 @@ def test_build_engine_backend_auto_rejects_jit_when_resolved_to_vector() -> None
         build_engine_backend("auto", params=params, auto_vector_min_d=35, jit="numba")
 
 
+# `auto_vector_max_capacity` (`20260903-claude-sonnet-5-fim-vg-
+# performance-campaign-design.md` §6.1 item 2): "auto" used to read
+# `params.d` alone, so a large-`d`, large-capacity config could resolve
+# to `"generational-vector"` even inside the loci-length-sweep region
+# already found to lose there (backend-factory design §10 item 10b).
+
+
+def test_build_engine_backend_auto_picks_generational_above_capacity_ceiling() -> None:
+    """A large `d` alone is not enough — capacity above the ceiling still falls back.
+
+    `d=40` clears `auto_vector_min_d` and `mutation_model`/
+    `migrant_sampling` are eligible, but `length=6` (capacity `4096`)
+    exceeds `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`1024`) — the exact
+    loci-length-sweep region already found `"generational-vector"`
+    losing at.
+    """
+    params = _finite_alleles_vector_params(d=40, loci=(LocusSpec(1, 6),))
+    backend = build_engine_backend(
+        "auto", params=params, auto_vector_min_d=35, auto_vector_max_capacity=1024
+    )
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, ThreadedAdvancer)
+
+
+def test_build_engine_backend_auto_respects_custom_capacity_ceiling() -> None:
+    """The capacity ceiling is a real, configurable parameter, not a hidden constant."""
+    # capacity 4096
+    params = _finite_alleles_vector_params(d=40, loci=(LocusSpec(1, 6),))
+    backend = build_engine_backend(
+        "auto", params=params, auto_vector_min_d=35, auto_vector_max_capacity=4096
+    )
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, VectorizedAdvancer)
+
+
+def test_build_engine_backend_auto_needs_every_locus_within_capacity() -> None:
+    """One oversized locus disqualifies the whole run, not just its own locus.
+
+    Mirrors how `mutation_model`/`migrant_sampling` eligibility already
+    disqualifies the whole run from a single violated property — this
+    checks the same "one disqualifying property anywhere" logic applies
+    across `params.loci`, not just within one field: a small, eligible
+    first locus does not rescue a run whose *second* locus exceeds the
+    ceiling.
+    """
+    params = _finite_alleles_vector_params(
+        d=40, loci=(LocusSpec(1, 2), LocusSpec(2, 6))
+    )  # capacities 16, 4096
+    backend = build_engine_backend(
+        "auto", params=params, auto_vector_min_d=35, auto_vector_max_capacity=1024
+    )
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, ThreadedAdvancer)
+
+
 def test_fim_engine_backend_auto_runs_end_to_end(
     tiny_params: SimulationParams,
 ) -> None:

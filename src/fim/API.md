@@ -196,6 +196,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [step](#fim.model.operators.step)
 * [fim.model.params](#fim.model.params)
   * [DEFAULT\_AUTO\_VECTOR\_MIN\_D](#fim.model.params.DEFAULT_AUTO_VECTOR_MIN_D)
+  * [DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY](#fim.model.params.DEFAULT_AUTO_VECTOR_MAX_CAPACITY)
   * [DEFAULT\_N\_REPLICATES](#fim.model.params.DEFAULT_N_REPLICATES)
   * [DEFAULT\_REPLICATE\_TOLERANCE](#fim.model.params.DEFAULT_REPLICATE_TOLERANCE)
   * [SimulationParams](#fim.model.params.SimulationParams)
@@ -1797,13 +1798,15 @@ Run `params`'s own replicate(s); see `fim()`'s own docstring.
 
 ```python
 def build_engine_backend(
-        engine_backend: EngineBackendChoice,
-        *,
-        jit: JitOption = "off",
-        max_workers: int | None = None,
-        store_factory: Callable[[str], TrajectoryStore] | None = None,
-        params: SimulationParams | None = None,
-        auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D) -> EngineBackend
+    engine_backend: EngineBackendChoice,
+    *,
+    jit: JitOption = "off",
+    max_workers: int | None = None,
+    store_factory: Callable[[str], TrajectoryStore] | None = None,
+    params: SimulationParams | None = None,
+    auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D,
+    auto_vector_max_capacity: int = DEFAULT_AUTO_VECTOR_MAX_CAPACITY
+) -> EngineBackend
 ```
 
 Return the configured backend `fim()` should run against.
@@ -1887,6 +1890,16 @@ class tree to maintain.
   meaningfully different hardware should re-run that same
   characterization and pass its own measured value here
   rather than trust this default blindly.
+- `auto_vector_max_capacity` - The per-locus capacity ceiling
+  `"auto"` uses alongside `auto_vector_min_d` — the largest
+  capacity across every locus in `params.loci` must be at
+  most this value, in addition to `d >= auto_vector_min_d`,
+  for `"auto"` to pick `"generational-vector"`; irrelevant,
+  and unused, under every other `engine_backend` value.
+  Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`1024`) —
+  see that constant's own docstring for the measured finding
+  behind it and the same cross-environment/cross-fix
+  staleness caveats `auto_vector_min_d` already carries.
 
 
 **Raises**:
@@ -1915,7 +1928,8 @@ def fim(N: PopulationSize,
         store_factory: Callable[[str], TrajectoryStore] | None = None,
         engine_backend: EngineBackendChoice | None = None,
         jit: JitOption | None = None,
-        auto_vector_min_d: int | None = None) -> SimulationOutput
+        auto_vector_min_d: int | None = None,
+        auto_vector_max_capacity: int | None = None) -> SimulationOutput
 ```
 
 Run the finite island model until convergence or the hard cap.
@@ -2101,6 +2115,13 @@ silently disagree.
   that field's own default and its known cross-environment
   caveats before trusting it on meaningfully different
   hardware.
+- `auto_vector_max_capacity` - The per-locus capacity ceiling
+  ``engine_backend="auto"`` uses alongside `auto_vector_min_d`
+  — ignored under every other `engine_backend` value. Left
+  unset (``None``, the default), falls back to `params.
+  auto_vector_max_capacity` — see `DEFAULT_AUTO_VECTOR_MAX_
+  CAPACITY`'s own docstring (`fim.model.params`) for the
+  measured finding behind that field's own default.
 
 
 **Returns**:
@@ -5812,6 +5833,41 @@ caller-supplied `SimulationParams` field for exactly this kind of
 drift — see `dev/bin/benchmark-engines --sweep d` to re-characterize it
 on any given machine.
 
+<a id="fim.model.params.DEFAULT_AUTO_VECTOR_MAX_CAPACITY"></a>
+
+#### DEFAULT\_AUTO\_VECTOR\_MAX\_CAPACITY
+
+`"auto"`'s own default per-locus capacity ceiling for `"generational-
+vector"` — above it, `"auto"` picks `"generational"` instead, regardless
+of `d`/`auto_vector_min_d`.
+
+Closes a real, previously-unaddressed gap: `"auto"`'s own resolution
+used to read `params.d` alone, never any locus's own capacity
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10
+item 10b — "a large-`d`, large-capacity config could pick the wrong
+engine"). Measured, not guessed, the same way `auto_vector_min_d`
+itself was: that same document's own loci-length sweep found
+`"generational-vector"` winning through capacity `1024` (locus length
+`2`-`5`) and losing to `"generational"` + `jit="numba"` at capacity
+`4096` (length `6`, `71.3s` vs `92.4s`) — the array-native path touches
+every cell of a locus's own `(d, capacity)` grid every generation
+regardless of how much of it is actually occupied, where the dict-based
+backends only ever touch what is present. `1024`, not a value strictly
+between the two, because a real capacity is always `4 ** length` for
+some integer `length` — there is no config that could ever land between
+`1024` and `4096`, so the boundary sits exactly at the last *tested,
+winning* value rather than an interpolated one nothing could reach
+anyway. Applies to the largest capacity across every locus in `params.
+loci` — one large-capacity locus already pays this cost even if every
+other locus in the same run is small, the same "one disqualifying
+property anywhere disqualifies the whole choice" logic `mutation_model`/
+`migrant_sampling` eligibility already uses. Not yet re-measured on
+different hardware, and not yet re-measured against the same-day
+`ThreadedAdvancer`/`migrate_vectorized` fixes that already made
+`auto_vector_min_d`'s own default doubly stale — see that constant's
+own docstring for the precedent this one inherits, and `dev/bin/
+benchmark-engines --sweep loci-length` to re-characterize it.
+
 <a id="fim.model.params.DEFAULT_N_REPLICATES"></a>
 
 #### DEFAULT\_N\_REPLICATES
@@ -5970,6 +6026,17 @@ functions that actually use each one.
   docstring for why it is a considered default, not a
   portable physical constant, and how to re-measure it on a
   given machine.
+- `auto_vector_max_capacity` - The per-locus capacity ceiling
+  `engine_backend="auto"` uses alongside `auto_vector_min_d`
+  — "generational-vector" is only chosen when `d >=
+  auto_vector_min_d` *and* every locus's own capacity is at
+  most this value; exceeding it at even one locus falls back
+  to "generational" regardless of `d`. Only meaningful when
+  `engine_backend` is "auto"; ignored otherwise. Defaults to
+  `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` — see that constant's
+  own docstring for the same "considered default, not a
+  portable constant" caveat `auto_vector_min_d` already
+  carries.
 - `initial_frequencies` - Optional explicit deme/locus frequency table.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>

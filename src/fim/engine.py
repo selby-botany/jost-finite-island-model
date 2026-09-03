@@ -126,6 +126,7 @@ from fim.model.initial import generate_initial_state
 from fim.model.locus import finite_allele_capacity
 from fim.model.operators import _population_sizes, step
 from fim.model.params import (
+    DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
     DEFAULT_AUTO_VECTOR_MIN_D,
     Migration,
     MutationRate,
@@ -1175,7 +1176,9 @@ JitOption = ModelJit
 
 
 def _resolve_auto_engine_backend(
-    params: SimulationParams, auto_vector_min_d: int
+    params: SimulationParams,
+    auto_vector_min_d: int,
+    auto_vector_max_capacity: int,
 ) -> Literal["generational", "generational-vector"]:
     """Resolve `engine_backend="auto"` to a concrete, non-`"auto"` choice.
 
@@ -1186,14 +1189,31 @@ def _resolve_auto_engine_backend(
     actually picked for a given `params`. Never resolves to `"lineal"`
     — see `build_engine_backend`'s own `engine_backend` Args entry for
     why only the generational-vs-vector axis is automated so far.
+
+    Reads capacity as well as `d` now (`20260903-claude-sonnet-5-fim-vg-
+    performance-campaign-design.md` §6.1 item 2) — a real, previously
+    unaddressed gap: this function used to read `params.d` alone, so a
+    large-`d`, large-capacity config could resolve to
+    `"generational-vector"` even in the exact loci-length-sweep region
+    already found to lose there (backend-factory design §10 item 10b).
+    Checks the *largest* capacity across every locus in `params.loci` —
+    one large-capacity locus already pays the array-native path's own
+    per-cell cost every generation even when every other locus in the
+    same run is small, the identical "one disqualifying property
+    anywhere disqualifies the whole choice" logic `mutation_model`/
+    `migrant_sampling` eligibility already uses, just applied over
+    `loci` instead of over a single scalar field.
     """
     vector_eligible = (
         params.mutation_model == "finite_alleles"
         and params.migrant_sampling == "continuous"
     )
+    max_capacity = max(finite_allele_capacity(locus.length) for locus in params.loci)
     return (
         "generational-vector"
-        if vector_eligible and params.d >= auto_vector_min_d
+        if vector_eligible
+        and params.d >= auto_vector_min_d
+        and max_capacity <= auto_vector_max_capacity
         else "generational"
     )
 
@@ -1206,6 +1226,7 @@ def build_engine_backend(
     store_factory: Callable[[str], TrajectoryStore] | None = None,
     params: SimulationParams | None = None,
     auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D,
+    auto_vector_max_capacity: int = DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
 ) -> EngineBackend:
     """Return the configured backend `fim()` should run against.
 
@@ -1287,6 +1308,16 @@ def build_engine_backend(
             meaningfully different hardware should re-run that same
             characterization and pass its own measured value here
             rather than trust this default blindly.
+        auto_vector_max_capacity: The per-locus capacity ceiling
+            `"auto"` uses alongside `auto_vector_min_d` — the largest
+            capacity across every locus in `params.loci` must be at
+            most this value, in addition to `d >= auto_vector_min_d`,
+            for `"auto"` to pick `"generational-vector"`; irrelevant,
+            and unused, under every other `engine_backend` value.
+            Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`1024`) —
+            see that constant's own docstring for the measured finding
+            behind it and the same cross-environment/cross-fix
+            staleness caveats `auto_vector_min_d` already carries.
 
     Raises:
         ValueError: If `engine_backend == "lineal"` and `jit != "off"`,
@@ -1304,7 +1335,9 @@ def build_engine_backend(
         # Resolve to a concrete choice, then fall through to the same
         # branches below — never invents a third code path, just picks
         # which existing one applies.
-        engine_backend = _resolve_auto_engine_backend(params, auto_vector_min_d)
+        engine_backend = _resolve_auto_engine_backend(
+            params, auto_vector_min_d, auto_vector_max_capacity
+        )
     if engine_backend == "lineal":
         if jit != "off":
             raise ValueError(
@@ -1342,6 +1375,7 @@ def fim(
     engine_backend: EngineBackendChoice | None = None,
     jit: JitOption | None = None,
     auto_vector_min_d: int | None = None,
+    auto_vector_max_capacity: int | None = None,
 ) -> SimulationOutput:
     """Run the finite island model until convergence or the hard cap.
 
@@ -1525,6 +1559,13 @@ def fim(
             that field's own default and its known cross-environment
             caveats before trusting it on meaningfully different
             hardware.
+        auto_vector_max_capacity: The per-locus capacity ceiling
+            ``engine_backend="auto"`` uses alongside `auto_vector_min_d`
+            — ignored under every other `engine_backend` value. Left
+            unset (``None``, the default), falls back to `params.
+            auto_vector_max_capacity` — see `DEFAULT_AUTO_VECTOR_MAX_
+            CAPACITY`'s own docstring (`fim.model.params`) for the
+            measured finding behind that field's own default.
 
     Returns:
         One result, or one independently seeded result per replicate.
@@ -1562,6 +1603,8 @@ def fim(
         jit = params.jit
     if auto_vector_min_d is None:
         auto_vector_min_d = params.auto_vector_min_d
+    if auto_vector_max_capacity is None:
+        auto_vector_max_capacity = params.auto_vector_max_capacity
     if engine_backend != "lineal" and (
         max_workers is not None or store_factory is not None
     ):
@@ -1581,6 +1624,7 @@ def fim(
         store_factory=store_factory,
         params=params,
         auto_vector_min_d=auto_vector_min_d,
+        auto_vector_max_capacity=auto_vector_max_capacity,
     )
     output = backend.run(params, store, run_id, run_clock)
     # Stamp every result's own manifest with which engine actually ran
@@ -1589,7 +1633,9 @@ def fim(
     # record (`RunManifest.engine_backend`'s own docstring; design doc
     # §7.4).
     resolved_engine_backend = (
-        _resolve_auto_engine_backend(params, auto_vector_min_d)
+        _resolve_auto_engine_backend(
+            params, auto_vector_min_d, auto_vector_max_capacity
+        )
         if engine_backend == "auto"
         else engine_backend
     )

@@ -537,12 +537,12 @@ for why the two don't compound.
 ## Engine backend and JIT
 
 Everything above this section is a **science** setting — it changes what
-gets computed. `engine_backend`, `jit`, and `auto_vector_min_d` are
-different: they change *how* the computation runs, not what it computes.
-Every `SimulationParams` field above is still validated and honored
-exactly the same way regardless of which engine backend actually
-executes it — changing these three never changes what a run converges
-to, only how long getting there takes.
+gets computed. `engine_backend`, `jit`, `auto_vector_min_d`, and
+`auto_vector_max_capacity` are different: they change *how* the
+computation runs, not what it computes. Every `SimulationParams` field
+above is still validated and honored exactly the same way regardless of
+which engine backend actually executes it — changing these four never
+changes what a run converges to, only how long getting there takes.
 
 ### engine_backend
 
@@ -575,7 +575,11 @@ the run:
   systematic bias, but not necessarily the identical trajectory for one
   specific seed).
 - `auto`: picks `generational` or `generational-vector` automatically,
-  from `d` and `auto_vector_min_d` (below) — never `lineal`.
+  from `d`, `auto_vector_min_d`, and `auto_vector_max_capacity` (both
+  below) — never `lineal`. Every locus must fit under the capacity
+  ceiling, not just `d` clearing the deme-count threshold — a run with
+  enough demes but a locus long enough to make `generational-vector`'s
+  own whole-array approach wasteful still falls back to `generational`.
 
 **Why you might care:** if a run is taking uncomfortably long —
 especially one with a large number of demes (`d`) — that slowness is a
@@ -622,6 +626,21 @@ current that measurement still is, and `dev/bin/benchmark-engines`
 (a maintainer tool, see `dev/bin/README.md`) for how to re-measure it
 on your own hardware.
 
+### auto_vector_max_capacity
+
+- **Type:** integer at least 1
+- **Default:** `1024`
+
+The per-locus capacity ceiling `engine_backend: auto` uses alongside
+`auto_vector_min_d` — `generational-vector` is only chosen when `d`
+clears its own threshold *and* every locus's own capacity
+(4<sup>length</sup> under `mutation_model: finite_alleles`) is at most
+this value; a single locus above it falls back to `generational`
+regardless of `d`. Ignored under every other `engine_backend` value.
+Like `auto_vector_min_d`, this default was measured on one specific
+machine — the same `dev/bin/benchmark-engines` maintainer tool
+re-measures this axis too (`--sweep loci-length`).
+
 ## Validation summary
 
 | Condition | Result |
@@ -651,5 +670,6 @@ on your own hardware.
 | engine_backend not `lineal`, `generational`, `generational-vector`, or `auto` | rejected |
 | jit not `off` or `numba` | rejected |
 | auto_vector_min_d less than 1 | rejected |
+| auto_vector_max_capacity less than 1 | rejected |
 | jit: numba with engine_backend: lineal or generational-vector | rejected |
 | engine_backend: generational-vector without mutation_model: finite_alleles and migrant_sampling: continuous | rejected |

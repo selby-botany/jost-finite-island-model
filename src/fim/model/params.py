@@ -76,6 +76,38 @@ caller-supplied `SimulationParams` field for exactly this kind of
 drift — see `dev/bin/benchmark-engines --sweep d` to re-characterize it
 on any given machine.
 """
+DEFAULT_AUTO_VECTOR_MAX_CAPACITY: Final = 1024
+"""`"auto"`'s own default per-locus capacity ceiling for `"generational-
+vector"` — above it, `"auto"` picks `"generational"` instead, regardless
+of `d`/`auto_vector_min_d`.
+
+Closes a real, previously-unaddressed gap: `"auto"`'s own resolution
+used to read `params.d` alone, never any locus's own capacity
+(`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10
+item 10b — "a large-`d`, large-capacity config could pick the wrong
+engine"). Measured, not guessed, the same way `auto_vector_min_d`
+itself was: that same document's own loci-length sweep found
+`"generational-vector"` winning through capacity `1024` (locus length
+`2`-`5`) and losing to `"generational"` + `jit="numba"` at capacity
+`4096` (length `6`, `71.3s` vs `92.4s`) — the array-native path touches
+every cell of a locus's own `(d, capacity)` grid every generation
+regardless of how much of it is actually occupied, where the dict-based
+backends only ever touch what is present. `1024`, not a value strictly
+between the two, because a real capacity is always `4 ** length` for
+some integer `length` — there is no config that could ever land between
+`1024` and `4096`, so the boundary sits exactly at the last *tested,
+winning* value rather than an interpolated one nothing could reach
+anyway. Applies to the largest capacity across every locus in `params.
+loci` — one large-capacity locus already pays this cost even if every
+other locus in the same run is small, the same "one disqualifying
+property anywhere disqualifies the whole choice" logic `mutation_model`/
+`migrant_sampling` eligibility already uses. Not yet re-measured on
+different hardware, and not yet re-measured against the same-day
+`ThreadedAdvancer`/`migrate_vectorized` fixes that already made
+`auto_vector_min_d`'s own default doubly stale — see that constant's
+own docstring for the precedent this one inherits, and `dev/bin/
+benchmark-engines --sweep loci-length` to re-characterize it.
+"""
 DEFAULT_N_REPLICATES: Final = 200
 """How many independently seeded replicates a run tries by default.
 
@@ -124,6 +156,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "engine_backend": "lineal",
     "jit": "off",
     "auto_vector_min_d": DEFAULT_AUTO_VECTOR_MIN_D,
+    "auto_vector_max_capacity": DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
 }
 
 _CONFIG_KEYS: Final = frozenset(
@@ -152,6 +185,7 @@ _CONFIG_KEYS: Final = frozenset(
         "engine_backend",
         "jit",
         "auto_vector_min_d",
+        "auto_vector_max_capacity",
         "migrant_sampling",
         "mutation_model",
         "p_0",
@@ -278,6 +312,17 @@ class SimulationParams:
             docstring for why it is a considered default, not a
             portable physical constant, and how to re-measure it on a
             given machine.
+        auto_vector_max_capacity: The per-locus capacity ceiling
+            `engine_backend="auto"` uses alongside `auto_vector_min_d`
+            — "generational-vector" is only chosen when `d >=
+            auto_vector_min_d` *and* every locus's own capacity is at
+            most this value; exceeding it at even one locus falls back
+            to "generational" regardless of `d`. Only meaningful when
+            `engine_backend` is "auto"; ignored otherwise. Defaults to
+            `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` — see that constant's
+            own docstring for the same "considered default, not a
+            portable constant" caveat `auto_vector_min_d` already
+            carries.
         initial_frequencies: Optional explicit deme/locus frequency table.
     """
 
@@ -306,6 +351,7 @@ class SimulationParams:
     engine_backend: EngineBackend = "lineal"
     jit: Jit = "off"
     auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D
+    auto_vector_max_capacity: int = DEFAULT_AUTO_VECTOR_MAX_CAPACITY
     initial_frequencies: InitialFrequencies | None = None
 
     def __post_init__(self) -> None:
@@ -408,6 +454,7 @@ class SimulationParams:
             engine_backend=self.engine_backend,
             jit=self.jit,
             auto_vector_min_d=self.auto_vector_min_d,
+            auto_vector_max_capacity=self.auto_vector_max_capacity,
             mutation_model=self.mutation_model,
             migrant_sampling=self.migrant_sampling,
         )
@@ -556,6 +603,7 @@ class SimulationParams:
             "engine_backend": self.engine_backend,
             "jit": self.jit,
             "auto_vector_min_d": self.auto_vector_min_d,
+            "auto_vector_max_capacity": self.auto_vector_max_capacity,
         }
         if self.initial_frequencies is not None:
             result["p_0"] = [
@@ -730,6 +778,13 @@ class SimulationParams:
                 config.get(
                     "auto_vector_min_d",
                     PARAMETER_DEFAULTS["auto_vector_min_d"],
+                ),
+            ),
+            auto_vector_max_capacity=_parse_int(
+                "auto_vector_max_capacity",
+                config.get(
+                    "auto_vector_max_capacity",
+                    PARAMETER_DEFAULTS["auto_vector_max_capacity"],
                 ),
             ),
             initial_frequencies=_parse_initial_frequencies(config.get("p_0")),
@@ -1260,6 +1315,7 @@ def _validate_engine_backend(
     engine_backend: EngineBackend,
     jit: Jit,
     auto_vector_min_d: int,
+    auto_vector_max_capacity: int,
     mutation_model: MutationModel,
     migrant_sampling: MigrantSampling,
 ) -> None:
@@ -1269,11 +1325,29 @@ def _validate_engine_backend(
     actually starts and `fim.engine.LinealBackend`/`VectorizedAdvancer`
     raise the same complaint deep inside a call stack: a config this
     obviously self-contradictory should never get far enough to start a
-    run at all. Mirrors `fim.engine.build_engine_backend`'s own rules
-    exactly (`20260901-claude-sonnet-5-fim-engine-backend-factory-
-    design.md` §7.5) rather than reimplementing them differently — kept
-    in sync by `test/model/test_params.py`'s own cross-check against
-    that function's source.
+    run at all. Mirrors two different real counterparts, not one single
+    function — corrected here, found stale while reading this docstring
+    against the current code rather than trusting it
+    (`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+    §6.1 item 2): the `jit`-related rejections mirror `fim.engine.
+    build_engine_backend`'s own identical checks
+    (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+    §7.5); the `mutation_model`/`migrant_sampling` rejection mirrors
+    `fim.engine.VectorizedAdvancer.advance`'s own runtime check instead
+    — `build_engine_backend` itself never checks either field, it only
+    ever raises on `jit`. **No automated cross-check enforces either
+    stays in sync — that claim, previously made here, did not hold**:
+    checked directly against the test suite, not merely assumed
+    correct; no such test exists anywhere under `test/`. Kept as a
+    plain code comment, not a verified guarantee, until a real test is
+    built.
+    `auto_vector_min_d`/`auto_vector_max_capacity` are a different kind
+    of check entirely — validated here only as plain positive integers,
+    never cross-referenced against `d`/any locus's own capacity; that
+    cross-referencing is `fim.engine._resolve_auto_engine_backend`'s
+    own job, at resolution time, not a construction-time rejection at
+    all (an out-of-range `auto_vector_min_d`/`auto_vector_max_capacity`
+    changes what `"auto"` picks, it never makes construction fail).
     """
     if engine_backend not in {"lineal", "generational", "generational-vector", "auto"}:
         raise ValueError(
@@ -1283,6 +1357,7 @@ def _validate_engine_backend(
     if jit not in {"off", "numba"}:
         raise ValueError("jit must be 'off' or 'numba'")
     _require_integer("auto_vector_min_d", auto_vector_min_d, minimum=1)
+    _require_integer("auto_vector_max_capacity", auto_vector_max_capacity, minimum=1)
     if engine_backend == "lineal" and jit != "off":
         raise ValueError("engine_backend 'lineal' only accepts jit='off'")
     if engine_backend == "generational-vector" and jit != "off":

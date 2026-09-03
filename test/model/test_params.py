@@ -53,6 +53,10 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
     assert params.jit == PARAMETER_DEFAULTS["jit"]
     assert params.jit == "off"
     assert params.auto_vector_min_d == PARAMETER_DEFAULTS["auto_vector_min_d"]
+    assert (
+        params.auto_vector_max_capacity
+        == PARAMETER_DEFAULTS["auto_vector_max_capacity"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -65,6 +69,7 @@ def test_scalar_parameters_construct_with_documented_defaults() -> None:
         ("N", 0, "N must be at least 1"),
         ("deme_weighting", "wrong", "deme_weighting"),
         ("convergence_window", 1, "convergence_window"),
+        ("auto_vector_max_capacity", 0, "auto_vector_max_capacity"),
     ],
 )
 def test_invalid_values_name_the_offending_field(
@@ -112,6 +117,24 @@ def test_initial_allele_count_is_bounded_by_the_smallest_deme_n() -> None:
 
     accepted = SimulationParams.from_mapping({**config, "initial_allele_count": 5})
     assert accepted.population_sizes == (5, 50)
+
+
+def test_auto_vector_max_capacity_is_a_real_field_and_round_trips() -> None:
+    """`auto_vector_max_capacity` is caller-configurable, not a hidden constant.
+
+    `20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+    §6.1 item 2 — a non-default value specifically, not just the
+    default `test_mapping_round_trip_is_lossless` (above) already
+    exercises for every field at once, so a wiring mistake that
+    happened to leave this field permanently pinned to its own default
+    could not hide behind that test alone.
+    """
+    params = SimulationParams.from_mapping(
+        {**_valid_config(), "auto_vector_max_capacity": 256}
+    )
+
+    assert params.auto_vector_max_capacity == 256
+    assert SimulationParams.from_mapping(params.to_dict()) == params
 
 
 def test_mapping_round_trip_is_lossless() -> None:
