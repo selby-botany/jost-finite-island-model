@@ -16,6 +16,7 @@ variance), which use a normal-approximation band matching this project's
 own existing precedent (`test_drift_variance_matches_binomial_theory`).
 """
 
+import math
 from collections.abc import Callable
 from dataclasses import replace
 
@@ -355,6 +356,45 @@ def test_mutate_vectorized_matches_dict_based_mutate_exactly(
             assert set(expected_map) == set(observed_map), (seed, deme)
             for allele_id, value in expected_map.items():
                 assert observed_map[allele_id] == value, (seed, deme, allele_id)
+
+
+def test_mutate_vectorized_renormalization_fsum_ignores_zero_padding() -> None:
+    """The claim `mutate_vectorized`'s own renormalization comment relies on, isolated.
+
+    `mutate_vectorized`'s per-deme renormalization restricts its
+    `math.fsum` call to a row's own nonzero entries rather than
+    converting the full, mostly-zero `capacity`-wide row (large
+    `capacity` values make the full conversion genuinely expensive —
+    profiling at `d=60`, `capacity=4096` found `.tolist()` alone
+    costing about as much as the JIT-compiled multinomial kernel
+    itself). That restriction is safe only because `fsum`'s own
+    running sum is bit-for-bit unaffected by omitting exact `0.0`
+    terms — proven here directly, in isolation from the rest of
+    `mutate_vectorized`'s own machinery, rather than relying on the
+    broader `test_mutate_vectorized_matches_dict_based_mutate_exactly`
+    to catch a regression only indirectly. Covers realistic shapes:
+    a large, mostly-zero row (the actual motivating case), an already-
+    dense row (zero padding contributes nothing to check), and a row
+    with values spanning several orders of magnitude (the case
+    `fsum`'s own correctly-rounded algorithm exists for in the first
+    place, so any subtle divergence from reordering terms would show
+    up here).
+    """
+    rng = np.random.default_rng(20260903)
+    capacity = 4096
+    cases = [
+        rng.random(12),  # sparse: only 12 of 4096 slots populated
+        rng.random(capacity),  # dense: every slot populated
+        np.array([1e-300, 1e150, 1e-10, 3.7, 1e300, 1e-200]),
+    ]
+    for dense_values in cases:
+        sparse_row = np.zeros(capacity, dtype=np.float64)
+        sparse_row[: dense_values.shape[0]] = dense_values
+
+        full_width = math.fsum(sparse_row.tolist())
+        nonzero_only = math.fsum(sparse_row[np.flatnonzero(sparse_row)].tolist())
+
+        assert nonzero_only == full_width
 
 
 def test_symmetric_migration_weights_rows_are_stochastic() -> None:

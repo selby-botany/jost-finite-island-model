@@ -6787,6 +6787,18 @@ as a real, measured cost this function used to be paid for
 needlessly, on every tick, for a run that might last hundreds of
 them.
 
+Restricts each row to `np.flatnonzero(row)` rather than
+`enumerate`-ing the full, mostly-zero `capacity`-wide row in plain
+Python — `vectorized_state_to_rows`, below, already used this same
+shortcut; this function did not, until caught by a sweep for the
+same "dense array walked element-by-element in Python" mismatch
+`mutate_vectorized`'s own renormalization step had (that function's
+own inline comment has the measured cost). Even though this
+function is only called once per lane rather than once per
+generation, walking every one of `capacity` slots in a Python loop
+to test `if frequency` on each is the identical waste at a smaller
+multiplier, not a different problem.
+
 <a id="fim.model.vectorized.vectorized_state_to_rows"></a>
 
 #### vectorized\_state\_to\_rows

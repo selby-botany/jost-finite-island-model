@@ -9638,6 +9638,35 @@ argument for the last one). Uses `_partial_finite_alleles_state` for
 the same reason the drift test above does — a saturated capacity
 cannot exercise the normalization bug at all.
 
+<a id="model.test_vectorized.test_mutate_vectorized_renormalization_fsum_ignores_zero_padding"></a>
+
+#### test\_mutate\_vectorized\_renormalization\_fsum\_ignores\_zero\_padding
+
+```python
+def test_mutate_vectorized_renormalization_fsum_ignores_zero_padding() -> None
+```
+
+The claim `mutate_vectorized`'s own renormalization comment relies on, isolated.
+
+`mutate_vectorized`'s per-deme renormalization restricts its
+`math.fsum` call to a row's own nonzero entries rather than
+converting the full, mostly-zero `capacity`-wide row (large
+`capacity` values make the full conversion genuinely expensive —
+profiling at `d=60`, `capacity=4096` found `.tolist()` alone
+costing about as much as the JIT-compiled multinomial kernel
+itself). That restriction is safe only because `fsum`'s own
+running sum is bit-for-bit unaffected by omitting exact `0.0`
+terms — proven here directly, in isolation from the rest of
+`mutate_vectorized`'s own machinery, rather than relying on the
+broader `test_mutate_vectorized_matches_dict_based_mutate_exactly`
+to catch a regression only indirectly. Covers realistic shapes:
+a large, mostly-zero row (the actual motivating case), an already-
+dense row (zero padding contributes nothing to check), and a row
+with values spanning several orders of magnitude (the case
+`fsum`'s own correctly-rounded algorithm exists for in the first
+place, so any subtle divergence from reordering terms would show
+up here).
+
 <a id="model.test_vectorized.test_symmetric_migration_weights_rows_are_stochastic"></a>
 
 #### test\_symmetric\_migration\_weights\_rows\_are\_stochastic

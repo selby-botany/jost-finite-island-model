@@ -339,6 +339,18 @@ def vectorized_state_to_model_state(state: VectorizedState) -> ModelState:
     as a real, measured cost this function used to be paid for
     needlessly, on every tick, for a run that might last hundreds of
     them.
+
+    Restricts each row to `np.flatnonzero(row)` rather than
+    `enumerate`-ing the full, mostly-zero `capacity`-wide row in plain
+    Python — `vectorized_state_to_rows`, below, already used this same
+    shortcut; this function did not, until caught by a sweep for the
+    same "dense array walked element-by-element in Python" mismatch
+    `mutate_vectorized`'s own renormalization step had (that function's
+    own inline comment has the measured cost). Even though this
+    function is only called once per lane rather than once per
+    generation, walking every one of `capacity` slots in a Python loop
+    to test `if frequency` on each is the identical waste at a smaller
+    multiplier, not a different problem.
     """
     deme_count = state.locus_states[0].frequencies.shape[0] if state.locus_states else 0
     demes = []
@@ -348,9 +360,8 @@ def vectorized_state_to_model_state(state: VectorizedState) -> ModelState:
             row = locus_state.frequencies[deme_index]
             locus_maps.append(
                 {
-                    AlleleId(allele_id): float(frequency)
-                    for allele_id, frequency in enumerate(row)
-                    if frequency
+                    AlleleId(int(allele_id)): float(row[allele_id])
+                    for allele_id in np.flatnonzero(row)
                 }
             )
         demes.append(tuple(locus_maps))
@@ -874,8 +885,23 @@ def mutate_vectorized(
         # confirmed directly that trailing zero-padding is inert under
         # `math.fsum` even though it is *not* inert under NumPy's own
         # pairwise `.sum()` (`_multinomial_rows_batched`'s own inline
-        # comment has that separate finding).
-        total = math.fsum(new_frequencies[deme].tolist())
+        # comment has that separate finding). `_normalize` itself only
+        # ever sees a dict's present (non-zero) keys in the first
+        # place, so restrict this call to the row's own nonzero entries
+        # too rather than converting the full, mostly-zero `capacity`-
+        # wide row: `fsum`'s own running sum is bit-for-bit unaffected
+        # by omitting exact `0.0` terms (adding one is a no-op at any
+        # partial sum), so this is not an approximation -- confirmed
+        # directly by `test_mutate_vectorized_renormalization_fsum_
+        # ignores_zero_padding` (`test/model/test_vectorized.py`), not
+        # assumed from the argument alone. `.tolist()` over the full
+        # zero-padded row measured as a genuinely large cost at
+        # realistic capacity (profiling at `d=60`, `capacity=4096`:
+        # ~19% of a whole step+convergence loop, comparable to the
+        # JIT-compiled multinomial kernel itself), almost all of it
+        # wasted on zeros this restriction skips entirely.
+        row = new_frequencies[deme]
+        total = math.fsum(row[np.flatnonzero(row)].tolist())
         new_frequencies[deme] /= total
 
     return VectorizedLocusState(
