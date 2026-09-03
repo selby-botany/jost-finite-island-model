@@ -39,6 +39,7 @@ from fim.model.vectorized import (
     build_vectorized_state,
     drift_vectorized,
     migrate_vectorized,
+    migrate_vectorized_symmetric,
     mutate_vectorized,
     step_vectorized,
     symmetric_migration_weights,
@@ -147,6 +148,62 @@ def test_migrate_vectorized_matches_dict_based_migrate() -> None:
         assert set(expected_map) == set(observed_map)
         for allele_id, value in expected_map.items():
             assert observed_map[allele_id] == pytest.approx(value, abs=1e-9)
+
+
+def test_migrate_vectorized_symmetric_matches_dict_based_migrate() -> None:
+    """The `O(d*K)` shortcut reproduces `fim.model.operators.migrate`'s own blend.
+
+    Same oracle and tolerance as `test_migrate_vectorized_matches_
+    dict_based_migrate`, above, for the new `O(d*K)` path
+    (`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+    §6.1 item 1) — not inherited from that test, since this function
+    computes the blend via a structurally different reduction (one
+    `sizes @ frequencies` vector-matrix product, not a `(d, d)` matmul),
+    which could in principle diverge even though both are derived from
+    the identical formula.
+    """
+    state = _finite_alleles_state(deme_count=5)
+    sizes = np.array([10, 20, 30, 40, 50], dtype=np.int64)
+    rate = 0.3
+
+    expected = migrate_dict(state, rate, tuple(int(s) for s in sizes))
+
+    vectorized = build_vectorized_state(state)
+    migrated = migrate_vectorized_symmetric(vectorized.locus_states[0], rate, sizes)
+    vectorized_result = vectorized_state_to_model_state(
+        replace(vectorized, locus_states=(migrated,))
+    )
+
+    for deme in range(5):
+        expected_map = expected.frequency_map(deme, 0)
+        observed_map = vectorized_result.frequency_map(deme, 0)
+        assert set(expected_map) == set(observed_map)
+        for allele_id, value in expected_map.items():
+            assert observed_map[allele_id] == pytest.approx(value, abs=1e-9)
+
+
+def test_migrate_vectorized_symmetric_matches_the_dense_matrix_path() -> None:
+    """The `O(d*K)` shortcut agrees with `migrate_vectorized`'s own general path.
+
+    Cross-checks the two array-native implementations directly against
+    each other, not only both separately against the dict-based oracle
+    — `migrate_vectorized(locus_state, symmetric_migration_weights(rate,
+    sizes))` is the *general* path's own answer for this same scalar-
+    rate case, computed through the `(d, d)` matrix this function exists
+    to avoid building at all.
+    """
+    state = _finite_alleles_state(deme_count=6)
+    sizes = np.array([15, 3, 40, 8, 22, 60], dtype=np.int64)
+    rate = 0.45
+
+    vectorized = build_vectorized_state(state)
+    weights = symmetric_migration_weights(rate, sizes)
+    via_matrix = migrate_vectorized(vectorized.locus_states[0], weights)
+    via_shortcut = migrate_vectorized_symmetric(vectorized.locus_states[0], rate, sizes)
+
+    np.testing.assert_allclose(
+        via_shortcut.frequencies, via_matrix.frequencies, atol=1e-9
+    )
 
 
 def test_drift_vectorized_matches_dict_based_drift_exactly(

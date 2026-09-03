@@ -140,7 +140,6 @@ from fim.model.vectorized import (
     VectorizedState,
     build_vectorized_state,
     step_vectorized,
-    symmetric_migration_weights,
     vectorized_state_to_model_state,
     vectorized_state_to_rows,
 )
@@ -472,14 +471,20 @@ class ReplicaLane:
     computes changes because of this.
 
     `migration_weights` is a `VectorizedAdvancer`-only cache: one dense
-    `(d, d)` migration weight matrix per locus, built once (from
-    `symmetric_migration_weights`, or `params.m` itself under a matrix
-    configuration) and reused for the rest of this lane's own run —
-    `params.m`/deme sizes never change mid-run, so recomputing this
-    every generation is pure, avoidable waste (found via the Stage 4/
-    Stage V3 benchmark sweep, `20260827-claude-sonnet-5-fim-engine-
-    parallel-refactor-design.md`'s own §9). Unused by every other
-    `Advancer`; stays `None` for the whole run under those.
+    `(d, d)` migration weight matrix per locus, built once from a
+    genuine caller-supplied weight matrix (`params.m` given as a full
+    matrix, not a scalar) and reused for the rest of this lane's own
+    run — `params.m`/deme sizes never change mid-run, so reconverting
+    this every generation is pure, avoidable waste (found via the
+    Stage 4/Stage V3 benchmark sweep, `20260827-claude-sonnet-5-fim-
+    engine-parallel-refactor-design.md`'s own §9). **Stays `None` for a
+    plain scalar `params.m` too, now** — `migrate_vectorized_symmetric`
+    computes that case directly in `O(d*K)`, with no `(d, d)` matrix
+    ever built at all (`20260903-claude-sonnet-5-fim-vg-performance-
+    campaign-design.md` §6.1 item 1); this field's own role narrowed to
+    the genuine-matrix case specifically, not retired. Unused by every
+    other `Advancer` either way; stays `None` for the whole run under
+    those.
 
     `vectorized_state` is also a `VectorizedAdvancer`-only cache — the
     live, dense `VectorizedState` this lane is actually stepping,
@@ -807,11 +812,13 @@ class VectorizedAdvancer:
     genuinely needs one. Measured directly, not assumed: at a large
     capacity, the per-tick reconstruction this removes was itself ~40%
     of that tick's own wall-clock time — larger than the biology
-    (`step_vectorized` itself) it was sitting next to. The dense
-    `(d, d)` migration weight matrix is likewise built once per lane and
-    cached on `lane.migration_weights`, not rebuilt every generation —
-    see `ReplicaLane`'s own docstring for the benchmark finding that
-    made this caching necessary, not just a nice-to-have.
+    (`step_vectorized` itself) it was sitting next to. A genuine
+    caller-supplied `(d, d)` migration weight matrix is likewise built
+    once per lane and cached on `lane.migration_weights`, not rebuilt
+    every generation; the far more common plain-scalar-rate case skips
+    building one at all now — see `ReplicaLane`'s own docstring for
+    both the original caching finding and the newer `O(d^2)`-avoidance
+    fix.
 
     Scope, deliberately, matching `fim.model.vectorized`'s own module
     docstring: `SimulationParams.mutation_model == "finite_alleles"`
@@ -847,23 +854,25 @@ class VectorizedAdvancer:
             sizes = np.asarray(
                 _population_sizes(lane.params.N, lane.state.deme_count), dtype=np.int64
             )
-            if lane.migration_weights is None:
-                # `params.m`/deme sizes never change mid-run, so this
-                # dense (d, d) matrix (O(d^2) to build via
-                # `symmetric_migration_weights`, then O(d^2) per
-                # generation again inside `migrate_vectorized`'s own
-                # matmul) is built once per lane and cached on it, not
-                # rebuilt from scratch every generation — the Stage 4/
-                # Stage V3 benchmark sweep found the earlier per-
-                # generation rebuild made Backend V's own d-scaling
-                # measurably worse than the dict-based backends' own
-                # linear-in-d migration formula (`ReplicaLane`'s own
-                # docstring has the full note).
-                weights = (
-                    symmetric_migration_weights(float(lane.params.m), sizes)
-                    if isinstance(lane.params.m, int | float)
-                    else np.asarray(lane.params.m, dtype=np.float64)
-                )
+            # A plain scalar `params.m` never needs a `(d, d)` matrix
+            # built at all — `migrate_vectorized_symmetric` computes the
+            # identical blend in `O(d*K)` directly (`20260903-claude-
+            # sonnet-5-fim-vg-performance-campaign-design.md` §6.1 item
+            # 1), so `lane.migration_weights` stays `None` and is never
+            # populated for this case. A genuine caller-supplied weight
+            # matrix still needs one real `(d, d)` array; `params.m`/
+            # deme sizes never change mid-run, so that array is still
+            # built once per lane and cached on it, not reconverted from
+            # `params.m` every generation — the Stage 4/Stage V3
+            # benchmark sweep found the earlier per-generation rebuild
+            # made Backend V's own d-scaling measurably worse than the
+            # dict-based backends' own linear-in-d migration formula
+            # (`ReplicaLane`'s own docstring has the full note).
+            symmetric_rate: float | None = None
+            if isinstance(lane.params.m, int | float):
+                symmetric_rate = float(lane.params.m)
+            elif lane.migration_weights is None:
+                weights = np.asarray(lane.params.m, dtype=np.float64)
                 lane.migration_weights = (weights,) * len(lane.state.loci)
             if lane.vectorized_state is None:
                 # Only the very first tick this lane is ever advanced —
@@ -879,6 +888,7 @@ class VectorizedAdvancer:
                 lane.params.mutation_rates,
                 sizes,
                 lane.rng,
+                symmetric_rate=symmetric_rate,
             )
             store.write_generation(
                 lane.run_id,

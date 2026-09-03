@@ -644,6 +644,63 @@ def migrate_vectorized(
     return replace(locus_state, frequencies=weights @ locus_state.frequencies)
 
 
+def migrate_vectorized_symmetric(
+    locus_state: VectorizedLocusState,
+    rate: float,
+    sizes: np.ndarray,
+) -> VectorizedLocusState:
+    """Blend every deme with the migrant pool in `O(d*K)` time, no `(d,d)` matrix.
+
+    The array-native counterpart to `fim.model.operators._migrate_
+    symmetric`'s own `O(d*A)` shortcut, for the identical common case:
+    a plain scalar migration rate, not a full custom weight matrix.
+    `migrate_vectorized`'s own dense `W @ F` matmul is `O(d^2*K)`
+    compute and `O(d^2)` memory to hold `W` at all, regardless of `rate`
+    being a scalar — the documented memory wall (`20260901-claude-
+    sonnet-5-fim-engine-backend-factory-design.md` §10, "`migrate_
+    vectorized`'s own `O(d^2)` memory wall": 0.8GB at `d=10^4`, 20GB at
+    `d=5x10^4`, genuinely unrepresentable beyond that, not merely slow).
+    This function never builds `W` at all — it restates `_migrate_
+    symmetric`'s own two-pass formula (global size-weighted mass once,
+    then a per-destination pool) directly in dense-array form:
+
+    ```
+    global_mass[a] = sum_i sizes[i] * frequencies[i, a]  # sizes @ frequencies
+    other_weight[i] = total_size - sizes[i]
+    pool[i, a] = (global_mass[a] - sizes[i] * frequencies[i, a]) / other_weight[i]
+    blended[i, a] = (1 - rate) * frequencies[i, a] + rate * pool[i, a]
+    ```
+
+    `O(d*K)` in both compute and memory — the identical order the
+    dict-based backend's own shortcut already achieves, now available
+    for the array-native path too. No separate normalization step:
+    every row of `blended` sums to exactly 1 whenever every row of
+    `frequencies` already does (the same row-stochastic-by-construction
+    property `symmetric_migration_weights`'s own docstring proves for
+    `W` directly — provable here the same way, by summing `blended`'s
+    own formula over `a` and simplifying), matching `migrate_
+    vectorized`'s own no-normalization contract exactly, not a new one.
+
+    Args:
+        locus_state: This locus's own dense working state.
+        rate: The scalar migration rate.
+        sizes: `(d,)` int64, each deme's own gene-copy count.
+
+    Returns:
+        This locus's own post-migration state.
+    """
+    frequencies = locus_state.frequencies
+    sizes_f64 = sizes.astype(np.float64)
+    total_size = float(sizes_f64.sum())
+    global_mass = sizes_f64 @ frequencies
+    other_weight = total_size - sizes_f64
+    pool = (global_mass[None, :] - sizes_f64[:, None] * frequencies) / other_weight[
+        :, None
+    ]
+    blended = (1.0 - rate) * frequencies + rate * pool
+    return replace(locus_state, frequencies=blended)
+
+
 def symmetric_migration_weights(rate: float, sizes: np.ndarray) -> np.ndarray:
     """Build the dense `(d, d)` weight matrix for a scalar migration rate.
 
@@ -655,6 +712,18 @@ def symmetric_migration_weights(rate: float, sizes: np.ndarray) -> np.ndarray:
     i`, `W[i, j] = rate * size_j / (total_size - size_i)` — row `i` sums
     to exactly 1 by construction (the migrant weights alone sum to
     `rate`, since `sum_{j != i} size_j == total_size - size_i`).
+
+    **No longer `fim.engine.VectorizedAdvancer`'s own path for a scalar
+    rate** — `migrate_vectorized_symmetric`, above, computes the
+    identical blend directly, in `O(d*K)`, without ever materializing
+    this `O(d^2)` matrix at all (`20260903-claude-sonnet-5-fim-vg-
+    performance-campaign-design.md` §6.1 item 1). Kept as a real, tested
+    public function in its own right: a genuine caller-supplied weight
+    matrix (`SimulationParams.m` given as a full matrix, not a scalar)
+    still needs an actual `(d, d)` array — `migrate_vectorized` itself,
+    unlike this narrower symmetric case, is not being retired — and a
+    caller who wants the materialized matrix directly (inspection,
+    building a custom topology from a symmetric base) still has it.
     """
     deme_count = sizes.shape[0]
     total_size = float(sizes.sum())
@@ -959,10 +1028,12 @@ def drift_vectorized(
 
 def step_vectorized(
     state: VectorizedState,
-    weights_per_locus: tuple[np.ndarray, ...],
+    weights_per_locus: tuple[np.ndarray, ...] | None,
     mutation_rates: tuple[float, ...],
     sizes: np.ndarray,
     rng: np.random.Generator,
+    *,
+    symmetric_rate: float | None = None,
 ) -> VectorizedState:
     """Advance one generation: migrate, then mutate, then drift, fused.
 
@@ -970,16 +1041,54 @@ def step_vectorized(
     locus stays a dense array from this call's own start to its own end,
     across all three stages, with no `ModelState` reconstructed in
     between (the actual thing this whole module exists to test — see the
-    module's own docstring). `weights_per_locus`/`mutation_rates` are
-    already resolved per locus by the caller (`symmetric_migration_weights`
-    or an already-row-stochastic matrix; `SimulationParams.mutation_rates`
-    itself already resolves a scalar `mu` to one rate per locus).
+    module's own docstring). `mutation_rates` is already resolved per
+    locus by the caller (`SimulationParams.mutation_rates` itself
+    already resolves a scalar `mu` to one rate per locus).
+
+    Exactly one of `weights_per_locus`/`symmetric_rate` must be given,
+    choosing which of `migrate_vectorized`'s own two implementations
+    runs this generation — see either function's own docstring:
+
+    - `weights_per_locus`: an already-row-stochastic `(d, d)` matrix per
+      locus (`symmetric_migration_weights`, or a genuine caller-supplied
+      weight matrix) — `O(d^2)` per locus, the general case.
+    - `symmetric_rate`: a plain scalar migration rate, dispatched to
+      `migrate_vectorized_symmetric` instead — `O(d*K)`, no `(d, d)`
+      matrix ever built, the common case
+      (`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+      §6.1 item 1).
+
+    Raises:
+        ValueError: If both or neither of `weights_per_locus`/
+            `symmetric_rate` are given.
     """
+    if (weights_per_locus is None) == (symmetric_rate is None):
+        raise ValueError(
+            "step_vectorized() requires exactly one of weights_per_locus "
+            "or symmetric_rate"
+        )
+    # Only the migrate step itself differs between the two paths — mutate
+    # and drift stay one shared loop, not duplicated across an if/else,
+    # so there is exactly one place their own fusion order is stated.
+    # A fixed-length `(None,) * n` placeholder, not `itertools.repeat`
+    # (infinite, and `zip`'s own `strict=True` check would need to pull
+    # one further element from it to notice the other iterables already
+    # stopped, which it never will — a real bug caught before running,
+    # not found by a failing test).
+    weights_or_none: tuple[np.ndarray | None, ...] = (
+        weights_per_locus
+        if weights_per_locus is not None
+        else (None,) * len(state.locus_states)
+    )
     new_locus_states = []
     for locus_state, weights, rate in zip(
-        state.locus_states, weights_per_locus, mutation_rates, strict=True
+        state.locus_states, weights_or_none, mutation_rates, strict=True
     ):
-        migrated = migrate_vectorized(locus_state, weights)
+        migrated = (
+            migrate_vectorized_symmetric(locus_state, symmetric_rate, sizes)
+            if symmetric_rate is not None
+            else migrate_vectorized(locus_state, weights)  # type: ignore[arg-type]
+        )
         mutated = mutate_vectorized(migrated, sizes, rate, rng)
         drifted = drift_vectorized(mutated, sizes, rng)
         new_locus_states.append(drifted)

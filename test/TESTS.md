@@ -3274,12 +3274,39 @@ def test_vectorized_advancer_caches_migration_weights_across_generations(
 
 `ReplicaLane.migration_weights` is built once, then reused, not rebuilt.
 
-Found by the Stage 4/Stage V3 benchmark sweep: `symmetric_migration_
-weights`'s own O(d^2) matrix build was being redone every single
-generation, even though `params.m`/deme sizes never change mid-run.
-Checked directly, not just inferred from timing: the exact same
-array object (`is`, not just equal) survives two consecutive
-`advance()` calls.
+Found by the Stage 4/Stage V3 benchmark sweep: a genuine `(d, d)`
+weight-matrix conversion was being redone every single generation,
+even though `params.m`/deme sizes never change mid-run. A genuine
+matrix `m` (`d=3`, symmetric-equivalent by construction, not a
+scalar) — `20260903-claude-sonnet-5-fim-vg-performance-campaign-
+design.md` §6.1 item 1's own `O(d)` fix took the scalar-rate case
+out of this cache entirely (see `test_vectorized_advancer_skips_
+migration_weights_cache_for_a_scalar_rate`, below); this test still
+covers the case that fix deliberately left the caching behavior
+unchanged for. Checked directly, not just inferred from timing: the
+exact same array object (`is`, not just equal) survives two
+consecutive `advance()` calls.
+
+<a id="engine.test_engine.test_vectorized_advancer_skips_migration_weights_cache_for_a_scalar_rate"></a>
+
+#### test\_vectorized\_advancer\_skips\_migration\_weights\_cache\_for\_a\_scalar\_rate
+
+```python
+def test_vectorized_advancer_skips_migration_weights_cache_for_a_scalar_rate(
+) -> None
+```
+
+A plain scalar `m` never populates `migration_weights` at all, ever.
+
+`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+§6.1 item 1: `migrate_vectorized_symmetric` computes a scalar-rate
+migration blend directly, in `O(d*K)`, with no `(d, d)` matrix ever
+built — so there is nothing to cache for this, this project's own
+most common configuration, not merely a cache that happens to stay
+unused. Checked across several generations, not just the first
+tick, since a regression that rebuilds-and-discards a matrix every
+generation would leave this field `None` too, indistinguishable
+from the fix at a single tick.
 
 
 
@@ -9431,6 +9458,42 @@ def test_migrate_vectorized_matches_dict_based_migrate() -> None
 ```
 
 The dense matmul reproduces `fim.model.operators.migrate`'s own blend.
+
+<a id="model.test_vectorized.test_migrate_vectorized_symmetric_matches_dict_based_migrate"></a>
+
+#### test\_migrate\_vectorized\_symmetric\_matches\_dict\_based\_migrate
+
+```python
+def test_migrate_vectorized_symmetric_matches_dict_based_migrate() -> None
+```
+
+The `O(d*K)` shortcut reproduces `fim.model.operators.migrate`'s own blend.
+
+Same oracle and tolerance as `test_migrate_vectorized_matches_
+dict_based_migrate`, above, for the new `O(d*K)` path
+(`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+§6.1 item 1) — not inherited from that test, since this function
+computes the blend via a structurally different reduction (one
+`sizes @ frequencies` vector-matrix product, not a `(d, d)` matmul),
+which could in principle diverge even though both are derived from
+the identical formula.
+
+<a id="model.test_vectorized.test_migrate_vectorized_symmetric_matches_the_dense_matrix_path"></a>
+
+#### test\_migrate\_vectorized\_symmetric\_matches\_the\_dense\_matrix\_path
+
+```python
+def test_migrate_vectorized_symmetric_matches_the_dense_matrix_path() -> None
+```
+
+The `O(d*K)` shortcut agrees with `migrate_vectorized`'s own general path.
+
+Cross-checks the two array-native implementations directly against
+each other, not only both separately against the dict-based oracle
+— `migrate_vectorized(locus_state, symmetric_migration_weights(rate,
+sizes))` is the *general* path's own answer for this same scalar-
+rate case, computed through the `(d, d)` matrix this function exists
+to avoid building at all.
 
 <a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly"></a>
 

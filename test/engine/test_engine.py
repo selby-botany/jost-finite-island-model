@@ -2497,15 +2497,24 @@ def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:
 def test_vectorized_advancer_caches_migration_weights_across_generations() -> None:
     """`ReplicaLane.migration_weights` is built once, then reused, not rebuilt.
 
-    Found by the Stage 4/Stage V3 benchmark sweep: `symmetric_migration_
-    weights`'s own O(d^2) matrix build was being redone every single
-    generation, even though `params.m`/deme sizes never change mid-run.
-    Checked directly, not just inferred from timing: the exact same
-    array object (`is`, not just equal) survives two consecutive
-    `advance()` calls.
+    Found by the Stage 4/Stage V3 benchmark sweep: a genuine `(d, d)`
+    weight-matrix conversion was being redone every single generation,
+    even though `params.m`/deme sizes never change mid-run. A genuine
+    matrix `m` (`d=3`, symmetric-equivalent by construction, not a
+    scalar) — `20260903-claude-sonnet-5-fim-vg-performance-campaign-
+    design.md` §6.1 item 1's own `O(d)` fix took the scalar-rate case
+    out of this cache entirely (see `test_vectorized_advancer_skips_
+    migration_weights_cache_for_a_scalar_rate`, below); this test still
+    covers the case that fix deliberately left the caching behavior
+    unchanged for. Checked directly, not just inferred from timing: the
+    exact same array object (`is`, not just equal) survives two
+    consecutive `advance()` calls.
     """
     pytest.importorskip("numba")
-    params = _finite_alleles_vector_params(max_generations=3, convergence_window=3)
+    matrix = ((0.8, 0.1, 0.1), (0.1, 0.8, 0.1), (0.1, 0.1, 0.8))
+    params = _finite_alleles_vector_params(
+        m=matrix, max_generations=3, convergence_window=3
+    )
     store = InMemoryTrajectoryStore()
     lane = _build_replica_lane(params, 0, None, store, _clock)
     # `_build_replica_lane` never populates `migration_weights` itself —
@@ -2527,3 +2536,27 @@ def test_vectorized_advancer_caches_migration_weights_across_generations() -> No
     assert second_weights is first_weights, (
         "same object, not rebuilt, second generation"
     )
+
+
+def test_vectorized_advancer_skips_migration_weights_cache_for_a_scalar_rate() -> None:
+    """A plain scalar `m` never populates `migration_weights` at all, ever.
+
+    `20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+    §6.1 item 1: `migrate_vectorized_symmetric` computes a scalar-rate
+    migration blend directly, in `O(d*K)`, with no `(d, d)` matrix ever
+    built — so there is nothing to cache for this, this project's own
+    most common configuration, not merely a cache that happens to stay
+    unused. Checked across several generations, not just the first
+    tick, since a regression that rebuilds-and-discards a matrix every
+    generation would leave this field `None` too, indistinguishable
+    from the fix at a single tick.
+    """
+    pytest.importorskip("numba")
+    params = _finite_alleles_vector_params(max_generations=3, convergence_window=3)
+    store = InMemoryTrajectoryStore()
+    lane = _build_replica_lane(params, 0, None, store, _clock)
+    advancer = VectorizedAdvancer()
+
+    for _ in range(3):
+        advancer.advance([lane], store)
+        assert lane.migration_weights is None

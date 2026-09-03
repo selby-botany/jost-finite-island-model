@@ -229,6 +229,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [vectorized\_state\_to\_model\_state](#fim.model.vectorized.vectorized_state_to_model_state)
   * [vectorized\_state\_to\_rows](#fim.model.vectorized.vectorized_state_to_rows)
   * [migrate\_vectorized](#fim.model.vectorized.migrate_vectorized)
+  * [migrate\_vectorized\_symmetric](#fim.model.vectorized.migrate_vectorized_symmetric)
   * [symmetric\_migration\_weights](#fim.model.vectorized.symmetric_migration_weights)
   * [mutate\_vectorized](#fim.model.vectorized.mutate_vectorized)
   * [drift\_vectorized](#fim.model.vectorized.drift_vectorized)
@@ -1411,14 +1412,20 @@ each replica's entire trajectory before starting the next (see
 computes changes because of this.
 
 `migration_weights` is a `VectorizedAdvancer`-only cache: one dense
-`(d, d)` migration weight matrix per locus, built once (from
-`symmetric_migration_weights`, or `params.m` itself under a matrix
-configuration) and reused for the rest of this lane's own run —
-`params.m`/deme sizes never change mid-run, so recomputing this
-every generation is pure, avoidable waste (found via the Stage 4/
-Stage V3 benchmark sweep, `20260827-claude-sonnet-5-fim-engine-
-parallel-refactor-design.md`'s own §9). Unused by every other
-`Advancer`; stays `None` for the whole run under those.
+`(d, d)` migration weight matrix per locus, built once from a
+genuine caller-supplied weight matrix (`params.m` given as a full
+matrix, not a scalar) and reused for the rest of this lane's own
+run — `params.m`/deme sizes never change mid-run, so reconverting
+this every generation is pure, avoidable waste (found via the
+Stage 4/Stage V3 benchmark sweep, `20260827-claude-sonnet-5-fim-
+engine-parallel-refactor-design.md`'s own §9). **Stays `None` for a
+plain scalar `params.m` too, now** — `migrate_vectorized_symmetric`
+computes that case directly in `O(d*K)`, with no `(d, d)` matrix
+ever built at all (`20260903-claude-sonnet-5-fim-vg-performance-
+campaign-design.md` §6.1 item 1); this field's own role narrowed to
+the genuine-matrix case specifically, not retired. Unused by every
+other `Advancer` either way; stays `None` for the whole run under
+those.
 
 `vectorized_state` is also a `VectorizedAdvancer`-only cache — the
 live, dense `VectorizedState` this lane is actually stepping,
@@ -1680,11 +1687,13 @@ reports it has stopped, for the report/`RunResult` machinery that
 genuinely needs one. Measured directly, not assumed: at a large
 capacity, the per-tick reconstruction this removes was itself ~40%
 of that tick's own wall-clock time — larger than the biology
-(`step_vectorized` itself) it was sitting next to. The dense
-`(d, d)` migration weight matrix is likewise built once per lane and
-cached on `lane.migration_weights`, not rebuilt every generation —
-see `ReplicaLane`'s own docstring for the benchmark finding that
-made this caching necessary, not just a nice-to-have.
+(`step_vectorized` itself) it was sitting next to. A genuine
+caller-supplied `(d, d)` migration weight matrix is likewise built
+once per lane and cached on `lane.migration_weights`, not rebuilt
+every generation; the far more common plain-scalar-rate case skips
+building one at all now — see `ReplicaLane`'s own docstring for
+both the original caching finding and the newer `O(d^2)`-avoidance
+fix.
 
 Scope, deliberately, matching `fim.model.vectorized`'s own module
 docstring: `SimulationParams.mutation_model == "finite_alleles"`
@@ -6752,6 +6761,60 @@ identical computation, as the one matrix product the vector design's
 own §5.1 names as the natural generalization. Deterministic
 ("continuous") migration only — see this module's own docstring.
 
+<a id="fim.model.vectorized.migrate_vectorized_symmetric"></a>
+
+#### migrate\_vectorized\_symmetric
+
+```python
+def migrate_vectorized_symmetric(locus_state: VectorizedLocusState,
+                                 rate: float,
+                                 sizes: np.ndarray) -> VectorizedLocusState
+```
+
+Blend every deme with the migrant pool in `O(d*K)` time, no `(d,d)` matrix.
+
+The array-native counterpart to `fim.model.operators._migrate_
+symmetric`'s own `O(d*A)` shortcut, for the identical common case:
+a plain scalar migration rate, not a full custom weight matrix.
+`migrate_vectorized`'s own dense `W @ F` matmul is `O(d^2*K)`
+compute and `O(d^2)` memory to hold `W` at all, regardless of `rate`
+being a scalar — the documented memory wall (`20260901-claude-
+sonnet-5-fim-engine-backend-factory-design.md` §10, "`migrate_
+vectorized`'s own `O(d^2)` memory wall": 0.8GB at `d=10^4`, 20GB at
+`d=5x10^4`, genuinely unrepresentable beyond that, not merely slow).
+This function never builds `W` at all — it restates `_migrate_
+symmetric`'s own two-pass formula (global size-weighted mass once,
+then a per-destination pool) directly in dense-array form:
+
+
+`O(d*K)` in both compute and memory — the identical order the
+dict-based backend's own shortcut already achieves, now available
+for the array-native path too. No separate normalization step:
+every row of `blended` sums to exactly 1 whenever every row of
+`frequencies` already does (the same row-stochastic-by-construction
+property `symmetric_migration_weights`'s own docstring proves for
+`W` directly — provable here the same way, by summing `blended`'s
+own formula over `a` and simplifying), matching `migrate_
+vectorized`'s own no-normalization contract exactly, not a new one.
+
+```
+global_mass[a] = sum_i sizes[i] * frequencies[i, a]  # sizes @ frequencies
+other_weight[i] = total_size - sizes[i]
+pool[i, a] = (global_mass[a] - sizes[i] * frequencies[i, a]) / other_weight[i]
+blended[i, a] = (1 - rate) * frequencies[i, a] + rate * pool[i, a]
+```
+
+**Arguments**:
+
+- `locus_state` - This locus's own dense working state.
+- `rate` - The scalar migration rate.
+- `sizes` - `(d,)` int64, each deme's own gene-copy count.
+
+
+**Returns**:
+
+  This locus's own post-migration state.
+
 <a id="fim.model.vectorized.symmetric_migration_weights"></a>
 
 #### symmetric\_migration\_weights
@@ -6770,6 +6833,18 @@ other deme's own frequency gives `W[i, i] = 1 - rate` and, for `j !=
 i`, `W[i, j] = rate * size_j / (total_size - size_i)` — row `i` sums
 to exactly 1 by construction (the migrant weights alone sum to
 `rate`, since `sum_{j != i} size_j == total_size - size_i`).
+
+**No longer `fim.engine.VectorizedAdvancer`'s own path for a scalar
+rate** — `migrate_vectorized_symmetric`, above, computes the
+identical blend directly, in `O(d*K)`, without ever materializing
+this `O(d^2)` matrix at all (`20260903-claude-sonnet-5-fim-vg-
+performance-campaign-design.md` §6.1 item 1). Kept as a real, tested
+public function in its own right: a genuine caller-supplied weight
+matrix (`SimulationParams.m` given as a full matrix, not a scalar)
+still needs an actual `(d, d)` array — `migrate_vectorized` itself,
+unlike this narrower symmetric case, is not being retired — and a
+caller who wants the materialized matrix directly (inspection,
+building a custom topology from a symmetric base) still has it.
 
 <a id="fim.model.vectorized.mutate_vectorized"></a>
 
@@ -6877,9 +6952,12 @@ exactly what property that gives this function relative to
 
 ```python
 def step_vectorized(state: VectorizedState,
-                    weights_per_locus: tuple[np.ndarray, ...],
-                    mutation_rates: tuple[float, ...], sizes: np.ndarray,
-                    rng: np.random.Generator) -> VectorizedState
+                    weights_per_locus: tuple[np.ndarray, ...] | None,
+                    mutation_rates: tuple[float, ...],
+                    sizes: np.ndarray,
+                    rng: np.random.Generator,
+                    *,
+                    symmetric_rate: float | None = None) -> VectorizedState
 ```
 
 Advance one generation: migrate, then mutate, then drift, fused.
@@ -6888,10 +6966,27 @@ The array-native counterpart to `fim.model.operators.step` — every
 locus stays a dense array from this call's own start to its own end,
 across all three stages, with no `ModelState` reconstructed in
 between (the actual thing this whole module exists to test — see the
-module's own docstring). `weights_per_locus`/`mutation_rates` are
-already resolved per locus by the caller (`symmetric_migration_weights`
-or an already-row-stochastic matrix; `SimulationParams.mutation_rates`
-itself already resolves a scalar `mu` to one rate per locus).
+module's own docstring). `mutation_rates` is already resolved per
+locus by the caller (`SimulationParams.mutation_rates` itself
+already resolves a scalar `mu` to one rate per locus).
+
+Exactly one of `weights_per_locus`/`symmetric_rate` must be given,
+choosing which of `migrate_vectorized`'s own two implementations
+runs this generation — see either function's own docstring:
+
+- `weights_per_locus`: an already-row-stochastic `(d, d)` matrix per
+locus (`symmetric_migration_weights`, or a genuine caller-supplied
+weight matrix) — `O(d^2)` per locus, the general case.
+- `symmetric_rate`: a plain scalar migration rate, dispatched to
+`migrate_vectorized_symmetric` instead — `O(d*K)`, no `(d, d)`
+matrix ever built, the common case
+(`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+§6.1 item 1).
+
+**Raises**:
+
+- `ValueError` - If both or neither of `weights_per_locus`/
+  `symmetric_rate` are given.
 
 <a id="fim.paths"></a>
 
