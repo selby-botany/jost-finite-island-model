@@ -6,6 +6,7 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 
+from fim.model import operators
 from fim.model.allele import (
     MINTED_ID_START,
     AlleleId,
@@ -14,19 +15,22 @@ from fim.model.allele import (
     FiniteAlleleSpace,
 )
 from fim.model.initial import generate_initial_state
-from fim.model.locus import LocusSpec
+from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.operators import (
+    _attribute_finite_allele_targets,
     _build_migrate_symmetric_buffers,
     _inversion_binomial,
     _jit_migrate_symmetric_blend,
     _jit_multinomial_via_binomial,
     _jit_multinomial_via_inversion_binomial,
     _jit_mutate_event_counts_batched,
+    _jit_mutate_targets_batched,
     _migrate_symmetric_blend_batched,
     _mint_infinite_allele_ids,
     _multinomial_via_binomial,
     _multinomial_via_inversion_binomial,
     _mutate_event_counts_batched,
+    _mutate_targets_batched,
     _next_mutate_event_count,
     drift,
     migrate,
@@ -564,6 +568,97 @@ def test_jit_multinomial_via_inversion_binomial_matches_plain_decomposition() ->
         assert plain.tolist() == list(jitted)
 
 
+def test_jit_mutate_targets_batched_matches_plain_decomposition() -> None:
+    """The Numba-JIT-compiled kernel is exactly the same function, compiled.
+
+    Same isolation as the other low-level kernel tests above — this
+    only asks whether `operators.py`'s own `_mutate_targets_batched`/
+    `_jit_mutate_targets_batched` agree with each other, given
+    identical, realistic minted-state arrays. Whether this module's own
+    *copy* of the algorithm agrees with `FiniteAlleleSpace.mutate_
+    target` is a separate question, covered by `test_mutate_targets_
+    batched_matches_finite_allele_space_exactly`, below.
+    """
+    pytest.importorskip("numba")
+    capacity = 20
+    controller = np.random.default_rng(20260904)
+    for _ in range(50):
+        seed = int(controller.integers(0, 2**31))
+        minted_count = int(controller.integers(2, capacity + 1))
+        event_count = int(controller.integers(1, 10))
+        sources = controller.integers(0, minted_count, size=event_count).astype(
+            np.int64
+        )
+        minted_mask = np.zeros(capacity, dtype=np.bool_)
+        minted_mask[:minted_count] = True
+        minted_list = np.zeros(capacity, dtype=np.int64)
+        minted_list[:minted_count] = np.arange(minted_count)
+
+        plain = _mutate_targets_batched(
+            np.random.Generator(np.random.PCG64(seed)),
+            sources,
+            capacity,
+            minted_mask.copy(),
+            minted_list.copy(),
+            minted_count,
+            minted_count,
+        )
+        jitted = _jit_mutate_targets_batched(
+            np.random.Generator(np.random.PCG64(seed)),
+            sources,
+            capacity,
+            minted_mask.copy(),
+            minted_list.copy(),
+            minted_count,
+            minted_count,
+        )
+        plain_targets, _, _, plain_count, plain_next = plain
+        jitted_targets, _, _, jitted_count, jitted_next = jitted
+        assert plain_targets.tolist() == jitted_targets.tolist(), seed
+        assert plain_count == jitted_count
+        assert plain_next == jitted_next
+
+
+def test_mutate_targets_batched_matches_finite_allele_space_exactly(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`operators.py`'s own duplicated kernel matches `FiniteAlleleSpace` exactly.
+
+    Mirrors `test/model/test_vectorized.py`'s own `test_mutate_
+    vectorized_recurrence_rate_matches_finite_allele_space` (the
+    original this module's own `_mutate_targets_batched` is a
+    deliberate duplicate of, per that function's own docstring) —
+    re-proven directly here because a duplicate is only as trustworthy
+    as its own, independent proof, not inherited from the original's.
+    For the identical starting minted set and an identically seeded
+    `rng`, the two must return the *exact same target*, every trial,
+    not merely agree on the rate across many.
+    """
+    capacity = 20
+
+    for minted_count in (2, 6, 12, capacity):
+        minted = tuple(AlleleId(i) for i in range(minted_count))
+        minted_mask = np.zeros(capacity, dtype=np.bool_)
+        minted_mask[:minted_count] = True
+        minted_list = np.zeros(capacity, dtype=np.int64)
+        minted_list[:minted_count] = np.arange(minted_count)
+        for source in range(minted_count):
+            for seed in range(50):
+                space = FiniteAlleleSpace(capacity, minted)
+                expected = int(space.mutate_target(AlleleId(source), rng(seed)))
+
+                targets, _, _, _, _ = _mutate_targets_batched(
+                    rng(seed),
+                    np.array([source], dtype=np.int64),
+                    capacity,
+                    minted_mask.copy(),
+                    minted_list.copy(),
+                    minted_count,
+                    minted_count,
+                )
+                assert int(targets[0]) == expected, (minted_count, source, seed)
+
+
 def test_next_mutate_event_count_reads_batched_array_or_draws_inline(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
@@ -617,6 +712,52 @@ def test_mint_infinite_allele_ids_reads_reserved_slice_or_mints_inline() -> None
     }
 
 
+def test_attribute_finite_allele_targets_batches_when_eligible_or_falls_back(
+    rng: Callable[[int], np.random.Generator],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Direct unit coverage for `_attribute_finite_allele_targets`.
+
+    Covered indirectly by every finite-alleles `mutate`-level test
+    above, but this project's own testing standard is one direct test
+    per function — checks both of this function's own branches (the
+    batched kernel, and the per-event fallback the capacity-bound
+    monkeypatch below forces) produce the identical accumulated
+    `mutated` dict for the same seed.
+    """
+    pytest.importorskip("numba")
+    locus = LocusSpec(1, 2)  # capacity 16
+    allele_ids = (AlleleId(0), AlleleId(1))
+    source_counts = np.array([2, 1], dtype=np.int64)
+
+    eligible_mutated: dict[AlleleId, float] = {}
+    _attribute_finite_allele_targets(
+        eligible_mutated,
+        FiniteAlleleRegistry({1: FiniteAlleleSpace(16, allele_ids)}),
+        locus,
+        allele_ids,
+        source_counts,
+        0.1,
+        rng(20260904),
+        jit=True,
+    )
+
+    monkeypatch.setattr(operators, "_MAX_JIT_FINITE_ALLELE_CAPACITY", 0)
+    fallback_mutated: dict[AlleleId, float] = {}
+    _attribute_finite_allele_targets(
+        fallback_mutated,
+        FiniteAlleleRegistry({1: FiniteAlleleSpace(16, allele_ids)}),
+        locus,
+        allele_ids,
+        source_counts,
+        0.1,
+        rng(20260904),
+        jit=True,
+    )
+
+    assert eligible_mutated == fallback_mutated
+
+
 def test_mutate_with_jit_matches_mutate_without_jit_bit_for_bit(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
@@ -643,20 +784,22 @@ def test_mutate_with_jit_under_finite_alleles_matches_without_jit_bit_for_bit(
     attribution/target-selection draws interleave with the event-count
     draw in a way batching it up front would desync (`20260901-claude-
     sonnet-5-fim-engine-backend-factory-design.md` §10 item 10e, stage
-    2's own docstring). Stage 3 does give the finite-alleles model a
-    real, if partial, `jit` benefit anyway: the source-attribution draw
-    itself is compiled as a same-position, one-call-at-a-time drop-in
-    (`_jit_multinomial_via_inversion_binomial`), leaving the event-count
-    draw and target selection (`finite_alleles.mutate_target`) both
-    unaffected — bit-identical output either way, checked here, not
-    "unaffected" the way stage 2 alone left it (`mutate`'s own `jit`
-    docstring has the full account). A fresh `FiniteAlleleSpace` per
-    call, not a shared one — `mutate_target` mutates its own internal
-    minted-state bookkeeping, so reusing one instance across two
-    separate `mutate()` calls would make the second call's own result
-    depend on the first call's own side effects, not on `jit` (the real
-    bug an earlier version of this test itself had, per this stage's
-    own commit history).
+    2's own docstring). Stages 3 and 3b together now give the finite-
+    alleles model real `jit` benefit through the *entire* pipeline for
+    a small-capacity locus like this one (`capacity=64`, well under
+    `_MAX_JIT_FINITE_ALLELE_CAPACITY`): the event-count draw stays
+    unbatched, deliberately, but source attribution is compiled
+    (`_jit_multinomial_via_inversion_binomial`, stage 3) *and* target
+    selection is now batched per pair too
+    (`_jit_mutate_targets_batched`, stage 3b) — bit-identical output
+    either way, checked here across the whole pipeline, not just the
+    source-attribution slice stage 3 alone left checked. A fresh
+    `FiniteAlleleSpace` per call, not a shared one — `mutate_target`
+    mutates its own internal minted-state bookkeeping, so reusing one
+    instance across two separate `mutate()` calls would make the
+    second call's own result depend on the first call's own side
+    effects, not on `jit` (the real bug an earlier version of this test
+    itself had, per this stage's own commit history).
     """
     pytest.importorskip("numba")
 
@@ -684,6 +827,235 @@ def test_mutate_with_jit_under_finite_alleles_matches_without_jit_bit_for_bit(
         jit=True,
     )
     assert without_jit == with_jit_requested
+
+
+def _finite_alleles_for(
+    state: ModelState, params: SimulationParams
+) -> FiniteAlleleRegistry:
+    """Build one fresh `FiniteAlleleSpace` per locus, seeded from `state`.
+
+    Mirrors `fim.engine._build_finite_allele_spaces` without importing
+    `fim.engine` into this test module. Every call returns a brand new
+    registry, never a shared one — `FiniteAlleleSpace` mutates its own
+    internal state as a side effect, so two separately-compared
+    `mutate()` calls always need their own independently-constructed
+    registry (`test_mutate_with_jit_under_finite_alleles_matches_
+    without_jit_bit_for_bit`'s own docstring has the real bug this
+    guards against).
+    """
+    return FiniteAlleleRegistry(
+        {
+            locus.locus_id: FiniteAlleleSpace(
+                finite_allele_capacity(locus.length),
+                (
+                    allele_id
+                    for deme in state.frequencies
+                    for allele_id in deme[locus_index]
+                ),
+            )
+            for locus_index, locus in enumerate(params.loci)
+        }
+    )
+
+
+def test_mutate_with_jit_matches_without_jit_under_multi_deme_finite_alleles(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Batched target-selection state carries correctly across demes.
+
+    One `FiniteAlleleSpace` is shared across *every* deme at a given
+    locus — a state minted while processing deme 0 is visible as a
+    real recurrence candidate while processing deme 1 at the same
+    locus, within the same generation
+    (`_attribute_finite_allele_targets`'s own docstring). A single-pair
+    test cannot exercise that cross-deme dependency at all; this uses
+    several demes and two loci of different (small, both eligible)
+    capacities, with a mutation rate high enough that real minting
+    happens throughout.
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=30,
+        m=0.1,
+        mu=0.2,
+        d=6,
+        seed=20260904,
+        mutation_model="finite_alleles",
+        loci=(LocusSpec(1, 2), LocusSpec(2, 3)),  # capacities 16, 64
+    )
+    state = generate_initial_state(params, rng(20260904))
+
+    without_jit = mutate(
+        state,
+        params.mu,
+        params.N,
+        AlleleRegistry(),
+        rng(11),
+        finite_alleles=_finite_alleles_for(state, params),
+        jit=False,
+    )
+    with_jit = mutate(
+        state,
+        params.mu,
+        params.N,
+        AlleleRegistry(),
+        rng(11),
+        finite_alleles=_finite_alleles_for(state, params),
+        jit=True,
+    )
+    assert without_jit == with_jit
+
+
+def test_mutate_with_jit_falls_back_above_the_capacity_bound(
+    rng: Callable[[int], np.random.Generator],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A locus above `_MAX_JIT_FINITE_ALLELE_CAPACITY` still works, unjitted.
+
+    The real default bound (`2**20`) is deliberately too large to
+    exercise cheaply in a unit test (building a real ineligible case
+    would mean an actual multi-million-entry `FiniteAlleleSpace`) — the
+    threshold itself is patched down instead, the standard way to
+    exercise a capacity-bound branch without paying the capacity's own
+    cost, and a real, modest capacity (1000) is used so this test still
+    proves something about real `FiniteAlleleSpace` behavior, not just
+    the comparison operator.
+    """
+    pytest.importorskip("numba")
+    monkeypatch.setattr(operators, "_MAX_JIT_FINITE_ALLELE_CAPACITY", 50)
+    params = SimulationParams(
+        N=30,
+        m=0.1,
+        mu=0.2,
+        d=3,
+        seed=20260904,
+        mutation_model="finite_alleles",
+        loci=(LocusSpec(1, 5),),  # capacity 1024, above the patched bound
+    )
+    state = generate_initial_state(params, rng(20260904))
+
+    without_jit = mutate(
+        state,
+        params.mu,
+        params.N,
+        AlleleRegistry(),
+        rng(12),
+        finite_alleles=_finite_alleles_for(state, params),
+        jit=False,
+    )
+    with_jit_requested = mutate(
+        state,
+        params.mu,
+        params.N,
+        AlleleRegistry(),
+        rng(12),
+        finite_alleles=_finite_alleles_for(state, params),
+        jit=True,
+    )
+    assert without_jit == with_jit_requested
+
+
+def test_mutate_with_jit_handles_mixed_eligible_and_ineligible_loci(
+    rng: Callable[[int], np.random.Generator],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Eligibility is decided per locus, not once for the whole run.
+
+    `FiniteAlleleRegistry` already supports different capacities per
+    locus in the same run (`test_finite_allele_registry_dispatches_by_
+    locus_id`) — this checks `mutate`'s own per-pair eligibility check
+    respects that: one locus routes through the batched kernel, the
+    other falls back, within the very same `mutate()` call, and the
+    combined result still matches the fully unjitted path exactly.
+    """
+    pytest.importorskip("numba")
+    monkeypatch.setattr(operators, "_MAX_JIT_FINITE_ALLELE_CAPACITY", 50)
+    params = SimulationParams(
+        N=30,
+        m=0.1,
+        mu=0.2,
+        d=4,
+        seed=20260904,
+        mutation_model="finite_alleles",
+        loci=(
+            LocusSpec(1, 2),  # capacity 16 -- eligible
+            LocusSpec(2, 5),  # capacity 1024 -- above the patched bound
+        ),
+    )
+    state = generate_initial_state(params, rng(20260904))
+
+    without_jit = mutate(
+        state,
+        params.mu,
+        params.N,
+        AlleleRegistry(),
+        rng(13),
+        finite_alleles=_finite_alleles_for(state, params),
+        jit=False,
+    )
+    with_jit = mutate(
+        state,
+        params.mu,
+        params.N,
+        AlleleRegistry(),
+        rng(13),
+        finite_alleles=_finite_alleles_for(state, params),
+        jit=True,
+    )
+    assert without_jit == with_jit
+
+
+def test_step_with_finite_alleles_jit_matches_without_jit_across_many_generations(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Target-selection state carries correctly across generations too.
+
+    `finite_alleles` is built once by the caller and threaded through
+    every `step()` call for the whole run (`mutate`'s own `finite_
+    alleles` docstring) — a single-generation test cannot exercise
+    whether a batched call's own write-back
+    (`FiniteAlleleSpace.restore_from_arrays`) is visible to the *next*
+    generation's own processing. This runs several real generations
+    (migrate, mutate, drift, in order) through two fully independent,
+    self-consistent pipelines, mirroring `test_step_with_mutate_jit_
+    matches_without_jit_across_many_generations`'s own proven-safe
+    shape.
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=25,
+        m=0.15,
+        mu=0.15,
+        d=5,
+        seed=20260904,
+        mutation_model="finite_alleles",
+        loci=(LocusSpec(1, 2),),  # capacity 16
+    )
+    state = generate_initial_state(params, rng(20260904))
+    unjitted_finite_alleles = _finite_alleles_for(state, params)
+    jitted_finite_alleles = _finite_alleles_for(state, params)
+
+    unjitted_rng = rng(19)
+    jitted_rng = rng(19)
+    for _ in range(20):
+        unjitted_state = step(
+            state,
+            params,
+            AlleleRegistry(),
+            unjitted_rng,
+            finite_alleles=unjitted_finite_alleles,
+            jit=False,
+        )
+        jitted_state = step(
+            state,
+            params,
+            AlleleRegistry(),
+            jitted_rng,
+            finite_alleles=jitted_finite_alleles,
+            jit=True,
+        )
+        assert unjitted_state == jitted_state
+        state = unjitted_state
 
 
 def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(

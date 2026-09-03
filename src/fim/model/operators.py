@@ -34,7 +34,13 @@ from collections.abc import Callable, Mapping, Sequence
 
 import numpy as np
 
-from fim.model.allele import AlleleId, AlleleRegistry, FiniteAlleleRegistry
+from fim.model.allele import (
+    AlleleId,
+    AlleleRegistry,
+    FiniteAlleleRegistry,
+    FiniteAlleleSpace,
+)
+from fim.model.locus import LocusSpec
 from fim.model.params import (
     Migration,
     MutationRate,
@@ -52,6 +58,21 @@ _JIT_MULTINOMIAL_VIA_BINOMIAL: (
 # is what keeps the mode -- and so the scan's own worst-case length --
 # bounded by roughly n / 2 rather than n.
 _REFLECT_THRESHOLD = 0.5
+
+# `mutate`'s own batched, JIT-compiled finite-alleles target-selection
+# path (`_jit_mutate_targets_batched`) needs a `capacity`-sized dense
+# array per locus per pair (`FiniteAlleleSpace.to_arrays`) -- safe and
+# cheap at the capacities this model's own docstring calls "moderate,"
+# genuinely unrepresentable at the astronomical ones it also names as a
+# real, intended case (this project's own tests use capacity 4**1000).
+# A locus above this bound falls back to the unjitted, O(1)-per-draw
+# `FiniteAlleleSpace.mutate_target` path instead -- silently, not an
+# error, matching `migrate`'s/`mutate`'s own established "performance
+# hint, not a mode switch" contract. A reasonable, deliberately
+# conservative first default, not a benchmarked one -- see
+# `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
+# §10 item 10e's own "target selection" follow-on entry.
+_MAX_JIT_FINITE_ALLELE_CAPACITY = 2**20
 
 
 def _inversion_binomial(rng: np.random.Generator, n: int, p: float) -> int:
@@ -416,6 +437,128 @@ def _jit_multinomial_via_inversion_binomial(
             _multinomial_via_inversion_binomial_compiled
         )
     return _JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL(rng, n, probabilities)
+
+
+_JIT_MUTATE_TARGETS_BATCHED: (
+    Callable[
+        [np.random.Generator, np.ndarray, int, np.ndarray, np.ndarray, int, int],
+        tuple[np.ndarray, np.ndarray, np.ndarray, int, int],
+    ]
+    | None
+) = None
+
+
+def _mutate_targets_batched(
+    rng: np.random.Generator,
+    sources: np.ndarray,
+    capacity: int,
+    minted_mask: np.ndarray,
+    minted_list: np.ndarray,
+    minted_count: int,
+    next_unminted: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, int]:
+    """Choose one mutation target per event, in order, updating minted state as it goes.
+
+    **A deliberate duplicate of `fim.model.vectorized._mutate_targets_
+    batched`, not an import of it** — `fim.model.vectorized` already
+    imports from this module (`_inversion_binomial`), so the reverse
+    import would be circular. Kept identical to the original on
+    purpose (`20260901-claude-sonnet-5-fim-engine-backend-factory-
+    design.md` §10 item 10e, stage 3's own "target selection" follow-
+    on): a direct array/loop translation of `FiniteAlleleSpace.
+    mutate_target`, called once per event in `sources` rather than once
+    per event from `mutate`'s own dict-based loop, proven exactly
+    matching that method by the original's own `test_mutate_targets_
+    batched_matches_finite_allele_space_exactly` (`test/model/
+    test_vectorized.py`) — this module's own `test_mutate_targets_
+    batched_matches_finite_allele_space_exactly` (`test/model/
+    test_operators.py`) re-proves it directly for *this* copy, not
+    inherited from the original's own test. Needs no nested-closure
+    duplication of any other function the way `_drift_counts_batched`/
+    `_mutate_event_counts_batched`/`_multinomial_via_inversion_
+    binomial_compiled` above do — this function calls nothing from
+    `fim.model.operators` at all, only `rng.random()`/`rng.integers()`,
+    both natively supported in `nopython` mode.
+
+    Args:
+        rng: The run's explicitly threaded random generator.
+        sources: `(events,)` int64 — each mutating copy's own source
+            allele id, in visiting order.
+        capacity: This locus's own fixed state-space size, `K`.
+        minted_mask: `(capacity,)` bool, mutated in place — pass a copy
+            if the caller's own array must stay unchanged.
+        minted_list: `(capacity,)` int64, mutated in place — same caveat.
+        minted_count: How many of `minted_list`'s own entries are valid.
+        next_unminted: The next not-yet-tried candidate state.
+
+    Returns:
+        `(targets, minted_mask, minted_list, minted_count, next_unminted)`
+        — `targets` is `(events,)` int64, one target per event;
+        the rest are `minted_mask`/`minted_list`/`minted_count`/
+        `next_unminted` as they stand after every event.
+    """
+    event_count = sources.shape[0]
+    targets = np.empty(event_count, dtype=np.int64)
+    for event_index in range(event_count):
+        current = sources[event_index]
+        recurrence_probability = (minted_count - 1) / (capacity - 1)
+        if recurrence_probability > 0.0 and rng.random() < recurrence_probability:
+            # See `fim.model.vectorized._mutate_targets_batched`'s own
+            # inline comment for the full "exclude one element, shift
+            # the drawn index" argument this branch relies on.
+            current_index = 0
+            for candidate_index in range(minted_count):
+                if minted_list[candidate_index] == current:
+                    current_index = candidate_index
+                    break
+            drawn_index = int(rng.integers(0, minted_count - 1))
+            if drawn_index >= current_index:
+                drawn_index += 1
+            targets[event_index] = minted_list[drawn_index]
+        else:
+            while minted_mask[next_unminted]:
+                next_unminted += 1
+            target = next_unminted
+            next_unminted += 1
+            minted_list[minted_count] = target
+            minted_mask[target] = True
+            minted_count += 1
+            targets[event_index] = target
+    return targets, minted_mask, minted_list, minted_count, next_unminted
+
+
+def _jit_mutate_targets_batched(
+    rng: np.random.Generator,
+    sources: np.ndarray,
+    capacity: int,
+    minted_mask: np.ndarray,
+    minted_list: np.ndarray,
+    minted_count: int,
+    next_unminted: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, int]:
+    """`_mutate_targets_batched`, JIT-compiled with `nogil=True`.
+
+    `numba` is an optional dependency (`pip install fim[jit]`), imported
+    here and nowhere else in this function — only a caller that
+    explicitly requests `mutate(..., jit=True)` on an eligible (bounded-
+    capacity) finite-alleles run ever pays its import/compilation cost
+    or needs it installed at all. Compiled once, on first call, and
+    cached at module level, independently of `fim.model.vectorized`'s
+    own identically-named cache — two separate compiled artifacts of
+    the same source, one per module, exactly as the duplication above
+    already implies.
+
+    Raises:
+        ImportError: If `numba` is not installed.
+    """
+    global _JIT_MUTATE_TARGETS_BATCHED  # noqa: PLW0603
+    if _JIT_MUTATE_TARGETS_BATCHED is None:
+        import numba  # noqa: PLC0415 -- lazy, optional-dependency import
+
+        _JIT_MUTATE_TARGETS_BATCHED = numba.jit(nogil=True)(_mutate_targets_batched)
+    return _JIT_MUTATE_TARGETS_BATCHED(
+        rng, sources, capacity, minted_mask, minted_list, minted_count, next_unminted
+    )
 
 
 _JIT_DRIFT_COUNTS_BATCHED: (
@@ -1080,6 +1223,94 @@ def _mint_infinite_allele_ids(
     return minted_offset + event_count
 
 
+def _attribute_finite_allele_targets(
+    mutated: dict[AlleleId, float],
+    finite_alleles: FiniteAlleleRegistry,
+    locus: LocusSpec,
+    allele_ids: tuple[AlleleId, ...],
+    source_counts: np.ndarray,
+    event_frequency: float,
+    rng: np.random.Generator,
+    jit: bool,
+) -> None:
+    """Attribute every mutating copy's own finite-alleles target into `mutated`.
+
+    Two paths, chosen per pair, per this call — never a fixed choice
+    for the whole run, since different loci can carry different
+    capacities in the same `FiniteAlleleRegistry` (`FiniteAlleleSpace`'s
+    own docstring; `test_finite_allele_registry_dispatches_by_locus_id`
+    already exercises exactly this):
+
+    - **Eligible** (`jit` and this locus's own `capacity <= _MAX_JIT_
+      FINITE_ALLELE_CAPACITY`): every event this pair needs handled is
+      drawn in one Numba-JIT-compiled, `nogil=True` call
+      (`_jit_mutate_targets_batched`) against this locus's own
+      `FiniteAlleleSpace`, exported to dense arrays
+      (`FiniteAlleleSpace.to_arrays`) and written back afterward
+      (`FiniteAlleleSpace.restore_from_arrays`) so the next pair at
+      this same locus — same deme's own next locus, or the next deme
+      entirely, since one `FiniteAlleleSpace` is shared across every
+      deme at a given locus — sees the correctly updated minted state.
+      Bit-identical to the unjitted path below, proven directly
+      (`test_mutate_with_jit_matches_without_jit_under_small_capacity_
+      finite_alleles`), not merely argued from the underlying kernel's
+      own already-proven equivalence to `FiniteAlleleSpace.mutate_
+      target` (`test_mutate_targets_batched_matches_finite_allele_
+      space_exactly`) — the sources array's own construction and the
+      write-back round trip are new code this call adds, and needed
+      their own proof.
+    - **Ineligible** (`jit` is `False`, or this locus's own `capacity`
+      exceeds the bound): the original, unbounded-capacity-safe,
+      one-draw-at-a-time loop through `FiniteAlleleSpace.mutate_target`
+      — unchanged, silently, not an error, matching `migrate`'s/
+      `mutate`'s own established "performance hint, not a mode switch"
+      contract. `_MAX_JIT_FINITE_ALLELE_CAPACITY`'s own module-level
+      comment has the reasoning for where that bound sits.
+
+    Args:
+        mutated: This pair's own working frequency map, mutated in
+            place with one accumulated entry per event's own target.
+        finite_alleles: This run's own per-locus finite-allele-space
+            registry.
+        locus: This pair's own locus.
+        allele_ids: This pair's own segregating alleles, ascending
+            order — `source_counts`'s own index order.
+        source_counts: How many events came from each of `allele_ids`,
+            the same order.
+        event_frequency: The frequency each event's own target
+            accumulates (`1 / size`).
+        rng: The run's explicitly threaded random generator.
+        jit: Whether the caller requested the batched path at all.
+    """
+    space: FiniteAlleleSpace = finite_alleles.space_for(locus.locus_id)
+    if jit and space.capacity <= _MAX_JIT_FINITE_ALLELE_CAPACITY:
+        sources = np.repeat(
+            np.asarray(allele_ids, dtype=np.int64),
+            np.asarray(source_counts, dtype=np.int64),
+        )
+        minted_mask, minted_list, minted_count, next_unminted = space.to_arrays()
+        targets, minted_mask, minted_list, minted_count, next_unminted = (
+            _jit_mutate_targets_batched(
+                rng,
+                sources,
+                space.capacity,
+                minted_mask,
+                minted_list,
+                minted_count,
+                next_unminted,
+            )
+        )
+        space.restore_from_arrays(minted_mask, minted_list, minted_count, next_unminted)
+        for target in targets:
+            allele_id = AlleleId(int(target))
+            mutated[allele_id] = mutated.get(allele_id, 0.0) + event_frequency
+        return
+    for source_id, source_count in zip(allele_ids, source_counts, strict=True):
+        for _event in range(int(source_count)):
+            target = finite_alleles.mutate_target(locus.locus_id, source_id, rng)
+            mutated[target] = mutated.get(target, 0.0) + event_frequency
+
+
 def mutate(
     state: ModelState,
     mu: MutationRate,
@@ -1180,18 +1411,33 @@ def mutate(
             (`_jit_multinomial_via_inversion_binomial`) as a direct,
             one-call-at-a-time, `nogil`-releasing drop-in for the same
             call, in the same place, in the same per-pair loop —
-            bit-identical output, real but partial benefit (target
-            selection, `finite_alleles.mutate_target`, still runs
-            unjitted; a real array-native replacement already exists
-            for it, `fim.model.vectorized._jit_mutate_targets_batched`,
-            proven exactly matching — not adopted here because that
-            kernel assumes a bounded, array-representable `capacity`,
-            where this function's own dict-based path must keep
-            supporting arbitrarily large capacities, including the
-            astronomical ones `FiniteAlleleSpace`'s own docstring
-            names; reusing it safely needs a new capacity-bound
-            eligibility gate, not built in this stage). Needs `numba`
-            installed only when `True`.
+            bit-identical output.
+
+            Target selection (`finite_alleles.mutate_target`) is now
+            batched too, per pair, per locus — but only when that
+            locus's own `FiniteAlleleSpace.capacity` is at most
+            `_MAX_JIT_FINITE_ALLELE_CAPACITY`
+            (`_attribute_finite_allele_targets`, which every pair's own
+            target selection now routes through regardless of `jit`).
+            Below that bound: every event this pair needs targets for
+            is drawn in one Numba-JIT-compiled, `nogil=True` call
+            (`_jit_mutate_targets_batched`, a deliberate duplicate of
+            `fim.model.vectorized`'s own kernel of the same name — see
+            `_mutate_targets_batched`'s own docstring for why it is a
+            duplicate, not an import), against that locus's own
+            `FiniteAlleleSpace` exported to dense arrays and written
+            back afterward — bit-identical output, checked directly,
+            not only inherited from that kernel's own already-proven
+            equivalence to `FiniteAlleleSpace.mutate_target`. Above the
+            bound (including the astronomical capacities
+            `FiniteAlleleSpace`'s own docstring names as a real,
+            intended case — a dense `capacity`-sized array there is not
+            slow, it is impossible): silently falls back to the
+            original, unbounded-capacity-safe, one-draw-at-a-time loop,
+            matching `migrate`'s/`mutate`'s own established
+            "performance hint, not a mode switch" contract. Needs
+            `numba` installed only when `True` and at least one locus
+            is eligible.
 
     Returns:
         A post-mutation state at the same generation.
@@ -1289,14 +1535,16 @@ def mutate(
                         rng, event_count, probabilities
                     )
                 )
-                for source_id, source_count in zip(
-                    allele_ids, source_counts, strict=True
-                ):
-                    for _event in range(int(source_count)):
-                        target = finite_alleles.mutate_target(
-                            locus.locus_id, source_id, rng
-                        )
-                        mutated[target] = mutated.get(target, 0.0) + event_frequency
+                _attribute_finite_allele_targets(
+                    mutated,
+                    finite_alleles,
+                    locus,
+                    allele_ids,
+                    source_counts,
+                    event_frequency,
+                    rng,
+                    jit,
+                )
             locus_maps.append(_normalize(mutated))
         demes.append(tuple(locus_maps))
     return ModelState(
@@ -1342,15 +1590,15 @@ def step(
             silently a no-op in `migrate` for a full custom weight
             matrix or stochastic migrant sampling (see `migrate`'s own
             docstring), real for the default scalar-rate, deterministic
-            case; real in `mutate` under both mutation models, though
-            in different amounts — full event-count *and* minting
-            batching under the default infinite-alleles model, only the
-            source-attribution draw compiled (not batched) under the
-            opt-in finite-alleles model, with `finite_alleles.mutate_
-            target`'s own target-selection RNG calls still unaffected
-            by this flag either way (see `mutate`'s own `jit` docstring
-            for the full account of why the two models differ this
-            much).
+            case; real in `mutate` under both mutation models, though in
+            different amounts — full event-count *and* minting batching
+            under the default infinite-alleles model; under the opt-in
+            finite-alleles model, the source-attribution draw compiled
+            (not batched) plus target selection itself batched too, per
+            locus, below a capacity bound (`_MAX_JIT_FINITE_ALLELE_
+            CAPACITY`) that keeps the astronomically large capacities
+            `FiniteAlleleSpace` also supports safely unaffected (see
+            `mutate`'s own `jit` docstring for the full account).
 
     Returns:
         The next generation.

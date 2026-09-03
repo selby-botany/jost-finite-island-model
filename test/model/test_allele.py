@@ -198,6 +198,113 @@ def test_finite_allele_space_underflows_to_zero_recurrence_at_huge_capacity(
     assert all(int(target) >= 2 for target in targets)
 
 
+def test_finite_allele_space_capacity_property() -> None:
+    """`capacity` exposes the constructor's own argument, unchanged."""
+    assert FiniteAlleleSpace(10, [AlleleId(0)]).capacity == 10
+
+
+def test_finite_allele_space_to_arrays_shape_and_content() -> None:
+    """`to_arrays` reflects exactly the minted state construction seeded."""
+    space = FiniteAlleleSpace(8, [AlleleId(1), AlleleId(3)])
+
+    minted_mask, minted_list, minted_count, next_unminted = space.to_arrays()
+
+    assert minted_mask.shape == (8,)
+    assert minted_mask.dtype == np.bool_
+    assert minted_mask.tolist() == [
+        False,
+        True,
+        False,
+        True,
+        False,
+        False,
+        False,
+        False,
+    ]
+    assert minted_list.shape == (8,)
+    assert minted_list[:2].tolist() == [1, 3]
+    assert minted_count == 2
+    assert next_unminted == 0
+
+
+def test_finite_allele_space_to_arrays_round_trips_through_restore_from_arrays(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """A no-op round trip through arrays changes nothing about future draws.
+
+    Exports a space's own state, restores that exact same state right
+    back, and checks its own future `mutate_target` behavior against a
+    second, never-round-tripped space fed the identical `rng` stream —
+    the two must agree exactly, generation after generation, proving
+    the round trip is lossless, not merely shaped correctly.
+    """
+    reference = FiniteAlleleSpace(30, [AlleleId(i) for i in range(5)])
+    round_tripped = FiniteAlleleSpace(30, [AlleleId(i) for i in range(5)])
+    round_tripped.restore_from_arrays(*round_tripped.to_arrays())
+
+    # Two independent generators from the identical seed, not one shared
+    # object — sharing one would have `round_tripped`'s own draw
+    # continue from wherever `reference`'s own call just left the
+    # stream, comparing two different draws rather than the same one
+    # taken twice.
+    reference_rng = rng(20260904)
+    round_tripped_rng = rng(20260904)
+    current = AlleleId(0)
+    for _ in range(50):
+        expected = reference.mutate_target(current, reference_rng)
+        observed = round_tripped.mutate_target(current, round_tripped_rng)
+        assert observed == expected
+        current = expected
+
+
+def test_finite_allele_space_to_arrays_round_trips_after_mutation(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """A round trip taken *after* real mutation activity still preserves state.
+
+    Same shape as the no-op round-trip test above, but the export
+    happens after the space has already minted several new states, not
+    at construction time — the case `mutate`'s own batched target-
+    selection path actually hits every pair.
+    """
+    reference = FiniteAlleleSpace(30, [AlleleId(0)])
+    round_tripped = FiniteAlleleSpace(30, [AlleleId(0)])
+
+    # Same identically-seeded-but-separate-generator-object discipline
+    # as the no-op round-trip test above, for both the warmup and the
+    # comparison below.
+    reference_warmup = rng(1)
+    round_tripped_warmup = rng(1)
+    current = AlleleId(0)
+    for _ in range(10):
+        current = reference.mutate_target(current, reference_warmup)
+    current = AlleleId(0)
+    for _ in range(10):
+        current = round_tripped.mutate_target(current, round_tripped_warmup)
+
+    round_tripped.restore_from_arrays(*round_tripped.to_arrays())
+
+    reference_rng = rng(2)
+    round_tripped_rng = rng(2)
+    for _ in range(50):
+        expected = reference.mutate_target(current, reference_rng)
+        observed = round_tripped.mutate_target(current, round_tripped_rng)
+        assert observed == expected
+        current = expected
+
+
+def test_finite_allele_registry_space_for_returns_the_live_space() -> None:
+    """`space_for` returns the same mutable object `mutate_target` uses.
+
+    Not a copy — mutating the returned space (as `mutate_target` itself
+    already does) must be visible back through the registry.
+    """
+    space = FiniteAlleleSpace(10, [AlleleId(0)])
+    registry = FiniteAlleleRegistry({1: space})
+
+    assert registry.space_for(1) is space
+
+
 @pytest.mark.statistical
 def test_finite_allele_space_recurrence_rate_matches_theory(
     rng: Callable[[int], np.random.Generator],

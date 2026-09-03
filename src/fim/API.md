@@ -166,10 +166,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [next\_k\_ids](#fim.model.allele.AlleleRegistry.next_k_ids)
   * [FiniteAlleleSpace](#fim.model.allele.FiniteAlleleSpace)
     * [\_\_init\_\_](#fim.model.allele.FiniteAlleleSpace.__init__)
+    * [capacity](#fim.model.allele.FiniteAlleleSpace.capacity)
+    * [to\_arrays](#fim.model.allele.FiniteAlleleSpace.to_arrays)
+    * [restore\_from\_arrays](#fim.model.allele.FiniteAlleleSpace.restore_from_arrays)
     * [mutate\_target](#fim.model.allele.FiniteAlleleSpace.mutate_target)
   * [FiniteAlleleRegistry](#fim.model.allele.FiniteAlleleRegistry)
     * [\_\_init\_\_](#fim.model.allele.FiniteAlleleRegistry.__init__)
     * [mutate\_target](#fim.model.allele.FiniteAlleleRegistry.mutate_target)
+    * [space\_for](#fim.model.allele.FiniteAlleleRegistry.space_for)
 * [fim.model.identifiers](#fim.model.identifiers)
   * [parse\_bounded\_frequency](#fim.model.identifiers.parse_bounded_frequency)
   * [parse\_integer\_identifier](#fim.model.identifiers.parse_integer_identifier)
@@ -4838,6 +4842,87 @@ Seed one locus's finite state space from its generation-zero alleles.
   to hold every initial ID, or an initial ID falls outside
   ``0 .. capacity - 1``.
 
+<a id="fim.model.allele.FiniteAlleleSpace.capacity"></a>
+
+#### capacity
+
+```python
+@property
+def capacity() -> int
+```
+
+This locus's own fixed state-space size, ``K``.
+
+<a id="fim.model.allele.FiniteAlleleSpace.to_arrays"></a>
+
+#### to\_arrays
+
+```python
+def to_arrays() -> tuple[np.ndarray, np.ndarray, int, int]
+```
+
+Export this space's own minted state in dense, array-native form.
+
+The counterpart `fim.model.vectorized`'s own `_mutate_targets_
+batched`/`_jit_mutate_targets_batched` (built for Backend V,
+proven exactly matching `mutate_target` above) already expects
+as input — see `20260901-claude-sonnet-5-fim-engine-backend-
+factory-design.md` §10 item 10e's own stage 3 entry for why
+`fim.model.operators` keeps its own duplicate of that kernel
+rather than importing it directly (`fim.model.vectorized`
+already imports from `fim.model.operators`, so the reverse
+import would be circular).
+
+**Only ever call this when `capacity` is small enough that a
+`capacity`-sized array is actually reasonable to build** — both
+returned arrays are `O(capacity)`, not `O(minted_count)`, and
+this class exists specifically to support capacities where that
+distinction matters (this module's own docstring names
+astronomical ones as a real, intended case). The caller owns
+that eligibility decision; this method does not gate it.
+
+**Returns**:
+
+  `minted_mask` (`(capacity,)` bool, `True` at every minted
+  state), `minted_list` (`(capacity,)` int64, the first
+  `minted_count` entries holding every minted state in the
+  order they were minted, the rest unused padding),
+  `minted_count`, and `next_unminted` — the exact argument
+  shape `_jit_mutate_targets_batched` expects.
+
+<a id="fim.model.allele.FiniteAlleleSpace.restore_from_arrays"></a>
+
+#### restore\_from\_arrays
+
+```python
+def restore_from_arrays(minted_mask: np.ndarray, minted_list: np.ndarray,
+                        minted_count: int, next_unminted: int) -> None
+```
+
+Replace this space's own minted state from `to_arrays`-shaped output.
+
+The write-back half of `to_arrays`, above — call after a batched
+`_jit_mutate_targets_batched` call with this space's own
+`to_arrays()` output (mutated by that call) to make its own
+effect on this space visible to whatever calls `mutate_target`
+or `to_arrays` next, exactly as `mutate_target` itself already
+mutates this space's own internal state as a side effect.
+
+**Arguments**:
+
+- `minted_mask` - Ignored beyond its own role in producing
+  `minted_list`/`minted_count` — this space's own
+  `_minted_set` is rebuilt from `minted_list[:minted_
+  count]` directly, not from this mask, since the mask
+  alone cannot recover minting *order* (needed for
+  `_minted`'s own list form) the way `minted_list` already
+  preserves it.
+- `minted_list` - `(capacity,)` int64, the first `minted_count`
+  entries holding every minted state, in minting order.
+- `minted_count` - How many of `minted_list`'s own entries are
+  valid.
+- `next_unminted` - The next not-yet-tried candidate state.
+
 <a id="fim.model.allele.FiniteAlleleSpace.mutate_target"></a>
 
 #### mutate\_target
@@ -4920,6 +5005,34 @@ Return a mutation target for ``locus_id`` under the K-allele model.
 **Returns**:
 
   One state other than ``current``, drawn uniformly at random.
+
+<a id="fim.model.allele.FiniteAlleleRegistry.space_for"></a>
+
+#### space\_for
+
+```python
+def space_for(locus_id: int) -> FiniteAlleleSpace
+```
+
+Return `locus_id`'s own `FiniteAlleleSpace` directly.
+
+For callers that need more than one draw at a time — `fim.
+model.operators.mutate`'s own batched, `nogil`-JIT-compiled
+target-selection path needs the space's own `capacity` (to
+decide eligibility) and `to_arrays`/`restore_from_arrays`
+(to batch a whole pair's own events in one call) — where
+`mutate_target`, above, only ever exposes one draw at a time.
+
+**Arguments**:
+
+- `locus_id` - The locus whose own space to return.
+
+
+**Returns**:
+
+  That locus's own `FiniteAlleleSpace`, the same live object
+  `mutate_target` itself already mutates as a side effect —
+  not a copy.
 
 <a id="fim.model.identifiers"></a>
 
@@ -5537,18 +5650,33 @@ docstring already names.
   (`_jit_multinomial_via_inversion_binomial`) as a direct,
   one-call-at-a-time, `nogil`-releasing drop-in for the same
   call, in the same place, in the same per-pair loop —
-  bit-identical output, real but partial benefit (target
-  selection, `finite_alleles.mutate_target`, still runs
-  unjitted; a real array-native replacement already exists
-  for it, `fim.model.vectorized._jit_mutate_targets_batched`,
-  proven exactly matching — not adopted here because that
-  kernel assumes a bounded, array-representable `capacity`,
-  where this function's own dict-based path must keep
-  supporting arbitrarily large capacities, including the
-  astronomical ones `FiniteAlleleSpace`'s own docstring
-  names; reusing it safely needs a new capacity-bound
-  eligibility gate, not built in this stage). Needs `numba`
-  installed only when `True`.
+  bit-identical output.
+
+  Target selection (`finite_alleles.mutate_target`) is now
+  batched too, per pair, per locus — but only when that
+  locus's own `FiniteAlleleSpace.capacity` is at most
+  `_MAX_JIT_FINITE_ALLELE_CAPACITY`
+  (`_attribute_finite_allele_targets`, which every pair's own
+  target selection now routes through regardless of `jit`).
+  Below that bound: every event this pair needs targets for
+  is drawn in one Numba-JIT-compiled, `nogil=True` call
+  (`_jit_mutate_targets_batched`, a deliberate duplicate of
+  `fim.model.vectorized`'s own kernel of the same name — see
+  `_mutate_targets_batched`'s own docstring for why it is a
+  duplicate, not an import), against that locus's own
+  `FiniteAlleleSpace` exported to dense arrays and written
+  back afterward — bit-identical output, checked directly,
+  not only inherited from that kernel's own already-proven
+  equivalence to `FiniteAlleleSpace.mutate_target`. Above the
+  bound (including the astronomical capacities
+  `FiniteAlleleSpace`'s own docstring names as a real,
+  intended case — a dense `capacity`-sized array there is not
+  slow, it is impossible): silently falls back to the
+  original, unbounded-capacity-safe, one-draw-at-a-time loop,
+  matching `migrate`'s/`mutate`'s own established
+  "performance hint, not a mode switch" contract. Needs
+  `numba` installed only when `True` and at least one locus
+  is eligible.
 
 
 **Returns**:
@@ -5597,15 +5725,15 @@ conventional choice this project follows.
   silently a no-op in `migrate` for a full custom weight
   matrix or stochastic migrant sampling (see `migrate`'s own
   docstring), real for the default scalar-rate, deterministic
-  case; real in `mutate` under both mutation models, though
-  in different amounts — full event-count *and* minting
-  batching under the default infinite-alleles model, only the
-  source-attribution draw compiled (not batched) under the
-  opt-in finite-alleles model, with `finite_alleles.mutate_
-  target`'s own target-selection RNG calls still unaffected
-  by this flag either way (see `mutate`'s own `jit` docstring
-  for the full account of why the two models differ this
-  much).
+  case; real in `mutate` under both mutation models, though in
+  different amounts — full event-count *and* minting batching
+  under the default infinite-alleles model; under the opt-in
+  finite-alleles model, the source-attribution draw compiled
+  (not batched) plus target selection itself batched too, per
+  locus, below a capacity bound (`_MAX_JIT_FINITE_ALLELE_
+  CAPACITY`) that keeps the astronomically large capacities
+  `FiniteAlleleSpace` also supports safely unaffected (see
+  `mutate`'s own `jit` docstring for the full account).
 
 
 **Returns**:

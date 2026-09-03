@@ -191,6 +191,83 @@ class FiniteAlleleSpace:
         self._minted_set: set[int] = set(minted)
         self._next_unminted = 0
 
+    @property
+    def capacity(self) -> int:
+        """This locus's own fixed state-space size, ``K``."""
+        return self._capacity
+
+    def to_arrays(self) -> tuple[np.ndarray, np.ndarray, int, int]:
+        """Export this space's own minted state in dense, array-native form.
+
+        The counterpart `fim.model.vectorized`'s own `_mutate_targets_
+        batched`/`_jit_mutate_targets_batched` (built for Backend V,
+        proven exactly matching `mutate_target` above) already expects
+        as input — see `20260901-claude-sonnet-5-fim-engine-backend-
+        factory-design.md` §10 item 10e's own stage 3 entry for why
+        `fim.model.operators` keeps its own duplicate of that kernel
+        rather than importing it directly (`fim.model.vectorized`
+        already imports from `fim.model.operators`, so the reverse
+        import would be circular).
+
+        **Only ever call this when `capacity` is small enough that a
+        `capacity`-sized array is actually reasonable to build** — both
+        returned arrays are `O(capacity)`, not `O(minted_count)`, and
+        this class exists specifically to support capacities where that
+        distinction matters (this module's own docstring names
+        astronomical ones as a real, intended case). The caller owns
+        that eligibility decision; this method does not gate it.
+
+        Returns:
+            `minted_mask` (`(capacity,)` bool, `True` at every minted
+            state), `minted_list` (`(capacity,)` int64, the first
+            `minted_count` entries holding every minted state in the
+            order they were minted, the rest unused padding),
+            `minted_count`, and `next_unminted` — the exact argument
+            shape `_jit_mutate_targets_batched` expects.
+        """
+        minted_mask = np.zeros(self._capacity, dtype=np.bool_)
+        minted_mask[np.asarray(self._minted, dtype=np.int64)] = True
+        minted_list = np.zeros(self._capacity, dtype=np.int64)
+        minted_list[: len(self._minted)] = np.asarray(self._minted, dtype=np.int64)
+        return minted_mask, minted_list, len(self._minted), self._next_unminted
+
+    def restore_from_arrays(
+        self,
+        minted_mask: np.ndarray,
+        minted_list: np.ndarray,
+        minted_count: int,
+        next_unminted: int,
+    ) -> None:
+        """Replace this space's own minted state from `to_arrays`-shaped output.
+
+        The write-back half of `to_arrays`, above — call after a batched
+        `_jit_mutate_targets_batched` call with this space's own
+        `to_arrays()` output (mutated by that call) to make its own
+        effect on this space visible to whatever calls `mutate_target`
+        or `to_arrays` next, exactly as `mutate_target` itself already
+        mutates this space's own internal state as a side effect.
+
+        Args:
+            minted_mask: Ignored beyond its own role in producing
+                `minted_list`/`minted_count` — this space's own
+                `_minted_set` is rebuilt from `minted_list[:minted_
+                count]` directly, not from this mask, since the mask
+                alone cannot recover minting *order* (needed for
+                `_minted`'s own list form) the way `minted_list` already
+                preserves it.
+            minted_list: `(capacity,)` int64, the first `minted_count`
+                entries holding every minted state, in minting order.
+            minted_count: How many of `minted_list`'s own entries are
+                valid.
+            next_unminted: The next not-yet-tried candidate state.
+        """
+        del minted_mask  # see docstring: order-preserving minted_list suffices
+        self._minted = [
+            AlleleId(int(identity)) for identity in minted_list[:minted_count]
+        ]
+        self._minted_set = {int(identity) for identity in self._minted}
+        self._next_unminted = next_unminted
+
     def mutate_target(
         self,
         current: AlleleId,
@@ -267,3 +344,23 @@ class FiniteAlleleRegistry:
             One state other than ``current``, drawn uniformly at random.
         """
         return self._spaces[locus_id].mutate_target(current, rng)
+
+    def space_for(self, locus_id: int) -> FiniteAlleleSpace:
+        """Return `locus_id`'s own `FiniteAlleleSpace` directly.
+
+        For callers that need more than one draw at a time — `fim.
+        model.operators.mutate`'s own batched, `nogil`-JIT-compiled
+        target-selection path needs the space's own `capacity` (to
+        decide eligibility) and `to_arrays`/`restore_from_arrays`
+        (to batch a whole pair's own events in one call) — where
+        `mutate_target`, above, only ever exposes one draw at a time.
+
+        Args:
+            locus_id: The locus whose own space to return.
+
+        Returns:
+            That locus's own `FiniteAlleleSpace`, the same live object
+            `mutate_target` itself already mutates as a side effect —
+            not a copy.
+        """
+        return self._spaces[locus_id]
