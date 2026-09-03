@@ -155,8 +155,6 @@ with its own thin autouse wrapper depending on this fixture:
 launcher.py` (no subdirectory of its own to scope a conftest.py
 to), and `test/gui/conftest.py` (`doc/fim-logging-design.md` §12).
 
-
-
 <a id="test.test_hypothesis_profile"></a>
 
 # test.test\_hypothesis\_profile
@@ -188,8 +186,6 @@ whatever test runs after this one), not
 `settings.get_profile("deterministic")` (which only proves a
 correctly configured profile exists somewhere, whether or not it is
 the one in effect), is deliberate.
-
-
 
 <a id="test.test_launcher"></a>
 
@@ -407,8 +403,6 @@ The Windows-only `FreeConsole` mechanic fires only for `sys.platform == "win32"`
 `ctypes.windll` does not exist on this (non-Windows) test platform,
 so it is faked in with `raising=False` rather than patched onto the
 real attribute.
-
-
 
 <a id="test.test_logging_setup"></a>
 
@@ -632,8 +626,6 @@ A real `warnings.warn` call reaches the configured file handler.
 Confirms the `logging.captureWarnings` bridge is actually active,
 end to end, rather than only asserting the function was called.
 
-
-
 <a id="test.test_metadata"></a>
 
 # test.test\_metadata
@@ -734,8 +726,6 @@ def test_version_loader_reports_unknown_without_any_metadata(
 
 A source-less uninstalled import has an explicit unknown version.
 
-
-
 <a id="test.test_mypy_scope"></a>
 
 # test.test\_mypy\_scope
@@ -787,8 +777,6 @@ actually run in CI and at push time never covered `test/` at all,
 regardless of what the config said. Both must invoke mypy with no
 positional argument, so `[tool.mypy]` stays the single source of
 truth for what gets checked and the two cannot drift apart again.
-
-
 
 <a id="test.test_paths"></a>
 
@@ -968,8 +956,6 @@ def test_atomic_directory_discards_the_temporary_directory_on_failure(
 
 A raised exception leaves neither the target nor an orphaned temp dir.
 
-
-
 <a id="test.test_reanalyze"></a>
 
 # test.test\_reanalyze
@@ -1063,8 +1049,6 @@ def test_group_rows_by_generation_groups_every_persisted_generation(
 ```
 
 Every persisted generation appears, keyed by its own generation number.
-
-
 
 <a id="test.test_update"></a>
 
@@ -1182,8 +1166,6 @@ not descendants — legitimately need the *real*
 functions themselves; see `test/conftest.py`'s own `log_isolation`
 fixture for the full reasoning and why that rules out a suite-wide
 autouse fixture.
-
-
 
 <a id="cli.test_cli"></a>
 
@@ -1925,8 +1907,6 @@ def test_monitor_rejects_records_after_convergence() -> None
 ```
 
 A terminal monitor cannot accept observations after its decision.
-
-
 
 <a id="convergence.test_monitor"></a>
 
@@ -3522,8 +3502,6 @@ def drive() -> Callable[..., Any]
 
 Bind `drive_and_read` as a fixture, for tests that prefer the fixture style.
 
-
-
 <a id="gui.test_animation"></a>
 
 # gui.test\_animation
@@ -3654,8 +3632,6 @@ already imported `matplotlib` for unrelated reasons, which would
 make a runtime check pass regardless of whether `animation.py`
 itself ever does.
 
-
-
 <a id="gui.test_animation_screen"></a>
 
 # gui.test\_animation\_screen
@@ -3715,8 +3691,6 @@ def test_opening_a_run_populates_the_scrubber_and_scrubbing_moves_the_frame(
 ```
 
 Re-opening a multi-generation run auto-populates and scrubs the scrubber.
-
-
 
 <a id="gui.test_app"></a>
 
@@ -3842,8 +3816,6 @@ this exact pywebview-hosted process, checked before any real batch
 logic (`fim.gui.store.LiveProgressStore`, `fim.gui.batch_runner`,
 both already built and tested independently) is ever reached through
 it.
-
-
 
 <a id="gui.test_app_api"></a>
 
@@ -4508,8 +4480,6 @@ ordering to call the real `main()` safely, with no window/`webview.
 start()` reached at all: a malformed value raises out of
 `configure()` before `create_window()` is ever called.
 
-
-
 <a id="gui.test_batch_results_screen"></a>
 
 # gui.test\_batch\_results\_screen
@@ -4634,8 +4604,6 @@ pywebview.api.open_output_folder(...)` with nothing downstream
 awaiting it. See `test_running_screen.py`'s own `_wait_for_cancel_
 run_settled` for the full mechanism, traced there via `sample <pid>`
 on a `git push`'s own hung pre-push `pytest` run.
-
-
 
 <a id="gui.test_batch_runner"></a>
 
@@ -4878,8 +4846,6 @@ flakes"). A real convergence run over many more generations gives
 each replicate a genuinely wide window to be observed within,
 independent of any one platform's own process-startup speed.
 
-
-
 <a id="gui.test_batch_running"></a>
 
 # gui.test\_batch\_running
@@ -4924,8 +4890,6 @@ message, so `done_event` firing is itself proof that call
 *succeeded* — a `JavascriptException` from a missing page-side
 handler would raise inside `_drain_batch_messages` first, and
 `on_message` (hence `done_event`) would never fire at all.
-
-
 
 <a id="gui.test_config_form"></a>
 
@@ -5356,8 +5320,6 @@ def test_tab_for_error_returns_none_for_an_unknown_key_message() -> None
 
 A message naming no field this form exposes resolves to no tab.
 
-
-
 <a id="gui.test_config_modal_dialogs"></a>
 
 # gui.test\_config\_modal\_dialogs
@@ -5390,8 +5352,6 @@ A `<button>` is natively focusable, but this project's own WKWebView
 host does not include it in the `Tab` order without this explicit
 opt-in (see this module's own docstring) — a future dialog copied
 from an existing one without it would silently reintroduce the gap.
-
-
 
 <a id="gui.test_help_screen"></a>
 
@@ -5460,8 +5420,6 @@ Back returns to Results, not a fixed default, when Help was opened from there.
 The one genuinely new interaction Help adds relative to every other
 screen's own fixed-target "Back" button: recording
 *whichever* screen was showing, not always the same one.
-
-
 
 <a id="gui.test_input_screen"></a>
 
@@ -5770,8 +5728,6 @@ reset call needed first: every test gets a fresh page load of its
 own, so the module-scoped high-water mark this proves already
 starts at its own initial `0` regardless.
 
-
-
 <a id="gui.test_open_run_screen"></a>
 
 # gui.test\_open\_run\_screen
@@ -5837,8 +5793,6 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
 ```
 
 A real recent run, selected and opened, ends on a populated Screen 3.
-
-
 
 <a id="gui.test_recent_runs"></a>
 
@@ -5919,8 +5873,6 @@ def test_recent_runs_defaults_to_paths_results_directory(
 ```
 
 Omitting `results_directory` resolves through `fim.paths.results_directory`.
-
-
 
 <a id="gui.test_results_screen"></a>
 
@@ -6068,8 +6020,6 @@ there via `sample <pid>` on a `git push`'s own hung pre-push
 run is the actual regression proof; the injected opener's own
 recorded path is the icing.
 
-
-
 <a id="gui.test_runner"></a>
 
 # gui.test\_runner
@@ -6206,8 +6156,6 @@ commit's message both claim: no `shutil.rmtree` or other bespoke
 cleanup code runs anywhere in `fim.gui.runner` — this test would
 fail exactly the same way whether that claim were true or not,
 because `fim.paths.atomic_directory` alone is responsible for it.
-
-
 
 <a id="gui.test_running_screen"></a>
 
@@ -6427,8 +6375,6 @@ real investigation establishing as the right one; an intermediate
 version of this test introduced such a loop instead, diagnosed the
 symptom (needs more margin) without finding this cause, and made
 the test slower without actually closing the gap.
-
-
 
 <a id="gui.test_store"></a>
 
@@ -6677,8 +6623,6 @@ def test_read_live_state_returns_none_for_a_different_run_id(
 
 Rows from a different run id are never mistaken for this replicate's own.
 
-
-
 <a id="gui.test_webui_global_scope"></a>
 
 # gui.test\_webui\_global\_scope
@@ -6906,8 +6850,6 @@ def test_finite_allele_registry_dispatches_by_locus_id(
 
 Each locus keeps its own independent, differently sized state space.
 
-
-
 <a id="model.test_initial"></a>
 
 # model.test\_initial
@@ -6986,8 +6928,6 @@ def test_generate_initial_state_uses_seed_when_rng_is_omitted() -> None
 
 The convenience API creates the same PCG64 stream as the engine.
 
-
-
 <a id="model.test_locus"></a>
 
 # model.test\_locus
@@ -7017,8 +6957,6 @@ def test_locus_rejects_nonpositive_values(locus_id: int, length: int) -> None
 ```
 
 Both locus identity and length are positive.
-
-
 
 <a id="model.test_operators"></a>
 
@@ -7628,8 +7566,6 @@ entirely (shrinking their own category count generation to
 generation, changing every later `offsets` slice's own width), which
 is exactly the shape most likely to expose an indexing bug in the
 flat-buffer-plus-offsets packing/unpacking if one existed.
-
-
 
 <a id="model.test_params"></a>
 
@@ -8395,8 +8331,6 @@ def test_explicit_frequency_support_cannot_exceed_deme_size() -> None
 
 Explicit support is bounded by the configured gene-copy count.
 
-
-
 <a id="model.test_state"></a>
 
 # model.test\_state
@@ -8519,8 +8453,6 @@ was a bare ``float(row[key])``, which coerces `True` to `1.0` and
 the string `"1"` to `1.0` — both of which persistence's own
 `_frequency_field` already rejected for the same field, plus its
 `(0, 1]` bound, which `from_rows` did not enforce at all.
-
-
 
 <a id="model.test_state_validation"></a>
 
@@ -8689,8 +8621,6 @@ def test_state_support_shape_and_empty_run_id_are_validated() -> None
 ```
 
 Public serialization helpers validate their external identifiers.
-
-
 
 <a id="model.test_topology"></a>
 
@@ -8867,8 +8797,6 @@ def test_dense_matrix_from_neighbors_rejects_malformed_maps(
 ```
 
 Every documented validation rule rejects its invalid sparse map.
-
-
 
 <a id="model.test_vectorized"></a>
 
@@ -9177,8 +9105,6 @@ def test_verify_trajectory_integrity_rejects_a_manifest_missing_the_trajectory_d
 
 `artifacts` populated but with no `trajectory` entry is rejected too.
 
-
-
 <a id="persistence.test_report"></a>
 
 # persistence.test\_report
@@ -9209,8 +9135,6 @@ def test_write_report_creates_parent_directories(tmp_path: Path) -> None
 ```
 
 A missing parent directory is created, matching every prior writer.
-
-
 
 <a id="persistence.test_store"></a>
 
@@ -9291,8 +9215,6 @@ def test_manifest_round_trip_reconstructs_several_convergence_statistics(
 ```
 
 A manifest watching several statistics is a lossless replay too.
-
-
 
 <a id="persistence.test_validation"></a>
 
@@ -9974,8 +9896,6 @@ def test_identity_recovery_functions_validate_their_inputs() -> None
 The identity-recovery family rejects the same malformed inputs
 as the rest of this module's equilibrium-formula family.
 
-
-
 <a id="statistics.test_interval"></a>
 
 # statistics.test\_interval
@@ -10139,8 +10059,6 @@ def test_fewer_than_two_values_is_rejected() -> None
 ```
 
 A confidence interval needs at least two observations.
-
-
 
 <a id="statistics.test_properties"></a>
 
@@ -10336,8 +10254,6 @@ def test_generator_documents_every_source_module(tmp_path: Path) -> None
 
 Every committed Python module receives an API section.
 
-
-
 <a id="validation.test_beta_workflow"></a>
 
 # validation.test\_beta\_workflow
@@ -10418,8 +10334,6 @@ Regression guard: this job originally shipped with only `binutils`
 build. `ci.yml`'s own `linux-x64` job already carries the correct,
 real-build-verified list; this job must not drift from it.
 
-
-
 <a id="validation.test_calibration_provenance"></a>
 
 # validation.test\_calibration\_provenance
@@ -10490,8 +10404,6 @@ def test_user_facing_calibration_doc_is_present() -> None
 ```
 
 The user-facing calibration document is retained and script-linked.
-
-
 
 <a id="validation.test_ci_runtime_budget"></a>
 
@@ -10596,8 +10508,6 @@ before writing this assertion, not assumed -- so this reads the
 trigger block back the same way every other test in this file
 already reads the rest of the workflow, through `workflow[True]`.
 
-
-
 <a id="validation.test_doc_links"></a>
 
 # validation.test\_doc\_links
@@ -10677,8 +10587,6 @@ to ship. `dev/` at the repository root is a real, wanted directory
 (`dev/git-hooks/`, `dev/bin/`) that happens to share the same bare
 name one level down; excluding by name alone would incorrectly skip
 it too.
-
-
 
 <a id="validation.test_equilibrium"></a>
 
@@ -10994,8 +10902,6 @@ def test_equilibrium_shannon_entropy_subpopulation_rejects_zero_mutation(
 
 A FIM subpopulation with `mu=0` never reaches a polymorphic equilibrium.
 
-
-
 <a id="validation.test_git_hooks"></a>
 
 # validation.test\_git\_hooks
@@ -11166,8 +11072,6 @@ def test_installer_links_all_repository_hooks(tmp_path: Path) -> None
 
 The installer links each documented hook into a fixture repository.
 
-
-
 <a id="validation.test_install_sh"></a>
 
 # validation.test\_install\_sh
@@ -11273,8 +11177,6 @@ A missing `PATH` entry produces a visible warning, not a silent gap.
 
 Otherwise a first-time user's `fim`/`fim-gui` install would appear to
 succeed and then be unrunnable with no explanation.
-
-
 
 <a id="validation.test_packaging_spec"></a>
 
@@ -11421,8 +11323,6 @@ the reverse-DNS app identity macOS uses to distinguish this app from
 any other, and the version strings are read from `version.txt` at
 build time rather than left blank.
 
-
-
 <a id="validation.test_python_wrappers"></a>
 
 # validation.test\_python\_wrappers
@@ -11499,8 +11399,6 @@ def test_bin_fim_gui_wrapper_exists_and_invokes_the_gui_module() -> None
 which register the `fim-gui` console-script entry point from
 `pyproject.toml`), but the `bin/`-on-PATH dev-clone workflow
 (`install/README.md`'s "Run from a clone") needs its own wrapper too.
-
-
 
 <a id="validation.test_release_notes"></a>
 
@@ -11697,8 +11595,6 @@ named explicitly here rather than silently — every other marker,
 including `packaging` and `statistical`, keeps running through this
 one gate exactly as originally established.
 
-
-
 <a id="validation.test_sdist_contents"></a>
 
 # validation.test\_sdist\_contents
@@ -11745,8 +11641,6 @@ config: a config-only check cannot see hatchling's own file-walk
 behavior. Marked `packaging`: it needs a real `python -m
 build` invocation, which it makes itself rather than depending on
 `build`'s own package step having already run.
-
-
 
 <a id="validation.test_simulator_equilibrium"></a>
 
@@ -12496,8 +12390,6 @@ far cheaper than the torus scenario's own ~23 minutes, since 8 loci
 at horizon 2000 is a much smaller integration than 150 loci at
 horizon 6000.
 
-
-
 <a id="validation.test_test_docs"></a>
 
 # validation.test\_test\_docs
@@ -12525,8 +12417,6 @@ def test_every_test_directory_is_a_documented_group() -> None
 `_GROUPS` here (and the generator's own) covers every real
 subdirectory of `test/` that actually holds `.py` files, other than
 `test/data/` (fixture JSON, not code).
-
-
 
 <a id="validation.test_workflow_pins"></a>
 

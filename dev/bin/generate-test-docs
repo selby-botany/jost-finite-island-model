@@ -92,51 +92,71 @@ def _module_files(directory: Path) -> list[Path]:
     return sorted(path for path in directory.glob("*.py") if path.name != "__init__.py")
 
 
-def _render_module(directory: Path, module: str, label: str) -> str:
-    """Render one file's own docstrings, with every anchor/heading qualified.
+def _render_modules(directory: Path, modules: list[str], label: str) -> str:
+    """Render every module in one group, with all anchors/headings qualified.
 
-    Runs `pydoc-markdown` scoped to `directory` alone (never the whole
-    `test/` tree at once) so a same-named file in a different group can
-    never be the one actually resolved. `label` (e.g. `"gui"`) is
-    prefixed onto the bare module name pydoc-markdown itself produces
-    (`test_store` -> `gui.test_store`) in both the heading and every
-    anchor id, disambiguating a same-named file in a different group
-    without needing a real Python package structure at all.
+    One `pydoc-markdown` call for the *whole* group (`-m` given once per
+    module, all sharing the group's own `-I` search path), not one call
+    per file -- `pydoc-markdown` documents each `-m` module's own
+    docstrings in the given order and concatenates them, each still
+    starting with its own `<a id="module"></a>` / `# module` pair
+    exactly as a lone `-m module` invocation would, so the same
+    qualification this function still does below is unaffected either
+    way. This is a real, measured fix, not a style preference: every
+    invocation pays a fixed ~1-2s Python-interpreter-plus-pydoc-markdown-
+    import cost regardless of file size (confirmed directly: the
+    smallest file in the whole suite still took over a second alone),
+    and this project's own `test/` tree has ~65 files across 10 groups
+    -- one call per file paid that fixed cost 65 times over; one call
+    per group pays it 10 times, cutting several minutes of wall-clock
+    off every full local test run and every `pre-commit` invocation
+    that regenerates this file, with no change to the rendered output.
+    Scoped to `directory` alone (never the whole `test/` tree at once)
+    so a same-named file in a different group can never be the one
+    actually resolved.
 
     Args:
         directory: The one directory `pydoc-markdown`'s own `-I` search
             path is scoped to.
-        module: The bare module name (file stem) to document.
-        label: This module's own group qualifier.
+        modules: This group's own bare module names (file stems), in
+            the order they should appear.
+        label: This group's own qualifier (e.g. `"gui"`).
 
     Returns:
-        The qualified Markdown for this one module.
+        The qualified Markdown for every module in `modules`, in order.
 
     Raises:
         subprocess.CalledProcessError: If `pydoc-markdown` itself fails.
     """
+    command = ["pydoc-markdown", "-q", "-I", str(directory)]
+    for module in modules:
+        command.extend(["-m", module])
     result = subprocess.run(
-        ["pydoc-markdown", "-q", "-I", str(directory), "-m", module],
+        command,
         check=True,
         capture_output=True,
         text=True,
         cwd=_ROOT,
     )
     text = result.stdout
-    qualified = f"{label}.{module}"
-    # The bare-anchor form (`id="test_store"`) and the per-function form
-    # (`id="test_store.test_something"`) both start with the same bare
-    # module name; the lookahead keeps everything from the following
-    # quote or dot onward untouched, qualifying only the module prefix.
-    text = re.sub(rf'id="{re.escape(module)}(?=["\.])', f'id="{qualified}', text)
-    escaped_module = module.replace("_", r"\_")
-    text = re.sub(
-        rf"^# {re.escape(escaped_module)}$",
-        f"# {label}.{escaped_module}",
-        text,
-        count=1,
-        flags=re.MULTILINE,
-    )
+    for module in modules:
+        qualified = f"{label}.{module}"
+        # The bare-anchor form (`id="test_store"`) and the per-function
+        # form (`id="test_store.test_something"`) both start with the
+        # same bare module name; the lookahead keeps everything from the
+        # following quote or dot onward untouched, qualifying only the
+        # module prefix. Each substitution only ever matches its own
+        # module's own anchors/heading -- safe to apply every module's
+        # own pair against the whole combined text in any order.
+        text = re.sub(rf'id="{re.escape(module)}(?=["\.])', f'id="{qualified}', text)
+        escaped_module = module.replace("_", r"\_")
+        text = re.sub(
+            rf"^# {re.escape(escaped_module)}$",
+            f"# {label}.{escaped_module}",
+            text,
+            count=1,
+            flags=re.MULTILINE,
+        )
     return text
 
 
@@ -163,12 +183,10 @@ def _render_group(group: str) -> tuple[str, list[str]]:
     # a `/` predictably enough to rely on.
     heading_text = f"`test/{group}/`" if group else "`test/`"
     sections: list[str] = [f'<a id="group-{label}"></a>\n\n## {heading_text}']
-    toc_lines: list[str] = []
-    for path in _module_files(directory):
-        module = path.stem
-        qualified = f"{label}.{module}"
-        sections.append(_render_module(directory, module, label))
-        toc_lines.append(f"  - [`{module}`](#{qualified})")
+    modules = [path.stem for path in _module_files(directory)]
+    toc_lines = [f"  - [`{module}`](#{label}.{module})" for module in modules]
+    if modules:
+        sections.append(_render_modules(directory, modules, label))
     return "\n\n".join(sections), toc_lines
 
 
