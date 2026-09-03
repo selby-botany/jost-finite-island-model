@@ -766,6 +766,127 @@ def migrate(
     )
 
 
+_JIT_MUTATE_EVENT_COUNTS_BATCHED: (
+    Callable[[np.random.Generator, np.ndarray, np.ndarray], np.ndarray] | None
+) = None
+
+
+def _mutate_event_counts_batched(
+    rng: np.random.Generator,
+    ns: np.ndarray,
+    ps: np.ndarray,
+) -> np.ndarray:
+    """Draw every (deme, locus) pair's own mutation-event count in one pass.
+
+    `mutate`'s own event-count draw is a single `Binomial(n, p)` per
+    pair — simpler than `drift`'s own per-pair *multinomial* draw
+    (`_drift_counts_batched`), so this needs no conditional-binomial
+    decomposition across categories, only the one draw per pair,
+    batched the same way: pay the Python/Numba call-boundary crossing
+    once per generation instead of once per `(deme, locus)` pair (the
+    same regression `_drift_counts_batched`'s own docstring already
+    measured and fixed for the multinomial case, avoided here from the
+    start rather than found the same way twice).
+
+    **Nested closure, not a call to the module-level `_inversion_
+    binomial`, for the identical reason `_drift_counts_batched`
+    already duplicates it** — see that function's own docstring:
+    Numba's `nopython` mode cannot compile a call to a plain,
+    undecorated module-level function as an internal callee, and
+    decorating `_inversion_binomial` itself would force every caller,
+    including every `jit=False` one, to pay `numba`'s own import cost.
+
+    **Bit-identity depends on visiting pairs in exactly the order
+    `mutate`'s own unjitted loop does** — deme-major, locus-minor
+    (`mutate`'s own docstring/loop order), unlike stage 1's `migrate`
+    work (`20260901-claude-sonnet-5-fim-engine-backend-factory-
+    design.md` §10 item 10e), which had no RNG at all: every pair's
+    own draw consumes real, sequential positions in the shared `rng`'s
+    own bit stream, so an out-of-order batched pass would desync every
+    later pair's own draw from what the unjitted loop would have
+    produced, even though each individual draw's own algorithm is
+    identical either way.
+
+    Args:
+        rng: The run's explicitly threaded random generator.
+        ns: One pair count per `(deme, locus)` pair, deme-major,
+            locus-minor — this pair's own deme's `N`.
+        ps: One probability per pair, the same order — this pair's own
+            locus's own mutation rate.
+
+    Returns:
+        One event count per pair, the same flat, deme-major,
+        locus-minor order as `ns`/`ps`.
+    """
+
+    def draw_one(n: int, p: float) -> int:
+        if n <= 0 or p <= 0.0:
+            return 0
+        if p >= 1.0:
+            return n
+        u = rng.random()
+        reflect = p > _REFLECT_THRESHOLD
+        q = 1.0 - p if reflect else p
+        mode = min(int((n + 1) * q), n)
+        log_pmf_mode = (
+            math.lgamma(n + 1.0)
+            - math.lgamma(mode + 1.0)
+            - math.lgamma(n - mode + 1.0)
+            + mode * math.log(q)
+            + (n - mode) * math.log1p(-q)
+        )
+        pmf_mode = math.exp(log_pmf_mode)
+        low_pmf = [pmf_mode]
+        current = pmf_mode
+        for offset in range(mode, 0, -1):
+            current = current * offset / (n - offset + 1) * (1.0 - q) / q
+            low_pmf.append(current)
+        low_pmf.reverse()
+        cdf = 0.0
+        for candidate in range(mode + 1):
+            cdf += low_pmf[candidate]
+            if cdf >= u:
+                return n - candidate if reflect else candidate
+        pmf = pmf_mode
+        candidate = mode
+        while cdf < u and candidate < n:
+            candidate += 1
+            pmf *= (n - candidate + 1) / candidate * q / (1.0 - q)
+            cdf += pmf
+        return n - candidate if reflect else candidate
+
+    counts = np.empty(ns.shape[0], dtype=np.int64)
+    for index in range(ns.shape[0]):
+        counts[index] = draw_one(ns[index], ps[index])
+    return counts
+
+
+def _jit_mutate_event_counts_batched(
+    rng: np.random.Generator,
+    ns: np.ndarray,
+    ps: np.ndarray,
+) -> np.ndarray:
+    """`_mutate_event_counts_batched`, JIT-compiled with `nogil=True`.
+
+    Lazily imports and compiles `numba` exactly like `_jit_drift_
+    counts_batched` does, and for the same reason. `numba` is an
+    optional dependency (``pip install fim[jit]``) — only a caller that
+    explicitly requests `mutate(..., jit=True)` ever pays its import/
+    compilation cost or needs it installed at all.
+
+    Raises:
+        ImportError: If `numba` is not installed.
+    """
+    global _JIT_MUTATE_EVENT_COUNTS_BATCHED  # noqa: PLW0603
+    if _JIT_MUTATE_EVENT_COUNTS_BATCHED is None:
+        import numba  # noqa: PLC0415 -- lazy, optional-dependency import
+
+        _JIT_MUTATE_EVENT_COUNTS_BATCHED = numba.jit(nogil=True)(
+            _mutate_event_counts_batched
+        )
+    return _JIT_MUTATE_EVENT_COUNTS_BATCHED(rng, ns, ps)
+
+
 def mutate(
     state: ModelState,
     mu: MutationRate,
@@ -774,6 +895,7 @@ def mutate(
     rng: np.random.Generator,
     *,
     finite_alleles: FiniteAlleleRegistry | None = None,
+    jit: bool = False,
 ) -> ModelState:
     """Replace a binomially sampled number of copies with new alleles.
 
@@ -825,6 +947,37 @@ def mutate(
             the existing allele each one came from, sampled proportionally
             to that allele's current share, exactly like the proportional
             mass reduction below already assumes.
+        jit: When `True` and `finite_alleles is None` (the default,
+            infinite-alleles model — see below for why the finite-
+            alleles model is out of scope), draw every `(deme, locus)`
+            pair's own event count in one Numba-JIT-compiled,
+            `nogil=True` call (`_jit_mutate_event_counts_batched`)
+            instead of one `_inversion_binomial` call per pair —
+            bit-identical output either way (this is stage 2 of
+            `20260901-claude-sonnet-5-fim-engine-backend-factory-
+            design.md` §10 item 10e's own phased plan; only the *event-
+            count draw* is batched — the proportional mass reduction
+            just below reads a precomputed scalar either way and needs
+            no batching of its own to benefit, and allele minting/
+            target-selection, stage 3, are untouched). Silently
+            ignored, not an error, when `finite_alleles` is given —
+            `registry.next_id()` (the infinite-alleles model's own
+            minting call) is a pure counter that consumes no `rng` draw
+            at all, so precomputing every pair's own event count up
+            front never changes what else that pair's own remaining
+            work draws from `rng` in between — but the finite-alleles
+            model's own per-event source-attribution
+            (`_multinomial_via_inversion_binomial`) and target
+            selection (`finite_alleles.mutate_target`) *do* draw from
+            `rng`, interleaved with each pair's own processing in the
+            unjitted loop below; precomputing every pair's own event
+            count up front would draw a later pair's own count before
+            an earlier pair's own finite-alleles draws happen,
+            desyncing the two paths from the very first pair with more
+            than one event (confirmed directly — an initial version of
+            this fix applied unconditionally and a bit-identity test
+            caught the divergence). Needs `numba` installed only when
+            `True` and eligible.
 
     Returns:
         A post-mutation state at the same generation.
@@ -833,13 +986,32 @@ def mutate(
         return state
     mutation_rates = mu if isinstance(mu, tuple) else (mu,) * state.locus_count
     sizes = _population_sizes(population_size, state.deme_count)
+    # `jit=True` draws every pair's own event count up front, in one
+    # compiled call, in the identical deme-major/locus-minor order the
+    # loop below visits pairs in — see `_mutate_event_counts_batched`'s
+    # own docstring for why that order is what keeps this bit-identical
+    # to the per-pair `_inversion_binomial` calls below, and this
+    # function's own `jit` docstring for why that guarantee only holds
+    # when `finite_alleles is None`. `None` (not an empty array) is the
+    # "not batched" sentinel, so the loop's own per-pair fallback stays
+    # a single, unambiguous `is None` check.
+    event_counts_flat: np.ndarray | None = None
+    if jit and finite_alleles is None:
+        ns = np.repeat(np.asarray(sizes, dtype=np.int64), state.locus_count)
+        ps = np.tile(np.asarray(mutation_rates, dtype=np.float64), state.deme_count)
+        event_counts_flat = _jit_mutate_event_counts_batched(rng, ns, ps)
     demes: list[tuple[Mapping[AlleleId, float], ...]] = []
+    pair_index = 0
     for deme, size in zip(state.frequencies, sizes, strict=True):
         locus_maps: list[Mapping[AlleleId, float]] = []
         for frequency_map, locus, rate in zip(
             deme, state.loci, mutation_rates, strict=True
         ):
-            event_count = _inversion_binomial(rng, size, rate)
+            if event_counts_flat is None:
+                event_count = _inversion_binomial(rng, size, rate)
+            else:
+                event_count = int(event_counts_flat[pair_index])
+            pair_index += 1
             if event_count == 0:
                 locus_maps.append(dict(frequency_map))
                 continue
@@ -927,13 +1099,17 @@ def step(
             otherwise.
         jit: Passed through to `drift`'s own `jit` argument (see its
             docstring) and, since `20260901-claude-sonnet-5-fim-engine-
-            backend-factory-design.md` §10 item 10e's own stage 1, to
-            `migrate`'s own `jit` argument too — silently a no-op there
-            for a full custom weight matrix or stochastic migrant
-            sampling (see `migrate`'s own docstring), real for the
-            default scalar-rate, deterministic case. `mutate`'s own RNG
-            calls remain unaffected by this flag — 10e's own stage 2
-            and 3, not yet built.
+            backend-factory-design.md` §10 item 10e's own stages 1-2,
+            to `migrate`'s and `mutate`'s own `jit` arguments too —
+            silently a no-op in `migrate` for a full custom weight
+            matrix or stochastic migrant sampling (see `migrate`'s own
+            docstring), real for the default scalar-rate, deterministic
+            case; real in `mutate` for its own event-count draw under
+            the default infinite-alleles model, silently a no-op under
+            the opt-in finite-alleles model instead (see `mutate`'s own
+            `jit` docstring for why), with `mutate`'s own allele
+            minting/target-selection RNG calls unaffected by this flag
+            either way — 10e's own stage 3, not yet built.
 
     Returns:
         The next generation.
@@ -945,7 +1121,13 @@ def step(
     migration_rng = rng if params.migrant_sampling == "stochastic" else None
     migrated = migrate(state, params.m, params.N, rng=migration_rng, jit=jit)
     mutated = mutate(
-        migrated, params.mu, params.N, registry, rng, finite_alleles=finite_alleles
+        migrated,
+        params.mu,
+        params.N,
+        registry,
+        rng,
+        finite_alleles=finite_alleles,
+        jit=jit,
     )
     return drift(mutated, params.N, rng, jit=jit)
 

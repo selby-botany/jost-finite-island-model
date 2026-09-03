@@ -20,8 +20,10 @@ from fim.model.operators import (
     _inversion_binomial,
     _jit_migrate_symmetric_blend,
     _jit_multinomial_via_binomial,
+    _jit_mutate_event_counts_batched,
     _migrate_symmetric_blend_batched,
     _multinomial_via_binomial,
+    _mutate_event_counts_batched,
     drift,
     migrate,
     mutate,
@@ -498,6 +500,162 @@ def test_mutation_finite_alleles_recurrence_rate_matches_theory(
     assert observed_rate == pytest.approx(
         expected_probability, abs=5.0 * standard_error
     )
+
+
+def test_jit_mutate_event_counts_batched_matches_plain_decomposition() -> None:
+    """The Numba-JIT-compiled kernel is exactly the same function, compiled.
+
+    Isolates the compilation layer from the "does batching the draw
+    change anything" question the tests below cover — the same
+    isolation `test_jit_multinomial_via_binomial_matches_plain_
+    decomposition` already does for drift's own compiled primitive.
+    """
+    pytest.importorskip("numba")
+    controller = np.random.default_rng(20260903)
+    for _ in range(200):
+        seed = int(controller.integers(0, 2**31))
+        pair_count = int(controller.integers(1, 12))
+        ns = controller.integers(1, 500, size=pair_count).astype(np.int64)
+        ps = controller.random(pair_count)
+
+        plain = _mutate_event_counts_batched(
+            np.random.Generator(np.random.PCG64(seed)), ns, ps
+        )
+        jitted = _jit_mutate_event_counts_batched(
+            np.random.Generator(np.random.PCG64(seed)), ns, ps
+        )
+        assert plain.tolist() == list(jitted)
+
+
+def test_mutate_with_jit_matches_mutate_without_jit_bit_for_bit(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`jit=True` changes nothing about `mutate`'s own output, for the same seed.
+
+    Under the default infinite-alleles model (`finite_alleles=None`),
+    `jit=True` is real: `registry.next_id()` consumes no `rng` draw at
+    all, so batching every pair's own event count up front never
+    disturbs any other draw's own position in the stream.
+    """
+    pytest.importorskip("numba")
+    unjitted = mutate(_state(), 0.1, 100, AlleleRegistry(), rng(20260903), jit=False)
+    jitted = mutate(_state(), 0.1, 100, AlleleRegistry(), rng(20260903), jit=True)
+    assert unjitted == jitted
+
+
+def test_mutate_with_jit_is_silently_ignored_under_finite_alleles(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`jit=True` under the finite-alleles model falls back, not an error.
+
+    `mutate`'s own `jit` support is scoped to the infinite-alleles model
+    only (`20260901-claude-sonnet-5-fim-engine-backend-factory-
+    design.md` §10 item 10e, stage 2's own docstring) — the finite-
+    alleles model's own per-event source-attribution/target-selection
+    draws interleave with the event-count draw in a way batching it up
+    front would desync, so `finite_alleles` given must keep working
+    exactly as before, silently, not raise. A fresh `FiniteAlleleSpace`
+    per call, not a shared one — `mutate_target` mutates its own
+    internal minted-state bookkeeping, so reusing one instance across
+    two separate `mutate()` calls would make the second call's own
+    result depend on the first call's own side effects, not on `jit`.
+    """
+    pytest.importorskip("numba")
+
+    def _finite_alleles() -> FiniteAlleleRegistry:
+        return FiniteAlleleRegistry(
+            {1: FiniteAlleleSpace(64, [AlleleId(0), AlleleId(1)])}
+        )
+
+    without_jit = mutate(
+        _state(),
+        0.1,
+        100,
+        AlleleRegistry(),
+        rng(6),
+        finite_alleles=_finite_alleles(),
+        jit=False,
+    )
+    with_jit_requested = mutate(
+        _state(),
+        0.1,
+        100,
+        AlleleRegistry(),
+        rng(6),
+        finite_alleles=_finite_alleles(),
+        jit=True,
+    )
+    assert without_jit == with_jit_requested
+
+
+def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The flat, per-pair event-count batching stays bit-identical at scale.
+
+    `_state()`'s own fixture (2 demes, 1 locus) barely exercises the
+    `(deme, locus)` flat layout `_mutate_event_counts_batched` depends
+    on visiting in deme-major, locus-minor order — this uses many demes
+    and several loci of different mutation rates (including one exact
+    `0.0` rate, `_inversion_binomial`'s own zero-draw short-circuit)
+    against a freshly generated, already-ragged initial state, mirroring
+    stage 1's own analogous `migrate` test
+    (`test_migrate_with_jit_matches_without_jit_across_many_demes_and_
+    loci`) in shape: one realistic-scale call, not a chained multi-
+    generation run — `test_step_with_mutate_jit_matches_without_jit_
+    across_many_generations`, below, is what covers naturally,
+    generation-by-generation reshaped allele sets, through two fully
+    independent, self-consistent pipelines (this test's own single-call
+    shape cannot safely be extended to "chain the result forward" without
+    also driving `drift` identically on both sides, since `mutate`'s own
+    event-count draw shares one running `rng` stream with everything
+    else called on it afterward).
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=25,
+        m=0.15,
+        mu=(0.03, 0.0, 0.01),
+        d=10,
+        seed=20260903,
+        loci=(LocusSpec(1, 40), LocusSpec(2, 20), LocusSpec(3, 60)),
+    )
+    state = generate_initial_state(params, rng(20260903))
+
+    unjitted = mutate(state, params.mu, params.N, AlleleRegistry(), rng(13), jit=False)
+    jitted = mutate(state, params.mu, params.N, AlleleRegistry(), rng(13), jit=True)
+
+    assert unjitted == jitted
+
+
+def test_step_with_mutate_jit_matches_without_jit_across_many_generations(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`step`'s own mutate stage stays bit-identical under `jit=True` too.
+
+    Companion to `test_step_with_migrate_jit_matches_without_jit_
+    across_many_generations` (stage 1) — same shape, now exercising
+    stage 2's own event-count batching inside a full `step` pipeline
+    (migrate, mutate, drift, in order, `jit` shared by all three).
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=25,
+        m=0.2,
+        mu=0.02,
+        d=10,
+        seed=20260903,
+        loci=(LocusSpec(1, 40), LocusSpec(2, 60)),
+    )
+    state = generate_initial_state(params, rng(20260903))
+
+    unjitted_rng = rng(17)
+    jitted_rng = rng(17)
+    for _ in range(20):
+        unjitted_state = step(state, params, AlleleRegistry(), unjitted_rng, jit=False)
+        jitted_state = step(state, params, AlleleRegistry(), jitted_rng, jit=True)
+        assert unjitted_state == jitted_state
+        state = unjitted_state
 
 
 def test_drift_preserves_invariants_and_is_seeded(

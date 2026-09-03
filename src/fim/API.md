@@ -5397,7 +5397,8 @@ def mutate(state: ModelState,
            registry: AlleleRegistry,
            rng: np.random.Generator,
            *,
-           finite_alleles: FiniteAlleleRegistry | None = None) -> ModelState
+           finite_alleles: FiniteAlleleRegistry | None = None,
+           jit: bool = False) -> ModelState
 ```
 
 Replace a binomially sampled number of copies with new alleles.
@@ -5451,6 +5452,37 @@ docstring already names.
   the existing allele each one came from, sampled proportionally
   to that allele's current share, exactly like the proportional
   mass reduction below already assumes.
+- `jit` - When `True` and `finite_alleles is None` (the default,
+  infinite-alleles model — see below for why the finite-
+  alleles model is out of scope), draw every `(deme, locus)`
+  pair's own event count in one Numba-JIT-compiled,
+  `nogil=True` call (`_jit_mutate_event_counts_batched`)
+  instead of one `_inversion_binomial` call per pair —
+  bit-identical output either way (this is stage 2 of
+  `20260901-claude-sonnet-5-fim-engine-backend-factory-
+  design.md` §10 item 10e's own phased plan; only the *event-
+  count draw* is batched — the proportional mass reduction
+  just below reads a precomputed scalar either way and needs
+  no batching of its own to benefit, and allele minting/
+  target-selection, stage 3, are untouched). Silently
+  ignored, not an error, when `finite_alleles` is given —
+  `registry.next_id()` (the infinite-alleles model's own
+  minting call) is a pure counter that consumes no `rng` draw
+  at all, so precomputing every pair's own event count up
+  front never changes what else that pair's own remaining
+  work draws from `rng` in between — but the finite-alleles
+  model's own per-event source-attribution
+  (`_multinomial_via_inversion_binomial`) and target
+  selection (`finite_alleles.mutate_target`) *do* draw from
+  `rng`, interleaved with each pair's own processing in the
+  unjitted loop below; precomputing every pair's own event
+  count up front would draw a later pair's own count before
+  an earlier pair's own finite-alleles draws happen,
+  desyncing the two paths from the very first pair with more
+  than one event (confirmed directly — an initial version of
+  this fix applied unconditionally and a bit-identity test
+  caught the divergence). Needs `numba` installed only when
+  `True` and eligible.
 
 
 **Returns**:
@@ -5494,13 +5526,17 @@ conventional choice this project follows.
   otherwise.
 - `jit` - Passed through to `drift`'s own `jit` argument (see its
   docstring) and, since `20260901-claude-sonnet-5-fim-engine-
-  backend-factory-design.md` §10 item 10e's own stage 1, to
-  `migrate`'s own `jit` argument too — silently a no-op there
-  for a full custom weight matrix or stochastic migrant
-  sampling (see `migrate`'s own docstring), real for the
-  default scalar-rate, deterministic case. `mutate`'s own RNG
-  calls remain unaffected by this flag — 10e's own stage 2
-  and 3, not yet built.
+  backend-factory-design.md` §10 item 10e's own stages 1-2,
+  to `migrate`'s and `mutate`'s own `jit` arguments too —
+  silently a no-op in `migrate` for a full custom weight
+  matrix or stochastic migrant sampling (see `migrate`'s own
+  docstring), real for the default scalar-rate, deterministic
+  case; real in `mutate` for its own event-count draw under
+  the default infinite-alleles model, silently a no-op under
+  the opt-in finite-alleles model instead (see `mutate`'s own
+  `jit` docstring for why), with `mutate`'s own allele
+  minting/target-selection RNG calls unaffected by this flag
+  either way — 10e's own stage 3, not yet built.
 
 
 **Returns**:

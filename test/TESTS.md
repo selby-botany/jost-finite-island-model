@@ -7149,6 +7149,105 @@ event with a certain, deterministic source — the only randomness left
 is that one event's target — so each trial is one clean Bernoulli
 observation, exactly like the space-level test.
 
+<a id="model.test_operators.test_jit_mutate_event_counts_batched_matches_plain_decomposition"></a>
+
+#### test\_jit\_mutate\_event\_counts\_batched\_matches\_plain\_decomposition
+
+```python
+def test_jit_mutate_event_counts_batched_matches_plain_decomposition() -> None
+```
+
+The Numba-JIT-compiled kernel is exactly the same function, compiled.
+
+Isolates the compilation layer from the "does batching the draw
+change anything" question the tests below cover — the same
+isolation `test_jit_multinomial_via_binomial_matches_plain_
+decomposition` already does for drift's own compiled primitive.
+
+<a id="model.test_operators.test_mutate_with_jit_matches_mutate_without_jit_bit_for_bit"></a>
+
+#### test\_mutate\_with\_jit\_matches\_mutate\_without\_jit\_bit\_for\_bit
+
+```python
+def test_mutate_with_jit_matches_mutate_without_jit_bit_for_bit(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`jit=True` changes nothing about `mutate`'s own output, for the same seed.
+
+Under the default infinite-alleles model (`finite_alleles=None`),
+`jit=True` is real: `registry.next_id()` consumes no `rng` draw at
+all, so batching every pair's own event count up front never
+disturbs any other draw's own position in the stream.
+
+<a id="model.test_operators.test_mutate_with_jit_is_silently_ignored_under_finite_alleles"></a>
+
+#### test\_mutate\_with\_jit\_is\_silently\_ignored\_under\_finite\_alleles
+
+```python
+def test_mutate_with_jit_is_silently_ignored_under_finite_alleles(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`jit=True` under the finite-alleles model falls back, not an error.
+
+`mutate`'s own `jit` support is scoped to the infinite-alleles model
+only (`20260901-claude-sonnet-5-fim-engine-backend-factory-
+design.md` §10 item 10e, stage 2's own docstring) — the finite-
+alleles model's own per-event source-attribution/target-selection
+draws interleave with the event-count draw in a way batching it up
+front would desync, so `finite_alleles` given must keep working
+exactly as before, silently, not raise. A fresh `FiniteAlleleSpace`
+per call, not a shared one — `mutate_target` mutates its own
+internal minted-state bookkeeping, so reusing one instance across
+two separate `mutate()` calls would make the second call's own
+result depend on the first call's own side effects, not on `jit`.
+
+<a id="model.test_operators.test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci"></a>
+
+#### test\_mutate\_with\_jit\_matches\_without\_jit\_across\_many\_demes\_and\_loci
+
+```python
+def test_mutate_with_jit_matches_without_jit_across_many_demes_and_loci(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The flat, per-pair event-count batching stays bit-identical at scale.
+
+`_state()`'s own fixture (2 demes, 1 locus) barely exercises the
+`(deme, locus)` flat layout `_mutate_event_counts_batched` depends
+on visiting in deme-major, locus-minor order — this uses many demes
+and several loci of different mutation rates (including one exact
+`0.0` rate, `_inversion_binomial`'s own zero-draw short-circuit)
+against a freshly generated, already-ragged initial state, mirroring
+stage 1's own analogous `migrate` test
+(`test_migrate_with_jit_matches_without_jit_across_many_demes_and_
+loci`) in shape: one realistic-scale call, not a chained multi-
+generation run — `test_step_with_mutate_jit_matches_without_jit_
+across_many_generations`, below, is what covers naturally,
+generation-by-generation reshaped allele sets, through two fully
+independent, self-consistent pipelines (this test's own single-call
+shape cannot safely be extended to "chain the result forward" without
+also driving `drift` identically on both sides, since `mutate`'s own
+event-count draw shares one running `rng` stream with everything
+else called on it afterward).
+
+<a id="model.test_operators.test_step_with_mutate_jit_matches_without_jit_across_many_generations"></a>
+
+#### test\_step\_with\_mutate\_jit\_matches\_without\_jit\_across\_many\_generations
+
+```python
+def test_step_with_mutate_jit_matches_without_jit_across_many_generations(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`step`'s own mutate stage stays bit-identical under `jit=True` too.
+
+Companion to `test_step_with_migrate_jit_matches_without_jit_
+across_many_generations` (stage 1) — same shape, now exercising
+stage 2's own event-count batching inside a full `step` pipeline
+(migrate, mutate, drift, in order, `jit` shared by all three).
+
 <a id="model.test_operators.test_drift_preserves_invariants_and_is_seeded"></a>
 
 #### test\_drift\_preserves\_invariants\_and\_is\_seeded
