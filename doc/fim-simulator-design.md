@@ -569,12 +569,40 @@ against, while two faster alternatives sit beside it, opt-in:
   next starts. Same answer, same seed, provably bit-for-bit — it is a
   different *order* of doing identical arithmetic, not different
   arithmetic.
-- **`"generational-vector"`** goes further: instead of one calculation
-  per deme (a Python loop), it does the whole deme-by-allele
-  calculation as one array operation, the way a spreadsheet computes an
-  entire column at once instead of cell by cell. This is where the real
-  speed lives for a large number of demes — and where the guarantee
-  changes shape (below).
+- **`"generational-vector"`** goes further: it computes the *identical*
+  equations §3.4's own pipeline is built from — migration's weighted
+  blend and drift's multinomial draw, spelled out in full in the
+  [finite-island-model introduction's own
+  §3.2](finite-island-model-introduction.md#32-one-generation-in-two-steps)
+  — for every deme at once, as one array operation, rather than one
+  deme at a time in a loop. Concretely: every deme's own frequency
+  vector becomes one row of a table, one column per possible allele.
+  Migration's own blend,
+
+  ```math
+  p_{\mathrm{mig},i} = (1-m)\, p_{t,i} + m\, \bar p_i
+  ```
+
+  is computed for every row `i` at once, and so is drift's own
+  multinomial draw. Nothing about *what* gets computed changes — this
+  is the same arithmetic the introduction's §3.2 already names,
+  restated for a whole table at once instead of row by row, the way a
+  spreadsheet computes an entire column with one formula instead of one
+  cell at a time. This is where the real speed lives for a large number
+  of demes — and where the guarantee changes shape (below).
+
+  **Why the table needs a column count fixed in advance.** A table
+  needs a known, fixed width — one column per possible allele — before
+  any arithmetic can run on it. §3.2's own default model (infinite
+  alleles: a mutation can mint a genuinely novel allele that has never
+  existed before, forever) has no such fixed count to allocate a column
+  for. The bounded, `4 ** L`-state finite-alleles model (§3.2, above)
+  does — every possible state is enumerable in advance, which is
+  exactly what makes a fixed-width table representable at all. That is
+  why `"generational-vector"` is scoped to the finite-alleles model
+  only: not an arbitrary restriction chosen for speed's own sake, but
+  the one model whose own state space is small and bounded enough to
+  become a table's own column count.
 
 **How to decide — the short version:** if you never touch Python and
 just run `fim run` on a YAML file, this section does not apply to you
@@ -591,6 +619,34 @@ reading before switching: `"generational"` always matches exactly;
 row-for-row, once migration is active — see [the functional API
 reference](fim-simulator-functional-api.md) for the precise guarantee
 each one makes, and never guess at this from the name alone.
+
+**What "matches statistically, not row-for-row" actually means, once
+migration is active.** Not a different science, and not an
+approximation of the equation above — the exact same weighted-blend
+formula, computed two different, both fully correct, ways: one column
+at a time as a running sum over demes (`"lineal"`/`"generational"`'s
+own dict-based arithmetic), or as one array operation across every
+deme at once (`"generational-vector"`'s own array, added up in
+whatever order the underlying array library chooses). Floating-point
+addition is not perfectly associative — `(a + b) + c` and `a + (b +
+c)` can differ in the very last bit of precision — so these two
+equally valid summation orders can land on a frequency that differs
+from the other engine's own by less than one part in `10^15`,
+invisible anywhere the number is actually used. The one place it is
+not invisible is drift's own multinomial draw, immediately afterward:
+which allele count a draw lands on depends on which side of a cutoff
+the frequency falls, and that sub-microscopic disagreement
+occasionally sits close enough to one such cutoff to flip which side
+of it the draw lands on — measured directly, not assumed: 23 of 30
+seeds with migration active diverged from `"lineal"`'s own trajectory
+within the first three generations. What keeps this an acceptable
+trade rather than a defect is that the divergence carries no
+directional bias — checked directly by comparing each engine's own
+*mean* differentiation statistics across many independently seeded
+replicates, not merely asserted: a small sample can show a borderline
+gap, but it narrows back to noise as the sample grows, exactly what an
+unbiased alternate realization of the same random process looks like,
+and a real bias would not.
 
 **A caution from this project's own history, worth knowing before you
 lean on either faster engine:** the exact same code change that made

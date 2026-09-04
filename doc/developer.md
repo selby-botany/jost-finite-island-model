@@ -252,7 +252,13 @@ reasoned about.
   floating-point reduction order than the dict-based backends' own
   arithmetic. Never assume "same seed" alone is enough to reproduce an
   archived `"generational-vector"` trajectory exactly if that run used
-  nonzero migration — check `manifest.engine_backend` first.
+  nonzero migration — check `manifest.engine_backend` first. The
+  [simulator design's own §4.6](fim-simulator-design.md#46-choosing-an-engine-backend)
+  has the equation-level explanation of why (the same weighted-blend
+  formula, two different summation orders, occasionally landing on
+  opposite sides of one of drift's own discrete decision boundaries) —
+  written for a scientist audience, not a maintainer one; worth pointing
+  a collaborator there directly rather than re-deriving it in a reply.
 
 Tests use a derandomized Hypothesis profile and literal PCG64 seeds. Statistical
 tolerances are derived from sample size before a seed is selected.
