@@ -107,6 +107,8 @@ class GuiProgressStore:
         run_id: str,
         generation: int,
         rows: Iterable[Mapping[str, Any]],
+        *,
+        validate: bool = True,
     ) -> None:
         """Delegate one generation's write, or raise `RunCancelledError` instead.
 
@@ -125,11 +127,18 @@ class GuiProgressStore:
         `list` (`ModelState.to_rows`'s own return type), so this costs
         nothing extra in practice; it exists so the decorator's own
         contract does not silently depend on that happening to be true.
+
+        `validate` is forwarded to `self._inner` unchanged, not
+        inspected or overridden here — this decorator has no opinion of
+        its own on whether a row needs validating; see `fim.persistence.
+        store`'s own top docstring for who does.
         """
         if self._cancel_event.is_set():
             raise RunCancelledError(run_id, generation)
         materialized_rows = list(rows)
-        self._inner.write_generation(run_id, generation, materialized_rows)
+        self._inner.write_generation(
+            run_id, generation, materialized_rows, validate=validate
+        )
         self._on_generation(generation, materialized_rows)
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
@@ -179,16 +188,20 @@ class LiveProgressStore:
         run_id: str,
         generation: int,
         rows: Iterable[Mapping[str, Any]],
+        *,
+        validate: bool = True,
     ) -> None:
         """Delegate one generation's write, or raise `RunCancelledError` instead.
 
         Checked before delegating, not after — the same ordering
         `GuiProgressStore.write_generation` uses, for the same reason: a
         cancellation observed here never reaches the real store at all.
+        `validate` is forwarded to `self._inner` unchanged, same as that
+        method's own docstring explains.
         """
         if self._cancel_path.exists():
             raise RunCancelledError(run_id, generation)
-        self._inner.write_generation(run_id, generation, rows)
+        self._inner.write_generation(run_id, generation, rows, validate=validate)
         write_progress_sidecar(self._progress_path, generation)
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:

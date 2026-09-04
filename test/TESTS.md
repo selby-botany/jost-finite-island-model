@@ -12549,8 +12549,11 @@ memory and time grow with the horizon. These tests only read
 #### write\_generation
 
 ```python
-def write_generation(run_id: str, generation: int,
-                     rows: Iterable[Mapping[str, Any]]) -> None
+def write_generation(run_id: str,
+                     generation: int,
+                     rows: Iterable[Mapping[str, Any]],
+                     *,
+                     validate: bool = True) -> None
 ```
 
 Accept and discard one generation's rows.

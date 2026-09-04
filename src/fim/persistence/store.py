@@ -9,13 +9,37 @@ JSONLTrajectoryStore` (the real, file-backed store) and
 library calls and tests that never need an actual file), implement —
 so `fim.engine`'s run loop can write to either without knowing which
 one it actually has.
+
+`write_generation`'s own `validate` keyword (default `True`, unchanged
+behavior for every existing caller): a real, measured cost. Profiling a
+representative Backend V run found `normalize_row` — full schema
+presence/absence checks, then a per-field `isinstance` gauntlet on
+every row of every generation — as the single largest cost center in
+the whole run, ~36% of wall clock, ahead of the actual migrate/mutate/
+drift step. That check earns its cost for a row `normalize_row` cannot
+otherwise vouch for: a hand-edited or externally-produced row, or one
+`JSONLTrajectoryStore.read` is parsing back off disk. It earns nothing
+for a row `fim.engine`'s own run loop just built, in the same
+expression, from `ModelState.to_rows`/`fim.model.vectorized.
+vectorized_state_to_rows` — both of which construct every field
+already well-typed and in-bounds by construction (a real, finite
+`float` frequency in `(0, 1]`, a positive `int` id, a nonempty `str`
+run id), from a `ModelState`/`VectorizedState` whose own construction
+already enforced those same invariants. Re-running `normalize_row` on
+such a row cannot find a defect `ModelState`'s/`VectorizedState`'s own
+construction did not already rule out — it can only re-confirm what is
+already known, on every single row, every single generation. `fim.
+engine`'s own five internal call sites pass `validate=False`
+specifically because each one is provably in this position; no other
+caller in this codebase does, and a new one should not either without
+the same proof.
 """
 
 from __future__ import annotations
 
 import threading
 from collections.abc import Iterable, Iterator, Mapping
-from typing import Any, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict, cast
 
 from fim.model.identifiers import parse_bounded_frequency
 
@@ -56,8 +80,25 @@ class TrajectoryStore(Protocol):
         run_id: str,
         generation: int,
         rows: Iterable[Mapping[str, Any]],
+        *,
+        validate: bool = True,
     ) -> None:
-        """Persist all rows for one generation."""
+        """Persist all rows for one generation.
+
+        Args:
+            run_id: This batch's own run identity.
+            generation: This batch's own generation number.
+            rows: The rows themselves.
+            validate: Whether to run every row through `normalize_row`'s
+                full schema/type/bounds check before writing it. Default
+                `True` is always safe — every existing caller keeps its
+                current behavior unchanged. `False` is an opt-in fast
+                path for a caller that already knows its own rows are
+                well-formed (this module's own top docstring has the
+                full reasoning and the two internal producers this
+                applies to); passing `False` for a row from anywhere
+                else is a real correctness risk, not a style choice.
+        """
         ...
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
@@ -117,11 +158,21 @@ class InMemoryTrajectoryStore:
         run_id: str,
         generation: int,
         rows: Iterable[Mapping[str, Any]],
+        *,
+        validate: bool = True,
     ) -> None:
-        """Append one validated generation."""
-        generation_rows = [
-            normalize_row(row, run_id=run_id, generation=generation) for row in rows
-        ]
+        """Append one generation, validated unless the caller vouches for it.
+
+        See this module's own top docstring for exactly what
+        `validate=False` skips, and why it is safe only for the two
+        internal row producers named there.
+        """
+        if validate:
+            generation_rows = [
+                normalize_row(row, run_id=run_id, generation=generation) for row in rows
+            ]
+        else:
+            generation_rows = [cast("TrajectoryRow", dict(row)) for row in rows]
         if not generation_rows:
             raise ValueError("a generation must contain at least one row")
         with self._lock:

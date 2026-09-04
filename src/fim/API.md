@@ -4303,8 +4303,11 @@ Wrap `inner`, reporting each write and honoring `cancel_event`.
 #### write\_generation
 
 ```python
-def write_generation(run_id: str, generation: int,
-                     rows: Iterable[Mapping[str, Any]]) -> None
+def write_generation(run_id: str,
+                     generation: int,
+                     rows: Iterable[Mapping[str, Any]],
+                     *,
+                     validate: bool = True) -> None
 ```
 
 Delegate one generation's write, or raise `RunCancelledError` instead.
@@ -4324,6 +4327,11 @@ second read. Every real caller in this codebase already passes a
 `list` (`ModelState.to_rows`'s own return type), so this costs
 nothing extra in practice; it exists so the decorator's own
 contract does not silently depend on that happening to be true.
+
+`validate` is forwarded to `self._inner` unchanged, not
+inspected or overridden here — this decorator has no opinion of
+its own on whether a row needs validating; see `fim.persistence.
+store`'s own top docstring for who does.
 
 <a id="fim.gui.store.GuiProgressStore.read"></a>
 
@@ -4382,8 +4390,11 @@ Wrap `inner`, recording progress in and honoring cancellation from disk.
 #### write\_generation
 
 ```python
-def write_generation(run_id: str, generation: int,
-                     rows: Iterable[Mapping[str, Any]]) -> None
+def write_generation(run_id: str,
+                     generation: int,
+                     rows: Iterable[Mapping[str, Any]],
+                     *,
+                     validate: bool = True) -> None
 ```
 
 Delegate one generation's write, or raise `RunCancelledError` instead.
@@ -4391,6 +4402,8 @@ Delegate one generation's write, or raise `RunCancelledError` instead.
 Checked before delegating, not after — the same ordering
 `GuiProgressStore.write_generation` uses, for the same reason: a
 cancellation observed here never reaches the real store at all.
+`validate` is forwarded to `self._inner` unchanged, same as that
+method's own docstring explains.
 
 <a id="fim.gui.store.LiveProgressStore.read"></a>
 
@@ -7499,15 +7512,24 @@ Restore everything but `_lock`, then rebuild a fresh one.
 #### write\_generation
 
 ```python
-def write_generation(run_id: str, generation: int,
-                     rows: Iterable[Mapping[str, Any]]) -> None
+def write_generation(run_id: str,
+                     generation: int,
+                     rows: Iterable[Mapping[str, Any]],
+                     *,
+                     validate: bool = True) -> None
 ```
 
 Append and flush all rows for one generation.
 
 Every row is validated (via `fim.persistence.store.
-normalize_row`) before anything is written, so a malformed row
-is rejected up front rather than partially written to disk.
+normalize_row`) before anything is written by default, so a
+malformed row is rejected up front rather than partially
+written to disk — `validate=False` skips that for a caller
+that already vouches for its own rows (`fim.persistence.store`'s
+own top docstring has the full reasoning and which callers this
+applies to; `json.dumps`'s own ``allow_nan=False`` below still
+catches a non-finite frequency either way, as a last resort,
+not a substitute for real validation on an untrusted row).
 ``handle.flush()`` hands this generation's bytes from Python's
 own internal buffer to the operating system right away, rather
 than leaving them sitting in memory until the file is
@@ -7962,6 +7984,30 @@ library calls and tests that never need an actual file), implement —
 so `fim.engine`'s run loop can write to either without knowing which
 one it actually has.
 
+`write_generation`'s own `validate` keyword (default `True`, unchanged
+behavior for every existing caller): a real, measured cost. Profiling a
+representative Backend V run found `normalize_row` — full schema
+presence/absence checks, then a per-field `isinstance` gauntlet on
+every row of every generation — as the single largest cost center in
+the whole run, ~36% of wall clock, ahead of the actual migrate/mutate/
+drift step. That check earns its cost for a row `normalize_row` cannot
+otherwise vouch for: a hand-edited or externally-produced row, or one
+`JSONLTrajectoryStore.read` is parsing back off disk. It earns nothing
+for a row `fim.engine`'s own run loop just built, in the same
+expression, from `ModelState.to_rows`/`fim.model.vectorized.
+vectorized_state_to_rows` — both of which construct every field
+already well-typed and in-bounds by construction (a real, finite
+`float` frequency in `(0, 1]`, a positive `int` id, a nonempty `str`
+run id), from a `ModelState`/`VectorizedState` whose own construction
+already enforced those same invariants. Re-running `normalize_row` on
+such a row cannot find a defect `ModelState`'s/`VectorizedState`'s own
+construction did not already rule out — it can only re-confirm what is
+already known, on every single row, every single generation. `fim.
+engine`'s own five internal call sites pass `validate=False`
+specifically because each one is provably in this position; no other
+caller in this codebase does, and a new one should not either without
+the same proof.
+
 <a id="fim.persistence.store.TrajectoryRow"></a>
 
 ## TrajectoryRow Objects
@@ -8002,11 +8048,29 @@ interface regardless of which concrete store it is actually given.
 #### write\_generation
 
 ```python
-def write_generation(run_id: str, generation: int,
-                     rows: Iterable[Mapping[str, Any]]) -> None
+def write_generation(run_id: str,
+                     generation: int,
+                     rows: Iterable[Mapping[str, Any]],
+                     *,
+                     validate: bool = True) -> None
 ```
 
 Persist all rows for one generation.
+
+**Arguments**:
+
+- `run_id` - This batch's own run identity.
+- `generation` - This batch's own generation number.
+- `rows` - The rows themselves.
+- `validate` - Whether to run every row through `normalize_row`'s
+  full schema/type/bounds check before writing it. Default
+  `True` is always safe — every existing caller keeps its
+  current behavior unchanged. `False` is an opt-in fast
+  path for a caller that already knows its own rows are
+  well-formed (this module's own top docstring has the
+  full reasoning and the two internal producers this
+  applies to); passing `False` for a row from anywhere
+  else is a real correctness risk, not a style choice.
 
 <a id="fim.persistence.store.TrajectoryStore.read"></a>
 
@@ -8089,11 +8153,18 @@ Restore everything but `_lock`, then rebuild a fresh one.
 #### write\_generation
 
 ```python
-def write_generation(run_id: str, generation: int,
-                     rows: Iterable[Mapping[str, Any]]) -> None
+def write_generation(run_id: str,
+                     generation: int,
+                     rows: Iterable[Mapping[str, Any]],
+                     *,
+                     validate: bool = True) -> None
 ```
 
-Append one validated generation.
+Append one generation, validated unless the caller vouches for it.
+
+See this module's own top docstring for exactly what
+`validate=False` skips, and why it is safe only for the two
+internal row producers named there.
 
 <a id="fim.persistence.store.InMemoryTrajectoryStore.read"></a>
 
@@ -9334,9 +9405,10 @@ not a bug to raise on.
 #### statistics\_report
 
 ```python
-def statistics_report(
-        table: FrequencyTable,
-        deme_weights: DemeWeights = None) -> DifferentiationReport
+def statistics_report(table: FrequencyTable,
+                      deme_weights: DemeWeights = None,
+                      *,
+                      validate: bool = True) -> DifferentiationReport
 ```
 
 Return the scalar statistics block consumed by an engine report.
@@ -9353,23 +9425,44 @@ deme weighting as specified by their definitions. ``deme_weights`` is
 applied only to ``E_ST``; pass relative deme sizes to request its native
 size-weighted form.
 
-Validates `table` exactly once, then computes every field from that
-one already-validated `demes` tuple directly, via each statistic's
-own private `_..._from_demes` core — not by calling the public
-`h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st` functions, which would each
-independently re-validate (and, for `g_st`/`jost_d`, re-derive
-`H_S`/`H_T` a second time) the identical data this function already
-validated at its own top. Measured, not assumed, to be a real cost:
-profiling `_convergence_values_vectorized`'s own reference-scale hot
-path found roughly eleven full validation passes over the same table
-per call before this fix (`20260903-claude-sonnet-5-fim-vg-
-performance-campaign-design.md` §6.1 item 3) — one here, plus one
-inside each of `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st`, plus a
-further two apiece inside `g_st`/`jost_d`'s own internal `h_s`/`h_t`
-calls. Every public statistic function's own standalone behavior for
-a caller who invokes it directly, with genuinely unvalidated input,
-is unchanged by this — only the redundant re-validation *through
-this function* is gone.
+Validates `table` exactly once (unless `validate=False`, see below),
+then computes every field from that one `demes` tuple directly, via
+each statistic's own private `_..._from_demes` core — not by calling
+the public `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st` functions, which
+would each independently re-validate (and, for `g_st`/`jost_d`,
+re-derive `H_S`/`H_T` a second time) the identical data this
+function already validated at its own top. Measured, not assumed, to
+be a real cost: profiling `_convergence_values_vectorized`'s own
+reference-scale hot path found roughly eleven full validation passes
+over the same table per call before this fix (`20260903-claude-
+sonnet-5-fim-vg-performance-campaign-design.md` §6.1 item 3) — one
+here, plus one inside each of `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/
+`k_st`, plus a further two apiece inside `g_st`/`jost_d`'s own
+internal `h_s`/`h_t` calls. Every public statistic function's own
+standalone behavior for a caller who invokes it directly, with
+genuinely unvalidated input, is unchanged by this — only the
+redundant re-validation *through this function* is gone.
+
+**Arguments**:
+
+- `table` - Every deme's own allele-frequency mapping.
+- `deme_weights` - See above.
+- `validate` - Whether `table` is run through `_validate_table`
+  (`True`, the default — always safe, unchanged behavior for
+  every existing caller) or trusted as already exactly
+  `Sequence[dict[int, float]]`, each deme already summing to
+  1, with `False` — an opt-in fast path for a caller that
+  already knows this, the same reasoning and the same
+  measured payoff as `fim.persistence.store.write_generation`'s
+  own `validate` keyword (that module's own top docstring has
+  the general argument). `fim.engine._statistics_for_locus_
+  vectorized` is the one caller that passes `False`: its own
+  `table` is built fresh, in the same expression, directly off
+  a `VectorizedState`'s own dense array (already-normalized by
+  construction, every key already a genuine `int`, every value
+  already a genuine `float`) — re-validating it here cannot
+  find a defect that construction did not already rule out,
+  only re-confirm one, on every locus, every generation.
 
 <a id="fim.statistics.interval"></a>
 

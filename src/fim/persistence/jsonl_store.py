@@ -20,7 +20,7 @@ import logging
 import threading
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fim.persistence.store import TrajectoryRow, normalize_row
 
@@ -77,12 +77,20 @@ class JSONLTrajectoryStore:
         run_id: str,
         generation: int,
         rows: Iterable[Mapping[str, Any]],
+        *,
+        validate: bool = True,
     ) -> None:
         """Append and flush all rows for one generation.
 
         Every row is validated (via `fim.persistence.store.
-        normalize_row`) before anything is written, so a malformed row
-        is rejected up front rather than partially written to disk.
+        normalize_row`) before anything is written by default, so a
+        malformed row is rejected up front rather than partially
+        written to disk — `validate=False` skips that for a caller
+        that already vouches for its own rows (`fim.persistence.store`'s
+        own top docstring has the full reasoning and which callers this
+        applies to; `json.dumps`'s own ``allow_nan=False`` below still
+        catches a non-finite frequency either way, as a last resort,
+        not a substitute for real validation on an untrusted row).
         ``handle.flush()`` hands this generation's bytes from Python's
         own internal buffer to the operating system right away, rather
         than leaving them sitting in memory until the file is
@@ -91,9 +99,12 @@ class JSONLTrajectoryStore:
         lost entirely if the process is interrupted or crashes before
         the file handle would otherwise have been closed.
         """
-        normalized_rows = [
-            normalize_row(row, run_id=run_id, generation=generation) for row in rows
-        ]
+        if validate:
+            normalized_rows = [
+                normalize_row(row, run_id=run_id, generation=generation) for row in rows
+            ]
+        else:
+            normalized_rows = [cast("TrajectoryRow", dict(row)) for row in rows]
         if not normalized_rows:
             raise ValueError("a generation must contain at least one row")
         self.path.parent.mkdir(parents=True, exist_ok=True)

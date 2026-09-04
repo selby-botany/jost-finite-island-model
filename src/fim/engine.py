@@ -619,7 +619,10 @@ class SequentialAdvancer:
                 jit=self._jit,
             )
             store.write_generation(
-                lane.run_id, lane.state.generation, lane.state.to_rows(lane.run_id)
+                lane.run_id,
+                lane.state.generation,
+                lane.state.to_rows(lane.run_id),
+                validate=False,
             )
             values = _convergence_values(lane.state, lane.params)
             lane.monitor.record(lane.state.generation, values)
@@ -901,6 +904,7 @@ class VectorizedAdvancer:
                 lane.run_id,
                 stepped.generation,
                 vectorized_state_to_rows(stepped, lane.run_id),
+                validate=False,
             )
             lane.vectorized_state = stepped
             values = _convergence_values_vectorized(stepped, lane.params)
@@ -981,7 +985,9 @@ def _build_replica_lane(
         if lane_params.mutation_model == "finite_alleles"
         else None
     )
-    store.write_generation(lane_run_id, state.generation, state.to_rows(lane_run_id))
+    store.write_generation(
+        lane_run_id, state.generation, state.to_rows(lane_run_id), validate=False
+    )
     monitor.record(state.generation, _convergence_values(state, lane_params))
     return ReplicaLane(
         replica_index=replica_index,
@@ -2210,7 +2216,9 @@ def _run_one(
     # criterion at the very start still gets a correctly recorded
     # generation-zero observation, and a later replay of the persisted
     # trajectory always has a real starting frame to show, not a gap.
-    store.write_generation(run_id, state.generation, state.to_rows(run_id))
+    store.write_generation(
+        run_id, state.generation, state.to_rows(run_id), validate=False
+    )
     monitor.record(
         state.generation,
         _convergence_values(state, params),
@@ -2230,7 +2238,9 @@ def _run_one(
     debug_enabled = logger.isEnabledFor(logging.DEBUG)
     while not monitor.should_stop():
         state = step(state, params, registry, rng, finite_alleles=finite_alleles)
-        store.write_generation(run_id, state.generation, state.to_rows(run_id))
+        store.write_generation(
+            run_id, state.generation, state.to_rows(run_id), validate=False
+        )
         values = _convergence_values(state, params)
         monitor.record(state.generation, values)
         if debug_enabled:

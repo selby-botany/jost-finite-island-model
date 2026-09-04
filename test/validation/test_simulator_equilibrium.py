@@ -193,9 +193,11 @@ class _DiscardingStore:
         run_id: str,
         generation: int,
         rows: Iterable[Mapping[str, Any]],
+        *,
+        validate: bool = True,
     ) -> None:
         """Accept and discard one generation's rows."""
-        del run_id, generation, rows
+        del run_id, generation, rows, validate
 
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Yield nothing; no trajectory is retained."""
