@@ -30,6 +30,10 @@
     - [Installing it](#installing-it)
     - [Using it from the command line](#using-it-from-the-command-line)
   - [Appendix A. Graphical front-end sketches](#appendix-a-graphical-front-end-sketches)
+  - [Appendix B. Engine backend benchmark results](#appendix-b-engine-backend-benchmark-results)
+    - [B.1 `d` (deme count) sweep](#b1-d-deme-count-sweep)
+    - [B.2 G thread-count sweep](#b2-g-thread-count-sweep)
+    - [B.3 Locus length (capacity) sweep](#b3-locus-length-capacity-sweep)
   - [Metadata](#metadata)
     - [Revisions](#revisions)
 
