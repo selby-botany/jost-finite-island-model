@@ -90,6 +90,47 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is materialized once per replicate, only when it stops, not once per
   generation. No change to what any run computes (existing bit-for-bit
   and statistical parity tests against `"lineal"` pass unchanged).
+- `migrate_vectorized` no longer builds a dense `(d, d)` weight matrix
+  for a plain scalar migration rate — a new `migrate_vectorized_
+  symmetric` computes the identical blend directly, `O(d * capacity)`
+  instead of `O(d^2 * capacity)` to build the matrix alone. Measured at
+  several-thousand-fold for the matrix build itself at large `d`
+  (`d=2000`: 8.88s → <0.0004s); the dense-matrix path stays available,
+  unchanged, for a genuine caller-supplied weight matrix.
+- `engine_backend="auto"` now also checks every locus's own capacity
+  (`4 ** length` under `finite_alleles`), not `d` alone, against a new
+  `auto_vector_max_capacity` setting (default 1024) before resolving to
+  `"generational-vector"` — closes a real gap where a large-`d`,
+  large-capacity config could resolve to the array-native backend
+  inside a range it actually loses in.
+- `fim.statistics.differentiation`'s public functions (`h_s`, `h_t`,
+  `g_st`, `jost_d`, `e_st`, `k_st`) no longer each independently
+  re-validate the same frequency table `statistics_report` already
+  validated — roughly eleven redundant validation passes per
+  `statistics_report()` call down to one. Measured at the reference
+  scale: `_convergence_values_vectorized`'s own share of the per-
+  generation step+convergence loop dropped from 60% to 17.5% of loop
+  total, a 4.36x reduction in its own cost.
+- `mutate_vectorized`'s per-deme renormalization no longer converts an
+  entire `capacity`-wide, almost-all-zero row to a Python list just to
+  sum it — restricted to the row's own nonzero entries first, which
+  `math.fsum`'s own running-sum semantics make bit-for-bit equivalent
+  to the full-width call, not an approximation. Measured at the
+  reference scale: the whole step+convergence loop dropped from 3.227s
+  to 1.452s (2.22x), `mutate_vectorized`'s own share from 2.026s to
+  0.585s (3.46x). A same-shaped sibling bug in `vectorized_state_to_
+  model_state` (`enumerate(row)` instead of `np.flatnonzero(row)`)
+  fixed the same way.
+- `step()`'s `migrate`/`mutate`/`drift` chain no longer pays full
+  `ModelState` validation three times per generation — only `drift`'s
+  own final, generation-ending output needs it; `migrate`'s and
+  `mutate`'s own intermediate output is immediately consumed by the
+  next operator, never exposed raw. `ModelState` gained a `validate:
+  InitVar[bool]` (not a stored field) that skips only the per-allele
+  checks, never the structural ones, and never the transform either
+  way — confirmed bit-for-bit identical to `"lineal"`'s own output by
+  the full test suite (1034 passed, 0 failures), not merely reasoned
+  about.
 - `install.sh` no longer fails at the very end of an otherwise-successful
   install with `bash: line 1: tmp_dir: unbound variable`. `tmp_dir` was
   declared `local` to `main`, but the `trap ... EXIT` referencing it
