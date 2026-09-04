@@ -98,6 +98,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   under `set -o nounset` on every run, real or fake. `tmp_dir` is now a
   script-global; confirmed against a real end-to-end dry run (exit 0,
   no stray error, temp directory actually removed).
+- `install.sh` no longer prints an alarming, misleading `curl: (23)
+  Failure writing output to destination` line on every single
+  successful run. `resolve_version` piped `curl` straight into `grep
+  -m1`, which closes its own stdin the instant it finds a match while
+  `curl` may still be mid-write on the response's later bytes —
+  confirmed directly on a real Ubuntu 24.04 host, not assumed. The
+  install itself was never actually broken by this (the failing
+  pipeline runs inside `version=$(resolve_version)`'s own command
+  substitution, a subshell bash does not run under `errexit` by
+  default), but the stderr noise looked exactly like a real failure
+  right before "Installed fim 1.2.0". Fixed by capturing the response
+  once before parsing it, removing the live pipe entirely.
 
 ---
 

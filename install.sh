@@ -73,13 +73,29 @@ resolve_version() {
         printf '%s\n' "${FIM_INSTALL_VERSION}"
         return 0
     fi
-    local api_url tag
+    local api_url response tag
     api_url="https://api.github.com/repos/${repo}/releases/latest"
-    tag=$(
-        curl -fsSL "${api_url}" \
-            | grep -m1 '"tag_name"' \
-            | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/'
-    )
+    # Capture the whole response before parsing it, rather than piping
+    # curl straight into `grep -m1` -- confirmed directly (not assumed)
+    # on a real Ubuntu 24.04 host: `grep -m1` closes its own stdin the
+    # instant it has a match, and curl -- still mid-write on this
+    # response's later bytes when that happens -- gets `EPIPE` and
+    # prints `curl: (23) Failure writing output to destination` to
+    # stderr on every single run, even though `tag` still comes out
+    # correct every time (this function only ever runs inside the
+    # outer `version=$(resolve_version)` call site, whose own command
+    # substitution is a subshell that does not inherit `errexit` by
+    # default -- `shopt inherit_errexit` -- so the inner pipeline's
+    # `pipefail`-computed nonzero status, real as it is, never actually
+    # aborts anything). Not a correctness bug, but a genuinely alarming,
+    # misleading line of stderr noise on every successful install --
+    # worth removing outright, not just tolerating: `curl` writes its
+    # response in one pass into `response` with nothing downstream free
+    # to close the connection early, so there is no pipe left for it to
+    # race against.
+    response=$(curl -fsSL "${api_url}") || die "could not reach ${api_url}"
+    tag=$(grep -m1 '"tag_name"' <<<"${response}" \
+        | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
     [[ -n "${tag}" ]] || die "could not determine the latest release tag from ${api_url}"
     printf '%s\n' "${tag}"
 }
