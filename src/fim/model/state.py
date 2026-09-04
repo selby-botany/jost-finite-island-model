@@ -19,7 +19,7 @@ from __future__ import annotations
 import copyreg
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass
 from types import MappingProxyType
 from typing import Any
 
@@ -86,14 +86,21 @@ class ModelState:
             maps — ``frequencies[deme_index][locus_index]`` is that one
             deme's one locus's own allele-to-frequency mapping.
         generation: Non-negative generation represented by this state.
+        validate: Construction-only, not a stored field (a
+            ``dataclasses.InitVar`` — excluded from equality, ``repr``,
+            hashing, and ``dataclasses.fields()``, and defaults back to
+            ``True`` on every ``dataclasses.replace()`` unless passed
+            explicitly). See `__post_init__` for what it skips and why
+            that is safe.
     """
 
     loci: tuple[LocusSpec, ...]
     frequencies: tuple[tuple[FrequencyMap, ...], ...]
     generation: int = 0
+    validate: InitVar[bool] = True
 
-    def __post_init__(self) -> None:
-        """Normalize maps and enforce the probability-vector invariant.
+    def __post_init__(self, validate: bool) -> None:
+        """Normalize maps and, unless told otherwise, enforce every invariant.
 
         Runs automatically right after every field is assigned (this is
         what `dataclass` calls `__post_init__` for) — this is where every
@@ -102,7 +109,16 @@ class ModelState:
         supplying the same number of loci, and (via
         `_normalize_frequency_map`, below) every individual frequency map
         actually summing to 1. A `ModelState` that survives construction
-        at all is therefore guaranteed valid everywhere else it is used.
+        at all is therefore guaranteed valid everywhere else it is used —
+        this class's own structural checks, right below, always run,
+        regardless of `validate`; only `_normalize_frequency_map`'s own
+        per-map checks (the expensive, per-allele ones) are what
+        `validate=False` skips, via that function's own `validate`
+        argument, never the transform it performs either way. See that
+        function's own docstring for the full argument for why this is
+        safe — this class's own default (`validate=True`) is unchanged
+        for the public constructor and every caller of it that does not
+        explicitly opt out.
         """
         loci = tuple(self.loci)
         if not loci:
@@ -127,6 +143,7 @@ class ModelState:
                         _normalize_frequency_map(
                             frequency_map,
                             context=(f"deme {deme_index}, locus {locus.locus_id}"),
+                            validate=validate,
                         )
                     )
                 )
@@ -339,8 +356,9 @@ def _normalize_frequency_map(
     frequency_map: Mapping[AlleleId, float],
     *,
     context: str,
+    validate: bool = True,
 ) -> MutableFrequencyMap:
-    """Copy and validate one sparse probability vector.
+    """Copy [, and validate] one sparse probability vector.
 
     Allele identity uses the same `parse_integer_identifier` rule as
     the config parser's own `p_0` handling — this is `ModelState`'s
@@ -348,6 +366,25 @@ def _normalize_frequency_map(
     directly (not only through YAML config), so it needs the identical
     guard against a truncated float (`1.9` silently becoming `1`) or a
     negative identifier sneaking through as a bare Python key (S5).
+
+    `validate=False` skips every check below (the negative-identifier
+    guard, the finite/non-negative frequency checks, the non-empty
+    check, and the sum-to-1 check with the full `fsum` pass it needs)
+    but performs the *identical* transform either way — identity
+    parsing, `AlleleId` wrapping, `float()` conversion, and the
+    `frequency > 0.0` filter that decides which entries survive into
+    `normalized` all run unconditionally, in the same order, so the
+    returned dict is byte-for-byte the same as the fully-checked path
+    would produce for any input that already passes those checks.
+    `ModelState.__post_init__` uses this for `migrate`'s and `mutate`'s
+    own intermediate output within `step()` — data this project's own
+    trusted internal operators just produced and immediately re-consume
+    as the next operator's input, never exposed to a caller raw — while
+    keeping the public constructor's own default (`validate=True`)
+    unchanged for every other caller, including `drift`'s own
+    generation-ending construction
+    (`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+    §6.3 item 3).
     """
     normalized: MutableFrequencyMap = {}
     for raw_allele_id, raw_frequency in frequency_map.items():
@@ -355,18 +392,20 @@ def _normalize_frequency_map(
             f"{context}: allele ID {raw_allele_id!r} must be an integer",
             raw_allele_id,
         )
-        if identity < 0:
+        if validate and identity < 0:
             raise ValueError(
                 f"{context}: allele ID {raw_allele_id!r} must be a non-negative integer"
             )
         allele_id = AlleleId(identity)
         frequency = float(raw_frequency)
-        if not math.isfinite(frequency):
+        if validate and not math.isfinite(frequency):
             raise ValueError(f"{context}: frequencies must be finite")
-        if frequency < 0.0:
+        if validate and frequency < 0.0:
             raise ValueError(f"{context}: frequencies must be non-negative")
         if frequency > 0.0:
             normalized[allele_id] = frequency
+    if not validate:
+        return normalized
     if not normalized:
         raise ValueError(f"{context}: at least one allele must be present")
     total = math.fsum(normalized.values())

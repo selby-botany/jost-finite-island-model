@@ -125,6 +125,104 @@ def test_direct_construction_rejects_malformed_allele_ids(
         )
 
 
+def test_validate_false_produces_byte_identical_frequencies_for_valid_input() -> None:
+    """`validate=False` changes nothing about a valid state's own stored data.
+
+    Direct, mechanism-level proof for the `step()`-internal fast path
+    (`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+    §6.3 item 3, `migrate`'s/`mutate`'s own `ModelState(..., validate=
+    False)` calls): for input that already satisfies every check
+    `validate=True` would run, the resulting `.frequencies` structure —
+    same keys, same `AlleleId` types, same float values, same
+    `MappingProxyType` wrapping — is exactly equal either way. Not an
+    integration-level "does the whole pipeline still match" check (the
+    existing `LinealBackend`/`GenerationalBackend` golden-parity and
+    equilibrium suites already cover that, unchanged and still passing);
+    this isolates the one function whose own contract this change
+    actually touches.
+    """
+    frequencies = (
+        (
+            {AlleleId(0): 0.25, AlleleId(1): 0.75},
+            {AlleleId(0): 1.0},
+        ),
+        (
+            {AlleleId(0): 0.5, AlleleId(1): 0.5},
+            {AlleleId(1): 1.0},
+        ),
+    )
+    checked = ModelState(
+        loci=(LocusSpec(1, 100), LocusSpec(2, 200)),
+        frequencies=frequencies,
+        generation=4,
+    )
+    unchecked = ModelState(
+        loci=(LocusSpec(1, 100), LocusSpec(2, 200)),
+        frequencies=frequencies,
+        generation=4,
+        validate=False,
+    )
+    assert checked == unchecked
+    assert checked.frequencies == unchecked.frequencies
+    for deme_index in range(checked.deme_count):
+        for locus_index in range(checked.locus_count):
+            checked_map = checked.frequency_map(deme_index, locus_index)
+            unchecked_map = unchecked.frequency_map(deme_index, locus_index)
+            assert dict(checked_map) == dict(unchecked_map)
+            for allele_id, value in checked_map.items():
+                # Exact float equality, not `pytest.approx` -- the whole
+                # point is that skipping the checks cannot change a
+                # single bit of a value that was already going to pass
+                # them.
+                assert unchecked_map[allele_id] == value
+
+
+def test_validate_false_still_enforces_every_structural_check() -> None:
+    """`validate=False` only ever reaches `_normalize_frequency_map`'s
+    own per-allele checks -- `ModelState.__post_init__`'s own
+    structural checks (empty loci, duplicate locus IDs, a negative
+    generation, a deme/locus-count mismatch) run unconditionally either
+    way, matching `__post_init__`'s own docstring.
+    """
+    with pytest.raises(ValueError, match="at least one locus"):
+        ModelState(loci=(), frequencies=(), validate=False)
+    with pytest.raises(ValueError, match="non-negative integer"):
+        ModelState(
+            loci=(LocusSpec(1, 100),),
+            frequencies=(({AlleleId(0): 1.0},),),
+            generation=-1,
+            validate=False,
+        )
+    with pytest.raises(ValueError, match="loci; expected"):
+        ModelState(
+            loci=(LocusSpec(1, 100), LocusSpec(2, 100)),
+            frequencies=(({AlleleId(0): 1.0},),),  # only one locus map
+            validate=False,
+        )
+
+
+def test_validate_false_skips_only_the_per_allele_checks() -> None:
+    """The documented trust boundary, made explicit: `validate=False`
+    really does skip the sum-to-1/finite/non-negative checks
+    `_normalize_frequency_map` would otherwise run -- input that would
+    be rejected under `validate=True` is accepted (and silently
+    filtered/coerced exactly as the checked path would have shaped it,
+    had it not raised first) under `validate=False`. This is the
+    documented, deliberate cost of the fast path: it is only ever
+    reached with data `step()`'s own `migrate`/`mutate` just produced,
+    never with untrusted input.
+    """
+    frequencies = (({AlleleId(0): 0.4},),)  # sums to 0.4, not 1
+    with pytest.raises(ValueError, match="sum to"):
+        ModelState(loci=(LocusSpec(1, 100),), frequencies=frequencies)
+    unchecked = ModelState(
+        loci=(LocusSpec(1, 100),),
+        frequencies=frequencies,
+        validate=False,
+    )
+    assert dict(unchecked.frequency_map(0, 0)) == {AlleleId(0): 0.4}
+
+
 @pytest.mark.parametrize(
     ("frequency", "message"),
     [

@@ -9087,6 +9087,62 @@ already been guarded against exactly this, but `ModelState`'s
 public constructor, reachable by a downstream embedder directly and
 not only through YAML config, retained the defect verbatim.
 
+<a id="model.test_state.test_validate_false_produces_byte_identical_frequencies_for_valid_input"></a>
+
+#### test\_validate\_false\_produces\_byte\_identical\_frequencies\_for\_valid\_input
+
+```python
+def test_validate_false_produces_byte_identical_frequencies_for_valid_input(
+) -> None
+```
+
+`validate=False` changes nothing about a valid state's own stored data.
+
+Direct, mechanism-level proof for the `step()`-internal fast path
+(`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+§6.3 item 3, `migrate`'s/`mutate`'s own `ModelState(..., validate=
+False)` calls): for input that already satisfies every check
+`validate=True` would run, the resulting `.frequencies` structure —
+same keys, same `AlleleId` types, same float values, same
+`MappingProxyType` wrapping — is exactly equal either way. Not an
+integration-level "does the whole pipeline still match" check (the
+existing `LinealBackend`/`GenerationalBackend` golden-parity and
+equilibrium suites already cover that, unchanged and still passing);
+this isolates the one function whose own contract this change
+actually touches.
+
+<a id="model.test_state.test_validate_false_still_enforces_every_structural_check"></a>
+
+#### test\_validate\_false\_still\_enforces\_every\_structural\_check
+
+```python
+def test_validate_false_still_enforces_every_structural_check() -> None
+```
+
+`validate=False` only ever reaches `_normalize_frequency_map`'s
+own per-allele checks -- `ModelState.__post_init__`'s own
+structural checks (empty loci, duplicate locus IDs, a negative
+generation, a deme/locus-count mismatch) run unconditionally either
+way, matching `__post_init__`'s own docstring.
+
+<a id="model.test_state.test_validate_false_skips_only_the_per_allele_checks"></a>
+
+#### test\_validate\_false\_skips\_only\_the\_per\_allele\_checks
+
+```python
+def test_validate_false_skips_only_the_per_allele_checks() -> None
+```
+
+The documented trust boundary, made explicit: `validate=False`
+really does skip the sum-to-1/finite/non-negative checks
+`_normalize_frequency_map` would otherwise run -- input that would
+be rejected under `validate=True` is accepted (and silently
+filtered/coerced exactly as the checked path would have shaped it,
+had it not raised first) under `validate=False`. This is the
+documented, deliberate cost of the fast path: it is only ever
+reached with data `step()`'s own `migrate`/`mutate` just produced,
+never with untrusted input.
+
 <a id="model.test_state.test_from_rows_rejects_boolean_string_and_out_of_bounds_frequencies"></a>
 
 #### test\_from\_rows\_rejects\_boolean\_string\_and\_out\_of\_bounds\_frequencies

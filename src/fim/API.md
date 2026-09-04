@@ -6209,16 +6209,22 @@ still holding a reference to it.
   maps — ``frequencies[deme_index][locus_index]`` is that one
   deme's one locus's own allele-to-frequency mapping.
 - `generation` - Non-negative generation represented by this state.
+- `validate` - Construction-only, not a stored field (a
+  ``dataclasses.InitVar`` — excluded from equality, ``repr``,
+  hashing, and ``dataclasses.fields()``, and defaults back to
+  ``True`` on every ``dataclasses.replace()`` unless passed
+  explicitly). See `__post_init__` for what it skips and why
+  that is safe.
 
 <a id="fim.model.state.ModelState.__post_init__"></a>
 
 #### \_\_post\_init\_\_
 
 ```python
-def __post_init__() -> None
+def __post_init__(validate: bool) -> None
 ```
 
-Normalize maps and enforce the probability-vector invariant.
+Normalize maps and, unless told otherwise, enforce every invariant.
 
 Runs automatically right after every field is assigned (this is
 what `dataclass` calls `__post_init__` for) — this is where every
@@ -6227,7 +6233,16 @@ at least one locus and one deme, unique locus IDs, every deme
 supplying the same number of loci, and (via
 `_normalize_frequency_map`, below) every individual frequency map
 actually summing to 1. A `ModelState` that survives construction
-at all is therefore guaranteed valid everywhere else it is used.
+at all is therefore guaranteed valid everywhere else it is used —
+this class's own structural checks, right below, always run,
+regardless of `validate`; only `_normalize_frequency_map`'s own
+per-map checks (the expensive, per-allele ones) are what
+`validate=False` skips, via that function's own `validate`
+argument, never the transform it performs either way. See that
+function's own docstring for the full argument for why this is
+safe — this class's own default (`validate=True`) is unchanged
+for the public constructor and every caller of it that does not
+explicitly opt out.
 
 <a id="fim.model.state.ModelState.deme_count"></a>
 

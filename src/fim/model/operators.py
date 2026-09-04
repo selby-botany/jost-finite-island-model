@@ -1016,10 +1016,19 @@ def migrate(
         demes = _migrate_symmetric(state, float(m), symmetric_sizes, rng=rng, jit=jit)
     else:
         demes = _migrate_matrix(state, m, sizes=matrix_sizes, rng=rng)
+    # `validate=False`: this is `step()`'s own intermediate state,
+    # immediately consumed as `mutate`'s input, never returned to a
+    # caller raw -- `ModelState.__post_init__`'s own docstring, and
+    # `_normalize_frequency_map`'s, have the full argument for why
+    # skipping the per-allele checks here (not the transform, which
+    # still runs identically) cannot change what gets computed
+    # (`20260903-claude-sonnet-5-fim-vg-performance-campaign-design.md`
+    # §6.3 item 3).
     return ModelState(
         loci=state.loci,
         frequencies=demes,
         generation=state.generation,
+        validate=False,
     )
 
 
@@ -1547,10 +1556,18 @@ def mutate(
                 )
             locus_maps.append(_normalize(mutated))
         demes.append(tuple(locus_maps))
+    # `validate=False`: this is `step()`'s own intermediate state,
+    # immediately consumed as `drift`'s input, never returned to a
+    # caller raw -- see `migrate`'s own identical comment, above, and
+    # `_normalize_frequency_map`'s own docstring for the full argument.
+    # `_normalize`, just above, already guarantees every locus map here
+    # is positive-only and sums to 1 within float precision, on top of
+    # that.
     return ModelState(
         loci=state.loci,
         frequencies=tuple(demes),
         generation=state.generation,
+        validate=False,
     )
 
 
