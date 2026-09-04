@@ -142,6 +142,16 @@ a finding worth keeping belongs in prose (a design document, an issue,
 a commit message), the way every earlier benchmark sweep in this
 project's own history was recorded.
 
+`--config` optionally overrides the four settings *not* being swept
+(`N`, `d`, `m`, `mu`, plus locus length) from a real `fim` config file
+-- the exact same file `fim run` reads, so a config already written for
+one purpose can be pointed at this tool too. Without it, this tool
+falls back to its own long-standing built-in reference-scale values,
+unchanged from before this option existed. The config must describe a
+single locus and plain, single-number `N`/`m`/`mu` (not the per-deme or
+per-locus shapes a real run can also use) -- this tool has only ever
+modeled that simpler case.
+
 ## `benchmark-queue`
 
 **What it does:** Takes a list of commands (almost always several

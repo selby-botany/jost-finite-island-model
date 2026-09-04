@@ -72,10 +72,29 @@ Findings worth keeping get written up as prose (this project's own
 established practice for every prior benchmark sweep), not as a
 versioned raw-numbers artifact.
 
+`--config` overrides the fixed (non-swept) baseline -- `N`, `d`, `m`,
+`mu`, and locus length -- from a real `fim` YAML config file, the exact
+same format and `SimulationParams.from_mapping` validation `fim run`
+itself uses, rather than this tool's own compiled-in reference-scale
+constants (`DEFAULT_D`/`DEFAULT_N`/`DEFAULT_MU`/`DEFAULT_M`/`DEFAULT_
+LOCUS_LENGTH`, still used for whichever of those a config does not
+mention, and for every field when no `--config` is given at all --
+every existing invocation with no `--config` behaves identically to
+before this option existed). The config's own value for whichever
+field `--sweep` is actually varying is simply never consulted -- `
+--values` always drives that one. The config must describe exactly one
+locus (this tool has only ever modeled one) and a scalar, symmetric
+`m`/`N`/`mu` (a caller-supplied migration matrix, or a per-deme `N`, or
+a per-locus `mu`, all valid in a real `fim` config, have no single
+scalar this tool could hold fixed while sweeping something else) --
+rejected with a clear error, not silently narrowed to one entry, if the
+config supplies either.
+
 Usage:
     dev/bin/benchmark-engines --sweep d \\
         --values 4,10,20,35,50,80,120 --replicates 16 \\
         --generations 100 --trials 3 \\
+        --config my-baseline.yaml \\
         --output /tmp/benchmark-d-sweep.json
 """
 
@@ -89,10 +108,14 @@ import statistics
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from importlib.metadata import version as installed_version
 from pathlib import Path
+from typing import NamedTuple
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
@@ -113,6 +136,75 @@ DEFAULT_N = 500
 DEFAULT_MU = 0.001
 DEFAULT_M = 0.05
 DEFAULT_LOCUS_LENGTH = 4  # capacity = 4**4 = 256, this project's own reference scale
+
+
+class FixedBaseline(NamedTuple):
+    """The five fields held fixed for whichever one `--sweep` is not varying.
+
+    Built once per invocation (`_load_fixed_baseline`), from either
+    `--config` or this module's own `DEFAULT_*` constants -- never
+    re-read per swept value, since none of these five ever changes
+    within one sweep (only the swept field's own value does, per point,
+    in `_measure_point`).
+    """
+
+    d: int
+    n: int
+    mu: float
+    m: float
+    locus_length: int
+
+
+def _load_fixed_baseline(config_path: Path | None) -> FixedBaseline:
+    """Return the fixed baseline from `--config`, or this module's own defaults.
+
+    `config_path=None` (no `--config` given) reproduces this tool's own
+    original, hardcoded-constant behavior exactly -- every sweep run
+    before this option existed is unaffected.
+
+    Args:
+        config_path: A real `fim` YAML config file, or `None`.
+
+    Returns:
+        The five fixed-baseline values, ready to feed `_measure_point`.
+
+    Raises:
+        ValueError: If the config's own `N`, `m`, or `mu` is not a
+            plain scalar (a per-deme `N`, a migration matrix, or a
+            per-locus `mu` -- all valid in a real `fim` config, none of
+            them a single fixed value this tool could hold while
+            sweeping something else), or if it describes anything other
+            than exactly one locus.
+    """
+    if config_path is None:
+        return FixedBaseline(
+            d=DEFAULT_D,
+            n=DEFAULT_N,
+            mu=DEFAULT_MU,
+            m=DEFAULT_M,
+            locus_length=DEFAULT_LOCUS_LENGTH,
+        )
+    payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"{config_path}: configuration root must be a mapping")
+    params = SimulationParams.from_mapping(payload)
+    if not isinstance(params.N, int):
+        raise ValueError(f"{config_path}: N must be a single scalar, not per-deme")
+    if not isinstance(params.m, int | float):
+        raise ValueError(f"{config_path}: m must be a scalar rate, not a matrix")
+    if not isinstance(params.mu, int | float):
+        raise ValueError(f"{config_path}: mu must be a single scalar, not per-locus")
+    if len(params.loci) != 1:
+        raise ValueError(
+            f"{config_path}: must describe exactly one locus, got {len(params.loci)}"
+        )
+    return FixedBaseline(
+        d=params.d,
+        n=params.N,
+        mu=params.mu,
+        m=params.m,
+        locus_length=params.loci[0].length,
+    )
 
 
 def _clock() -> datetime:
@@ -208,6 +300,7 @@ def _measure_point(
     field: SweepField,
     value: float,
     *,
+    baseline: FixedBaseline,
     replicates: int,
     generations: int,
     trials: int,
@@ -225,12 +318,18 @@ def _measure_point(
     entirely (`fim.model.vectorized`'s own batched decomposition) — two
     independent one-time compile costs, each needing its own untimed
     warm-up call, not one flag standing in for both.
+
+    Args:
+        baseline: The four other fields' own fixed values (`--config`,
+            or this module's own `DEFAULT_*` constants) -- consulted
+            for whichever of `d`/`N`/`mu`/`m`/`locus_length` is not
+            `field` itself.
     """
-    d = int(value) if field == "d" else DEFAULT_D
-    n = int(value) if field == "N" else DEFAULT_N
-    mu = float(value) if field == "mu" else DEFAULT_MU
-    m = float(value) if field == "m" else DEFAULT_M
-    locus_length = int(value) if field == "loci-length" else DEFAULT_LOCUS_LENGTH
+    d = int(value) if field == "d" else baseline.d
+    n = int(value) if field == "N" else baseline.n
+    mu = float(value) if field == "mu" else baseline.mu
+    m = float(value) if field == "m" else baseline.m
+    locus_length = int(value) if field == "loci-length" else baseline.locus_length
     if field not in {"d", "N", "mu", "m", "loci-length"}:
         raise ValueError(f"unknown sweep field: {field}")
 
@@ -458,6 +557,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--seed", type=int, default=20260902, help="Base RNG seed.")
     parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="Optional fim YAML config overriding the fixed (non-swept) "
+        "baseline -- N, d, m, mu, locus length. Same format and validation "
+        "as fim run's own config file; must describe exactly one locus and "
+        "scalar N/m/mu. Whichever field --sweep varies is read from "
+        "--values regardless, never from this file. Defaults to this "
+        "tool's own built-in reference-scale constants when omitted.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -465,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    baseline = _load_fixed_baseline(args.config)
     values = [float(v) for v in args.values.split(",")]
     warmed_up_generational_numba = [False]
     warmed_up_vector = [False]
@@ -472,6 +583,7 @@ def main(argv: list[str] | None = None) -> int:
         _measure_point(
             args.sweep,
             value,
+            baseline=baseline,
             replicates=args.replicates,
             generations=args.generations,
             trials=args.trials,
@@ -485,18 +597,21 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"Sweeping {args.sweep} over {values} "
         f"(replicates={args.replicates}, generations={args.generations}, "
-        f"trials={args.trials})"
+        f"trials={args.trials}, baseline={baseline}"
+        + (f", config={args.config}" if args.config is not None else "")
+        + ")"
     )
     _print_table(points)
 
     if args.output is not None:
         fingerprint = _environment_fingerprint()
         fixed = {
-            "N": DEFAULT_N,
-            "mu": DEFAULT_MU,
-            "m": DEFAULT_M,
-            "locus_length": DEFAULT_LOCUS_LENGTH,
-            "d": DEFAULT_D,
+            "N": baseline.n,
+            "mu": baseline.mu,
+            "m": baseline.m,
+            "locus_length": baseline.locus_length,
+            "d": baseline.d,
+            "config": str(args.config) if args.config is not None else None,
             "replicates": args.replicates,
             "generations": args.generations,
             "trials": args.trials,
