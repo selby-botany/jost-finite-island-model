@@ -214,6 +214,9 @@ defines the complete scientific and architectural contract.
 - [Simulator design](doc/fim-simulator-design.md)
 - [Test plan](doc/fim-simulator-test-plan.md) — how this project knows
   its own numbers are trustworthy, written for a non-programmer
+- [Migration and identity conventions](doc/migration-conventions.md) —
+  mapping this project's own conventions onto cited papers, for anyone
+  comparing `fim`'s output against the literature
 
 ### Maintaining or extending the application
 

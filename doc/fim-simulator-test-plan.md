@@ -252,7 +252,9 @@ One specific hypothesis has since been checked and ruled out: the same
 migration-convention mismatch that explained an analogous gap against
 Ryman & Leimar (2008) — a redrawn-migrant pool that includes the home
 deme itself, versus this project's own pool of the four neighbors only
-— does not explain this one. Applying that same "pool includes self"
+(see [the migration-conventions reference](migration-conventions.md)
+for the full mapping) — does not explain this one. Applying that same
+"pool includes self"
 mapping to the torus moves the recursion's own exact prediction
 *further* from `0.172` (to about `0.374`), not closer
 (`test_crow_aoki_torus_under_the_papers_own_migration_convention`,
