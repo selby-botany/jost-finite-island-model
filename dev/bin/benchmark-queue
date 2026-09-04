@@ -358,6 +358,18 @@ def _resolve_command(command: tuple[str, ...]) -> list[str]:
     in the queue file (an argument that happens to look like a path,
     e.g. `--output some/file.json`, is that job's own business, not
     this tool's to reinterpret).
+
+    A job invoking a `#!/usr/bin/env python3`-shebang script (most
+    `dev/bin/*` tools in this repo) should give that script's own
+    interpreter explicitly as argv[0] -- `[sys.executable, "dev/bin/
+    benchmark-engines", ...]`, not `["dev/bin/benchmark-engines", ...]`
+    relying on the shebang -- on any machine with more than one
+    `python3` on `PATH`, `env python3` can silently resolve to the
+    wrong one (a real, already-hit case: this repo's own venvs need
+    Python 3.12 for `datetime.UTC`; a bare shebang found a system 3.10
+    instead and failed at runtime, not at queue-generation time).
+    `dev/bin/generate-heatmap-queue`'s own `_build_queue` does exactly
+    this.
     """
     program, *rest = command
     if program.startswith("/"):

@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Render a d x locus-length heatmap from `generate-heatmap-queue`'s own results.
+
+Reads every `result-len*.json` file `generate-heatmap-queue` pointed a
+`benchmark-engines --output` at (one per locus-length value, each
+holding one point per `d` value swept) and prints two grids: which
+backend actually won at each (d, length) point, and the `V`/`G-jit`
+wall-clock ratio there (below 1 means V is still ahead; above 1 means
+`"generational"` with `jit="numba"` has taken over) -- side by side, so
+the *shape* of the winning-backend boundary and *how much* it costs to
+be on the wrong side of it are both visible at once, without needing
+every raw second column `benchmark-engines`'s own table already prints.
+
+Usage:
+    dev/bin/render-heatmap /tmp/fim-heatmap
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from collections.abc import Callable
+from pathlib import Path
+
+_RESULT_NAME = re.compile(r"^result-len(\d+)\.json$")
+
+
+def _fastest_backend(point: dict[str, object]) -> str:
+    """Return whichever backend has the smallest wall-clock time at this point.
+
+    Same candidate set and tie-break as `benchmark-engines`'s own
+    `_print_table` (`"L"`/`"G-off"`/`"G-jit"`/`"V"`, `min` over whichever
+    are not `None` -- `"generational-vector"` reports `None` seconds,
+    with its own `vector_skip_reason` set, for a config outside its
+    enforced scope, and this project's history has at least one config
+    per session where that has actually happened).
+    """
+    candidates = {
+        "L": point["lineal_batch_seconds"],
+        "G-off": point["generational_jit_off_seconds"],
+        "G-jit": point["generational_jit_numba_seconds"],
+        "V": point["vector_seconds"],
+    }
+    real_candidates = {
+        name: seconds for name, seconds in candidates.items() if seconds is not None
+    }
+    if not real_candidates:
+        return "?"
+    return min(real_candidates, key=lambda name: real_candidates[name])  # type: ignore[arg-type,return-value]
+
+
+def _vector_over_generational_jit_ratio(point: dict[str, object]) -> str:
+    """Return `V / G-jit` seconds, formatted, or `"n/a"` if either is missing.
+
+    A separate function rather than a lambda purely so the two `float`
+    casts below have somewhere to live -- `point`'s own values are
+    typed `object` (a JSON payload with a `dict[str, object]` per
+    point, matching `_fastest_backend`'s own reasoning above), and a
+    lambda cannot hold a `# type: ignore` of its own.
+    """
+    vector_seconds = point.get("vector_seconds")
+    generational_jit_seconds = point.get("generational_jit_numba_seconds")
+    if vector_seconds is None or generational_jit_seconds is None:
+        return "n/a"
+    return f"{float(vector_seconds) / float(generational_jit_seconds):.2f}"  # type: ignore[arg-type]
+
+
+def _load_results(out_dir: Path) -> dict[int, dict[int, dict[str, object]]]:
+    """Return `{length: {d: point}}` from every `result-len*.json` in `out_dir`.
+
+    Raises:
+        ValueError: If `out_dir` has no matching result files at all --
+            almost always means `benchmark-queue` has not finished (or
+            has not even started) the queue `generate-heatmap-queue`
+            wrote, not that this tool is looking in the wrong place.
+    """
+    grid: dict[int, dict[int, dict[str, object]]] = {}
+    for path in sorted(out_dir.glob("result-len*.json")):
+        match = _RESULT_NAME.match(path.name)
+        if match is None:
+            continue
+        length = int(match.group(1))
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        grid[length] = {int(point["d"]): point for point in payload["points"]}
+    if not grid:
+        raise ValueError(
+            f"no result-len*.json files in {out_dir} -- has `benchmark-queue` "
+            "actually finished running the queue this directory's own "
+            "queue.json describes yet?"
+        )
+    return grid
+
+
+def _print_grid(
+    grid: dict[int, dict[int, dict[str, object]]],
+    *,
+    title: str,
+    cell: Callable[[dict[str, object]], str],
+) -> None:
+    """Print one d (rows) x length (columns) grid, formatting each cell with `cell`."""
+    lengths = sorted(grid)
+    d_values = sorted({d for points in grid.values() for d in points})
+    print(f"\n{title}")
+    header = f"{'d / length':>12}" + "".join(f"{length:>10}" for length in lengths)
+    print(header)
+    print("-" * len(header))
+    for d in d_values:
+        row = f"{d:>12}"
+        for length in lengths:
+            point = grid[length].get(d)
+            row += f"{cell(point) if point is not None else 'n/a':>10}"
+        print(row)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Load every result file in the given directory and print both grids."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "out_dir",
+        type=Path,
+        help="Directory generate-heatmap-queue wrote configs/queue.json into, "
+        "and benchmark-queue wrote result-len*.json into.",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        grid = _load_results(args.out_dir)
+    except (OSError, ValueError, json.JSONDecodeError, KeyError) as error:
+        print(f"render-heatmap: {error}", file=sys.stderr)
+        return 2
+
+    _print_grid(grid, title="Fastest backend", cell=_fastest_backend)
+    _print_grid(
+        grid,
+        title="V / G-jit wall-clock ratio (below 1.0 = V still ahead)",
+        cell=_vector_over_generational_jit_ratio,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

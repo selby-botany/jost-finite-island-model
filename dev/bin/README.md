@@ -11,11 +11,13 @@
   - [`compare-against-hierfstat`](#compare-against-hierfstat)
   - [`extract-release-notes`](#extract-release-notes)
   - [`generate-api-docs`](#generate-api-docs)
+  - [`generate-heatmap-queue`](#generate-heatmap-queue)
   - [`generate-help-html`](#generate-help-html)
+  - [`render-heatmap`](#render-heatmap)
   - [`validate-repository`](#validate-repository)
   - [Related documents](#related-documents)
 
-These ten commands keep the project trustworthy: they make sure the
+These twelve commands keep the project trustworthy: they make sure the
 documentation you read matches the code that actually runs, that a
 release's own history is recorded accurately, and that no credential or
 badly formed file ever gets committed. None of them run a simulation --
@@ -69,7 +71,9 @@ run by hand.
 | [`compare-against-hierfstat`](#compare-against-hierfstat) | Runs an independently-written simulator (hierfstat, an R package, inside Docker) alongside this project's own, and prints how closely the two agree |
 | [`extract-release-notes`](#extract-release-notes) | Pulls one version's own section out of `CHANGELOG.md`, for GitHub's release page |
 | [`generate-api-docs`](#generate-api-docs) | Rebuilds the generated API reference (`src/fim/API.md`) from the code's own docstrings |
+| [`generate-heatmap-queue`](#generate-heatmap-queue) | Writes a `benchmark-queue` file that measures every combination of deme count and locus length at once, to check whether the engines' own speed crossover is really a simple rectangle in that two-setting space |
 | [`generate-help-html`](#generate-help-html) | Rebuilds the desktop app's in-app Help screen content from `doc/usage.md`/`doc/configuration.md` |
+| [`render-heatmap`](#render-heatmap) | Turns `generate-heatmap-queue`'s own results into two readable grids: which engine won at each combination, and by how much |
 | [`validate-repository`](#validate-repository) | Runs every repository-hygiene checker (shell scripts, YAML, Markdown, leaked secrets) over the whole checkout |
 
 Every command supports `-h`/`--help` for the same explanation you are
@@ -549,6 +553,66 @@ file -- used by the freshness check described above, which renders into
 a temporary location and compares it against what is actually
 committed, rather than overwriting the real file just to check it.
 
+## `generate-heatmap-queue`
+
+**What it does:** `engine_backend="auto"` decides between two of this
+project's three engines using two separate settings, one for deme
+count (`auto_vector_min_d`) and one for locus length/capacity
+(`auto_vector_max_capacity`) -- as if the real line where one engine
+starts beating the other were a perfect rectangle in that two-setting
+space. Nobody had actually checked that: every speed measurement taken
+so far ([`benchmark-engines`](#benchmark-engines)) only ever varied one
+of those two settings at a time. This tool writes a
+[`benchmark-queue`](#benchmark-queue) file that measures every
+combination of several deme counts and several locus lengths at once,
+so the shape of that boundary becomes visible instead of assumed.
+
+**Why it matters:** Two settings can easily interact in a way neither
+one shows on its own -- the real boundary could be a diagonal line, not
+the rectangle two independent settings describe, and if it is, the
+current settings could be silently picking the slower engine somewhere
+nobody has looked yet. This tool's own generated file also demonstrates
+[`benchmark-queue`](#benchmark-queue)'s own concurrent-stage feature
+put to real use: every locus-length value's own measurement is
+independent of every other one, so they all run at the same time (one
+shared stage), rather than paying for a separate wait-for-quiet pause
+before each.
+
+**When to run it:** The same "otherwise idle machine" caveat
+`benchmark-engines` itself carries applies here too, and the same
+answer applies: on a machine with real spare capacity, several
+measurements really can run side by side without spoiling each
+other's numbers (see `benchmark-queue`'s own "why it matters" section
+above). Start with a deliberately coarse, widely-spaced set of values;
+read the result ([`render-heatmap`](#render-heatmap)); then run this
+tool again with a narrower, denser range centered on wherever the
+first pass actually found the boundary, rather than measuring the
+whole space in fine detail from the start -- most of it has already
+turned out to be one-sided in every measurement taken so far.
+
+**Usage:**
+
+```console
+dev/bin/generate-heatmap-queue \
+    --d-values 10,35,70,120,300 --length-values 5,6,7,8 \
+    --out-dir /tmp/fim-heatmap
+dev/bin/benchmark-queue /tmp/fim-heatmap/queue.json \
+    --log-dir /tmp/fim-heatmap/logs
+dev/bin/render-heatmap /tmp/fim-heatmap
+```
+
+`--d-values`/`--length-values` are the two axes of the grid (comma-
+separated; every value on one axis is measured against every value on
+the other). `--fixed-N`/`--fixed-m`/`--fixed-mu` hold the three other
+settings steady throughout (defaults match `benchmark-engines`'s own);
+`--replicates`/`--generations`/`--trials` size and repeat each
+individual measurement, exactly as the equivalent `benchmark-engines`
+flags do. `--out-dir` is where everything this tool and the two it
+hands off to (`benchmark-queue`, `render-heatmap`) produce actually
+lives -- one small config file per locus-length value, the queue file
+itself, and (once `benchmark-queue` has actually run it)
+`render-heatmap`'s own input files.
+
 ## `generate-help-html`
 
 **What it does:** Converts the two operational guides
@@ -587,6 +651,42 @@ With no arguments, overwrites the real, committed HTML files under
 `src/fim/gui/webui/help/`. `--output-dir PATH` writes to a scratch
 directory of your choosing instead, without touching the committed
 files -- used by the freshness check described above.
+
+## `render-heatmap`
+
+**What it does:** Reads every result file
+[`generate-heatmap-queue`](#generate-heatmap-queue) pointed a
+`benchmark-engines --output` at, and prints two grids -- deme count
+down the side, locus length across the top -- one showing which engine
+actually won at each combination, the other showing by how much
+(`"generational-vector"`'s own time divided by `"generational"`'s own,
+with JIT on; below `1.0` means the array-native engine is still ahead).
+
+**Why it matters:** A table of raw seconds, one per combination,
+answers "how long did this take" but not the actual question -- "does
+the boundary between the two engines bend." Seeing both engines'
+own winner and the size of the gap side by side, arranged the same way
+the two settings actually vary, makes that shape visible at a glance
+instead of requiring a reader to mentally cross-reference several
+separate `benchmark-engines` tables.
+
+**When to run it:** Once [`benchmark-queue`](#benchmark-queue) has
+actually finished running the queue file
+[`generate-heatmap-queue`](#generate-heatmap-queue) wrote -- this tool
+reads that run's own output files, not live data, so running it before
+the queue finishes finds nothing yet (and says so directly, rather than
+printing an empty or misleading grid).
+
+**Usage:**
+
+```console
+dev/bin/render-heatmap /tmp/fim-heatmap
+```
+
+The one argument is the same `--out-dir` directory
+[`generate-heatmap-queue`](#generate-heatmap-queue) was given -- this
+tool finds every `result-len*.json` file in it on its own; nothing
+else needs to be told which files to read.
 
 ## `validate-repository`
 

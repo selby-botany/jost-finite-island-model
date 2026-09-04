@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""Generate a d x locus-length heatmap sweep as a `benchmark-queue` file.
+
+`engine_backend="auto"` resolves between `"generational"` and
+`"generational-vector"` on two independent thresholds --
+`auto_vector_min_d` and `auto_vector_max_capacity` -- as if the real
+decision boundary between the two engines were a rectangle in (d,
+capacity) space. Nothing has actually tested that: every sweep so far
+(`dev/bin/benchmark-engines --sweep d` and `--sweep loci-length`,
+independently) only ever varied one axis while holding the other at a
+single reference value, which cannot see whether the two axes
+*interact* -- whether the real boundary is a rectangle, or a diagonal
+that a fixed pair of independent thresholds gets wrong in some corner.
+
+This tool builds that check as a `benchmark-queue` queue file: one
+small YAML config per locus-length value (`--length-values`, holding
+`N`/`m`/`mu` fixed at `--fixed-N`/`--fixed-m`/`--fixed-mu`), and one
+`benchmark-engines --sweep d --config <that file>` job per length
+value, each internally sweeping the *entire* `--d-values` list in one
+already-JIT-warmed invocation. All of them are independent of each
+other and each individually cheap enough (this project's own history:
+citrus-2's own 22 cores sit at load 1-5 even under several concurrent
+`benchmark-engines` invocations) to belong in one shared parallel
+stage, rather than paying for `length-values` separate rounds of
+`benchmark-queue`'s own idle wait.
+
+Coarse first, refine only where it matters: the botanically relevant
+question is not "what is the exact wall-clock time everywhere," it is
+"where does V stop winning" -- most of the parameter space this project
+has already swept turned out to be one-sided (V wins at every `d` from
+2 through 500 tested so far; the one real crossover found lives
+somewhere between locus length 7 and 8). Run this tool once with a
+deliberately coarse, wide `--d-values`/`--length-values` first; read
+the result (`dev/bin/render-heatmap`, this tool's own companion); then
+run this tool again with a narrower, denser range centered on wherever
+the coarse pass found the boundary, rather than paying for a single
+dense grid over the whole space up front. This tool does not automate
+that refinement step itself -- deciding where a crossover actually
+landed, and whether it is worth a second pass, is a judgment call for
+whoever is reading the first pass's own results, not a rule this tool
+could get right unattended.
+
+Usage:
+    dev/bin/generate-heatmap-queue \\
+        --d-values 10,35,70,120,300 --length-values 5,6,7,8 \\
+        --out-dir /tmp/fim-heatmap
+    dev/bin/benchmark-queue /tmp/fim-heatmap/queue.json \\
+        --log-dir /tmp/fim-heatmap/logs
+    dev/bin/render-heatmap /tmp/fim-heatmap
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# The same reference-scale defaults `benchmark-engines` itself compiles
+# in (`DEFAULT_N`/`DEFAULT_M`/`DEFAULT_MU`) -- kept in sync by eye, not
+# imported, since this tool only ever needs them as a *starting* default
+# a caller can override, not as the source of truth `benchmark-engines`
+# itself falls back to when no `--config` is given at all.
+_DEFAULT_FIXED_N = 500
+_DEFAULT_FIXED_M = 0.05
+_DEFAULT_FIXED_MU = 0.001
+_DEFAULT_REPLICATES = 16
+_DEFAULT_GENERATIONS = 100
+_DEFAULT_TRIALS = 3
+# Straddles the known length-7/length-8 crossover
+# (`doc/fim-simulator-design.md` Appendix B.3) from both sides, and the
+# `auto_vector_min_d=35` threshold similarly -- a starting point informed
+# by every 1D sweep already run, not an arbitrary range.
+_DEFAULT_D_VALUES = (10, 35, 70, 120, 300)
+_DEFAULT_LENGTH_VALUES = (5, 6, 7, 8)
+
+
+def _parse_int_list(raw: str, *, name: str) -> tuple[int, ...]:
+    """Parse a comma-separated list of positive integers."""
+    try:
+        values = tuple(int(part) for part in raw.split(","))
+    except ValueError as error:
+        raise ValueError(f"--{name} must be comma-separated integers") from error
+    if not values:
+        raise ValueError(f"--{name} must not be empty")
+    return values
+
+
+def _write_length_config(
+    out_dir: Path,
+    length: int,
+    *,
+    fixed_n: int,
+    fixed_m: float,
+    fixed_mu: float,
+    seed: int,
+) -> Path:
+    """Write one locus-length's own fixed-baseline YAML config.
+
+    `d` is set to `2` -- the smallest value `SimulationParams.from_
+    mapping` accepts at all (`d` must be at least 2 for a differentiation
+    statistic to mean anything), but never actually used for anything
+    here: every job this config feeds is `benchmark-engines --sweep d`,
+    which reads `d` from `--values` for every measured point and never
+    consults the config's own `d` at all (`_load_fixed_baseline`'s own
+    docstring in `benchmark-engines` states this contract explicitly).
+    """
+    config = {
+        "N": fixed_n,
+        "d": 2,
+        "m": fixed_m,
+        "mu": fixed_mu,
+        "seed": seed,
+        "loci": [{"length": length}],
+    }
+    config_path = out_dir / f"config-len{length}.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    return config_path
+
+
+def _build_queue(
+    *,
+    d_values: tuple[int, ...],
+    length_values: tuple[int, ...],
+    out_dir: Path,
+    replicates: int,
+    generations: int,
+    trials: int,
+    seed: int,
+    fixed_n: int,
+    fixed_m: float,
+    fixed_mu: float,
+) -> dict[str, object]:
+    """Build the `benchmark-queue` payload: one parallel stage, one job per length.
+
+    Each job's own command starts with `sys.executable` (this very
+    interpreter, whichever venv it actually is), not the bare string
+    `"dev/bin/benchmark-engines"` relying on that script's own `#!/usr/
+    bin/env python3` shebang -- `benchmark-queue` execs a job's argv
+    directly, and `env python3` on a machine with more than one `python3`
+    on `PATH` (a real, already-hit case: this repo's own `.venv-312`
+    needs Python 3.12 for `datetime.UTC`, and a bare `env python3` found
+    a system 3.10 instead) silently runs the wrong interpreter instead
+    of failing loudly at generation time. `str(ROOT / ...)` for the
+    script itself, not the bare relative path, since only a job's own
+    argv[0] gets resolved against `ROOT` by `benchmark-queue`'s own
+    `_resolve_command` -- once `sys.executable` occupies that slot, the
+    script path is just another argument to it.
+    """
+    d_values_arg = ",".join(str(value) for value in d_values)
+    jobs = []
+    for length in length_values:
+        config_path = _write_length_config(
+            out_dir,
+            length,
+            fixed_n=fixed_n,
+            fixed_m=fixed_m,
+            fixed_mu=fixed_mu,
+            seed=seed,
+        )
+        result_path = out_dir / f"result-len{length}.json"
+        jobs.append(
+            {
+                "label": f"heatmap-len{length}",
+                "command": [
+                    sys.executable,
+                    str(ROOT / "dev" / "bin" / "benchmark-engines"),
+                    "--sweep",
+                    "d",
+                    "--values",
+                    d_values_arg,
+                    "--replicates",
+                    str(replicates),
+                    "--generations",
+                    str(generations),
+                    "--trials",
+                    str(trials),
+                    "--seed",
+                    str(seed),
+                    "--config",
+                    str(config_path),
+                    "--output",
+                    str(result_path),
+                ],
+            }
+        )
+    return {"stages": [jobs]}
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Parse arguments, write per-length configs, and write the queue file."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--d-values",
+        default=",".join(str(value) for value in _DEFAULT_D_VALUES),
+        help=f"Comma-separated d values to sweep at every locus length "
+        f"(default: {','.join(str(v) for v in _DEFAULT_D_VALUES)}).",
+    )
+    parser.add_argument(
+        "--length-values",
+        default=",".join(str(value) for value in _DEFAULT_LENGTH_VALUES),
+        help="Comma-separated locus-length values -- one benchmark-engines "
+        f"job each (default: {','.join(str(v) for v in _DEFAULT_LENGTH_VALUES)}).",
+    )
+    parser.add_argument("--fixed-N", type=int, default=_DEFAULT_FIXED_N)
+    parser.add_argument("--fixed-m", type=float, default=_DEFAULT_FIXED_M)
+    parser.add_argument("--fixed-mu", type=float, default=_DEFAULT_FIXED_MU)
+    parser.add_argument("--replicates", type=int, default=_DEFAULT_REPLICATES)
+    parser.add_argument("--generations", type=int, default=_DEFAULT_GENERATIONS)
+    parser.add_argument("--trials", type=int, default=_DEFAULT_TRIALS)
+    parser.add_argument("--seed", type=int, default=20260902)
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        required=True,
+        help="Directory to write configs, the queue file, and (once "
+        "benchmark-queue actually runs it) each job's own --output JSON.",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        d_values = _parse_int_list(args.d_values, name="d-values")
+        length_values = _parse_int_list(args.length_values, name="length-values")
+    except ValueError as error:
+        print(f"generate-heatmap-queue: {error}", file=sys.stderr)
+        return 2
+
+    # Absolute, not whatever `--out-dir` was given as: `benchmark-queue`
+    # runs every job with `cwd=ROOT`, not this tool's own working
+    # directory, so a relative `--config`/`--output` path embedded in a
+    # generated command would resolve against the wrong directory the
+    # moment the queue actually runs.
+    args.out_dir = args.out_dir.resolve()
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    queue = _build_queue(
+        d_values=d_values,
+        length_values=length_values,
+        out_dir=args.out_dir,
+        replicates=args.replicates,
+        generations=args.generations,
+        trials=args.trials,
+        seed=args.seed,
+        fixed_n=args.fixed_N,
+        fixed_m=args.fixed_m,
+        fixed_mu=args.fixed_mu,
+    )
+    queue_path = args.out_dir / "queue.json"
+    queue_path.write_text(json.dumps(queue, indent=2) + "\n", encoding="utf-8")
+
+    point_count = len(d_values) * len(length_values)
+    print(
+        f"Wrote {queue_path} -- 1 stage, {len(length_values)} job(s) "
+        f"in parallel, {point_count} (d, length) point(s) total."
+    )
+    print(
+        f"Run it:   dev/bin/benchmark-queue {queue_path} --log-dir {args.out_dir}/logs"
+    )
+    print(f"Read it:  dev/bin/render-heatmap {args.out_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
