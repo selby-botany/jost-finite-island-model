@@ -1385,8 +1385,8 @@ parameters are stated with it, below.
 
 ### B.1 `d` (deme count) sweep
 
-Commit `8a07a97`, citrus-2 (Intel Core Ultra 9 185H, 22 threads,
-idle), 2026-09-03/04. Fixed: `N=500`, `m=0.05`, `mu=0.001`, locus
+Commit `8a07a97`, citrus-2 (Intel Core Ultra 9 185H, 22 threads, 93GB RAM,
+Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle), 2026-09-03/04. Fixed: `N=500`, `m=0.05`, `mu=0.001`, locus
 length 4 (capacity 256).
 
 ```console
@@ -1429,8 +1429,8 @@ grows (26x at `d=2` down to 9x at `d=120`).
 
 ### B.2 G thread-count sweep
 
-Commit `883c41e`, citrus-2 (Intel Core Ultra 9 185H, 22 threads,
-idle), 2026-09-03. `d=60`, `N=200`, `m=0.1`, `mu=0.02`, 8 replicates,
+Commit `883c41e`, citrus-2 (Intel Core Ultra 9 185H, 22 threads, 93GB RAM,
+Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle), 2026-09-03. `d=60`, `N=200`, `m=0.1`, `mu=0.02`, 8 replicates,
 150 forced generations (`convergence_window=150`), median of 3,
 `workers` ∈ {1,2,4,6,8,10} × `jit` ∈ {`"off"`, `"numba"`}, scheduled
 against a real core budget rather than run either fully serial or
@@ -1453,8 +1453,8 @@ present at `workers=1` and does not grow with more workers.
 
 ### B.3 Locus length (capacity) sweep
 
-Commit `883c41e`, citrus-2 (Intel Core Ultra 9 185H, 22 threads,
-idle), 2026-09-04. Fixed: `d=60`, `N=500`, `m=0.05`, `mu=0.001`.
+Commit `883c41e`, citrus-2 (Intel Core Ultra 9 185H, 22 threads, 93GB RAM,
+Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle), 2026-09-04. Fixed: `d=60`, `N=500`, `m=0.05`, `mu=0.001`.
 Capacity is `4 ** length` (§3.2's own finite-alleles state space).
 
 ```console
