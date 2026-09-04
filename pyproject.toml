@@ -109,6 +109,7 @@ dev = [
     "pyinstaller==6.*",
     "pytest>=8,<10",
     "pytest-cov>=5,<8",
+    "pytest-xdist>=3.6,<4",
     "ruff>=0.6,<0.17",
     "types-PyYAML==6.0.*",
 ]
@@ -229,7 +230,15 @@ module = "numba.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-addopts = "-m 'not statistical and not slow and not packaging and not gui' --strict-config --strict-markers"
+# `-n auto` (pytest-xdist): distribute test items across one worker
+# process per CPU core. Safe by construction for this suite's default
+# marker filter specifically because `gui` is excluded here -- every
+# `gui`-marked test drives a real `pywebview` window
+# (`test/gui/conftest.py`), and running several of those concurrently
+# across worker processes has not been verified; `build`'s own `--ci`
+# invocation (the one marker set that *does* include `gui`) deliberately
+# does not pass `-n auto` for exactly that reason -- see its own comment.
+addopts = "-n auto -m 'not statistical and not slow and not packaging and not gui' --strict-config --strict-markers"
 testpaths = ["test"]
 markers = [
     "gui: opens a real pywebview window; needs a display (xvfb-run in CI)",

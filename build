@@ -106,6 +106,7 @@ if ! "${dry_run}"; then
     "${run_type}" && required_modules[${#required_modules[@]}]=mypy
     if "${run_test}"; then
         required_modules[${#required_modules[@]}]=pytest
+        required_modules[${#required_modules[@]}]=xdist
         "${coverage}" \
             && required_modules[${#required_modules[@]}]=pytest_cov
     fi
@@ -170,8 +171,12 @@ if "${run_test}"; then
         # the same day; see that job's own inline comment for the
         # evidence). No coverage here -- coverage is `--ci`'s own job,
         # and this small, deliberately separate invocation is not it.
+        # `-n auto` (pytest-xdist): the `slow` marker never overlaps
+        # `gui` (confirmed by grep before adding this), so this is safe
+        # by the same reasoning as `pyproject.toml`'s own default
+        # `addopts` -- see that file's own comment.
         run "${python}" -m pytest -o addopts= --strict-config \
-            --strict-markers -m 'slow'
+            --strict-markers -n auto -m 'slow'
     elif "${coverage}"; then
         # The authoritative --ci gate runs every marker except `slow`
         # (see the `--slow-only` branch above for where that one now
@@ -182,6 +187,14 @@ if "${run_test}"; then
         # added marker included here by default instead of silently
         # excluded -- the same reasoning R17 itself established, now
         # applied to one deliberately-named exception rather than none.
+        #
+        # Deliberately no `-n auto` here, unlike the two pytest
+        # invocations above/below: this is the one marker set that
+        # includes `gui`, and running several real `pywebview` windows
+        # concurrently across xdist worker processes has not been
+        # verified safe (`pyproject.toml`'s own default `addopts` has
+        # the full reasoning). Revisit once that is checked for real,
+        # ideally against a real `--ci` run under `xvfb-run`.
         pytest_marker_args=(-m 'not slow and not packaging')
         "${ci}" && pytest_marker_args=(-m 'not slow')
         run "${python}" -m pytest -o addopts= --strict-config \
