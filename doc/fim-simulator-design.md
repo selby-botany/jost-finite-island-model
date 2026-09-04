@@ -1078,7 +1078,7 @@ built (§11): each names the one place the change lands.
 | …replicate batches ran faster? | max_workers (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs _run_one unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A store_factory gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
 | …replicate batches ran faster, without process-per-replicate overhead? | `fim()`'s own `engine_backend="generational"` (a config-file field — see doc/configuration.md#engine-backend-and-jit) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency): a real, substantial speedup that comes from removing CPython interpreter overhead rather than from thread-count parallelism — the same speedup is already present at a single worker and does not grow as more workers are added; `jit="off"` shows no speedup at any worker count ([Appendix B.2](#b2-g-thread-count-sweep) has the measured table). `migrate`'s/`mutate`'s own RNG calls stay unjitted for the matrix-form migration and stochastic migrant-sampling paths, so those two configurations do not see this speedup |
 | …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme, for the bounded-K (finite-alleles) mutation model? | `fim()`'s own `engine_backend="generational-vector"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), scoped to `mutation_model="finite_alleles"` and `migrant_sampling="continuous"` — a config outside that scope raises `ValueError` naming the violated constraint | a third engine implementation, `VectorizedAdvancer`, converts each replicate's own state to a dense `(deme, allele)` array once per generation and runs `migrate`/`mutate`/`drift` fused on that array (`fim.model.vectorized`; [§4.6](#46-choosing-an-engine-backend) explains the underlying math for a scientist reader). Matches the other two backends exactly, same seed, when migration is off; with migration active, matches them statistically rather than bit-for-bit — same mean differentiation statistics across many seeds, confirmed to carry no directional bias, not necessarily the same individual trajectory ([§4.6](#46-choosing-an-engine-backend) has the precise mechanism and a measured figure). Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). `"generational-vector"` is the fastest of the four measured engine/JIT combinations at every `d` tested, from 2 through 120 — [Appendix B.1](#b1-d-deme-count-sweep) has the measured tables |
-| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | `fim()`'s own `engine_backend="auto"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default 35) and `auto_vector_max_capacity` (default 1024) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity (4<sup>length</sup> under `finite_alleles`) is at most the capacity ceiling, *and* the config is otherwise eligible for it (`finite_alleles`/continuous migration), `"generational"` otherwise — never `"lineal"`, since no benchmark data yet characterizes that boundary. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. Checking every locus's own capacity, not `d` alone, is what stops a large-`d`, large-capacity config from resolving to `"generational-vector"` inside a region it actually loses in. The row above's own measured range (`d` from 2 through 120) finds `"generational-vector"` fastest at every tested point, with no sign yet of a lower crossover — `auto_vector_min_d`'s own role in this decision, and `auto_vector_max_capacity`'s own crossover, are both under active re-characterization at this project's own current measurement pass, not settled numbers. Both stay caller-supplied parameters, not hardcoded literals, so overriding either is already possible without a code change |
+| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | `fim()`'s own `engine_backend="auto"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default 35) and `auto_vector_max_capacity` (default 1024) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity (4<sup>length</sup> under `finite_alleles`) is at most the capacity ceiling, *and* the config is otherwise eligible for it (`finite_alleles`/continuous migration), `"generational"` otherwise — never `"lineal"`, since no benchmark data yet characterizes that boundary. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. Checking every locus's own capacity, not `d` alone, is what stops a large-`d`, large-capacity config from resolving to `"generational-vector"` inside a region it actually loses in. Two open questions about both default thresholds — [Appendix B.1](#b1-d-deme-count-sweep) finds `"generational-vector"` fastest at every measured `d` from 2 through 120, with no lower crossover found; [Appendix B.3](#b3-locus-length-capacity-sweep) finds the capacity crossover somewhere between 16384 and 65536, well above the current `auto_vector_max_capacity` default of 1024. Neither default has been changed on the strength of this alone — both stay caller-supplied parameters, not hardcoded literals, so overriding either is already possible without a code change |
 
 ### 9.2 Landing spots for changes that are not built
 
@@ -1384,6 +1384,37 @@ workers=10      230.21s (1.09x)    123.83s (2.03x)
 `jit="off"` shows no real speedup at any worker count. `jit="numba"`
 shows a real, consistent ~1.7-2.1x speedup that is already fully
 present at `workers=1` and does not grow with more workers.
+
+### B.3 Locus length (capacity) sweep
+
+Commit `883c41e`, citrus-2 (Intel Core Ultra 9 185H, 22 threads,
+idle), 2026-09-04. Capacity is `4 ** length` (§3.2's own finite-
+alleles state space).
+
+```console
+dev/bin/benchmark-engines --sweep loci-length --values 2,4,5,6,7,8 \
+    --replicates 16 --generations 100 --trials 3
+```
+
+```text
+  length  capacity   L_1(s)   L_b(s)  L_b/L1  G-off(s)    /L1  G-jit(s)    /L1     V(s)    /L1  fastest
+---------------------------------------------------------------------------------------------------------
+       2        16    0.831   10.963   13.20    11.089  13.35    10.066  12.12    3.636   4.38        V
+       4       256    1.887   29.095   15.42    30.237  16.03    18.649   9.88    5.017   2.66        V
+       5      1024    2.358   36.381   15.43    38.078  16.15    25.927  11.00    6.184   2.62        V
+       6      4096    2.326   37.168   15.98    39.189  16.85    29.391  12.63    9.577   4.12        V
+       7     16384    2.132   36.563   17.15    38.202  17.92    30.135  14.13   29.629  13.90        V
+       8     65536    2.516   37.663   14.97    39.008  15.50    31.319  12.45  102.112  40.58     G-jit
+```
+
+`"generational-vector"` wins through capacity 16384, then loses to
+`"generational"` with `jit="numba"` at capacity 65536 — the crossover
+sits somewhere in that interval, not yet narrowed further. That is a
+materially larger range than the capacity-4096 crossover this
+project's own earlier sweep found (backend-factory design §10 item
+10b) — commits `fbb8107` and `a2a9159` change V's own capacity
+scaling, not only its `d` scaling, which is the most likely
+explanation for the difference.
 
 ## Metadata
 
