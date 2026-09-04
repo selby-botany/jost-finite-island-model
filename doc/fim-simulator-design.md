@@ -575,21 +575,44 @@ against, while two faster alternatives sit beside it, opt-in:
   [finite-island-model introduction's own
   §3.2](finite-island-model-introduction.md#32-one-generation-in-two-steps)
   — for every deme at once, as one array operation, rather than one
-  deme at a time in a loop. Concretely: every deme's own frequency
-  vector becomes one row of a table, one column per possible allele.
-  Migration's own blend,
+  deme at a time in a loop. Concretely: stack every deme's own
+  frequency vector into one matrix, `P_t` — `d` rows (one per deme),
+  one column per possible allele. Migration's own weighted blend, the
+  introduction's §3.2 own `p_{\mathrm{mig},i} = (1-m)\, p_{t,i} + m\,
+  \bar p_i`, restated as a single matrix equation for the whole table
+  at once:
 
   ```math
-  p_{\mathrm{mig},i} = (1-m)\, p_{t,i} + m\, \bar p_i
+  P_{\mathrm{mig}} = W\, P_t
   ```
 
-  is computed for every row `i` at once, and so is drift's own
-  multinomial draw. Nothing about *what* gets computed changes — this
-  is the same arithmetic the introduction's §3.2 already names,
-  restated for a whole table at once instead of row by row, the way a
-  spreadsheet computes an entire column with one formula instead of one
-  cell at a time. This is where the real speed lives for a large number
-  of demes — and where the guarantee changes shape (below).
+  `W` is a `d × d` matrix — row `i` holds `(1-m)` on the diagonal and
+  the weight given to every other deme's own contribution to `\bar
+  p_i` off it, summing to 1 across the row (a row-stochastic matrix).
+  `P_t` has one column per possible allele; multiplying `W` into one
+  such column is one matrix–vector product computing all `d` demes' own
+  blend for that single allele at once — exactly `d` copies of the
+  introduction's own scalar formula, evaluated together rather than one
+  at a time. `W P_t` performs that same product across every column
+  simultaneously, one matrix–vector product per allele, all of them at
+  once — the ordinary meaning of a matrix–matrix product, not a new
+  operation invented for speed. (When every deme shares the same rate
+  `m` and pool
+  composition, `W` never actually needs to be built at all: the
+  identical blend follows directly from each deme's own size and the
+  size-weighted total across every other deme, `O(d)` instead of
+  `O(d^2)` to construct a matrix only to discard most of it as zero
+  weight — the shortcut this project's own `migrate_vectorized_
+  symmetric` takes.) Drift's own multinomial draw runs the same way,
+  one array-wide random draw instead of one loop iteration per deme,
+  though a random draw has no comparable matrix-equation form the way
+  a deterministic blend does. Nothing about *what* gets computed
+  changes — this is the same arithmetic the introduction's §3.2
+  already names, restated as one linear-algebra operation over the
+  whole table instead of row by row, the way a spreadsheet computes an
+  entire column with one formula instead of one cell at a time. This
+  is where the real speed lives for a large number of demes — and
+  where the guarantee changes shape (below).
 
   **Why the table needs a column count fixed in advance.** A table
   needs a known, fixed width — one column per possible allele — before
@@ -1318,10 +1341,49 @@ methodology — median of 3 independent, freshly built runs per point,
 not a re-timed warm cache); reproduce any table below with the exact
 command shown above it.
 
+**Reading the tables.** Every table sweeps exactly one
+`SimulationParams` field, holding every other one fixed at this
+project's own reference values (stated with each table below). Every
+number in a row is a wall-clock median of 3 independent runs at that
+one swept value:
+
+- **`L_1`** — a single-replicate `"lineal"` run (`n_replicates=1`),
+  the reference implementation running once, with no batching of any
+  kind. Not itself an engine choice worth reaching for; it exists
+  purely as the divisor every `/L1` column is a ratio to, so that a
+  number stays comparable across different machines and sessions —
+  "how many single-lineage-run-equivalents does this batch cost,"
+  independent of how fast or slow the underlying hardware happens to
+  be.
+- **`L_b`** — `"lineal"` run at the *same batch size* (same
+  `n_replicates`) as every other engine in that row: the real fourth
+  data series, showing how the reference engine itself scales, not
+  left implicit inside what the other three get divided by.
+- **`G-off`** / **`G-jit`** — `"generational"` (`ThreadedAdvancer`,
+  `max_workers=` every logical CPU the benchmark host has) with
+  `jit="off"` and `jit="numba"` respectively.
+- **`V`** — `"generational-vector"` (always effectively JIT-compiled;
+  it has no `jit="off"` mode).
+- **`fastest`** — which of `L_b`/`G-off`/`G-jit`/`V` had the lowest
+  raw wall-clock time at that row's own swept value.
+
+**Fixed across B.1 and B.3** (both produced by `dev/bin/benchmark-
+engines`): `n_replicates=16`, `max_generations=100`,
+`mutation_model="finite_alleles"`, `migrant_sampling="continuous"`
+(the only combination `"generational-vector"` accepts at all — see
+§4.6), `replicate_tolerance=None` (every replicate runs to the full
+generation count, never stopped early, so what gets timed does not
+itself vary run to run). **B.2 is a separate, standalone script, not
+`benchmark-engines`** — it uses the project's own *default*
+`mutation_model="infinite_alleles"`, which `"generational-vector"`
+cannot run at all, so B.2's own table has no `V` column; its own fixed
+parameters are stated with it, below.
+
 ### B.1 `d` (deme count) sweep
 
 Commit `8a07a97`, citrus-2 (Intel Core Ultra 9 185H, 22 threads,
-idle), 2026-09-03/04.
+idle), 2026-09-03/04. Fixed: `N=500`, `m=0.05`, `mu=0.001`, locus
+length 4 (capacity 256).
 
 ```console
 dev/bin/benchmark-engines --sweep d --values 4,10,20,35,50,80,120 \
@@ -1388,8 +1450,8 @@ present at `workers=1` and does not grow with more workers.
 ### B.3 Locus length (capacity) sweep
 
 Commit `883c41e`, citrus-2 (Intel Core Ultra 9 185H, 22 threads,
-idle), 2026-09-04. Capacity is `4 ** length` (§3.2's own finite-
-alleles state space).
+idle), 2026-09-04. Fixed: `d=60`, `N=500`, `m=0.05`, `mu=0.001`.
+Capacity is `4 ** length` (§3.2's own finite-alleles state space).
 
 ```console
 dev/bin/benchmark-engines --sweep loci-length --values 2,4,5,6,7,8 \
