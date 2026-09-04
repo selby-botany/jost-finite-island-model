@@ -12745,6 +12745,64 @@ itself (which reproduces *this same* `G_ST ~= 0.32`-ish
 neighborhood, not the published `0.172`, when run long enough that
 its own equilibration lag genuinely shrinks).
 
+<a id="validation.test_simulator_equilibrium.test_crow_aoki_torus_under_the_papers_own_migration_convention"></a>
+
+#### test\_crow\_aoki\_torus\_under\_the\_papers\_own\_migration\_convention
+
+```python
+def test_crow_aoki_torus_under_the_papers_own_migration_convention() -> None
+```
+
+R9: does the published `G_ST=0.172` discrepancy trace to a migration-
+convention mismatch, the same failure mode already found and fixed for
+Ryman & Leimar (2008)?
+
+`20260903-claude-opus-5-gene-identity-recursion-fim-implications.md`
+§8/§9's own proposed check: the test above computes `fim`'s own exact
+recursion under `fim`'s own migration convention (`rate` redrawn only
+from a deme's four neighbors, `_crow_aoki_torus_matrix`'s own default)
+and finds `G_ST ~= 0.324`, not the published `0.172` -- a long-standing,
+documented, unresolved gap (`doc/fim-simulator-test-plan.md`, Appendix
+A). Part 3.3 of the implications document found and numerically
+verified the *identical* failure mode for Ryman & Leimar's own island-
+model comparison: an unmapped migration convention (`fim`'s "redraw
+from the other demes only" vs. Nei/Li's "redraw from a pool including
+the home deme") produced up to 58% relative error, resolved to about
+0.1% once mapped. This test asks whether the same fix moves Crow &
+Aoki's own number the same way.
+
+`pool_size=5` (`_crow_aoki_torus_matrix`'s own docstring has the exact
+derivation) builds the torus matrix under that same "pool includes the
+home deme" convention, spread over the home deme's own four neighbors
+-- the direct spatial analogue of the island-model mapping, not a new
+assumption.
+
+This does **not** assert a match to `0.172`, for the identical reason
+the test above does not: forcing an assertion that a chosen parameter
+reproduces a target number is exactly the pattern this project's own
+testing rules forbid. What the recursion actually gives under this
+convention is recorded here as a finding, either resolving the
+discrepancy or narrowing what remains unexplained -- both are useful,
+and the assertion below pins whichever this run actually produces so a
+future change to either function is caught, not silently absorbed.
+
+**The finding is negative, and informative for exactly that reason.**
+`G_ST ~= 0.374` under this convention -- *further* from `0.172` than
+`fim`'s own convention's `0.324`, not closer. The "pool includes the
+home deme" mapping that resolved Ryman & Leimar's own island-model gap
+to about 0.1% (Part 3.3) does not resolve this one; it makes it worse.
+This narrows rather than confirms Part 8's own hypothesis that both
+gaps share one cause: the island-model mismatch is specifically about
+*whether the redraw pool includes the home deme*, and correcting only
+that dimension for the torus moves the wrong direction, so whatever
+Crow & Aoki's own unpublished "numerical calculations" actually did is
+apparently not simply "the R&L pool-includes-self convention, applied
+to four spatial neighbors" either. The old test's own honest
+exploration (`m ~= 0.12` reproduces `0.172` almost exactly, found by
+varying the *rate* rather than the pool composition) remains the
+closer lead; this result rules out one specific, principled alternative
+explanation rather than supplying a new one.
+
 <a id="validation.test_simulator_equilibrium.test_stepping_stone_differentiation_is_at_least_the_island_models"></a>
 
 #### test\_stepping\_stone\_differentiation\_is\_at\_least\_the\_island\_models

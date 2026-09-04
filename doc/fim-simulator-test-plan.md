@@ -248,6 +248,17 @@ knowledge of this specific literature, or access to the authors' own
 working notes, may be able to resolve this; anyone who can is warmly
 invited to.
 
+One specific hypothesis has since been checked and ruled out: the same
+migration-convention mismatch that explained an analogous gap against
+Ryman & Leimar (2008) — a redrawn-migrant pool that includes the home
+deme itself, versus this project's own pool of the four neighbors only
+— does not explain this one. Applying that same "pool includes self"
+mapping to the torus moves the recursion's own exact prediction
+*further* from `0.172` (to about `0.374`), not closer
+(`test_crow_aoki_torus_under_the_papers_own_migration_convention`,
+`test/validation/test_simulator_equilibrium.py`). The `m ~= 0.12`
+scalar-rate reading two paragraphs above remains the closer lead.
+
 **No test yet exists checking that the real simulator's own convergence
 speed matches Whitlock's (1992) theoretical prediction of it.** §2.3
 above already confirms Whitlock's formula is an exact mathematical

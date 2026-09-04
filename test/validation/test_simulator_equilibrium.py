@@ -782,7 +782,7 @@ def _pooled_shannon_statistics(
 
 
 def _crow_aoki_torus_matrix(
-    side_length: int, rate: float
+    side_length: int, rate: float, *, pool_size: int = 4
 ) -> tuple[tuple[float, ...], ...]:
     """Return the dense migration matrix for an `L`-by-`L` toroidal lattice.
 
@@ -805,20 +805,40 @@ def _crow_aoki_torus_matrix(
     Demes are numbered row-major, one-based (`row * side_length + column
     + 1`), matching `dense_matrix_from_neighbors`'s own one-based
     convention. `rate`'s total outgoing migration fraction is split
-    evenly across all four neighbors, `rate / 4` each, mirroring how
-    `fim.model.topology._neighbor_weights` already splits a topology's
-    total rate across however many neighbors a deme actually has.
+    evenly across all four neighbors, `rate / pool_size` each, mirroring
+    how `fim.model.topology._neighbor_weights` already splits a
+    topology's total rate across however many neighbors a deme actually
+    has.
+
+    `pool_size` (default 4, `fim`'s own convention: migrants drawn only
+    from the four neighbors) exists for exactly one other caller,
+    `test_crow_aoki_torus_under_the_papers_own_migration_convention` —
+    the R&L Nei/Li convention redraws `rate` from a pool that *includes*
+    the home deme (`20260903-claude-opus-5-gene-identity-recursion-fim-
+    implications.md` §3.3/§9), which for this topology means a five-way
+    pool (self plus four neighbors), each getting `rate / 5`. Passing
+    `pool_size=5` here does not need a fifth, self-referencing entry in
+    the neighbor map at all: `dense_matrix_from_neighbors` already
+    derives a deme's own diagonal as `1 - sum(off-diagonal weights)`, so
+    four off-diagonal entries of `rate / 5` each already leave exactly
+    `1 - 4 * (rate / 5) = 1 - 4 * rate / 5` on the diagonal — algebraically
+    identical to `(1 - rate) + rate / 5`, the home deme's own retained
+    share plus its own equal slice of the redrawn pool. No other change
+    to this function is needed for the different convention.
 
     Args:
         side_length: `L`, the lattice's side length; the deme count is
             `L * L` (Crow & Aoki's own `n`).
         rate: Every deme's total outgoing migration fraction, matching
             the meaning `m` already has in the symmetric island model.
+        pool_size: How many-way the redrawn `rate` fraction is split —
+            4 (default) for `fim`'s own neighbors-only convention, 5 for
+            R&L's own neighbors-plus-self convention.
 
     Returns:
         An `(L*L)`-by-`(L*L)` row-stochastic dense migration matrix.
     """
-    neighbor_weight = rate / 4.0
+    neighbor_weight = rate / pool_size
     neighbors: dict[int, dict[int, float]] = {}
     for row in range(side_length):
         for column in range(side_length):
@@ -1273,6 +1293,82 @@ def test_pairwise_identity_recursion_applied_to_the_crow_aoki_torus() -> None:
     # (see this test's own docstring for why that is not asserted here).
     assert 0.0 <= g_st <= 1.0
     assert g_st == pytest.approx(0.324, abs=0.01)
+
+
+def test_crow_aoki_torus_under_the_papers_own_migration_convention() -> None:
+    """R9: does the published `G_ST=0.172` discrepancy trace to a migration-
+    convention mismatch, the same failure mode already found and fixed for
+    Ryman & Leimar (2008)?
+
+    `20260903-claude-opus-5-gene-identity-recursion-fim-implications.md`
+    §8/§9's own proposed check: the test above computes `fim`'s own exact
+    recursion under `fim`'s own migration convention (`rate` redrawn only
+    from a deme's four neighbors, `_crow_aoki_torus_matrix`'s own default)
+    and finds `G_ST ~= 0.324`, not the published `0.172` -- a long-standing,
+    documented, unresolved gap (`doc/fim-simulator-test-plan.md`, Appendix
+    A). Part 3.3 of the implications document found and numerically
+    verified the *identical* failure mode for Ryman & Leimar's own island-
+    model comparison: an unmapped migration convention (`fim`'s "redraw
+    from the other demes only" vs. Nei/Li's "redraw from a pool including
+    the home deme") produced up to 58% relative error, resolved to about
+    0.1% once mapped. This test asks whether the same fix moves Crow &
+    Aoki's own number the same way.
+
+    `pool_size=5` (`_crow_aoki_torus_matrix`'s own docstring has the exact
+    derivation) builds the torus matrix under that same "pool includes the
+    home deme" convention, spread over the home deme's own four neighbors
+    -- the direct spatial analogue of the island-model mapping, not a new
+    assumption.
+
+    This does **not** assert a match to `0.172`, for the identical reason
+    the test above does not: forcing an assertion that a chosen parameter
+    reproduces a target number is exactly the pattern this project's own
+    testing rules forbid. What the recursion actually gives under this
+    convention is recorded here as a finding, either resolving the
+    discrepancy or narrowing what remains unexplained -- both are useful,
+    and the assertion below pins whichever this run actually produces so a
+    future change to either function is caught, not silently absorbed.
+
+    **The finding is negative, and informative for exactly that reason.**
+    `G_ST ~= 0.374` under this convention -- *further* from `0.172` than
+    `fim`'s own convention's `0.324`, not closer. The "pool includes the
+    home deme" mapping that resolved Ryman & Leimar's own island-model gap
+    to about 0.1% (Part 3.3) does not resolve this one; it makes it worse.
+    This narrows rather than confirms Part 8's own hypothesis that both
+    gaps share one cause: the island-model mismatch is specifically about
+    *whether the redraw pool includes the home deme*, and correcting only
+    that dimension for the torus moves the wrong direction, so whatever
+    Crow & Aoki's own unpublished "numerical calculations" actually did is
+    apparently not simply "the R&L pool-includes-self convention, applied
+    to four spatial neighbors" either. The old test's own honest
+    exploration (`m ~= 0.12` reproduces `0.172` almost exactly, found by
+    varying the *rate* rather than the pool composition) remains the
+    closer lead; this result rules out one specific, principled alternative
+    explanation rather than supplying a new one.
+    """
+    side_length = 3
+    d = side_length * side_length
+    matrix = _crow_aoki_torus_matrix(side_length, 0.05, pool_size=5)
+
+    identity = _pairwise_identity_fixed_point(
+        population_size=20, migration_matrix=matrix, mu=1e-5
+    )
+    g_st, jost_d = _pooled_statistics_from_identity_matrix(identity, d)
+
+    identity_again = _pairwise_identity_fixed_point(
+        population_size=20, migration_matrix=matrix, mu=1e-5
+    )
+    g_st_again, jost_d_again = _pooled_statistics_from_identity_matrix(
+        identity_again, d
+    )
+    assert g_st == g_st_again
+    assert jost_d == jost_d_again
+
+    # Pin whatever this run actually finds -- not a target, a regression
+    # guard. Update this value, with a fresh comment recording the new
+    # finding, if `_crow_aoki_torus_matrix`'s own convention math ever
+    # changes deliberately.
+    assert g_st == pytest.approx(0.374, abs=0.01)
 
 
 @pytest.mark.parametrize(
