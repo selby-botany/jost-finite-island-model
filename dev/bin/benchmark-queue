@@ -34,24 +34,45 @@ is just an argv list, run as a subprocess; a two-factor heatmap script,
 once one exists, queues here exactly the same way a plain
 `benchmark-engines` invocation does.
 
-Queue file format (JSON, an array of job objects):
+Queue file format (JSON, one object with `jobs` and, optionally,
+`settings`):
 
-    [
-      {
-        "label": "d-fine-grid",
-        "command": ["dev/bin/benchmark-engines", "--sweep", "d",
-                     "--values", "10,35,70,120",
-                     "--replicates", "16", "--generations", "100",
-                     "--trials", "3"],
-        "timeout_seconds": 3600
+    {
+      "settings": {
+        "idle_load_fraction": 0.1
       },
-      ...
-    ]
+      "jobs": [
+        {
+          "label": "d-fine-grid",
+          "command": ["dev/bin/benchmark-engines", "--sweep", "d",
+                       "--values", "10,35,70,120",
+                       "--replicates", "16", "--generations", "100",
+                       "--trials", "3"],
+          "timeout_seconds": 3600
+        }
+      ]
+    }
 
 `label` names the job (used for its own log filename and in the
 summary); `command` is the argv to run, resolved relative to this
 repository's own root if not absolute; `timeout_seconds` is optional,
-overriding `--default-timeout-seconds` for that one job.
+overriding `settings.default_timeout_seconds` for that one job.
+
+`settings` is optional and every key in it is optional -- it exists so
+one queue file is portable across very different machines, rather than
+carrying one hardcoded idle threshold that only suits whichever machine
+wrote it. `idle_load_fraction` is the one most worth setting explicitly
+per machine: a 4-8 core laptop competing with a browser and an antivirus
+scanner needs the conservative built-in default (0.1 -- wait for the
+1-minute load average to drop to 10% of core count) to get a trustworthy
+result at all, where a dedicated many-core server sitting at load 5 out
+of 22 cores has 17 genuinely idle cores the same default would wrongly
+call "busy." Recognized keys: `idle_load_fraction`, `idle_poll_seconds`,
+`idle_max_wait_seconds`, `default_timeout_seconds`, `stop_on_failure` --
+one of each of this tool's own `--idle-load-fraction`/etc. CLI flags,
+which still override whatever a queue file's own `settings` says when
+explicitly passed (a CLI flag is the more immediate expression of
+intent than a file two people might share).
 
 Usage:
     dev/bin/benchmark-queue queue.json --log-dir /tmp/fim-queue
@@ -68,6 +89,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -86,6 +108,34 @@ _DEFAULT_IDLE_POLL_SECONDS = 30.0
 # the summary) than to make zero progress at all.
 _DEFAULT_IDLE_MAX_WAIT_SECONDS = 3600.0
 _DEFAULT_JOB_TIMEOUT_SECONDS = 4 * 3600.0
+
+
+class QueueSettings(NamedTuple):
+    """The five tunables a queue file's own `settings` object may set.
+
+    Resolved once per run (`_resolve_settings`): a CLI flag, if
+    explicitly passed, wins over the queue file's own `settings`, which
+    wins over this module's own `_DEFAULT_*` constants. Exists mainly so
+    `idle_load_fraction` can be portable across very different machines
+    -- a laptop's own conservative default is the wrong number entirely
+    for a dedicated many-core server, and vice versa; see this module's
+    own top docstring for the concrete numbers.
+    """
+
+    idle_load_fraction: float
+    idle_poll_seconds: float
+    idle_max_wait_seconds: float
+    default_timeout_seconds: float
+    stop_on_failure: bool
+
+
+_DEFAULT_SETTINGS = QueueSettings(
+    idle_load_fraction=_DEFAULT_IDLE_LOAD_FRACTION,
+    idle_poll_seconds=_DEFAULT_IDLE_POLL_SECONDS,
+    idle_max_wait_seconds=_DEFAULT_IDLE_MAX_WAIT_SECONDS,
+    default_timeout_seconds=_DEFAULT_JOB_TIMEOUT_SECONDS,
+    stop_on_failure=False,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,29 +175,84 @@ class JobResult:
     waited_for_idle_seconds: float
 
 
-def _load_queue(queue_path: Path) -> list[Job]:
-    """Parse and validate a queue file into `Job`s, in file order.
+def _settings_from_payload(
+    queue_path: Path, raw_settings: object
+) -> dict[str, float | bool]:
+    """Validate a queue file's own optional `settings` object.
+
+    Every key is optional; an absent key is simply not included in the
+    returned `dict`, left for `_resolve_settings` to fill from this
+    module's own `_DEFAULT_*` constants. Returns a plain `dict` rather
+    than a `QueueSettings` directly because `_resolve_settings` also
+    needs to know which keys a queue file left unset, to layer a CLI
+    override correctly above only those.
+    """
+    if raw_settings is None:
+        return {}
+    if not isinstance(raw_settings, dict):
+        raise ValueError(f"{queue_path}: 'settings' must be a JSON object")
+    numeric_keys = (
+        "idle_load_fraction",
+        "idle_poll_seconds",
+        "idle_max_wait_seconds",
+        "default_timeout_seconds",
+    )
+    resolved: dict[str, float | bool] = {}
+    unknown = set(raw_settings) - {*numeric_keys, "stop_on_failure"}
+    if unknown:
+        names = ", ".join(sorted(unknown))
+        raise ValueError(f"{queue_path}: unknown settings key(s): {names}")
+    for key in numeric_keys:
+        if key not in raw_settings:
+            continue
+        value = raw_settings[key]
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise ValueError(f"{queue_path}: settings.{key} must be a number")
+        resolved[key] = float(value)
+    if "stop_on_failure" in raw_settings:
+        value = raw_settings["stop_on_failure"]
+        if not isinstance(value, bool):
+            raise ValueError(f"{queue_path}: settings.stop_on_failure must be a bool")
+        resolved["stop_on_failure"] = value
+    return resolved
+
+
+def _load_queue(queue_path: Path) -> tuple[dict[str, float | bool], list[Job]]:
+    """Parse and validate a queue file into its own settings and `Job`s.
 
     Args:
         queue_path: Path to the queue's own JSON file.
 
     Returns:
-        Every job, in the exact order the queue file lists them --
-        queue order is run order, always, so a caller can put the
-        cheapest/most-informative jobs first.
+        The queue file's own `settings` overrides (only the keys it
+        actually set -- see `_settings_from_payload`), and every job,
+        in the exact order the queue file lists them: queue order is
+        run order, always, so a caller can put the cheapest/most-
+        informative jobs first.
 
     Raises:
-        ValueError: If the file is not a JSON array of job objects,
-            or any job is missing `label`/`command`, has a non-string
-            `label`, a non-list `command`, or a `command` containing
-            anything but strings.
+        ValueError: If the file's top level is not a JSON object with a
+            `jobs` array, `settings` (if present) is malformed (see
+            `_settings_from_payload`), or any job is missing `label`/
+            `command`, has a non-string `label`, a non-list `command`,
+            or a `command` containing anything but strings.
     """
     payload = json.loads(queue_path.read_text(encoding="utf-8"))
-    if not isinstance(payload, list):
-        raise ValueError(f"{queue_path}: top level must be a JSON array of jobs")
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"{queue_path}: top level must be a JSON object with a 'jobs' array"
+        )
+    unknown_top_level = set(payload) - {"settings", "jobs"}
+    if unknown_top_level:
+        names = ", ".join(sorted(unknown_top_level))
+        raise ValueError(f"{queue_path}: unknown top-level key(s): {names}")
+    settings = _settings_from_payload(queue_path, payload.get("settings"))
+    raw_jobs = payload.get("jobs")
+    if not isinstance(raw_jobs, list):
+        raise ValueError(f"{queue_path}: 'jobs' must be a JSON array")
     jobs: list[Job] = []
     seen_labels: set[str] = set()
-    for index, raw_job in enumerate(payload):
+    for index, raw_job in enumerate(raw_jobs):
         if not isinstance(raw_job, dict):
             raise ValueError(f"{queue_path}: job {index} must be a JSON object")
         label = raw_job.get("label")
@@ -175,7 +280,7 @@ def _load_queue(queue_path: Path) -> list[Job]:
                 timeout_seconds=None if timeout_raw is None else float(timeout_raw),
             )
         )
-    return jobs
+    return settings, jobs
 
 
 def _resolve_command(command: tuple[str, ...]) -> list[str]:
@@ -266,10 +371,7 @@ def _run_job(
     job: Job,
     *,
     log_dir: Path,
-    default_timeout_seconds: float,
-    idle_load_fraction: float,
-    idle_poll_seconds: float,
-    idle_max_wait_seconds: float,
+    settings: QueueSettings,
     log: _Logger,
 ) -> JobResult:
     """Wait for isolation, then run one job to completion (or timeout).
@@ -278,11 +380,10 @@ def _run_job(
         job: The job to run.
         log_dir: Directory each job's own stdout/stderr log is written
             under (`<log_dir>/<label>.log`).
-        default_timeout_seconds: Used unless `job.timeout_seconds`
-            overrides it.
-        idle_load_fraction: See `_wait_for_idle`.
-        idle_poll_seconds: See `_wait_for_idle`.
-        idle_max_wait_seconds: See `_wait_for_idle`.
+        settings: This run's own fully-resolved settings (`_resolve_
+            settings`) -- `default_timeout_seconds` is used unless
+            `job.timeout_seconds` overrides it; the three `idle_*`
+            fields go straight to `_wait_for_idle`.
         log: Where to write progress lines.
 
     Returns:
@@ -291,16 +392,18 @@ def _run_job(
         summary always has one entry per job the queue ever started.
     """
     waited_seconds = _wait_for_idle(
-        idle_load_fraction=idle_load_fraction,
-        poll_seconds=idle_poll_seconds,
-        max_wait_seconds=idle_max_wait_seconds,
+        idle_load_fraction=settings.idle_load_fraction,
+        poll_seconds=settings.idle_poll_seconds,
+        max_wait_seconds=settings.idle_max_wait_seconds,
         log=log,
     )
     load_average_at_start = os.getloadavg()
     log_path = log_dir / f"{job.label}.log"
     resolved_command = _resolve_command(job.command)
     timeout_seconds = (
-        default_timeout_seconds if job.timeout_seconds is None else job.timeout_seconds
+        settings.default_timeout_seconds
+        if job.timeout_seconds is None
+        else job.timeout_seconds
     )
     log(f"starting {job.label!r}: {' '.join(resolved_command)}")
     started_at = datetime.now(UTC)
@@ -363,6 +466,33 @@ def _write_summary(summary_path: Path, results: list[JobResult]) -> None:
     )
 
 
+def _resolve_settings(
+    queue_settings: dict[str, float | bool], args: argparse.Namespace
+) -> QueueSettings:
+    """Layer CLI flags over a queue file's own `settings` over this module's defaults.
+
+    A CLI flag wins only when actually passed (each one defaults to
+    `None` in `main`'s own parser specifically so "not passed" and
+    "explicitly set to this module's own default value" are
+    distinguishable here) -- otherwise the queue file's own `settings`
+    entry for that key wins, and only otherwise does `_DEFAULT_SETTINGS`
+    apply.
+    """
+    cli_overrides = {
+        "idle_load_fraction": args.idle_load_fraction,
+        "idle_poll_seconds": args.idle_poll_seconds,
+        "idle_max_wait_seconds": args.idle_max_wait_seconds,
+        "default_timeout_seconds": args.default_timeout_seconds,
+        "stop_on_failure": True if args.stop_on_failure else None,
+    }
+    merged = {
+        **_DEFAULT_SETTINGS._asdict(),
+        **queue_settings,
+        **{key: value for key, value in cli_overrides.items() if value is not None},
+    }
+    return QueueSettings(**merged)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run every job in a queue file sequentially, in isolation."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -377,70 +507,74 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--default-timeout-seconds",
         type=float,
-        default=_DEFAULT_JOB_TIMEOUT_SECONDS,
-        help=f"Per-job wall-clock limit unless a job overrides it "
-        f"(default: {_DEFAULT_JOB_TIMEOUT_SECONDS:.0f}).",
+        default=None,
+        help="Per-job wall-clock limit unless a job overrides it. Overrides "
+        "the queue file's own settings.default_timeout_seconds if given "
+        f"(module default: {_DEFAULT_JOB_TIMEOUT_SECONDS:.0f}).",
     )
     parser.add_argument(
         "--idle-load-fraction",
         type=float,
-        default=_DEFAULT_IDLE_LOAD_FRACTION,
+        default=None,
         help="Proceed once 1-minute load average is at or below this "
-        f"fraction of os.cpu_count() (default: {_DEFAULT_IDLE_LOAD_FRACTION}).",
+        "fraction of os.cpu_count(). Overrides the queue file's own "
+        "settings.idle_load_fraction if given (module default: "
+        f"{_DEFAULT_IDLE_LOAD_FRACTION}) -- see this tool's own top "
+        "docstring for why this is the one setting most worth tuning "
+        "per machine.",
     )
     parser.add_argument(
         "--idle-poll-seconds",
         type=float,
-        default=_DEFAULT_IDLE_POLL_SECONDS,
-        help=f"How often to re-check load while waiting for idle "
-        f"(default: {_DEFAULT_IDLE_POLL_SECONDS:.0f}).",
+        default=None,
+        help="How often to re-check load while waiting for idle. Overrides "
+        "the queue file's own settings.idle_poll_seconds if given (module "
+        f"default: {_DEFAULT_IDLE_POLL_SECONDS:.0f}).",
     )
     parser.add_argument(
         "--idle-max-wait-seconds",
         type=float,
-        default=_DEFAULT_IDLE_MAX_WAIT_SECONDS,
-        help="Give up waiting for idle and run anyway after this long "
-        f"(default: {_DEFAULT_IDLE_MAX_WAIT_SECONDS:.0f}).",
+        default=None,
+        help="Give up waiting for idle and run anyway after this long. "
+        "Overrides the queue file's own settings.idle_max_wait_seconds if "
+        f"given (module default: {_DEFAULT_IDLE_MAX_WAIT_SECONDS:.0f}).",
     )
     parser.add_argument(
         "--stop-on-failure",
         action="store_true",
-        help="Stop the queue at the first non-zero exit or timeout, "
-        "instead of continuing to the next job (default: continue).",
+        help="Stop the queue at the first non-zero exit or timeout, instead "
+        "of continuing to the next job. Overrides the queue file's own "
+        "settings.stop_on_failure if given (module default: continue).",
     )
     args = parser.parse_args(argv)
 
     log = _Logger()
     try:
-        jobs = _load_queue(args.queue)
+        queue_settings, jobs = _load_queue(args.queue)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         log(f"cannot read queue {args.queue}: {error}")
         return 2
     if not jobs:
         log(f"{args.queue} contains no jobs")
         return 0
+    settings = _resolve_settings(queue_settings, args)
 
     args.log_dir.mkdir(parents=True, exist_ok=True)
     summary_path = args.log_dir / "summary.json"
-    log(f"queue {args.queue} has {len(jobs)} job(s); logs under {args.log_dir}")
+    log(
+        f"queue {args.queue} has {len(jobs)} job(s); logs under {args.log_dir}; "
+        f"settings={settings}"
+    )
 
     results: list[JobResult] = []
     failures = 0
     for job in jobs:
-        result = _run_job(
-            job,
-            log_dir=args.log_dir,
-            default_timeout_seconds=args.default_timeout_seconds,
-            idle_load_fraction=args.idle_load_fraction,
-            idle_poll_seconds=args.idle_poll_seconds,
-            idle_max_wait_seconds=args.idle_max_wait_seconds,
-            log=log,
-        )
+        result = _run_job(job, log_dir=args.log_dir, settings=settings, log=log)
         results.append(result)
         _write_summary(summary_path, results)
         if result.timed_out or result.exit_code != 0:
             failures += 1
-            if args.stop_on_failure:
+            if settings.stop_on_failure:
                 log(f"stopping queue: {job.label!r} did not succeed")
                 break
 

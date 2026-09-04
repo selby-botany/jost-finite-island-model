@@ -163,17 +163,21 @@ and running anyway (with a clear warning in its own log that this
 particular result should not be trusted the way the others are).
 
 **Why it matters:** `benchmark-engines`'s own numbers are only
-meaningful when nothing else on the machine is competing for the same
-CPU cores while it runs. Two sweeps launched at the same time on the
-same machine — even a very idle-looking machine — can still collide:
-`"generational"`'s own optional multi-threading can reach for every CPU
-core the machine has, so if a second sweep's own timed run happens to
-start at the same moment, both get slowed down in a way that has
-nothing to do with the code being measured. Running sweeps one at a
-time, with a real idle check between them, is what makes several
-sweeps' worth of results actually comparable to each other, without
-requiring a person to sit and watch each one finish before starting the
-next.
+meaningful when nothing else on the machine is meaningfully competing
+for the same CPU cores while it runs. `"generational"`'s own optional
+multi-threading can reach for every core the machine has, so two
+sweeps' own timed runs starting at the same moment can genuinely slow
+each other down. How much this actually matters depends heavily on the
+machine: a 4-8 core laptop can be thrown off by almost any second
+process, where a dedicated many-core server has enough spare capacity
+that several sweeps really can run side by side without meaningfully
+affecting each other's numbers — this tool's own idle check (how
+"quiet" is quiet enough before starting the next command) is tunable
+for exactly that reason; see `--idle-load-fraction` below. Running
+sweeps one at a time, with a real idle check between them, is what
+makes several sweeps' worth of results actually comparable to each
+other on whichever machine you are using, without requiring a person to
+sit and watch each one finish before starting the next.
 
 **When to run it:** Whenever there is more than one question worth
 sweeping for — several settings, or the same setting at several fixed
@@ -192,26 +196,50 @@ picture of what has run so far and what has not.
 dev/bin/benchmark-queue my-sweeps.json --log-dir /tmp/fim-sweeps
 ```
 
-`my-sweeps.json` is a JSON list, each entry naming one command to run:
+`my-sweeps.json` is a JSON object with a `jobs` list and, optionally, a
+`settings` object:
 
 ```json
-[
-  {
-    "label": "d-fine-grid",
-    "command": ["dev/bin/benchmark-engines", "--sweep", "d",
-                "--values", "10,35,70,120", "--replicates", "16",
-                "--generations", "100", "--trials", "3"]
-  }
-]
+{
+  "settings": {
+    "idle_load_fraction": 2.0
+  },
+  "jobs": [
+    {
+      "label": "d-fine-grid",
+      "command": ["dev/bin/benchmark-engines", "--sweep", "d",
+                  "--values", "10,35,70,120", "--replicates", "16",
+                  "--generations", "100", "--trials", "3"]
+    }
+  ]
+}
 ```
 
 `label` is a short name used for that command's own log file
 (`<log-dir>/<label>.log`) and its entry in `<log-dir>/summary.json`.
 Give one command an optional `"timeout_seconds"` if it might reasonably
-hang or run unexpectedly long — without one, `--default-timeout-
-seconds` applies (four hours). One command failing, or timing out,
-does not stop the rest of the list from running — pass `--stop-on-
-failure` if you would rather it did.
+hang or run unexpectedly long — without one, `settings.default_
+timeout_seconds` (or, absent that too, four hours) applies. One command
+failing, or timing out, does not stop the rest of the list from running
+— set `settings.stop_on_failure` (or pass `--stop-on-failure`) if you
+would rather it did.
+
+`settings` is optional, every key in it is optional, and it exists so
+one queue file is portable across very different machines rather than
+carrying one hardcoded idle threshold that only suits whichever machine
+wrote it. `idle_load_fraction` is the one most worth setting per
+machine: it means "proceed once 1-minute load average drops to this
+fraction of the CPU count" — the conservative built-in default (`0.1`)
+is right for a laptop, and far too cautious for a dedicated many-core
+server (a load of `5` out of `22` cores still has `17` genuinely idle
+ones). Keep one queue file per machine profile — `queue-laptop.json`,
+`queue-citrus2.json` — each with its own `settings.idle_load_fraction`,
+rather than remembering to pass `--idle-load-fraction` by hand every
+time. A command-line flag (`--idle-load-fraction`, `--idle-poll-
+seconds`, `--idle-max-wait-seconds`, `--default-timeout-seconds`,
+`--stop-on-failure`) always overrides whatever the queue file's own
+`settings` says, for the one time you want to override a shared file
+without editing it.
 
 ## `calibrate-auto-threshold`
 
