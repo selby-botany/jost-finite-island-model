@@ -154,13 +154,16 @@ modeled that simpler case.
 
 ## `benchmark-queue`
 
-**What it does:** Takes a list of commands (almost always several
+**What it does:** Takes a list of *stages* (almost always several
 `benchmark-engines` invocations, one per question you want answered)
-and runs them one at a time, waiting until the machine is genuinely
-quiet before starting each one — not just checking once at the start,
-but re-checking every thirty seconds for up to an hour before giving up
-and running anyway (with a clear warning in its own log that this
-particular result should not be trusted the way the others are).
+and runs them one stage at a time, waiting until the machine is
+genuinely quiet before starting each one — not just checking once at
+the start, but re-checking every thirty seconds for up to an hour
+before giving up and running anyway (with a clear warning in its own
+log that this particular result should not be trusted the way the
+others are). A stage can hold more than one command: every command in
+one stage runs at the same time, and the next stage does not start
+until all of them have finished.
 
 **Why it matters:** `benchmark-engines`'s own numbers are only
 meaningful when nothing else on the machine is meaningfully competing
@@ -172,12 +175,15 @@ machine: a 4-8 core laptop can be thrown off by almost any second
 process, where a dedicated many-core server has enough spare capacity
 that several sweeps really can run side by side without meaningfully
 affecting each other's numbers — this tool's own idle check (how
-"quiet" is quiet enough before starting the next command) is tunable
-for exactly that reason; see `--idle-load-fraction` below. Running
-sweeps one at a time, with a real idle check between them, is what
-makes several sweeps' worth of results actually comparable to each
-other on whichever machine you are using, without requiring a person to
-sit and watch each one finish before starting the next.
+"quiet" is quiet enough before starting the next stage) is tunable for
+exactly that reason; see `--idle-load-fraction` below. Grouping several
+independent commands into one stage is how you take advantage of that
+spare capacity deliberately; putting one command alone in its own stage
+is how you say "this one needs the whole machine to itself." Either
+way, running one stage at a time, with a real idle check between them,
+is what makes results actually comparable to each other on whichever
+machine you are using, without requiring a person to sit and watch each
+stage finish before starting the next.
 
 **When to run it:** Whenever there is more than one question worth
 sweeping for — several settings, or the same setting at several fixed
@@ -186,9 +192,9 @@ never as part of an automated test, build, or release step. Written to
 be started and left alone for as long as it takes: every command's own
 output is written to its own file as it happens (not held back until
 everything finishes), and a summary file is rewritten after every
-single command completes, so checking in partway through — or a
-command list that takes days — always shows an accurate, up-to-date
-picture of what has run so far and what has not.
+single stage completes, so checking in partway through — or a queue
+that takes days — always shows an accurate, up-to-date picture of what
+has run so far and what has not.
 
 **Usage:**
 
@@ -196,33 +202,49 @@ picture of what has run so far and what has not.
 dev/bin/benchmark-queue my-sweeps.json --log-dir /tmp/fim-sweeps
 ```
 
-`my-sweeps.json` is a JSON object with a `jobs` list and, optionally, a
-`settings` object:
+`my-sweeps.json` is a JSON object with a `stages` list and, optionally,
+a `settings` object. Each entry in `stages` is itself a list of one or
+more commands:
 
 ```json
 {
   "settings": {
     "idle_load_fraction": 2.0
   },
-  "jobs": [
-    {
-      "label": "d-fine-grid",
-      "command": ["dev/bin/benchmark-engines", "--sweep", "d",
-                  "--values", "10,35,70,120", "--replicates", "16",
-                  "--generations", "100", "--trials", "3"]
-    }
+  "stages": [
+    [
+      {"label": "d10-len4", "command": ["dev/bin/benchmark-engines",
+        "--sweep", "d", "--values", "10", "--config", "grid.yaml"]},
+      {"label": "d10-len5", "command": ["dev/bin/benchmark-engines",
+        "--sweep", "d", "--values", "10", "--config", "grid-len5.yaml"]}
+    ],
+    [
+      {
+        "label": "d-fine-grid",
+        "command": ["dev/bin/benchmark-engines", "--sweep", "d",
+                    "--values", "10,35,70,120", "--replicates", "16",
+                    "--generations", "100", "--trials", "3"]
+      }
+    ]
   ]
 }
 ```
 
+This example's two `d10-len*` commands run at the same time (they are
+in the first stage together); `d-fine-grid` only starts once both of
+those have finished, and runs by itself (its own stage holds just the
+one command).
+
 `label` is a short name used for that command's own log file
-(`<log-dir>/<label>.log`) and its entry in `<log-dir>/summary.json`.
-Give one command an optional `"timeout_seconds"` if it might reasonably
-hang or run unexpectedly long — without one, `settings.default_
-timeout_seconds` (or, absent that too, four hours) applies. One command
-failing, or timing out, does not stop the rest of the list from running
-— set `settings.stop_on_failure` (or pass `--stop-on-failure`) if you
-would rather it did.
+(`<log-dir>/<label>.log`) and its entry in `<log-dir>/summary.json` —
+unique across the whole file, not just within one stage. Give one
+command an optional `"timeout_seconds"` if it might reasonably hang or
+run unexpectedly long — without one, `settings.default_timeout_seconds`
+(or, absent that too, four hours) applies. One command failing, or
+timing out, does not stop the rest of the queue from running — set
+`settings.stop_on_failure` (or pass `--stop-on-failure`) if you would
+rather it did (a stage already running is always let finish in full
+first; nothing is cut short mid-stage).
 
 `settings` is optional, every key in it is optional, and it exists so
 one queue file is portable across very different machines rather than

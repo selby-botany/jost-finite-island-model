@@ -1,28 +1,42 @@
 #!/usr/bin/env python3
-"""Run a queue of benchmark jobs sequentially, each in isolation.
+"""Run a queue of benchmark jobs -- each stage in isolation, in order.
 
 `dev/bin/benchmark-engines`'s own docstring states its methodology
 plainly: "this tool does not itself pin CPU affinity or launch
 background load -- it assumes the caller runs it on an otherwise-idle
 machine ('run in isolation, no unrelated process competing for CPU')".
 That is a real requirement, not a suggestion -- `ThreadedAdvancer`
-(Backend G) defaults `max_workers` to `os.cpu_count()`, so two sweeps
+(Backend G) defaults `max_workers` to `os.cpu_count()`, so two jobs
 that each happen to hit their own G-phase at the same moment compete
 for the same finite cores, and the resulting numbers are noise, not
 data. This tool is the thing that actually *keeps* that promise across
-more than one sweep: given a queue of jobs, it runs them one at a time,
-waiting for the machine to actually be quiet before starting each one,
-rather than a caller hand-launching several `benchmark-engines`
-invocations at once and hoping they do not overlap.
+more than one job: given a queue of *stages* -- each stage one or more
+jobs -- it runs stages one at a time, waiting for the machine to
+actually be quiet before starting each stage, rather than a caller
+hand-launching several `benchmark-engines` invocations at once and
+hoping they do not overlap.
+
+Not every job needs the whole machine to itself, though -- on hardware
+with real spare capacity (a many-core server, not the laptop the
+conservative built-in idle threshold was written for; see `settings`
+below), several genuinely independent jobs can safely share it. A
+stage with more than one job runs every one of them concurrently, each
+against its own log file, and only moves on once the whole stage has
+finished -- the *stage* is what waits for isolation and what the next
+stage waits on, not each individual job. A stage of exactly one job is
+how "this one needs to run alone" is expressed: nothing else in the
+queue starts until it finishes.
 
 Built specifically to be kicked off and forgotten for hours or days:
 every job's own stdout/stderr goes to its own log file the moment it is
 produced (not buffered until the whole queue finishes), a summary JSON
-is rewritten after every job (not only at the end, so a caller checking
-in mid-run — or a process that dies mid-run — still has a faithful
-record of everything that already completed), and one job failing or
-timing out never aborts the rest of the queue by default (`--stop-
-on-failure` opts into that instead).
+is rewritten after every stage (not only at the end, so a caller
+checking in mid-run — or a process that dies mid-run — still has a
+faithful record of everything that already completed), and one job
+failing or timing out never aborts the rest of the queue by default
+(`--stop-on-failure` opts into that instead, checked once a stage
+finishes -- a stage already running is always let finish in full, never
+cut short partway through).
 
 Deliberately a separate tool from `benchmark-engines` itself, not a new
 flag bolted onto it: that tool's own docstring already states "this
@@ -30,33 +44,53 @@ tool does not attempt a full multi-factor grid (out of scope, and
 combinatorially large)" as a considered decision, not an oversight, and
 its job is characterizing *one* sweep well, not queuing several. This
 tool has no opinion at all about what a job actually measures -- a job
-is just an argv list, run as a subprocess; a two-factor heatmap script,
-once one exists, queues here exactly the same way a plain
-`benchmark-engines` invocation does.
+is just an argv list, run as a subprocess; a two-factor heatmap sweep,
+built from many individual `benchmark-engines --config ...` points, is
+just a queue file with one stage per point (or several points grouped
+into one stage, wherever they are cheap and independent enough to run
+together).
 
-Queue file format (JSON, one object with `jobs` and, optionally,
+Queue file format (JSON, one object with `stages` and, optionally,
 `settings`):
 
     {
       "settings": {
         "idle_load_fraction": 0.1
       },
-      "jobs": [
-        {
-          "label": "d-fine-grid",
-          "command": ["dev/bin/benchmark-engines", "--sweep", "d",
-                       "--values", "10,35,70,120",
-                       "--replicates", "16", "--generations", "100",
-                       "--trials", "3"],
-          "timeout_seconds": 3600
-        }
+      "stages": [
+        [
+          {
+            "label": "d10-len4",
+            "command": ["dev/bin/benchmark-engines", "--sweep", "d",
+                         "--values", "10", "--config", "grid.yaml"]
+          },
+          {
+            "label": "d10-len5",
+            "command": ["dev/bin/benchmark-engines", "--sweep", "d",
+                         "--values", "10", "--config", "grid-len5.yaml"]
+          }
+        ],
+        [
+          {
+            "label": "d-fine-grid",
+            "command": ["dev/bin/benchmark-engines", "--sweep", "d",
+                         "--values", "10,35,70,120",
+                         "--replicates", "16", "--generations", "100",
+                         "--trials", "3"],
+            "timeout_seconds": 3600
+          }
+        ]
       ]
     }
 
-`label` names the job (used for its own log filename and in the
-summary); `command` is the argv to run, resolved relative to this
-repository's own root if not absolute; `timeout_seconds` is optional,
-overriding `settings.default_timeout_seconds` for that one job.
+`stages` is a list of stages, run in order; each stage is a list of one
+or more jobs, run concurrently, with the whole stage waiting to start
+until the machine is idle. `label` names a job (used for its own log
+filename and its entry in the summary -- unique across the *whole*
+queue, not just within one stage); `command` is the argv to run,
+resolved relative to this repository's own root if not absolute;
+`timeout_seconds` is optional, overriding `settings.default_timeout_
+seconds` for that one job.
 
 `settings` is optional and every key in it is optional -- it exists so
 one queue file is portable across very different machines, rather than
@@ -67,7 +101,8 @@ scanner needs the conservative built-in default (0.1 -- wait for the
 1-minute load average to drop to 10% of core count) to get a trustworthy
 result at all, where a dedicated many-core server sitting at load 5 out
 of 22 cores has 17 genuinely idle cores the same default would wrongly
-call "busy." Recognized keys: `idle_load_fraction`, `idle_poll_seconds`,
+call "busy" -- and is exactly the case a multi-job stage is for.
+Recognized keys: `idle_load_fraction`, `idle_poll_seconds`,
 `idle_max_wait_seconds`, `default_timeout_seconds`, `stop_on_failure` --
 one of each of this tool's own `--idle-load-fraction`/etc. CLI flags,
 which still override whatever a queue file's own `settings` says when
@@ -85,7 +120,9 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -161,9 +198,16 @@ class Job:
 
 @dataclass(slots=True)
 class JobResult:
-    """One job's own outcome, as recorded in the summary."""
+    """One job's own outcome, as recorded in the summary.
+
+    `load_average_at_start` and `waited_for_idle_seconds` are the same
+    value for every job in one stage -- both are properties of the
+    *stage* (sampled once, right after that stage's own idle wait,
+    before any of its jobs are launched), not of any one job within it.
+    """
 
     label: str
+    stage_index: int
     command: tuple[str, ...]
     log_path: str
     started_at: str
@@ -217,70 +261,93 @@ def _settings_from_payload(
     return resolved
 
 
-def _load_queue(queue_path: Path) -> tuple[dict[str, float | bool], list[Job]]:
-    """Parse and validate a queue file into its own settings and `Job`s.
+def _load_job(queue_path: Path, stage_index: int, raw_job: object) -> Job:
+    """Parse and validate one job object, from within one stage.
+
+    Raises:
+        ValueError: The job is not a JSON object, or is missing `label`/
+            `command`, has a non-string `label`, a non-list `command`,
+            a `command` containing anything but strings, or a
+            non-numeric `timeout_seconds`.
+    """
+    if not isinstance(raw_job, dict):
+        raise ValueError(f"{queue_path}: stage {stage_index} job must be a JSON object")
+    label = raw_job.get("label")
+    command = raw_job.get("command")
+    if not isinstance(label, str) or not label:
+        raise ValueError(
+            f"{queue_path}: stage {stage_index} has a job with no nonempty 'label'"
+        )
+    if not isinstance(command, list) or not command:
+        raise ValueError(f"{queue_path}: job {label!r} needs a nonempty 'command'")
+    if not all(isinstance(part, str) for part in command):
+        raise ValueError(f"{queue_path}: job {label!r}'s command must be all strings")
+    timeout_raw = raw_job.get("timeout_seconds")
+    if timeout_raw is not None and not isinstance(timeout_raw, int | float):
+        raise ValueError(
+            f"{queue_path}: job {label!r}'s timeout_seconds must be a number"
+        )
+    return Job(
+        label=label,
+        command=tuple(command),
+        timeout_seconds=None if timeout_raw is None else float(timeout_raw),
+    )
+
+
+def _load_queue(
+    queue_path: Path,
+) -> tuple[dict[str, float | bool], list[list[Job]]]:
+    """Parse and validate a queue file into its own settings and stages.
 
     Args:
         queue_path: Path to the queue's own JSON file.
 
     Returns:
         The queue file's own `settings` overrides (only the keys it
-        actually set -- see `_settings_from_payload`), and every job,
-        in the exact order the queue file lists them: queue order is
-        run order, always, so a caller can put the cheapest/most-
-        informative jobs first.
+        actually set -- see `_settings_from_payload`), and every stage,
+        each a list of one or more `Job`s, in the exact order the queue
+        file lists them: stage order is run order, always, and job
+        order within a stage is preserved in the summary even though
+        the jobs themselves run concurrently.
 
     Raises:
         ValueError: If the file's top level is not a JSON object with a
-            `jobs` array, `settings` (if present) is malformed (see
-            `_settings_from_payload`), or any job is missing `label`/
-            `command`, has a non-string `label`, a non-list `command`,
-            or a `command` containing anything but strings.
+            `stages` array, `settings` (if present) is malformed (see
+            `_settings_from_payload`), a stage is empty or not a JSON
+            array, a job is malformed (see `_load_job`), or the same
+            `label` appears more than once anywhere in the file (labels
+            name a job's own log file and summary entry, so they must
+            be unique across the whole queue, not just one stage).
     """
     payload = json.loads(queue_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(
-            f"{queue_path}: top level must be a JSON object with a 'jobs' array"
+            f"{queue_path}: top level must be a JSON object with a 'stages' array"
         )
-    unknown_top_level = set(payload) - {"settings", "jobs"}
+    unknown_top_level = set(payload) - {"settings", "stages"}
     if unknown_top_level:
         names = ", ".join(sorted(unknown_top_level))
         raise ValueError(f"{queue_path}: unknown top-level key(s): {names}")
     settings = _settings_from_payload(queue_path, payload.get("settings"))
-    raw_jobs = payload.get("jobs")
-    if not isinstance(raw_jobs, list):
-        raise ValueError(f"{queue_path}: 'jobs' must be a JSON array")
-    jobs: list[Job] = []
+    raw_stages = payload.get("stages")
+    if not isinstance(raw_stages, list):
+        raise ValueError(f"{queue_path}: 'stages' must be a JSON array")
+    stages: list[list[Job]] = []
     seen_labels: set[str] = set()
-    for index, raw_job in enumerate(raw_jobs):
-        if not isinstance(raw_job, dict):
-            raise ValueError(f"{queue_path}: job {index} must be a JSON object")
-        label = raw_job.get("label")
-        command = raw_job.get("command")
-        if not isinstance(label, str) or not label:
-            raise ValueError(f"{queue_path}: job {index} needs a nonempty 'label'")
-        if label in seen_labels:
-            raise ValueError(f"{queue_path}: duplicate job label {label!r}")
-        seen_labels.add(label)
-        if not isinstance(command, list) or not command:
-            raise ValueError(f"{queue_path}: job {label!r} needs a nonempty 'command'")
-        if not all(isinstance(part, str) for part in command):
+    for stage_index, raw_stage in enumerate(raw_stages):
+        if not isinstance(raw_stage, list) or not raw_stage:
             raise ValueError(
-                f"{queue_path}: job {label!r}'s command must be all strings"
+                f"{queue_path}: stage {stage_index} must be a nonempty JSON array"
             )
-        timeout_raw = raw_job.get("timeout_seconds")
-        if timeout_raw is not None and not isinstance(timeout_raw, int | float):
-            raise ValueError(
-                f"{queue_path}: job {label!r}'s timeout_seconds must be a number"
-            )
-        jobs.append(
-            Job(
-                label=label,
-                command=tuple(command),
-                timeout_seconds=None if timeout_raw is None else float(timeout_raw),
-            )
-        )
-    return settings, jobs
+        stage_jobs = [
+            _load_job(queue_path, stage_index, raw_job) for raw_job in raw_stage
+        ]
+        for job in stage_jobs:
+            if job.label in seen_labels:
+                raise ValueError(f"{queue_path}: duplicate job label {job.label!r}")
+            seen_labels.add(job.label)
+        stages.append(stage_jobs)
+    return settings, stages
 
 
 def _resolve_command(command: tuple[str, ...]) -> list[str]:
@@ -354,36 +421,60 @@ def _wait_for_idle(
 class _Logger:
     """Timestamped progress lines to stdout, unbuffered.
 
-    A plain `print` would do almost the same thing, except for
-    buffering: this tool is meant to run for hours or days under
-    `setsid ... > log 2>&1 &`, and a caller tailing that log wants each
-    line the moment it is written, not whenever Python's own stdout
-    buffer happens to flush.
+    A plain `print` would do almost the same thing, except for two
+    things: buffering (this tool is meant to run for hours or days
+    under `setsid ... > log 2>&1 &`, and a caller tailing that log
+    wants each line the moment it is written, not whenever Python's own
+    stdout buffer happens to flush), and thread safety -- a multi-job
+    stage's own several `_execute_job` calls each log from their own
+    thread, and an unguarded `print` gives no guarantee two lines
+    logged at nearly the same moment do not interleave mid-line.
     """
+
+    def __init__(self) -> None:
+        """Create the shared lock every call writes under."""
+        self._lock = threading.Lock()
 
     def __call__(self, message: str) -> None:
         """Write one timestamped line and flush immediately."""
         timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        print(f"[{timestamp}] {message}", flush=True)
+        with self._lock:
+            print(f"[{timestamp}] {message}", flush=True)
 
 
-def _run_job(
+def _execute_job(
     job: Job,
     *,
+    stage_index: int,
     log_dir: Path,
-    settings: QueueSettings,
+    default_timeout_seconds: float,
+    load_average_at_start: tuple[float, float, float],
+    waited_for_idle_seconds: float,
     log: _Logger,
 ) -> JobResult:
-    """Wait for isolation, then run one job to completion (or timeout).
+    """Run one job's own subprocess to completion (or timeout).
+
+    No idle wait here -- that already happened once for the whole stage
+    this job belongs to (`_run_stage`), before any of that stage's own
+    jobs, including this one, were launched. Safe to call concurrently
+    for several jobs in the same stage: each opens and writes only its
+    own log file, and `subprocess.run` itself is safe to call from
+    multiple threads at once.
 
     Args:
         job: The job to run.
-        log_dir: Directory each job's own stdout/stderr log is written
+        stage_index: Which stage this job belongs to, recorded on the
+            returned `JobResult` (see that class's own docstring for
+            why `load_average_at_start`/`waited_for_idle_seconds` below
+            are shared across every job in one stage, not resampled per
+            job).
+        log_dir: Directory this job's own stdout/stderr log is written
             under (`<log_dir>/<label>.log`).
-        settings: This run's own fully-resolved settings (`_resolve_
-            settings`) -- `default_timeout_seconds` is used unless
-            `job.timeout_seconds` overrides it; the three `idle_*`
-            fields go straight to `_wait_for_idle`.
+        default_timeout_seconds: Used unless `job.timeout_seconds`
+            overrides it.
+        load_average_at_start: This job's own stage's load average,
+            sampled once right after that stage's idle wait.
+        waited_for_idle_seconds: This job's own stage's idle wait.
         log: Where to write progress lines.
 
     Returns:
@@ -391,19 +482,10 @@ def _run_job(
         timed out -- a `JobResult` is produced in every case, so the
         summary always has one entry per job the queue ever started.
     """
-    waited_seconds = _wait_for_idle(
-        idle_load_fraction=settings.idle_load_fraction,
-        poll_seconds=settings.idle_poll_seconds,
-        max_wait_seconds=settings.idle_max_wait_seconds,
-        log=log,
-    )
-    load_average_at_start = os.getloadavg()
     log_path = log_dir / f"{job.label}.log"
     resolved_command = _resolve_command(job.command)
     timeout_seconds = (
-        settings.default_timeout_seconds
-        if job.timeout_seconds is None
-        else job.timeout_seconds
+        default_timeout_seconds if job.timeout_seconds is None else job.timeout_seconds
     )
     log(f"starting {job.label!r}: {' '.join(resolved_command)}")
     started_at = datetime.now(UTC)
@@ -435,6 +517,7 @@ def _run_job(
         log(f"{job.label!r} FAILED in {duration_seconds:.0f}s (exit {exit_code})")
     return JobResult(
         label=job.label,
+        stage_index=stage_index,
         command=job.command,
         log_path=str(log_path),
         started_at=started_at.isoformat(),
@@ -443,15 +526,71 @@ def _run_job(
         load_average_at_start=load_average_at_start,
         exit_code=exit_code,
         timed_out=timed_out,
-        waited_for_idle_seconds=waited_seconds,
+        waited_for_idle_seconds=waited_for_idle_seconds,
     )
+
+
+def _run_stage(
+    stage_index: int,
+    jobs: list[Job],
+    *,
+    log_dir: Path,
+    settings: QueueSettings,
+    log: _Logger,
+) -> list[JobResult]:
+    """Wait for isolation once, then run every job in this stage concurrently.
+
+    A stage of one job is exactly "run this alone, waiting for the
+    machine to be idle first" -- there is no separate code path for
+    that case, it falls out of `ThreadPoolExecutor(max_workers=1)`
+    doing the only thing it can with one job. A stage of several jobs
+    launches all of them at once and waits for every one to finish
+    (successfully, unsuccessfully, or by timeout) before returning --
+    the next stage's own idle wait does not begin until this whole
+    stage is done, whichever of its jobs happens to finish last.
+
+    Args:
+        stage_index: This stage's own position in the queue, recorded
+            on every one of its own jobs' `JobResult`.
+        jobs: The jobs to run, in declaration order.
+        log_dir: Passed through to `_execute_job`.
+        settings: This run's own fully-resolved settings.
+        log: Where to write progress lines.
+
+    Returns:
+        Every job's own `JobResult`, in the same order `jobs` was
+        given -- not completion order, which threads racing each other
+        would make nondeterministic run to run.
+    """
+    waited_seconds = _wait_for_idle(
+        idle_load_fraction=settings.idle_load_fraction,
+        poll_seconds=settings.idle_poll_seconds,
+        max_wait_seconds=settings.idle_max_wait_seconds,
+        log=log,
+    )
+    load_average_at_start = os.getloadavg()
+    with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
+        futures = [
+            executor.submit(
+                _execute_job,
+                job,
+                stage_index=stage_index,
+                log_dir=log_dir,
+                default_timeout_seconds=settings.default_timeout_seconds,
+                load_average_at_start=load_average_at_start,
+                waited_for_idle_seconds=waited_seconds,
+                log=log,
+            )
+            for job in jobs
+        ]
+        return [future.result() for future in futures]
 
 
 def _write_summary(summary_path: Path, results: list[JobResult]) -> None:
     """Overwrite the summary file with every result so far.
 
-    Called after every single job, not only at the end -- a queue this
-    tool's own docstring promises can run for "hours or days" must
+    Called after every single stage, not only at the end -- a queue
+    this tool's own docstring promises can run for "hours or days" must
     leave a faithful, current record behind at every point along the
     way, not just at a completion that might never come if the process
     is killed, the machine reboots, or a job hangs past its own
@@ -494,7 +633,7 @@ def _resolve_settings(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run every job in a queue file sequentially, in isolation."""
+    """Run every stage in a queue file in order, each stage in isolation."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("queue", type=Path, help="Path to the queue's own JSON file.")
     parser.add_argument(
@@ -550,36 +689,48 @@ def main(argv: list[str] | None = None) -> int:
 
     log = _Logger()
     try:
-        queue_settings, jobs = _load_queue(args.queue)
+        queue_settings, stages = _load_queue(args.queue)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         log(f"cannot read queue {args.queue}: {error}")
         return 2
-    if not jobs:
-        log(f"{args.queue} contains no jobs")
+    if not stages:
+        log(f"{args.queue} contains no stages")
         return 0
     settings = _resolve_settings(queue_settings, args)
 
     args.log_dir.mkdir(parents=True, exist_ok=True)
     summary_path = args.log_dir / "summary.json"
+    total_jobs = sum(len(stage) for stage in stages)
     log(
-        f"queue {args.queue} has {len(jobs)} job(s); logs under {args.log_dir}; "
-        f"settings={settings}"
+        f"queue {args.queue} has {len(stages)} stage(s), {total_jobs} job(s) "
+        f"total; logs under {args.log_dir}; settings={settings}"
     )
 
     results: list[JobResult] = []
     failures = 0
-    for job in jobs:
-        result = _run_job(job, log_dir=args.log_dir, settings=settings, log=log)
-        results.append(result)
+    for stage_index, stage_jobs in enumerate(stages):
+        plural = "" if len(stage_jobs) == 1 else f", {len(stage_jobs)} jobs in parallel"
+        log(f"stage {stage_index}: {[job.label for job in stage_jobs]}{plural}")
+        stage_results = _run_stage(
+            stage_index, stage_jobs, log_dir=args.log_dir, settings=settings, log=log
+        )
+        results.extend(stage_results)
         _write_summary(summary_path, results)
-        if result.timed_out or result.exit_code != 0:
-            failures += 1
+        stage_failed = any(
+            result.timed_out or result.exit_code != 0 for result in stage_results
+        )
+        if stage_failed:
+            failures += sum(
+                1
+                for result in stage_results
+                if result.timed_out or result.exit_code != 0
+            )
             if settings.stop_on_failure:
-                log(f"stopping queue: {job.label!r} did not succeed")
+                log(f"stopping queue: stage {stage_index} did not fully succeed")
                 break
 
     log(
-        f"queue finished: {len(results)}/{len(jobs)} job(s) run, "
+        f"queue finished: {len(results)}/{total_jobs} job(s) run, "
         f"{failures} did not succeed"
     )
     return 1 if failures else 0
