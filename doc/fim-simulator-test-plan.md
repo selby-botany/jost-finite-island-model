@@ -107,7 +107,7 @@ formulas, first gets checked against theory.
 
 The strongest, most literal test available for a scientific simulator:
 plug in the exact parameters a published paper used, and check whether
-this simulator's own output lands where that paper reported. Six
+this simulator's own output lands where that paper reported. Seven
 independent sources are used, spanning six decades of the population-
 genetics literature and several different research traditions,
 specifically so that no single author's own conventions or assumptions
@@ -132,6 +132,13 @@ could be silently baked into agreement:
   `G_ST` statistic. Three further measures from that same paper, not
   previously implemented, were added and checked directly against its
   own algebra.
+- **Ryman & Leimar (2008)** — two further trajectory-located published
+  numbers (most sources above give a single published value, not a
+  curve): their Equation 4 reproduces all four heterozygosities their
+  own Figure 1 discussion quotes, and their Equation 5 reproduces their
+  own published mutation-free `G_ST(t)` landmark table, including "at
+  `t=100`, `G_ST` is close to 0.04." See also §2.4, below, for this
+  same paper's own independently derived recursion.
 - **Whitlock (1992)** — a different kind of question altogether: not
   "what value does a statistic settle to," but "how many generations
   does it take to get there" after a disturbance. Shown to be an exact
@@ -166,6 +173,20 @@ first such comparison found this simulator's own long-run average
 closed-form theoretical prediction all within a few percent of one
 another — three independent sources of evidence for the very same
 number, agreeing.
+
+A second, differently shaped check exists for this project's own
+gene-identity recursion specifically (`_iterate_identities` in the test
+suite — see [the migration-conventions reference](migration-conventions.md)
+for what it computes and why): **Ryman & Leimar (2008)**'s own
+Equations 2 and 3 are an independently published derivation of the
+identical recursion, by different authors reasoning from different
+premises, not a second program simulating the same process. Once their
+own migration and identity-sampling conventions are mapped onto this
+project's (the same mapping the migration-conventions reference
+documents), the two recursions agree to `float` noise over a
+multi-thousand-generation trajectory — not merely at one equilibrium
+point, and not merely a restatement of this project's own derivation
+under different variable names.
 
 ## 3. Testing the actual product, not just the mathematics
 
@@ -350,6 +371,10 @@ reason — not overlooked:
   this session.)
 - Nei M (1973). Analysis of gene diversity in subdivided populations.
   *Proceedings of the National Academy of Sciences* 70(12):3321-3323.
+- Ryman N, Leimar O (2008). Effect of mutation on genetic
+  differentiation among nonequilibrium populations. *Evolution*
+  62(9):2250-2259. DOI
+  [10.1111/j.1558-5646.2008.00453.x](https://doi.org/10.1111/j.1558-5646.2008.00453.x).
 - Whitlock MC (1992). Temporal fluctuations in demographic parameters
   and the genetic variance among populations. *Evolution*
   46(3):608-615.

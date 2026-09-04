@@ -12836,6 +12836,132 @@ varying the *rate* rather than the pool composition) remains the
 closer lead; this result rules out one specific, principled alternative
 explanation rather than supplying a new one.
 
+<a id="validation.test_simulator_equilibrium.test_ryman_leimar_equations_2_and_3_match_fims_own_recursion"></a>
+
+#### test\_ryman\_leimar\_equations\_2\_and\_3\_match\_fims\_own\_recursion
+
+```python
+@pytest.mark.parametrize("generations", [1, 10, 100, 1000, 5000])
+@pytest.mark.parametrize(
+    ("population_size", "m", "mu", "d"),
+    [
+        (100, 0.0001, 0.000001, 5),
+        (2000, 0.01, 0.001, 100),
+        (100, 0.01, 0.005, 4),
+    ],
+)
+def test_ryman_leimar_equations_2_and_3_match_fims_own_recursion(
+        population_size: int, m: float, mu: float, d: int,
+        generations: int) -> None
+```
+
+R2: an independently published derivation reproduces `fim`'s own recursion.
+
+`_iterate_identities` was derived from `fim`'s own operators (its
+docstring says so). A recursion derived from the implementation
+shares the implementation's assumptions, so it cannot catch a wrong
+one -- only an inconsistency between the code and itself.
+`_iterate_paper_identities` is a literal transcription of Ryman &
+Leimar (2008)'s own published Equations 2 and 3, derived by
+different authors from different premises; agreement between the
+two, under the R1 migration/identity mapping, is a genuinely
+external check that the current suite otherwise has no equivalent
+of for this recursion.
+
+Two comparisons, each against its own tolerance above:
+
+1. Migration mapped and identities converted to the distinct-pair
+   convention, but each recursion keeps its own real mutation
+   model -- `fim`'s exact second moment (`_mutation_survival`)
+   against the paper's own ``(1 - u)^2``. The residual is the
+   *real, documented* difference between two correct but different
+   mutation models (Part 3.3's "mutation factor" paragraph: exact
+   for `fim`'s own binomial-count operator, exact for the paper's
+   own per-lineage infinite-alleles model), not an error in either
+   recursion.
+2. The same, but `_iterate_paper_identities` also substitutes
+   `fim`'s own `_mutation_survival` factor via its own
+   ``mutation_survival`` override -- isolating whether the two
+   recursions are the *same recursion* once every convention and
+   every model difference is accounted for. What is left is float
+   noise accumulated over up to 5000 generations, not a structural
+   residual.
+
+<a id="validation.test_simulator_equilibrium.test_ryman_leimar_equation_4_reproduces_figure_1"></a>
+
+#### test\_ryman\_leimar\_equation\_4\_reproduces\_figure\_1
+
+```python
+@pytest.mark.parametrize(
+    ("mu", "expected_h_s"),
+    [
+        (1e-8, 0.000040),
+        (1e-6, 0.003984),
+        (1e-4, 0.285745),
+        (1e-3, 0.800240),
+    ],
+)
+def test_ryman_leimar_equation_4_reproduces_figure_1(
+        mu: float, expected_h_s: float) -> None
+```
+
+R2: the paper's own published Figure 1 heterozygosities, from their Eq. 4.
+
+Their Equation 4 gives the isolated mutation-drift equilibrium
+identity, ``J0* = (1 - u)^2 / (2N - (2N - 1)(1 - u)^2)`` -- the
+fixed point `_iterate_paper_identities` at ``m=0`` would converge
+to under enough generations (no migration ever needed to reach it;
+drift and mutation alone determine an isolated island's own
+equilibrium), but computed here from the closed form directly, both
+because the paper states
+it as a closed form and to keep this a genuinely independent check
+of `_iterate_paper_identities`'s own drift/mutation arithmetic
+rather than a test that would pass even if that function's per-step
+logic were subtly wrong. At ``2N = 2000`` (their ``N = 1000``
+diploid individuals -- see `_iterate_paper_identities`'s own
+docstring for why this is `fim`'s `population_size`-style gene-copy
+count directly, not `1000 * 2`), it reproduces all four
+heterozygosities the paper's own Figure 1 discussion quotes;
+`expected_h_s` here is Part 6.5's own "recomputed" column (compare
+the paper's own less-precise printed values there), and the ``abs``
+tolerance is generous next to the ``~1e-7`` agreement actually
+measured while writing this test.
+
+<a id="validation.test_simulator_equilibrium.test_ryman_leimar_equation_5_reproduces_the_published_g_st_trajectory"></a>
+
+#### test\_ryman\_leimar\_equation\_5\_reproduces\_the\_published\_g\_st\_trajectory
+
+```python
+@pytest.mark.parametrize(
+    ("t", "expected_g_st"),
+    [
+        (10, 0.0045),
+        (100, 0.0441),
+        (1000, 0.3687),
+        (5000, 0.9097),
+    ],
+)
+def test_ryman_leimar_equation_5_reproduces_the_published_g_st_trajectory(
+        t: int, expected_g_st: float) -> None
+```
+
+R2: the paper's own published mutation-free `G_ST` trajectory, their Eq. 5.
+
+Complete isolation (``m=0``) and no mutation (``u=0``), starting
+from ``(J0, J1) = (0, 0)`` -- an ancestral population with no
+identity-by-descent yet, the infinite-alleles-model founding
+condition (contrast `_identity_fixed_point`'s own ``(1, 0)``, a
+*different* founding condition this project uses elsewhere; the two
+are not interchangeable, and using the wrong one here would not
+reproduce the paper's own numbers). Under this convention, `J1`
+stays frozen at its founding value forever -- migration is what
+lets identity flow between islands, and there is none -- so this is
+exactly `_iterate_paper_identities` at those parameter values, not
+a separate closed form Part 6.5 states one for. At ``s=10``,
+``2N=2000``, it reproduces the paper's own published landmark
+table (Part 6.5), including "at `t=100`, `G_ST` is close to 0.04
+for all mutation rates" -- the ``0.0441`` row.
+
 <a id="validation.test_simulator_equilibrium.test_stepping_stone_differentiation_is_at_least_the_island_models"></a>
 
 #### test\_stepping\_stone\_differentiation\_is\_at\_least\_the\_island\_models

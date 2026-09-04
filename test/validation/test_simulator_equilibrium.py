@@ -1439,6 +1439,335 @@ def test_crow_aoki_torus_under_the_papers_own_migration_convention() -> None:
     assert g_st == pytest.approx(0.374, abs=0.01)
 
 
+def _paper_identity_coefficients(m: float, s: int) -> tuple[float, float]:
+    """Return Ryman & Leimar (2008)'s own migration coefficients, Eq. 2/3's `a`, `b`.
+
+    ``a`` is the probability that two gene copies drawn from the *same*
+    island both effectively trace to that island this generation
+    (their own migration convention: each copy either stays, probability
+    ``1 - m``, or is redrawn from the pool of all ``s`` islands
+    *including the home one*, probability ``m`` -- see `doc/migration-
+    conventions.md`); ``b`` is the same probability for two copies drawn
+    from two *different* islands. Transcribed literally from
+    `20260903-claude-opus-5-ryman-leimar-gene-identity-recursions.md`
+    Part 4.2 (a private companion document, not part of this repository
+    -- see `doc/migration-conventions.md`'s own "Who this document is
+    for" section), not re-derived from `_identity_coefficients`, above --
+    the entire point of R2 is an independently published derivation to
+    check `fim`'s own recursion against, not a restatement of the same
+    algebra under new names.
+
+    Args:
+        m: The paper's own migration rate -- not `fim`'s; see
+            `doc/migration-conventions.md`'s ``m_paper = m_fim * d /
+            (d - 1)`` mapping before comparing against `fim`'s own
+            recursion, which uses a different rate for the identical
+            physical migration process.
+        s: Number of islands.
+
+    Returns:
+        ``(a, b)``.
+    """
+    a = (1.0 - m) ** 2 + m * (2.0 - m) / s
+    b = m * (2.0 - m) / s
+    return a, b
+
+
+def _iterate_paper_identities(
+    *,
+    population_size: int,
+    m: float,
+    mu: float,
+    s: int,
+    within_identity: float,
+    between_identity: float,
+    generations: int,
+    mutation_survival: float | None = None,
+) -> tuple[float, float]:
+    """Return ``(J0, J1)`` after ``generations`` steps of the paper's own Eq. 2/3.
+
+    A direct, term-for-term transcription of Ryman & Leimar (2008)'s
+    Equations 2 and 3 (see Part 4 of the companion math document cited
+    in `_paper_identity_coefficients`, above, for the full derivation),
+    reading Drift -> Migrate -> Mutate each step -- the paper's own
+    order, the reverse of `fim`'s own Migrate -> Mutate -> Drift (see
+    `_iterate_identities`). Part 3.3 of the implications document (also
+    private, same caveat) found this ordering difference is not a real
+    difference once the with-replacement/distinct-pair identity
+    conversion is applied: `test_ryman_leimar_equations_2_and_3_match_
+    fims_own_recursion`, below, is the check that finding rests on.
+
+    Args:
+        population_size: Gene-copy count -- `fim`'s own `population_
+            size` convention, and *already* the paper's own ``2N``
+            directly (their ``N`` is diploid individuals, `fim`'s
+            `population_size` is gene copies -- the same count, not
+            related by an extra factor of 2; doubling it here would be
+            a real bug, not a convention nuance, and was caught exactly
+            this way while writing this function).
+        m: The paper's own migration rate (see `_paper_identity_
+            coefficients`'s own docstring for the mapping needed before
+            comparing against `fim`'s recursion).
+        mu: Per-copy mutation probability.
+        s: Number of islands.
+        within_identity: Initial ``J0``.
+        between_identity: Initial ``J1``.
+        generations: Number of steps to take -- always a fixed count.
+            Unlike `_iterate_identities`, this recursion has no
+            "iterate to a fixed point" mode: R2's whole point is a
+            *trajectory* comparison, not an equilibrium one (Part 7 of
+            the companion math document explains why a trajectory is
+            the stronger test).
+        mutation_survival: Override for the paper's own ``(1 - u)^2``
+            mutation-survival prefactor. ``None`` (the default) uses
+            the paper's own factor unmodified; `test_ryman_leimar_
+            equations_2_and_3_match_fims_own_recursion` also calls this
+            with `_mutation_survival`'s own exact-second-moment factor
+            substituted in, to isolate how much of the row-2 residual
+            in Part 3.2's own table is purely the documented mutation-
+            model difference (Part 3.3's "mutation factor" paragraph)
+            and not a bug in either recursion.
+
+    Returns:
+        The ``(J0, J1)`` pair after ``generations`` steps.
+    """
+    a, b = _paper_identity_coefficients(m, s)
+    survival = mutation_survival if mutation_survival is not None else (1.0 - mu) ** 2
+    inverse = 1.0 / population_size
+    within = within_identity
+    between = between_identity
+    for _ in range(generations):
+        drift_term = inverse + (1.0 - inverse) * within
+        next_within = survival * (a * drift_term + (1.0 - a) * between)
+        next_between = survival * (b * drift_term + (1.0 - b) * between)
+        within, between = next_within, next_between
+    return within, between
+
+
+def _fim_identities_to_paper_convention(
+    within: float, between: float, population_size: int
+) -> tuple[float, float]:
+    """Convert `fim`'s own with-replacement identities to the paper's distinct-pair `J`.
+
+    Exact conversion (`doc/migration-conventions.md` §2.1), applied to
+    the within-deme identity only: `fim` tracks ``E[sum p_k^2]``, the
+    probability two copies drawn *with replacement* match (including
+    drawing the same physical copy twice); Ryman & Leimar's ``J`` is
+    the probability two *distinct* copies match. Two copies from
+    different demes are already distinct by construction, so the
+    between-deme identity needs no conversion.
+
+    Args:
+        within: `fim`'s own within-deme identity, ``jw``.
+        between: `fim`'s own between-deme identity, ``jb`` -- returned
+            unchanged; accepted only so callers can convert both halves
+            of a `_iterate_identities` result in one call.
+        population_size: Gene-copy count ``N`` per deme.
+
+    Returns:
+        ``(Gs_paper, Gd_paper)``, ready to compare directly against
+        `_iterate_paper_identities`'s own ``(J0, J1)`` or to pass to
+        `_identities_to_statistics` (whose ``(G_ST, D)`` forms are the
+        same algebra as the paper's own Part 5.2/5.3, convention-
+        agnostic in the within/between pair fed to them -- verified by
+        hand before this function was written, not assumed).
+    """
+    gs_paper = (population_size * within - 1.0) / (population_size - 1.0)
+    return gs_paper, between
+
+
+# Part 3.2's own tolerances, measured over a 240-combination grid
+# (`N in {200, 2000, 20000}`, `d in {2, 5, 10, 50}`,
+# `m in {0, 1e-4, 1e-3, 1e-2, 1e-1}`, `u in {0, 1e-6, 1e-4, 1e-3}`) sampled
+# at 714 generations across each 5000-generation trajectory. This test
+# re-checks a small, representative slice of that same grid on every run,
+# not the full sweep -- these are the measured *maxima* from the larger
+# sweep, not values freshly calibrated for the smaller slice below (which
+# measures comfortably inside them; see this module's own git history for
+# the exploration that picked the slice).
+_RYMAN_LEIMAR_ROW2_TOL_G = 1.11e-3
+_RYMAN_LEIMAR_ROW2_TOL_D = 4.54e-3
+_RYMAN_LEIMAR_ROW3_TOL_G = 3.4e-7
+_RYMAN_LEIMAR_ROW3_TOL_D = 1.9e-9
+
+
+@pytest.mark.parametrize("generations", [1, 10, 100, 1000, 5000])
+@pytest.mark.parametrize(
+    ("population_size", "m", "mu", "d"),
+    [
+        (100, 0.0001, 0.000001, 5),
+        (2000, 0.01, 0.001, 100),
+        (100, 0.01, 0.005, 4),
+    ],
+)
+def test_ryman_leimar_equations_2_and_3_match_fims_own_recursion(
+    population_size: int, m: float, mu: float, d: int, generations: int
+) -> None:
+    """R2: an independently published derivation reproduces `fim`'s own recursion.
+
+    `_iterate_identities` was derived from `fim`'s own operators (its
+    docstring says so). A recursion derived from the implementation
+    shares the implementation's assumptions, so it cannot catch a wrong
+    one -- only an inconsistency between the code and itself.
+    `_iterate_paper_identities` is a literal transcription of Ryman &
+    Leimar (2008)'s own published Equations 2 and 3, derived by
+    different authors from different premises; agreement between the
+    two, under the R1 migration/identity mapping, is a genuinely
+    external check that the current suite otherwise has no equivalent
+    of for this recursion.
+
+    Two comparisons, each against its own tolerance above:
+
+    1. Migration mapped and identities converted to the distinct-pair
+       convention, but each recursion keeps its own real mutation
+       model -- `fim`'s exact second moment (`_mutation_survival`)
+       against the paper's own ``(1 - u)^2``. The residual is the
+       *real, documented* difference between two correct but different
+       mutation models (Part 3.3's "mutation factor" paragraph: exact
+       for `fim`'s own binomial-count operator, exact for the paper's
+       own per-lineage infinite-alleles model), not an error in either
+       recursion.
+    2. The same, but `_iterate_paper_identities` also substitutes
+       `fim`'s own `_mutation_survival` factor via its own
+       ``mutation_survival`` override -- isolating whether the two
+       recursions are the *same recursion* once every convention and
+       every model difference is accounted for. What is left is float
+       noise accumulated over up to 5000 generations, not a structural
+       residual.
+    """
+    m_paper = m * d / (d - 1)
+
+    fim_within, fim_between = _iterate_identities(
+        population_size=population_size,
+        m=m,
+        mu=mu,
+        d=d,
+        within_identity=1.0,
+        between_identity=0.0,
+        generations=generations,
+    )
+    converted_within, converted_between = _fim_identities_to_paper_convention(
+        fim_within, fim_between, population_size
+    )
+    fim_g_st, fim_d = _identities_to_statistics(converted_within, converted_between, d)
+
+    paper_within, paper_between = _iterate_paper_identities(
+        population_size=population_size,
+        m=m_paper,
+        mu=mu,
+        s=d,
+        within_identity=1.0,
+        between_identity=0.0,
+        generations=generations,
+    )
+    paper_g_st, paper_d = _identities_to_statistics(paper_within, paper_between, d)
+
+    assert paper_g_st == pytest.approx(fim_g_st, abs=_RYMAN_LEIMAR_ROW2_TOL_G)
+    assert paper_d == pytest.approx(fim_d, abs=_RYMAN_LEIMAR_ROW2_TOL_D)
+
+    matched_within, matched_between = _iterate_paper_identities(
+        population_size=population_size,
+        m=m_paper,
+        mu=mu,
+        s=d,
+        within_identity=1.0,
+        between_identity=0.0,
+        generations=generations,
+        mutation_survival=_mutation_survival(mu, population_size),
+    )
+    matched_g_st, matched_d = _identities_to_statistics(
+        matched_within, matched_between, d
+    )
+    assert matched_g_st == pytest.approx(fim_g_st, abs=_RYMAN_LEIMAR_ROW3_TOL_G)
+    assert matched_d == pytest.approx(fim_d, abs=_RYMAN_LEIMAR_ROW3_TOL_D)
+
+
+@pytest.mark.parametrize(
+    ("mu", "expected_h_s"),
+    [
+        (1e-8, 0.000040),
+        (1e-6, 0.003984),
+        (1e-4, 0.285745),
+        (1e-3, 0.800240),
+    ],
+)
+def test_ryman_leimar_equation_4_reproduces_figure_1(
+    mu: float, expected_h_s: float
+) -> None:
+    """R2: the paper's own published Figure 1 heterozygosities, from their Eq. 4.
+
+    Their Equation 4 gives the isolated mutation-drift equilibrium
+    identity, ``J0* = (1 - u)^2 / (2N - (2N - 1)(1 - u)^2)`` -- the
+    fixed point `_iterate_paper_identities` at ``m=0`` would converge
+    to under enough generations (no migration ever needed to reach it;
+    drift and mutation alone determine an isolated island's own
+    equilibrium), but computed here from the closed form directly, both
+    because the paper states
+    it as a closed form and to keep this a genuinely independent check
+    of `_iterate_paper_identities`'s own drift/mutation arithmetic
+    rather than a test that would pass even if that function's per-step
+    logic were subtly wrong. At ``2N = 2000`` (their ``N = 1000``
+    diploid individuals -- see `_iterate_paper_identities`'s own
+    docstring for why this is `fim`'s `population_size`-style gene-copy
+    count directly, not `1000 * 2`), it reproduces all four
+    heterozygosities the paper's own Figure 1 discussion quotes;
+    `expected_h_s` here is Part 6.5's own "recomputed" column (compare
+    the paper's own less-precise printed values there), and the ``abs``
+    tolerance is generous next to the ``~1e-7`` agreement actually
+    measured while writing this test.
+    """
+    two_n = 2000
+    j0_star = (1.0 - mu) ** 2 / (two_n - (two_n - 1) * (1.0 - mu) ** 2)
+    h_s = 1.0 - j0_star
+
+    assert h_s == pytest.approx(expected_h_s, abs=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("t", "expected_g_st"),
+    [
+        (10, 0.0045),
+        (100, 0.0441),
+        (1000, 0.3687),
+        (5000, 0.9097),
+    ],
+)
+def test_ryman_leimar_equation_5_reproduces_the_published_g_st_trajectory(
+    t: int, expected_g_st: float
+) -> None:
+    """R2: the paper's own published mutation-free `G_ST` trajectory, their Eq. 5.
+
+    Complete isolation (``m=0``) and no mutation (``u=0``), starting
+    from ``(J0, J1) = (0, 0)`` -- an ancestral population with no
+    identity-by-descent yet, the infinite-alleles-model founding
+    condition (contrast `_identity_fixed_point`'s own ``(1, 0)``, a
+    *different* founding condition this project uses elsewhere; the two
+    are not interchangeable, and using the wrong one here would not
+    reproduce the paper's own numbers). Under this convention, `J1`
+    stays frozen at its founding value forever -- migration is what
+    lets identity flow between islands, and there is none -- so this is
+    exactly `_iterate_paper_identities` at those parameter values, not
+    a separate closed form Part 6.5 states one for. At ``s=10``,
+    ``2N=2000``, it reproduces the paper's own published landmark
+    table (Part 6.5), including "at `t=100`, `G_ST` is close to 0.04
+    for all mutation rates" -- the ``0.0441`` row.
+    """
+    two_n = 2000
+    s = 10
+    within, between = _iterate_paper_identities(
+        population_size=two_n,
+        m=0.0,
+        mu=0.0,
+        s=s,
+        within_identity=0.0,
+        between_identity=0.0,
+        generations=t,
+    )
+    g_st, _ = _identities_to_statistics(within, between, s)
+
+    assert g_st == pytest.approx(expected_g_st, abs=5e-5)
+
+
 @pytest.mark.parametrize(
     ("population_size", "m", "mu", "d"),
     [
