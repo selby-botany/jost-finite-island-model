@@ -397,10 +397,9 @@ replicate runs are needed for a confidence interval&quot; without guessing a
 fixed count in advance — see each statistic's realized interval in
 <code>summary.json</code> (CLI) or fim.engine.replicate_summary (library).</p>
 <p>An <strong>explicit</strong> <code>replicate_tolerance: null</code> disables the adaptive stop
-entirely — n<sub>replicates</sub> then always runs in full, exactly the
-behavior a config written before this field had a default got by
-default. This is different from simply omitting the key, which now
-means &quot;use the <code>0.01</code> default,&quot; not &quot;disabled.&quot;</p>
+entirely — n<sub>replicates</sub> then always runs in full. This is
+different from simply omitting the key, which means &quot;use the <code>0.01</code>
+default,&quot; not &quot;disabled.&quot;</p>
 <pre><code class="language-yaml">n_replicates: 200          # hard cap
 replicate_tolerance: 0.02  # stop once every watched statistic is this tight
 replicate_minimum: 20

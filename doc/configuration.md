@@ -467,10 +467,9 @@ fixed count in advance — see each statistic's realized interval in
 `summary.json` (CLI) or fim.engine.replicate_summary (library).
 
 An **explicit** `replicate_tolerance: null` disables the adaptive stop
-entirely — n<sub>replicates</sub> then always runs in full, exactly the
-behavior a config written before this field had a default got by
-default. This is different from simply omitting the key, which now
-means "use the `0.01` default," not "disabled."
+entirely — n<sub>replicates</sub> then always runs in full. This is
+different from simply omitting the key, which means "use the `0.01`
+default," not "disabled."
 
 ```yaml
 n_replicates: 200          # hard cap

@@ -1076,9 +1076,9 @@ built (§11): each names the one place the change lands.
 | …several statistics had to agree before stopping? | 𝖯["convergence_statistic"] as a list plus 𝖯["convergence_combinator"] (`"all"`/`"any"`) | the single-statistic path (§5) is that combinator's one-element special case, not a different code path |
 | …many replicate runs were needed for a confidence interval, without hand-guessing the count? | 𝖯["replicate_tolerance"]: once replicate_minimum replicates exist, the batch stops as soon as every watched statistic's across-replicate Student's-t interval (`fim.statistics.interval`) is that tight, combined by the same convergence_combinator used within a run, with n<sub>replicates</sub> as the hard cap. fim.engine.replicate_summary and the CLI's `summary.json` report the realized interval | `ConfidenceIntervalCriterion` implements the same `ConvergenceCriterion` protocol as `TrailingWindowCriterion` and plugs into an unmodified `ConvergenceMonitor`, so the replicate batch loop gains a second stopping rule rather than a second loop |
 | …replicate batches ran faster? | max_workers (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs _run_one unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A store_factory gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
-| …replicate batches ran faster, without process-per-replicate overhead? | `fim()`'s own `engine_backend="generational"` (a config-file field now, not library-only — see doc/configuration.md#engine-backend-and-jit) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency); genuinely faster single-threaded (roughly 1.7x, `dev/bin/benchmark-engines`, 2026-09-02) but not a thread-scaling fix — `migrate`'s/`mutate`'s own RNG calls stay unjitted regardless. **Re-measured 2026-09-02, superseding an earlier "helps more as thread count rises with `d`" claim this row previously made**: a thread-count sweep at `d=60` found *no* real speedup at any thread count from 1 to 14, under either `mutation_model`, with or without `jit="numba"` — flat to actively worse than one thread past 4-6 threads. Root cause, found by profiling: the RNG primitive `drift` now uses to stay bit-identical with the other two backends (`_inversion_binomial`, added to close a real correctness gap — [§4.6](#46-choosing-an-engine-backend), [developer guide](developer.md#engine-backends)) is pure Python and holds the GIL almost the entire time `drift` runs, which was not true of what it replaced. A real, known, presently-unaddressed cost of that correctness fix — not a design flaw in threading itself, and not fixed here: doing so needs its own JIT-compiled, `nogil=True`, bit-identical replacement for `migrate`'s/`mutate`'s own RNG calls too |
-| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme, for the bounded-K (finite-alleles) mutation model? | `fim()`'s own `engine_backend="generational-vector"` (a config-file field now, not library-only — see doc/configuration.md#engine-backend-and-jit), scoped to `mutation_model="finite_alleles"` and `migrant_sampling="continuous"` — a config outside that scope raises `ValueError` naming the violated constraint | a third engine implementation, `VectorizedAdvancer`, converts each replicate's own state to a dense `(deme, allele)` array once per generation and runs `migrate`/`mutate`/`drift` fused on that array (`fim.model.vectorized`). Matches the other two backends exactly, same seed, when migration is off; with migration active, matches them statistically rather than bit-for-bit (same mean differentiation statistics across many seeds, confirmed to carry no directional bias, not necessarily the same individual trajectory) — its own dense-matrix migration blend and the dict-based backends' own arithmetic are two different, equally valid floating-point paths to the identical computation, occasionally landing on opposite sides of a discrete draw's own decision boundary. Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). **Re-measured 2026-09-02** (`dev/bin/benchmark-engines`, normalized to a single-lineage `"lineal"` run at the same `d`, not to a same-size `"lineal"` batch the way an earlier measurement here was): across `d` from 4 to 80, `"generational-vector"` was the faster of the two batch-capable engines at *every* point tested, the advantage narrowing as `d` grows rather than only appearing past a threshold — a real change from the previously-recorded "slower until roughly `d=30`" finding, not a refinement of it, and directly a consequence of the `"generational"` regression in the row above: with `"generational"` no longer getting a real thread-count benefit at any `d`, there is little of an early-`d` advantage left for `"generational-vector"` to be behind. `auto_vector_min_d`'s own default (next row) is very likely stale evidence given this — flagged there, not changed here without further characterization |
-| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | `fim()`'s own `engine_backend="auto"` (a config-file field now, not library-only — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default 35) and `auto_vector_max_capacity` (default 1024) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity (4<sup>length</sup> under `finite_alleles`) is at most the capacity ceiling, *and* the config is otherwise eligible for it (`finite_alleles`/continuous migration), `"generational"` otherwise — never `"lineal"`, since no benchmark data yet characterizes that boundary. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. **`auto_vector_max_capacity` closes a real gap this row's own resolution used to have**: before it existed, this row read `d` alone, so a large-`d`, large-capacity config could resolve to `"generational-vector"` inside the exact region a separate loci-length sweep already found it losing in (`"generational-vector"` wins through capacity 1024, loses to `"generational"` + `jit="numba"` at capacity 4096 — `20260901-claude-sonnet-5-fim-engine-backend-factory-design.md` §10 item 10b, the project's own design-history record, not duplicated here) — checked directly against the running code, not assumed, that this row's own resolution logic never read capacity at all before this fix. **Both defaults were measured before the RNG-correctness fix described in the two rows above landed, and the 2026-09-02 re-measurement found `"generational-vector"` already ahead at `d=4`, the smallest value tested** — neither constant has been changed (a deliberate choice needs its own confirmation, not a silent edit alongside a documentation pass), but neither should be trusted as current evidence until re-characterized; both stay caller-supplied parameters for exactly this kind of drift, not hardcoded literals, so overriding either is already possible without a code change |
+| …replicate batches ran faster, without process-per-replicate overhead? | `fim()`'s own `engine_backend="generational"` (a config-file field — see doc/configuration.md#engine-backend-and-jit) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency): a real, substantial speedup that comes from removing CPython interpreter overhead rather than from thread-count parallelism — the same speedup is already present at a single worker and does not grow as more workers are added; `jit="off"` shows no speedup at any worker count ([Appendix B.2](#b2-g-thread-count-sweep) has the measured table). `migrate`'s/`mutate`'s own RNG calls stay unjitted for the matrix-form migration and stochastic migrant-sampling paths, so those two configurations do not see this speedup |
+| …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme, for the bounded-K (finite-alleles) mutation model? | `fim()`'s own `engine_backend="generational-vector"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), scoped to `mutation_model="finite_alleles"` and `migrant_sampling="continuous"` — a config outside that scope raises `ValueError` naming the violated constraint | a third engine implementation, `VectorizedAdvancer`, converts each replicate's own state to a dense `(deme, allele)` array once per generation and runs `migrate`/`mutate`/`drift` fused on that array (`fim.model.vectorized`; [§4.6](#46-choosing-an-engine-backend) explains the underlying math for a scientist reader). Matches the other two backends exactly, same seed, when migration is off; with migration active, matches them statistically rather than bit-for-bit — same mean differentiation statistics across many seeds, confirmed to carry no directional bias, not necessarily the same individual trajectory ([§4.6](#46-choosing-an-engine-backend) has the precise mechanism and a measured figure). Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). `"generational-vector"` is the fastest of the four measured engine/JIT combinations at every `d` tested, from 2 through 120 — [Appendix B.1](#b1-d-deme-count-sweep) has the measured tables |
+| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | `fim()`'s own `engine_backend="auto"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default 35) and `auto_vector_max_capacity` (default 1024) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity (4<sup>length</sup> under `finite_alleles`) is at most the capacity ceiling, *and* the config is otherwise eligible for it (`finite_alleles`/continuous migration), `"generational"` otherwise — never `"lineal"`, since no benchmark data yet characterizes that boundary. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. Checking every locus's own capacity, not `d` alone, is what stops a large-`d`, large-capacity config from resolving to `"generational-vector"` inside a region it actually loses in. The row above's own measured range (`d` from 2 through 120) finds `"generational-vector"` fastest at every tested point, with no sign yet of a lower crossover — `auto_vector_min_d`'s own role in this decision, and `auto_vector_max_capacity`'s own crossover, are both under active re-characterization at this project's own current measurement pass, not settled numbers. Both stay caller-supplied parameters, not hardcoded literals, so overriding either is already possible without a code change |
 
 ### 9.2 Landing spots for changes that are not built
 
@@ -1303,6 +1303,87 @@ under active development — kept here only as the original illustrative
 sketches this appendix's introduction describes, with their
 now-unavailable images (moved out of this repository) replaced by their
 own alt-text descriptions rather than left as broken links.
+
+## Appendix B. Engine backend benchmark results
+
+§4.6 and §9.1 above describe what the measured evidence *shows*, in
+present tense, without embedding the raw numbers in flowing prose —
+those numbers live here instead, each table stamped with the one
+thing worth dating: the exact commit and hardware that produced it. A
+benchmark result is only meaningful alongside that provenance; without
+it, a number from a different day and a different machine looks like
+today's own current behavior and is not. Produced by
+`dev/bin/benchmark-engines` (its own module docstring has the full
+methodology — median of 3 independent, freshly built runs per point,
+not a re-timed warm cache); reproduce any table below with the exact
+command shown above it.
+
+### B.1 `d` (deme count) sweep
+
+Commit `8a07a97`, citrus-2 (Intel Core Ultra 9 185H, 22 threads,
+idle), 2026-09-03/04.
+
+```console
+dev/bin/benchmark-engines --sweep d --values 4,10,20,35,50,80,120 \
+    --replicates 16 --generations 100 --trials 3
+```
+
+```text
+     value   L_1(s)   L_b(s)  L_b/L1  G-off(s)    /L1  G-jit(s)    /L1     V(s)    /L1  fastest
+-----------------------------------------------------------------------------------------------
+         4    0.043    0.754   17.65     0.951  22.24     1.062  24.84    0.372   8.69        V
+        10    0.138    2.368   17.15     2.525  18.29     2.283  16.54    0.818   5.93        V
+        20    0.366    5.907   16.16     6.018  16.46     5.113  13.99    1.581   4.32        V
+        35    0.724   12.894   17.81    13.566  18.74     9.645  13.33    2.831   3.91        V
+        50    1.349   22.537   16.70    23.196  17.19    14.834  10.99    4.192   3.11        V
+        80    2.854   45.126   15.81    47.602  16.68    27.163   9.52    7.062   2.47        V
+       120    5.071   79.941   15.77    85.891  16.94    45.650   9.00   11.196   2.21        V
+```
+
+```console
+dev/bin/benchmark-engines --sweep d --values 2,3,4,6,8 \
+    --replicates 16 --generations 100 --trials 3
+```
+
+```text
+     value   L_1(s)   L_b(s)  L_b/L1  G-off(s)    /L1  G-jit(s)    /L1     V(s)    /L1  fastest
+-----------------------------------------------------------------------------------------------
+         2    0.026    0.351   13.56     0.487  18.80     0.683  26.38    0.236   9.11        V
+         3    0.034    0.535   15.67     0.722  21.13     0.859  25.14    0.315   9.22        V
+         4    0.044    0.745   17.00     0.944  21.54     0.924  21.08    0.434   9.91        V
+         6    0.078    1.179   15.14     1.366  17.53     1.424  18.28    0.514   6.60        V
+         8    0.101    1.695   16.73     2.079  20.52     1.845  18.21    0.676   6.67        V
+```
+
+`V` (`"generational-vector"`) is the fastest column at every point in
+both tables — the full measured range is `d=2` through `d=120`, with
+no lower crossover found yet. `G-off`'s own `/L1` ratio stays roughly
+flat (16-22x) across the whole range; `G-jit`'s own ratio falls as `d`
+grows (26x at `d=2` down to 9x at `d=120`).
+
+### B.2 G thread-count sweep
+
+Commit `883c41e`, citrus-2 (Intel Core Ultra 9 185H, 22 threads,
+idle), 2026-09-03. `d=60`, `N=200`, `m=0.1`, `mu=0.02`, 8 replicates,
+150 forced generations (`convergence_window=150`), median of 3,
+`workers` ∈ {1,2,4,6,8,10} × `jit` ∈ {`"off"`, `"numba"`}, scheduled
+against a real core budget rather than run either fully serial or
+fully concurrent (concurrent same-worker-count trials would corrupt
+each other's own timing).
+
+```text
+                jit='off'          jit='numba'       numba speedup
+workers= 1      250.87s (1.00x)    134.80s (1.86x)
+workers= 2      241.28s (1.04x)    120.45s (2.08x)
+workers= 4      251.50s (1.00x)    128.96s (1.95x)
+workers= 6      298.21s (0.84x)    131.13s (1.91x)
+workers= 8      285.60s (0.88x)    151.20s (1.66x)
+workers=10      230.21s (1.09x)    123.83s (2.03x)
+```
+
+`jit="off"` shows no real speedup at any worker count. `jit="numba"`
+shows a real, consistent ~1.7-2.1x speedup that is already fully
+present at `workers=1` and does not grow with more workers.
 
 ## Metadata
 
