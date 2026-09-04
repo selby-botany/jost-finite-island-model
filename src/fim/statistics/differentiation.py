@@ -48,7 +48,7 @@ from collections.abc import Mapping, Sequence
 from math import exp, expm1, fsum, isfinite, log, sqrt
 from numbers import Real
 from operator import index as integer_index
-from typing import Any, TypeAlias, TypedDict
+from typing import Any, TypeAlias, TypedDict, cast
 
 FrequencyTable: TypeAlias = Sequence[Mapping[Any, Any]]
 DemeWeights: TypeAlias = Sequence[Any] | None
@@ -1462,6 +1462,8 @@ def equilibrium_shannon_differentiation(
 def statistics_report(
     table: FrequencyTable,
     deme_weights: DemeWeights = None,
+    *,
+    validate: bool = True,
 ) -> DifferentiationReport:
     """Return the scalar statistics block consumed by an engine report.
 
@@ -1477,25 +1479,49 @@ def statistics_report(
     applied only to ``E_ST``; pass relative deme sizes to request its native
     size-weighted form.
 
-    Validates `table` exactly once, then computes every field from that
-    one already-validated `demes` tuple directly, via each statistic's
-    own private `_..._from_demes` core — not by calling the public
-    `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st` functions, which would each
-    independently re-validate (and, for `g_st`/`jost_d`, re-derive
-    `H_S`/`H_T` a second time) the identical data this function already
-    validated at its own top. Measured, not assumed, to be a real cost:
-    profiling `_convergence_values_vectorized`'s own reference-scale hot
-    path found roughly eleven full validation passes over the same table
-    per call before this fix (`20260903-claude-sonnet-5-fim-vg-
-    performance-campaign-design.md` §6.1 item 3) — one here, plus one
-    inside each of `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st`, plus a
-    further two apiece inside `g_st`/`jost_d`'s own internal `h_s`/`h_t`
-    calls. Every public statistic function's own standalone behavior for
-    a caller who invokes it directly, with genuinely unvalidated input,
-    is unchanged by this — only the redundant re-validation *through
-    this function* is gone.
+    Validates `table` exactly once (unless `validate=False`, see below),
+    then computes every field from that one `demes` tuple directly, via
+    each statistic's own private `_..._from_demes` core — not by calling
+    the public `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/`k_st` functions, which
+    would each independently re-validate (and, for `g_st`/`jost_d`,
+    re-derive `H_S`/`H_T` a second time) the identical data this
+    function already validated at its own top. Measured, not assumed, to
+    be a real cost: profiling `_convergence_values_vectorized`'s own
+    reference-scale hot path found roughly eleven full validation passes
+    over the same table per call before this fix (`20260903-claude-
+    sonnet-5-fim-vg-performance-campaign-design.md` §6.1 item 3) — one
+    here, plus one inside each of `h_s`/`h_t`/`g_st`/`jost_d`/`e_st`/
+    `k_st`, plus a further two apiece inside `g_st`/`jost_d`'s own
+    internal `h_s`/`h_t` calls. Every public statistic function's own
+    standalone behavior for a caller who invokes it directly, with
+    genuinely unvalidated input, is unchanged by this — only the
+    redundant re-validation *through this function* is gone.
+
+    Args:
+        table: Every deme's own allele-frequency mapping.
+        deme_weights: See above.
+        validate: Whether `table` is run through `_validate_table`
+            (`True`, the default — always safe, unchanged behavior for
+            every existing caller) or trusted as already exactly
+            `Sequence[dict[int, float]]`, each deme already summing to
+            1, with `False` — an opt-in fast path for a caller that
+            already knows this, the same reasoning and the same
+            measured payoff as `fim.persistence.store.write_generation`'s
+            own `validate` keyword (that module's own top docstring has
+            the general argument). `fim.engine._statistics_for_locus_
+            vectorized` is the one caller that passes `False`: its own
+            `table` is built fresh, in the same expression, directly off
+            a `VectorizedState`'s own dense array (already-normalized by
+            construction, every key already a genuine `int`, every value
+            already a genuine `float`) — re-validating it here cannot
+            find a defect that construction did not already rule out,
+            only re-confirm one, on every locus, every generation.
     """
-    demes = _validate_table(table)
+    demes = (
+        _validate_table(table)
+        if validate
+        else cast("tuple[dict[int, float], ...]", tuple(table))
+    )
     _require_multiple_demes(demes)
     equal_weights = _validate_weights(len(demes), None)
     within = _h_s_from_demes(demes, equal_weights)

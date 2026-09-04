@@ -2644,7 +2644,7 @@ def _statistics_for_locus(
     weights: Sequence[float] | None = (
         params.population_sizes if params.deme_weighting == "size" else None
     )
-    return statistics_report(table, weights)
+    return statistics_report(table, weights, validate=False)
 
 
 def _statistics_for_locus_vectorized(
@@ -2673,7 +2673,7 @@ def _statistics_for_locus_vectorized(
     weights: Sequence[float] | None = (
         params.population_sizes if params.deme_weighting == "size" else None
     )
-    return statistics_report(table, weights)
+    return statistics_report(table, weights, validate=False)
 
 
 def _report_statistic(
