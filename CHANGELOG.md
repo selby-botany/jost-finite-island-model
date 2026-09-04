@@ -62,6 +62,33 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`null` for `None`), never omits it, so `from_mapping(params.to_dict())
   == params` holds unconditionally regardless of which default is
   current.
+- `report_for_state`'s own `"D"`/`"G_ST"` fields now pool `H_S`/`H_T`
+  across loci first and compute one `D`/`G_ST` from those pooled values
+  ("ratio of means"), instead of averaging each locus's own `D`/`G_ST`
+  ratio across loci ("mean of ratios") — a real, measured accuracy
+  improvement, not a stylistic change: against the exact gene-identity
+  recursion at this project's own reference scale, "ratio of means"
+  landed within 0.25% of the recursion's own prediction where "mean of
+  ratios" was off by 1.88% (up to 4.84% of `D` alone, 3.4 standard
+  errors of the mean, in the worst individually measured scenario;
+  `G_ST`'s own denominator blends both identities and damps the effect
+  to 0.73%). "Mean of ratios" suffers a Jensen's-inequality-style bias
+  from unstable small-denominator per-locus ratios that pooling before
+  dividing avoids; "ratio of means" is also what the exact recursion
+  itself predicts, since `G_ST`/`D` are both linear in `H_S`/`H_T`.
+  A new `locus_aggregation` setting (`"ratio_of_means"`, the new
+  default, or `"mean_of_ratios"`, this project's own original behavior)
+  lets a caller opt back into the old numbers for comparability with
+  literature or prior analyses that used them, not because "mean of
+  ratios" is the better estimator. `H_S`, `H_T`, `H_ST`, `E_ST`, and
+  `K_ST` are all unaffected — each is already a linear mean across
+  loci, with no such ambiguity to resolve. R3 in `20260903-claude-
+  opus-5-gene-identity-recursion-fim-implications.md`'s own remediation
+  sequencing (a private companion document, not part of this
+  repository — see `doc/migration-conventions.md`'s own "Who this
+  document is for" section); pinned against this project's own
+  validation-harness oracle by `test_report_for_state_ratio_of_means_
+  matches_the_pooled_oracle`.
 
 ### Fixed
 

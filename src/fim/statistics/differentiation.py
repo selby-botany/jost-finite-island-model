@@ -636,15 +636,23 @@ def g_st_log(table: FrequencyTable, deme_weights: DemeWeights = None) -> float |
     return _bounded(value, "G_ST_log")
 
 
-def _jost_d_from_demes(
-    demes: tuple[dict[int, float], ...], within: float, total: float
+def _jost_d_from_within_and_total(
+    deme_count: int, within: float, total: float
 ) -> float:
     """`jost_d`'s own real math, given already-computed `H_S`/`H_T`.
 
     Split out for the identical reason `_g_st_from_demes`'s own
-    docstring gives.
+    docstring gives. Takes `deme_count` directly rather than the full
+    `demes` tuple `_g_st_from_demes` takes — this function's own
+    `d / (d - 1)` rescaling only ever needed the count, never the
+    frequency content, so a caller that already has a deme count on
+    hand but no reason to construct a `demes` tuple (`fim.engine.
+    report_for_state`'s own `"ratio_of_means"` cross-locus aggregation,
+    which pools `H_S`/`H_T` across loci rather than working from any one
+    locus's own frequency table) does not have to build one just to
+    satisfy this signature.
     """
-    value = ((total - within) / (1.0 - within)) * len(demes) / (len(demes) - 1)
+    value = ((total - within) / (1.0 - within)) * deme_count / (deme_count - 1)
     return _bounded(value, "D")
 
 
@@ -668,7 +676,7 @@ def jost_d(table: FrequencyTable) -> float:
     weights = _validate_weights(len(demes), None)
     within = _h_s_from_demes(demes, weights)
     total = _h_t_from_demes(demes, weights)
-    return _jost_d_from_demes(demes, within, total)
+    return _jost_d_from_within_and_total(len(demes), within, total)
 
 
 def _e_st_from_demes(
@@ -1502,7 +1510,7 @@ def statistics_report(
         "H_T": total,
         "H_ST": _bounded((total - within) / (1.0 - within), "H_ST"),
         "G_ST": _g_st_from_demes(total, within),
-        "D": _jost_d_from_demes(demes, within, total),
+        "D": _jost_d_from_within_and_total(len(demes), within, total),
         "E_ST": _e_st_from_demes(demes, entropy_weights),
         "K_ST": _k_st_from_demes(demes),
     }

@@ -12565,6 +12565,39 @@ def read(run_id: str) -> Iterator[TrajectoryRow]
 
 Yield nothing; no trajectory is retained.
 
+<a id="validation.test_simulator_equilibrium.test_report_for_state_ratio_of_means_matches_the_pooled_oracle"></a>
+
+#### test\_report\_for\_state\_ratio\_of\_means\_matches\_the\_pooled\_oracle
+
+```python
+def test_report_for_state_ratio_of_means_matches_the_pooled_oracle() -> None
+```
+
+Production's default ``locus_aggregation`` agrees with this file's own oracle.
+
+`_pooled_g_st_d`, above, is `_run_engine_pooled`'s independent
+pooled-across-loci ``(G_ST, D)`` oracle — built directly from `fim.
+statistics`'s own per-locus `h_s`/`h_t` primitives, never from `fim.
+engine.report_for_state`, specifically so this file's own published-
+value comparisons never depend on production's own cross-locus
+aggregation being correct. Before R3 (see
+`20260903-claude-opus-5-gene-identity-recursion-fim-implications.md`),
+production instead averaged each locus's own `D`/`G_ST` ratio — a
+different, measurably biased number (see CHANGELOG.md's own entry for
+this change) that this test would have failed against.
+
+This test runs one short, deterministic simulation and asserts
+`report_for_state`'s own `"G_ST"`/`"D"` fields, under the
+`locus_aggregation="ratio_of_means"` default, equal `_pooled_g_st_d`'s
+own numbers for the identical final state — exactly, not approximately,
+since both now do the identical arithmetic (mean `H_S`/`H_T` across
+loci, then one `G_ST`/`D` from those pooled values). A regression in
+either function's own pooling arithmetic would eventually show up as
+drift in some published-value scenario elsewhere in this file anyway,
+but only this test names the two functions and reports the failure as
+"production disagrees with the validation oracle" rather than as an
+unexplained accuracy regression somewhere else.
+
 <a id="validation.test_simulator_equilibrium.test_engine_reproduces_part_vi_equilibrium_via_generational_backend"></a>
 
 #### test\_engine\_reproduces\_part\_vi\_equilibrium\_via\_generational\_backend

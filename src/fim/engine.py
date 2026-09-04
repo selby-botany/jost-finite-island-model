@@ -128,6 +128,7 @@ from fim.model.operators import _population_sizes, step
 from fim.model.params import (
     DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
     DEFAULT_AUTO_VECTOR_MIN_D,
+    LocusAggregation,
     Migration,
     MutationRate,
     PopulationSize,
@@ -146,7 +147,12 @@ from fim.model.vectorized import (
 )
 from fim.persistence.manifest import CURRENT_SCHEMA_VERSION, RunManifest
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
-from fim.statistics.differentiation import DifferentiationReport, statistics_report
+from fim.statistics.differentiation import (
+    DifferentiationReport,
+    _g_st_from_demes,
+    _jost_d_from_within_and_total,
+    statistics_report,
+)
 from fim.statistics.interval import ConfidenceInterval, confidence_interval
 
 Clock: TypeAlias = Callable[[], datetime]
@@ -1732,6 +1738,15 @@ def report_for_state(
         _statistics_for_locus(state, params, locus_index)
         for locus_index in range(state.locus_count)
     )
+    mean_h_s = _mean(tuple(report["H_S"] for report in locus_reports))
+    mean_h_t = _mean(tuple(report["H_T"] for report in locus_reports))
+    g_st, d = _pooled_g_st_and_d(
+        locus_reports,
+        mean_h_s=mean_h_s,
+        mean_h_t=mean_h_t,
+        deme_count=state.deme_count,
+        locus_aggregation=params.locus_aggregation,
+    )
     return {
         "run_id": run_id,
         "generation": state.generation,
@@ -1742,12 +1757,12 @@ def report_for_state(
             else list(params.convergence_statistic)
         ),
         "reason": reason,
-        "G_ST": _mean_g_st_across_loci(locus_reports),
-        "D": _mean(tuple(report["D"] for report in locus_reports)),
+        "G_ST": g_st,
+        "D": d,
         "E_ST": _mean(tuple(report["E_ST"] for report in locus_reports)),
         "K_ST": _mean(tuple(report["K_ST"] for report in locus_reports)),
-        "H_S": _mean(tuple(report["H_S"] for report in locus_reports)),
-        "H_T": _mean(tuple(report["H_T"] for report in locus_reports)),
+        "H_S": mean_h_s,
+        "H_T": mean_h_t,
         "H_ST": _mean(tuple(report["H_ST"] for report in locus_reports)),
     }
 
@@ -2539,6 +2554,46 @@ def _mean_g_st_across_loci(
     if not defined:
         return None
     return _mean(tuple(defined))
+
+
+def _pooled_g_st_and_d(
+    locus_reports: Sequence[DifferentiationReport],
+    *,
+    mean_h_s: float,
+    mean_h_t: float,
+    deme_count: int,
+    locus_aggregation: LocusAggregation,
+) -> tuple[float | None, float]:
+    """Return ``(G_ST, D)``, aggregated across loci per `locus_aggregation`.
+
+    Two genuinely different estimators of the same two named statistics
+    (`SimulationParams.locus_aggregation`'s own docstring has the full
+    argument for why they differ and which this project recommends):
+
+    - `"ratio_of_means"` (the default): pool `H_S`/`H_T` across loci
+      first — `mean_h_s`/`mean_h_t`, already computed by the caller for
+      the report's own `H_S`/`H_T` fields, reused here rather than
+      recomputed — then compute one `G_ST`/`D` from those pooled values,
+      via the identical private cores `g_st`/`jost_d` use internally
+      (`_g_st_from_demes`/`_jost_d_from_within_and_total`), so this
+      function does not re-derive either formula independently.
+    - `"mean_of_ratios"` (this project's own original behavior): average
+      each locus's own already-computed `G_ST`/`D` — unchanged from
+      before this function existed.
+
+    `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST` are unaffected by either choice
+    (`SimulationParams.locus_aggregation`'s own docstring again) and stay
+    a plain per-locus mean regardless, computed by the caller.
+    """
+    if locus_aggregation == "mean_of_ratios":
+        return (
+            _mean_g_st_across_loci(locus_reports),
+            _mean(tuple(report["D"] for report in locus_reports)),
+        )
+    return (
+        _g_st_from_demes(mean_h_t, mean_h_s),
+        _jost_d_from_within_and_total(deme_count, mean_h_s, mean_h_t),
+    )
 
 
 def _statistics_for_locus(

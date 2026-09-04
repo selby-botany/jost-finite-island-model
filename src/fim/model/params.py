@@ -41,6 +41,7 @@ PopulationSize = int | tuple[int, ...]
 Migration = float | tuple[tuple[float, ...], ...]
 MutationRate = float | tuple[float, ...]
 DemeWeighting = Literal["equal", "size"]
+LocusAggregation = Literal["ratio_of_means", "mean_of_ratios"]
 ConvergenceStatistic = str | tuple[str, ...]
 ConvergenceCombinator = Literal["any", "all"]
 MigrantSampling = Literal["continuous", "stochastic"]
@@ -142,6 +143,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "initial_allele_count": 2,
     "initial_concentration": 1.0,
     "deme_weighting": "size",
+    "locus_aggregation": "ratio_of_means",
     "convergence_statistic": "D",
     "convergence_combinator": "all",
     "convergence_window": 50,
@@ -173,6 +175,7 @@ _CONFIG_KEYS: Final = frozenset(
         "initial_allele_count",
         "initial_concentration",
         "deme_weighting",
+        "locus_aggregation",
         "convergence_statistic",
         "convergence_combinator",
         "convergence_window",
@@ -237,6 +240,25 @@ class SimulationParams:
         initial_allele_count: Founding allele count per locus.
         initial_concentration: Symmetric Dirichlet concentration.
         deme_weighting: Weighting used by statistics that support it.
+        locus_aggregation: How `D` and `G_ST` combine across loci in
+            `fim.engine.report_for_state`'s own final report —
+            `"ratio_of_means"` (the default): average `H_S`/`H_T` across
+            loci first, then compute one `D`/`G_ST` from those pooled
+            values, matching what the exact gene-identity recursion
+            predicts and avoiding the small-denominator instability a
+            per-locus ratio can have. `"mean_of_ratios"`: compute `D`/
+            `G_ST` at each locus independently, then average those —
+            this project's own original behavior, kept available for
+            comparability with literature or prior analyses that used
+            it, not because it is the better estimator: measured against
+            the exact gene-identity recursion at this project's own
+            reference scale, `"ratio_of_means"` landed within 0.25% of
+            the recursion's own prediction where `"mean_of_ratios"` was
+            off by 1.88% (CHANGELOG.md's own entry for this change has
+            the full comparison). Every other
+            reported statistic (`H_S`, `H_T`, `H_ST`, `E_ST`, `K_ST`) is
+            unaffected — each is already a linear mean across loci, with
+            no such ambiguity to resolve.
         convergence_statistic: One statistic, or several, watched by the
             convergence monitor.
         convergence_combinator: How several watched statistics combine —
@@ -337,6 +359,7 @@ class SimulationParams:
     initial_allele_count: int = 2
     initial_concentration: float = 1.0
     deme_weighting: DemeWeighting = "size"
+    locus_aggregation: LocusAggregation = "ratio_of_means"
     convergence_statistic: ConvergenceStatistic = "D"
     convergence_combinator: ConvergenceCombinator = "all"
     convergence_window: int = 50
@@ -404,8 +427,7 @@ class SimulationParams:
             or self.initial_concentration <= 0.0
         ):
             raise ValueError("initial_concentration must be greater than 0")
-        if self.deme_weighting not in {"equal", "size"}:
-            raise ValueError("deme_weighting must be 'equal' or 'size'")
+        _validate_weighting_and_aggregation(self.deme_weighting, self.locus_aggregation)
         convergence_statistics = _normalize_convergence_statistic(
             self.convergence_statistic
         )
@@ -573,6 +595,7 @@ class SimulationParams:
             "initial_allele_count": self.initial_allele_count,
             "initial_concentration": self.initial_concentration,
             "deme_weighting": self.deme_weighting,
+            "locus_aggregation": self.locus_aggregation,
             "convergence_statistic": (
                 self.convergence_statistic
                 if isinstance(self.convergence_statistic, str)
@@ -680,6 +703,12 @@ class SimulationParams:
                 config.get(
                     "deme_weighting",
                     PARAMETER_DEFAULTS["deme_weighting"],
+                )
+            ),
+            locus_aggregation=_parse_locus_aggregation(
+                config.get(
+                    "locus_aggregation",
+                    PARAMETER_DEFAULTS["locus_aggregation"],
                 )
             ),
             convergence_statistic=_parse_convergence_statistic(
@@ -1102,6 +1131,16 @@ def _parse_deme_weighting(value: Any) -> DemeWeighting:
     raise ValueError("deme_weighting must be 'equal' or 'size'")
 
 
+def _parse_locus_aggregation(value: Any) -> LocusAggregation:
+    """Parse the two supported locus-aggregation values."""
+    parsed = _parse_string("locus_aggregation", value)
+    if parsed == "ratio_of_means":
+        return "ratio_of_means"
+    if parsed == "mean_of_ratios":
+        return "mean_of_ratios"
+    raise ValueError("locus_aggregation must be 'ratio_of_means' or 'mean_of_ratios'")
+
+
 def _parse_float(name: str, value: Any) -> float:
     """Parse a finite config float without accepting booleans."""
     if isinstance(value, bool) or not isinstance(value, int | float):
@@ -1308,6 +1347,26 @@ def _validate_finite_allele_capacity(
                 f"finite_alleles capacity ({capacity}) for length "
                 f"{locus.length}"
             )
+
+
+def _validate_weighting_and_aggregation(
+    deme_weighting: DemeWeighting,
+    locus_aggregation: LocusAggregation,
+) -> None:
+    """Validate the two statistics-aggregation choices together.
+
+    Factored out of `__post_init__` itself purely to stay under ruff's
+    own branch-count limit for that method — `deme_weighting` and
+    `locus_aggregation` share nothing behaviorally (one controls how
+    demes are weighted, the other how loci are combined), grouped here
+    only because each is a plain two-value string check.
+    """
+    if deme_weighting not in {"equal", "size"}:
+        raise ValueError("deme_weighting must be 'equal' or 'size'")
+    if locus_aggregation not in {"ratio_of_means", "mean_of_ratios"}:
+        raise ValueError(
+            "locus_aggregation must be 'ratio_of_means' or 'mean_of_ratios'"
+        )
 
 
 def _validate_engine_backend(

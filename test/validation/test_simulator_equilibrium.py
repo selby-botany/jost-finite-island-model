@@ -69,7 +69,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from fim.engine import EngineBackendChoice, fim
+from fim.engine import EngineBackendChoice, fim, report_for_state
 from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import InitialFrequencies, Migration, SimulationParams
@@ -709,6 +709,16 @@ def _pooled_g_st_d(state: ModelState, d: int, n_loci: int) -> tuple[float, float
     global fixation). The forms match ``fim.statistics``'s ``g_st`` and
     ``jost_d`` on the mean within- and total-heterozygosities.
 
+    This is also exactly what `fim.engine.report_for_state` now computes by
+    default (`SimulationParams.locus_aggregation == "ratio_of_means"`, R3 in
+    `20260903-claude-opus-5-gene-identity-recursion-fim-implications.md`'s
+    own remediation sequencing) — production and this file's own oracle used
+    to differ here (production averaged per-locus ratios instead), and
+    `test_report_for_state_ratio_of_means_matches_the_pooled_oracle`, right
+    below, pins that the two now agree on the same simulated state rather
+    than leaving it as something every scenario in this file merely happens
+    to be consistent with.
+
     Args:
         state: Final state of one replicate.
         d: Number of demes.
@@ -738,6 +748,64 @@ def _pooled_g_st_d(state: ModelState, d: int, n_loci: int) -> tuple[float, float
         else 0.0
     )
     return g_st, jost_d
+
+
+def test_report_for_state_ratio_of_means_matches_the_pooled_oracle() -> None:
+    """Production's default ``locus_aggregation`` agrees with this file's own oracle.
+
+    `_pooled_g_st_d`, above, is `_run_engine_pooled`'s independent
+    pooled-across-loci ``(G_ST, D)`` oracle — built directly from `fim.
+    statistics`'s own per-locus `h_s`/`h_t` primitives, never from `fim.
+    engine.report_for_state`, specifically so this file's own published-
+    value comparisons never depend on production's own cross-locus
+    aggregation being correct. Before R3 (see
+    `20260903-claude-opus-5-gene-identity-recursion-fim-implications.md`),
+    production instead averaged each locus's own `D`/`G_ST` ratio — a
+    different, measurably biased number (see CHANGELOG.md's own entry for
+    this change) that this test would have failed against.
+
+    This test runs one short, deterministic simulation and asserts
+    `report_for_state`'s own `"G_ST"`/`"D"` fields, under the
+    `locus_aggregation="ratio_of_means"` default, equal `_pooled_g_st_d`'s
+    own numbers for the identical final state — exactly, not approximately,
+    since both now do the identical arithmetic (mean `H_S`/`H_T` across
+    loci, then one `G_ST`/`D` from those pooled values). A regression in
+    either function's own pooling arithmetic would eventually show up as
+    drift in some published-value scenario elsewhere in this file anyway,
+    but only this test names the two functions and reports the failure as
+    "production disagrees with the validation oracle" rather than as an
+    unexplained accuracy regression somewhere else.
+    """
+    d, n_loci = 4, 6
+    loci = tuple(LocusSpec(index + 1, 400) for index in range(n_loci))
+    params = SimulationParams(
+        N=200,
+        m=0.05,
+        mu=1e-4,
+        d=d,
+        seed=20260904,
+        loci=loci,
+        initial_allele_count=2,
+        max_generations=50,
+    )
+    result = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        store=_DiscardingStore(),
+    )
+    state = (result if isinstance(result, tuple) else (result,))[0].final_state
+
+    assert params.locus_aggregation == "ratio_of_means"
+    oracle_g_st, oracle_d = _pooled_g_st_d(state, d, n_loci)
+    report = report_for_state(
+        state, params, run_id="r3-cross-check", converged=True, reason="test"
+    )
+
+    assert report["G_ST"] == pytest.approx(oracle_g_st, abs=1e-12)
+    assert report["D"] == pytest.approx(oracle_d, abs=1e-12)
 
 
 def _pooled_shannon_statistics(

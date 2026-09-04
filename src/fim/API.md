@@ -5951,6 +5951,25 @@ functions that actually use each one.
 - `initial_allele_count` - Founding allele count per locus.
 - `initial_concentration` - Symmetric Dirichlet concentration.
 - `deme_weighting` - Weighting used by statistics that support it.
+- `locus_aggregation` - How `D` and `G_ST` combine across loci in
+  `fim.engine.report_for_state`'s own final report —
+- ``"ratio_of_means"`` _the default_ - average `H_S`/`H_T` across
+  loci first, then compute one `D`/`G_ST` from those pooled
+  values, matching what the exact gene-identity recursion
+  predicts and avoiding the small-denominator instability a
+  per-locus ratio can have. `"mean_of_ratios"`: compute `D`/
+  `G_ST` at each locus independently, then average those —
+  this project's own original behavior, kept available for
+  comparability with literature or prior analyses that used
+  it, not because it is the better estimator: measured against
+  the exact gene-identity recursion at this project's own
+  reference scale, `"ratio_of_means"` landed within 0.25% of
+  the recursion's own prediction where `"mean_of_ratios"` was
+  off by 1.88% (CHANGELOG.md's own entry for this change has
+  the full comparison). Every other
+  reported statistic (`H_S`, `H_T`, `H_ST`, `E_ST`, `K_ST`) is
+  unaffected — each is already a linear mean across loci, with
+  no such ambiguity to resolve.
 - `convergence_statistic` - One statistic, or several, watched by the
   convergence monitor.
 - `convergence_combinator` - How several watched statistics combine —
