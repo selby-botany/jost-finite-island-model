@@ -1,0 +1,455 @@
+#!/usr/bin/env python3
+"""Run a queue of benchmark jobs sequentially, each in isolation.
+
+`dev/bin/benchmark-engines`'s own docstring states its methodology
+plainly: "this tool does not itself pin CPU affinity or launch
+background load -- it assumes the caller runs it on an otherwise-idle
+machine ('run in isolation, no unrelated process competing for CPU')".
+That is a real requirement, not a suggestion -- `ThreadedAdvancer`
+(Backend G) defaults `max_workers` to `os.cpu_count()`, so two sweeps
+that each happen to hit their own G-phase at the same moment compete
+for the same finite cores, and the resulting numbers are noise, not
+data. This tool is the thing that actually *keeps* that promise across
+more than one sweep: given a queue of jobs, it runs them one at a time,
+waiting for the machine to actually be quiet before starting each one,
+rather than a caller hand-launching several `benchmark-engines`
+invocations at once and hoping they do not overlap.
+
+Built specifically to be kicked off and forgotten for hours or days:
+every job's own stdout/stderr goes to its own log file the moment it is
+produced (not buffered until the whole queue finishes), a summary JSON
+is rewritten after every job (not only at the end, so a caller checking
+in mid-run — or a process that dies mid-run — still has a faithful
+record of everything that already completed), and one job failing or
+timing out never aborts the rest of the queue by default (`--stop-
+on-failure` opts into that instead).
+
+Deliberately a separate tool from `benchmark-engines` itself, not a new
+flag bolted onto it: that tool's own docstring already states "this
+tool does not attempt a full multi-factor grid (out of scope, and
+combinatorially large)" as a considered decision, not an oversight, and
+its job is characterizing *one* sweep well, not queuing several. This
+tool has no opinion at all about what a job actually measures -- a job
+is just an argv list, run as a subprocess; a two-factor heatmap script,
+once one exists, queues here exactly the same way a plain
+`benchmark-engines` invocation does.
+
+Queue file format (JSON, an array of job objects):
+
+    [
+      {
+        "label": "d-fine-grid",
+        "command": ["dev/bin/benchmark-engines", "--sweep", "d",
+                     "--values", "10,35,70,120",
+                     "--replicates", "16", "--generations", "100",
+                     "--trials", "3"],
+        "timeout_seconds": 3600
+      },
+      ...
+    ]
+
+`label` names the job (used for its own log filename and in the
+summary); `command` is the argv to run, resolved relative to this
+repository's own root if not absolute; `timeout_seconds` is optional,
+overriding `--default-timeout-seconds` for that one job.
+
+Usage:
+    dev/bin/benchmark-queue queue.json --log-dir /tmp/fim-queue
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# How idle "idle" means, as a fraction of `os.cpu_count()`'s own 1-minute
+# load average: conservative on purpose (this tool's whole job is
+# protecting a sweep's own timing numbers from exactly this kind of
+# contamination), not a tight bound tuned to squeeze out extra
+# throughput.
+_DEFAULT_IDLE_LOAD_FRACTION = 0.1
+_DEFAULT_IDLE_POLL_SECONDS = 30.0
+# How long to wait for the machine to go idle before giving up and
+# running the job anyway. Not infinite: a queue meant to be "kicked off
+# and forgotten for days" must never wedge itself forever waiting on an
+# unrelated, indefinitely-running process elsewhere on the same box --
+# better to run one job under imperfect isolation (recorded as such in
+# the summary) than to make zero progress at all.
+_DEFAULT_IDLE_MAX_WAIT_SECONDS = 3600.0
+_DEFAULT_JOB_TIMEOUT_SECONDS = 4 * 3600.0
+
+
+@dataclass(frozen=True, slots=True)
+class Job:
+    """One queued benchmark invocation.
+
+    Attributes:
+        label: Short, filesystem-safe name -- used for this job's own
+            log file and its entry in the summary.
+        command: The argv to run. A relative first element (almost
+            always a `dev/bin/...` tool) is resolved against this
+            repository's own root, so a queue file works the same way
+            regardless of the working directory `benchmark-queue` was
+            itself invoked from.
+        timeout_seconds: Overrides `--default-timeout-seconds` for this
+            one job, or `None` to use that default.
+    """
+
+    label: str
+    command: tuple[str, ...]
+    timeout_seconds: float | None
+
+
+@dataclass(slots=True)
+class JobResult:
+    """One job's own outcome, as recorded in the summary."""
+
+    label: str
+    command: tuple[str, ...]
+    log_path: str
+    started_at: str
+    finished_at: str
+    duration_seconds: float
+    load_average_at_start: tuple[float, float, float]
+    exit_code: int | None
+    timed_out: bool
+    waited_for_idle_seconds: float
+
+
+def _load_queue(queue_path: Path) -> list[Job]:
+    """Parse and validate a queue file into `Job`s, in file order.
+
+    Args:
+        queue_path: Path to the queue's own JSON file.
+
+    Returns:
+        Every job, in the exact order the queue file lists them --
+        queue order is run order, always, so a caller can put the
+        cheapest/most-informative jobs first.
+
+    Raises:
+        ValueError: If the file is not a JSON array of job objects,
+            or any job is missing `label`/`command`, has a non-string
+            `label`, a non-list `command`, or a `command` containing
+            anything but strings.
+    """
+    payload = json.loads(queue_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError(f"{queue_path}: top level must be a JSON array of jobs")
+    jobs: list[Job] = []
+    seen_labels: set[str] = set()
+    for index, raw_job in enumerate(payload):
+        if not isinstance(raw_job, dict):
+            raise ValueError(f"{queue_path}: job {index} must be a JSON object")
+        label = raw_job.get("label")
+        command = raw_job.get("command")
+        if not isinstance(label, str) or not label:
+            raise ValueError(f"{queue_path}: job {index} needs a nonempty 'label'")
+        if label in seen_labels:
+            raise ValueError(f"{queue_path}: duplicate job label {label!r}")
+        seen_labels.add(label)
+        if not isinstance(command, list) or not command:
+            raise ValueError(f"{queue_path}: job {label!r} needs a nonempty 'command'")
+        if not all(isinstance(part, str) for part in command):
+            raise ValueError(
+                f"{queue_path}: job {label!r}'s command must be all strings"
+            )
+        timeout_raw = raw_job.get("timeout_seconds")
+        if timeout_raw is not None and not isinstance(timeout_raw, int | float):
+            raise ValueError(
+                f"{queue_path}: job {label!r}'s timeout_seconds must be a number"
+            )
+        jobs.append(
+            Job(
+                label=label,
+                command=tuple(command),
+                timeout_seconds=None if timeout_raw is None else float(timeout_raw),
+            )
+        )
+    return jobs
+
+
+def _resolve_command(command: tuple[str, ...]) -> list[str]:
+    """Resolve a job's own relative command path against this repo's root.
+
+    Only the first argv element (the program itself) is resolved --
+    every later element is passed through unchanged, exactly as given
+    in the queue file (an argument that happens to look like a path,
+    e.g. `--output some/file.json`, is that job's own business, not
+    this tool's to reinterpret).
+    """
+    program, *rest = command
+    if program.startswith("/"):
+        return [program, *rest]
+    return [str(ROOT / program), *rest]
+
+
+def _wait_for_idle(
+    *,
+    idle_load_fraction: float,
+    poll_seconds: float,
+    max_wait_seconds: float,
+    log: _Logger,
+) -> float:
+    """Block until 1-minute load average is idle, or `max_wait_seconds` passes.
+
+    "Idle" means the 1-minute load average is at or below
+    `idle_load_fraction * os.cpu_count()` -- conservative by design (see
+    this module's own top docstring for why). Logs once when it starts
+    waiting and once every `poll_seconds` while still waiting, not
+    silently, so a caller tailing this tool's own log can tell "still
+    running a job" from "stuck waiting for the machine to quiet down"
+    at a glance.
+
+    Args:
+        idle_load_fraction: The threshold, as a fraction of CPU count.
+        poll_seconds: How often to re-check.
+        max_wait_seconds: Give up and proceed anyway after this long.
+        log: Where to write progress lines.
+
+    Returns:
+        How many seconds were actually spent waiting (0.0 if the
+        machine was already idle on the first check).
+    """
+    cpu_count = os.cpu_count() or 1
+    threshold = idle_load_fraction * cpu_count
+    started = time.monotonic()
+    announced = False
+    while True:
+        load_1min = os.getloadavg()[0]
+        if load_1min <= threshold:
+            return time.monotonic() - started
+        elapsed = time.monotonic() - started
+        if not announced:
+            log(
+                f"waiting for idle machine (load {load_1min:.2f} > "
+                f"threshold {threshold:.2f} = {idle_load_fraction} x "
+                f"{cpu_count} cpus)..."
+            )
+            announced = True
+        if elapsed >= max_wait_seconds:
+            log(
+                f"gave up waiting for idle after {elapsed:.0f}s "
+                f"(load {load_1min:.2f}) -- running anyway, isolation "
+                "not guaranteed for this job"
+            )
+            return elapsed
+        time.sleep(min(poll_seconds, max_wait_seconds - elapsed))
+
+
+class _Logger:
+    """Timestamped progress lines to stdout, unbuffered.
+
+    A plain `print` would do almost the same thing, except for
+    buffering: this tool is meant to run for hours or days under
+    `setsid ... > log 2>&1 &`, and a caller tailing that log wants each
+    line the moment it is written, not whenever Python's own stdout
+    buffer happens to flush.
+    """
+
+    def __call__(self, message: str) -> None:
+        """Write one timestamped line and flush immediately."""
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        print(f"[{timestamp}] {message}", flush=True)
+
+
+def _run_job(
+    job: Job,
+    *,
+    log_dir: Path,
+    default_timeout_seconds: float,
+    idle_load_fraction: float,
+    idle_poll_seconds: float,
+    idle_max_wait_seconds: float,
+    log: _Logger,
+) -> JobResult:
+    """Wait for isolation, then run one job to completion (or timeout).
+
+    Args:
+        job: The job to run.
+        log_dir: Directory each job's own stdout/stderr log is written
+            under (`<log_dir>/<label>.log`).
+        default_timeout_seconds: Used unless `job.timeout_seconds`
+            overrides it.
+        idle_load_fraction: See `_wait_for_idle`.
+        idle_poll_seconds: See `_wait_for_idle`.
+        idle_max_wait_seconds: See `_wait_for_idle`.
+        log: Where to write progress lines.
+
+    Returns:
+        This job's own `JobResult`, whether it succeeded, failed, or
+        timed out -- a `JobResult` is produced in every case, so the
+        summary always has one entry per job the queue ever started.
+    """
+    waited_seconds = _wait_for_idle(
+        idle_load_fraction=idle_load_fraction,
+        poll_seconds=idle_poll_seconds,
+        max_wait_seconds=idle_max_wait_seconds,
+        log=log,
+    )
+    load_average_at_start = os.getloadavg()
+    log_path = log_dir / f"{job.label}.log"
+    resolved_command = _resolve_command(job.command)
+    timeout_seconds = (
+        default_timeout_seconds if job.timeout_seconds is None else job.timeout_seconds
+    )
+    log(f"starting {job.label!r}: {' '.join(resolved_command)}")
+    started_at = datetime.now(UTC)
+    started_monotonic = time.monotonic()
+    timed_out = False
+    exit_code: int | None
+    with log_path.open("w", encoding="utf-8") as handle:
+        try:
+            completed = subprocess.run(
+                resolved_command,
+                cwd=ROOT,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                timeout=timeout_seconds,
+                check=False,
+            )
+            exit_code = completed.returncode
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            exit_code = None
+            handle.write(f"\n[benchmark-queue] killed: exceeded {timeout_seconds}s\n")
+    finished_at = datetime.now(UTC)
+    duration_seconds = time.monotonic() - started_monotonic
+    if timed_out:
+        log(f"{job.label!r} timed out after {duration_seconds:.0f}s")
+    elif exit_code == 0:
+        log(f"{job.label!r} finished in {duration_seconds:.0f}s (exit 0)")
+    else:
+        log(f"{job.label!r} FAILED in {duration_seconds:.0f}s (exit {exit_code})")
+    return JobResult(
+        label=job.label,
+        command=job.command,
+        log_path=str(log_path),
+        started_at=started_at.isoformat(),
+        finished_at=finished_at.isoformat(),
+        duration_seconds=duration_seconds,
+        load_average_at_start=load_average_at_start,
+        exit_code=exit_code,
+        timed_out=timed_out,
+        waited_for_idle_seconds=waited_seconds,
+    )
+
+
+def _write_summary(summary_path: Path, results: list[JobResult]) -> None:
+    """Overwrite the summary file with every result so far.
+
+    Called after every single job, not only at the end -- a queue this
+    tool's own docstring promises can run for "hours or days" must
+    leave a faithful, current record behind at every point along the
+    way, not just at a completion that might never come if the process
+    is killed, the machine reboots, or a job hangs past its own
+    timeout's ability to notice.
+    """
+    payload = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "jobs": [asdict(result) for result in results],
+    }
+    summary_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run every job in a queue file sequentially, in isolation."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("queue", type=Path, help="Path to the queue's own JSON file.")
+    parser.add_argument(
+        "--log-dir",
+        type=Path,
+        default=Path("/tmp/fim-benchmark-queue"),
+        help="Directory for each job's own log file and the summary "
+        "(default: /tmp/fim-benchmark-queue).",
+    )
+    parser.add_argument(
+        "--default-timeout-seconds",
+        type=float,
+        default=_DEFAULT_JOB_TIMEOUT_SECONDS,
+        help=f"Per-job wall-clock limit unless a job overrides it "
+        f"(default: {_DEFAULT_JOB_TIMEOUT_SECONDS:.0f}).",
+    )
+    parser.add_argument(
+        "--idle-load-fraction",
+        type=float,
+        default=_DEFAULT_IDLE_LOAD_FRACTION,
+        help="Proceed once 1-minute load average is at or below this "
+        f"fraction of os.cpu_count() (default: {_DEFAULT_IDLE_LOAD_FRACTION}).",
+    )
+    parser.add_argument(
+        "--idle-poll-seconds",
+        type=float,
+        default=_DEFAULT_IDLE_POLL_SECONDS,
+        help=f"How often to re-check load while waiting for idle "
+        f"(default: {_DEFAULT_IDLE_POLL_SECONDS:.0f}).",
+    )
+    parser.add_argument(
+        "--idle-max-wait-seconds",
+        type=float,
+        default=_DEFAULT_IDLE_MAX_WAIT_SECONDS,
+        help="Give up waiting for idle and run anyway after this long "
+        f"(default: {_DEFAULT_IDLE_MAX_WAIT_SECONDS:.0f}).",
+    )
+    parser.add_argument(
+        "--stop-on-failure",
+        action="store_true",
+        help="Stop the queue at the first non-zero exit or timeout, "
+        "instead of continuing to the next job (default: continue).",
+    )
+    args = parser.parse_args(argv)
+
+    log = _Logger()
+    try:
+        jobs = _load_queue(args.queue)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        log(f"cannot read queue {args.queue}: {error}")
+        return 2
+    if not jobs:
+        log(f"{args.queue} contains no jobs")
+        return 0
+
+    args.log_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = args.log_dir / "summary.json"
+    log(f"queue {args.queue} has {len(jobs)} job(s); logs under {args.log_dir}")
+
+    results: list[JobResult] = []
+    failures = 0
+    for job in jobs:
+        result = _run_job(
+            job,
+            log_dir=args.log_dir,
+            default_timeout_seconds=args.default_timeout_seconds,
+            idle_load_fraction=args.idle_load_fraction,
+            idle_poll_seconds=args.idle_poll_seconds,
+            idle_max_wait_seconds=args.idle_max_wait_seconds,
+            log=log,
+        )
+        results.append(result)
+        _write_summary(summary_path, results)
+        if result.timed_out or result.exit_code != 0:
+            failures += 1
+            if args.stop_on_failure:
+                log(f"stopping queue: {job.label!r} did not succeed")
+                break
+
+    log(
+        f"queue finished: {len(results)}/{len(jobs)} job(s) run, "
+        f"{failures} did not succeed"
+    )
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

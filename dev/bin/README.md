@@ -4,6 +4,7 @@
   - [Why generated files exist at all](#why-generated-files-exist-at-all)
   - [At a glance](#at-a-glance)
   - [`benchmark-engines`](#benchmark-engines)
+  - [`benchmark-queue`](#benchmark-queue)
   - [`calibrate-auto-threshold`](#calibrate-auto-threshold)
   - [`calibrate-statistical-bands`](#calibrate-statistical-bands)
   - [`check-doc-links`](#check-doc-links)
@@ -14,7 +15,7 @@
   - [`validate-repository`](#validate-repository)
   - [Related documents](#related-documents)
 
-These eight commands keep the project trustworthy: they make sure the
+These ten commands keep the project trustworthy: they make sure the
 documentation you read matches the code that actually runs, that a
 release's own history is recorded accurately, and that no credential or
 badly formed file ever gets committed. None of them run a simulation --
@@ -61,6 +62,7 @@ run by hand.
 | Command | What it does |
 |---|---|
 | [`benchmark-engines`](#benchmark-engines) | Times how long each `engine_backend` choice takes as one setting (deme count, population size, mutation/migration rate, locus length) sweeps across a range, so a choice between them can be made from evidence instead of a guess |
+| [`benchmark-queue`](#benchmark-queue) | Runs a list of `benchmark-engines` (or any other) commands one after another, each one waiting for the machine to be quiet first, so several sweeps can be queued up and left running for hours without their own timing numbers contaminating each other |
 | [`calibrate-auto-threshold`](#calibrate-auto-threshold) | Measures, on your own machine, the deme count above which `engine_backend: auto` should switch engines — the shipped default was measured on a different machine and this project's own history has already found it can go stale |
 | [`calibrate-statistical-bands`](#calibrate-statistical-bands) | Re-measures how much random variation is normal for the three published-science validation scenarios, so the tests that check the simulator against them use an honest, evidence-based tolerance |
 | [`check-doc-links`](#check-doc-links) | Confirms every link between documentation pages actually goes somewhere, and that no page is orphaned with nothing linking to it |
@@ -139,6 +141,67 @@ timing numbers are only meaningful for the machine that produced them;
 a finding worth keeping belongs in prose (a design document, an issue,
 a commit message), the way every earlier benchmark sweep in this
 project's own history was recorded.
+
+## `benchmark-queue`
+
+**What it does:** Takes a list of commands (almost always several
+`benchmark-engines` invocations, one per question you want answered)
+and runs them one at a time, waiting until the machine is genuinely
+quiet before starting each one — not just checking once at the start,
+but re-checking every thirty seconds for up to an hour before giving up
+and running anyway (with a clear warning in its own log that this
+particular result should not be trusted the way the others are).
+
+**Why it matters:** `benchmark-engines`'s own numbers are only
+meaningful when nothing else on the machine is competing for the same
+CPU cores while it runs. Two sweeps launched at the same time on the
+same machine — even a very idle-looking machine — can still collide:
+`"generational"`'s own optional multi-threading can reach for every CPU
+core the machine has, so if a second sweep's own timed run happens to
+start at the same moment, both get slowed down in a way that has
+nothing to do with the code being measured. Running sweeps one at a
+time, with a real idle check between them, is what makes several
+sweeps' worth of results actually comparable to each other, without
+requiring a person to sit and watch each one finish before starting the
+next.
+
+**When to run it:** Whenever there is more than one question worth
+sweeping for — several settings, or the same setting at several fixed
+combinations of everything else — and, like `benchmark-engines` itself,
+never as part of an automated test, build, or release step. Written to
+be started and left alone for as long as it takes: every command's own
+output is written to its own file as it happens (not held back until
+everything finishes), and a summary file is rewritten after every
+single command completes, so checking in partway through — or a
+command list that takes days — always shows an accurate, up-to-date
+picture of what has run so far and what has not.
+
+**Usage:**
+
+```console
+dev/bin/benchmark-queue my-sweeps.json --log-dir /tmp/fim-sweeps
+```
+
+`my-sweeps.json` is a JSON list, each entry naming one command to run:
+
+```json
+[
+  {
+    "label": "d-fine-grid",
+    "command": ["dev/bin/benchmark-engines", "--sweep", "d",
+                "--values", "10,35,70,120", "--replicates", "16",
+                "--generations", "100", "--trials", "3"]
+  }
+]
+```
+
+`label` is a short name used for that command's own log file
+(`<log-dir>/<label>.log`) and its entry in `<log-dir>/summary.json`.
+Give one command an optional `"timeout_seconds"` if it might reasonably
+hang or run unexpectedly long — without one, `--default-timeout-
+seconds` applies (four hours). One command failing, or timing out,
+does not stop the rest of the list from running — pass `--stop-on-
+failure` if you would rather it did.
 
 ## `calibrate-auto-threshold`
 
