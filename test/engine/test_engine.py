@@ -16,6 +16,8 @@ from fim.engine import (
     ThreadedAdvancer,
     VectorizedAdvancer,
     _build_replica_lane,
+    _convergence_values,
+    _convergence_values_vectorized,
     build_engine_backend,
     fim,
     replicate_summary,
@@ -1024,6 +1026,111 @@ def test_report_for_state_drops_a_monomorphic_locus_from_the_g_st_average() -> N
         reason="test",
     )
     assert report["G_ST"] == pytest.approx(polymorphic_locus_only["G_ST"])
+
+
+def _two_locus_state_with_divergent_per_locus_estimates() -> ModelState:
+    """Two loci whose own `H_S`/`H_T` genuinely differ, one deme pair, two alleles each.
+
+    Deliberately not the same per-locus differentiation everywhere:
+    `"ratio_of_means"`/`"mean_of_ratios"` agree exactly whenever every
+    locus has identical `H_S`/`H_T` (both estimators reduce to the same
+    single value averaged with itself), so a regression test built from
+    such a state could pass by coincidence even without `_convergence_
+    values` respecting `locus_aggregation` at all. These two loci's own
+    allele frequencies are deliberately different enough (one lightly,
+    one heavily differentiated) that the two estimators give genuinely
+    different `D`/`G_ST` — see `test_convergence_watches_the_same_d_
+    and_g_st_report_for_state_uses`. Locus length `1` (capacity `4`), not
+    this file's own usual `100` — inert for the dict-based statistics
+    either way (`test_locus_length_does_not_affect_the_report`), but
+    `test_convergence_values_vectorized_watches_the_same_d_and_g_st`
+    below feeds this same state through `build_vectorized_state`, which
+    allocates a real `(deme_count, 4**length)` array.
+    """
+    loci = (LocusSpec(1, 1), LocusSpec(2, 1))
+    return ModelState(
+        loci=loci,
+        frequencies=(
+            (
+                {AlleleId(0): 0.55, AlleleId(1): 0.45},
+                {AlleleId(0): 0.95, AlleleId(1): 0.05},
+            ),
+            (
+                {AlleleId(0): 0.45, AlleleId(1): 0.55},
+                {AlleleId(0): 0.05, AlleleId(1): 0.95},
+            ),
+        ),
+    )
+
+
+def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses() -> None:
+    """The convergence monitor's own `D`/`G_ST` match `report_for_state`'s, always.
+
+    Before this fix, `_convergence_values` (and its vectorized
+    counterpart) always aggregated `D`/`G_ST` across loci via a plain
+    per-locus mean (`"mean_of_ratios"`), regardless of `params.
+    locus_aggregation` — `report_for_state`'s own `D`/`G_ST` fields, by
+    contrast, already respected it. Under the default `locus_
+    aggregation="ratio_of_means"`, the two estimators are materially
+    different (this project's own `params.py` docstring: 0.25% vs 1.88%
+    from the exact gene-identity recursion at reference scale), so a
+    multi-locus run could stop its trailing window on a `D` its own
+    final report never actually showed (this project's own multi-model
+    engine review, 2026-09-04, `FIM-10`/finding C-02/finding P1-2 — one
+    of three reviewers naming it the only finding among four full
+    reviews that changes a scientific result). Checked under both
+    aggregation choices, not only the default, so a future regression in
+    either branch of `_watched_statistic_values` is caught.
+    """
+    state = _two_locus_state_with_divergent_per_locus_estimates()
+    for locus_aggregation in ("ratio_of_means", "mean_of_ratios"):
+        params = SimulationParams(
+            N=10,
+            m=0.1,
+            mu=0.0,
+            d=2,
+            seed=7,
+            loci=state.loci,
+            convergence_statistic=("D", "G_ST"),
+            locus_aggregation=locus_aggregation,
+        )
+        report = report_for_state(
+            state, params, run_id="run-a", converged=False, reason="test"
+        )
+        watched = _convergence_values(state, params)
+        assert report["G_ST"] is not None
+        assert watched["D"] == pytest.approx(report["D"])
+        assert watched["G_ST"] == pytest.approx(report["G_ST"])
+
+
+def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None:
+    """The array-native convergence path gets the identical `FIM-10` fix.
+
+    `_convergence_values_vectorized` shares `_watched_statistic_values`
+    with the dict-based path above — this only needs to confirm the
+    `VectorizedState`-specific plumbing (deriving `deme_count` from a
+    locus's own dense array shape, not a `ModelState.deme_count`
+    attribute that doesn't exist here) feeds it correctly, not
+    re-litigate the aggregation math itself.
+    """
+    state = _two_locus_state_with_divergent_per_locus_estimates()
+    params = SimulationParams(
+        N=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=state.loci,
+        convergence_statistic=("D", "G_ST"),
+    )
+    report = report_for_state(
+        state, params, run_id="run-a", converged=False, reason="test"
+    )
+    vectorized_state = build_vectorized_state(state)
+    watched = _convergence_values_vectorized(vectorized_state, params)
+    assert report["G_ST"] is not None
+    assert watched["D"] == pytest.approx(report["D"])
+    assert watched["G_ST"] == pytest.approx(report["G_ST"])
 
 
 def test_locus_length_does_not_affect_the_report() -> None:

@@ -2434,17 +2434,19 @@ def _convergence_values(
     simply not advancing its own trailing window this generation, which
     is honest about there being no observation to add, rather than
     fabricating one.
+
+    ``D``/``G_ST`` are aggregated across loci per `params.
+    locus_aggregation` (`_watched_statistic_values`), the identical
+    estimator `report_for_state` uses for its own ``D``/``G_ST`` fields —
+    every other watched statistic (``E_ST``, ``K_ST``, ``H_S``, ``H_T``)
+    is unaffected by that choice and stays a plain per-locus mean either
+    way (`_pooled_g_st_and_d`'s own docstring).
     """
     locus_reports = tuple(
         _statistics_for_locus(state, params, locus_index)
         for locus_index in range(state.locus_count)
     )
-    values: dict[str, float] = {}
-    for statistic in params.convergence_statistics:
-        value = _mean_statistic_across_loci(locus_reports, statistic)
-        if value is not None:
-            values[statistic] = value
-    return values
+    return _watched_statistic_values(locus_reports, params, deme_count=state.deme_count)
 
 
 def _convergence_values_vectorized(
@@ -2463,15 +2465,75 @@ def _convergence_values_vectorized(
     other consumer that used to force that same round trip every tick
     (`ReplicaLane`'s own docstring has the measured cost this removes).
     Otherwise identical to `_convergence_values`: same watched-statistic
-    selection, same locus-averaging, same "an undefined `G_ST` this
-    generation is omitted, not substituted" rule.
+    selection, same `locus_aggregation`-respecting `D`/`G_ST` handling,
+    same "an undefined `G_ST` this generation is omitted, not
+    substituted" rule.
     """
     locus_reports = tuple(
         _statistics_for_locus_vectorized(locus_state, params)
         for locus_state in state.locus_states
     )
+    # `VectorizedState` carries no `deme_count` of its own (unlike
+    # `ModelState`) — every locus shares the same deme axis, so any one
+    # locus's own dense array gives it; `fim.model.vectorized`'s own
+    # `vectorized_state_to_model_state`/`vectorized_state_to_rows` derive
+    # it the identical way.
+    deme_count = state.locus_states[0].frequencies.shape[0] if state.locus_states else 0
+    return _watched_statistic_values(locus_reports, params, deme_count=deme_count)
+
+
+def _watched_statistic_values(
+    locus_reports: Sequence[DifferentiationReport],
+    params: SimulationParams,
+    *,
+    deme_count: int,
+) -> dict[str, float]:
+    """`_convergence_values`/`_convergence_values_vectorized`'s own shared core.
+
+    Before this function existed, both callers aggregated every watched
+    statistic — including `D`/`G_ST` — via `_mean_statistic_across_loci`
+    alone, a plain per-locus mean (`"mean_of_ratios"`) regardless of
+    `params.locus_aggregation`. `report_for_state`'s own final `D`/`G_ST`
+    fields, by contrast, already respect `locus_aggregation` via
+    `_pooled_g_st_and_d` — under the default `"ratio_of_means"`, a
+    materially different estimator (this project's own `params.py`
+    docstring measures the two differing by 0.25% vs. 1.88% from the
+    exact gene-identity recursion at reference scale). A multi-locus run
+    at the default aggregation could therefore stop on a trailing-window
+    `D` the final report never actually shows — a real, reachable
+    inconsistency between why a run stopped and what it reports (this
+    project's own multi-model engine review, 2026-09-04, `FIM-10`/
+    finding C-02/finding P1-2, independently found by three of four
+    reviewers, one of them naming it the only finding among all four
+    reviews that changes a scientific result).
+
+    `D`/`G_ST` now go through the identical `_pooled_g_st_and_d` call
+    `report_for_state` itself makes, whenever either is actually
+    watched; every other statistic (`E_ST`, `K_ST`, `H_S`, `H_T`) is
+    unaffected by `locus_aggregation` and keeps using `_mean_statistic_
+    across_loci`, exactly as before (`_pooled_g_st_and_d`'s own
+    docstring: those five stay a plain per-locus mean regardless of the
+    aggregation choice).
+    """
+    watched = params.convergence_statistics
     values: dict[str, float] = {}
-    for statistic in params.convergence_statistics:
+    if "D" in watched or "G_ST" in watched:
+        mean_h_s = _mean(tuple(report["H_S"] for report in locus_reports))
+        mean_h_t = _mean(tuple(report["H_T"] for report in locus_reports))
+        g_st, d = _pooled_g_st_and_d(
+            locus_reports,
+            mean_h_s=mean_h_s,
+            mean_h_t=mean_h_t,
+            deme_count=deme_count,
+            locus_aggregation=params.locus_aggregation,
+        )
+        if "D" in watched:
+            values["D"] = d
+        if "G_ST" in watched and g_st is not None:
+            values["G_ST"] = g_st
+    for statistic in watched:
+        if statistic in ("D", "G_ST"):
+            continue
         value = _mean_statistic_across_loci(locus_reports, statistic)
         if value is not None:
             values[statistic] = value

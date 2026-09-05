@@ -2523,6 +2523,50 @@ the undefined locus (which would understate real differentiation),
 and not `None` (which would discard the polymorphic locus's real
 signal over one unrelated monomorphic locus).
 
+<a id="engine.test_engine.test_convergence_watches_the_same_d_and_g_st_report_for_state_uses"></a>
+
+#### test\_convergence\_watches\_the\_same\_d\_and\_g\_st\_report\_for\_state\_uses
+
+```python
+def test_convergence_watches_the_same_d_and_g_st_report_for_state_uses(
+) -> None
+```
+
+The convergence monitor's own `D`/`G_ST` match `report_for_state`'s, always.
+
+Before this fix, `_convergence_values` (and its vectorized
+counterpart) always aggregated `D`/`G_ST` across loci via a plain
+per-locus mean (`"mean_of_ratios"`), regardless of `params.
+locus_aggregation` — `report_for_state`'s own `D`/`G_ST` fields, by
+contrast, already respected it. Under the default `locus_
+aggregation="ratio_of_means"`, the two estimators are materially
+different (this project's own `params.py` docstring: 0.25% vs 1.88%
+from the exact gene-identity recursion at reference scale), so a
+multi-locus run could stop its trailing window on a `D` its own
+final report never actually showed (this project's own multi-model
+engine review, 2026-09-04, `FIM-10`/finding C-02/finding P1-2 — one
+of three reviewers naming it the only finding among four full
+reviews that changes a scientific result). Checked under both
+aggregation choices, not only the default, so a future regression in
+either branch of `_watched_statistic_values` is caught.
+
+<a id="engine.test_engine.test_convergence_values_vectorized_watches_the_same_d_and_g_st"></a>
+
+#### test\_convergence\_values\_vectorized\_watches\_the\_same\_d\_and\_g\_st
+
+```python
+def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None
+```
+
+The array-native convergence path gets the identical `FIM-10` fix.
+
+`_convergence_values_vectorized` shares `_watched_statistic_values`
+with the dict-based path above — this only needs to confirm the
+`VectorizedState`-specific plumbing (deriving `deme_count` from a
+locus's own dense array shape, not a `ModelState.deme_count`
+attribute that doesn't exist here) feeds it correctly, not
+re-litigate the aggregation math itself.
+
 <a id="engine.test_engine.test_locus_length_does_not_affect_the_report"></a>
 
 #### test\_locus\_length\_does\_not\_affect\_the\_report
