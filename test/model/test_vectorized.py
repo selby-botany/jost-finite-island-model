@@ -633,6 +633,34 @@ def test_symmetric_migration_weights_rows_are_stochastic() -> None:
     assert weights.sum(axis=1) == pytest.approx(np.ones(4))
 
 
+def test_symmetric_migration_weights_matches_naive_loop_bit_for_bit() -> None:
+    """The broadcast rewrite matches a literal transcription of the old loop.
+
+    `FIM-29` (Phase 7 item 5): asserts bit-for-bit equality
+    (`np.testing.assert_array_equal`), not `pytest.approx`, against a
+    plain-Python double loop performing the exact same `rate *
+    sizes[source] / other_weight` arithmetic in the exact same order —
+    confirmed directly rather than only reasoned about from IEEE 754
+    left-to-right evaluation order.
+    """
+    sizes = np.array([7, 13, 20, 3, 41], dtype=np.int64)
+    rate = 0.37
+    deme_count = sizes.shape[0]
+    total_size = float(sizes.sum())
+    naive = np.zeros((deme_count, deme_count), dtype=np.float64)
+    for destination in range(deme_count):
+        other_weight = total_size - sizes[destination]
+        for source in range(deme_count):
+            if source == destination:
+                naive[destination, source] = 1.0 - rate
+            else:
+                naive[destination, source] = rate * sizes[source] / other_weight
+
+    weights = symmetric_migration_weights(rate, sizes)
+
+    np.testing.assert_array_equal(weights, naive)
+
+
 def test_drift_vectorized_variance_matches_binomial_theory(
     rng: Callable[[int], np.random.Generator],
 ) -> None:

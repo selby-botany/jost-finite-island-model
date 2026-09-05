@@ -904,17 +904,27 @@ def symmetric_migration_weights(rate: float, sizes: np.ndarray) -> np.ndarray:
     unlike this narrower symmetric case, is not being retired — and a
     caller who wants the materialized matrix directly (inspection,
     building a custom topology from a symmetric base) still has it.
+
+    Built with NumPy broadcasting rather than the `O(d^2)` pure-Python
+    double loop this replaced (Phase 7 item 5, `FIM-29`,
+    `20260904-claude-sonnet-5-fim-engine-review-remediations.md`):
+    `weights[destination, source] = rate * sizes[source] /
+    other_weight[destination]` for every entry, off-diagonal or not, is
+    the exact same left-to-right `*` then `/` the old loop body computed
+    per element — broadcasting changes nothing about which two floating-
+    point operations happen or their order, only that NumPy issues them
+    instead of the interpreter — so every off-diagonal entry is
+    bit-identical to the loop version; only the diagonal is overwritten
+    afterward, exactly as the loop's own `if source == destination`
+    branch did, since `other_weight[destination]` sits under `sizes[
+    destination]` on that row and needs no special-casing to compute
+    correctly, only to have `1.0 - rate` win instead.
     """
-    deme_count = sizes.shape[0]
     total_size = float(sizes.sum())
-    weights = np.zeros((deme_count, deme_count), dtype=np.float64)
-    for destination in range(deme_count):
-        other_weight = total_size - sizes[destination]
-        for source in range(deme_count):
-            if source == destination:
-                weights[destination, source] = 1.0 - rate
-            else:
-                weights[destination, source] = rate * sizes[source] / other_weight
+    sizes_f64 = sizes.astype(np.float64)
+    other_weight = total_size - sizes_f64
+    weights = rate * sizes_f64[None, :] / other_weight[:, None]
+    np.fill_diagonal(weights, 1.0 - rate)
     return weights
 
 

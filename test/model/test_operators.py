@@ -1,7 +1,7 @@
 """Tests for one-generation update operators."""
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 import numpy as np
 import pytest
@@ -1655,6 +1655,62 @@ def test_migrate_stochastic_matrix_migrant_count_matches_binomial_theory(
     assert np.var(observed, ddof=1) == pytest.approx(
         expected_variance, abs=5.0 * variance_standard_error
     )
+
+
+def test_migrate_matrix_builds_each_locus_source_tuple_once_not_per_destination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_migrate_matrix` reads each (deme, locus) frequency map only once.
+
+    `FIM-36` (Phase 7 item 5,
+    `20260904-claude-sonnet-5-fim-engine-review-remediations.md`): the
+    old loop rebuilt every locus's own ``sources`` tuple from scratch for
+    every destination row, so a run over ``deme_count`` destinations and
+    ``locus_count`` loci called ``ModelState.frequency_map`` ``deme_count
+    * locus_count * deme_count`` times. Reading each (deme, locus) pair's
+    frequency map is a fact about the state, not about which destination
+    is currently blending, so it should be read exactly once per pair —
+    ``deme_count * locus_count`` calls total — an allocation/call-count
+    regression test, not an outcome-equivalence one, matching this
+    project's own established `FIM-53`/`FIM-27`/`FIM-28` precedent.
+    """
+    state = ModelState(
+        loci=(LocusSpec(1, 100), LocusSpec(2, 100)),
+        frequencies=(
+            (
+                {AlleleId(0): 0.8, AlleleId(1): 0.2},
+                {AlleleId(0): 0.5, AlleleId(1): 0.5},
+            ),
+            (
+                {AlleleId(0): 0.2, AlleleId(1): 0.8},
+                {AlleleId(0): 0.4, AlleleId(1): 0.6},
+            ),
+            (
+                {AlleleId(0): 0.5, AlleleId(1): 0.5},
+                {AlleleId(0): 0.3, AlleleId(1): 0.7},
+            ),
+        ),
+    )
+    matrix = (
+        (0.7, 0.2, 0.1),
+        (0.1, 0.8, 0.1),
+        (0.05, 0.05, 0.9),
+    )
+    call_count = 0
+    original_frequency_map = ModelState.frequency_map
+
+    def _counting_frequency_map(
+        self: ModelState, deme: int, locus_index: int
+    ) -> Mapping[AlleleId, float]:
+        nonlocal call_count
+        call_count += 1
+        return original_frequency_map(self, deme, locus_index)
+
+    monkeypatch.setattr(ModelState, "frequency_map", _counting_frequency_map)
+
+    migrate(state, matrix)
+
+    assert call_count == state.deme_count * state.locus_count
 
 
 def test_migrate_stochastic_matrix_self_weight_one_matches_continuous(

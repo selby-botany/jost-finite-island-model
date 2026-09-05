@@ -7375,6 +7375,21 @@ unlike this narrower symmetric case, is not being retired — and a
 caller who wants the materialized matrix directly (inspection,
 building a custom topology from a symmetric base) still has it.
 
+Built with NumPy broadcasting rather than the `O(d^2)` pure-Python
+double loop this replaced (Phase 7 item 5, `FIM-29`,
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md`):
+`weights[destination, source] = rate * sizes[source] /
+other_weight[destination]` for every entry, off-diagonal or not, is
+the exact same left-to-right `*` then `/` the old loop body computed
+per element — broadcasting changes nothing about which two floating-
+point operations happen or their order, only that NumPy issues them
+instead of the interpreter — so every off-diagonal entry is
+bit-identical to the loop version; only the diagonal is overwritten
+afterward, exactly as the loop's own `if source == destination`
+branch did, since `other_weight[destination]` sits under `sizes[
+destination]` on that row and needs no special-casing to compute
+correctly, only to have `1.0 - rate` win instead.
+
 <a id="fim.model.vectorized.mutate_vectorized"></a>
 
 #### mutate\_vectorized

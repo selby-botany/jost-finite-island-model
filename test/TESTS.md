@@ -8718,6 +8718,29 @@ Mirrors the scalar-path statistical test above, but through
 a 0.3 non-self weight entirely to deme 1, so the same direct
 migrant-fraction argument applies.
 
+<a id="model.test_operators.test_migrate_matrix_builds_each_locus_source_tuple_once_not_per_destination"></a>
+
+#### test\_migrate\_matrix\_builds\_each\_locus\_source\_tuple\_once\_not\_per\_destination
+
+```python
+def test_migrate_matrix_builds_each_locus_source_tuple_once_not_per_destination(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`_migrate_matrix` reads each (deme, locus) frequency map only once.
+
+`FIM-36` (Phase 7 item 5,
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md`): the
+old loop rebuilt every locus's own ``sources`` tuple from scratch for
+every destination row, so a run over ``deme_count`` destinations and
+``locus_count`` loci called ``ModelState.frequency_map`` ``deme_count
+* locus_count * deme_count`` times. Reading each (deme, locus) pair's
+frequency map is a fact about the state, not about which destination
+is currently blending, so it should be read exactly once per pair —
+``deme_count * locus_count`` calls total — an allocation/call-count
+regression test, not an outcome-equivalence one, matching this
+project's own established `FIM-53`/`FIM-27`/`FIM-28` precedent.
+
 <a id="model.test_operators.test_migrate_stochastic_matrix_self_weight_one_matches_continuous"></a>
 
 #### test\_migrate\_stochastic\_matrix\_self\_weight\_one\_matches\_continuous
@@ -10791,6 +10814,23 @@ def test_symmetric_migration_weights_rows_are_stochastic() -> None
 ```
 
 Every row of the derived weight matrix sums to exactly 1.
+
+<a id="model.test_vectorized.test_symmetric_migration_weights_matches_naive_loop_bit_for_bit"></a>
+
+#### test\_symmetric\_migration\_weights\_matches\_naive\_loop\_bit\_for\_bit
+
+```python
+def test_symmetric_migration_weights_matches_naive_loop_bit_for_bit() -> None
+```
+
+The broadcast rewrite matches a literal transcription of the old loop.
+
+`FIM-29` (Phase 7 item 5): asserts bit-for-bit equality
+(`np.testing.assert_array_equal`), not `pytest.approx`, against a
+plain-Python double loop performing the exact same `rate *
+sizes[source] / other_weight` arithmetic in the exact same order —
+confirmed directly rather than only reasoned about from IEEE 754
+left-to-right evaluation order.
 
 <a id="model.test_vectorized.test_drift_vectorized_variance_matches_binomial_theory"></a>
 

@@ -1797,6 +1797,20 @@ def _migrate_matrix(
 ) -> tuple[tuple[Mapping[AlleleId, float], ...], ...]:
     """Apply a complete source-weight matrix."""
     result: list[tuple[Mapping[AlleleId, float], ...]] = []
+    # Every deme's own frequency map at a given locus is a fact about
+    # `state`, not about which destination is currently being blended —
+    # built once per locus, up front, rather than rebuilt from scratch
+    # for every (destination, locus) pair below (`FIM-36`, Phase 7 item
+    # 5, `20260904-claude-sonnet-5-fim-engine-review-remediations.md`).
+    # `state.frequency_map` is a pure, deterministic read of `state`, so
+    # caching its result across destinations changes nothing it returns.
+    sources_by_locus = tuple(
+        tuple(
+            state.frequency_map(source, locus_index)
+            for source in range(state.deme_count)
+        )
+        for locus_index in range(state.locus_count)
+    )
     for destination, weights in enumerate(matrix):
         # Stochastic path: the row's own diagonal entry is this
         # destination's self-retention weight; everything else is the
@@ -1817,10 +1831,7 @@ def _migrate_matrix(
             )
         locus_maps: list[Mapping[AlleleId, float]] = []
         for locus_index in range(state.locus_count):
-            sources = tuple(
-                state.frequency_map(source, locus_index)
-                for source in range(state.deme_count)
-            )
+            sources = sources_by_locus[locus_index]
             if rng is None:
                 allele_ids = _allele_union(sources)
                 blended = {
