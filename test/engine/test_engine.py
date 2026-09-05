@@ -1573,6 +1573,56 @@ def test_fim_generational_vector_rejects_jit(tiny_params: SimulationParams) -> N
         )
 
 
+def test_build_engine_backend_generational_vector_requires_numba(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A numba-less install fails at config time, not on the first `advance()`.
+
+    Monkeypatches `fim.engine._numba_is_available` directly rather than
+    actually uninstalling numba from the test environment — see that
+    function's own docstring for why it exists as a separate, mockable
+    unit. Before this guard existed, `build_engine_backend` happily
+    returned a `GenerationalBackend(VectorizedAdvancer())` regardless,
+    and the failure only surfaced as a raw `ImportError` from inside
+    `fim.model.vectorized` on the first generation — after generation
+    zero had already been persisted to the trajectory store (this
+    project's own multi-model engine review, 2026-09-04, `FIM-01`).
+    """
+    monkeypatch.setattr(engine, "_numba_is_available", lambda: False)
+    with pytest.raises(ValueError, match="numba"):
+        build_engine_backend("generational-vector")
+
+
+def test_build_engine_backend_auto_requires_numba_when_resolved_to_vector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`"auto"` resolving to Backend V hits the identical numba guard.
+
+    `_resolve_auto_engine_backend` never checks numba itself (its own
+    docstring names only `d`/capacity/mutation-model/migrant-sampling as
+    what it decides on) — the guard lives once, in `build_engine_backend`
+    itself, downstream of resolution, so `"auto"` gets it for free rather
+    than needing its own duplicate check.
+    """
+    monkeypatch.setattr(engine, "_numba_is_available", lambda: False)
+    params = _finite_alleles_vector_params(d=40)
+    with pytest.raises(ValueError, match="numba"):
+        build_engine_backend("auto", params=params, auto_vector_min_d=35)
+
+
+def test_build_engine_backend_generational_vector_accepts_numba_present() -> None:
+    """The positive case, alongside the two negative ones above.
+
+    Confirms the new `_numba_is_available` guard is not itself firing a
+    false positive in this dev environment's own normal state (numba
+    installed, per `pip install fim[jit]`) — without this, the two
+    monkeypatched tests above could both pass for the wrong reason if the
+    guard raised unconditionally.
+    """
+    backend = build_engine_backend("generational-vector")
+    assert isinstance(backend, GenerationalBackend)
+
+
 def test_build_engine_backend_rejects_unknown_choice() -> None:
     """An unrecognized `engine_backend` is a `ValueError`, not silently ignored."""
     with pytest.raises(ValueError, match="unknown engine backend"):

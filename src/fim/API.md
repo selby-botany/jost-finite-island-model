@@ -1907,8 +1907,10 @@ class tree to maintain.
 - `ValueError` - If `engine_backend == "lineal"` and `jit != "off"`,
   `engine_backend == "generational-vector"` (or `"auto"`
   resolves to it) and `jit != "off"`, `engine_backend ==
-  "auto"` and `params` is `None`, or `engine_backend` names
-  something unrecognized.
+  "generational-vector"` (or `"auto"` resolves to it) and the
+  optional `numba` dependency is not installed,
+  `engine_backend == "auto"` and `params` is `None`, or
+  `engine_backend` names something unrecognized.
 
 <a id="fim.engine.fim"></a>
 

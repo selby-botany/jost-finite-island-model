@@ -97,6 +97,7 @@ reproducible too, not just each individual replicate in isolation.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import logging
 import math
@@ -1230,6 +1231,34 @@ def _resolve_auto_engine_backend(
     )
 
 
+def _numba_is_available() -> bool:
+    """Return whether the optional `numba` dependency can actually be imported.
+
+    `importlib.util.find_spec` locates the module without importing it —
+    cheap enough to call on every `"generational-vector"` construction,
+    and it never pays numba's own (non-trivial) import cost just to
+    answer "is it there at all."
+
+    `build_engine_backend` calls this before constructing a
+    `VectorizedAdvancer` — `fim.model.vectorized`'s own mutate step
+    imports `numba` unconditionally on first use (its own module
+    docstring), with no pure-Python fallback, so a numba-less install
+    used to fail on the *first `advance()` call*, after generation zero
+    had already been built and persisted to the trajectory store — a
+    real, previously unguarded gap (this project's own multi-model
+    engine review, 2026-09-04, `FIM-01`/finding C-03/finding P1-3,
+    independently found by three of four reviewers). Checking here
+    instead turns that into a named `ValueError` at config time, before
+    anything has been written.
+
+    A module-level function, not inlined into `build_engine_backend`,
+    specifically so a test can monkeypatch it directly (`fim.engine.
+    _numba_is_available`) to exercise the numba-less path without
+    actually uninstalling numba from the test environment.
+    """
+    return importlib.util.find_spec("numba") is not None
+
+
 def build_engine_backend(
     engine_backend: EngineBackendChoice,
     *,
@@ -1335,8 +1364,10 @@ def build_engine_backend(
         ValueError: If `engine_backend == "lineal"` and `jit != "off"`,
             `engine_backend == "generational-vector"` (or `"auto"`
             resolves to it) and `jit != "off"`, `engine_backend ==
-            "auto"` and `params` is `None`, or `engine_backend` names
-            something unrecognized.
+            "generational-vector"` (or `"auto"` resolves to it) and the
+            optional `numba` dependency is not installed,
+            `engine_backend == "auto"` and `params` is `None`, or
+            `engine_backend` names something unrecognized.
     """
     if engine_backend == "auto":
         if params is None:
@@ -1367,6 +1398,13 @@ def build_engine_backend(
                 "own mutate step always requires numba internally "
                 "(fim.model.vectorized), regardless of this argument; pass "
                 "jit='off' (the default)"
+            )
+        if not _numba_is_available():
+            raise ValueError(
+                "generational-vector needs the optional numba dependency "
+                "(fim.model.vectorized's own mutate step imports it "
+                "unconditionally) — install it with `pip install fim[jit]` "
+                "before selecting this backend"
             )
         return GenerationalBackend(VectorizedAdvancer())
     raise ValueError(f"unknown engine backend: {engine_backend!r}")
