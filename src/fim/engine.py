@@ -524,7 +524,10 @@ class ReplicaLane:
     reconstruction this avoids on every other tick was ~40% of that
     tick's own wall-clock time — `20260901-claude-sonnet-5-fim-engine-
     backend-factory-design.md` §11). Unused by every other `Advancer`;
-    stays `None` for the whole run under those.
+    stays `None` for the whole run under those. Released (set back to
+    `None`) by `_finalize_replica_lane` the instant a lane stops, not
+    held for the rest of the batch's own run — see that function's own
+    docstring (`FIM-48`).
     """
 
     replica_index: int
@@ -1012,7 +1015,26 @@ def _finalize_replica_lane(
 
     Mirrors the tail of `_run_one` exactly — same report/manifest
     construction, from this lane's own final state and monitor history.
+
+    Also releases `lane.vectorized_state`/`lane.migration_weights`
+    (`VectorizedAdvancer`-only caches — see `ReplicaLane`'s own
+    docstring) the moment they stop being needed: `VectorizedAdvancer.
+    advance` already rebuilt `lane.state` (the `ModelState` the
+    `RunResult` below actually reads) from `lane.vectorized_state`
+    before ever calling this function, so the dense array itself is
+    pure dead weight from here on — `run_batch`'s own `lanes` list still
+    holds this `ReplicaLane` until the whole batch returns, so without
+    this, a finished lane's own cached state would stay alive for the
+    rest of the batch's run for nothing. `FIM-48` (this project's own
+    multi-model engine review, 2026-09-04): the fix `run_batch`'s own
+    bounded window bounds how many lanes hold this cache *concurrently*;
+    this releases *each one's own copy* the instant its lane is done,
+    independent of whether a window is configured at all. A no-op for
+    every other `Advancer`, whose lanes never populate either field to
+    begin with.
     """
+    lane.vectorized_state = None
+    lane.migration_weights = None
     outcome = lane.monitor.outcome()
     if outcome.reason is None:
         # Unreachable in practice — see `_run_one`'s own identical guard
@@ -1114,10 +1136,35 @@ def run_batch(
     zero eagerly, before this loop ever runs, so even a lane the
     generation-first loop below never advances past that point still
     has rows to discard, not merely lanes that got partway through.
+
+    At most `params.max_concurrent_replicates` lanes are ever alive at
+    once — `None` (the default) means every requested replicate, exactly
+    every prior release's own behavior, since `min(window_size,
+    n_replicates)` below then equals `n_replicates` itself and every
+    lane is built up front as before. A smaller window instead builds
+    lanes lazily: only the window's own worth exist up front, and a
+    lane is constructed for replicate index *i* only once some earlier
+    lane's own slot frees up, immediately before advancing past that
+    point — never merely reserved. This is `FIM-45`/`P-04`/`P2-7`'s own
+    fix (a replicate `run_batch` never gets to before an adaptive stop
+    now never pays for that replicate's own setup either, on any
+    `Advancer`) and, for `VectorizedAdvancer` specifically,
+    `FIM-48`'s own fix too: that advancer's cached `VectorizedState`
+    (`ReplicaLane.vectorized_state`, released immediately once a lane
+    finalizes — see `_finalize_replica_lane`) is held by every
+    concurrently active lane at once, so bounding how many lanes are
+    ever active at once directly bounds this backend's own steady-state
+    memory, independent of `n_replicates` itself. A replacement lane is
+    built only *after* confirming the cross-replica monitor has not
+    just decided to stop — building one first and discarding it a line
+    later would reintroduce exactly the wasted setup this fix exists to
+    remove.
     """
+    window_size = params.max_concurrent_replicates or params.n_replicates
+    next_unbuilt_index = min(window_size, params.n_replicates)
     lanes = [
         _build_replica_lane(params, replica_index, run_id, store, clock)
-        for replica_index in range(params.n_replicates)
+        for replica_index in range(next_unbuilt_index)
     ]
     cross_monitor = _replicate_monitor(params)
     stopped_so_far = 0
@@ -1147,6 +1194,13 @@ def run_batch(
                     return tuple(
                         _require_lane_result(lane) for lane in lanes if lane.result
                     )
+            if next_unbuilt_index < params.n_replicates:
+                lanes.append(
+                    _build_replica_lane(
+                        params, next_unbuilt_index, run_id, store, clock
+                    )
+                )
+                next_unbuilt_index += 1
     return tuple(_require_lane_result(lane) for lane in lanes)
 
 

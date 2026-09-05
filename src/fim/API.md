@@ -1463,7 +1463,10 @@ actually stops (measured directly: at a large capacity, the
 reconstruction this avoids on every other tick was ~40% of that
 tick's own wall-clock time — `20260901-claude-sonnet-5-fim-engine-
 backend-factory-design.md` §11). Unused by every other `Advancer`;
-stays `None` for the whole run under those.
+stays `None` for the whole run under those. Released (set back to
+`None`) by `_finalize_replica_lane` the instant a lane stops, not
+held for the rest of the batch's own run — see that function's own
+docstring (`FIM-48`).
 
 <a id="fim.engine.Advancer"></a>
 
@@ -1762,6 +1765,29 @@ engine review, 2026-09-04, `FIM-49`/finding M-01/finding P2-1 case
 zero eagerly, before this loop ever runs, so even a lane the
 generation-first loop below never advances past that point still
 has rows to discard, not merely lanes that got partway through.
+
+At most `params.max_concurrent_replicates` lanes are ever alive at
+once — `None` (the default) means every requested replicate, exactly
+every prior release's own behavior, since `min(window_size,
+n_replicates)` below then equals `n_replicates` itself and every
+lane is built up front as before. A smaller window instead builds
+lanes lazily: only the window's own worth exist up front, and a
+lane is constructed for replicate index *i* only once some earlier
+lane's own slot frees up, immediately before advancing past that
+point — never merely reserved. This is `FIM-45`/`P-04`/`P2-7`'s own
+fix (a replicate `run_batch` never gets to before an adaptive stop
+now never pays for that replicate's own setup either, on any
+`Advancer`) and, for `VectorizedAdvancer` specifically,
+`FIM-48`'s own fix too: that advancer's cached `VectorizedState`
+(`ReplicaLane.vectorized_state`, released immediately once a lane
+finalizes — see `_finalize_replica_lane`) is held by every
+concurrently active lane at once, so bounding how many lanes are
+ever active at once directly bounds this backend's own steady-state
+memory, independent of `n_replicates` itself. A replacement lane is
+built only *after* confirming the cross-replica monitor has not
+just decided to stop — building one first and discarding it a line
+later would reintroduce exactly the wasted setup this fix exists to
+remove.
 
 <a id="fim.engine.GenerationalBackend"></a>
 
@@ -6183,6 +6209,28 @@ functions that actually use each one.
   own docstring for the same "considered default, not a
   portable constant" caveat `auto_vector_min_d` already
   carries.
+- `max_concurrent_replicates` - Caps how many replicate lanes
+  `fim.engine.run_batch` (the `"generational"`/
+  `"generational-vector"` path) advances at once — `None` (the
+  default) advances every requested replicate together,
+  exactly like every prior release. `run_batch` builds each
+  lane lazily now, on demand, rather than all `n_replicates`
+  of them up front: only this many are ever alive
+  simultaneously, and a finished lane's slot is handed to the
+  next not-yet-started replicate rather than every replicate
+  starting at once. Meaningful for any `engine_backend` that
+  reaches `run_batch`; matters most for `"generational-
+  vector"`, whose own per-lane cached `VectorizedState` is a
+  dense `(deme_count, capacity)` array per locus — held by
+  every concurrently active lane at once, so an unbounded
+  batch's steady-state memory scales with `n_replicates`
+  directly (`dev/doc/apps/selby/jost-finite-island-model/
+  20260904-claude-sonnet-5-fim-engine-review-remediations.md`,
+  `FIM-48`). Silently clamped down to `n_replicates` if given
+  larger, the same reasoning `replicate_minimum`'s own clamp
+  already uses. Ignored by `"lineal"`, which never calls
+  `run_batch` at all (see `fim.engine.LinealBackend`'s own
+  docstring).
 - `initial_frequencies` - Optional explicit deme/locus frequency table.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>

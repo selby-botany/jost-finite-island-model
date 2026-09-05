@@ -10,9 +10,11 @@ import pytest
 
 from fim import engine
 from fim.engine import (
+    Clock,
     FinalReport,
     GenerationalBackend,
     LinealBackend,
+    ReplicaLane,
     RunResult,
     SequentialAdvancer,
     ThreadedAdvancer,
@@ -34,7 +36,7 @@ from fim.model.params import ConvergenceCombinator, SimulationParams
 from fim.model.state import ModelState
 from fim.model.vectorized import build_vectorized_state, vectorized_state_to_model_state
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
-from fim.persistence.store import InMemoryTrajectoryStore
+from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
 
 
 def _clock() -> datetime:
@@ -275,6 +277,129 @@ def test_generational_adaptive_stop_discards_abandoned_lanes_own_rows() -> None:
         run_id for run_id in every_possible_run_id if list(store.read(run_id))
     }
     assert still_present_run_ids == returned_run_ids
+
+
+def test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`max_concurrent_replicates` caps how many lanes are ever alive at once.
+
+    Regression test for `FIM-45`/`FIM-48`: `run_batch` now builds lanes
+    lazily, only as an earlier lane's own slot frees up, rather than all
+    `n_replicates` of them up front. Instruments `_build_replica_lane`/
+    `_finalize_replica_lane` (both still calling through to the real
+    implementation) to track the running "built but not yet finalized"
+    count directly, rather than trusting only the final result count —
+    a bug that built every lane immediately but still returned the
+    right *count* of results would pass a result-count-only check.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 6,
+            "engine_backend": "generational",
+            "max_concurrent_replicates": 2,
+        }
+    )
+    concurrently_active = 0
+    peak_concurrently_active = 0
+    build_call_count = 0
+    real_build = engine._build_replica_lane
+    real_finalize = engine._finalize_replica_lane
+
+    def _counting_build(
+        params: SimulationParams,
+        replica_index: int,
+        run_id: str | None,
+        store: TrajectoryStore,
+        clock: Clock,
+    ) -> ReplicaLane:
+        nonlocal concurrently_active, peak_concurrently_active, build_call_count
+        lane = real_build(params, replica_index, run_id, store, clock)
+        build_call_count += 1
+        concurrently_active += 1
+        peak_concurrently_active = max(peak_concurrently_active, concurrently_active)
+        return lane
+
+    def _counting_finalize(
+        lane: ReplicaLane, clock: Clock, store: TrajectoryStore
+    ) -> RunResult:
+        nonlocal concurrently_active
+        result = real_finalize(lane, clock, store)
+        concurrently_active -= 1
+        return result
+
+    monkeypatch.setattr(engine, "_build_replica_lane", _counting_build)
+    monkeypatch.setattr(engine, "_finalize_replica_lane", _counting_finalize)
+
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+
+    assert isinstance(output, tuple)
+    assert len(output) == 6
+    assert build_call_count == 6
+    assert peak_concurrently_active == 2
+
+
+def _report_without_run_id(report: FinalReport) -> dict[str, object]:
+    """Strip `run_id` for a report comparison that ignores it deliberately.
+
+    Shared by every "windowing changes nothing about what a batch
+    computes" test below — `FinalReport.run_id` is expected to differ
+    whenever `max_concurrent_replicates` does (`deterministic_run_id`
+    hashes a run's own entire configuration), so it is excluded here
+    rather than making every call site remember to do so.
+    """
+    return {key: value for key, value in report.items() if key != "run_id"}
+
+
+def test_max_concurrent_replicates_does_not_change_what_a_batch_computes() -> None:
+    """A window changes only *when* lanes are built, never a run's own trajectory.
+
+    `n_replicates=6` against a window of `2` versus no window (`None`,
+    every prior release's own behavior) must agree exactly, replicate
+    for replicate: `run_batch`'s own generation-first ordering already
+    made every lane's own result depend only on that lane's own prior
+    state (see its docstring) — windowing changes only when a lane is
+    constructed and advanced relative to another, which that same
+    argument already covers. `run_id` itself is deliberately excluded
+    from the comparison: `deterministic_run_id` hashes a run's own
+    *entire* configuration (`engine_backend`/`jit`/`auto_vector_min_d`
+    already do the same), so a differing `max_concurrent_replicates`
+    changing `run_id` is expected, not a defect — what must not differ
+    is what the run actually computed.
+    """
+    base_params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 6,
+            "engine_backend": "generational",
+        }
+    )
+    unbounded = fim(
+        base_params.N,
+        base_params.m,
+        base_params.mu,
+        base_params.d,
+        params=base_params,
+        clock=_clock,
+    )
+    windowed_params = replace(base_params, max_concurrent_replicates=2)
+    windowed = fim(
+        windowed_params.N,
+        windowed_params.m,
+        windowed_params.mu,
+        windowed_params.d,
+        params=windowed_params,
+        clock=_clock,
+    )
+
+    assert isinstance(unbounded, tuple)
+    assert isinstance(windowed, tuple)
+    for unbounded_result, windowed_result in zip(unbounded, windowed, strict=True):
+        assert unbounded_result.final_state == windowed_result.final_state
+        assert _report_without_run_id(
+            unbounded_result.report
+        ) == _report_without_run_id(windowed_result.report)
 
 
 def test_replicate_minimum_above_n_replicates_runs_to_completion() -> None:
@@ -2623,6 +2748,79 @@ def test_generational_vector_backend_batch_is_independently_reproducible() -> No
         assert first_result.run_id == second_result.run_id
         assert first_result.report == second_result.report
         assert first_result.final_state == second_result.final_state
+
+
+def test_finalize_replica_lane_releases_vectorized_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_finalize_replica_lane` clears a lane's own dense cache once it stops.
+
+    Regression test for `FIM-48`: without this, a finished lane's own
+    `VectorizedState` cache stayed referenced by `run_batch`'s own
+    `lanes` list for the rest of the batch's own run, for nothing —
+    `RunResult` only ever reads `lane.state` (already rebuilt by
+    `VectorizedAdvancer.advance` before this function is ever called),
+    never `lane.vectorized_state` itself. Also confirms the cache
+    genuinely existed right before release, so this is not a vacuous
+    pass on a lane that never populated it in the first place.
+    """
+    pytest.importorskip("numba")
+    params = _finite_alleles_vector_params()
+    had_cache_before_release = False
+    real_finalize = engine._finalize_replica_lane
+
+    def _spying_finalize(
+        lane: ReplicaLane, clock: Clock, store: TrajectoryStore
+    ) -> RunResult:
+        nonlocal had_cache_before_release
+        had_cache_before_release = lane.vectorized_state is not None
+        result = real_finalize(lane, clock, store)
+        assert lane.vectorized_state is None
+        assert lane.migration_weights is None
+        return result
+
+    monkeypatch.setattr(engine, "_finalize_replica_lane", _spying_finalize)
+
+    GenerationalBackend(VectorizedAdvancer()).run(
+        params, InMemoryTrajectoryStore(), None, _clock
+    )
+
+    assert had_cache_before_release
+
+
+def test_generational_vector_backend_windowed_batch_matches_unbounded() -> None:
+    """A `max_concurrent_replicates` window changes nothing about Backend V's output.
+
+    The same invariant `test_max_concurrent_replicates_does_not_change_
+    what_a_batch_computes` checks for the dict-based `SequentialAdvancer`
+    path, here for `VectorizedAdvancer` specifically — the one `Advancer`
+    `FIM-48`'s own memory finding is actually about, so this is the
+    backend a windowing bug most plausibly could have corrupted (a stale
+    `vectorized_state` reused across lanes, say) without the dict-based
+    test above ever noticing. `run_id` is deliberately excluded from the
+    comparison — see the dict-based test's own docstring for why a
+    differing `max_concurrent_replicates` changing it is expected.
+    """
+    pytest.importorskip("numba")
+    params = replace(_finite_alleles_vector_params(), n_replicates=6)
+
+    unbounded = GenerationalBackend(VectorizedAdvancer()).run(
+        params, InMemoryTrajectoryStore(), None, _clock
+    )
+    windowed = GenerationalBackend(VectorizedAdvancer()).run(
+        replace(params, max_concurrent_replicates=2),
+        InMemoryTrajectoryStore(),
+        None,
+        _clock,
+    )
+
+    assert isinstance(unbounded, tuple)
+    assert isinstance(windowed, tuple)
+    for unbounded_result, windowed_result in zip(unbounded, windowed, strict=True):
+        assert _report_without_run_id(
+            unbounded_result.report
+        ) == _report_without_run_id(windowed_result.report)
+        assert unbounded_result.final_state == windowed_result.final_state
 
 
 def test_generational_vector_backend_matches_lineal_exactly_without_migration() -> None:

@@ -137,6 +137,58 @@ def test_auto_vector_max_capacity_is_a_real_field_and_round_trips() -> None:
     assert SimulationParams.from_mapping(params.to_dict()) == params
 
 
+def test_max_concurrent_replicates_defaults_to_none_and_round_trips() -> None:
+    """`max_concurrent_replicates` is a real, optional field, `None` by default.
+
+    `dev/doc/apps/selby/jost-finite-island-model/20260904-claude-
+    sonnet-5-fim-engine-review-remediations.md`, `FIM-45`/`FIM-48`.
+    Omitted from `to_dict()` when `None`, like `initial_frequencies` —
+    this field's own default is already `None`, so an absent key and an
+    explicit `None` mean the same thing to `from_mapping`, unlike
+    `replicate_tolerance` (see that field's own round-trip test).
+    """
+    default_params = SimulationParams.from_mapping(_valid_config())
+    assert default_params.max_concurrent_replicates is None
+    assert "max_concurrent_replicates" not in default_params.to_dict()
+    assert SimulationParams.from_mapping(default_params.to_dict()) == default_params
+
+    bounded_params = SimulationParams.from_mapping(
+        {**_valid_config(), "n_replicates": 10, "max_concurrent_replicates": 3}
+    )
+    assert bounded_params.max_concurrent_replicates == 3
+    assert bounded_params.to_dict()["max_concurrent_replicates"] == 3
+    assert SimulationParams.from_mapping(bounded_params.to_dict()) == bounded_params
+
+
+def test_max_concurrent_replicates_above_n_replicates_is_clamped_not_rejected() -> None:
+    """A window wider than the whole batch is silently capped, not rejected.
+
+    Mirrors `test_replicate_minimum_above_n_replicates_is_clamped_not_
+    rejected`'s own reasoning: a window sized for a different, larger
+    `n_replicates` (or just generously chosen) behaves exactly like
+    `None` would, not like a config error.
+    """
+    params = SimulationParams.from_mapping(
+        {**_valid_config(), "n_replicates": 3, "max_concurrent_replicates": 100}
+    )
+    assert params.max_concurrent_replicates == 3
+
+    unaffected = SimulationParams.from_mapping(
+        {**_valid_config(), "n_replicates": 10, "max_concurrent_replicates": 3}
+    )
+    assert unaffected.max_concurrent_replicates == 3
+
+
+def test_max_concurrent_replicates_rejects_non_positive_values() -> None:
+    """Zero or negative windows are config errors, not silently clamped."""
+    with pytest.raises(
+        ValueError, match="max_concurrent_replicates must be at least 1"
+    ):
+        SimulationParams.from_mapping(
+            {**_valid_config(), "max_concurrent_replicates": 0}
+        )
+
+
 def test_mapping_round_trip_is_lossless() -> None:
     """Manifest serialization reconstructs equal parameters."""
     original = SimulationParams.from_mapping(

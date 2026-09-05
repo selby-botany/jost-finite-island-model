@@ -536,11 +536,12 @@ for why the two don't compound.
 ## Engine backend and JIT
 
 Everything above this section is a **science** setting — it changes what
-gets computed. `engine_backend`, `jit`, `auto_vector_min_d`, and
-`auto_vector_max_capacity` are different: they change *how* the
-computation runs, not what it computes. Every `SimulationParams` field
-above is still validated and honored exactly the same way regardless of
-which engine backend actually executes it — changing these four never
+gets computed. `engine_backend`, `jit`, `auto_vector_min_d`,
+`auto_vector_max_capacity`, and `max_concurrent_replicates` are
+different: they change *how* the computation runs, not what it
+computes. Every `SimulationParams` field above is still validated and
+honored exactly the same way regardless of which engine backend
+actually executes it — changing these five never
 changes what a run converges to, only how long getting there takes.
 
 ### engine_backend
@@ -640,6 +641,51 @@ Like `auto_vector_min_d`, this default was measured on one specific
 machine — the same `dev/bin/benchmark-engines` maintainer tool
 re-measures this axis too (`--sweep loci-length`).
 
+### max_concurrent_replicates
+
+- **Type:** integer at least 1, or omitted
+- **Default:** unset (every replicate advances together)
+
+Caps how many replicate lanes `engine_backend: generational` or
+`generational-vector` advance at once. Unset (the default) advances
+every requested replicate together, exactly like every prior release —
+every replicate lane is built up front, before the first generation
+runs. A smaller value instead builds lanes lazily: only this many exist
+at once, and a finished lane's own slot goes to the next
+not-yet-started replicate rather than every replicate starting
+simultaneously. Ignored under `engine_backend: lineal`, which never
+uses this windowed batching at all.
+
+This matters most under `generational-vector`: that backend keeps a
+dense, per-locus array cached for every currently active replicate at
+once, so an unbounded batch's own memory use scales directly with
+`n_replicates` — a run that comfortably fits at `n_replicates: 10` can
+run out of memory at `n_replicates: 200` on the identical configuration
+otherwise. Setting `max_concurrent_replicates` to a small number (`4`,
+say) bounds that memory use to a small, fixed multiple regardless of
+how many replicates the batch as a whole is asked to run. A value
+larger than `n_replicates` is silently capped at `n_replicates` rather
+than rejected, the same reasoning `replicate_minimum` (above) already
+uses.
+
+```yaml
+n_replicates: 200
+engine_backend: generational-vector
+max_concurrent_replicates: 4
+mutation_model: finite_alleles
+migrant_sampling: continuous
+```
+
+Windowing changes only *when* a replicate's own lane is built and
+advanced relative to another — never what any replicate itself
+computes, so a batch's own results are identical with or without a
+window, aside from `run_id` itself: an auto-generated `run_id` is a
+hash of a run's *entire* configuration, this field included, so two
+otherwise-identical configs that differ only in
+`max_concurrent_replicates` get different auto-generated run ids (the
+same is already true of `engine_backend`, `jit`, and every other field
+on this page).
+
 ## Validation summary
 
 | Condition | Result |
@@ -672,3 +718,5 @@ re-measures this axis too (`--sweep loci-length`).
 | auto_vector_max_capacity less than 1 | rejected |
 | jit: numba with engine_backend: lineal or generational-vector | rejected |
 | engine_backend: generational-vector without mutation_model: finite_alleles and migrant_sampling: continuous | rejected |
+| max_concurrent_replicates less than 1 | rejected |
+| max_concurrent_replicates greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |

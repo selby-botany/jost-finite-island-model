@@ -2134,6 +2134,50 @@ rows in `store` that need discarding, not just lanes that got
 partway through. Checked against `store.read` (the public
 contract), never `store._rows` directly.
 
+<a id="engine.test_engine.test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window"></a>
+
+#### test\_run\_batch\_bounds\_concurrently\_active\_lanes\_to\_the\_configured\_window
+
+```python
+def test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`max_concurrent_replicates` caps how many lanes are ever alive at once.
+
+Regression test for `FIM-45`/`FIM-48`: `run_batch` now builds lanes
+lazily, only as an earlier lane's own slot frees up, rather than all
+`n_replicates` of them up front. Instruments `_build_replica_lane`/
+`_finalize_replica_lane` (both still calling through to the real
+implementation) to track the running "built but not yet finalized"
+count directly, rather than trusting only the final result count —
+a bug that built every lane immediately but still returned the
+right *count* of results would pass a result-count-only check.
+
+<a id="engine.test_engine.test_max_concurrent_replicates_does_not_change_what_a_batch_computes"></a>
+
+#### test\_max\_concurrent\_replicates\_does\_not\_change\_what\_a\_batch\_computes
+
+```python
+def test_max_concurrent_replicates_does_not_change_what_a_batch_computes(
+) -> None
+```
+
+A window changes only *when* lanes are built, never a run's own trajectory.
+
+`n_replicates=6` against a window of `2` versus no window (`None`,
+every prior release's own behavior) must agree exactly, replicate
+for replicate: `run_batch`'s own generation-first ordering already
+made every lane's own result depend only on that lane's own prior
+state (see its docstring) — windowing changes only when a lane is
+constructed and advanced relative to another, which that same
+argument already covers. `run_id` itself is deliberately excluded
+from the comparison: `deterministic_run_id` hashes a run's own
+*entire* configuration (`engine_backend`/`jit`/`auto_vector_min_d`
+already do the same), so a differing `max_concurrent_replicates`
+changing `run_id` is expected, not a defect — what must not differ
+is what the run actually computed.
+
 <a id="engine.test_engine.test_replicate_minimum_above_n_replicates_runs_to_completion"></a>
 
 #### test\_replicate\_minimum\_above\_n\_replicates\_runs\_to\_completion
@@ -3362,6 +3406,47 @@ vector_backend_matches_lineal_statistically`, below, for the real
 cross-backend comparison, and `test_generational_vector_backend_
 matches_lineal_exactly_without_migration` for the case where a
 full multi-generation run *is* checked bit-for-bit.
+
+<a id="engine.test_engine.test_finalize_replica_lane_releases_vectorized_state"></a>
+
+#### test\_finalize\_replica\_lane\_releases\_vectorized\_state
+
+```python
+def test_finalize_replica_lane_releases_vectorized_state(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`_finalize_replica_lane` clears a lane's own dense cache once it stops.
+
+Regression test for `FIM-48`: without this, a finished lane's own
+`VectorizedState` cache stayed referenced by `run_batch`'s own
+`lanes` list for the rest of the batch's own run, for nothing —
+`RunResult` only ever reads `lane.state` (already rebuilt by
+`VectorizedAdvancer.advance` before this function is ever called),
+never `lane.vectorized_state` itself. Also confirms the cache
+genuinely existed right before release, so this is not a vacuous
+pass on a lane that never populated it in the first place.
+
+<a id="engine.test_engine.test_generational_vector_backend_windowed_batch_matches_unbounded"></a>
+
+#### test\_generational\_vector\_backend\_windowed\_batch\_matches\_unbounded
+
+```python
+def test_generational_vector_backend_windowed_batch_matches_unbounded(
+) -> None
+```
+
+A `max_concurrent_replicates` window changes nothing about Backend V's output.
+
+The same invariant `test_max_concurrent_replicates_does_not_change_
+what_a_batch_computes` checks for the dict-based `SequentialAdvancer`
+path, here for `VectorizedAdvancer` specifically — the one `Advancer`
+`FIM-48`'s own memory finding is actually about, so this is the
+backend a windowing bug most plausibly could have corrupted (a stale
+`vectorized_state` reused across lanes, say) without the dict-based
+test above ever noticing. `run_id` is deliberately excluded from the
+comparison — see the dict-based test's own docstring for why a
+differing `max_concurrent_replicates` changing it is expected.
 
 <a id="engine.test_engine.test_generational_vector_backend_matches_lineal_exactly_without_migration"></a>
 
@@ -8627,6 +8712,49 @@ default `test_mapping_round_trip_is_lossless` (above) already
 exercises for every field at once, so a wiring mistake that
 happened to leave this field permanently pinned to its own default
 could not hide behind that test alone.
+
+<a id="model.test_params.test_max_concurrent_replicates_defaults_to_none_and_round_trips"></a>
+
+#### test\_max\_concurrent\_replicates\_defaults\_to\_none\_and\_round\_trips
+
+```python
+def test_max_concurrent_replicates_defaults_to_none_and_round_trips() -> None
+```
+
+`max_concurrent_replicates` is a real, optional field, `None` by default.
+
+`dev/doc/apps/selby/jost-finite-island-model/20260904-claude-
+sonnet-5-fim-engine-review-remediations.md`, `FIM-45`/`FIM-48`.
+Omitted from `to_dict()` when `None`, like `initial_frequencies` —
+this field's own default is already `None`, so an absent key and an
+explicit `None` mean the same thing to `from_mapping`, unlike
+`replicate_tolerance` (see that field's own round-trip test).
+
+<a id="model.test_params.test_max_concurrent_replicates_above_n_replicates_is_clamped_not_rejected"></a>
+
+#### test\_max\_concurrent\_replicates\_above\_n\_replicates\_is\_clamped\_not\_rejected
+
+```python
+def test_max_concurrent_replicates_above_n_replicates_is_clamped_not_rejected(
+) -> None
+```
+
+A window wider than the whole batch is silently capped, not rejected.
+
+Mirrors `test_replicate_minimum_above_n_replicates_is_clamped_not_
+rejected`'s own reasoning: a window sized for a different, larger
+`n_replicates` (or just generously chosen) behaves exactly like
+`None` would, not like a config error.
+
+<a id="model.test_params.test_max_concurrent_replicates_rejects_non_positive_values"></a>
+
+#### test\_max\_concurrent\_replicates\_rejects\_non\_positive\_values
+
+```python
+def test_max_concurrent_replicates_rejects_non_positive_values() -> None
+```
+
+Zero or negative windows are config errors, not silently clamped.
 
 <a id="model.test_params.test_mapping_round_trip_is_lossless"></a>
 

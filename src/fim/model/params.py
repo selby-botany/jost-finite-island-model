@@ -159,6 +159,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "jit": "off",
     "auto_vector_min_d": DEFAULT_AUTO_VECTOR_MIN_D,
     "auto_vector_max_capacity": DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
+    "max_concurrent_replicates": None,
 }
 
 _CONFIG_KEYS: Final = frozenset(
@@ -189,6 +190,7 @@ _CONFIG_KEYS: Final = frozenset(
         "jit",
         "auto_vector_min_d",
         "auto_vector_max_capacity",
+        "max_concurrent_replicates",
         "migrant_sampling",
         "mutation_model",
         "p_0",
@@ -345,6 +347,28 @@ class SimulationParams:
             own docstring for the same "considered default, not a
             portable constant" caveat `auto_vector_min_d` already
             carries.
+        max_concurrent_replicates: Caps how many replicate lanes
+            `fim.engine.run_batch` (the `"generational"`/
+            `"generational-vector"` path) advances at once — `None` (the
+            default) advances every requested replicate together,
+            exactly like every prior release. `run_batch` builds each
+            lane lazily now, on demand, rather than all `n_replicates`
+            of them up front: only this many are ever alive
+            simultaneously, and a finished lane's slot is handed to the
+            next not-yet-started replicate rather than every replicate
+            starting at once. Meaningful for any `engine_backend` that
+            reaches `run_batch`; matters most for `"generational-
+            vector"`, whose own per-lane cached `VectorizedState` is a
+            dense `(deme_count, capacity)` array per locus — held by
+            every concurrently active lane at once, so an unbounded
+            batch's steady-state memory scales with `n_replicates`
+            directly (`dev/doc/apps/selby/jost-finite-island-model/
+            20260904-claude-sonnet-5-fim-engine-review-remediations.md`,
+            `FIM-48`). Silently clamped down to `n_replicates` if given
+            larger, the same reasoning `replicate_minimum`'s own clamp
+            already uses. Ignored by `"lineal"`, which never calls
+            `run_batch` at all (see `fim.engine.LinealBackend`'s own
+            docstring).
         initial_frequencies: Optional explicit deme/locus frequency table.
     """
 
@@ -375,6 +399,7 @@ class SimulationParams:
     jit: Jit = "off"
     auto_vector_min_d: int = DEFAULT_AUTO_VECTOR_MIN_D
     auto_vector_max_capacity: int = DEFAULT_AUTO_VECTOR_MAX_CAPACITY
+    max_concurrent_replicates: int | None = None
     initial_frequencies: InitialFrequencies | None = None
 
     def __post_init__(self) -> None:
@@ -480,6 +505,19 @@ class SimulationParams:
             mutation_model=self.mutation_model,
             migrant_sampling=self.migrant_sampling,
         )
+        if self.max_concurrent_replicates is not None:
+            _require_integer(
+                "max_concurrent_replicates",
+                self.max_concurrent_replicates,
+                minimum=1,
+            )
+            object.__setattr__(
+                self,
+                "max_concurrent_replicates",
+                _clamp_max_concurrent_replicates(
+                    self.max_concurrent_replicates, self.n_replicates
+                ),
+            )
 
         initial_frequencies = _normalize_initial_frequencies(
             self.initial_frequencies,
@@ -628,6 +666,15 @@ class SimulationParams:
             "auto_vector_min_d": self.auto_vector_min_d,
             "auto_vector_max_capacity": self.auto_vector_max_capacity,
         }
+        if self.max_concurrent_replicates is not None:
+            # Omitted rather than always written, unlike `replicate_
+            # tolerance` above: this field's own default is already
+            # `None`, so an absent key and an explicit `None` mean
+            # exactly the same thing to `from_mapping` — the round-trip
+            # hazard `replicate_tolerance`'s own comment describes
+            # cannot arise here. Matches `initial_frequencies`, below,
+            # for the same reason.
+            result["max_concurrent_replicates"] = self.max_concurrent_replicates
         if self.initial_frequencies is not None:
             result["p_0"] = [
                 [
@@ -814,6 +861,13 @@ class SimulationParams:
                 config.get(
                     "auto_vector_max_capacity",
                     PARAMETER_DEFAULTS["auto_vector_max_capacity"],
+                ),
+            ),
+            max_concurrent_replicates=_parse_optional_int(
+                "max_concurrent_replicates",
+                config.get(
+                    "max_concurrent_replicates",
+                    PARAMETER_DEFAULTS["max_concurrent_replicates"],
                 ),
             ),
             initial_frequencies=_parse_initial_frequencies(config.get("p_0")),
@@ -1285,6 +1339,13 @@ def _parse_optional_float(name: str, value: Any) -> float | None:
     return _parse_float(name, value)
 
 
+def _parse_optional_int(name: str, value: Any) -> int | None:
+    """Parse a config integer, or ``None`` when the key is absent/explicit ``null``."""
+    if value is None:
+        return None
+    return _parse_int(name, value)
+
+
 def _parse_population_size(value: Any) -> PopulationSize:
     """Parse scalar or per-deme gene-copy counts."""
     if isinstance(value, int) and not isinstance(value, bool):
@@ -1512,3 +1573,20 @@ def _clamp_replicate_minimum(replicate_minimum: int, n_replicates: int) -> int:
     if n_replicates < _MIN_MEANINGFUL_REPLICATE_COUNT:
         return replicate_minimum
     return min(replicate_minimum, n_replicates)
+
+
+def _clamp_max_concurrent_replicates(
+    max_concurrent_replicates: int, n_replicates: int
+) -> int:
+    """Cap max_concurrent_replicates at n_replicates, silently, not by rejecting.
+
+    A window wider than the whole batch is not wrong, just meaningless —
+    `fim.engine.run_batch` already never has more than `n_replicates`
+    lanes to advance in the first place, so a caller who names a
+    generously large window (or one sized for a *different*, larger
+    `n_replicates` on a config reused across runs) gets exactly the same
+    behavior a plain `None` would give, not a config-time error. Mirrors
+    `_clamp_replicate_minimum`'s own reasoning, above, for the identical
+    shape of mismatch between two `SimulationParams` fields.
+    """
+    return min(max_concurrent_replicates, n_replicates)

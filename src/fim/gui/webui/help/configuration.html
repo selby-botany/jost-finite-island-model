@@ -457,11 +457,12 @@ still resamples every gene copy exactly once per generation) — see
 for why the two don't compound.</p>
 <h2 id="engine-backend-and-jit">Engine backend and JIT</h2>
 <p>Everything above this section is a <strong>science</strong> setting — it changes what
-gets computed. <code>engine_backend</code>, <code>jit</code>, <code>auto_vector_min_d</code>, and
-<code>auto_vector_max_capacity</code> are different: they change <em>how</em> the
-computation runs, not what it computes. Every <code>SimulationParams</code> field
-above is still validated and honored exactly the same way regardless of
-which engine backend actually executes it — changing these four never
+gets computed. <code>engine_backend</code>, <code>jit</code>, <code>auto_vector_min_d</code>,
+<code>auto_vector_max_capacity</code>, and <code>max_concurrent_replicates</code> are
+different: they change <em>how</em> the computation runs, not what it
+computes. Every <code>SimulationParams</code> field above is still validated and
+honored exactly the same way regardless of which engine backend
+actually executes it — changing these five never
 changes what a run converges to, only how long getting there takes.</p>
 <h3 id="enginebackend">engine_backend</h3>
 <ul>
@@ -554,6 +555,46 @@ regardless of <code>d</code>. Ignored under every other <code>engine_backend</co
 Like <code>auto_vector_min_d</code>, this default was measured on one specific
 machine — the same <code>dev/bin/benchmark-engines</code> maintainer tool
 re-measures this axis too (<code>--sweep loci-length</code>).</p>
+<h3 id="maxconcurrentreplicates">max_concurrent_replicates</h3>
+<ul>
+<li><strong>Type:</strong> integer at least 1, or omitted</li>
+<li><strong>Default:</strong> unset (every replicate advances together)</li>
+</ul>
+<p>Caps how many replicate lanes <code>engine_backend: generational</code> or
+<code>generational-vector</code> advance at once. Unset (the default) advances
+every requested replicate together, exactly like every prior release —
+every replicate lane is built up front, before the first generation
+runs. A smaller value instead builds lanes lazily: only this many exist
+at once, and a finished lane's own slot goes to the next
+not-yet-started replicate rather than every replicate starting
+simultaneously. Ignored under <code>engine_backend: lineal</code>, which never
+uses this windowed batching at all.</p>
+<p>This matters most under <code>generational-vector</code>: that backend keeps a
+dense, per-locus array cached for every currently active replicate at
+once, so an unbounded batch's own memory use scales directly with
+<code>n_replicates</code> — a run that comfortably fits at <code>n_replicates: 10</code> can
+run out of memory at <code>n_replicates: 200</code> on the identical configuration
+otherwise. Setting <code>max_concurrent_replicates</code> to a small number (<code>4</code>,
+say) bounds that memory use to a small, fixed multiple regardless of
+how many replicates the batch as a whole is asked to run. A value
+larger than <code>n_replicates</code> is silently capped at <code>n_replicates</code> rather
+than rejected, the same reasoning <code>replicate_minimum</code> (above) already
+uses.</p>
+<pre><code class="language-yaml">n_replicates: 200
+engine_backend: generational-vector
+max_concurrent_replicates: 4
+mutation_model: finite_alleles
+migrant_sampling: continuous
+</code></pre>
+<p>Windowing changes only <em>when</em> a replicate's own lane is built and
+advanced relative to another — never what any replicate itself
+computes, so a batch's own results are identical with or without a
+window, aside from <code>run_id</code> itself: an auto-generated <code>run_id</code> is a
+hash of a run's <em>entire</em> configuration, this field included, so two
+otherwise-identical configs that differ only in
+<code>max_concurrent_replicates</code> get different auto-generated run ids (the
+same is already true of <code>engine_backend</code>, <code>jit</code>, and every other field
+on this page).</p>
 <h2 id="validation-summary">Validation summary</h2>
 <table>
 <thead>
@@ -674,6 +715,14 @@ re-measures this axis too (<code>--sweep loci-length</code>).</p>
 <tr>
 <td>engine_backend: generational-vector without mutation_model: finite_alleles and migrant_sampling: continuous</td>
 <td>rejected</td>
+</tr>
+<tr>
+<td>max_concurrent_replicates less than 1</td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>max_concurrent_replicates greater than n<sub>replicates</sub></td>
+<td>silently capped at n<sub>replicates</sub></td>
 </tr>
 </tbody>
 </table>
