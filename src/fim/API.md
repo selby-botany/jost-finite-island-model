@@ -4948,6 +4948,19 @@ not `k` times.
 
 - `ValueError` - If `k` is negative.
 
+  Noted, not fixed (this project's own multi-model engine review,
+  2026-09-04, `FIM-20`/finding Kimi-FIM-20, calls this "minor
+  (theoretical)" and prescribes no fix): `base + np.arange(k,
+  dtype=np.int64)` computes in fixed-width `int64`, which silently
+  wraps around to a negative identity on overflow rather than
+  raising, unlike `self._next` itself (a plain Python `int`, never
+  fixed-width). Reaching it needs roughly `2**63` calls to `next_
+  id`/`next_k_ids` combined over one run's own lifetime — an
+  allele-minting rate no realistic configuration this project
+  validates for could approach before every other resource
+  (wall-clock time not least) already made the run practically
+  impossible to finish.
+
 <a id="fim.model.allele.FiniteAlleleSpace"></a>
 
 ## FiniteAlleleSpace Objects

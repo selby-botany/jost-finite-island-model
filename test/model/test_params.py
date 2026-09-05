@@ -108,6 +108,38 @@ def test_array_n_and_matrix_m_are_shape_validated() -> None:
     assert params.population_sizes == (10, 20)
 
 
+def test_direct_construction_rejects_bool_and_string_matrix_entries() -> None:
+    """A direct `SimulationParams(...)` entry is as strict as `from_mapping`'s own.
+
+    Regression test for FIM-08: `_normalize_migration`/`_normalize_
+    mutation_rate` used to coerce each matrix/list entry with a raw
+    `float(item)`, which silently accepts a `bool` (`True`/`False`
+    coerce to `1.0`/`0.0`) or a numeric string (`"0.5"`) — neither of
+    which `SimulationParams.from_mapping`'s own `_parse_migration`/
+    `_parse_mutation_rate` would ever accept, a real inconsistency
+    between the two construction routes this project's own multi-model
+    engine review, 2026-09-04, found.
+    """
+    with pytest.raises(ValueError, match="m\\[0\\] must be a number"):
+        SimulationParams(
+            N=10,
+            m=((True, 0.0), (0.0, 1.0)),
+            mu=0.001,
+            d=2,
+            seed=7,
+            loci=(LocusSpec(1, 200),),
+        )
+    with pytest.raises(ValueError, match="mu\\[0\\] must be a number"):
+        SimulationParams(
+            N=10,
+            m=0.1,
+            mu=("0.5",),  # type: ignore[arg-type]
+            d=2,
+            seed=7,
+            loci=(LocusSpec(1, 200),),
+        )
+
+
 def test_initial_allele_count_is_bounded_by_the_smallest_deme_n() -> None:
     """Unequal per-deme N constrains founding alleles by the smallest deme."""
     config = {**_valid_config(), "N": [5, 50], "initial_allele_count": 6}

@@ -1117,7 +1117,18 @@ def _normalize_migration(value: Migration, d: int) -> Migration:
     if isinstance(value, int | float):
         _require_probability("m", float(value))
         return float(value)
-    rows = tuple(tuple(float(item) for item in row) for row in value)
+    # `_parse_float`, not a raw `float(item)`: this function is also
+    # reached by a direct `SimulationParams(...)` construction, bypassing
+    # `from_mapping`/`_parse_migration` entirely — a raw `float(item)`
+    # silently accepts a `bool` (`True`/`False` coerce to `1.0`/`0.0`) or
+    # a numeric string (`"0.5"`), neither of which the config-file path
+    # would ever accept, a real inconsistency between the two
+    # construction routes this project's own multi-model engine review,
+    # 2026-09-04, found (`FIM-08`/finding Kimi-FIM-08).
+    rows = tuple(
+        tuple(_parse_float(f"m[{row_index}]", item) for item in row)
+        for row_index, row in enumerate(value)
+    )
     if len(rows) != d or any(len(row) != d for row in rows):
         raise ValueError("migration matrix m must have shape d x d")
     for index, row in enumerate(rows):
@@ -1140,7 +1151,14 @@ def _normalize_mutation_rate(value: MutationRate, n_loci: int) -> tuple[float, .
     if isinstance(value, int | float):
         _require_probability("mu", float(value))
         return (float(value),) * n_loci
-    rates = tuple(float(item) for item in value)
+    # `_parse_float`, not a raw `float(item)` — see `_normalize_
+    # migration`'s own identical comment (`FIM-08`) for why: a direct
+    # `SimulationParams(...)` construction reaches this function too,
+    # and a raw `float(item)` would silently accept a `bool` or a
+    # numeric string the config-file path already rejects.
+    rates = tuple(
+        _parse_float(f"mu[{index}]", item) for index, item in enumerate(value)
+    )
     if len(rates) != n_loci:
         raise ValueError("mu must contain exactly one rate per locus")
     for index, rate in enumerate(rates):

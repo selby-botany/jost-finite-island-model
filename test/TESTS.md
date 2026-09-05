@@ -8907,6 +8907,25 @@ def test_array_n_and_matrix_m_are_shape_validated() -> None
 
 Future unequal-size and migration-matrix data shapes are accepted.
 
+<a id="model.test_params.test_direct_construction_rejects_bool_and_string_matrix_entries"></a>
+
+#### test\_direct\_construction\_rejects\_bool\_and\_string\_matrix\_entries
+
+```python
+def test_direct_construction_rejects_bool_and_string_matrix_entries() -> None
+```
+
+A direct `SimulationParams(...)` entry is as strict as `from_mapping`'s own.
+
+Regression test for FIM-08: `_normalize_migration`/`_normalize_
+mutation_rate` used to coerce each matrix/list entry with a raw
+`float(item)`, which silently accepts a `bool` (`True`/`False`
+coerce to `1.0`/`0.0`) or a numeric string (`"0.5"`) — neither of
+which `SimulationParams.from_mapping`'s own `_parse_migration`/
+`_parse_mutation_rate` would ever accept, a real inconsistency
+between the two construction routes this project's own multi-model
+engine review, 2026-09-04, found.
+
 <a id="model.test_params.test_initial_allele_count_is_bounded_by_the_smallest_deme_n"></a>
 
 #### test\_initial\_allele\_count\_is\_bounded\_by\_the\_smallest\_deme\_n
