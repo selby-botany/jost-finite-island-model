@@ -9890,7 +9890,8 @@ a handful of independent replicate draws specifically.
 
 **Raises**:
 
-- `ValueError` - If fewer than two values are supplied.
+- `ValueError` - If fewer than two values are supplied, or any value
+  is not finite.
 
 <a id="fim.statistics.interval.student_t_critical_value"></a>
 

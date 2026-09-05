@@ -142,11 +142,24 @@ def confidence_interval(
         The sample mean and its confidence interval.
 
     Raises:
-        ValueError: If fewer than two values are supplied.
+        ValueError: If fewer than two values are supplied, or any value
+            is not finite.
     """
     sample_count = len(values)
     if sample_count < _MINIMUM_SAMPLE_COUNT:
         raise ValueError("confidence_interval requires at least two values")
+    # No per-value finiteness check existed here at all before this
+    # project's own multi-model engine review, 2026-09-04 (`FIM-07`/
+    # finding Kimi-FIM-07): a `nan` silently produced a `nan` mean and
+    # interval for a direct caller of this function (the convergence-
+    # criterion path this project's own engine actually uses was already
+    # fail-safe against this, since `nan <= tolerance` is always `False`
+    # — but that is `fim.convergence.criteria`'s own accident, not a
+    # contract this function itself ever made). Matches `fim.convergence.
+    # monitor.ConvergenceMonitor.record`'s own identical rule.
+    for value in values:
+        if not math.isfinite(value):
+            raise ValueError("confidence_interval requires finite values")
     mean = math.fsum(values) / sample_count
     # "Bessel-corrected" means dividing by (sample_count - 1) rather than
     # sample_count itself when estimating how spread out the values

@@ -1986,6 +1986,49 @@ def test_monitor_distinguishes_convergence_from_cap() -> None
 
 Terminal outcomes remain valid and explain why the run stopped.
 
+<a id="convergence.test_monitor.test_record_rejects_a_non_integer_generation"></a>
+
+#### test\_record\_rejects\_a\_non\_integer\_generation
+
+```python
+@pytest.mark.parametrize(
+    "generation",
+    [True, False, 1.5, "1", None],
+    ids=["True", "False", "1.5", "'1'", "None"],
+)
+def test_record_rejects_a_non_integer_generation(generation: object) -> None
+```
+
+A non-integer `generation` (including `bool`) raises `ValueError`.
+
+Regression test for FIM-06: `generation < 0` used to run directly
+against whatever `generation` actually was — a raw `TypeError` for
+anything not orderable against `0` (`None`, a string), and a
+*silent, wrong* pass for `bool` (`True`/`False` compare as `1`/`0`
+in Python, and `bool` is an `int` subclass, so an isolated `not
+isinstance(generation, int)` check alone would not have caught it
+either).
+
+<a id="convergence.test_monitor.test_record_rejects_a_non_numeric_value"></a>
+
+#### test\_record\_rejects\_a\_non\_numeric\_value
+
+```python
+@pytest.mark.parametrize("value", [True, "0.5", None],
+                         ids=["True", "'0.5'", "None"])
+def test_record_rejects_a_non_numeric_value(value: object) -> None
+```
+
+A non-numeric watched value raises `ValueError`, not a raw `TypeError`.
+
+Regression test for FIM-06: a non-numeric `value` used to reach
+`math.isfinite(number)` directly, which raises Python's own generic
+`TypeError` for anything it cannot accept at all, rather than this
+method's own documented `ValueError`. `bool` is rejected too, the
+same `bool`-is-not-really-a-number discipline `generation`, above,
+already applies — `True`/`False` are technically valid `int`s, but
+not a meaningful watched statistic value.
+
 <a id="convergence.test_monitor.test_multi_statistic_monitor_requires_a_mapping_but_accepts_a_partial_one"></a>
 
 #### test\_multi\_statistic\_monitor\_requires\_a\_mapping\_but\_accepts\_a\_partial\_one
@@ -11746,6 +11789,22 @@ def test_fewer_than_two_values_is_rejected() -> None
 ```
 
 A confidence interval needs at least two observations.
+
+<a id="statistics.test_interval.ConfidenceIntervalTests.test_non_finite_values_are_rejected"></a>
+
+#### test\_non\_finite\_values\_are\_rejected
+
+```python
+def test_non_finite_values_are_rejected() -> None
+```
+
+A `nan` or `inf` value raises, rather than silently producing one.
+
+Regression test for FIM-07: no per-value finiteness check
+existed here at all — a `nan` among the observations used to
+silently produce a `nan` mean and interval instead, matching
+`fim.convergence.monitor.ConvergenceMonitor.record`'s own
+identical rule for a watched statistic's own value.
 
 <a id="statistics.test_properties"></a>
 

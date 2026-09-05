@@ -54,6 +54,44 @@ def test_monitor_distinguishes_convergence_from_cap() -> None:
     assert not capped.outcome().converged
 
 
+@pytest.mark.parametrize(
+    "generation",
+    [True, False, 1.5, "1", None],
+    ids=["True", "False", "1.5", "'1'", "None"],
+)
+def test_record_rejects_a_non_integer_generation(generation: object) -> None:
+    """A non-integer `generation` (including `bool`) raises `ValueError`.
+
+    Regression test for FIM-06: `generation < 0` used to run directly
+    against whatever `generation` actually was — a raw `TypeError` for
+    anything not orderable against `0` (`None`, a string), and a
+    *silent, wrong* pass for `bool` (`True`/`False` compare as `1`/`0`
+    in Python, and `bool` is an `int` subclass, so an isolated `not
+    isinstance(generation, int)` check alone would not have caught it
+    either).
+    """
+    monitor = ConvergenceMonitor(TrailingWindowCriterion(4, 0.0), max_generations=10)
+    with pytest.raises(ValueError, match="non-negative integer"):
+        monitor.record(generation, 0.5)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", [True, "0.5", None], ids=["True", "'0.5'", "None"])
+def test_record_rejects_a_non_numeric_value(value: object) -> None:
+    """A non-numeric watched value raises `ValueError`, not a raw `TypeError`.
+
+    Regression test for FIM-06: a non-numeric `value` used to reach
+    `math.isfinite(number)` directly, which raises Python's own generic
+    `TypeError` for anything it cannot accept at all, rather than this
+    method's own documented `ValueError`. `bool` is rejected too, the
+    same `bool`-is-not-really-a-number discipline `generation`, above,
+    already applies — `True`/`False` are technically valid `int`s, but
+    not a meaningful watched statistic value.
+    """
+    monitor = ConvergenceMonitor(TrailingWindowCriterion(4, 0.0), max_generations=10)
+    with pytest.raises(ValueError, match="real number"):
+        monitor.record(0, value)  # type: ignore[arg-type]
+
+
 def test_multi_statistic_monitor_requires_a_mapping_but_accepts_a_partial_one() -> None:
     """Watching several statistics rejects a bare float, not a partial mapping.
 

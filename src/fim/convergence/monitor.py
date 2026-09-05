@@ -238,6 +238,20 @@ class ConvergenceMonitor:
         """
         if self._outcome.stopped:
             raise RuntimeError("cannot record after convergence monitoring stopped")
+        # `isinstance(generation, bool)` checked explicitly, first: `bool`
+        # is a subclass of `int` in Python, so a bare `not isinstance(
+        # generation, int)` alone would silently accept `True`/`False` as
+        # generation `1`/`0` — the same `bool`-is-not-really-an-int
+        # discipline every integer-shaped field elsewhere in this project
+        # already applies (`fim.model.params._require_integer`, for one).
+        # Neither check existed at all before this project's own multi-
+        # model engine review, 2026-09-04 (`FIM-06`/finding Kimi-FIM-06):
+        # a non-`int` `generation` reached `generation < 0` directly,
+        # which raises a raw `TypeError` for anything not orderable
+        # against `0` (a string, `None`, ...) instead of this function's
+        # own documented `ValueError`.
+        if isinstance(generation, bool) or not isinstance(generation, int):
+            raise ValueError("generation must be a non-negative integer")
         if generation < 0:
             raise ValueError("generation must be non-negative")
         if self._generations and generation <= self._generations[-1]:
@@ -245,6 +259,17 @@ class ConvergenceMonitor:
 
         values = self._resolve_values(value)
         for statistic, number in values.items():
+            # Same reasoning as `generation`, above, for `number`: this
+            # project's own multi-model engine review, 2026-09-04
+            # (`FIM-06`), found a non-numeric `value` (or mapping entry)
+            # reached `math.isfinite(number)` directly, which raises a
+            # raw `TypeError` for anything `math.isfinite` cannot accept
+            # at all (a string, `None`, ...) instead of this function's
+            # own documented `ValueError`.
+            if isinstance(number, bool) or not isinstance(number, int | float):
+                raise ValueError(
+                    f"convergence statistic {statistic!r} must be a real number"
+                )
             if not math.isfinite(number):
                 raise ValueError(f"convergence statistic {statistic!r} must be finite")
 

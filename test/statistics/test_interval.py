@@ -238,6 +238,20 @@ class ConfidenceIntervalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             confidence_interval([1.0])
 
+    def test_non_finite_values_are_rejected(self) -> None:
+        """A `nan` or `inf` value raises, rather than silently producing one.
+
+        Regression test for FIM-07: no per-value finiteness check
+        existed here at all — a `nan` among the observations used to
+        silently produce a `nan` mean and interval instead, matching
+        `fim.convergence.monitor.ConvergenceMonitor.record`'s own
+        identical rule for a watched statistic's own value.
+        """
+        with self.assertRaisesRegex(ValueError, "finite"):
+            confidence_interval([1.0, math.nan])
+        with self.assertRaisesRegex(ValueError, "finite"):
+            confidence_interval([1.0, math.inf])
+
 
 if __name__ == "__main__":
     unittest.main()
