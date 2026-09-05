@@ -76,6 +76,27 @@ deliberate confirmation, not a silent edit. `auto_vector_min_d` stays a
 caller-supplied `SimulationParams` field for exactly this kind of
 drift — see `dev/bin/benchmark-engines --sweep d` to re-characterize it
 on any given machine.
+
+**Re-measured again 2026-09-05 (`FIM-52`, Phase 7 item 6,
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md`) — on
+different, native hardware this time (`citrus-2`, Intel Core Ultra 9
+185H, x86_64 Linux, not this project's own Apple Silicon development
+machine), and after every Phase 1-7 correctness/performance fix, not
+just Stage F8: `dev/bin/benchmark-engines --sweep d --values
+2,4,8,16,25,35,50,70,100,150,250 --replicates 16 --generations 100
+--trials 5` found `"generational-vector"` fastest at *every* tested
+`d`, from `2` (the smallest value `SimulationParams` accepts at all)
+through `250` — never losing even once, and never approaching a
+crossover from below. Its own margin over `"generational"` with
+`jit="numba"` (the closest competitor at every point) shrinks as `d`
+grows (from roughly 2x at `d=2` to roughly 6x at `d=250`, both favoring
+V) but never comes close to reversing. This confirms, on a second,
+independent, materially different machine, that `35` is not merely
+stale but has never been correct against any post-Stage-F8 build of
+this codebase — every tested value below it would have been routed to
+the slower engine by `"auto"`. Still not changed here: doing so is a
+deliberate act on its own, tracked separately, not a byproduct of
+recording a measurement.
 """
 DEFAULT_AUTO_VECTOR_MAX_CAPACITY: Final = 1024
 """`"auto"`'s own default per-locus capacity ceiling for `"generational-
@@ -108,6 +129,34 @@ different hardware, and not yet re-measured against the same-day
 `auto_vector_min_d`'s own default doubly stale — see that constant's
 own docstring for the precedent this one inherits, and `dev/bin/
 benchmark-engines --sweep loci-length` to re-characterize it.
+
+**Re-measured 2026-09-05 (`FIM-52`, Phase 7 item 6,
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md`) — on
+`citrus-2` (Intel Core Ultra 9 185H, x86_64 Linux), after every Phase
+1-7 fix: `dev/bin/benchmark-engines --sweep loci-length --values
+1,2,3,4,5,6,7,8 --replicates 8 --generations 50 --trials 3` found the
+crossover has moved, not merely shifted within noise — `"generational-
+vector"` now wins through capacity `4096` (locus length `6`, `1.942s`
+vs `"generational"` + `jit="numba"`'s `5.152s` — V faster, reversing
+the earlier `71.3s` vs `92.4s` finding at this same capacity), and
+loses starting at capacity `16384` (locus length `7`, `7.333s` vs
+`5.077s`), with the gap widening sharply by capacity `65536` (length
+`8`: `28.158s` vs `5.547s`, V now the slower engine by roughly `5x`).
+The likely mechanism: several of the same Phase 7 fixes measured
+against `d` above (`FIM-53`/`FIM-54`/`FIM-27`/`FIM-28`) reduce V's own
+per-generation cost in ways that scale with capacity specifically
+(fewer full `(d, capacity)`-shaped temporaries, fewer full-array
+copies) — exactly the dimension this constant thresholds, so a
+capacity-sensitive fix category moving this specific crossover, while
+leaving `auto_vector_min_d`'s own `d`-axis crossover unmoved (still no
+reversal found at any tested `d`, see that constant's own docstring),
+is the expected shape of the result, not a surprising one. `1024`
+significantly understates what current code can actually do — real
+data now supports `4096`, still not an interpolated value (capacity is
+always `4 ** length`; nothing could land between `4096` and `16384`
+either). Still not changed here, for the same reason `auto_vector_
+min_d`'s own docstring gives: a deliberate act of its own, not a
+byproduct of recording a measurement.
 """
 DEFAULT_N_REPLICATES: Final = 200
 """How many independently seeded replicates a run tries by default.
