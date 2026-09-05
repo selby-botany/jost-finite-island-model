@@ -187,6 +187,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ExplicitInitialCondition](#fim.model.initial.ExplicitInitialCondition)
     * [generate](#fim.model.initial.ExplicitInitialCondition.generate)
   * [generate\_initial\_state](#fim.model.initial.generate_initial_state)
+  * [founding\_condition\_for\_heterozygosity](#fim.model.initial.founding_condition_for_heterozygosity)
 * [fim.model.locus](#fim.model.locus)
   * [LocusSpec](#fim.model.locus.LocusSpec)
     * [\_\_post\_init\_\_](#fim.model.locus.LocusSpec.__post_init__)
@@ -5533,6 +5534,82 @@ itself.
 **Returns**:
 
   A reproducible generation-zero state.
+
+<a id="fim.model.initial.founding_condition_for_heterozygosity"></a>
+
+#### founding\_condition\_for\_heterozygosity
+
+```python
+def founding_condition_for_heterozygosity(
+        heterozygosity: float,
+        *,
+        deme_count: int,
+        locus_count: int = 1) -> InitialFrequencies
+```
+
+Build a `p_0` table where every deme is an identical ancestral copy.
+
+Ryman & Leimar (2008)'s own gene-identity recursion starts every
+trajectory from `Gs(0) = Gd(0) = 1 - H_S(0)` — every deme founded as
+an identical copy of one ancestral population at a specified
+heterozygosity, before any migration/mutation/drift has had a chance
+to make the demes diverge from each other. `fim`'s own two existing
+founding strategies (`DirichletInitialCondition`'s independent random
+draw per deme, `ExplicitInitialCondition`'s arbitrary caller-supplied
+table) can realize this only by accident, never by construction —
+this project's own Ryman & Leimar remediation, `R7`
+(`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-
+5-gene-identity-recursion-fim-implications.md` §9), exists
+specifically so a trajectory comparison against that recursion
+(`R5`) never has to argue about whether an observed early-generation
+gap is a real engine defect or just a founding-condition mismatch.
+
+The returned table plugs directly into `SimulationParams.
+initial_frequencies`; `generate_initial_state` then dispatches it to
+`ExplicitInitialCondition` exactly like any other explicit `p_0`.
+
+How the target is realized: `heterozygosity == 0.0` is a single
+fixed allele, trivially. Otherwise, the fewest alleles that can
+reach the target at all is `ceil(1 / (1 - heterozygosity))` — the
+same identity a uniform draw over that many equally common alleles
+would give — split into that many `- 1` "minor" alleles at one
+shared frequency and one "major" allele holding the remainder,
+solved for the exact minor frequency that reaches `heterozygosity`
+precisely (a straightforward quadratic; see `_ancestral_allele_
+frequencies`'s own docstring for the derivation). Every deme, and
+every locus within each deme, gets an independent copy of the
+identical distribution — matching `founding_allele_ids`'s own
+per-locus-relative allele-identity convention, the same one
+`DirichletInitialCondition` already uses.
+
+A high target heterozygosity needs proportionally many alleles
+(`heterozygosity=0.99` needs 100) — an intrinsic property of what
+heterozygosity means, not a limitation of this construction:
+reaching high heterozygosity at all requires many, comparably
+common alleles, by definition.
+
+**Arguments**:
+
+- `heterozygosity` - The ancestral population's own expected
+  heterozygosity, `H_S(0)`. Must be in `[0, 1)` — `1` itself
+  is the unreachable supremum every finite allele count only
+  ever approaches (`heterozygosity.heterozygosity`'s own
+  docstring).
+- `deme_count` - How many identical deme copies to build.
+- `locus_count` - How many loci to build the identical distribution
+  for, independently at each. Defaults to `1`.
+
+
+**Returns**:
+
+  An `InitialFrequencies` table: `deme_count` identical copies,
+  each `locus_count` independent copies of the same distribution.
+
+
+**Raises**:
+
+- `ValueError` - If `heterozygosity` is not in `[0, 1)`, or
+  `deme_count`/`locus_count` is not a positive integer.
 
 <a id="fim.model.locus"></a>
 

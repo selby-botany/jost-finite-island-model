@@ -7696,6 +7696,91 @@ def test_generate_initial_state_uses_seed_when_rng_is_omitted() -> None
 
 The convenience API creates the same PCG64 stream as the engine.
 
+<a id="model.test_initial.test_founding_condition_gs_equals_gd_equals_one_minus_h_s_0"></a>
+
+#### test\_founding\_condition\_gs\_equals\_gd\_equals\_one\_minus\_h\_s\_0
+
+```python
+@pytest.mark.parametrize("heterozygosity",
+                         [0.0, 0.1, 0.3, 0.5, 0.6667, 0.8, 0.9, 0.95, 0.99])
+@pytest.mark.parametrize("deme_count", [2, 3, 5])
+def test_founding_condition_gs_equals_gd_equals_one_minus_h_s_0(
+        heterozygosity: float, deme_count: int) -> None
+```
+
+`R7`'s own exit condition: `Gs(0) = Gd(0) = 1 - H_S(0)`, exactly.
+
+`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-5-
+gene-identity-recursion-fim-implications.md` §9, `R7` — the whole
+point of this helper is that every deme is an identical ancestral
+copy, so the within- and between-deme gene identities coincide
+exactly with the requested heterozygosity's own complement, for any
+deme count and at any achievable heterozygosity, not merely
+approximately.
+
+<a id="model.test_initial.test_founding_condition_builds_identical_demes_and_independent_loci"></a>
+
+#### test\_founding\_condition\_builds\_identical\_demes\_and\_independent\_loci
+
+```python
+def test_founding_condition_builds_identical_demes_and_independent_loci(
+) -> None
+```
+
+Every deme is byte-for-byte identical; every locus is its own copy.
+
+<a id="model.test_initial.test_founding_condition_realizes_the_state_through_explicit_initial_condition"></a>
+
+#### test\_founding\_condition\_realizes\_the\_state\_through\_explicit\_initial\_condition
+
+```python
+def test_founding_condition_realizes_the_state_through_explicit_initial_condition(
+) -> (None)
+```
+
+The built table is a genuine, usable `p_0` — not just internally consistent.
+
+<a id="model.test_initial.test_founding_condition_rejects_invalid_inputs"></a>
+
+#### test\_founding\_condition\_rejects\_invalid\_inputs
+
+```python
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({
+            "heterozygosity": -0.1,
+            "deme_count": 2
+        }, r"heterozygosity"),
+        ({
+            "heterozygosity": 1.0,
+            "deme_count": 2
+        }, r"heterozygosity"),
+        ({
+            "heterozygosity": True,
+            "deme_count": 2
+        }, r"heterozygosity"),
+        ({
+            "heterozygosity": float("nan"),
+            "deme_count": 2
+        }, r"heterozygosity"),
+        ({
+            "heterozygosity": 0.5,
+            "deme_count": 0
+        }, r"deme_count"),
+        ({
+            "heterozygosity": 0.5,
+            "deme_count": 2,
+            "locus_count": 0
+        }, r"locus_count"),
+    ],
+)
+def test_founding_condition_rejects_invalid_inputs(kwargs: dict[str, object],
+                                                   message: str) -> None
+```
+
+Every argument is validated, not passed straight into the arithmetic.
+
 <a id="model.test_locus"></a>
 
 # model.test\_locus

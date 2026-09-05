@@ -15,13 +15,14 @@ specific known starting condition rather than a random one.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Protocol
 
 import numpy as np
 
 from fim.model.allele import AlleleId, founding_allele_ids
-from fim.model.params import SimulationParams
+from fim.model.params import InitialFrequencies, SimulationParams
 from fim.model.state import ModelState
 
 
@@ -177,3 +178,138 @@ def generate_initial_state(
     else:
         generator = ExplicitInitialCondition()
     return generator.generate(params, run_rng)
+
+
+def founding_condition_for_heterozygosity(
+    heterozygosity: float,
+    *,
+    deme_count: int,
+    locus_count: int = 1,
+) -> InitialFrequencies:
+    """Build a `p_0` table where every deme is an identical ancestral copy.
+
+    Ryman & Leimar (2008)'s own gene-identity recursion starts every
+    trajectory from `Gs(0) = Gd(0) = 1 - H_S(0)` — every deme founded as
+    an identical copy of one ancestral population at a specified
+    heterozygosity, before any migration/mutation/drift has had a chance
+    to make the demes diverge from each other. `fim`'s own two existing
+    founding strategies (`DirichletInitialCondition`'s independent random
+    draw per deme, `ExplicitInitialCondition`'s arbitrary caller-supplied
+    table) can realize this only by accident, never by construction —
+    this project's own Ryman & Leimar remediation, `R7`
+    (`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-
+    5-gene-identity-recursion-fim-implications.md` §9), exists
+    specifically so a trajectory comparison against that recursion
+    (`R5`) never has to argue about whether an observed early-generation
+    gap is a real engine defect or just a founding-condition mismatch.
+
+    The returned table plugs directly into `SimulationParams.
+    initial_frequencies`; `generate_initial_state` then dispatches it to
+    `ExplicitInitialCondition` exactly like any other explicit `p_0`.
+
+    How the target is realized: `heterozygosity == 0.0` is a single
+    fixed allele, trivially. Otherwise, the fewest alleles that can
+    reach the target at all is `ceil(1 / (1 - heterozygosity))` — the
+    same identity a uniform draw over that many equally common alleles
+    would give — split into that many `- 1` "minor" alleles at one
+    shared frequency and one "major" allele holding the remainder,
+    solved for the exact minor frequency that reaches `heterozygosity`
+    precisely (a straightforward quadratic; see `_ancestral_allele_
+    frequencies`'s own docstring for the derivation). Every deme, and
+    every locus within each deme, gets an independent copy of the
+    identical distribution — matching `founding_allele_ids`'s own
+    per-locus-relative allele-identity convention, the same one
+    `DirichletInitialCondition` already uses.
+
+    A high target heterozygosity needs proportionally many alleles
+    (`heterozygosity=0.99` needs 100) — an intrinsic property of what
+    heterozygosity means, not a limitation of this construction:
+    reaching high heterozygosity at all requires many, comparably
+    common alleles, by definition.
+
+    Args:
+        heterozygosity: The ancestral population's own expected
+            heterozygosity, `H_S(0)`. Must be in `[0, 1)` — `1` itself
+            is the unreachable supremum every finite allele count only
+            ever approaches (`heterozygosity.heterozygosity`'s own
+            docstring).
+        deme_count: How many identical deme copies to build.
+        locus_count: How many loci to build the identical distribution
+            for, independently at each. Defaults to `1`.
+
+    Returns:
+        An `InitialFrequencies` table: `deme_count` identical copies,
+        each `locus_count` independent copies of the same distribution.
+
+    Raises:
+        ValueError: If `heterozygosity` is not in `[0, 1)`, or
+            `deme_count`/`locus_count` is not a positive integer.
+    """
+    if isinstance(heterozygosity, bool) or not isinstance(heterozygosity, int | float):
+        raise ValueError("heterozygosity must be a real number")
+    if not math.isfinite(heterozygosity) or not 0.0 <= heterozygosity < 1.0:
+        raise ValueError("heterozygosity must be in [0, 1)")
+    if (
+        isinstance(deme_count, bool)
+        or not isinstance(deme_count, int)
+        or deme_count < 1
+    ):
+        raise ValueError("deme_count must be a positive integer")
+    if (
+        isinstance(locus_count, bool)
+        or not isinstance(locus_count, int)
+        or locus_count < 1
+    ):
+        raise ValueError("locus_count must be a positive integer")
+    # A fresh `_ancestral_allele_frequencies` call per (deme, locus) pair,
+    # not one shared tuple reused across demes: every dict below is
+    # already read-only in practice once `ModelState` wraps it, but this
+    # function's own docstring promises independent copies, not shared
+    # objects a caller could accidentally alias.
+    return tuple(
+        tuple(
+            _ancestral_allele_frequencies(float(heterozygosity))
+            for _ in range(locus_count)
+        )
+        for _ in range(deme_count)
+    )
+
+
+def _ancestral_allele_frequencies(heterozygosity: float) -> dict[AlleleId, float]:
+    """Return one locus's own ancestral frequency map at a given heterozygosity.
+
+    `minor_count = ceil(1 / (1 - heterozygosity)) - 1` equally frequent
+    "minor" alleles, each at frequency `q`, plus one "major" allele
+    holding `1 - minor_count * q` — chosen so that even the smallest
+    allele count admitting a real solution is used, never more. Summing
+    squared frequencies (`fim.statistics.differentiation.identity`'s own
+    `Σp²`) and setting it equal to `1 - heterozygosity` gives one
+    quadratic in `q`:
+
+    ``minor_count * (minor_count + 1) * q² - 2 * minor_count * q
+    + heterozygosity = 0``
+
+    (the `+ heterozygosity` constant term is `1 - (1 - heterozygosity)`,
+    the target identity's own complement) — solved directly via the
+    quadratic formula, taking the smaller of its two real roots (the
+    other root's own `q` exceeds `1 / minor_count`, giving a negative
+    major-allele frequency, not a second valid solution). Verified
+    numerically to reproduce the requested `heterozygosity` to float
+    precision across a broad sweep before being written here — see
+    `test_founding_condition_for_heterozygosity_matches_the_target`.
+    """
+    if heterozygosity == 0.0:
+        return {AlleleId(0): 1.0}
+    target_identity = 1.0 - heterozygosity
+    minor_count = math.ceil(1.0 / target_identity) - 1
+    quadratic_a = minor_count * (minor_count + 1)
+    quadratic_b = -2.0 * minor_count
+    quadratic_c = heterozygosity
+    discriminant = quadratic_b * quadratic_b - 4.0 * quadratic_a * quadratic_c
+    minor_frequency = (-quadratic_b - math.sqrt(max(discriminant, 0.0))) / (
+        2.0 * quadratic_a
+    )
+    major_frequency = 1.0 - minor_count * minor_frequency
+    frequencies = {AlleleId(index): minor_frequency for index in range(minor_count)}
+    frequencies[AlleleId(minor_count)] = major_frequency
+    return frequencies
