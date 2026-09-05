@@ -6497,15 +6497,48 @@ in that narrower gap already carried `pairPanel` but was still drawn
 as the overview, because the flag telling the client which one to
 draw had not caught up yet. Fixed at that same source: the flag
 now flips synchronously, before the bridge call is even awaited, so
-it is never later than the click. With that fixed, waiting for one
-more `progress_count` tick after the round trip lands and reading
-the canvas once is correct again — no retry loop of `evaluate_js`
-calls competing with the background thread's own concurrent pushes,
-exactly the shape this file's own module docstring already spent a
-real investigation establishing as the right one; an intermediate
-version of this test introduced such a loop instead, diagnosed the
-symptom (needs more margin) without finding this cause, and made
-the test slower without actually closing the gap.
+it is never later than the click.
+
+A third defect surfaced later still, this time in the *data*, not
+the wiring: the very next tick after the round trip lands is
+genuinely showing `pairPanel`, exactly as intended, but `fim.cli.
+STARTER_CONFIG` (this test's own starter defaults,
+`_SET_UNREACHABLE_CONVERGENCE` deliberately leaves untouched) pairs
+a single, `initial_allele_count=2` locus with weak migration and
+mutation (`m=0.001`, `mu=0.00003`) — one discrete point per deme
+pair. `Deme 2` and `Deme 3` (the default panel's and this test's own
+chosen pair's other axis) have not necessarily drifted apart from
+*each other* yet only a tick or two after the run starts, and two
+demes independently landing back on the same discrete allele count
+this early is a real, narrowing-over-time coincidence — confirmed
+live, reproducing on every attempt right after the fix below was
+tried first: retrying the pixel comparison itself on each
+subsequent tick, an `evaluate_js` call every time. That retry loop
+is what this file's own module docstring already warned a fix must
+not do — competing `evaluate_js` calls against the background
+thread's own concurrent pushes, the exact collision shape recorded
+there (macOS `AppHelper.callAfter`, one thread's call going
+unanswered under contention) — and it reproduced that exact
+failure mode: `progress_count` itself stopped advancing for the
+rest of the run, confirmed by direct instrumentation, not a
+coincidence of population genetics at all. Waiting for a fixed,
+larger generation count first was also considered and rejected: it
+would only change which specific coincidence the test gambles on,
+not remove the gamble, for parameters this test does not otherwise
+own.
+
+Closed at the actual source instead, with no new `evaluate_js`
+calls at all: `on_message` below recomputes `viz.scatter.
+deme_pair_panel`'s own points from each tick's raw state (`message
+[3]`, the same array `_drain_run_messages` itself calls it on) and
+compares them to that tick's `panels[0]` (`message[2]`) — pure
+Python, no bridge call, safe to do on every tick. `_drive` then
+waits, by polling that pure-Python flag only, for a tick at or past
+`progress_count_when_pair_landed` whose own data has already
+diverged, before making the *one* `evaluate_js` snapshot call this
+test has always made — preserving the "one-off call" shape the
+Cancel test above and this file's own module docstring establish,
+while no longer gambling on which specific tick's snapshot to take.
 
 <a id="gui.test_store"></a>
 
