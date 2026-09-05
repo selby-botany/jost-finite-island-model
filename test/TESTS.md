@@ -11664,6 +11664,128 @@ the exact mechanism), but reachable directly by calling the
 private helper with contrived, already-computed values, exactly
 as `statistics_report`'s own internal call site does.
 
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_max_matches_ryman_leimar_equation_7"></a>
+
+#### test\_g\_st\_max\_matches\_ryman\_leimar\_equation\_7
+
+```python
+def test_g_st_max_matches_ryman_leimar_equation_7() -> None
+```
+
+`g_st_max` matches its own defining formula and boundary behavior.
+
+`R6` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
+claude-opus-5-gene-identity-recursion-fim-implications.md`.
+`H_S -> 0` reaching the ceiling `1` exactly (nothing standing in
+the way of complete differentiation when there is no within-deme
+diversity at all) is the sharpest boundary case available.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_prime_matches_ryman_leimar_equation_8"></a>
+
+#### test\_g\_st\_prime\_matches\_ryman\_leimar\_equation\_8
+
+```python
+def test_g_st_prime_matches_ryman_leimar_equation_8() -> None
+```
+
+`g_st_prime` is exactly `g_st_value / g_st_max`, including at `H_S = 0`.
+
+At `H_S = 0`, `g_st_max` is exactly `1`, so `g_st_prime` must
+equal its own input `G_ST` unchanged — standardizing changes
+nothing when there is no within-deme diversity for `G_ST` to be
+standardized against in the first place.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_prime_manufactures_a_larger_apparent_difference_than_g_st"></a>
+
+#### test\_g\_st\_prime\_manufactures\_a\_larger\_apparent\_difference\_than\_g\_st
+
+```python
+def test_g_st_prime_manufactures_a_larger_apparent_difference_than_g_st(
+) -> None
+```
+
+Reproduces Ryman & Leimar's own Figure 2 finding, qualitatively.
+
+`N=1000, s=10, m=0.0005`: `G_ST` barely moves across mutation
+rates (`0.31` at `H_S=0.0003` versus `0.27` at `H_S=0.273` — the
+paper's own printed numbers, §6.4 of `dev/doc/apps/selby/jost-
+finite-island-model/20260903-claude-opus-5-ryman-leimar-gene-
+identity-recursions.md`) while `H_S` itself moves enormously.
+`G'_ST` is not one of the paper's own printed numbers here (only
+`G_ST`/`H_S` are), so this checks the *qualitative* claim the
+paper actually makes — standardizing manufactures a
+proportionally larger apparent gap than the raw statistic shows
+— rather than a specific value neither this document nor the
+paper's own text provides.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_max_rejects_invalid_inputs"></a>
+
+#### test\_g\_st\_max\_rejects\_invalid\_inputs
+
+```python
+def test_g_st_max_rejects_invalid_inputs() -> None
+```
+
+Every argument is validated before the arithmetic runs.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_prime_rejects_a_non_finite_g_st_value"></a>
+
+#### test\_g\_st\_prime\_rejects\_a\_non\_finite\_g\_st\_value
+
+```python
+def test_g_st_prime_rejects_a_non_finite_g_st_value() -> None
+```
+
+`g_st_prime` validates its own extra argument, not just `g_st_max`'s.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutation_negligible_transition_matches_its_own_formula"></a>
+
+#### test\_mutation\_negligible\_transition\_matches\_its\_own\_formula
+
+```python
+def test_mutation_negligible_transition_matches_its_own_formula() -> None
+```
+
+`mutation_negligible_transition` is `0.2 * H_S(0) / (2u)`, exactly.
+
+`R6`'s own Equation 9, at the paper's own published one-fifth
+calibration. `mu=0.0` (no mutation at all) is negligible at any
+`t` whatsoever — the well-defined limit, `inf`, not a division
+failure.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutation_negligible_transition_rejects_invalid_inputs"></a>
+
+#### test\_mutation\_negligible\_transition\_rejects\_invalid\_inputs
+
+```python
+def test_mutation_negligible_transition_rejects_invalid_inputs() -> None
+```
+
+Every argument is validated before the arithmetic runs.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutation_negligible_equilibrium_matches_its_own_formula"></a>
+
+#### test\_mutation\_negligible\_equilibrium\_matches\_its\_own\_formula
+
+```python
+def test_mutation_negligible_equilibrium_matches_its_own_formula() -> None
+```
+
+`mutation_negligible_equilibrium` is `mu <= 0.1 * (m + 1/(4N))`, exactly.
+
+`R6`'s own Equation 10, at the paper's own published one-tenth
+calibration.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutation_negligible_equilibrium_rejects_invalid_inputs"></a>
+
+#### test\_mutation\_negligible\_equilibrium\_rejects\_invalid\_inputs
+
+```python
+def test_mutation_negligible_equilibrium_rejects_invalid_inputs() -> None
+```
+
+Every argument is validated before the arithmetic runs.
+
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_table_and_deme_validation_reports_bad_inputs"></a>
 
 #### test\_table\_and\_deme\_validation\_reports\_bad\_inputs

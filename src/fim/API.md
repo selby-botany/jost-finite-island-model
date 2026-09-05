@@ -312,6 +312,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [d\_m](#fim.statistics.differentiation.d_m)
   * [r\_st](#fim.statistics.differentiation.r_st)
   * [g\_st\_log](#fim.statistics.differentiation.g_st_log)
+  * [g\_st\_max](#fim.statistics.differentiation.g_st_max)
+  * [g\_st\_prime](#fim.statistics.differentiation.g_st_prime)
   * [jost\_d](#fim.statistics.differentiation.jost_d)
   * [e\_st](#fim.statistics.differentiation.e_st)
   * [k\_st](#fim.statistics.differentiation.k_st)
@@ -322,6 +324,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [identity\_recovery\_equilibrium](#fim.statistics.differentiation.identity_recovery_equilibrium)
   * [identity\_recovery\_trajectory](#fim.statistics.differentiation.identity_recovery_trajectory)
   * [identity\_recovery\_half\_life](#fim.statistics.differentiation.identity_recovery_half_life)
+  * [mutation\_negligible\_transition](#fim.statistics.differentiation.mutation_negligible_transition)
+  * [mutation\_negligible\_equilibrium](#fim.statistics.differentiation.mutation_negligible_equilibrium)
   * [equilibrium\_shannon\_entropy\_isolated](#fim.statistics.differentiation.equilibrium_shannon_entropy_isolated)
   * [equilibrium\_shannon\_entropy\_isolated\_smm](#fim.statistics.differentiation.equilibrium_shannon_entropy_isolated_smm)
   * [equilibrium\_shannon\_entropy\_total](#fim.statistics.differentiation.equilibrium_shannon_entropy_total)
@@ -9312,6 +9316,101 @@ exactly), or when `H_S` is exactly one (`J_S = 0`, `ln(J_S)`
 undefined — every deme individually has zero chance that two
 randomly drawn gene copies match).
 
+**Naming hazard:** `doc/jost-differentiation-measures.md` calls this
+estimator "`G'_ST`," Nei's own term for it — a *different* quantity
+from `g_st_prime`, below, which is Hedrick's own, differently
+defined `G'_ST`. Both names are genuinely used in the literature for
+their own respective formula; this project's own multi-model engine
+review, 2026-09-04, flagged the collision (Ryman & Leimar
+remediation `R6`) rather than letting a future reader assume the two
+are interchangeable because they share a name.
+
+<a id="fim.statistics.differentiation.g_st_max"></a>
+
+#### g\_st\_max
+
+```python
+def g_st_max(h_s: float, deme_count: int) -> float
+```
+
+Return Hedrick (2005)'s own attainable ceiling for `G_ST`.
+
+Ryman & Leimar (2008), Equation 7:
+``G_ST(max) = (s - 1)(1 - H_S) / (s - 1 + H_S)`` — the largest value
+ordinary `g_st` can reach given a fixed within-deme heterozygosity
+`H_S` and deme count `s`, attained when every deme is fixed for its
+own distinct, private allele (`h_s`'s own docstring has the general
+argument for why `H_S` alone bounds how differentiated a set of
+demes can possibly look). Approaches `1` as `H_S -> 0` (little
+within-deme diversity leaves little standing in the way of complete
+differentiation) and falls toward `0` as `H_S -> 1` (a population
+already this diverse internally has correspondingly less room left
+to differentiate at all) — see `g_st_prime`, below, for what
+dividing by this ceiling is actually for.
+
+**Arguments**:
+
+- `h_s` - Within-deme heterozygosity, `H_S`, in `[0, 1)`.
+- `deme_count` - Number of demes, `s`, at least `2`.
+
+
+**Returns**:
+
+  `G_ST(max)`, in `(0, 1]`.
+
+
+**Raises**:
+
+- `ValueError` - If `h_s` is not in `[0, 1)`, or `deme_count < 2`.
+
+<a id="fim.statistics.differentiation.g_st_prime"></a>
+
+#### g\_st\_prime
+
+```python
+def g_st_prime(g_st_value: float, h_s: float, deme_count: int) -> float
+```
+
+Return Hedrick (2005)'s own standardized ``G'_ST = G_ST / G_ST(max)``.
+
+Ryman & Leimar (2008), Equation 8 — rescales ordinary `G_ST` by its
+own attainable ceiling (`g_st_max`, above) so that a fully
+differentiated set of demes (every deme fixed for its own distinct
+allele) always reads exactly `1`, regardless of `H_S`, rather than
+an `H_S`-dependent value less than `1` the way raw `G_ST` does.
+
+**Naming hazard:** a *different* `G'_ST`, Nei's own logarithmic
+form, already exists in this project as `g_st_log`, above — see
+that function's own docstring for the identical warning from its
+own side. Name whichever one is actually meant explicitly; do not
+call one by the other's name.
+
+Ryman & Leimar's own finding (their Figure 2, `N = 1000`, `s = 10`,
+`m = 0.0005`): standardizing this way can *manufacture* a large
+apparent difference between two scenarios whose ordinary `G_ST`
+barely differs, whenever `H_S` differs sharply between them (this
+project's own multi-model engine review, 2026-09-04, `R6`'s own
+Finding E documents the worked numbers) — a caution about
+interpreting this statistic, not a defect in computing it.
+
+**Arguments**:
+
+- `g_st_value` - Ordinary `G_ST` (`g_st`'s own return value, if not
+  `None`).
+- `h_s` - Within-deme heterozygosity, `H_S`, in `[0, 1)`.
+- `deme_count` - Number of demes, `s`, at least `2`.
+
+
+**Returns**:
+
+  `G_ST / G_ST(max)`.
+
+
+**Raises**:
+
+- `ValueError` - If `g_st_value` is not finite, or `h_s`/`deme_count`
+  fail `g_st_max`'s own validation.
+
 <a id="fim.statistics.differentiation.jost_d"></a>
 
 #### jost\_d
@@ -9649,6 +9748,90 @@ than evaluating ``log(0.5) / log(0.0)``, which is the correct limit
 **Returns**:
 
   Generations to close half the gap to equilibrium.
+
+<a id="fim.statistics.differentiation.mutation_negligible_transition"></a>
+
+#### mutation\_negligible\_transition
+
+```python
+def mutation_negligible_transition(h_s_initial: float, mu: float) -> float
+```
+
+Return the largest generation count `t` at which mutation is still negligible.
+
+Ryman & Leimar (2008), Equation 9's own condition,
+``t << H_S(0) / (2u)`` (during the transition phase, `G_ST` behaves
+as if there were no mutation at all — see this project's own
+Ryman & Leimar remediation, `R6`, Finding E, for the full context):
+calibrated here at the paper's own published factor of one-fifth,
+found by numerically iterating their Equations 2 and 3 to hold
+`G_ST` within 10% of its mutation-free value. A caller compares
+their own elapsed generation count against this function's return
+value directly (`t <= mutation_negligible_transition(h_s_initial,
+mu)`); this function does not take `t` itself; there is nothing
+further for it to check once the threshold is known.
+
+`mu == 0.0` (no mutation at all) returns positive infinity: mutation
+is negligible at literally any `t` when there is none, a genuine
+limit rather than a division-by-zero to guard against.
+
+**Arguments**:
+
+- `h_s_initial` - The *ancestral* heterozygosity, `H_S(0)`, in
+  `[0, 1)` — see `fim.model.initial.
+  founding_condition_for_heterozygosity` for building a
+  founding condition realizing a specific value of it.
+- `mu` - Per-generation mutation probability, in `[0, 1]`.
+
+
+**Returns**:
+
+  The largest `t` (generations) at which mutation is still
+  negligible under the paper's own calibration, or `inf` if
+  `mu == 0.0`.
+
+
+**Raises**:
+
+- `ValueError` - If `h_s_initial` is not in `[0, 1)`, or `mu` is not
+  in `[0, 1]`.
+
+<a id="fim.statistics.differentiation.mutation_negligible_equilibrium"></a>
+
+#### mutation\_negligible\_equilibrium
+
+```python
+def mutation_negligible_equilibrium(m: float, mu: float,
+                                    population_size: int) -> bool
+```
+
+Return whether mutation is negligible next to migration/drift at equilibrium.
+
+Ryman & Leimar (2008), Equation 10's own condition,
+``u << m + 1/(4N)`` (the long-run `G_ST` is set by migration and
+drift alone, and mutation is a detail — this project's own Ryman &
+Leimar remediation, `R6`, Finding E, has the full context):
+calibrated here at the paper's own published factor of one-tenth,
+found the same way `mutation_negligible_transition`'s own factor
+was, to hold `G_ST` within 10% of its mutation-free equilibrium
+value.
+
+**Arguments**:
+
+- `m` - Migration rate, in `[0, 1]`.
+- `mu` - Per-generation mutation probability, in `[0, 1]`.
+- `population_size` - Gene-copy count `N`, at least `1`.
+
+
+**Returns**:
+
+  Whether `mu <= (m + 1 / (4 * population_size)) / 10`.
+
+
+**Raises**:
+
+- `ValueError` - If `m`/`mu` is not in `[0, 1]`, or `population_size`
+  is not a positive integer.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated"></a>
 

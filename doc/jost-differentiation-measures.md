@@ -1477,7 +1477,9 @@ changes results — make it explicitly and record it.
 | \mathrm{NGD} | Nei's genetic distance |
 | D̄<sub>m</sub> | Nei's absolute mean pairwise between-deme gene diversity |
 | R<sub>ST</sub> | Nei's `D̄_m` relative to within-deme diversity, `= D̄_m/H_S` |
-| G'<sub>ST</sub> | Nei's log-based large-differentiation `G_ST` estimator |
+| G'<sub>ST</sub> (Nei) | Nei's log-based large-differentiation `G_ST` estimator, `= g_st_log` |
+| G'<sub>ST</sub> (Hedrick) | Hedrick's standardized `G_ST`, `= g_st_prime` — a *different* quantity from Nei's own G'<sub>ST</sub> above, despite the shared name |
+| G<sub>ST</sub>(max) | Hedrick's own attainable `G_ST` ceiling given `H_S`, `= g_st_max` |
 | Gs, Gd | Ryman & Leimar's within-/between-deme gene identities (`J_0`, `J_1`), `= gs`/`gd` |
 
 ### Within one deme
@@ -1549,7 +1551,27 @@ own Eq. 4 derivation assumes `w_i = 1/s`):
 ```
 
 ```math
-G'_{ST} = \frac{-\ln(J_T/J_S)}{-\ln J_T} = \frac{\ln(J_S/J_T)}{-\ln J_T}
+G'_{ST} \text{ (Nei)} = \frac{-\ln(J_T/J_S)}{-\ln J_T} = \frac{\ln(J_S/J_T)}{-\ln J_T}
+```
+
+Hedrick (2005)'s own, differently defined `G'_ST` — Ryman & Leimar
+(2008)'s own Equations 7-8, `g_st_max`/`g_st_prime` in `fim.statistics.
+differentiation` — rescales ordinary `G_ST` by its own attainable
+ceiling instead:
+
+```math
+G_{ST}(\max) = \frac{(s-1)(1-H_S)}{s-1+H_S}, \qquad
+G'_{ST} \text{ (Hedrick)} = \frac{G_{ST}}{G_{ST}(\max)}
+```
+
+Ryman & Leimar's own two transition-phase/equilibrium mutation-
+negligibility conditions (Equations 9-10, `mutation_negligible_
+transition`/`mutation_negligible_equilibrium`), each at the paper's own
+published calibration factor for a 10% effect on `G_ST`:
+
+```math
+t \ll \frac{H_S(0)}{2\mu} \text{ (one-fifth)}, \qquad
+\mu \ll m + \frac{1}{4N} \text{ (one-tenth)}
 ```
 
 ### Useful identities

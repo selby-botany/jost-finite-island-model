@@ -19,6 +19,8 @@ from fim.statistics import (
     equilibrium_g_st,
     g_st,
     g_st_log,
+    g_st_max,
+    g_st_prime,
     gd,
     gs,
     h_s,
@@ -33,6 +35,8 @@ from fim.statistics import (
     identity_recovery_trajectory,
     jost_d,
     k_st,
+    mutation_negligible_equilibrium,
+    mutation_negligible_transition,
     r_st,
     statistics_report,
     total_hill_number,
@@ -373,6 +377,141 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         """
         with self.assertRaisesRegex(ArithmeticError, "H_ST is undefined"):
             differentiation._h_st_from_within_and_total(1.0, 1.0)
+
+    def test_g_st_max_matches_ryman_leimar_equation_7(self) -> None:
+        """`g_st_max` matches its own defining formula and boundary behavior.
+
+        `R6` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
+        claude-opus-5-gene-identity-recursion-fim-implications.md`.
+        `H_S -> 0` reaching the ceiling `1` exactly (nothing standing in
+        the way of complete differentiation when there is no within-deme
+        diversity at all) is the sharpest boundary case available.
+        """
+        self.assertEqual(g_st_max(0.0, 5), 1.0)
+        self.assertAlmostEqual(
+            g_st_max(0.2, 4), (4 - 1) * (1.0 - 0.2) / (4 - 1 + 0.2), places=12
+        )
+
+    def test_g_st_prime_matches_ryman_leimar_equation_8(self) -> None:
+        """`g_st_prime` is exactly `g_st_value / g_st_max`, including at `H_S = 0`.
+
+        At `H_S = 0`, `g_st_max` is exactly `1`, so `g_st_prime` must
+        equal its own input `G_ST` unchanged — standardizing changes
+        nothing when there is no within-deme diversity for `G_ST` to be
+        standardized against in the first place.
+        """
+        self.assertAlmostEqual(g_st_prime(0.5, 0.0, 5), 0.5, places=12)
+        self.assertAlmostEqual(
+            g_st_prime(0.3, 0.2, 4), 0.3 / g_st_max(0.2, 4), places=12
+        )
+
+    def test_g_st_prime_manufactures_a_larger_apparent_difference_than_g_st(
+        self,
+    ) -> None:
+        """Reproduces Ryman & Leimar's own Figure 2 finding, qualitatively.
+
+        `N=1000, s=10, m=0.0005`: `G_ST` barely moves across mutation
+        rates (`0.31` at `H_S=0.0003` versus `0.27` at `H_S=0.273` — the
+        paper's own printed numbers, §6.4 of `dev/doc/apps/selby/jost-
+        finite-island-model/20260903-claude-opus-5-ryman-leimar-gene-
+        identity-recursions.md`) while `H_S` itself moves enormously.
+        `G'_ST` is not one of the paper's own printed numbers here (only
+        `G_ST`/`H_S` are), so this checks the *qualitative* claim the
+        paper actually makes — standardizing manufactures a
+        proportionally larger apparent gap than the raw statistic shows
+        — rather than a specific value neither this document nor the
+        paper's own text provides.
+        """
+        deme_count = 10
+        g_prime_low_mutation = g_st_prime(0.31, 0.0003, deme_count)
+        g_prime_high_mutation = g_st_prime(0.27, 0.273, deme_count)
+
+        g_st_relative_change = abs(0.31 - 0.27) / 0.31
+        g_st_prime_relative_change = (
+            abs(g_prime_low_mutation - g_prime_high_mutation) / g_prime_low_mutation
+        )
+        assert g_st_prime_relative_change > g_st_relative_change
+
+    def test_g_st_max_rejects_invalid_inputs(self) -> None:
+        """Every argument is validated before the arithmetic runs."""
+        cases: tuple[tuple[object, object, str], ...] = (
+            (-0.1, 5, "h_s"),
+            (1.0, 5, "h_s"),
+            (True, 5, "h_s"),
+            (0.5, 1, "at least two demes"),
+            (0.5, True, "deme_count"),
+        )
+        for h_s_value, deme_count, message in cases:
+            with (
+                self.subTest(h_s=h_s_value, deme_count=deme_count),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                g_st_max(h_s_value, deme_count)  # type: ignore[arg-type]
+
+    def test_g_st_prime_rejects_a_non_finite_g_st_value(self) -> None:
+        """`g_st_prime` validates its own extra argument, not just `g_st_max`'s."""
+        with self.assertRaisesRegex(ValueError, "g_st_value"):
+            g_st_prime(math.nan, 0.2, 4)
+
+    def test_mutation_negligible_transition_matches_its_own_formula(self) -> None:
+        """`mutation_negligible_transition` is `0.2 * H_S(0) / (2u)`, exactly.
+
+        `R6`'s own Equation 9, at the paper's own published one-fifth
+        calibration. `mu=0.0` (no mutation at all) is negligible at any
+        `t` whatsoever — the well-defined limit, `inf`, not a division
+        failure.
+        """
+        self.assertAlmostEqual(
+            mutation_negligible_transition(0.5, 0.01), 0.2 * 0.5 / (2 * 0.01)
+        )
+        self.assertEqual(mutation_negligible_transition(0.5, 0.0), math.inf)
+        # Halving mu doubles how long mutation stays negligible for.
+        self.assertAlmostEqual(
+            mutation_negligible_transition(0.5, 0.005),
+            2 * mutation_negligible_transition(0.5, 0.01),
+        )
+
+    def test_mutation_negligible_transition_rejects_invalid_inputs(self) -> None:
+        """Every argument is validated before the arithmetic runs."""
+        cases: tuple[tuple[object, object, str], ...] = (
+            (-0.1, 0.01, "h_s_initial"),
+            (1.0, 0.01, "h_s_initial"),
+            (0.5, -0.1, "mu"),
+            (0.5, 1.1, "mu"),
+        )
+        for h_s_initial, mu, message in cases:
+            with (
+                self.subTest(h_s_initial=h_s_initial, mu=mu),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                mutation_negligible_transition(h_s_initial, mu)  # type: ignore[arg-type]
+
+    def test_mutation_negligible_equilibrium_matches_its_own_formula(self) -> None:
+        """`mutation_negligible_equilibrium` is `mu <= 0.1 * (m + 1/(4N))`, exactly.
+
+        `R6`'s own Equation 10, at the paper's own published one-tenth
+        calibration.
+        """
+        assert not mutation_negligible_equilibrium(0.0, 0.0001, 1000)
+        assert mutation_negligible_equilibrium(0.01, 0.0001, 1000)
+        threshold = 0.1 * (0.01 + 1.0 / (4 * 1000))
+        assert mutation_negligible_equilibrium(0.01, threshold, 1000)
+        assert not mutation_negligible_equilibrium(0.01, threshold * 1.01, 1000)
+
+    def test_mutation_negligible_equilibrium_rejects_invalid_inputs(self) -> None:
+        """Every argument is validated before the arithmetic runs."""
+        cases: tuple[tuple[object, object, object, str], ...] = (
+            (-0.1, 0.0001, 1000, "m"),
+            (0.01, -0.1, 1000, "mu"),
+            (0.01, 0.0001, 0, "population_size"),
+            (0.01, 0.0001, True, "population_size"),
+        )
+        for m, mu, population_size, message in cases:
+            with (
+                self.subTest(m=m, mu=mu, population_size=population_size),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                mutation_negligible_equilibrium(m, mu, population_size)  # type: ignore[arg-type]
 
     def test_table_and_deme_validation_reports_bad_inputs(self) -> None:
         """Public statistics reject malformed mappings and frequencies."""
