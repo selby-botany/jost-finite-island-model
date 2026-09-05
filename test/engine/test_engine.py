@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from fim import engine
@@ -22,6 +23,7 @@ from fim.engine import (
     _build_replica_lane,
     _convergence_values,
     _convergence_values_vectorized,
+    bootstrap_replicate_summary,
     build_engine_backend,
     deterministic_run_id,
     fim,
@@ -845,6 +847,120 @@ def test_replicate_summary_requires_at_least_two_results(
         replicate_summary(())
     with pytest.raises(ValueError, match="at least two"):
         replicate_summary((_run(tiny_params),))
+
+
+def test_bootstrap_replicate_summary_point_estimate_matches_the_pooled_ratio(
+    tiny_params: SimulationParams,
+) -> None:
+    """The point estimate is the grand ratio-of-means, not a mean of ratios.
+
+    Exit-criterion test for `R3` part 3 of `dev/doc/apps/selby/jost-
+    finite-island-model/20260903-claude-opus-5-gene-identity-recursion-
+    fim-implications.md`: `bootstrap_replicate_summary`'s own `"mean"`
+    field must equal `1 - mean(Gd_i) / mean(Gs_i)` computed directly
+    from the same batch's own reports — the "ratio of means across
+    everything" the identity recursion predicts — not `mean(D_i)`
+    (`replicate_summary`'s own estimator, a mean of ratios, subject to
+    a real Jensen-gap bias `D`/`G_ST` are the only statistics with).
+    """
+    params = SimulationParams.from_mapping(
+        {**tiny_params.to_dict(), "n_replicates": 8, "replicate_tolerance": None}
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+
+    summary = bootstrap_replicate_summary(output, rng=np.random.default_rng(1))
+
+    mean_gs = statistics.fmean(result.report["Gs"] for result in output)
+    mean_gd = statistics.fmean(result.report["Gd"] for result in output)
+    within = 1.0 - mean_gs
+    total = 1.0 - ((params.d - 1) * mean_gd + mean_gs) / params.d
+    expected_d = ((total - within) / (1.0 - within)) * params.d / (params.d - 1)
+    mean_of_per_replicate_d = statistics.fmean(result.report["D"] for result in output)
+
+    assert summary["D"]["mean"] == pytest.approx(expected_d)
+    # Not a vacuous check: the two estimators must actually differ here,
+    # or this test could pass even if the implementation silently fell
+    # back to `replicate_summary`'s own mean-of-ratios estimator.
+    assert summary["D"]["mean"] != pytest.approx(mean_of_per_replicate_d)
+
+
+def test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate(
+    tiny_params: SimulationParams,
+) -> None:
+    """The reported interval actually brackets the reported point estimate."""
+    params = SimulationParams.from_mapping(
+        {**tiny_params.to_dict(), "n_replicates": 8, "replicate_tolerance": None}
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+
+    summary = bootstrap_replicate_summary(output, rng=np.random.default_rng(2))
+
+    for statistic, interval in summary.items():
+        assert interval["low"] <= interval["mean"] <= interval["high"], statistic
+        assert interval["sample_count"] == len(output)
+        assert interval["confidence"] == 0.95
+
+
+def test_bootstrap_replicate_summary_is_deterministic_for_a_given_rng_state(
+    tiny_params: SimulationParams,
+) -> None:
+    """The same `rng` state reproduces the identical interval, bit for bit.
+
+    Bootstrap resampling is still real randomness — this project's own
+    zero-tolerance-for-nondeterminism discipline requires it to be
+    exactly reproducible for a given, explicitly threaded `rng` seed,
+    the same as every other source of randomness in this project.
+    """
+    params = SimulationParams.from_mapping(
+        {**tiny_params.to_dict(), "n_replicates": 6, "replicate_tolerance": None}
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+
+    first = bootstrap_replicate_summary(output, rng=np.random.default_rng(7))
+    second = bootstrap_replicate_summary(output, rng=np.random.default_rng(7))
+
+    assert first == second
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"confidence": 0.0}, "confidence"),
+        ({"confidence": 1.0}, "confidence"),
+        ({"bootstrap_samples": 0}, "bootstrap_samples"),
+    ],
+)
+def test_bootstrap_replicate_summary_rejects_invalid_inputs(
+    tiny_params: SimulationParams,
+    kwargs: dict[str, object],
+    message: str,
+) -> None:
+    """Every keyword argument is validated, not passed straight to numpy."""
+    params = SimulationParams.from_mapping(
+        {**tiny_params.to_dict(), "n_replicates": 4, "replicate_tolerance": None}
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+
+    with pytest.raises(ValueError, match=message):
+        bootstrap_replicate_summary(
+            output,
+            rng=np.random.default_rng(1),
+            **kwargs,  # type: ignore[arg-type]
+        )
+
+
+def test_bootstrap_replicate_summary_requires_at_least_two_results(
+    tiny_params: SimulationParams,
+) -> None:
+    """A single result has no batch to resample."""
+    with pytest.raises(ValueError, match="at least two"):
+        bootstrap_replicate_summary((), rng=np.random.default_rng(1))
+    with pytest.raises(ValueError, match="at least two"):
+        bootstrap_replicate_summary((_run(tiny_params),), rng=np.random.default_rng(1))
 
 
 def test_convergence_can_watch_h_st(tiny_params: SimulationParams) -> None:

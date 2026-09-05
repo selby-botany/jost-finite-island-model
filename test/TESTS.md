@@ -2542,6 +2542,90 @@ def test_replicate_summary_requires_at_least_two_results(
 
 A single result has no interval to compute.
 
+<a id="engine.test_engine.test_bootstrap_replicate_summary_point_estimate_matches_the_pooled_ratio"></a>
+
+#### test\_bootstrap\_replicate\_summary\_point\_estimate\_matches\_the\_pooled\_ratio
+
+```python
+def test_bootstrap_replicate_summary_point_estimate_matches_the_pooled_ratio(
+        tiny_params: SimulationParams) -> None
+```
+
+The point estimate is the grand ratio-of-means, not a mean of ratios.
+
+Exit-criterion test for `R3` part 3 of `dev/doc/apps/selby/jost-
+finite-island-model/20260903-claude-opus-5-gene-identity-recursion-
+fim-implications.md`: `bootstrap_replicate_summary`'s own `"mean"`
+field must equal `1 - mean(Gd_i) / mean(Gs_i)` computed directly
+from the same batch's own reports — the "ratio of means across
+everything" the identity recursion predicts — not `mean(D_i)`
+(`replicate_summary`'s own estimator, a mean of ratios, subject to
+a real Jensen-gap bias `D`/`G_ST` are the only statistics with).
+
+<a id="engine.test_engine.test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate"></a>
+
+#### test\_bootstrap\_replicate\_summary\_interval\_contains\_its\_own\_point\_estimate
+
+```python
+def test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate(
+        tiny_params: SimulationParams) -> None
+```
+
+The reported interval actually brackets the reported point estimate.
+
+<a id="engine.test_engine.test_bootstrap_replicate_summary_is_deterministic_for_a_given_rng_state"></a>
+
+#### test\_bootstrap\_replicate\_summary\_is\_deterministic\_for\_a\_given\_rng\_state
+
+```python
+def test_bootstrap_replicate_summary_is_deterministic_for_a_given_rng_state(
+        tiny_params: SimulationParams) -> None
+```
+
+The same `rng` state reproduces the identical interval, bit for bit.
+
+Bootstrap resampling is still real randomness — this project's own
+zero-tolerance-for-nondeterminism discipline requires it to be
+exactly reproducible for a given, explicitly threaded `rng` seed,
+the same as every other source of randomness in this project.
+
+<a id="engine.test_engine.test_bootstrap_replicate_summary_rejects_invalid_inputs"></a>
+
+#### test\_bootstrap\_replicate\_summary\_rejects\_invalid\_inputs
+
+```python
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({
+            "confidence": 0.0
+        }, "confidence"),
+        ({
+            "confidence": 1.0
+        }, "confidence"),
+        ({
+            "bootstrap_samples": 0
+        }, "bootstrap_samples"),
+    ],
+)
+def test_bootstrap_replicate_summary_rejects_invalid_inputs(
+        tiny_params: SimulationParams, kwargs: dict[str, object],
+        message: str) -> None
+```
+
+Every keyword argument is validated, not passed straight to numpy.
+
+<a id="engine.test_engine.test_bootstrap_replicate_summary_requires_at_least_two_results"></a>
+
+#### test\_bootstrap\_replicate\_summary\_requires\_at\_least\_two\_results
+
+```python
+def test_bootstrap_replicate_summary_requires_at_least_two_results(
+        tiny_params: SimulationParams) -> None
+```
+
+A single result has no batch to resample.
+
 <a id="engine.test_engine.test_convergence_can_watch_h_st"></a>
 
 #### test\_convergence\_can\_watch\_h\_st

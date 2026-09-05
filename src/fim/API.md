@@ -68,6 +68,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [report\_for\_state](#fim.engine.report_for_state)
   * [reports\_summary](#fim.engine.reports_summary)
   * [replicate\_summary](#fim.engine.replicate_summary)
+  * [bootstrap\_replicate\_summary](#fim.engine.bootstrap_replicate_summary)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
@@ -2451,6 +2452,79 @@ docstring for why it does not raise this same case itself).
 **Raises**:
 
 - `ValueError` - If fewer than two results are supplied.
+
+<a id="fim.engine.bootstrap_replicate_summary"></a>
+
+#### bootstrap\_replicate\_summary
+
+```python
+def bootstrap_replicate_summary(
+        results: Sequence[RunResult],
+        *,
+        rng: np.random.Generator,
+        confidence: float = 0.95,
+        bootstrap_samples: int = 2000) -> dict[str, ConfidenceInterval]
+```
+
+Return a bootstrap confidence interval for the batch's own pooled `D`/`G_ST`.
+
+`replicate_summary` treats each replicate's own final `D`/`G_ST` as
+one independent draw and builds a closed-form Student's-t interval
+on their plain mean — correct for every *linear* statistic
+(`H_S`, `H_T`, `H_ST`, `E_ST`, `K_ST`, `Gs`, `Gd`), but `D`/`G_ST`
+are *ratios* of `Gs`/`Gd`, and the mean of a ratio is not, in
+general, the ratio of the means: averaging each replicate's own
+already-computed `D` carries a real, measured Jensen-gap bias
+relative to what the identity recursion itself predicts (this
+project's own Ryman & Leimar remediation, `R3` part 3, quantifies
+it directly: +4.84% of `D`, 3.4 standard errors from zero, on one
+measured run).
+This function instead bootstraps the *grand* ratio-of-means estimate
+(`_grand_ratio_of_means`: pool `Gs`/`Gd` across every replicate
+first, then take one ratio) — resampling replicates with
+replacement `bootstrap_samples` times, recomputing that same grand
+ratio each time, and reading off a percentile interval from the
+resulting distribution (`_bootstrap_interval`) — since no closed-form
+variance for a ratio-of-means statistic sampled from a multi-
+generation stochastic recursion has been derived (it would need
+delta-method propagation through the recursion's own higher
+moments); resampling sidesteps deriving one at all.
+
+Every other statistic `replicate_summary` reports is deliberately
+absent here — this function exists only for the two that need a
+fundamentally different treatment, not as a general replacement.
+
+**Arguments**:
+
+- `results` - Two or more independently seeded replicate results,
+  all sharing the same `SimulationParams.d` (this function
+  reads it once, from `results[0]`).
+- `rng` - The bootstrap's own explicitly threaded random generator —
+  required, not defaulted, so a caller cannot accidentally
+  get a non-reproducible interval the way an unseeded default
+  would silently allow, unlike every other source of
+  randomness in this project.
+- `confidence` - Two-tailed confidence level for the percentile
+  interval.
+- `bootstrap_samples` - How many resampled batches to draw. `2000`
+  (the default) is a conventional bootstrap sample size, ample
+  for a stable 95% percentile estimate; deterministic and
+  reproducible for a given `rng` state regardless of the
+  value chosen.
+
+
+**Returns**:
+
+- ``{"D"` - ..., "G_ST": ...}`, both as `ConfidenceInterval`s built
+  by `_bootstrap_interval` — `"G_ST"` omitted if it is undefined
+  (`_g_st_from_demes` returns `None`) for the observed batch's own
+  point estimate, or for every one of its bootstrap resamples.
+
+
+**Raises**:
+
+- `ValueError` - If fewer than two results are supplied, `confidence`
+  is not in `(0, 1)`, or `bootstrap_samples` is not positive.
 
 <a id="fim.gui"></a>
 

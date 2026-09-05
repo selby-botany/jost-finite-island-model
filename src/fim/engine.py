@@ -2130,6 +2130,169 @@ def replicate_summary(
     return reports_summary([result.report for result in results], confidence=confidence)
 
 
+def _grand_ratio_of_means(
+    reports: Sequence[FinalReport], deme_count: int
+) -> tuple[float | None, float]:
+    """Return `(G_ST, D)` pooled across every report's own `Gs`/`Gd`, as one ratio.
+
+    `mean(Gs_i)`/`mean(Gd_i)` across every report, converted back to
+    `H_S`/`H_T` (inverting `fim.statistics.differentiation.gs`/`gd`'s
+    own formulas) and then through `_g_st_from_demes`/`_jost_d_from_
+    within_and_total` — the "ratio of means across everything" this
+    project's own Ryman & Leimar remediation, `R3` part 3
+    (`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-
+    5-gene-identity-recursion-fim-implications.md` §4, §9), found the
+    identity recursion itself predicts — genuinely different from
+    averaging each report's own already-computed `G_ST`/`D` (a *mean of
+    ratios*, subject to a real, measured Jensen-gap bias `Gs`/`Gd`
+    themselves, being linear, never have). `Gs`/`Gd` are already each
+    report's own ratio-of-means across loci (`report_for_state`'s own
+    `mean_h_s`/`mean_h_t`), so averaging them again across reports
+    reaches the identical grand pooled mean a direct re-derivation from
+    every underlying frequency table would, without needing one.
+    """
+    mean_gs = _mean(tuple(report["Gs"] for report in reports))
+    mean_gd = _mean(tuple(report["Gd"] for report in reports))
+    within = 1.0 - mean_gs
+    total = 1.0 - ((deme_count - 1) * mean_gd + mean_gs) / deme_count
+    g_st = _g_st_from_demes(total, within)
+    d_value = _jost_d_from_within_and_total(deme_count, within, total)
+    return g_st, d_value
+
+
+def _bootstrap_interval(
+    point_estimate: float,
+    bootstrap_values: Sequence[float],
+    confidence: float,
+    sample_count: int,
+) -> ConfidenceInterval:
+    """Build a percentile bootstrap `ConfidenceInterval` around a point estimate.
+
+    `low`/`high` are the bootstrap distribution's own `(1 - confidence)
+    / 2` / `1 - (1 - confidence) / 2` percentiles — the standard
+    "percentile method" for a bootstrap interval, used here rather than
+    a Student's-t interval on the bootstrap mean specifically because a
+    ratio-of-means statistic's own bootstrap distribution is not
+    generally symmetric, unlike the linear statistics `confidence_
+    interval` already builds Student's-t intervals for. `half_width` is
+    `(high - low) / 2`, a symmetrized summary kept only for display
+    consistency with every other `ConfidenceInterval` this project
+    reports — `low`/`high` are the authoritative bounds whenever the
+    true interval is asymmetric, not `mean` plus or minus this value.
+    `sample_count` is the number of *original* replicates the point
+    estimate and every resample were drawn from, matching `confidence_
+    interval`'s own meaning for that field — not the number of
+    bootstrap resamples, an internal computational parameter with no
+    comparable statistical meaning.
+    """
+    tail = (1.0 - confidence) / 2.0
+    low = float(np.quantile(bootstrap_values, tail))
+    high = float(np.quantile(bootstrap_values, 1.0 - tail))
+    return {
+        "mean": point_estimate,
+        "half_width": (high - low) / 2.0,
+        "low": low,
+        "high": high,
+        "sample_count": sample_count,
+        "confidence": confidence,
+    }
+
+
+def bootstrap_replicate_summary(
+    results: Sequence[RunResult],
+    *,
+    rng: np.random.Generator,
+    confidence: float = 0.95,
+    bootstrap_samples: int = 2000,
+) -> dict[str, ConfidenceInterval]:
+    """Return a bootstrap confidence interval for the batch's own pooled `D`/`G_ST`.
+
+    `replicate_summary` treats each replicate's own final `D`/`G_ST` as
+    one independent draw and builds a closed-form Student's-t interval
+    on their plain mean — correct for every *linear* statistic
+    (`H_S`, `H_T`, `H_ST`, `E_ST`, `K_ST`, `Gs`, `Gd`), but `D`/`G_ST`
+    are *ratios* of `Gs`/`Gd`, and the mean of a ratio is not, in
+    general, the ratio of the means: averaging each replicate's own
+    already-computed `D` carries a real, measured Jensen-gap bias
+    relative to what the identity recursion itself predicts (this
+    project's own Ryman & Leimar remediation, `R3` part 3, quantifies
+    it directly: +4.84% of `D`, 3.4 standard errors from zero, on one
+    measured run).
+    This function instead bootstraps the *grand* ratio-of-means estimate
+    (`_grand_ratio_of_means`: pool `Gs`/`Gd` across every replicate
+    first, then take one ratio) — resampling replicates with
+    replacement `bootstrap_samples` times, recomputing that same grand
+    ratio each time, and reading off a percentile interval from the
+    resulting distribution (`_bootstrap_interval`) — since no closed-form
+    variance for a ratio-of-means statistic sampled from a multi-
+    generation stochastic recursion has been derived (it would need
+    delta-method propagation through the recursion's own higher
+    moments); resampling sidesteps deriving one at all.
+
+    Every other statistic `replicate_summary` reports is deliberately
+    absent here — this function exists only for the two that need a
+    fundamentally different treatment, not as a general replacement.
+
+    Args:
+        results: Two or more independently seeded replicate results,
+            all sharing the same `SimulationParams.d` (this function
+            reads it once, from `results[0]`).
+        rng: The bootstrap's own explicitly threaded random generator —
+            required, not defaulted, so a caller cannot accidentally
+            get a non-reproducible interval the way an unseeded default
+            would silently allow, unlike every other source of
+            randomness in this project.
+        confidence: Two-tailed confidence level for the percentile
+            interval.
+        bootstrap_samples: How many resampled batches to draw. `2000`
+            (the default) is a conventional bootstrap sample size, ample
+            for a stable 95% percentile estimate; deterministic and
+            reproducible for a given `rng` state regardless of the
+            value chosen.
+
+    Returns:
+        `{"D": ..., "G_ST": ...}`, both as `ConfidenceInterval`s built
+        by `_bootstrap_interval` — `"G_ST"` omitted if it is undefined
+        (`_g_st_from_demes` returns `None`) for the observed batch's own
+        point estimate, or for every one of its bootstrap resamples.
+
+    Raises:
+        ValueError: If fewer than two results are supplied, `confidence`
+            is not in `(0, 1)`, or `bootstrap_samples` is not positive.
+    """
+    if len(results) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+        raise ValueError("bootstrap_replicate_summary requires at least two results")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be between 0 and 1")
+    if bootstrap_samples < 1:
+        raise ValueError("bootstrap_samples must be at least 1")
+    reports = [result.report for result in results]
+    replicate_count = len(reports)
+    deme_count = results[0].params.d
+    point_g_st, point_d = _grand_ratio_of_means(reports, deme_count)
+
+    bootstrap_g_st: list[float] = []
+    bootstrap_d: list[float] = []
+    for _ in range(bootstrap_samples):
+        resampled_indices = rng.integers(0, replicate_count, size=replicate_count)
+        resampled_reports = [reports[index] for index in resampled_indices]
+        resampled_g_st, resampled_d = _grand_ratio_of_means(
+            resampled_reports, deme_count
+        )
+        if resampled_g_st is not None:
+            bootstrap_g_st.append(resampled_g_st)
+        bootstrap_d.append(resampled_d)
+
+    summary: dict[str, ConfidenceInterval] = {
+        "D": _bootstrap_interval(point_d, bootstrap_d, confidence, replicate_count)
+    }
+    if point_g_st is not None and bootstrap_g_st:
+        summary["G_ST"] = _bootstrap_interval(
+            point_g_st, bootstrap_g_st, confidence, replicate_count
+        )
+    return summary
+
+
 def _build_finite_allele_spaces(
     state: ModelState,
     params: SimulationParams,
