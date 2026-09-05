@@ -2367,6 +2367,58 @@ def test_max_workers_rejects_a_non_positive_count() -> None
 
 `max_workers` must name at least one worker.
 
+<a id="engine.test_engine.test_single_replicate_run_still_validates_max_workers"></a>
+
+#### test\_single\_replicate\_run\_still\_validates\_max\_workers
+
+```python
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({
+            "max_workers": 0
+        }, "max_workers must be at least 1"),
+        (
+            {
+                "store": InMemoryTrajectoryStore(),
+                "max_workers": 2
+            },
+            "max_workers requires store=None",
+        ),
+    ],
+)
+def test_single_replicate_run_still_validates_max_workers(
+        kwargs: dict[str, object], message: str) -> None
+```
+
+A single-replicate run no longer bypasses `max_workers` validation.
+
+Regression test for FIM-05: `LinealBackend.run`'s own early return
+for `n_replicates == 1` used to skip straight past every `max_
+workers` check below it in the function — a `max_workers=0`, or a
+`store` given alongside `max_workers`, both silently succeeded
+there instead of raising, the exact validation a multi-replicate
+batch (`n_replicates > 1`) already enforced.
+
+<a id="engine.test_engine.test_single_replicate_run_uses_store_factory"></a>
+
+#### test\_single\_replicate\_run\_uses\_store\_factory
+
+```python
+def test_single_replicate_run_uses_store_factory(tmp_path: Path) -> None
+```
+
+A single-replicate run honors `store_factory`, not just a shared `store`.
+
+Regression test for FIM-05: `LinealBackend.run`'s own `n_replicates
+== 1` early return used to ignore a given `store_factory` entirely,
+silently building a fresh `InMemoryTrajectoryStore()` instead — the
+one place `store_factory` had no effect at all. A real, file-backed
+factory (rather than another `InMemoryTrajectoryStore`, which the
+silent fallback also produces, and so could not distinguish the two)
+proves it was actually called: its own file only exists on disk if
+the factory itself ran.
+
 <a id="engine.test_engine.test_max_workers_rejects_an_unpicklable_clock"></a>
 
 #### test\_max\_workers\_rejects\_an\_unpicklable\_clock

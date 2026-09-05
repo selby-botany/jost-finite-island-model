@@ -250,7 +250,22 @@ class SimulationParams:
             seed is `seed + replicate_index`, which is therefore also
             always non-negative and always in range: see the
             `_require_integer` call site for why no separate bound on
-            that derived value is needed.
+            that derived value is needed. This plain-addition scheme
+            can *alias*: `seed=100`'s own replicate `2` and `seed=102`'s
+            own replicate `0` compute the identical derived seed (`102`)
+            and therefore the identical replicate trajectory, if both
+            configurations are ever run side by side (this project's
+            own multi-model engine review, 2026-09-04, `FIM-21`/finding
+            Kimi-FIM-21). A documented tradeoff, not fixed here:
+            `numpy.random.SeedSequence(seed).spawn(n)` would remove the
+            aliasing by construction, but at the cost of changing every
+            already-published replicate's own derived seed for every
+            `n_replicates > 1` configuration ever run under this
+            scheme — a reproducibility break with no matching benefit
+            for the ordinary case (two configurations sharing a
+            handful of small, round `seed` values run side by side),
+            not a decision to make silently as part of an unrelated
+            hardening pass.
         loci: Nonempty ordered locus descriptions.
         initial_allele_count: Founding allele count per locus.
         initial_concentration: Symmetric Dirichlet concentration.

@@ -370,24 +370,14 @@ class LinealBackend:
         """Run `params`'s own replicate(s); see `fim()`'s own docstring."""
         if store is not None and self._store_factory is not None:
             raise ValueError("store and store_factory are mutually exclusive")
-        # From here down, this is a three-way dispatch, in order of
-        # increasing complexity: a single run (`n_replicates == 1`, the
-        # common case) goes straight to `_run_one`; a multi-replicate
-        # batch with `max_workers` set hands off to the parallel-worker-
-        # process path (`_run_batch_parallel`); everything else is a
-        # multi-replicate batch run the plain way, one replicate after
-        # another, in the loop at the bottom of this method.
-        if params.n_replicates == 1:
-            trajectory_store = store if store is not None else InMemoryTrajectoryStore()
-            logger.debug("LinealBackend: dispatching a single scalar run")
-            return _run_one(
-                params,
-                trajectory_store,
-                run_id or deterministic_run_id(params),
-                clock,
-            )
-
-        monitor = _replicate_monitor(params)
+        # Validated here, unconditionally, rather than only inside the
+        # `n_replicates > 1` branch below: a single-replicate run
+        # (`n_replicates == 1`) used to skip straight past every one of
+        # these checks via its own early return, so `max_workers=0`,
+        # `max_workers` alongside a real `store`, or a picklability
+        # failure all silently succeeded there instead of raising
+        # (this project's own multi-model engine review, 2026-09-04,
+        # `FIM-05`/finding Kimi-FIM-05).
         if self._max_workers is not None:
             if self._max_workers < 1:
                 raise ValueError("max_workers must be at least 1")
@@ -400,6 +390,31 @@ class LinealBackend:
             _require_picklable("clock", clock)
             if self._store_factory is not None:
                 _require_picklable("store_factory", self._store_factory)
+        # From here down, this is a three-way dispatch, in order of
+        # increasing complexity: a single run (`n_replicates == 1`, the
+        # common case) goes straight to `_run_one`, without spinning up
+        # a worker-process pool for exactly one replicate even if
+        # `max_workers` is set — every check above still ran, and a
+        # given `store_factory` still builds this run's own store
+        # (`FIM-05`; previously ignored here, silently falling back to
+        # a fresh `InMemoryTrajectoryStore()` instead); a multi-
+        # replicate batch with `max_workers` set hands off to the
+        # parallel-worker-process path (`_run_batch_parallel`);
+        # everything else is a multi-replicate batch run the plain way,
+        # one replicate after another, in the loop at the bottom of
+        # this method.
+        if params.n_replicates == 1:
+            run_identifier = run_id or deterministic_run_id(params)
+            trajectory_store = (
+                self._store_factory(run_identifier)
+                if self._store_factory is not None
+                else (store if store is not None else InMemoryTrajectoryStore())
+            )
+            logger.debug("LinealBackend: dispatching a single scalar run")
+            return _run_one(params, trajectory_store, run_identifier, clock)
+
+        monitor = _replicate_monitor(params)
+        if self._max_workers is not None:
             logger.debug(
                 "LinealBackend: dispatching a %d-replicate batch across up to "
                 "%d worker(s)",
@@ -1371,7 +1386,19 @@ def build_engine_backend(
             operators. Under `"generational"`, `"numba"` JIT-compiles
             `drift`'s own multinomial draw (`fim.model.operators.drift`'s
             own docstring) — bit-identical output to `"off"`, for the
-            same seed. Not yet shown to be a standalone wall-clock win,
+            same seed, *on the same machine*: that claim (and every
+            "generational-vector" trajectory's own reliance on `numba`,
+            unconditionally, further below) rests on `numba`'s own
+            compiled math matching CPython's own `libm` bit for bit,
+            verified only on this project's own development platform so
+            far, not across the different `libm` implementations a
+            different operating system or CPU architecture can ship
+            (this project's own multi-model engine review, 2026-09-04,
+            `FIM-22`/finding Kimi-FIM-22) — a portability caveat to keep
+            in mind before treating a `jit="numba"`/"generational-
+            vector" result as reproducible across machines the way
+            every `jit="off"` result already is, not a known, confirmed
+            divergence. Not yet shown to be a standalone wall-clock win,
             though: it fixes a real, separately measured regression an
             earlier, per-pair-call version had, but `drift`'s own
             dominant cost at this project's reference scale is

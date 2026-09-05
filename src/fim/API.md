@@ -1886,7 +1886,19 @@ class tree to maintain.
   operators. Under `"generational"`, `"numba"` JIT-compiles
   `drift`'s own multinomial draw (`fim.model.operators.drift`'s
   own docstring) — bit-identical output to `"off"`, for the
-  same seed. Not yet shown to be a standalone wall-clock win,
+  same seed, *on the same machine*: that claim (and every
+  "generational-vector" trajectory's own reliance on `numba`,
+  unconditionally, further below) rests on `numba`'s own
+  compiled math matching CPython's own `libm` bit for bit,
+  verified only on this project's own development platform so
+  far, not across the different `libm` implementations a
+  different operating system or CPU architecture can ship
+  (this project's own multi-model engine review, 2026-09-04,
+  `FIM-22`/finding Kimi-FIM-22) — a portability caveat to keep
+  in mind before treating a `jit="numba"`/"generational-
+  vector" result as reproducible across machines the way
+  every `jit="off"` result already is, not a known, confirmed
+  divergence. Not yet shown to be a standalone wall-clock win,
 - `though` - it fixes a real, separately measured regression an
   earlier, per-pair-call version had, but `drift`'s own
   dominant cost at this project's reference scale is
@@ -6102,7 +6114,22 @@ functions that actually use each one.
   seed is `seed + replicate_index`, which is therefore also
   always non-negative and always in range: see the
   `_require_integer` call site for why no separate bound on
-  that derived value is needed.
+  that derived value is needed. This plain-addition scheme
+  can *alias*: `seed=100`'s own replicate `2` and `seed=102`'s
+  own replicate `0` compute the identical derived seed (`102`)
+  and therefore the identical replicate trajectory, if both
+  configurations are ever run side by side (this project's
+  own multi-model engine review, 2026-09-04, `FIM-21`/finding
+  Kimi-FIM-21). A documented tradeoff, not fixed here:
+  `numpy.random.SeedSequence(seed).spawn(n)` would remove the
+  aliasing by construction, but at the cost of changing every
+  already-published replicate's own derived seed for every
+  `n_replicates > 1` configuration ever run under this
+  scheme — a reproducibility break with no matching benefit
+  for the ordinary case (two configurations sharing a
+  handful of small, round `seed` values run side by side),
+  not a decision to make silently as part of an unrelated
+  hardening pass.
 - `loci` - Nonempty ordered locus descriptions.
 - `initial_allele_count` - Founding allele count per locus.
 - `initial_concentration` - Symmetric Dirichlet concentration.
