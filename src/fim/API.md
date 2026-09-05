@@ -1908,7 +1908,15 @@ class tree to maintain.
   `engine_backend == "generational-vector"` (or `"auto"`
   resolves to it) and `jit != "off"`, `engine_backend ==
   "generational-vector"` (or `"auto"` resolves to it) and the
-  optional `numba` dependency is not installed,
+  optional `numba` dependency is not installed, `engine_backend
+  == "generational-vector"` and `params` is both vector-eligible
+  (`mutation_model == "finite_alleles"`, `migrant_sampling ==
+  "continuous"`) and names a locus whose capacity exceeds
+  `auto_vector_max_capacity` (checked only when `params` is
+  given and already eligible on those two axes — an ineligible
+  config raises its own, more specific error later, from
+  `backend.run()`, and `"auto"` already refuses an over-capacity
+  eligible config on its own, before ever reaching this branch),
   `engine_backend == "auto"` and `params` is `None`, or
   `engine_backend` names something unrecognized.
 

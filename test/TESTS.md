@@ -2831,7 +2831,43 @@ Confirms the new `_numba_is_available` guard is not itself firing a
 false positive in this dev environment's own normal state (numba
 installed, per `pip install fim[jit]`) — without this, the two
 monkeypatched tests above could both pass for the wrong reason if the
-guard raised unconditionally.
+guard raised unconditionally. Also the "no `params`" case for the
+capacity ceiling below: with no `params` to read a capacity from,
+that check is skipped entirely rather than erroring — `fim()` itself
+always passes `params`, so this only matters for this function's own
+lower-level, params-less construction form.
+
+<a id="engine.test_engine.test_build_engine_backend_vector_rejects_oversized_capacity"></a>
+
+#### test\_build\_engine\_backend\_vector\_rejects\_oversized\_capacity
+
+```python
+def test_build_engine_backend_vector_rejects_oversized_capacity() -> None
+```
+
+Explicit selection now gets the same capacity ceiling `"auto"` already had.
+
+<a id="engine.test_engine.test_build_engine_backend_vector_respects_custom_capacity_ceiling"></a>
+
+#### test\_build\_engine\_backend\_vector\_respects\_custom\_capacity\_ceiling
+
+```python
+def test_build_engine_backend_vector_respects_custom_capacity_ceiling(
+) -> None
+```
+
+The explicit-path ceiling is a real, configurable parameter, not a hidden one.
+
+<a id="engine.test_engine.test_build_engine_backend_vector_needs_every_locus_within_capacity"></a>
+
+#### test\_build\_engine\_backend\_vector\_needs\_every\_locus\_within\_capacity
+
+```python
+def test_build_engine_backend_vector_needs_every_locus_within_capacity(
+) -> None
+```
+
+One oversized locus disqualifies explicit selection too, not just `"auto"`.
 
 <a id="engine.test_engine.test_build_engine_backend_rejects_unknown_choice"></a>
 

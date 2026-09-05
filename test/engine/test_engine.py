@@ -1617,10 +1617,61 @@ def test_build_engine_backend_generational_vector_accepts_numba_present() -> Non
     false positive in this dev environment's own normal state (numba
     installed, per `pip install fim[jit]`) — without this, the two
     monkeypatched tests above could both pass for the wrong reason if the
-    guard raised unconditionally.
+    guard raised unconditionally. Also the "no `params`" case for the
+    capacity ceiling below: with no `params` to read a capacity from,
+    that check is skipped entirely rather than erroring — `fim()` itself
+    always passes `params`, so this only matters for this function's own
+    lower-level, params-less construction form.
     """
     backend = build_engine_backend("generational-vector")
     assert isinstance(backend, GenerationalBackend)
+
+
+# `auto_vector_max_capacity` used to gate only `"auto"`'s own choice
+# between Backend G and Backend V (`_resolve_auto_engine_backend`) —
+# explicit `"generational-vector"` selection accepted any capacity at
+# all, including the default locus length's own `4**200`, which `build_
+# vectorized_state` cannot allocate (this project's own multi-model
+# engine review, 2026-09-04, `FIM-47`/finding C-04/finding P1.2/finding
+# P1-4). These mirror the "auto" capacity tests above exactly, with the
+# same params, to make the before/after contrast direct: the same config
+# that makes `"auto"` fall back to Backend G now makes explicit
+# `"generational-vector"` raise, rather than silently attempting the
+# allocation anyway.
+
+
+def test_build_engine_backend_vector_rejects_oversized_capacity() -> None:
+    """Explicit selection now gets the same capacity ceiling `"auto"` already had."""
+    params = _finite_alleles_vector_params(
+        d=40, loci=(LocusSpec(1, 6),)
+    )  # capacity 4096
+    with pytest.raises(ValueError, match="auto_vector_max_capacity"):
+        build_engine_backend(
+            "generational-vector", params=params, auto_vector_max_capacity=1024
+        )
+
+
+def test_build_engine_backend_vector_respects_custom_capacity_ceiling() -> None:
+    """The explicit-path ceiling is a real, configurable parameter, not a hidden one."""
+    params = _finite_alleles_vector_params(
+        d=40, loci=(LocusSpec(1, 6),)
+    )  # capacity 4096
+    backend = build_engine_backend(
+        "generational-vector", params=params, auto_vector_max_capacity=4096
+    )
+    assert isinstance(backend, GenerationalBackend)
+    assert isinstance(backend._advancer, VectorizedAdvancer)
+
+
+def test_build_engine_backend_vector_needs_every_locus_within_capacity() -> None:
+    """One oversized locus disqualifies explicit selection too, not just `"auto"`."""
+    params = _finite_alleles_vector_params(
+        d=40, loci=(LocusSpec(1, 2), LocusSpec(2, 6))
+    )  # capacities 16, 4096
+    with pytest.raises(ValueError, match="auto_vector_max_capacity"):
+        build_engine_backend(
+            "generational-vector", params=params, auto_vector_max_capacity=1024
+        )
 
 
 def test_build_engine_backend_rejects_unknown_choice() -> None:

@@ -1365,7 +1365,15 @@ def build_engine_backend(
             `engine_backend == "generational-vector"` (or `"auto"`
             resolves to it) and `jit != "off"`, `engine_backend ==
             "generational-vector"` (or `"auto"` resolves to it) and the
-            optional `numba` dependency is not installed,
+            optional `numba` dependency is not installed, `engine_backend
+            == "generational-vector"` and `params` is both vector-eligible
+            (`mutation_model == "finite_alleles"`, `migrant_sampling ==
+            "continuous"`) and names a locus whose capacity exceeds
+            `auto_vector_max_capacity` (checked only when `params` is
+            given and already eligible on those two axes — an ineligible
+            config raises its own, more specific error later, from
+            `backend.run()`, and `"auto"` already refuses an over-capacity
+            eligible config on its own, before ever reaching this branch),
             `engine_backend == "auto"` and `params` is `None`, or
             `engine_backend` names something unrecognized.
     """
@@ -1406,6 +1414,52 @@ def build_engine_backend(
                 "unconditionally) — install it with `pip install fim[jit]` "
                 "before selecting this backend"
             )
+        # `"auto"` already refuses this same backend when a locus's own
+        # capacity exceeds `auto_vector_max_capacity`
+        # (`_resolve_auto_engine_backend`, above) — explicit selection used
+        # to skip that check entirely, accepting a config `build_
+        # vectorized_state` cannot actually allocate (the default locus
+        # length, 200, implies capacity 4**200; this project's own
+        # multi-model engine review, 2026-09-04, found this independently
+        # three times — `FIM-47`/finding C-04/finding P1.2/finding P1-4).
+        # Only checkable when `params` is given: `fim()` itself always
+        # passes one, so this closes the actual reachable gap; a caller
+        # using this function's own lower-level, params-less form (as
+        # several tests here already do, to construct a backend without a
+        # real run in mind) gets no capacity opinion, same as it always
+        # has for every other params-dependent question this function
+        # answers. Gated on the identical `vector_eligible` condition
+        # `_resolve_auto_engine_backend` uses, not on `params` alone: a
+        # `mutation_model="infinite_alleles"` or `migrant_sampling=
+        # "stochastic"` config has no real "capacity" to speak of (locus
+        # length means something else entirely there), and already gets
+        # its own, more specific `ValueError` later, from `backend.run()`
+        # — this check firing first on `tiny_params`'s own out-of-scope
+        # default locus length would otherwise mask that more relevant
+        # error with a misleading capacity complaint (caught live by
+        # `test_fim_generational_vector_rejects_infinite_alleles`/`test_
+        # fim_generational_vector_rejects_stochastic_migrant_sampling`
+        # failing when this check was first written without the gate).
+        if params is not None and (
+            params.mutation_model == "finite_alleles"
+            and params.migrant_sampling == "continuous"
+        ):
+            max_capacity = max(
+                finite_allele_capacity(locus.length) for locus in params.loci
+            )
+            if max_capacity > auto_vector_max_capacity:
+                raise ValueError(
+                    "generational-vector's own dense per-locus capacity "
+                    f"would be {max_capacity} (the largest locus length "
+                    "among params.loci), exceeding auto_vector_max_capacity="
+                    f"{auto_vector_max_capacity} — the same ceiling "
+                    "engine_backend='auto' itself already refuses to cross "
+                    "for this exact backend. Reduce the offending locus "
+                    "length, raise auto_vector_max_capacity only after "
+                    "confirming the memory a (d, capacity) dense array at "
+                    "that size actually needs is available, or choose a "
+                    "different engine_backend"
+                )
         return GenerationalBackend(VectorizedAdvancer())
     raise ValueError(f"unknown engine backend: {engine_backend!r}")
 
