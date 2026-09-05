@@ -178,6 +178,32 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   default), but the stderr noise looked exactly like a real failure
   right before "Installed fim 1.2.0". Fixed by capturing the response
   once before parsing it, removing the live pipe entirely.
+- `TrajectoryStore.write_generation` (both `InMemoryTrajectoryStore` and
+  `JSONLTrajectoryStore`) no longer re-validates every row `fim.engine`'s
+  own five internal call sites hand it, via a new `validate: bool = True`
+  keyword those five sites pass `False` for — each one builds its own
+  rows, in the same expression, from `ModelState.to_rows`/`fim.model.
+  vectorized.vectorized_state_to_rows`, both already-well-typed and
+  in-bounds by construction. Profiling a representative Backend V run
+  found this the single largest cost center in the whole run, ~36% of
+  wall clock, ahead of the actual migrate/mutate/drift step. `validate`
+  defaults to `True` — an externally-supplied row (a hand-edited one, or
+  one read back off disk) is still fully validated; only the redundant
+  re-validation of a row this project's own code just built is gone.
+- `fim.statistics.differentiation.statistics_report` no longer
+  re-validates a frequency table `fim.engine`'s own convergence monitor
+  hands it every generation, via the same kind of new `validate: bool =
+  True` keyword its two internal callers pass `False` for. The same
+  profiling pass that found the fix above found this as the second-
+  largest cost center, ~31% of wall clock, of which 17.6 percentage
+  points was pure validation, not the `G_ST`/`D`/`H_S`/`H_T` math
+  itself — the same class of redundant work that function's own
+  docstring already described fixing once *within* one call (eleven
+  validation passes down to one); this closes the remaining gap
+  *across* calls. `isinstance` call count across the whole run dropped
+  95% between the two fixes (33.5M to 1.6M), with no change targeting
+  `isinstance` directly — it was never its own cost, only the tax these
+  two validation gauntlets carried.
 
 ---
 
