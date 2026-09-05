@@ -232,6 +232,39 @@ def test_migrate_vectorized_symmetric_single_deme_is_identity() -> None:
     assert not np.any(np.isnan(migrated.frequencies))
 
 
+def test_migrate_vectorized_symmetric_reuses_buffers_without_changing_any_bit() -> None:
+    """The buffer-reuse rewrite is bit-for-bit identical to the naive expression.
+
+    Regression test for FIM-54: `migrate_vectorized_symmetric` used to
+    compute the blend as one naive expression, materializing up to six
+    full `(d, capacity)`-shaped temporaries; rewritten to reuse two
+    buffers via `out=` instead. IEEE 754 addition and multiplication are
+    each exactly commutative, so reordering which operand of `+`/`*`
+    lands in which buffer cannot change the bits produced — checked
+    directly here, against a literal transcription of the pre-rewrite
+    expression, rather than trusting that arithmetic identity alone.
+    """
+    state = _finite_alleles_state(deme_count=6, capacity_length=2)
+    sizes = np.array([10, 15, 20, 25, 30, 35], dtype=np.int64)
+    rate = 0.23
+    vectorized = build_vectorized_state(state)
+    locus_state = vectorized.locus_states[0]
+
+    frequencies = locus_state.frequencies
+    sizes_f64 = sizes.astype(np.float64)
+    total_size = float(sizes_f64.sum())
+    global_mass = sizes_f64 @ frequencies
+    other_weight = total_size - sizes_f64
+    naive_pool = (global_mass[None, :] - sizes_f64[:, None] * frequencies) / (
+        other_weight[:, None]
+    )
+    expected = (1.0 - rate) * frequencies + rate * naive_pool
+
+    migrated = migrate_vectorized_symmetric(locus_state, rate, sizes)
+
+    np.testing.assert_array_equal(migrated.frequencies, expected)
+
+
 def test_migrate_vectorized_symmetric_zero_rate_returns_the_same_object() -> None:
     """`rate=0.0` allocates nothing at all — an identity check, not a value one.
 

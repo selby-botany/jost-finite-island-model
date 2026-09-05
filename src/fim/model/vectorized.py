@@ -850,10 +850,34 @@ def migrate_vectorized_symmetric(
     total_size = float(sizes_f64.sum())
     global_mass = sizes_f64 @ frequencies
     other_weight = total_size - sizes_f64
-    pool = (global_mass[None, :] - sizes_f64[:, None] * frequencies) / other_weight[
-        :, None
-    ]
-    blended = (1.0 - rate) * frequencies + rate * pool
+    # Two reusable `(d, capacity)` work buffers, not the six a naive
+    # transcription of the formula in this function's own docstring
+    # would materialize (`sizes_f64[:, None] * frequencies`, the
+    # subtraction, the division, `(1 - rate) * frequencies`, `rate *
+    # pool`, and the final sum -- up to `40 * d * capacity` bytes of
+    # `float64` temporaries alive at once at this project's own
+    # multi-model engine review's own estimate, 2026-09-04, `FIM-54`).
+    # `pool` is built, then overwritten in place through each of its own
+    # remaining steps via `out=`, ending as `rate * pool` itself;
+    # `local_component` holds `(1 - rate) * frequencies` and is reused
+    # as the final result buffer. `frequencies` (the input) is only ever
+    # read here, never written to, in place -- unchanged from before
+    # this rewrite, and required either way by this function's own
+    # "returns a new state, never mutates its own argument" contract.
+    # Every step below performs the identical elementwise arithmetic, in
+    # the identical order, the un-fused expression already did -- IEEE
+    # 754 addition and multiplication are each exactly commutative, so
+    # reordering which operand of `+`/`*` is written into which buffer
+    # changes nothing about the bits produced; confirmed directly by
+    # `test_migrate_vectorized_symmetric_reuses_buffers_without_changing_
+    # any_bit` before this rewrite replaced the un-fused version, not
+    # merely reasoned about from the arithmetic identities above alone.
+    pool = sizes_f64[:, None] * frequencies
+    np.subtract(global_mass[None, :], pool, out=pool)
+    np.divide(pool, other_weight[:, None], out=pool)
+    np.multiply(pool, rate, out=pool)
+    local_component = np.multiply(frequencies, 1.0 - rate)
+    blended = np.add(local_component, pool, out=local_component)
     return replace(locus_state, frequencies=blended)
 
 

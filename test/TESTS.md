@@ -10537,6 +10537,26 @@ operators.migrate` has its own matching test. Unreachable via a
 validated `SimulationParams` (`d >= 2`), but this function is
 public.
 
+<a id="model.test_vectorized.test_migrate_vectorized_symmetric_reuses_buffers_without_changing_any_bit"></a>
+
+#### test\_migrate\_vectorized\_symmetric\_reuses\_buffers\_without\_changing\_any\_bit
+
+```python
+def test_migrate_vectorized_symmetric_reuses_buffers_without_changing_any_bit(
+) -> None
+```
+
+The buffer-reuse rewrite is bit-for-bit identical to the naive expression.
+
+Regression test for FIM-54: `migrate_vectorized_symmetric` used to
+compute the blend as one naive expression, materializing up to six
+full `(d, capacity)`-shaped temporaries; rewritten to reuse two
+buffers via `out=` instead. IEEE 754 addition and multiplication are
+each exactly commutative, so reordering which operand of `+`/`*`
+lands in which buffer cannot change the bits produced — checked
+directly here, against a literal transcription of the pre-rewrite
+expression, rather than trusting that arithmetic identity alone.
+
 <a id="model.test_vectorized.test_migrate_vectorized_symmetric_zero_rate_returns_the_same_object"></a>
 
 #### test\_migrate\_vectorized\_symmetric\_zero\_rate\_returns\_the\_same\_object
