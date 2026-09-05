@@ -287,6 +287,82 @@ class DifferentiationStatisticsTests(unittest.TestCase):
 
         self.assertEqual(call_count, 1)
 
+    def test_statistics_report_statistics_parameter_skips_unrequested_fields(
+        self,
+    ) -> None:
+        """`statistics` skips computing `E_ST`/`K_ST`/`Gs`/`Gd` when excluded.
+
+        `FIM-24`/`FIM-32` (Phase 7 item 4,
+        `20260904-claude-sonnet-5-fim-engine-review-remediations.md`):
+        an allocation/call-count regression test, not an outcome-
+        equivalence one — patches `_e_st_from_demes`/`_k_st_from_demes`
+        directly and asserts each is called zero times when its own name
+        is absent from `statistics`, matching this project's own
+        established `FIM-53`/`FIM-27`/`FIM-28`/`FIM-36` precedent for
+        this exact kind of claim.
+        """
+        table = [{0: 0.5, 1: 0.5}, {0: 0.25, 2: 0.75}, {0: 0.4, 1: 0.6}]
+        e_st_calls = 0
+        k_st_calls = 0
+        original_e_st = differentiation._e_st_from_demes
+        original_k_st = differentiation._k_st_from_demes
+
+        def counting_e_st(*args: object, **kwargs: object) -> float:
+            nonlocal e_st_calls
+            e_st_calls += 1
+            return original_e_st(*args, **kwargs)  # type: ignore[arg-type]
+
+        def counting_k_st(*args: object, **kwargs: object) -> float:
+            nonlocal k_st_calls
+            k_st_calls += 1
+            return original_k_st(*args, **kwargs)  # type: ignore[arg-type]
+
+        with (
+            patch.object(differentiation, "_e_st_from_demes", counting_e_st),
+            patch.object(differentiation, "_k_st_from_demes", counting_k_st),
+        ):
+            reduced = differentiation.statistics_report(
+                table, statistics=frozenset({"D"})
+            )
+
+        self.assertEqual(e_st_calls, 0)
+        self.assertEqual(k_st_calls, 0)
+        self.assertTrue(math.isnan(reduced["E_ST"]))
+        self.assertTrue(math.isnan(reduced["K_ST"]))
+        self.assertTrue(math.isnan(reduced["Gs"]))
+        self.assertTrue(math.isnan(reduced["Gd"]))
+
+    def test_statistics_report_statistics_parameter_never_changes_computed_fields(
+        self,
+    ) -> None:
+        """Every field the `statistics` filter *keeps* matches the full report.
+
+        Bit-for-bit, not `assertAlmostEqual`: `H_S`/`H_T`/`H_ST`/`G_ST`/
+        `D` are computed by the exact same code path regardless of
+        `statistics`, so excluding `E_ST`/`K_ST`/`Gs`/`Gd` must change
+        nothing about them.
+        """
+        table = [
+            {0: 0.5, 1: 0.3, 2: 0.2},
+            {0: 0.1, 1: 0.6, 2: 0.3},
+            {0: 0.4, 1: 0.4, 2: 0.2},
+        ]
+        full = differentiation.statistics_report(table)
+        reduced = differentiation.statistics_report(
+            table, statistics=frozenset({"D", "G_ST"})
+        )
+
+        for field in ("H_S", "H_T", "H_ST", "G_ST", "D"):
+            self.assertEqual(full[field], reduced[field])
+
+        # `E_ST` was requested's own complement (`K_ST`) stays excluded,
+        # but requesting `E_ST` itself must still compute the real value.
+        e_st_only = differentiation.statistics_report(
+            table, statistics=frozenset({"E_ST"})
+        )
+        self.assertEqual(e_st_only["E_ST"], full["E_ST"])
+        self.assertTrue(math.isnan(e_st_only["K_ST"]))
+
     def test_differentiation_statistics_are_bounded(self) -> None:
         """All defined scalar differentiation measures stay inside [0, 1]."""
         tables = (

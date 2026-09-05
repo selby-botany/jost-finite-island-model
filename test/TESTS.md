@@ -2887,6 +2887,43 @@ locus's own dense array shape, not a `ModelState.deme_count`
 attribute that doesn't exist here) feeds it correctly, not
 re-litigate the aggregation math itself.
 
+<a id="engine.test_engine.test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched"></a>
+
+#### test\_convergence\_values\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched
+
+```python
+def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`_convergence_values` never computes `E_ST`/`K_ST` when nothing watches them.
+
+`FIM-24`/`FIM-32` (Phase 7 item 4,
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md`): an
+allocation/call-count regression test at the full convergence-check
+entry point, not just at `statistics_report` directly — proves the
+`params.convergence_statistics` filter this fix adds actually
+reaches `differentiation._e_st_from_demes`/`_k_st_from_demes`,
+end to end, for the common case (only `D` watched, this project's
+own stated default) matching this project's own established
+`FIM-53`/`FIM-27`/`FIM-28`/`FIM-36` precedent for this kind of claim.
+
+<a id="engine.test_engine.test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watched"></a>
+
+#### test\_convergence\_values\_vectorized\_skips\_e\_st\_and\_k\_st\_when\_only\_d\_is\_watched
+
+```python
+def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watched(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The array-native convergence path gets the identical `FIM-24`/`FIM-32` fix.
+
+Mirrors `test_convergence_values_skips_e_st_and_k_st_when_only_d_
+is_watched` above, through `_convergence_values_vectorized` instead
+— proves `VectorizedState`'s own dense-array path skips the same
+work, not just the dict-based path.
+
 <a id="engine.test_engine.test_locus_length_does_not_affect_the_report"></a>
 
 #### test\_locus\_length\_does\_not\_affect\_the\_report
@@ -11704,6 +11741,42 @@ inside `g_st`'s/`jost_d`'s own internal `h_s`/`h_t` calls
 vectorized`'s own reference-scale hot path, not assumed from
 reading the code alone). Counts real calls across a table with
 several demes, not just that the final numbers happen to match.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_statistics_parameter_skips_unrequested_fields"></a>
+
+#### test\_statistics\_report\_statistics\_parameter\_skips\_unrequested\_fields
+
+```python
+def test_statistics_report_statistics_parameter_skips_unrequested_fields(
+) -> None
+```
+
+`statistics` skips computing `E_ST`/`K_ST`/`Gs`/`Gd` when excluded.
+
+`FIM-24`/`FIM-32` (Phase 7 item 4,
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md`):
+an allocation/call-count regression test, not an outcome-
+equivalence one — patches `_e_st_from_demes`/`_k_st_from_demes`
+directly and asserts each is called zero times when its own name
+is absent from `statistics`, matching this project's own
+established `FIM-53`/`FIM-27`/`FIM-28`/`FIM-36` precedent for
+this exact kind of claim.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_statistics_parameter_never_changes_computed_fields"></a>
+
+#### test\_statistics\_report\_statistics\_parameter\_never\_changes\_computed\_fields
+
+```python
+def test_statistics_report_statistics_parameter_never_changes_computed_fields(
+) -> None
+```
+
+Every field the `statistics` filter *keeps* matches the full report.
+
+Bit-for-bit, not `assertAlmostEqual`: `H_S`/`H_T`/`H_ST`/`G_ST`/
+`D` are computed by the exact same code path regardless of
+`statistics`, so excluding `E_ST`/`K_ST`/`Gs`/`Gd` must change
+nothing about them.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_differentiation_statistics_are_bounded"></a>
 

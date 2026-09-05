@@ -44,8 +44,8 @@ only whether two entries share the same identity or not.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from math import exp, expm1, fsum, inf, isfinite, log, sqrt
+from collections.abc import Collection, Mapping, Sequence
+from math import exp, expm1, fsum, inf, isfinite, log, nan, sqrt
 from numbers import Real
 from operator import index as integer_index
 from typing import Any, TypeAlias, TypedDict, cast
@@ -76,13 +76,26 @@ class DifferentiationReport(TypedDict):
     below (`fim.engine.FinalReport` reports the identical set, each
     averaged across every locus a run tracks). `G_ST` alone can be
     `None`: see `g_st`'s own docstring for why. Every other field is
-    always a real number. `Gs`/`Gd` (`gs`/`gd`, below) added by this
-    project's own Ryman & Leimar remediation, `R4`
+    always a real number **when `statistics_report` is called with its
+    default `statistics=None`** — every existing caller, and the only
+    form this report ever takes once it leaves `fim.engine`'s own
+    convergence-checking hot path. `Gs`/`Gd` (`gs`/`gd`, below) added by
+    this project's own Ryman & Leimar remediation, `R4`
     (`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-
     5-gene-identity-recursion-fim-implications.md` §9) — the within-
     and between-deme gene identities `H_S`/`H_T`/`G_ST`/`D` are all
     themselves derived from, exposed directly rather than leaving every
     consumer to re-derive them from `H_S`/`H_T` independently.
+
+    `E_ST`/`K_ST`/`Gs`/`Gd` may instead hold `math.nan` — a deliberate
+    placeholder, never a real measurement — whenever `statistics_report`
+    was called with an explicit `statistics` argument that excludes that
+    field's own name; see that parameter's own docstring for the full
+    contract. This never happens through any public entry point: the
+    only caller that ever passes `statistics` is `fim.engine`'s own
+    per-generation convergence check (`_statistics_for_locus`/
+    `_statistics_for_locus_vectorized`), which never reads a field it
+    excluded.
     """
 
     H_S: float
@@ -1789,6 +1802,7 @@ def statistics_report(
     deme_weights: DemeWeights = None,
     *,
     validate: bool = True,
+    statistics: Collection[str] | None = None,
 ) -> DifferentiationReport:
     """Return the scalar statistics block consumed by an engine report.
 
@@ -1841,6 +1855,35 @@ def statistics_report(
             already a genuine `float`) — re-validating it here cannot
             find a defect that construction did not already rule out,
             only re-confirm one, on every locus, every generation.
+        statistics: `None` (the default — every existing caller,
+            unaffected) computes every field, exactly as before. Given a
+            collection of field names instead, `E_ST`/`K_ST`/`Gs`/`Gd`
+            are each computed only when its own name appears in
+            `statistics`; the rest hold `math.nan` (see
+            `DifferentiationReport`'s own docstring for the placeholder
+            contract this relies on). `H_S`/`H_T`/`H_ST`/`G_ST`/`D` are
+            always computed regardless of `statistics` — each is either
+            the shared input every other field derives from (`H_S`,
+            `H_T`) or an O(1) arithmetic step once those two are known
+            (`H_ST`, `G_ST`, `D`), so excluding them would save nothing.
+            `E_ST` (an `_entropy` pass over the pooled table plus one
+            more per deme) and `K_ST` (a set union across every deme's
+            own alleles) are each a real, independent O(total allele
+            entries) pass over `table` in their own right — this
+            parameter exists specifically to skip those two when a
+            caller already knows neither is wanted (Phase 7 item 4,
+            `FIM-24`/`FIM-32`, `dev/doc/apps/selby/jost-finite-island-
+            model/20260904-claude-sonnet-5-fim-engine-review-
+            remediations.md` — this project's own multi-model engine
+            review, 2026-09-04: every generation's own convergence check
+            computed all nine fields even though a run typically watches
+            only `D`). `Gs`/`Gd` are cheap (each an O(1) step off
+            `within`/`total`) but are never watchable for convergence at
+            all (`fim.model.params._CONVERGENCE_STATISTICS`), so the one
+            caller that ever passes `statistics` never asks for them
+            either — gated for the same reason as `E_ST`/`K_ST`, not
+            because computing them costs anything worth avoiding on its
+            own.
     """
     demes = (
         _validate_table(table)
@@ -1851,21 +1894,29 @@ def statistics_report(
     equal_weights = _validate_weights(len(demes), None)
     within = _h_s_from_demes(demes, equal_weights)
     total = _h_t_from_demes(demes, equal_weights)
-    entropy_weights = (
-        equal_weights
-        if deme_weights is None
-        else _validate_weights(len(demes), deme_weights)
-    )
+    wants_e_st = statistics is None or "E_ST" in statistics
+    wants_k_st = statistics is None or "K_ST" in statistics
+    wants_gs = statistics is None or "Gs" in statistics
+    wants_gd = statistics is None or "Gd" in statistics
+    if wants_e_st:
+        entropy_weights = (
+            equal_weights
+            if deme_weights is None
+            else _validate_weights(len(demes), deme_weights)
+        )
+        e_st = _e_st_from_demes(demes, entropy_weights)
+    else:
+        e_st = nan
     return {
         "H_S": within,
         "H_T": total,
         "H_ST": _h_st_from_within_and_total(total, within),
         "G_ST": _g_st_from_demes(total, within),
         "D": _jost_d_from_within_and_total(len(demes), within, total),
-        "E_ST": _e_st_from_demes(demes, entropy_weights),
-        "K_ST": _k_st_from_demes(demes),
-        "Gs": 1.0 - within,
-        "Gd": _gd_from_within_and_total(within, total, len(demes)),
+        "E_ST": e_st,
+        "K_ST": _k_st_from_demes(demes) if wants_k_st else nan,
+        "Gs": (1.0 - within) if wants_gs else nan,
+        "Gd": _gd_from_within_and_total(within, total, len(demes)) if wants_gd else nan,
     }
 
 

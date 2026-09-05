@@ -103,7 +103,7 @@ import logging
 import math
 import os
 import pickle
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -2834,8 +2834,9 @@ def _convergence_values(
     is unaffected by that choice and stays a plain per-locus mean either
     way (`_pooled_g_st_and_d`'s own docstring).
     """
+    watched = params.convergence_statistics
     locus_reports = tuple(
-        _statistics_for_locus(state, params, locus_index)
+        _statistics_for_locus(state, params, locus_index, statistics=watched)
         for locus_index in range(state.locus_count)
     )
     return _watched_statistic_values(locus_reports, params, deme_count=state.deme_count)
@@ -2861,8 +2862,9 @@ def _convergence_values_vectorized(
     same "an undefined `G_ST` this generation is omitted, not
     substituted" rule.
     """
+    watched = params.convergence_statistics
     locus_reports = tuple(
-        _statistics_for_locus_vectorized(locus_state, params)
+        _statistics_for_locus_vectorized(locus_state, params, statistics=watched)
         for locus_state in state.locus_states
     )
     # `VectorizedState` carries no `deme_count` of its own (unlike
@@ -3158,6 +3160,8 @@ def _statistics_for_locus(
     state: ModelState,
     params: SimulationParams,
     locus_index: int,
+    *,
+    statistics: Collection[str] | None = None,
 ) -> DifferentiationReport:
     """Compute one locus's scalar statistics.
 
@@ -3178,6 +3182,15 @@ def _statistics_for_locus(
     comes up whenever averaging across groups of unequal size, with no
     universally correct answer; which is more appropriate depends on the
     actual scientific question being asked.
+
+    `statistics`: forwarded verbatim to `statistics_report` — `None`
+    (the default) for `report_for_state`'s own final-report call, which
+    needs every field; `_convergence_values`'s own per-generation call
+    passes `params.convergence_statistics` instead, so the fields no
+    watched statistic ever reads are skipped rather than computed and
+    discarded every generation (Phase 7 item 4, `FIM-24`/`FIM-32`; see
+    `statistics_report`'s own `statistics` parameter for the full
+    contract).
     """
     table: list[Mapping[Any, Any]] = [
         {
@@ -3192,12 +3205,14 @@ def _statistics_for_locus(
     weights: Sequence[float] | None = (
         params.population_sizes if params.deme_weighting == "size" else None
     )
-    return statistics_report(table, weights, validate=False)
+    return statistics_report(table, weights, validate=False, statistics=statistics)
 
 
 def _statistics_for_locus_vectorized(
     locus_state: VectorizedLocusState,
     params: SimulationParams,
+    *,
+    statistics: Collection[str] | None = None,
 ) -> DifferentiationReport:
     """`_statistics_for_locus`'s own array-native counterpart.
 
@@ -3208,7 +3223,8 @@ def _statistics_for_locus_vectorized(
     persistence — rather than from a `ModelState`'s own sparse
     `frequency_map`. Computes nothing statistical itself, exactly like
     `_statistics_for_locus`; `deme_weighting`'s own meaning is
-    unchanged.
+    unchanged. `statistics`: see `_statistics_for_locus`'s own docstring
+    — identical contract, forwarded the same way.
     """
     frequencies = locus_state.frequencies
     table: list[Mapping[Any, Any]] = [
@@ -3221,7 +3237,7 @@ def _statistics_for_locus_vectorized(
     weights: Sequence[float] | None = (
         params.population_sizes if params.deme_weighting == "size" else None
     )
-    return statistics_report(table, weights, validate=False)
+    return statistics_report(table, weights, validate=False, statistics=statistics)
 
 
 def _report_statistic(

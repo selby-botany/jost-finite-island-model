@@ -39,6 +39,7 @@ from fim.model.state import ModelState
 from fim.model.vectorized import build_vectorized_state, vectorized_state_to_model_state
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
+from fim.statistics import differentiation
 
 
 def _clock() -> datetime:
@@ -1592,6 +1593,102 @@ def test_convergence_values_vectorized_watches_the_same_d_and_g_st() -> None:
     assert report["G_ST"] is not None
     assert watched["D"] == pytest.approx(report["D"])
     assert watched["G_ST"] == pytest.approx(report["G_ST"])
+
+
+def test_convergence_values_skips_e_st_and_k_st_when_only_d_is_watched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_convergence_values` never computes `E_ST`/`K_ST` when nothing watches them.
+
+    `FIM-24`/`FIM-32` (Phase 7 item 4,
+    `20260904-claude-sonnet-5-fim-engine-review-remediations.md`): an
+    allocation/call-count regression test at the full convergence-check
+    entry point, not just at `statistics_report` directly — proves the
+    `params.convergence_statistics` filter this fix adds actually
+    reaches `differentiation._e_st_from_demes`/`_k_st_from_demes`,
+    end to end, for the common case (only `D` watched, this project's
+    own stated default) matching this project's own established
+    `FIM-53`/`FIM-27`/`FIM-28`/`FIM-36` precedent for this kind of claim.
+    """
+    state = _two_locus_state_with_divergent_per_locus_estimates()
+    params = SimulationParams(
+        N=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=state.loci,
+        convergence_statistic="D",
+    )
+    e_st_calls = 0
+    k_st_calls = 0
+    original_e_st = differentiation._e_st_from_demes
+    original_k_st = differentiation._k_st_from_demes
+
+    def counting_e_st(*args: object, **kwargs: object) -> float:
+        nonlocal e_st_calls
+        e_st_calls += 1
+        return original_e_st(*args, **kwargs)  # type: ignore[arg-type]
+
+    def counting_k_st(*args: object, **kwargs: object) -> float:
+        nonlocal k_st_calls
+        k_st_calls += 1
+        return original_k_st(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(differentiation, "_e_st_from_demes", counting_e_st)
+    monkeypatch.setattr(differentiation, "_k_st_from_demes", counting_k_st)
+
+    watched = _convergence_values(state, params)
+
+    assert e_st_calls == 0
+    assert k_st_calls == 0
+    assert "D" in watched
+
+
+def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The array-native convergence path gets the identical `FIM-24`/`FIM-32` fix.
+
+    Mirrors `test_convergence_values_skips_e_st_and_k_st_when_only_d_
+    is_watched` above, through `_convergence_values_vectorized` instead
+    — proves `VectorizedState`'s own dense-array path skips the same
+    work, not just the dict-based path.
+    """
+    state = _two_locus_state_with_divergent_per_locus_estimates()
+    params = SimulationParams(
+        N=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=state.loci,
+        convergence_statistic="D",
+    )
+    vectorized_state = build_vectorized_state(state)
+    e_st_calls = 0
+    k_st_calls = 0
+    original_e_st = differentiation._e_st_from_demes
+    original_k_st = differentiation._k_st_from_demes
+
+    def counting_e_st(*args: object, **kwargs: object) -> float:
+        nonlocal e_st_calls
+        e_st_calls += 1
+        return original_e_st(*args, **kwargs)  # type: ignore[arg-type]
+
+    def counting_k_st(*args: object, **kwargs: object) -> float:
+        nonlocal k_st_calls
+        k_st_calls += 1
+        return original_k_st(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(differentiation, "_e_st_from_demes", counting_e_st)
+    monkeypatch.setattr(differentiation, "_k_st_from_demes", counting_k_st)
+
+    watched = _convergence_values_vectorized(vectorized_state, params)
+
+    assert e_st_calls == 0
+    assert k_st_calls == 0
+    assert "D" in watched
 
 
 def test_locus_length_does_not_affect_the_report() -> None:
