@@ -231,6 +231,24 @@ def test_convergence_statistic_accepts_several_names_and_round_trips() -> None:
     assert single.convergence_statistics == ("D",)
 
 
+def test_convergence_statistic_accepts_h_st() -> None:
+    """`H_ST` is a real, watchable convergence statistic, not report-only.
+
+    Regression test for `FIM-51`: `fim.engine.FinalReport`/
+    `replicate_summary` already report `H_ST` alongside every other
+    differentiation measure, but `_CONVERGENCE_STATISTICS` did not
+    include it, so a run could not actually watch it for convergence —
+    the one statistic reportable but not watchable, with no principled
+    reason behind the gap.
+    """
+    params = SimulationParams.from_mapping(
+        {**_valid_config(), "convergence_statistic": "H_ST"}
+    )
+
+    assert params.convergence_statistic == "H_ST"
+    assert params.convergence_statistics == ("H_ST",)
+
+
 def test_migrant_sampling_defaults_to_continuous_and_round_trips() -> None:
     """The opt-in stochastic migrant-count model stays off unless requested.
 

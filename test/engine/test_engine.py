@@ -776,6 +776,25 @@ def test_replicate_summary_requires_at_least_two_results(
         replicate_summary((_run(tiny_params),))
 
 
+def test_convergence_can_watch_h_st(tiny_params: SimulationParams) -> None:
+    """A run can actually watch `H_ST` for convergence, not just report it.
+
+    Regression test for `FIM-51`: `_report_statistic` used to raise
+    `unsupported convergence statistic: H_ST` the instant a per-
+    generation convergence check tried to read it, even though `H_ST` is
+    a real, always-defined `DifferentiationReport` field (`fim.model.
+    params._CONVERGENCE_STATISTICS` now allows selecting it in the first
+    place — this is that config's own engine-level counterpart).
+    """
+    params = replace(tiny_params, convergence_statistic="H_ST")
+
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+
+    assert isinstance(output, RunResult)
+    assert output.report["H_ST"] is not None
+    assert output.report["converged_on"] == "H_ST"
+
+
 def test_naive_manifest_clock_is_rejected(tiny_params: SimulationParams) -> None:
     """Manifest timestamps require an explicit timezone."""
     with pytest.raises(ValueError, match="timezone-aware"):

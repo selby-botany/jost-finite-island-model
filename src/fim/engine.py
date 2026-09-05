@@ -3020,21 +3020,24 @@ def _report_statistic(
     same "look up one named statistic safely" job, for the same reason:
     a plain `report[statistic]` would raise Python's own generic
     `KeyError` for an unrecognized name, rather than the specific,
-    named-statistic error this function raises instead.
+    named-statistic error this function raises instead. `H_ST` was
+    missing from this lookup until this project's own multi-model engine
+    review, 2026-09-04 (`FIM-51`) — `fim.model.params.
+    _CONVERGENCE_STATISTICS` is this function's own config-time
+    counterpart; keep both in sync.
     """
-    if statistic == "D":
-        return report["D"]
-    if statistic == "G_ST":
-        return report["G_ST"]
-    if statistic == "E_ST":
-        return report["E_ST"]
-    if statistic == "K_ST":
-        return report["K_ST"]
-    if statistic == "H_S":
-        return report["H_S"]
-    if statistic == "H_T":
-        return report["H_T"]
-    raise ValueError(f"unsupported convergence statistic: {statistic}")
+    fields: Mapping[str, float | None] = {
+        "D": report["D"],
+        "G_ST": report["G_ST"],
+        "E_ST": report["E_ST"],
+        "K_ST": report["K_ST"],
+        "H_S": report["H_S"],
+        "H_T": report["H_T"],
+        "H_ST": report["H_ST"],
+    }
+    if statistic not in fields:
+        raise ValueError(f"unsupported convergence statistic: {statistic}")
+    return fields[statistic]
 
 
 def _utc_now() -> datetime:

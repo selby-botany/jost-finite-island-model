@@ -2424,6 +2424,23 @@ def test_replicate_summary_requires_at_least_two_results(
 
 A single result has no interval to compute.
 
+<a id="engine.test_engine.test_convergence_can_watch_h_st"></a>
+
+#### test\_convergence\_can\_watch\_h\_st
+
+```python
+def test_convergence_can_watch_h_st(tiny_params: SimulationParams) -> None
+```
+
+A run can actually watch `H_ST` for convergence, not just report it.
+
+Regression test for `FIM-51`: `_report_statistic` used to raise
+`unsupported convergence statistic: H_ST` the instant a per-
+generation convergence check tried to read it, even though `H_ST` is
+a real, always-defined `DifferentiationReport` field (`fim.model.
+params._CONVERGENCE_STATISTICS` now allows selecting it in the first
+place — this is that config's own engine-level counterpart).
+
 <a id="engine.test_engine.test_naive_manifest_clock_is_rejected"></a>
 
 #### test\_naive\_manifest\_clock\_is\_rejected
@@ -8865,6 +8882,23 @@ Several statistics normalize to a tuple, round-trip, and stay ordered.
 Design §9: "several statistics needed to agree before stopping" lands as
 a list here; a single statistic is that list's one-element special case
 and keeps producing the same bare string as before this extension.
+
+<a id="model.test_params.test_convergence_statistic_accepts_h_st"></a>
+
+#### test\_convergence\_statistic\_accepts\_h\_st
+
+```python
+def test_convergence_statistic_accepts_h_st() -> None
+```
+
+`H_ST` is a real, watchable convergence statistic, not report-only.
+
+Regression test for `FIM-51`: `fim.engine.FinalReport`/
+`replicate_summary` already report `H_ST` alongside every other
+differentiation measure, but `_CONVERGENCE_STATISTICS` did not
+include it, so a run could not actually watch it for convergence —
+the one statistic reportable but not watchable, with no principled
+reason behind the gap.
 
 <a id="model.test_params.test_migrant_sampling_defaults_to_continuous_and_round_trips"></a>
 

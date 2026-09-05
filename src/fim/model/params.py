@@ -197,7 +197,20 @@ _CONFIG_KEYS: Final = frozenset(
     }
 )
 
-_CONVERGENCE_STATISTICS: Final = frozenset({"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"})
+_CONVERGENCE_STATISTICS: Final = frozenset(
+    {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"}
+)
+"""Every statistic name `convergence_statistic` may watch.
+
+`H_ST` was missing here until this project's own multi-model engine
+review, 2026-09-04 (`FIM-51`/finding Gemini M-03/finding Grok P3-1):
+`fim.engine.FinalReport`/`replicate_summary` already report `H_ST`
+alongside every other differentiation measure, but a caller could not
+actually *watch* it for convergence — the one statistic reportable but
+not watchable, an inconsistency with no principled reason behind it.
+`fim.engine._report_statistic` is this set's own convergence-time
+counterpart; keep both in sync.
+"""
 
 
 @dataclass(frozen=True, slots=True)

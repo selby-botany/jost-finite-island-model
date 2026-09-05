@@ -364,8 +364,8 @@ p_0:
 
 ### convergence_statistic
 
-- **Type:** one of `D`, G<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, or a list of
-  several of them
+- **Type:** one of `D`, G<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>,
+  H<sub>ST</sub>, or a list of several of them
 - **Default:** `D`
 
 A list watches several statistics at once — each keeps its own independent
