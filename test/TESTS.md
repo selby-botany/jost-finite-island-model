@@ -14274,6 +14274,66 @@ point, "Why this kills the standard inference") is that `D` and
 exactly, with the same non-flaking, no-seed, no-calibration
 oracle as the migration test above.
 
+<a id="validation.test_simulator_equilibrium.test_engine_trajectory_matches_the_identity_recursion_gs_and_gd"></a>
+
+#### test\_engine\_trajectory\_matches\_the\_identity\_recursion\_gs\_and\_gd
+
+```python
+@pytest.mark.slow
+@pytest.mark.statistical
+def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None
+```
+
+The engine's `Gs`/`Gd` trajectory tracks the recursion, not just its fixed point.
+
+`R5` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
+claude-opus-5-gene-identity-recursion-fim-implications.md` — the
+first test in this file, and in the project, that compares the real
+engine directly against `_iterate_identities` rather than against an
+O(1/N) diffusion equilibrium (`_ONE_OVER_N_TOL`, used throughout the
+rest of this file, does not appear here at all: the recursion is
+exact for every finite `N`, at every generation, so nothing but
+sampling noise separates the two). Retains a real trajectory store
+(every other engine-level test in this file discards trajectories
+for speed) and reconstructs `ModelState` at several sampled
+generations directly from its own rows (`ModelState.from_rows`,
+`fim.reanalyze.reanalyze_trajectory`'s own file-backed counterpart's
+in-memory analog), computing `Gs`/`Gd` at each via `report_for_state`
+— the same public API a real re-analysis would use, not an internal
+shortcut.
+
+Sample generations are log-spaced (``3, 10, 30, 100, 300``), not
+linear: the interesting structure is in the first few hundred
+generations (Part 4.3 of the source document measured this same
+scenario's own identities still 1-4% below their fixed point at
+generations 200-300), and linear sampling of a longer run would put
+almost every point in the flat equilibrium region, reproducing
+`test_engine_reproduces_part_vi_equilibrium` at greater cost.
+`founding_condition_for_heterozygosity` (`R7`) starts every deme as
+an identical ancestral copy, so `Gs(0) = Gd(0)` exactly and the
+recursion's own starting point needs no separate argument about
+founding-condition mismatch — the whole reason `R7` exists.
+
+Statistical band: a genuine two-sided Student's-t confidence
+interval computed directly from this run's own 30 replicates
+(`confidence_interval`, the same machinery `replicate_summary`
+already uses for every other statistic), not a pre-characterized
+`_SIGMA_*`/`_band` constant the way every other statistical test in
+this file uses. Deliberately different, not an oversight: this
+comparison has no `_ONE_OVER_N_TOL`-shaped second error source to
+combine by triangle inequality (unlike every `_band`-using test
+here), so it reduces to an ordinary one-sample t-test against a
+known constant — and, seeded exactly like every other test in this
+file, the interval computed here is exactly as reproducible run to
+run as a pre-characterized one would be, not a source of new
+flakiness.
+
+Configuration: `N=100, m=0.01, mu=0.005, d=4`, matching Part 4.2's
+own worked scenario; 8 loci, 30 replicates, horizon 300, ancestral
+`H_S(0)=0.4`, seed 20260905. Runtime is roughly 40 seconds. Verified
+directly, not merely reasoned about, before being written here: all
+five sampled generations pass at this configuration.
+
 <a id="validation.test_simulator_equilibrium.test_engine_reproduces_part_vi_equilibrium"></a>
 
 #### test\_engine\_reproduces\_part\_vi\_equilibrium

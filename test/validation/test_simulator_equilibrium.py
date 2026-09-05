@@ -71,12 +71,14 @@ from numpy.typing import NDArray
 
 from fim.engine import EngineBackendChoice, fim, report_for_state
 from fim.model.allele import AlleleId
+from fim.model.initial import founding_condition_for_heterozygosity
 from fim.model.locus import LocusSpec
 from fim.model.params import InitialFrequencies, Migration, SimulationParams
 from fim.model.state import ModelState
 from fim.model.topology import dense_matrix_from_neighbors, stepping_stone_neighbors
-from fim.persistence.store import TrajectoryRow
+from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryRow
 from fim.statistics import (
+    confidence_interval,
     equilibrium_d,
     equilibrium_g_st,
     equilibrium_shannon_differentiation,
@@ -2047,6 +2049,139 @@ def test_identity_recursion_d_and_g_st_move_opposite_ways_in_mutation() -> None:
 
     assert d_values == sorted(d_values)
     assert g_st_values == sorted(g_st_values, reverse=True)
+
+
+@pytest.mark.slow
+@pytest.mark.statistical
+def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
+    """The engine's `Gs`/`Gd` trajectory tracks the recursion, not just its fixed point.
+
+    `R5` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
+    claude-opus-5-gene-identity-recursion-fim-implications.md` — the
+    first test in this file, and in the project, that compares the real
+    engine directly against `_iterate_identities` rather than against an
+    O(1/N) diffusion equilibrium (`_ONE_OVER_N_TOL`, used throughout the
+    rest of this file, does not appear here at all: the recursion is
+    exact for every finite `N`, at every generation, so nothing but
+    sampling noise separates the two). Retains a real trajectory store
+    (every other engine-level test in this file discards trajectories
+    for speed) and reconstructs `ModelState` at several sampled
+    generations directly from its own rows (`ModelState.from_rows`,
+    `fim.reanalyze.reanalyze_trajectory`'s own file-backed counterpart's
+    in-memory analog), computing `Gs`/`Gd` at each via `report_for_state`
+    — the same public API a real re-analysis would use, not an internal
+    shortcut.
+
+    Sample generations are log-spaced (``3, 10, 30, 100, 300``), not
+    linear: the interesting structure is in the first few hundred
+    generations (Part 4.3 of the source document measured this same
+    scenario's own identities still 1-4% below their fixed point at
+    generations 200-300), and linear sampling of a longer run would put
+    almost every point in the flat equilibrium region, reproducing
+    `test_engine_reproduces_part_vi_equilibrium` at greater cost.
+    `founding_condition_for_heterozygosity` (`R7`) starts every deme as
+    an identical ancestral copy, so `Gs(0) = Gd(0)` exactly and the
+    recursion's own starting point needs no separate argument about
+    founding-condition mismatch — the whole reason `R7` exists.
+
+    Statistical band: a genuine two-sided Student's-t confidence
+    interval computed directly from this run's own 30 replicates
+    (`confidence_interval`, the same machinery `replicate_summary`
+    already uses for every other statistic), not a pre-characterized
+    `_SIGMA_*`/`_band` constant the way every other statistical test in
+    this file uses. Deliberately different, not an oversight: this
+    comparison has no `_ONE_OVER_N_TOL`-shaped second error source to
+    combine by triangle inequality (unlike every `_band`-using test
+    here), so it reduces to an ordinary one-sample t-test against a
+    known constant — and, seeded exactly like every other test in this
+    file, the interval computed here is exactly as reproducible run to
+    run as a pre-characterized one would be, not a source of new
+    flakiness.
+
+    Configuration: `N=100, m=0.01, mu=0.005, d=4`, matching Part 4.2's
+    own worked scenario; 8 loci, 30 replicates, horizon 300, ancestral
+    `H_S(0)=0.4`, seed 20260905. Runtime is roughly 40 seconds. Verified
+    directly, not merely reasoned about, before being written here: all
+    five sampled generations pass at this configuration.
+    """
+    population_size = 100
+    m = 0.01
+    mu = 0.005
+    d = 4
+    heterozygosity_0 = 0.4
+    n_loci = 8
+    replicates = 30
+    horizon = 300
+    sample_generations = (3, 10, 30, 100, 300)
+
+    initial_frequencies = founding_condition_for_heterozygosity(
+        heterozygosity_0, deme_count=d, locus_count=n_loci
+    )
+    params = SimulationParams(
+        N=population_size,
+        m=m,
+        mu=mu,
+        d=d,
+        seed=20260905,
+        loci=tuple(LocusSpec(index + 1, 200) for index in range(n_loci)),
+        mutation_model="infinite_alleles",
+        max_generations=horizon,
+        convergence_window=4,
+        # Never actually satisfied by real stochastic data -- every
+        # replicate must run the full horizon so a row exists at every
+        # sampled generation, not stop early via the trailing-window
+        # criterion.
+        convergence_tolerance=0.0,
+        n_replicates=replicates,
+        replicate_tolerance=None,
+        initial_frequencies=initial_frequencies,
+    )
+    store = InMemoryTrajectoryStore()
+
+    output = fim(params.N, params.m, params.mu, params.d, params=params, store=store)
+
+    assert isinstance(output, tuple)
+    assert len(output) == replicates
+    for sample_generation in sample_generations:
+        expected_within, expected_between = _iterate_identities(
+            population_size=population_size,
+            m=m,
+            mu=mu,
+            d=d,
+            within_identity=1.0 - heterozygosity_0,
+            between_identity=1.0 - heterozygosity_0,
+            generations=sample_generation,
+        )
+        gs_values = []
+        gd_values = []
+        for result in output:
+            generation_rows = [
+                row
+                for row in store.read(result.run_id)
+                if row["generation"] == sample_generation
+            ]
+            state = ModelState.from_rows(generation_rows, params.loci)
+            report = report_for_state(
+                state,
+                params,
+                run_id=result.run_id,
+                converged=False,
+                reason="reanalysis",
+            )
+            gs_values.append(report["Gs"])
+            gd_values.append(report["Gd"])
+        gs_interval = confidence_interval(gs_values)
+        gd_interval = confidence_interval(gd_values)
+        assert gs_interval["low"] <= expected_within <= gs_interval["high"], (
+            f"Gs at generation {sample_generation}: recursion predicts "
+            f"{expected_within!r}, engine interval is "
+            f"[{gs_interval['low']!r}, {gs_interval['high']!r}]"
+        )
+        assert gd_interval["low"] <= expected_between <= gd_interval["high"], (
+            f"Gd at generation {sample_generation}: recursion predicts "
+            f"{expected_between!r}, engine interval is "
+            f"[{gd_interval['low']!r}, {gd_interval['high']!r}]"
+        )
 
 
 @pytest.mark.slow
