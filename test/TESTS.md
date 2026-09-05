@@ -2115,6 +2115,25 @@ def test_replicate_tolerance_can_stop_before_the_cap() -> None
 
 A generous tolerance stops as soon as `replicate_minimum` is reached.
 
+<a id="engine.test_engine.test_generational_adaptive_stop_discards_abandoned_lanes_own_rows"></a>
+
+#### test\_generational\_adaptive\_stop\_discards\_abandoned\_lanes\_own\_rows
+
+```python
+def test_generational_adaptive_stop_discards_abandoned_lanes_own_rows(
+) -> None
+```
+
+No abandoned lane's own rows survive an adaptive stop in a shared store.
+
+Regression test for `FIM-49`: `_build_replica_lane` writes each
+lane's own generation zero eagerly, before `run_batch`'s own
+generation-first loop ever runs — so even a lane the loop never
+gets to advance at all (never finalized, no `RunResult`) still has
+rows in `store` that need discarding, not just lanes that got
+partway through. Checked against `store.read` (the public
+contract), never `store._rows` directly.
+
 <a id="engine.test_engine.test_replicate_minimum_above_n_replicates_runs_to_completion"></a>
 
 #### test\_replicate\_minimum\_above\_n\_replicates\_runs\_to\_completion
@@ -2321,6 +2340,24 @@ Batched parallel replicates still honor `replicate_tolerance`.
 A batch can overshoot the exact minimal replicate count by at most
 ``max_workers - 1``, since the stopping decision is only applied once
 a whole concurrent batch has completed.
+
+<a id="engine.test_engine.test_parallel_batch_adaptive_stop_discards_overshoot_replicates_artifacts"></a>
+
+#### test\_parallel\_batch\_adaptive\_stop\_discards\_overshoot\_replicates\_artifacts
+
+```python
+def test_parallel_batch_adaptive_stop_discards_overshoot_replicates_artifacts(
+        tmp_path: Path) -> None
+```
+
+No overshoot replicate's own persisted file survives an adaptive stop.
+
+Regression test for `FIM-50`: with `max_workers=2` and a real,
+file-backed `store_factory`, an adaptive stop can leave up to
+`max_workers - 1` already-running "overshoot" replicates finishing
+after the stop decision — their own store artifacts must be
+discarded from disk, not left behind with no `RunResult` in the
+return value to account for them.
 
 <a id="engine.test_engine.test_max_workers_uses_store_factory_per_replicate"></a>
 

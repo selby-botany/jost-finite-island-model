@@ -104,7 +104,7 @@ import math
 import os
 import pickle
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, TypeAlias, TypedDict
@@ -1102,6 +1102,18 @@ def run_batch(
     reordering *when* one lane's generation is computed relative to
     another's never changes that lane's own result, only when a shared
     observer (the cross-replica monitor) gets to see it.
+
+    An adaptive stop's own abandoned lanes (every lane with no `result`
+    at the moment `outcome.stopped` fires — never finalized at all, or
+    finalized in the very same tick but not yet reached by the sorted
+    loop below when the stop was decided) have their own rows discarded
+    from `store` before returning, not left behind as orphaned data no
+    returned `RunResult` accounts for (this project's own multi-model
+    engine review, 2026-09-04, `FIM-49`/finding M-01/finding P2-1 case
+    1). `_build_replica_lane` already wrote each lane's own generation
+    zero eagerly, before this loop ever runs, so even a lane the
+    generation-first loop below never advances past that point still
+    has rows to discard, not merely lanes that got partway through.
     """
     lanes = [
         _build_replica_lane(params, replica_index, run_id, store, clock)
@@ -1129,6 +1141,9 @@ def run_batch(
                         stopped_so_far,
                         params.n_replicates,
                     )
+                    for abandoned_lane in lanes:
+                        if abandoned_lane.result is None:
+                            store.discard(abandoned_lane.run_id)
                     return tuple(
                         _require_lane_result(lane) for lane in lanes if lane.result
                     )
@@ -2128,6 +2143,25 @@ def _run_batch_parallel(
     by up to ``max_workers - 1`` extra replicates, since the whole batch
     a stopping replicate happened to fall in has already been started by
     the time the decision is made.
+
+    That overshoot's own compute is unavoidable — every future in the
+    current batch was submitted to a pool sized exactly `max_workers`,
+    so by the time a stop is decided, the rest have almost always
+    already started running, and `Future.cancel()` cannot interrupt a
+    worker process once it has (this project's own multi-model engine
+    review, 2026-09-04, `FIM-50`/finding P2-1 case 2, confirms the
+    compute cost is already documented and accepted). What is not
+    accepted: `store_factory`, when given, makes each overshoot
+    replicate's own worker write a real, persistent trajectory — those
+    artifacts used to be left behind with no `RunResult` in this
+    function's own return value to account for them, discoverable only
+    by a reader of the store noticing a `run_id` that does not belong to
+    any of the results actually returned. Now: `cancel()` is still tried
+    first (a genuine, if rare, win for a future that has not started
+    yet), then each overshoot future is waited on and, if `store_
+    factory` is real, its own artifacts are discarded — never left
+    orphaned regardless of whether the worker itself succeeded, raised,
+    or was actually cancelled in time.
     """
     results: list[RunResult] = []
     replicate_index = 0
@@ -2141,6 +2175,7 @@ def _run_batch_parallel(
                 params.n_replicates,
             )
             futures = {}
+            batch_run_ids = {}
             for index in range(replicate_index, batch_end):
                 replicate_params = replace(
                     params,
@@ -2152,6 +2187,7 @@ def _run_batch_parallel(
                     if run_id is not None
                     else deterministic_run_id(replicate_params)
                 )
+                batch_run_ids[index] = replicate_run_id
                 futures[index] = executor.submit(
                     _run_replicate_worker,
                     replicate_params,
@@ -2177,9 +2213,72 @@ def _run_batch_parallel(
                             params.n_replicates,
                             max_workers - 1,
                         )
+                        _discard_overshoot_replicates(
+                            futures,
+                            batch_run_ids,
+                            range(index + 1, batch_end),
+                            store_factory,
+                        )
                         return tuple(results)
             replicate_index = batch_end
     return tuple(results)
+
+
+def _discard_overshoot_replicates(
+    futures: Mapping[int, Future[RunResult]],
+    run_ids: Mapping[int, str],
+    overshoot_indices: range,
+    store_factory: Callable[[str], TrajectoryStore] | None,
+) -> None:
+    """Cancel where possible; wait for and discard the rest, artifacts included.
+
+    Split out of `_run_batch_parallel` so that function's own adaptive-
+    stop branch reads as one clear sequence of steps, not one more
+    layer of nested loops (`FIM-50`; see that function's own docstring
+    for the full reasoning this exists for).
+
+    Args:
+        futures: Every future submitted for the current batch, keyed by
+            replicate index — including the ones already collected;
+            only `overshoot_indices` are actually touched.
+        run_ids: Each `overshoot_indices` entry's own `replicate_run_id`,
+            computed once at submission time (never recomputed here, to
+            rule out any risk of it drifting from what the worker was
+            actually given).
+        overshoot_indices: The batch indices strictly after the one that
+            triggered the adaptive stop — never empty when this is worth
+            calling, but a `range` of length zero is a safe no-op either
+            way.
+        store_factory: `None` means no real, persistent store exists for
+            any replicate in this batch at all (every `RunResult` only
+            carries its own in-memory store, already covered by simply
+            never keeping a reference to the discarded `RunResult`) —
+            this function does nothing in that case beyond waiting on
+            the futures.
+    """
+    for index in overshoot_indices:
+        future = futures[index]
+        if future.cancel():
+            # Successfully cancelled before the worker process ever
+            # started — nothing ran, so nothing was ever written for
+            # this replicate to discard.
+            continue
+        try:
+            future.result()
+        except BaseException:
+            # An overshoot worker's own failure is not this function's
+            # to raise; it was never
+            # going into `results` either way, and its own store
+            # artifacts (if any were written before it failed) still
+            # need discarding below.
+            logger.warning(
+                "overshoot replicate %s raised after an adaptive stop; "
+                "discarding its own store artifacts, if any",
+                run_ids[index],
+                exc_info=True,
+            )
+        if store_factory is not None:
+            store_factory(run_ids[index]).discard(run_ids[index])
 
 
 def _run_replicate_worker(

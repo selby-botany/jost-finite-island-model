@@ -1751,6 +1751,18 @@ reordering *when* one lane's generation is computed relative to
 another's never changes that lane's own result, only when a shared
 observer (the cross-replica monitor) gets to see it.
 
+An adaptive stop's own abandoned lanes (every lane with no `result`
+at the moment `outcome.stopped` fires — never finalized at all, or
+finalized in the very same tick but not yet reached by the sorted
+loop below when the stop was decided) have their own rows discarded
+from `store` before returning, not left behind as orphaned data no
+returned `RunResult` accounts for (this project's own multi-model
+engine review, 2026-09-04, `FIM-49`/finding M-01/finding P2-1 case
+1). `_build_replica_lane` already wrote each lane's own generation
+zero eagerly, before this loop ever runs, so even a lane the
+generation-first loop below never advances past that point still
+has rows to discard, not merely lanes that got partway through.
+
 <a id="fim.engine.GenerationalBackend"></a>
 
 ## GenerationalBackend Objects

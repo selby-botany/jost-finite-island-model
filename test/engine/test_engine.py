@@ -1,8 +1,10 @@
 """End-to-end tests for the deterministic library engine."""
 
+import functools
 import statistics
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -19,6 +21,7 @@ from fim.engine import (
     _convergence_values,
     _convergence_values_vectorized,
     build_engine_backend,
+    deterministic_run_id,
     fim,
     replicate_summary,
     report_for_state,
@@ -30,6 +33,7 @@ from fim.model.operators import _population_sizes
 from fim.model.params import ConvergenceCombinator, SimulationParams
 from fim.model.state import ModelState
 from fim.model.vectorized import build_vectorized_state, vectorized_state_to_model_state
+from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import InMemoryTrajectoryStore
 
 
@@ -226,6 +230,51 @@ def test_replicate_tolerance_can_stop_before_the_cap() -> None:
     output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
     assert isinstance(output, tuple)
     assert len(output) == 3
+
+
+def test_generational_adaptive_stop_discards_abandoned_lanes_own_rows() -> None:
+    """No abandoned lane's own rows survive an adaptive stop in a shared store.
+
+    Regression test for `FIM-49`: `_build_replica_lane` writes each
+    lane's own generation zero eagerly, before `run_batch`'s own
+    generation-first loop ever runs — so even a lane the loop never
+    gets to advance at all (never finalized, no `RunResult`) still has
+    rows in `store` that need discarding, not just lanes that got
+    partway through. Checked against `store.read` (the public
+    contract), never `store._rows` directly.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 10,
+            "replicate_minimum": 3,
+            "replicate_tolerance": 1000.0,
+            "engine_backend": "generational",
+        }
+    )
+    store = InMemoryTrajectoryStore()
+
+    output = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        store=store,
+        clock=_clock,
+    )
+
+    assert isinstance(output, tuple)
+    assert len(output) == 3
+    returned_run_ids = {result.run_id for result in output}
+    every_possible_run_id = {
+        deterministic_run_id(replace(params, seed=params.seed + index, n_replicates=1))
+        for index in range(params.n_replicates)
+    }
+    still_present_run_ids = {
+        run_id for run_id in every_possible_run_id if list(store.read(run_id))
+    }
+    assert still_present_run_ids == returned_run_ids
 
 
 def test_replicate_minimum_above_n_replicates_runs_to_completion() -> None:
@@ -513,6 +562,58 @@ def test_max_workers_respects_adaptive_stopping_in_batches() -> None:
     output = fim(params.N, params.m, params.mu, params.d, params=params, max_workers=2)
     assert isinstance(output, tuple)
     assert 3 <= len(output) <= 4
+
+
+def _jsonl_store_factory(directory: Path, run_id: str) -> JSONLTrajectoryStore:
+    """Module-level, `functools.partial`-bindable `store_factory` for FIM-50.
+
+    A worker process must be able to pickle a reference to `store_
+    factory` itself, ruling out a closure or lambda; a test binds
+    `directory` to its own `tmp_path` via `functools.partial` before
+    passing this through, giving every replicate a real, file-backed
+    store on disk (unlike `_in_memory_store_factory` below, which
+    ignores `run_id` entirely and cannot show whether a specific run's
+    own artifacts survived).
+    """
+    return JSONLTrajectoryStore(directory / f"{run_id}.jsonl")
+
+
+def test_parallel_batch_adaptive_stop_discards_overshoot_replicates_artifacts(
+    tmp_path: Path,
+) -> None:
+    """No overshoot replicate's own persisted file survives an adaptive stop.
+
+    Regression test for `FIM-50`: with `max_workers=2` and a real,
+    file-backed `store_factory`, an adaptive stop can leave up to
+    `max_workers - 1` already-running "overshoot" replicates finishing
+    after the stop decision — their own store artifacts must be
+    discarded from disk, not left behind with no `RunResult` in the
+    return value to account for them.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 10,
+            "replicate_minimum": 3,
+            "replicate_tolerance": 1000.0,
+        }
+    )
+
+    output = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        max_workers=2,
+        store_factory=functools.partial(_jsonl_store_factory, tmp_path),
+    )
+
+    assert isinstance(output, tuple)
+    assert 3 <= len(output) <= 4
+    returned_run_ids = {result.run_id for result in output}
+    surviving_run_ids = {path.stem for path in tmp_path.glob("*.jsonl")}
+    assert surviving_run_ids == returned_run_ids
 
 
 def _in_memory_store_factory(run_id: str) -> InMemoryTrajectoryStore:
