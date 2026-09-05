@@ -253,6 +253,12 @@ def _jit_multinomial_via_binomial(
     first call, and cached at module level — every call after the first
     reuses the already-compiled function rather than recompiling.
 
+    `cache=True` additionally persists the compiled machine code to an
+    on-disk cache file, reused across separate processes too, not just
+    separate calls within one -- see `fim.model.vectorized._jit_
+    multinomial_rows_batched`'s own docstring for the measured benefit
+    and the confirmed-safe read-only-install fallback.
+
     Raises:
         ImportError: If `numba` is not installed.
     """
@@ -260,7 +266,9 @@ def _jit_multinomial_via_binomial(
     if _JIT_MULTINOMIAL_VIA_BINOMIAL is None:
         import numba  # noqa: PLC0415 -- lazy, optional-dependency import
 
-        _JIT_MULTINOMIAL_VIA_BINOMIAL = numba.jit(nogil=True)(_multinomial_via_binomial)
+        _JIT_MULTINOMIAL_VIA_BINOMIAL = numba.jit(nogil=True, cache=True)(
+            _multinomial_via_binomial
+        )
     return _JIT_MULTINOMIAL_VIA_BINOMIAL(rng, n, probabilities)
 
 
@@ -421,10 +429,14 @@ def _jit_multinomial_via_inversion_binomial(
     """`_multinomial_via_inversion_binomial_compiled`, JIT-compiled with `nogil=True`.
 
     Lazily imports and compiles `numba` exactly like `_jit_multinomial_
-    via_binomial` does, and for the same reason. `numba` is an optional
-    dependency (``pip install fim[jit]``) — only a caller that
-    explicitly requests `mutate(..., jit=True)` on a finite-alleles run
-    ever pays its import/compilation cost or needs it installed at all.
+    via_binomial` does, and for the same reason (including `cache=True`
+    -- see that function's own docstring, and `fim.model.vectorized.
+    _jit_multinomial_rows_batched`'s beyond it, for the measured
+    cross-process benefit and the confirmed-safe read-only-install
+    fallback). `numba` is an optional dependency (``pip install
+    fim[jit]``) — only a caller that explicitly requests `mutate(...,
+    jit=True)` on a finite-alleles run ever pays its import/compilation
+    cost or needs it installed at all.
 
     Raises:
         ImportError: If `numba` is not installed.
@@ -433,7 +445,7 @@ def _jit_multinomial_via_inversion_binomial(
     if _JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL is None:
         import numba  # noqa: PLC0415 -- lazy, optional-dependency import
 
-        _JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL = numba.jit(nogil=True)(
+        _JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL = numba.jit(nogil=True, cache=True)(
             _multinomial_via_inversion_binomial_compiled
         )
     return _JIT_MULTINOMIAL_VIA_INVERSION_BINOMIAL(rng, n, probabilities)
@@ -546,7 +558,16 @@ def _jit_mutate_targets_batched(
     cached at module level, independently of `fim.model.vectorized`'s
     own identically-named cache — two separate compiled artifacts of
     the same source, one per module, exactly as the duplication above
-    already implies.
+    already implies (`cache=True` below persists each to its own
+    on-disk file for the same reason — one per module, keyed by that
+    module's own name — not one shared file the two could collide
+    over).
+
+    `cache=True` additionally persists the compiled machine code across
+    separate processes, not just separate calls within one -- see
+    `fim.model.vectorized._jit_multinomial_rows_batched`'s own
+    docstring for the measured benefit and the confirmed-safe
+    read-only-install fallback.
 
     Raises:
         ImportError: If `numba` is not installed.
@@ -555,7 +576,9 @@ def _jit_mutate_targets_batched(
     if _JIT_MUTATE_TARGETS_BATCHED is None:
         import numba  # noqa: PLC0415 -- lazy, optional-dependency import
 
-        _JIT_MUTATE_TARGETS_BATCHED = numba.jit(nogil=True)(_mutate_targets_batched)
+        _JIT_MUTATE_TARGETS_BATCHED = numba.jit(nogil=True, cache=True)(
+            _mutate_targets_batched
+        )
     return _JIT_MUTATE_TARGETS_BATCHED(
         rng, sources, capacity, minted_mask, minted_list, minted_count, next_unminted
     )
@@ -734,7 +757,10 @@ def _jit_drift_counts_batched(
     not turn `drift` into a clear net win on its own; see
     `_drift_counts_batched`'s own docstring for the full, corrected
     measurement and why. Lazily imports and compiles `numba` exactly
-    like `_jit_multinomial_via_binomial` does, and for the same reason.
+    like `_jit_multinomial_via_binomial` does, and for the same reason
+    (including `cache=True` -- see that function's own docstring for
+    the measured cross-process benefit and the confirmed-safe
+    read-only-install fallback).
 
     Raises:
         ImportError: If `numba` is not installed.
@@ -743,7 +769,9 @@ def _jit_drift_counts_batched(
     if _JIT_DRIFT_COUNTS_BATCHED is None:
         import numba  # noqa: PLC0415 -- lazy, optional-dependency import
 
-        _JIT_DRIFT_COUNTS_BATCHED = numba.jit(nogil=True)(_drift_counts_batched)
+        _JIT_DRIFT_COUNTS_BATCHED = numba.jit(nogil=True, cache=True)(
+            _drift_counts_batched
+        )
     return _JIT_DRIFT_COUNTS_BATCHED(rng, ns, offsets, probabilities_flat)
 
 
@@ -1135,10 +1163,13 @@ def _jit_mutate_event_counts_batched(
     """`_mutate_event_counts_batched`, JIT-compiled with `nogil=True`.
 
     Lazily imports and compiles `numba` exactly like `_jit_drift_
-    counts_batched` does, and for the same reason. `numba` is an
-    optional dependency (``pip install fim[jit]``) — only a caller that
-    explicitly requests `mutate(..., jit=True)` ever pays its import/
-    compilation cost or needs it installed at all.
+    counts_batched` does, and for the same reason (including
+    `cache=True` -- see `_jit_multinomial_via_binomial`'s own docstring
+    for the measured cross-process benefit and the confirmed-safe
+    read-only-install fallback). `numba` is an optional dependency
+    (``pip install fim[jit]``) — only a caller that explicitly requests
+    `mutate(..., jit=True)` ever pays its import/compilation cost or
+    needs it installed at all.
 
     Raises:
         ImportError: If `numba` is not installed.
@@ -1147,7 +1178,7 @@ def _jit_mutate_event_counts_batched(
     if _JIT_MUTATE_EVENT_COUNTS_BATCHED is None:
         import numba  # noqa: PLC0415 -- lazy, optional-dependency import
 
-        _JIT_MUTATE_EVENT_COUNTS_BATCHED = numba.jit(nogil=True)(
+        _JIT_MUTATE_EVENT_COUNTS_BATCHED = numba.jit(nogil=True, cache=True)(
             _mutate_event_counts_batched
         )
     return _JIT_MUTATE_EVENT_COUNTS_BATCHED(rng, ns, ps)
@@ -1919,13 +1950,16 @@ def _jit_migrate_symmetric_blend(
     `_migrate_symmetric_blend_batched` (unlike `_drift_counts_batched`,
     which needs `_inversion_binomial`'s own algorithm and so duplicates
     it as a nested closure — see that function's own docstring for why),
-    so this compiles directly, the same lazy, cached, `nogil=True`
-    pattern as `_jit_multinomial_via_binomial`. `numba` is an optional
-    dependency (``pip install fim[jit]``), imported here and nowhere else
-    in this function — only a caller that explicitly requests
-    `migrate(..., jit=True)` on an eligible (scalar-rate, deterministic)
-    call ever pays its import/compilation cost or needs it installed at
-    all. Compiled once, on first call, and cached at module level.
+    so this compiles directly, the same lazy, cached, `nogil=True`,
+    `cache=True` pattern as `_jit_multinomial_via_binomial` (see that
+    function's own docstring for the measured cross-process benefit and
+    the confirmed-safe read-only-install fallback). `numba` is an
+    optional dependency (``pip install fim[jit]``), imported here and
+    nowhere else in this function — only a caller that explicitly
+    requests `migrate(..., jit=True)` on an eligible (scalar-rate,
+    deterministic) call ever pays its import/compilation cost or needs
+    it installed at all. Compiled once, on first call, and cached at
+    module level.
 
     Raises:
         ImportError: If `numba` is not installed.
@@ -1934,7 +1968,7 @@ def _jit_migrate_symmetric_blend(
     if _JIT_MIGRATE_SYMMETRIC_BLEND is None:
         import numba  # noqa: PLC0415 -- lazy, optional-dependency import
 
-        _JIT_MIGRATE_SYMMETRIC_BLEND = numba.jit(nogil=True)(
+        _JIT_MIGRATE_SYMMETRIC_BLEND = numba.jit(nogil=True, cache=True)(
             _migrate_symmetric_blend_batched
         )
     return _JIT_MIGRATE_SYMMETRIC_BLEND(

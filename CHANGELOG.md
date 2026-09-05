@@ -204,6 +204,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   95% between the two fixes (33.5M to 1.6M), with no change targeting
   `isinstance` directly — it was never its own cost, only the tax these
   two validation gauntlets carried.
+- Every JIT-compiled hot-path function (`fim.model.vectorized`'s and
+  `fim.model.operators`'s own lazy `numba.jit(nogil=True)` wrappers, 8
+  in total) now also passes `cache=True`, persisting the compiled
+  machine code to an on-disk file (keyed by module, qualified name, and
+  source hash) instead of recompiling on every fresh process. Measured
+  directly: a representative wrapper function's own first call dropped
+  from ~1.5s (cold compile) to ~0.37s (on-disk cache hit) in a second,
+  genuinely separate process. Confirmed to degrade gracefully, not
+  raise, when the cache cannot be written at all (a read-only install
+  location) — falls back to recompiling every time, exactly the
+  pre-`cache=True` behavior, never a new failure mode.
 
 ---
 
