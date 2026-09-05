@@ -10603,6 +10603,31 @@ vectorized_symmetric_zero_rate_returns_the_same_object`'s own
 docstring for why an object-identity check, not a value-equality
 one, is what actually proves this.
 
+<a id="model.test_vectorized.test_mutate_vectorized_builds_allele_ids_once_per_call_not_per_deme"></a>
+
+#### test\_mutate\_vectorized\_builds\_allele\_ids\_once\_per\_call\_not\_per\_deme
+
+```python
+def test_mutate_vectorized_builds_allele_ids_once_per_call_not_per_deme(
+        monkeypatch: pytest.MonkeyPatch,
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`np.arange(capacity)` is loop-invariant, so it is built once per call.
+
+Regression test for FIM-27: `event_sources = np.repeat(np.arange(
+capacity, dtype=np.int64), source_counts)` used to rebuild the same
+`capacity`-length array once per *active-mutating* deme — every one
+of them identical, since neither `capacity` nor anything else the
+array depends on changes across demes within one call. A high `rate`
+(`0.5`) across several demes makes it near-certain more than one
+deme actually mutates, so a fast path that still rebuilt this per
+deme would make this test's own call count come out above `1`.
+`np.arange` is patched globally for the duration of this call —
+safe here specifically because the JIT-compiled kernels this
+function also calls do not invoke NumPy's own Python-level `arange`
+symbol from inside compiled code.
+
 <a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly"></a>
 
 #### test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly

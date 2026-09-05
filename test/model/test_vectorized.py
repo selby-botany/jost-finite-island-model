@@ -19,6 +19,7 @@ own existing precedent (`test_drift_variance_matches_binomial_theory`).
 import math
 from collections.abc import Callable
 from dataclasses import replace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -319,6 +320,45 @@ def test_mutate_vectorized_zero_rate_returns_the_same_object(
 
     mutated_nonzero = mutate_vectorized(locus_state, sizes, 0.5, rng(1))
     assert mutated_nonzero is not locus_state
+
+
+def test_mutate_vectorized_builds_allele_ids_once_per_call_not_per_deme(
+    monkeypatch: pytest.MonkeyPatch,
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`np.arange(capacity)` is loop-invariant, so it is built once per call.
+
+    Regression test for FIM-27: `event_sources = np.repeat(np.arange(
+    capacity, dtype=np.int64), source_counts)` used to rebuild the same
+    `capacity`-length array once per *active-mutating* deme — every one
+    of them identical, since neither `capacity` nor anything else the
+    array depends on changes across demes within one call. A high `rate`
+    (`0.5`) across several demes makes it near-certain more than one
+    deme actually mutates, so a fast path that still rebuilt this per
+    deme would make this test's own call count come out above `1`.
+    `np.arange` is patched globally for the duration of this call —
+    safe here specifically because the JIT-compiled kernels this
+    function also calls do not invoke NumPy's own Python-level `arange`
+    symbol from inside compiled code.
+    """
+    state = _finite_alleles_state(deme_count=6)
+    sizes = np.array([500, 500, 500, 500, 500, 500], dtype=np.int64)
+    vectorized = build_vectorized_state(state)
+    locus_state = vectorized.locus_states[0]
+
+    call_count = 0
+    real_arange = np.arange
+
+    def _counting_arange(*args: Any, **kwargs: Any) -> Any:
+        nonlocal call_count
+        call_count += 1
+        return real_arange(*args, **kwargs)
+
+    monkeypatch.setattr(np, "arange", _counting_arange)
+
+    mutate_vectorized(locus_state, sizes, 0.5, rng(1))
+
+    assert call_count == 1
 
 
 def test_drift_vectorized_matches_dict_based_drift_exactly(

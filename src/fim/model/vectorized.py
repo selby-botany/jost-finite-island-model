@@ -1015,6 +1015,22 @@ def mutate_vectorized(
     next_unminted = locus_state.next_unminted
     capacity = locus_state.capacity
 
+    # Hoisted out of the deme loop below, not rebuilt once per active-
+    # mutating deme: `capacity` (hence `allele_ids`'s own range) and the
+    # one-element `event_count_buffer` `_jit_multinomial_rows_batched`
+    # reads from are both loop-invariant across every deme this
+    # generation, at this locus — neither depends on `deme`, `rng`, or
+    # anything computed inside the loop. `event_count_buffer` is
+    # overwritten in place each iteration rather than replaced with a
+    # freshly allocated one-element array; `_jit_multinomial_rows_
+    # batched` only ever reads it, never keeps a reference past its own
+    # call, so reuse here changes no output, only how many small
+    # allocations a generation with many active-mutating demes pays for
+    # (this project's own multi-model engine review, 2026-09-04,
+    # `FIM-27`/`FIM-28`).
+    allele_ids = np.arange(capacity, dtype=np.int64)
+    event_count_buffer = np.empty(1, dtype=np.int64)
+
     for deme in range(sizes.shape[0]):
         size = int(sizes[deme])
         event_count = _inversion_binomial(rng, size, rate)
@@ -1031,13 +1047,14 @@ def mutate_vectorized(
         # this call site did exactly that) is not equivalent, down to
         # the last bit.
         source_row = locus_state.frequencies[deme : deme + 1]
+        event_count_buffer[0] = event_count
         source_counts = _jit_multinomial_rows_batched(
             rng,
-            np.array([event_count], dtype=np.int64),
+            event_count_buffer,
             source_row,
             _present_only_row_sums(source_row),
         )[0]
-        event_sources = np.repeat(np.arange(capacity, dtype=np.int64), source_counts)
+        event_sources = np.repeat(allele_ids, source_counts)
 
         targets, minted_mask, minted_list, minted_count, next_unminted = (
             _jit_mutate_targets_batched(
