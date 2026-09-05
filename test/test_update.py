@@ -35,6 +35,13 @@ class _ReleaseResponse:
         # empty `Message()` is what a header-less real response carries.
         HTTPError("https://example.invalid", 500, "bad", Message(), None),
         URLError("offline"),
+        # Regression case for FIM-04: `except (HTTPError, URLError)` used
+        # to let a raw `TimeoutError` (a request exceeding `timeout=5`)
+        # escape this function uncaught, breaking its own documented
+        # `RuntimeError` contract — `TimeoutError` is neither `HTTPError`
+        # nor `URLError`, but is an `OSError` subclass, same as both of
+        # those.
+        TimeoutError("timed out"),
     ],
 )
 def test_fetch_latest_release_wraps_network_errors(
@@ -47,6 +54,36 @@ def test_fetch_latest_release_wraps_network_errors(
         raise error
 
     monkeypatch.setattr(update, "urlopen", fail)
+    with pytest.raises(RuntimeError, match="update check failed"):
+        update.fetch_latest_release()
+
+
+class _MalformedJsonResponse:
+    """A response whose body is not valid JSON at all."""
+
+    def __enter__(self) -> _MalformedJsonResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self, *_args: object) -> bytes:
+        return b"not json at all {"
+
+
+def test_fetch_latest_release_wraps_malformed_json_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A response body that is not valid JSON becomes the documented contract.
+
+    Regression test for FIM-04: `except (HTTPError, URLError)` used to
+    let a `json.JSONDecodeError` escape this function uncaught for a
+    genuinely malformed response body, rather than this function's own
+    documented `RuntimeError` contract.
+    """
+    monkeypatch.setattr(
+        update, "urlopen", lambda _request, **_kwargs: _MalformedJsonResponse()
+    )
     with pytest.raises(RuntimeError, match="update check failed"):
         update.fetch_latest_release()
 

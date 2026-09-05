@@ -9978,6 +9978,27 @@ means a genuinely unreachable network fails quickly and reports an
 error, rather than leaving the caller waiting indefinitely for a
 response that may never come.
 
+Every failure mode this function can actually hit — a DNS/connection
+failure, an HTTP error status, a request that exceeds `timeout`, or
+a response that is not valid JSON — is caught below and re-raised
+as one `RuntimeError`, this function's own documented failure
+contract (see `Raises`, below). `except (HTTPError, URLError)` used
+to be this function's own exception clause; both a raw
+`TimeoutError` and a malformed, non-JSON response body could still
+escape uncaught, breaking that contract and, downstream, `fim.gui.
+app`'s own "Check for updates" handler, which catches only the
+documented `RuntimeError` (this project's own multi-model engine
+review, 2026-09-04, `FIM-04`/finding Kimi-FIM-04). `OSError` alone
+already covers `URLError`/`HTTPError`/`TimeoutError` — all three
+are `OSError` subclasses in Python's own standard library — so
+this is strictly a widening of what was already caught, not a new,
+independent case.
+
+**Raises**:
+
+- `RuntimeError` - On any network, HTTP, timeout, or malformed-
+  response failure.
+
 <a id="fim.update.latest_release"></a>
 
 #### latest\_release

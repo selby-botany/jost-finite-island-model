@@ -1068,6 +1068,13 @@ Unit tests for the shared, explicit, opt-in release-check logic.
         # empty `Message()` is what a header-less real response carries.
         HTTPError("https://example.invalid", 500, "bad", Message(), None),
         URLError("offline"),
+        # Regression case for FIM-04: `except (HTTPError, URLError)` used
+        # to let a raw `TimeoutError` (a request exceeding `timeout=5`)
+        # escape this function uncaught, breaking its own documented
+        # `RuntimeError` contract — `TimeoutError` is neither `HTTPError`
+        # nor `URLError`, but is an `OSError` subclass, same as both of
+        # those.
+        TimeoutError("timed out"),
     ],
 )
 def test_fetch_latest_release_wraps_network_errors(
@@ -1075,6 +1082,22 @@ def test_fetch_latest_release_wraps_network_errors(
 ```
 
 Network failures become the documented runtime error contract.
+
+<a id="test.test_update.test_fetch_latest_release_wraps_malformed_json_response"></a>
+
+#### test\_fetch\_latest\_release\_wraps\_malformed\_json\_response
+
+```python
+def test_fetch_latest_release_wraps_malformed_json_response(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A response body that is not valid JSON becomes the documented contract.
+
+Regression test for FIM-04: `except (HTTPError, URLError)` used to
+let a `json.JSONDecodeError` escape this function uncaught for a
+genuinely malformed response body, rather than this function's own
+documented `RuntimeError` contract.
 
 <a id="test.test_update.test_fetch_latest_release_rejects_non_object_payload"></a>
 

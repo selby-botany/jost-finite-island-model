@@ -27,7 +27,6 @@ import json
 import logging
 from collections.abc import Callable, Mapping
 from typing import Any, TypeAlias
-from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from fim import __version__
@@ -77,6 +76,26 @@ def fetch_latest_release() -> Mapping[str, Any]:
     means a genuinely unreachable network fails quickly and reports an
     error, rather than leaving the caller waiting indefinitely for a
     response that may never come.
+
+    Every failure mode this function can actually hit — a DNS/connection
+    failure, an HTTP error status, a request that exceeds `timeout`, or
+    a response that is not valid JSON — is caught below and re-raised
+    as one `RuntimeError`, this function's own documented failure
+    contract (see `Raises`, below). `except (HTTPError, URLError)` used
+    to be this function's own exception clause; both a raw
+    `TimeoutError` and a malformed, non-JSON response body could still
+    escape uncaught, breaking that contract and, downstream, `fim.gui.
+    app`'s own "Check for updates" handler, which catches only the
+    documented `RuntimeError` (this project's own multi-model engine
+    review, 2026-09-04, `FIM-04`/finding Kimi-FIM-04). `OSError` alone
+    already covers `URLError`/`HTTPError`/`TimeoutError` — all three
+    are `OSError` subclasses in Python's own standard library — so
+    this is strictly a widening of what was already caught, not a new,
+    independent case.
+
+    Raises:
+        RuntimeError: On any network, HTTP, timeout, or malformed-
+            response failure.
     """
     request = Request(
         RELEASES_API,
@@ -89,7 +108,7 @@ def fetch_latest_release() -> Mapping[str, Any]:
     try:
         with urlopen(request, timeout=5) as response:
             payload = json.load(response)
-    except (HTTPError, URLError) as error:
+    except (OSError, json.JSONDecodeError) as error:
         logger.warning("update check request to %s failed: %s", RELEASES_API, error)
         raise RuntimeError(f"update check failed: {error}") from error
     if not isinstance(payload, Mapping):
