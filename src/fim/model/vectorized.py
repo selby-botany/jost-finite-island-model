@@ -717,6 +717,19 @@ def migrate_vectorized_symmetric(
     Returns:
         This locus's own post-migration state.
     """
+    if sizes.shape[0] == 1:
+        # No "other" deme to blend with -- `other_weight` below would be
+        # exactly `0.0`, producing a silent `NaN` rather than a raised
+        # error (unlike the dict-based `_migrate_symmetric`, which at
+        # least fails loudly here). Migration among one deme is a
+        # well-defined no-op, the identical identity `_migrate_symmetric`
+        # itself now returns for this same input (this project's own
+        # multi-model engine review, 2026-09-04, found the two backends
+        # disagreeing on how this case fails —
+        # `FIM-02`/finding C-06/finding P2-2). Unreachable via a
+        # validated `SimulationParams` (`d >= 2`), but this function is
+        # public.
+        return locus_state
     frequencies = locus_state.frequencies
     sizes_f64 = sizes.astype(np.float64)
     total_size = float(sizes_f64.sum())
@@ -1071,7 +1084,20 @@ def drift_vectorized(
     module's own docstring, and `_multinomial_rows_batched`'s own, for
     exactly what property that gives this function relative to
     `drift`'s own output for the same seed.
+
+    Raises:
+        ValueError: If any deme's own size is not a positive integer —
+            `counts / sizes[:, None]` below would otherwise divide by
+            `0` for that deme, producing a silent `NaN` rather than a
+            raised error (this project's own multi-model engine review,
+            2026-09-04, `FIM-15`). `fim.model.operators.drift`'s own
+            dict-based path already rejects this via `_population_
+            sizes`; unreachable via a validated `SimulationParams`
+            (every `N` value must be a positive integer), but this
+            function is public and takes `sizes` directly, unvalidated.
     """
+    if np.any(sizes <= 0):
+        raise ValueError("drift_vectorized requires every deme size to be at least 1")
     counts = _jit_multinomial_rows_batched(rng, sizes, locus_state.frequencies)
     return replace(locus_state, frequencies=counts / sizes[:, None])
 

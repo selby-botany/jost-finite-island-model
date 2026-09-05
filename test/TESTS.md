@@ -7331,6 +7331,26 @@ def test_migrate_zero_is_identity() -> None
 
 No migration leaves all frequencies unchanged.
 
+<a id="model.test_operators.test_migrate_single_deme_is_identity"></a>
+
+#### test\_migrate\_single\_deme\_is\_identity
+
+```python
+def test_migrate_single_deme_is_identity() -> None
+```
+
+A single deme has no "other" pool to migrate from — a well-defined no-op.
+
+Before this guard existed, `_migrate_symmetric`'s own
+`other_weight = total_size - destination_size` was exactly `0.0`
+whenever `deme_count == 1`, raising `ZeroDivisionError` — one of
+three different failure modes this project's own multi-model engine
+review, 2026-09-04, found across the three backends for the same
+input (`FIM-02`/finding C-06/finding P2-2); `migrate_vectorized_
+symmetric` (`fim.model.vectorized`) has its own matching test.
+Unreachable via a validated `SimulationParams` (`d >= 2`), but
+`migrate`/`ModelState` are public.
+
 <a id="model.test_operators.test_migrate_one_replaces_each_deme_with_other_pool"></a>
 
 #### test\_migrate\_one\_replaces\_each\_deme\_with\_other\_pool
@@ -9737,6 +9757,26 @@ sizes))` is the *general* path's own answer for this same scalar-
 rate case, computed through the `(d, d)` matrix this function exists
 to avoid building at all.
 
+<a id="model.test_vectorized.test_migrate_vectorized_symmetric_single_deme_is_identity"></a>
+
+#### test\_migrate\_vectorized\_symmetric\_single\_deme\_is\_identity
+
+```python
+def test_migrate_vectorized_symmetric_single_deme_is_identity() -> None
+```
+
+A single deme has no "other" pool to migrate from — a well-defined no-op.
+
+Before this guard existed, `other_weight = total_size - sizes_f64`
+was exactly `0.0` whenever there was only one deme, dividing the
+pool computation by zero and producing a silent `NaN` — one of two
+different failure modes this project's own multi-model engine
+review, 2026-09-04, found across the dict and vector backends for
+the same input (`FIM-02`/finding C-06/finding P2-2); `fim.model.
+operators.migrate` has its own matching test. Unreachable via a
+validated `SimulationParams` (`d >= 2`), but this function is
+public.
+
 <a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly"></a>
 
 #### test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly
@@ -9762,6 +9802,26 @@ statistical band — the counts underneath are literally the same
 integers, not just close. This is the actual, concrete proof the
 whole unified-RNG effort exists to deliver, not yet attempted
 before this test.
+
+<a id="model.test_vectorized.test_drift_vectorized_rejects_a_zero_size_deme"></a>
+
+#### test\_drift\_vectorized\_rejects\_a\_zero\_size\_deme
+
+```python
+def test_drift_vectorized_rejects_a_zero_size_deme() -> None
+```
+
+A zero-size deme is a named `ValueError`, not a silent `NaN`.
+
+`counts / sizes[:, None]` divides by `0` for that deme whenever
+`sizes` contains a non-positive entry — `fim.model.operators.drift`'s
+own dict-based path already rejects this via `_population_sizes`;
+this function took `sizes` directly, unvalidated (this project's own
+multi-model engine review, 2026-09-04, `FIM-15`). Unreachable via a
+validated `SimulationParams` (every `N` value must be a positive
+integer), but this function is public. No `numba` needed to exercise
+this: the guard raises before `_jit_multinomial_rows_batched` is
+ever called.
 
 <a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly_with_partial_capacity"></a>
 

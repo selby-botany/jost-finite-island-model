@@ -7082,6 +7082,18 @@ module's own docstring, and `_multinomial_rows_batched`'s own, for
 exactly what property that gives this function relative to
 `drift`'s own output for the same seed.
 
+**Raises**:
+
+- `ValueError` - If any deme's own size is not a positive integer —
+  `counts / sizes[:, None]` below would otherwise divide by
+  `0` for that deme, producing a silent `NaN` rather than a
+  raised error (this project's own multi-model engine review,
+  2026-09-04, `FIM-15`). `fim.model.operators.drift`'s own
+  dict-based path already rejects this via `_population_
+  sizes`; unreachable via a validated `SimulationParams`
+  (every `N` value must be a positive integer), but this
+  function is public and takes `sizes` directly, unvalidated.
+
 <a id="fim.model.vectorized.step_vectorized"></a>
 
 #### step\_vectorized

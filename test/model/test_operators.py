@@ -58,6 +58,26 @@ def test_migrate_zero_is_identity() -> None:
     assert migrate(_state(), 0.0) == _state()
 
 
+def test_migrate_single_deme_is_identity() -> None:
+    """A single deme has no "other" pool to migrate from — a well-defined no-op.
+
+    Before this guard existed, `_migrate_symmetric`'s own
+    `other_weight = total_size - destination_size` was exactly `0.0`
+    whenever `deme_count == 1`, raising `ZeroDivisionError` — one of
+    three different failure modes this project's own multi-model engine
+    review, 2026-09-04, found across the three backends for the same
+    input (`FIM-02`/finding C-06/finding P2-2); `migrate_vectorized_
+    symmetric` (`fim.model.vectorized`) has its own matching test.
+    Unreachable via a validated `SimulationParams` (`d >= 2`), but
+    `migrate`/`ModelState` are public.
+    """
+    single_deme_state = ModelState(
+        loci=(LocusSpec(1, 100),),
+        frequencies=(({AlleleId(0): 0.8, AlleleId(1): 0.2},),),
+    )
+    assert migrate(single_deme_state, 0.35) == single_deme_state
+
+
 def test_migrate_one_replaces_each_deme_with_other_pool() -> None:
     """At m=1, two demes exchange their complete frequency vectors."""
     migrated = migrate(_state(), 1.0)

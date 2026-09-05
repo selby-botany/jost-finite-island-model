@@ -207,6 +207,31 @@ def test_migrate_vectorized_symmetric_matches_the_dense_matrix_path() -> None:
     )
 
 
+def test_migrate_vectorized_symmetric_single_deme_is_identity() -> None:
+    """A single deme has no "other" pool to migrate from — a well-defined no-op.
+
+    Before this guard existed, `other_weight = total_size - sizes_f64`
+    was exactly `0.0` whenever there was only one deme, dividing the
+    pool computation by zero and producing a silent `NaN` — one of two
+    different failure modes this project's own multi-model engine
+    review, 2026-09-04, found across the dict and vector backends for
+    the same input (`FIM-02`/finding C-06/finding P2-2); `fim.model.
+    operators.migrate` has its own matching test. Unreachable via a
+    validated `SimulationParams` (`d >= 2`), but this function is
+    public.
+    """
+    state = _finite_alleles_state(deme_count=1)
+    sizes = np.array([25], dtype=np.int64)
+
+    vectorized = build_vectorized_state(state)
+    migrated = migrate_vectorized_symmetric(vectorized.locus_states[0], 0.35, sizes)
+
+    np.testing.assert_array_equal(
+        migrated.frequencies, vectorized.locus_states[0].frequencies
+    )
+    assert not np.any(np.isnan(migrated.frequencies))
+
+
 def test_drift_vectorized_matches_dict_based_drift_exactly(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
@@ -248,6 +273,27 @@ def test_drift_vectorized_matches_dict_based_drift_exactly(
             assert set(expected_map) == set(observed_map), (seed, deme)
             for allele_id, value in expected_map.items():
                 assert observed_map[allele_id] == value, (seed, deme, allele_id)
+
+
+def test_drift_vectorized_rejects_a_zero_size_deme() -> None:
+    """A zero-size deme is a named `ValueError`, not a silent `NaN`.
+
+    `counts / sizes[:, None]` divides by `0` for that deme whenever
+    `sizes` contains a non-positive entry — `fim.model.operators.drift`'s
+    own dict-based path already rejects this via `_population_sizes`;
+    this function took `sizes` directly, unvalidated (this project's own
+    multi-model engine review, 2026-09-04, `FIM-15`). Unreachable via a
+    validated `SimulationParams` (every `N` value must be a positive
+    integer), but this function is public. No `numba` needed to exercise
+    this: the guard raises before `_jit_multinomial_rows_batched` is
+    ever called.
+    """
+    state = _finite_alleles_state(deme_count=2, capacity_length=1)
+    sizes = np.array([10, 0], dtype=np.int64)
+    vectorized = build_vectorized_state(state)
+
+    with pytest.raises(ValueError, match="at least 1"):
+        drift_vectorized(vectorized.locus_states[0], sizes, np.random.default_rng(0))
 
 
 def test_drift_vectorized_matches_dict_based_drift_exactly_with_partial_capacity(

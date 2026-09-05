@@ -2063,7 +2063,19 @@ def _migrate_symmetric(
             (`20260901-claude-sonnet-5-fim-engine-backend-factory-
             design.md` §10 item 10e's own phased plan, stage 1).
     """
-    if rate == 0.0:
+    # `rate == 0.0` (nothing to blend) and `state.deme_count == 1` (no
+    # "other" deme to blend *with* — `other_weight` below would be
+    # exactly `0.0`, raising `ZeroDivisionError`) both make migration a
+    # well-defined no-op, the identical identity this function already
+    # returns for the first case; `deme_count == 1` added here for the
+    # second, previously unguarded one — this project's own multi-model
+    # engine review, 2026-09-04, found the three backends disagreeing on
+    # how this case fails (`ZeroDivisionError` here, silent `NaN` in
+    # `migrate_vectorized_symmetric`) rather than agreeing this is a
+    # no-op (`FIM-02`/finding C-06/finding P2-2). Unreachable via a
+    # validated `SimulationParams` (`d >= 2`), but `migrate`/`ModelState`
+    # are public.
+    if rate == 0.0 or state.deme_count == 1:
         return tuple(
             tuple(dict(frequency_map) for frequency_map in deme)
             for deme in state.frequencies
