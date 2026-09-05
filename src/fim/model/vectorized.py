@@ -828,6 +828,23 @@ def migrate_vectorized_symmetric(
         # validated `SimulationParams` (`d >= 2`), but this function is
         # public.
         return locus_state
+    if rate == 0.0:
+        # `_migrate_symmetric` (the dict-based path) already short-
+        # circuits this identical case; this array-native path did not,
+        # so `m=0` still built `global_mass`/`pool`/`blended` -- three
+        # full `(d, capacity)`-shaped temporaries computed and then
+        # discarded, on every generation of every zero-migration run (a
+        # standard, not edge, configuration: isolating one evolutionary
+        # force at a time is the ordinary way to study any one of them).
+        # Safe to return `locus_state` unchanged, not a copy: nothing in
+        # this module ever mutates a `VectorizedLocusState`'s own arrays
+        # in place without copying first (`mutate_vectorized`'s own
+        # `.copy()` calls, `drift_vectorized`'s own fresh `counts /
+        # sizes[:, None]` array) — the same passthrough contract the
+        # `sizes.shape[0] == 1` case, just above, already relies on
+        # (this project's own multi-model engine review, 2026-09-04,
+        # `FIM-53`).
+        return locus_state
     frequencies = locus_state.frequencies
     sizes_f64 = sizes.astype(np.float64)
     total_size = float(sizes_f64.sum())
@@ -953,6 +970,20 @@ def mutate_vectorized(
     `test/model/test_vectorized.py`), across 30 seeds and a deliberately
     non-saturated capacity, not assumed from the first two fixes alone.
     """
+    if rate == 0.0:
+        # `_inversion_binomial` already returns `0` at `p <= 0.0` with no
+        # draw consumed, so the per-deme loop below already always
+        # `continue`s immediately for every deme at `rate = 0.0` -- but
+        # only *after* three full-array copies (`frequencies`, `minted_
+        # mask`, `minted_list`) had already been paid for, unconditionally,
+        # above it. `mutate`'s own dict-based path pays no such cost for
+        # `mu = 0` (nothing to copy there in the first place). Safe to
+        # return `locus_state` unchanged, not a copy: see `migrate_
+        # vectorized_symmetric`'s own identical fast path, just above,
+        # for the shared "nothing downstream mutates in place without
+        # copying first" contract this relies on (this project's own
+        # multi-model engine review, 2026-09-04, `FIM-53`).
+        return locus_state
     new_frequencies = locus_state.frequencies.copy()
     minted_mask = locus_state.minted_mask.copy()
     minted_list = locus_state.minted_list.copy()

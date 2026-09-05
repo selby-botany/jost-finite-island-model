@@ -232,6 +232,62 @@ def test_migrate_vectorized_symmetric_single_deme_is_identity() -> None:
     assert not np.any(np.isnan(migrated.frequencies))
 
 
+def test_migrate_vectorized_symmetric_zero_rate_returns_the_same_object() -> None:
+    """`rate=0.0` allocates nothing at all — an identity check, not a value one.
+
+    Regression test for FIM-53: `migrate_vectorized_symmetric` used to
+    compute `global_mass`/`pool`/`blended` — three full `(d, capacity)`-
+    shaped temporaries — even at `rate=0.0`, unlike the dict-based
+    `_migrate_symmetric`, which already short-circuits this identical
+    case. A plain value-equality assertion (`migrated.frequencies ==
+    original.frequencies`) would pass even if this fast path silently
+    started copying again — only an object-identity (`is`) check
+    actually proves no allocation happened, the "allocation... not just
+    outcome-equivalence" regression this finding specifically asks for.
+    A genuinely nonzero rate, checked alongside it, must still return a
+    distinct object — proving the fast path is conditional, not always
+    a passthrough.
+    """
+    state = _finite_alleles_state(deme_count=4)
+    sizes = np.array([25, 25, 25, 25], dtype=np.int64)
+    vectorized = build_vectorized_state(state)
+    locus_state = vectorized.locus_states[0]
+
+    migrated = migrate_vectorized_symmetric(locus_state, 0.0, sizes)
+    assert migrated is locus_state
+
+    migrated_nonzero = migrate_vectorized_symmetric(locus_state, 0.1, sizes)
+    assert migrated_nonzero is not locus_state
+
+
+def test_mutate_vectorized_zero_rate_returns_the_same_object(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`rate=0.0` allocates nothing at all — an identity check, not a value one.
+
+    Regression test for FIM-53: `mutate_vectorized` already skipped its
+    own expensive per-deme sampling at `rate=0.0` (`_inversion_binomial`
+    returns `0` with no draw consumed at `p <= 0.0`, so the per-deme
+    loop's own `if event_count == 0: continue` always fired immediately)
+    — but only *after* three full-array copies (`frequencies`, `minted_
+    mask`, `minted_list`) had already been paid for unconditionally,
+    every generation of every zero-mutation run. See `test_migrate_
+    vectorized_symmetric_zero_rate_returns_the_same_object`'s own
+    docstring for why an object-identity check, not a value-equality
+    one, is what actually proves this.
+    """
+    state = _finite_alleles_state(deme_count=4)
+    sizes = np.array([25, 25, 25, 25], dtype=np.int64)
+    vectorized = build_vectorized_state(state)
+    locus_state = vectorized.locus_states[0]
+
+    mutated = mutate_vectorized(locus_state, sizes, 0.0, rng(1))
+    assert mutated is locus_state
+
+    mutated_nonzero = mutate_vectorized(locus_state, sizes, 0.5, rng(1))
+    assert mutated_nonzero is not locus_state
+
+
 def test_drift_vectorized_matches_dict_based_drift_exactly(
     rng: Callable[[int], np.random.Generator],
 ) -> None:

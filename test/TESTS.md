@@ -10537,6 +10537,52 @@ operators.migrate` has its own matching test. Unreachable via a
 validated `SimulationParams` (`d >= 2`), but this function is
 public.
 
+<a id="model.test_vectorized.test_migrate_vectorized_symmetric_zero_rate_returns_the_same_object"></a>
+
+#### test\_migrate\_vectorized\_symmetric\_zero\_rate\_returns\_the\_same\_object
+
+```python
+def test_migrate_vectorized_symmetric_zero_rate_returns_the_same_object(
+) -> None
+```
+
+`rate=0.0` allocates nothing at all — an identity check, not a value one.
+
+Regression test for FIM-53: `migrate_vectorized_symmetric` used to
+compute `global_mass`/`pool`/`blended` — three full `(d, capacity)`-
+shaped temporaries — even at `rate=0.0`, unlike the dict-based
+`_migrate_symmetric`, which already short-circuits this identical
+case. A plain value-equality assertion (`migrated.frequencies ==
+original.frequencies`) would pass even if this fast path silently
+started copying again — only an object-identity (`is`) check
+actually proves no allocation happened, the "allocation... not just
+outcome-equivalence" regression this finding specifically asks for.
+A genuinely nonzero rate, checked alongside it, must still return a
+distinct object — proving the fast path is conditional, not always
+a passthrough.
+
+<a id="model.test_vectorized.test_mutate_vectorized_zero_rate_returns_the_same_object"></a>
+
+#### test\_mutate\_vectorized\_zero\_rate\_returns\_the\_same\_object
+
+```python
+def test_mutate_vectorized_zero_rate_returns_the_same_object(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`rate=0.0` allocates nothing at all — an identity check, not a value one.
+
+Regression test for FIM-53: `mutate_vectorized` already skipped its
+own expensive per-deme sampling at `rate=0.0` (`_inversion_binomial`
+returns `0` with no draw consumed at `p <= 0.0`, so the per-deme
+loop's own `if event_count == 0: continue` always fired immediately)
+— but only *after* three full-array copies (`frequencies`, `minted_
+mask`, `minted_list`) had already been paid for unconditionally,
+every generation of every zero-mutation run. See `test_migrate_
+vectorized_symmetric_zero_rate_returns_the_same_object`'s own
+docstring for why an object-identity check, not a value-equality
+one, is what actually proves this.
+
 <a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly"></a>
 
 #### test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly
