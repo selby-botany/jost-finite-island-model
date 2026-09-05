@@ -45,7 +45,7 @@ only whether two entries share the same identity or not.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from math import exp, expm1, fsum, isfinite, log, sqrt
+from math import exp, expm1, fsum, inf, isfinite, log, sqrt
 from numbers import Real
 from operator import index as integer_index
 from typing import Any, TypeAlias, TypedDict, cast
@@ -263,14 +263,45 @@ def _hill(frequencies: Mapping[int, float], order: float) -> float:
     limit instead (`order = 0` counts alleles outright; `order = 1` is
     the exponential of Shannon entropy, see `_entropy`, above) — the
     ordinary case just below handles every other, non-limiting order.
+
+    Computed in log space, not as `fsum(frequency**order for ...)`
+    directly: for a high enough `order` (roughly 1100 and up, well
+    within a caller-suppliable range — `order` is otherwise unbounded),
+    every individual `frequency**order` term underflows to an exact
+    `0.0` for any `frequency < 1.0`, making the whole sum `0.0`; raising
+    that to `1.0 / (1.0 - order)` (negative for `order > 1`) is then
+    ``0.0 ** negative``, which Python raises `ZeroDivisionError` for,
+    rather than a differentiation measure ever finishing with a defined
+    answer or a named error (this project's own multi-model engine
+    review, 2026-09-04, `FIM-03`/finding Kimi-FIM-03). The log-sum-exp
+    identity below is exactly the same formula, only restated so the
+    largest term is factored out and normalized to exactly `1.0` before
+    summing — every other term still safely underflows to `0.0`
+    relative to it, but the sum itself never does, pushing the same
+    failure mode out to an order of magnitude no real `order` value
+    reaches.
     """
     positive = tuple(frequency for frequency in frequencies.values() if frequency > 0.0)
     if order == 0.0:
         return float(len(positive))
     if order == 1.0:
         return exp(-fsum(frequency * log(frequency) for frequency in positive))
-    power_sum = fsum(frequency**order for frequency in positive)
-    return float(power_sum ** (1.0 / (1.0 - order)))
+    log_terms = tuple(order * log(frequency) for frequency in positive)
+    largest_log_term = max(log_terms)
+    if largest_log_term == -inf:
+        # Defensive fallback only, not a mathematically exact result:
+        # `order * log(frequency)` itself has overflowed to `-inf` for
+        # every term, which needs an `order` many, many orders of
+        # magnitude past the `~1100` threshold this fix actually targets
+        # (`log_terms` alone already fixes every practically reachable
+        # `order`) — `term - largest_log_term` below would be `nan`
+        # (`-inf - (-inf)`) rather than a real number here, so this
+        # returns `0.0` rather than propagating that `nan` silently.
+        return 0.0
+    log_power_sum = largest_log_term + log(
+        fsum(exp(term - largest_log_term) for term in log_terms)
+    )
+    return float(exp(log_power_sum / (1.0 - order)))
 
 
 def _validate_order(order: float | int) -> float:
@@ -412,6 +443,45 @@ def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     return _h_t_from_demes(demes, weights)
 
 
+def _h_st_from_within_and_total(total: float, within: float) -> float:
+    """`h_st`'s own real math, given already-computed `H_T`/`H_S`.
+
+    Split out for the identical reason `_g_st_from_demes`'s own
+    docstring gives — `statistics_report`, below, computes `H_S`/`H_T`
+    once and passes the two resulting floats straight in here, rather
+    than calling the public `h_st`, which would revalidate and
+    recompute both from scratch.
+    """
+    denominator = 1.0 - within
+    if denominator == 0.0:
+        # `within` (`H_S`) is mathematically guaranteed to fall strictly
+        # below `1.0` for any finite allele count (`heterozygosity`'s
+        # own docstring) — reaching this branch needs `H_S` to round to
+        # exactly `1.0` in float64, which itself needs every present
+        # allele's own squared frequency to underflow in `fsum`'s
+        # accumulation: an allele count many orders of magnitude past
+        # anything a validated `SimulationParams`/`FrequencyTable` can
+        # produce (this project's own multi-model engine review,
+        # 2026-09-04, `FIM-18`/finding Kimi-FIM-18, calls this
+        # "practically unreachable" — confirmed here by naming the
+        # actual mechanism a real zero denominator would need, not
+        # merely asserted). Raised as a specific, documented error
+        # instead of Python's own generic `ZeroDivisionError`, on the
+        # chance this analysis is ever proven wrong by a future change
+        # elsewhere in this module. Deliberately *not* `g_st`'s own
+        # `None`-when-undefined convention: unlike `G_ST` (genuinely
+        # undefined at `H_T == 0`, a real, reachable configuration —
+        # every deme fixed for one identical allele), this denominator
+        # reaching exactly zero is not a real state to represent at all,
+        # only a defect to surface loudly if it ever somehow occurs.
+        raise ArithmeticError(
+            "H_ST is undefined: within-deme heterozygosity has reached "
+            "exactly 1.0, a state no finite allele configuration should "
+            "ever be able to produce"
+        )
+    return _bounded((total - within) / denominator, "H_ST")
+
+
 def h_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     """Return correctly partitioned between-deme heterozygosity ``H_ST``.
 
@@ -431,7 +501,7 @@ def h_st(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     """
     within = h_s(table, deme_weights)
     total = h_t(table, deme_weights)
-    return _bounded((total - within) / (1.0 - within), "H_ST")
+    return _h_st_from_within_and_total(total, within)
 
 
 def total_hill_number(
@@ -1102,14 +1172,28 @@ def _digamma(x: float) -> float:
     for why formulas here stay dependency-free), so this is a small,
     self-contained one: the standard recurrence `psi(x+1) = psi(x) +
     1/x` shifts a small `x` up past `_DIGAMMA_ASYMPTOTIC_THRESHOLD`,
-    where the asymptotic series below is accurate to within machine
-    precision.
+    where the asymptotic series below is accurate to roughly `2.4e-9`
+    absolute error at the threshold itself (`_digamma(1.0)` against the
+    exactly known `psi(1) = -gamma`, the Euler-Mascheroni constant) —
+    **not** "machine precision" (`~2.2e-16`), a claim this docstring
+    made until this project's own multi-model engine review, 2026-09-04
+    (`FIM-17`/finding Kimi-FIM-17) found it off by about seven orders of
+    magnitude at exactly this function's own threshold. Harmless in
+    practice: every equilibrium formula built on this stays comfortably
+    inside that error budget for the population sizes and mutation rates
+    this project's own configuration validation allows, so the threshold
+    itself is left unchanged rather than raised to actually reach
+    machine precision — a numeric-output change with no user-visible
+    benefit large enough to justify perturbing every value this function
+    has ever produced.
 
     Args:
         x: A positive real number.
 
     Returns:
-        `psi(x)`, accurate to within machine precision for any `x > 0`.
+        `psi(x)`, accurate to roughly `2.4e-9` absolute error for any
+        `x > 0` — see this docstring's own correction, above, for why
+        that is not "machine precision".
 
     Raises:
         ValueError: If `x` is not a positive, finite real number.
@@ -1534,7 +1618,7 @@ def statistics_report(
     return {
         "H_S": within,
         "H_T": total,
-        "H_ST": _bounded((total - within) / (1.0 - within), "H_ST"),
+        "H_ST": _h_st_from_within_and_total(total, within),
         "G_ST": _g_st_from_demes(total, within),
         "D": _jost_d_from_within_and_total(len(demes), within, total),
         "E_ST": _e_st_from_demes(demes, entropy_weights),

@@ -11230,6 +11230,66 @@ def test_hill_orders_and_input_types_are_validated() -> None
 
 Hill APIs reject negative, nonnumeric, and nonfinite orders.
 
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_hill_number_does_not_underflow_at_a_high_order"></a>
+
+#### test\_hill\_number\_does\_not\_underflow\_at\_a\_high\_order
+
+```python
+def test_hill_number_does_not_underflow_at_a_high_order() -> None
+```
+
+A Hill number at a very high order returns a value, not a crash.
+
+Regression test for FIM-03: `frequency**order` underflows to an
+exact `0.0` for any `frequency < 1.0` once `order` is high
+enough — for this deme's own largest frequency (`0.9`), verified
+directly to be somewhere between `5000` and `10000` on the
+pre-fix code — making `_hill`'s own `power_sum ** (1.0 / (1.0 -
+order))` compute `0.0 ** <negative>`, `ZeroDivisionError` in
+Python, not a defined answer. `order=10_000` here is confirmed
+past that threshold, not merely assumed to be. As `order` grows,
+a Hill number converges to the reciprocal of the single largest
+frequency (the "Berger-Parker" limit); this also checks the
+result actually approaches it, not merely that nothing raised.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_digamma_accuracy_at_its_own_asymptotic_threshold"></a>
+
+#### test\_digamma\_accuracy\_at\_its\_own\_asymptotic\_threshold
+
+```python
+def test_digamma_accuracy_at_its_own_asymptotic_threshold() -> None
+```
+
+`_digamma` meets its own documented, corrected accuracy bound.
+
+Regression test for FIM-17: this function's own docstring used
+to claim "accurate to within machine precision" (`~2.2e-16`) —
+false at its own `_DIGAMMA_ASYMPTOTIC_THRESHOLD`, off by about
+seven orders of magnitude (confirmed directly against the
+exactly known `psi(1) = -gamma`, the Euler-Mascheroni constant,
+before writing the corrected `~2.4e-9` bound into the
+docstring). This asserts the real, now-documented bound holds,
+not the false one.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_h_st_raises_a_named_error_instead_of_zero_division"></a>
+
+#### test\_h\_st\_raises\_a\_named\_error\_instead\_of\_zero\_division
+
+```python
+def test_h_st_raises_a_named_error_instead_of_zero_division() -> None
+```
+
+A zero H_ST denominator raises a specific, documented error.
+
+Regression test for FIM-18: `h_st`'s own ``(total - within) /
+(1.0 - within)`` used to raise Python's own generic
+`ZeroDivisionError` when `within` (`H_S`) reached exactly `1.0`
+— confirmed "practically unreachable" through any finite,
+validated `FrequencyTable` (this function's own docstring names
+the exact mechanism), but reachable directly by calling the
+private helper with contrived, already-computed values, exactly
+as `statistics_report`'s own internal call site does.
+
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_table_and_deme_validation_reports_bad_inputs"></a>
 
 #### test\_table\_and\_deme\_validation\_reports\_bad\_inputs
