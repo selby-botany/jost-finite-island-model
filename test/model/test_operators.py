@@ -679,6 +679,45 @@ def test_mutate_targets_batched_matches_finite_allele_space_exactly(
                 assert int(targets[0]) == expected, (minted_count, source, seed)
 
 
+class _AlwaysMintRng:
+    """A minimal stub forcing `_mutate_targets_batched`'s mint branch open.
+
+    See `test/model/test_vectorized.py`'s own identical class for the
+    full reasoning — `recurrence_probability` is exactly `1.0` whenever
+    `minted_count == capacity`, so a real `np.random.Generator` (whose
+    own `random()` never returns exactly `1.0`) can never reach the mint
+    branch at that point; this fake's `random()` returning `1.0` itself
+    is the only way to exercise it directly.
+    """
+
+    def random(self) -> float:
+        return 1.0
+
+
+def test_mutate_targets_batched_raises_when_capacity_is_exhausted() -> None:
+    """`operators.py`'s own duplicate kernel gets the identical `FIM-16` guard.
+
+    Mirrors `test/model/test_vectorized.py`'s own test of the same name
+    for the original this module's own `_mutate_targets_batched` is a
+    deliberate duplicate of — re-proven directly here since a duplicate
+    is only as trustworthy as its own, independent proof.
+    """
+    capacity = 5
+    minted_mask = np.ones(capacity, dtype=np.bool_)
+    minted_list = np.arange(capacity, dtype=np.int64)
+
+    with pytest.raises(RuntimeError, match="no unminted state left"):
+        _mutate_targets_batched(
+            _AlwaysMintRng(),  # type: ignore[arg-type]
+            np.array([0], dtype=np.int64),
+            capacity,
+            minted_mask,
+            minted_list,
+            capacity,
+            capacity,
+        )
+
+
 def test_next_mutate_event_count_reads_batched_array_or_draws_inline(
     rng: Callable[[int], np.random.Generator],
 ) -> None:

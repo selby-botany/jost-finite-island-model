@@ -7273,6 +7273,42 @@ probability of ``(50 - 1) / (100 - 1)``. Each trial reconstructs a
 fresh, identically seeded space so one trial's minting never changes
 the next trial's true probability.
 
+<a id="model.test_allele.test_mutate_target_mint_branch_is_uniform_over_every_unminted_state"></a>
+
+#### test\_mutate\_target\_mint\_branch\_is\_uniform\_over\_every\_unminted\_state
+
+```python
+@pytest.mark.statistical
+def test_mutate_target_mint_branch_is_uniform_over_every_unminted_state(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+A fresh mutation target is drawn uniformly among every unminted state.
+
+A direct, independent proof of the actual documented contract — not
+cross-backend agreement, which cannot detect a defect both backends
+share. Before `FIM-46`'s fix (this project's own multi-model engine
+review, 2026-09-04, independently found by three of four reviewers),
+the mint branch always returned `self._next_unminted`, the single
+smallest not-yet-minted state, deterministically: every other
+unminted state had probability exactly zero, and every existing
+cross-backend parity test still passed, since `fim.model.vectorized`/
+`fim.model.operators`'s own `_mutate_targets_batched` shared the
+identical defect (proven "exactly matching" `mutate_target`, which
+is exactly the problem — two implementations of the same wrong
+distribution agreeing with each other proves nothing about whether
+that distribution is the documented one).
+
+One initial founder (`minted_count=1`) makes `recurrence_probability`
+exactly `0.0`, so every trial exercises the mint branch alone, never
+the (already independently correct — the `others = [... != current]`
+list is a genuine Python list, indexed uniformly) recurrence branch.
+Capacity `11` leaves 10 unminted states available at once in every
+trial — the review's own explicit point that the pre-fix defect only
+manifests when multiple targets are actually unminted simultaneously,
+unlike a capacity of `2` where there is only ever one possible
+target regardless of how it is chosen.
+
 <a id="model.test_allele.test_finite_allele_registry_dispatches_by_locus_id"></a>
 
 #### test\_finite\_allele\_registry\_dispatches\_by\_locus\_id
@@ -7679,6 +7715,21 @@ as its own, independent proof, not inherited from the original's.
 For the identical starting minted set and an identically seeded
 `rng`, the two must return the *exact same target*, every trial,
 not merely agree on the rate across many.
+
+<a id="model.test_operators.test_mutate_targets_batched_raises_when_capacity_is_exhausted"></a>
+
+#### test\_mutate\_targets\_batched\_raises\_when\_capacity\_is\_exhausted
+
+```python
+def test_mutate_targets_batched_raises_when_capacity_is_exhausted() -> None
+```
+
+`operators.py`'s own duplicate kernel gets the identical `FIM-16` guard.
+
+Mirrors `test/model/test_vectorized.py`'s own test of the same name
+for the original this module's own `_mutate_targets_batched` is a
+deliberate duplicate of — re-proven directly here since a duplicate
+is only as trustworthy as its own, independent proof.
 
 <a id="model.test_operators.test_next_mutate_event_count_reads_batched_array_or_draws_inline"></a>
 
@@ -9925,6 +9976,30 @@ minted per deme — which does exercise that precondition, and did
 catch real cross-backend mismatches before the fix landed (found
 via a direct scratch probe, not assumed).
 
+<a id="model.test_vectorized.test_drift_vectorized_matches_dict_based_drift_exactly_at_eight_or_more_present"></a>
+
+#### test\_drift\_vectorized\_matches\_dict\_based\_drift\_exactly\_at\_eight\_or\_more\_present
+
+```python
+def test_drift_vectorized_matches_dict_based_drift_exactly_at_eight_or_more_present(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The same exact-agreement proof again, now specifically at >= 8 present alleles.
+
+Neither test above ever exercises 8 or more present alleles in one
+deme-locus (6, at most) — a real gap: NumPy's own `ndarray.sum()`
+(what the dict-based path's own `probabilities.sum()` actually
+calls) is sequential only below 8 elements, switching to pairwise
+summation from 8 up, which does not, in general, produce the same
+final bit as a strictly sequential accumulation of the identical
+values — exactly what `_multinomial_rows_batched`'s own `present_
+sum` used to be, before `FIM-12` (this project's own multi-model
+engine review, 2026-09-04, Kimi's own finding of that number).
+Confirmed live, not merely reasoned about: reverting `_present_only_
+row_sums`'s own fix reproduces real mismatches at deme sizes 8, 12,
+and 16 below, none at 6 or 7 — the exact boundary the finding names.
+
 <a id="model.test_vectorized.test_mutate_vectorized_matches_dict_based_mutate_exactly"></a>
 
 #### test\_mutate\_vectorized\_matches\_dict\_based\_mutate\_exactly
@@ -10024,6 +10099,23 @@ Exercises both branches (recurrence and fresh-mint) by ramping
 `minted_count` from 2 up to `capacity`, and repeats every source id
 across many seeds — the actual, checked invariant the prior version
 of this test claimed in its own name but never inspected.
+
+<a id="model.test_vectorized.test_mutate_targets_batched_raises_when_capacity_is_exhausted"></a>
+
+#### test\_mutate\_targets\_batched\_raises\_when\_capacity\_is\_exhausted
+
+```python
+def test_mutate_targets_batched_raises_when_capacity_is_exhausted() -> None
+```
+
+Restores the capacity guard `FiniteAlleleSpace.mutate_target` already had.
+
+Before this fix, this function indexed `minted_mask[next_unminted]`
+with no bound check at all — an invariant violation here would have
+raised `IndexError` on a NumPy internal, not a message naming the
+actual problem (this project's own multi-model engine review,
+2026-09-04, `FIM-16`/finding M-05/finding P3-3). See `_AlwaysMintRng`
+for why a real `Generator` cannot exercise this line directly.
 
 <a id="model.test_vectorized.test_mutate_vectorized_preserves_frequency_invariants"></a>
 

@@ -344,6 +344,55 @@ def test_finite_allele_space_recurrence_rate_matches_theory(
     )
 
 
+@pytest.mark.statistical
+def test_mutate_target_mint_branch_is_uniform_over_every_unminted_state(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """A fresh mutation target is drawn uniformly among every unminted state.
+
+    A direct, independent proof of the actual documented contract — not
+    cross-backend agreement, which cannot detect a defect both backends
+    share. Before `FIM-46`'s fix (this project's own multi-model engine
+    review, 2026-09-04, independently found by three of four reviewers),
+    the mint branch always returned `self._next_unminted`, the single
+    smallest not-yet-minted state, deterministically: every other
+    unminted state had probability exactly zero, and every existing
+    cross-backend parity test still passed, since `fim.model.vectorized`/
+    `fim.model.operators`'s own `_mutate_targets_batched` shared the
+    identical defect (proven "exactly matching" `mutate_target`, which
+    is exactly the problem — two implementations of the same wrong
+    distribution agreeing with each other proves nothing about whether
+    that distribution is the documented one).
+
+    One initial founder (`minted_count=1`) makes `recurrence_probability`
+    exactly `0.0`, so every trial exercises the mint branch alone, never
+    the (already independently correct — the `others = [... != current]`
+    list is a genuine Python list, indexed uniformly) recurrence branch.
+    Capacity `11` leaves 10 unminted states available at once in every
+    trial — the review's own explicit point that the pre-fix defect only
+    manifests when multiple targets are actually unminted simultaneously,
+    unlike a capacity of `2` where there is only ever one possible
+    target regardless of how it is chosen.
+    """
+    capacity = 11
+    trials = 20_000
+    generator = rng(20260905)
+
+    counts = dict.fromkeys(range(1, capacity), 0)
+    for _ in range(trials):
+        space = FiniteAlleleSpace(capacity, [AlleleId(0)])
+        target = int(space.mutate_target(AlleleId(0), generator))
+        assert target != 0
+        counts[target] += 1
+
+    unminted_count = capacity - 1
+    expected = trials / unminted_count
+    probability = 1.0 / unminted_count
+    standard_error = (trials * probability * (1.0 - probability)) ** 0.5
+    for target, count in counts.items():
+        assert count == pytest.approx(expected, abs=5.0 * standard_error), target
+
+
 def test_finite_allele_registry_dispatches_by_locus_id(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
@@ -362,4 +411,11 @@ def test_finite_allele_registry_dispatches_by_locus_id(
     large_locus_target = registry.mutate_target(2, AlleleId(0), generator)
 
     assert small_locus_targets <= {1, 2, 3}
-    assert large_locus_target == AlleleId(1)
+    # Not `== AlleleId(1)`: that assumed the pre-`FIM-46` deterministic
+    # "always the smallest not-yet-minted state" mint behavior, encoding
+    # the very defect this project's own multi-model engine review,
+    # 2026-09-04, found as a real bug, not a feature — a mint target is
+    # now a genuine uniform draw among every one of the `capacity - 1`
+    # unminted states, so a specific value can no longer be asserted.
+    assert large_locus_target != AlleleId(0)
+    assert 0 <= int(large_locus_target) < 4**10

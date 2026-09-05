@@ -340,6 +340,59 @@ def test_drift_vectorized_matches_dict_based_drift_exactly_with_partial_capacity
                 assert observed_map[allele_id] == value, (seed, deme, allele_id)
 
 
+def test_drift_vectorized_matches_dict_based_drift_exactly_at_eight_or_more_present(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The same exact-agreement proof again, now specifically at >= 8 present alleles.
+
+    Neither test above ever exercises 8 or more present alleles in one
+    deme-locus (6, at most) — a real gap: NumPy's own `ndarray.sum()`
+    (what the dict-based path's own `probabilities.sum()` actually
+    calls) is sequential only below 8 elements, switching to pairwise
+    summation from 8 up, which does not, in general, produce the same
+    final bit as a strictly sequential accumulation of the identical
+    values — exactly what `_multinomial_rows_batched`'s own `present_
+    sum` used to be, before `FIM-12` (this project's own multi-model
+    engine review, 2026-09-04, Kimi's own finding of that number).
+    Confirmed live, not merely reasoned about: reverting `_present_only_
+    row_sums`'s own fix reproduces real mismatches at deme sizes 8, 12,
+    and 16 below, none at 6 or 7 — the exact boundary the finding names.
+    """
+    pytest.importorskip("numba")
+    for minted_count in (8, 12, 16):
+        for seed in range(20):
+            state = _partial_finite_alleles_state(
+                deme_count=3, capacity_length=2, minted_count=minted_count
+            )
+            sizes = np.array([20, 45, 100], dtype=np.int64)
+
+            expected = drift_dict(state, tuple(int(s) for s in sizes), rng(seed))
+
+            vectorized = build_vectorized_state(state)
+            observed_vectorized = drift_vectorized(
+                vectorized.locus_states[0], sizes, rng(seed)
+            )
+            observed = vectorized_state_to_model_state(
+                replace(vectorized, locus_states=(observed_vectorized,))
+            )
+
+            for deme in range(3):
+                expected_map = expected.frequency_map(deme, 0)
+                observed_map = observed.frequency_map(deme, 0)
+                assert set(expected_map) == set(observed_map), (
+                    minted_count,
+                    seed,
+                    deme,
+                )
+                for allele_id, value in expected_map.items():
+                    assert observed_map[allele_id] == value, (
+                        minted_count,
+                        seed,
+                        deme,
+                        allele_id,
+                    )
+
+
 def test_mutate_vectorized_matches_dict_based_mutate_exactly(
     rng: Callable[[int], np.random.Generator],
 ) -> None:
@@ -515,6 +568,50 @@ def test_mutate_targets_batched_never_selects_its_own_source(
                     minted_count,
                 )
                 assert targets[0] != source
+
+
+class _AlwaysMintRng:
+    """A minimal stub forcing `_mutate_targets_batched`'s mint branch open.
+
+    `recurrence_probability` is mathematically exactly `1.0` whenever
+    `minted_count == capacity` — the documented reason the capacity
+    `RuntimeError` guard below is unreachable through any real
+    `np.random.Generator` (`random()` never returns exactly `1.0`, so
+    `rng.random() < 1.0` is always true, always choosing recurrence).
+    Directly unit-testing the guard therefore needs a fake whose own
+    `random()` returns `1.0` itself, making `1.0 < 1.0` false and
+    falling through to the mint branch on purpose — the only way to
+    exercise a line of code this project's own real RNG can never reach.
+    """
+
+    def random(self) -> float:
+        return 1.0
+
+
+def test_mutate_targets_batched_raises_when_capacity_is_exhausted() -> None:
+    """Restores the capacity guard `FiniteAlleleSpace.mutate_target` already had.
+
+    Before this fix, this function indexed `minted_mask[next_unminted]`
+    with no bound check at all — an invariant violation here would have
+    raised `IndexError` on a NumPy internal, not a message naming the
+    actual problem (this project's own multi-model engine review,
+    2026-09-04, `FIM-16`/finding M-05/finding P3-3). See `_AlwaysMintRng`
+    for why a real `Generator` cannot exercise this line directly.
+    """
+    capacity = 5
+    minted_mask = np.ones(capacity, dtype=np.bool_)
+    minted_list = np.arange(capacity, dtype=np.int64)
+
+    with pytest.raises(RuntimeError, match="no unminted state left"):
+        _mutate_targets_batched(
+            _AlwaysMintRng(),  # type: ignore[arg-type]
+            np.array([0], dtype=np.int64),
+            capacity,
+            minted_mask,
+            minted_list,
+            capacity,
+            capacity,
+        )
 
 
 def test_mutate_vectorized_preserves_frequency_invariants(

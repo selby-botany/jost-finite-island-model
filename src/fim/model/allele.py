@@ -37,6 +37,50 @@ MINTED_ID_START = 1 << 32
 # A single-state space has no "other" state for a mutation to target.
 _MINIMUM_FINITE_ALLELE_CAPACITY = 2
 
+# `numpy.random.Generator.integers`'s own documented range: the largest
+# exclusive `high` it accepts is `2**63` (signed int64's own ceiling).
+# `FiniteAlleleSpace.mutate_target`'s own `capacity` can be far larger —
+# `finite_allele_capacity(200)` is `4**200`, the whole reason this
+# class's own module docstring calls an astronomical capacity a real,
+# intended case, never merely a large `int64` — so drawing a fresh
+# mutation target uniformly needs a fallback for capacities beyond what
+# `Generator.integers` can be asked for directly.
+_MAX_DIRECT_SAMPLE_CAPACITY = 1 << 63
+
+
+def _uniform_integer_below(rng: np.random.Generator, capacity: int) -> int:
+    """Return one integer drawn uniformly from ``0 .. capacity - 1``, any size.
+
+    `rng.integers(0, capacity)` directly whenever `capacity` fits within
+    `Generator.integers`'s own supported range — identical draw shape to
+    every prior release, unchanged, for every capacity this project's
+    own tests exercise before `FIM-46` (this project's own multi-model
+    engine review, 2026-09-04) motivated this function's own existence.
+
+    Beyond that range, draws `capacity.bit_length()` random bits at a
+    time (`rng.bytes`, an unbiased byte stream) and rejects any value
+    `>= capacity` — the standard rejection-sampling construction for a
+    uniform integer over an arbitrary-precision range: drawing exactly
+    `bit_length` bits gives a candidate range of `[0, 2**bit_length)`,
+    strictly less than `2 * capacity`, so better than even odds of
+    acceptance on every attempt, and each accepted value is exactly as
+    likely as every other by construction (no value in `[0, capacity)`
+    is ever preferred over another by this procedure). Needed at all
+    only because Python's own arbitrary-precision integers can express
+    a `capacity` no fixed-width sampler (`int64` included) can accept as
+    an argument, not because uniform sampling over a huge range is
+    otherwise difficult.
+    """
+    if capacity <= _MAX_DIRECT_SAMPLE_CAPACITY:
+        return int(rng.integers(0, capacity))
+    bit_length = capacity.bit_length()
+    byte_length = (bit_length + 7) // 8
+    padding_bits = byte_length * 8 - bit_length
+    while True:
+        candidate = int.from_bytes(rng.bytes(byte_length), "big") >> padding_bits
+        if candidate < capacity:
+            return candidate
+
 
 def founding_allele_ids(count: int) -> tuple[AlleleId, ...]:
     """Return the locus-relative founding allele identifiers.
@@ -223,7 +267,15 @@ class FiniteAlleleSpace:
             `minted_count` entries holding every minted state in the
             order they were minted, the rest unused padding),
             `minted_count`, and `next_unminted` — the exact argument
-            shape `_jit_mutate_targets_batched` expects.
+            shape `_jit_mutate_targets_batched` expects. `next_unminted`
+            itself is inert since `FIM-46`'s fix (`mutate_target`'s own
+            docstring): neither this class nor `_jit_mutate_targets_
+            batched` still uses it to choose a mint target (both now
+            sample uniformly instead), so it is carried through this
+            tuple unchanged from whatever `__init__` set it to (`0`),
+            kept only so this method's own return shape — and `_jit_
+            mutate_targets_batched`'s matching argument shape — did not
+            need to change everywhere either already reaches.
         """
         minted_mask = np.zeros(self._capacity, dtype=np.bool_)
         minted_mask[np.asarray(self._minted, dtype=np.int64)] = True
@@ -259,7 +311,9 @@ class FiniteAlleleSpace:
                 entries holding every minted state, in minting order.
             minted_count: How many of `minted_list`'s own entries are
                 valid.
-            next_unminted: The next not-yet-tried candidate state.
+            next_unminted: Inert since `FIM-46`'s fix (`to_arrays`'s own
+                docstring) — stored back verbatim, never read for a
+                mint decision.
         """
         del minted_mask  # see docstring: order-preserving minted_list suffices
         self._minted = [
@@ -282,31 +336,65 @@ class FiniteAlleleSpace:
         Returns:
             A state drawn uniformly from the ``capacity - 1`` others: an
             already-minted one (a recurrence), chosen uniformly among the
-            tracked minted set excluding ``current``, or the next not-yet-
-            minted one, with probability proportional to how many of each
-            kind remain.
+            tracked minted set excluding ``current``, or a fresh one,
+            chosen uniformly among every not-yet-minted state — not
+            merely the smallest one.
+
+            **Corrected 2026-09-05** (this project's own multi-model
+            engine review, 2026-09-04, `FIM-46`/finding C-05/finding
+            P1.1/finding P1-5, independently found by three of four
+            reviewers): the mint branch below used to always return
+            ``self._next_unminted``, the smallest not-yet-minted state,
+            deterministically — a specific unminted state other than
+            that one had probability exactly zero of ever being this
+            call's own return value, contradicting this docstring's own
+            "uniformly at random" claim and this class's own module
+            docstring. `_mutate_targets_batched` (`fim.model.vectorized`
+            and `fim.model.operators`, kept as duplicate implementations
+            for a documented circular-import reason) shared the
+            identical defect and is fixed the same way, so cross-backend
+            parity tests could never have caught this on their own —
+            they validate agreement between two implementations of the
+            same wrong distribution. A new, independent target-identity
+            oracle test (`test_mutate_target_mint_branch_is_uniform_
+            over_every_unminted_state`, `test/model/test_allele.py`)
+            checks the actual distribution directly, not merely
+            cross-backend agreement.
+
+            Uniform rejection sampling over ``0 .. capacity - 1``,
+            retrying only on an already-minted draw: correct regardless
+            of ``capacity``'s own magnitude, and cheap in the regime this
+            class exists for (`capacity` far larger than ``minted_
+            count`` — this class's own module docstring), since the
+            rejection probability is exactly ``minted_count / capacity``.
+            Never materializes a ``capacity``-sized structure, matching
+            this class's own documented "the full state space is never
+            materialized" contract, even at an astronomical ``capacity``
+            no array could hold at all.
 
         Raises:
             RuntimeError: If every state in ``0 .. capacity - 1`` is already
                 minted. Unreachable in practice: once ``minted_count ==
                 capacity``, ``recurrence_probability`` is exactly ``1.0``
                 and this branch is never taken; the guard exists so a
-                capacity overrun fails loudly instead of minting an
-                out-of-range ID.
+                capacity overrun fails loudly instead of looping forever
+                (rejection sampling has no other way to notice "there is
+                nothing left to draw" once every state is minted).
         """
         minted_count = len(self._minted)
         recurrence_probability = (minted_count - 1) / (self._capacity - 1)
         if recurrence_probability > 0.0 and rng.random() < recurrence_probability:
             others = [allele_id for allele_id in self._minted if allele_id != current]
             return others[int(rng.integers(0, len(others)))]
-        while self._next_unminted in self._minted_set:
-            self._next_unminted += 1
-        if self._next_unminted >= self._capacity:
+        if minted_count >= self._capacity:
             raise RuntimeError(
                 "finite allele space has no unminted state left to target"
             )
-        target = AlleleId(self._next_unminted)
-        self._next_unminted += 1
+        while True:
+            candidate = _uniform_integer_below(rng, self._capacity)
+            if candidate not in self._minted_set:
+                break
+        target = AlleleId(candidate)
         self._minted.append(target)
         self._minted_set.add(int(target))
         return target

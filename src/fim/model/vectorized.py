@@ -167,7 +167,8 @@ _JIT_MUTATE_TARGETS_BATCHED: (
 ) = None
 
 _JIT_MULTINOMIAL_ROWS_BATCHED: (
-    Callable[[np.random.Generator, np.ndarray, np.ndarray], np.ndarray] | None
+    Callable[[np.random.Generator, np.ndarray, np.ndarray, np.ndarray], np.ndarray]
+    | None
 ) = None
 
 # Mirrors `fim.model.operators._REFLECT_THRESHOLD` — kept as its own
@@ -429,8 +430,67 @@ def vectorized_state_to_rows(
     return rows
 
 
+def _present_only_row_sums(probabilities: np.ndarray) -> np.ndarray:
+    """Return each row's own present-only sum, matching dict's own `mutate`/`drift`.
+
+    **Corrected 2026-09-05** (this project's own multi-model engine
+    review, 2026-09-04, `FIM-12`/Kimi's own finding of that number,
+    confirmed live rather than only reasoned about): `_multinomial_
+    rows_batched`'s own inline comment already explains why summing a
+    zero-padded, `capacity`-wide row does not equal summing just the
+    present values — NumPy's reduction is not associative, and padding
+    zeros shift which nonzero terms get grouped together first. The fix
+    already in place for that (a hand-rolled *sequential* `+=` loop over
+    the present entries, inside the JIT kernel) rested on an assumption
+    that turned out to be false: NumPy's own `ndarray.sum()` — what the
+    dict-based path actually calls, on its own short, present-values-
+    only array — is sequential only below 8 elements; from 8 up it
+    switches to pairwise summation, which does not, in general, produce
+    the same final bit as a strictly sequential accumulation of the
+    identical values in the identical order. Every existing exact-match
+    test stayed below that threshold (at most 6 present alleles), so
+    this second, deeper gap stayed invisible until `FIM-46`'s own fix
+    (uniform-random, not deterministically sequential, minting) made an
+    8-present-allele deme newly reachable in short, already-existing
+    tests — confirmed live by a direct trace: `LinealBackend`/
+    `GenerationalBackend(VectorizedAdvancer())` agreed exactly through
+    generation 2, then diverged in exactly one deme at generation 3,
+    isolated down to one allele's own identity differing (`11` vs. `14`,
+    both at the correct `0.025` frequency) the instant that deme reached
+    8 present alleles.
+
+    The only way to reproduce NumPy's own pairwise result exactly is to
+    build the identical short, present-only array dict's own `mutate`/
+    `drift` build (via `sorted(frequency_map)`, ascending allele-id
+    order — the same order boolean indexing below preserves) and call
+    real `ndarray.sum()` on it, outside the JIT boundary: `numba`'s own
+    `.sum()`, even called from inside a JIT-compiled function, reduces
+    sequentially, not pairwise, so computing this same value *inside*
+    `_multinomial_rows_batched` could never close this gap no matter how
+    it was written there.
+
+    Args:
+        probabilities: `(deme_count, capacity)`, each row dense over the
+            full capacity, present alleles nonzero, absent ones exactly
+            `0.0`.
+
+    Returns:
+        `(deme_count,)` float64 — row `i`'s own present-only sum, bit-
+        identical to what `probabilities[i][probabilities[i] > 0].sum()`
+        (equivalently, what dict's own `sorted(frequency_map)`-ordered
+        `probabilities.sum()`) computes for the same underlying values.
+    """
+    return np.array(
+        [row[row > 0.0].sum() for row in probabilities],
+        dtype=np.float64,
+    )
+
+
 def _multinomial_rows_batched(
-    rng: np.random.Generator, sizes: np.ndarray, probabilities: np.ndarray
+    rng: np.random.Generator,
+    sizes: np.ndarray,
+    probabilities: np.ndarray,
+    present_sums: np.ndarray,
 ) -> np.ndarray:
     """Draw one multinomial sample per row, each row its own `p` vector.
 
@@ -502,6 +562,12 @@ def _multinomial_rows_batched(
             function's own inline comment for why pre-normalizing over
             `capacity` elements, rather than letting this function sum
             only the present ones, is not bit-equivalent.
+        present_sums: `(d,)` float64, row `i`'s own present-only sum —
+            `_present_only_row_sums(probabilities)`, computed by the
+            caller with real NumPy, outside this function's own JIT
+            boundary. Not recomputed in here (see `_present_only_row_
+            sums`'s own docstring, `FIM-12`, for why a hand-rolled
+            sequential sum inside this function cannot reproduce it).
 
     Returns:
         `(d, capacity)` int64 counts, each row summing to that row's
@@ -584,16 +650,15 @@ def _multinomial_rows_batched(
         # restores the same category count and the same "final category
         # never draws" placement on both sides.
         last_nonzero = 0
-        present_sum = 0.0
         for column in range(capacity):
-            column_p = probabilities[deme_index, column]
-            if column_p > 0.0:
+            if probabilities[deme_index, column] > 0.0:
                 last_nonzero = column
-                present_sum += column_p
-        # Normalize over the present-only sum computed just above, not
-        # by assuming the row already sums to exactly 1.0. NumPy's own
-        # reduction is not associative: summing a length-`capacity` row
-        # padded with zeros beyond the last present column gives a
+        # Normalize over the present-only sum the caller already
+        # computed with real NumPy (`present_sums`, `_present_only_row_
+        # sums`), not by assuming the row already sums to exactly 1.0
+        # and not by re-accumulating it sequentially in here. NumPy's
+        # own reduction is not associative: summing a length-`capacity`
+        # row padded with zeros beyond the last present column gives a
         # different last bit than summing just the present values,
         # because the terms get grouped differently even though the
         # trailing zeros individually contribute nothing -- confirmed
@@ -613,11 +678,20 @@ def _multinomial_rows_batched(
         # first attempt. Replicating the dict-based path's own two-step
         # shape exactly -- normalize each column against `present_sum`
         # once, then track `remaining_p` from a clean `1.0` the same way
-        # `operators.mutate` does -- is what actually closes it. This is
-        # the same latent gap `drift_vectorized` carries too (it also
+        # `operators.mutate` does -- closed that first gap. A second,
+        # deeper one remained even so: `present_sum` itself, accumulated
+        # here by a hand-rolled sequential loop, silently stopped
+        # matching dict's own `probabilities.sum()` the moment 8 or more
+        # alleles were present in one row -- NumPy's own reduction is
+        # sequential only below that count, pairwise from it up
+        # (`_present_only_row_sums`'s own docstring, `FIM-12`). Passing
+        # `present_sums` in, computed the one way that actually
+        # reproduces NumPy's real behavior, closes that second gap. This
+        # is the same latent gap `drift_vectorized` carries too (it also
         # passes a capacity-wide, not present-only, row here) -- fixing
         # it in this one shared function closes it for both callers, not
         # just the one that surfaced it.
+        present_sum = present_sums[deme_index]
         remaining_n = sizes[deme_index]
         remaining_p = 1.0
         for column in range(capacity):
@@ -639,7 +713,10 @@ def _multinomial_rows_batched(
 
 
 def _jit_multinomial_rows_batched(
-    rng: np.random.Generator, sizes: np.ndarray, probabilities: np.ndarray
+    rng: np.random.Generator,
+    sizes: np.ndarray,
+    probabilities: np.ndarray,
+    present_sums: np.ndarray,
 ) -> np.ndarray:
     """`_multinomial_rows_batched`, JIT-compiled with `nogil=True`.
 
@@ -673,7 +750,7 @@ def _jit_multinomial_rows_batched(
         _JIT_MULTINOMIAL_ROWS_BATCHED = numba.jit(nogil=True, cache=True)(
             _multinomial_rows_batched
         )
-    return _JIT_MULTINOMIAL_ROWS_BATCHED(rng, sizes, probabilities)
+    return _JIT_MULTINOMIAL_ROWS_BATCHED(rng, sizes, probabilities, present_sums)
 
 
 def migrate_vectorized(
@@ -898,10 +975,12 @@ def mutate_vectorized(
         # zero-padded `capacity` width first (an earlier version of
         # this call site did exactly that) is not equivalent, down to
         # the last bit.
+        source_row = locus_state.frequencies[deme : deme + 1]
         source_counts = _jit_multinomial_rows_batched(
             rng,
             np.array([event_count], dtype=np.int64),
-            locus_state.frequencies[deme : deme + 1],
+            source_row,
+            _present_only_row_sums(source_row),
         )[0]
         event_sources = np.repeat(np.arange(capacity, dtype=np.int64), source_counts)
 
@@ -996,13 +1075,29 @@ def _mutate_targets_batched(
             if the caller's own array must stay unchanged.
         minted_list: `(capacity,)` int64, mutated in place — same caveat.
         minted_count: How many of `minted_list`'s own entries are valid.
-        next_unminted: The next not-yet-tried candidate state.
+        next_unminted: Inert since `FIM-46`'s fix, below — carried
+            through this signature and the returned tuple unchanged,
+            never read for a mint decision (`FiniteAlleleSpace.to_
+            arrays`'s own docstring has the full reasoning for why the
+            argument/return shape did not change along with the fix).
 
     Returns:
         `(targets, minted_mask, minted_list, minted_count, next_unminted)`
         — `targets` is `(events,)` int64, one target per event;
-        the rest are `minted_mask`/`minted_list`/`minted_count`/
-        `next_unminted` as they stand after every event.
+        `minted_mask`/`minted_list`/`minted_count` are as they stand
+        after every event; `next_unminted` is `next_unminted`, verbatim.
+
+    Raises:
+        RuntimeError: If a mint event is needed but every state in
+            `0 .. capacity - 1` is already minted — mirrors
+            `FiniteAlleleSpace.mutate_target`'s own guard exactly (see
+            its own docstring for why this is unreachable in practice).
+            Restores a guard `_mutate_targets_batched` itself never had
+            (this project's own multi-model engine review, 2026-09-04,
+            `FIM-16`): the dict-based original already raised here, but
+            this batched copy indexed `minted_mask[next_unminted]` with
+            no bound check, `IndexError`-ing on a `NumPy` internal
+            instead of failing with a message naming the actual problem.
     """
     event_count = sources.shape[0]
     targets = np.empty(event_count, dtype=np.int64)
@@ -1044,10 +1139,18 @@ def _mutate_targets_batched(
                 drawn_index += 1
             targets[event_index] = minted_list[drawn_index]
         else:
-            while minted_mask[next_unminted]:
-                next_unminted += 1
-            target = next_unminted
-            next_unminted += 1
+            # Uniform rejection sampling over every not-yet-minted
+            # state, matching `FiniteAlleleSpace.mutate_target`'s own
+            # fix exactly (`FIM-46`) — not `next_unminted`, which always
+            # returned the smallest not-yet-minted state deterministically,
+            # never a genuine uniform draw among every one of them.
+            if minted_count >= capacity:
+                raise RuntimeError(
+                    "finite allele space has no unminted state left to target"
+                )
+            target = int(rng.integers(0, capacity))
+            while minted_mask[target]:
+                target = int(rng.integers(0, capacity))
             minted_list[minted_count] = target
             minted_mask[target] = True
             minted_count += 1
@@ -1119,7 +1222,12 @@ def drift_vectorized(
     """
     if np.any(sizes <= 0):
         raise ValueError("drift_vectorized requires every deme size to be at least 1")
-    counts = _jit_multinomial_rows_batched(rng, sizes, locus_state.frequencies)
+    counts = _jit_multinomial_rows_batched(
+        rng,
+        sizes,
+        locus_state.frequencies,
+        _present_only_row_sums(locus_state.frequencies),
+    )
     return replace(locus_state, frequencies=counts / sizes[:, None])
 
 

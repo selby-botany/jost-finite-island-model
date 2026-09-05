@@ -4974,7 +4974,15 @@ that eligibility decision; this method does not gate it.
   `minted_count` entries holding every minted state in the
   order they were minted, the rest unused padding),
   `minted_count`, and `next_unminted` — the exact argument
-  shape `_jit_mutate_targets_batched` expects.
+  shape `_jit_mutate_targets_batched` expects. `next_unminted`
+  itself is inert since `FIM-46`'s fix (`mutate_target`'s own
+- `docstring)` - neither this class nor `_jit_mutate_targets_
+  batched` still uses it to choose a mint target (both now
+  sample uniformly instead), so it is carried through this
+  tuple unchanged from whatever `__init__` set it to (`0`),
+  kept only so this method's own return shape — and `_jit_
+  mutate_targets_batched`'s matching argument shape — did not
+  need to change everywhere either already reaches.
 
 <a id="fim.model.allele.FiniteAlleleSpace.restore_from_arrays"></a>
 
@@ -5007,7 +5015,9 @@ mutates this space's own internal state as a side effect.
   entries holding every minted state, in minting order.
 - `minted_count` - How many of `minted_list`'s own entries are
   valid.
-- `next_unminted` - The next not-yet-tried candidate state.
+- `next_unminted` - Inert since `FIM-46`'s fix (`to_arrays`'s own
+  docstring) — stored back verbatim, never read for a
+  mint decision.
 
 <a id="fim.model.allele.FiniteAlleleSpace.mutate_target"></a>
 
@@ -5029,9 +5039,41 @@ Return one state other than ``current``, uniformly at random.
 
   A state drawn uniformly from the ``capacity - 1`` others: an
   already-minted one (a recurrence), chosen uniformly among the
-  tracked minted set excluding ``current``, or the next not-yet-
-  minted one, with probability proportional to how many of each
-  kind remain.
+  tracked minted set excluding ``current``, or a fresh one,
+  chosen uniformly among every not-yet-minted state — not
+  merely the smallest one.
+
+  **Corrected 2026-09-05** (this project's own multi-model
+  engine review, 2026-09-04, `FIM-46`/finding C-05/finding
+  P1.1/finding P1-5, independently found by three of four
+- `reviewers)` - the mint branch below used to always return
+  ``self._next_unminted``, the smallest not-yet-minted state,
+  deterministically — a specific unminted state other than
+  that one had probability exactly zero of ever being this
+  call's own return value, contradicting this docstring's own
+  "uniformly at random" claim and this class's own module
+  docstring. `_mutate_targets_batched` (`fim.model.vectorized`
+  and `fim.model.operators`, kept as duplicate implementations
+  for a documented circular-import reason) shared the
+  identical defect and is fixed the same way, so cross-backend
+  parity tests could never have caught this on their own —
+  they validate agreement between two implementations of the
+  same wrong distribution. A new, independent target-identity
+  oracle test (`test_mutate_target_mint_branch_is_uniform_
+  over_every_unminted_state`, `test/model/test_allele.py`)
+  checks the actual distribution directly, not merely
+  cross-backend agreement.
+
+  Uniform rejection sampling over ``0 .. capacity - 1``,
+  retrying only on an already-minted draw: correct regardless
+  of ``capacity``'s own magnitude, and cheap in the regime this
+  class exists for (`capacity` far larger than ``minted_
+  count`` — this class's own module docstring), since the
+  rejection probability is exactly ``minted_count / capacity``.
+  Never materializes a ``capacity``-sized structure, matching
+  this class's own documented "the full state space is never
+  materialized" contract, even at an astronomical ``capacity``
+  no array could hold at all.
 
 
 **Raises**:
@@ -5040,8 +5082,9 @@ Return one state other than ``current``, uniformly at random.
   minted. Unreachable in practice: once ``minted_count ==
   capacity``, ``recurrence_probability`` is exactly ``1.0``
   and this branch is never taken; the guard exists so a
-  capacity overrun fails loudly instead of minting an
-  out-of-range ID.
+  capacity overrun fails loudly instead of looping forever
+  (rejection sampling has no other way to notice "there is
+  nothing left to draw" once every state is minted).
 
 <a id="fim.model.allele.FiniteAlleleRegistry"></a>
 

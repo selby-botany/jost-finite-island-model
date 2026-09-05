@@ -501,13 +501,30 @@ def _mutate_targets_batched(
             if the caller's own array must stay unchanged.
         minted_list: `(capacity,)` int64, mutated in place — same caveat.
         minted_count: How many of `minted_list`'s own entries are valid.
-        next_unminted: The next not-yet-tried candidate state.
+        next_unminted: Inert since `FIM-46`'s fix, below — carried
+            through this signature and the returned tuple unchanged,
+            never read for a mint decision (`FiniteAlleleSpace.to_
+            arrays`'s own docstring, `fim.model.allele`, has the full
+            reasoning for why the argument/return shape did not change
+            along with the fix).
 
     Returns:
         `(targets, minted_mask, minted_list, minted_count, next_unminted)`
         — `targets` is `(events,)` int64, one target per event;
-        the rest are `minted_mask`/`minted_list`/`minted_count`/
-        `next_unminted` as they stand after every event.
+        `minted_mask`/`minted_list`/`minted_count` are as they stand
+        after every event; `next_unminted` is `next_unminted`, verbatim.
+
+    Raises:
+        RuntimeError: If a mint event is needed but every state in
+            `0 .. capacity - 1` is already minted — mirrors
+            `FiniteAlleleSpace.mutate_target`'s own guard exactly (see
+            its own docstring for why this is unreachable in practice).
+            Restores a guard `_mutate_targets_batched` itself never had
+            (this project's own multi-model engine review, 2026-09-04,
+            `FIM-16`): the dict-based original already raised here, but
+            this batched copy indexed `minted_mask[next_unminted]` with
+            no bound check, `IndexError`-ing on a `NumPy` internal
+            instead of failing with a message naming the actual problem.
     """
     event_count = sources.shape[0]
     targets = np.empty(event_count, dtype=np.int64)
@@ -528,10 +545,18 @@ def _mutate_targets_batched(
                 drawn_index += 1
             targets[event_index] = minted_list[drawn_index]
         else:
-            while minted_mask[next_unminted]:
-                next_unminted += 1
-            target = next_unminted
-            next_unminted += 1
+            # Uniform rejection sampling over every not-yet-minted
+            # state, matching `FiniteAlleleSpace.mutate_target`'s own
+            # fix exactly (`FIM-46`) — not `next_unminted`, which always
+            # returned the smallest not-yet-minted state deterministically,
+            # never a genuine uniform draw among every one of them.
+            if minted_count >= capacity:
+                raise RuntimeError(
+                    "finite allele space has no unminted state left to target"
+                )
+            target = int(rng.integers(0, capacity))
+            while minted_mask[target]:
+                target = int(rng.integers(0, capacity))
             minted_list[minted_count] = target
             minted_mask[target] = True
             minted_count += 1
