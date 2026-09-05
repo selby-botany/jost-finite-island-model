@@ -1478,6 +1478,7 @@ changes results — make it explicitly and record it.
 | D̄<sub>m</sub> | Nei's absolute mean pairwise between-deme gene diversity |
 | R<sub>ST</sub> | Nei's `D̄_m` relative to within-deme diversity, `= D̄_m/H_S` |
 | G'<sub>ST</sub> | Nei's log-based large-differentiation `G_ST` estimator |
+| Gs, Gd | Ryman & Leimar's within-/between-deme gene identities (`J_0`, `J_1`), `= gs`/`gd` |
 
 ### Within one deme
 
@@ -1490,6 +1491,18 @@ H = 1 - \sum_i p_i^2 \qquad J = \sum_i p_i^2 = 1 - H \qquad {}^{H}D = \frac{1}{1
 ```
 
 ### Across demes
+
+Ryman & Leimar (2008) work in gene identities rather than heterozygosities
+— `Gs` (their `J_0`) and `Gd` (their `J_1`) — related to `H_S`/`H_T` by
+the same complement `J = 1 - H` above, plus one correction for `Gd`
+specifically (`gs`/`gd` in `fim.statistics.differentiation`; see
+`doc/migration-conventions.md` for the with-replacement-versus-
+distinct-pair identity convention `fim` and the paper use, and the exact
+`O(1/N)` mapping between the two):
+
+```math
+Gs = 1 - H_S, \qquad Gd = \frac{d\,(1-H_T) - (1-H_S)}{d-1}
+```
 
 ```math
 G_{ST} = \frac{H_{T} - H_{S}}{H_{T}} = 1 - \frac{H_{S}}{H_{T}}

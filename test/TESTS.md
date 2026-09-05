@@ -2559,6 +2559,26 @@ a real, always-defined `DifferentiationReport` field (`fim.model.
 params._CONVERGENCE_STATISTICS` now allows selecting it in the first
 place — this is that config's own engine-level counterpart).
 
+<a id="engine.test_engine.test_final_report_gs_and_gd_match_the_pooled_h_s_and_h_t"></a>
+
+#### test\_final\_report\_gs\_and\_gd\_match\_the\_pooled\_h\_s\_and\_h\_t
+
+```python
+def test_final_report_gs_and_gd_match_the_pooled_h_s_and_h_t(
+        tiny_params: SimulationParams) -> None
+```
+
+`FinalReport`'s `Gs`/`Gd` are the linear closed forms of its own `H_S`/`H_T`.
+
+Regression/exit-criterion test for `R4` of `dev/doc/apps/selby/
+jost-finite-island-model/20260903-claude-opus-5-gene-identity-
+recursion-fim-implications.md`: run across several loci so `H_S`/
+`H_T` are themselves already averages (`report_for_state`'s own
+`mean_h_s`/`mean_h_t`) — `Gs`/`Gd` being linear in `H_S`/`H_T` means
+computing them from those already-pooled means must agree exactly
+with the formula in `fim.statistics.differentiation.gs`/`gd`'s own
+docstrings, not merely approximately.
+
 <a id="engine.test_engine.test_naive_manifest_clock_is_rejected"></a>
 
 #### test\_naive\_manifest\_clock\_is\_rejected
@@ -11243,6 +11263,54 @@ def test_golden_statistics() -> None
 ```
 
 Golden tables match the worked examples in the differentiation guide.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_gs_and_gd_match_h_s_and_h_t_derived_values"></a>
+
+#### test\_gs\_and\_gd\_match\_h\_s\_and\_h\_t\_derived\_values
+
+```python
+def test_gs_and_gd_match_h_s_and_h_t_derived_values() -> None
+```
+
+`gs`/`gd` equal `h_s`/`h_t`'s own linear closed forms, on real tables.
+
+`R4` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
+claude-opus-5-gene-identity-recursion-fim-implications.md`'s own
+exit criterion: ``Gs = 1 - H_S``, ``Gd = (d * (1 - H_T) - (1 -
+H_S)) / (d - 1)`` (§4.4) — checked against every existing golden
+fixture already used for `h_s`/`h_t`/`g_st`/`jost_d` above, not a
+fresh set of hand-derived numbers, so this test cannot introduce
+its own arithmetic mistake independent of the formula it checks.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_gd_requires_multiple_demes"></a>
+
+#### test\_gd\_requires\_multiple\_demes
+
+```python
+def test_gd_requires_multiple_demes() -> None
+```
+
+`gd` needs at least two demes, the same requirement `g_st`/`h_st` share.
+
+A single deme has no "between" for `Gd` to describe, and the
+formula's own `d - 1` denominator is undefined at `d = 1`.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_statistics_report_gs_and_gd_match_the_standalone_functions"></a>
+
+#### test\_statistics\_report\_gs\_and\_gd\_match\_the\_standalone\_functions
+
+```python
+def test_statistics_report_gs_and_gd_match_the_standalone_functions() -> None
+```
+
+`statistics_report`'s own `Gs`/`Gd` fields agree with `gs`/`gd` directly.
+
+`statistics_report` computes every field from its own already-
+validated `demes`/`within`/`total`, never by calling the public
+`gs`/`gd` (the same "avoid redundant re-validation" reasoning
+`_h_s_from_demes`'s own docstring gives for `h_s`/`h_t`) — this
+checks the two independent code paths agree, not just that
+either one is internally consistent with itself.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_single_deme_statistics_and_hill_orders"></a>
 

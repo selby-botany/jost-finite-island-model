@@ -487,7 +487,17 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
 
     summary = replicate_summary(output)
 
-    assert set(summary) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"}
+    assert set(summary) == {
+        "D",
+        "G_ST",
+        "E_ST",
+        "K_ST",
+        "H_S",
+        "H_T",
+        "H_ST",
+        "Gs",
+        "Gd",
+    }
     assert summary["D"]["sample_count"] == 5
     assert summary["D"]["low"] <= summary["D"]["mean"] <= summary["D"]["high"]
     assert summary["D"]["confidence"] == 0.95
@@ -854,6 +864,35 @@ def test_convergence_can_watch_h_st(tiny_params: SimulationParams) -> None:
     assert isinstance(output, RunResult)
     assert output.report["H_ST"] is not None
     assert output.report["converged_on"] == "H_ST"
+
+
+def test_final_report_gs_and_gd_match_the_pooled_h_s_and_h_t(
+    tiny_params: SimulationParams,
+) -> None:
+    """`FinalReport`'s `Gs`/`Gd` are the linear closed forms of its own `H_S`/`H_T`.
+
+    Regression/exit-criterion test for `R4` of `dev/doc/apps/selby/
+    jost-finite-island-model/20260903-claude-opus-5-gene-identity-
+    recursion-fim-implications.md`: run across several loci so `H_S`/
+    `H_T` are themselves already averages (`report_for_state`'s own
+    `mean_h_s`/`mean_h_t`) — `Gs`/`Gd` being linear in `H_S`/`H_T` means
+    computing them from those already-pooled means must agree exactly
+    with the formula in `fim.statistics.differentiation.gs`/`gd`'s own
+    docstrings, not merely approximately.
+    """
+    params = replace(
+        tiny_params, loci=(LocusSpec(1, 200), LocusSpec(2, 150), LocusSpec(3, 100))
+    )
+
+    result = _run(params)
+
+    within = result.report["H_S"]
+    total = result.report["H_T"]
+    deme_count = params.d
+    assert result.report["Gs"] == pytest.approx(1.0 - within)
+    assert result.report["Gd"] == pytest.approx(
+        (deme_count * (1.0 - total) - (1.0 - within)) / (deme_count - 1)
+    )
 
 
 def test_naive_manifest_clock_is_rejected(tiny_params: SimulationParams) -> None:

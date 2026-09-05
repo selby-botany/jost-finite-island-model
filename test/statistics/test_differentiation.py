@@ -19,6 +19,8 @@ from fim.statistics import (
     equilibrium_g_st,
     g_st,
     g_st_log,
+    gd,
+    gs,
     h_s,
     h_st,
     h_t,
@@ -89,6 +91,62 @@ class DifferentiationStatisticsTests(unittest.TestCase):
                 assert isinstance(expected, dict)
                 for name, value in expected.items():
                     self.assertAlmostEqual(report_values[name], value, places=12)
+
+    def test_gs_and_gd_match_h_s_and_h_t_derived_values(self) -> None:
+        """`gs`/`gd` equal `h_s`/`h_t`'s own linear closed forms, on real tables.
+
+        `R4` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
+        claude-opus-5-gene-identity-recursion-fim-implications.md`'s own
+        exit criterion: ``Gs = 1 - H_S``, ``Gd = (d * (1 - H_T) - (1 -
+        H_S)) / (d - 1)`` (§4.4) — checked against every existing golden
+        fixture already used for `h_s`/`h_t`/`g_st`/`jost_d` above, not a
+        fresh set of hand-derived numbers, so this test cannot introduce
+        its own arithmetic mistake independent of the formula it checks.
+        """
+        for fixture_name in (
+            "fixed_all_different.json",
+            "fixed_five_five.json",
+            "fixed_nine_one.json",
+            "reversed_frequencies.json",
+            "shared_all.json",
+            "shared_and_private.json",
+            "shared_none.json",
+        ):
+            with self.subTest(fixture_name=fixture_name):
+                table = _frequency_table(_fixture(fixture_name))
+                within = h_s(table)
+                total = h_t(table)
+                deme_count = len(table)
+                self.assertAlmostEqual(gs(table), 1.0 - within, places=12)
+                self.assertAlmostEqual(
+                    gd(table),
+                    (deme_count * (1.0 - total) - (1.0 - within)) / (deme_count - 1),
+                    places=12,
+                )
+
+    def test_gd_requires_multiple_demes(self) -> None:
+        """`gd` needs at least two demes, the same requirement `g_st`/`h_st` share.
+
+        A single deme has no "between" for `Gd` to describe, and the
+        formula's own `d - 1` denominator is undefined at `d = 1`.
+        """
+        with self.assertRaisesRegex(ValueError, "at least two demes"):
+            gd([{0: 1.0}])
+
+    def test_statistics_report_gs_and_gd_match_the_standalone_functions(self) -> None:
+        """`statistics_report`'s own `Gs`/`Gd` fields agree with `gs`/`gd` directly.
+
+        `statistics_report` computes every field from its own already-
+        validated `demes`/`within`/`total`, never by calling the public
+        `gs`/`gd` (the same "avoid redundant re-validation" reasoning
+        `_h_s_from_demes`'s own docstring gives for `h_s`/`h_t`) — this
+        checks the two independent code paths agree, not just that
+        either one is internally consistent with itself.
+        """
+        table = [{0: 0.5, 1: 0.5}, {0: 0.25, 2: 0.75}]
+        report = statistics_report(table)
+        self.assertAlmostEqual(report["Gs"], gs(table), places=12)
+        self.assertAlmostEqual(report["Gd"], gd(table), places=12)
 
     def test_single_deme_statistics_and_hill_orders(self) -> None:
         """H, J, and q=0,1,2 Hill numbers follow their defining equations."""

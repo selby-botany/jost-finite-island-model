@@ -301,6 +301,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [hill\_number](#fim.statistics.differentiation.hill_number)
   * [h\_s](#fim.statistics.differentiation.h_s)
   * [h\_t](#fim.statistics.differentiation.h_t)
+  * [gs](#fim.statistics.differentiation.gs)
+  * [gd](#fim.statistics.differentiation.gd)
   * [h\_st](#fim.statistics.differentiation.h_st)
   * [total\_hill\_number](#fim.statistics.differentiation.total_hill_number)
   * [within\_hill\_number](#fim.statistics.differentiation.within_hill_number)
@@ -1238,7 +1240,7 @@ Fields:
         reason the run stopped (e.g. "statistic converged" or "hit
         the cap") — meant to be read directly by a person looking at
         a results table, not parsed by code.
-    G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The six differentiation/
+    G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The seven differentiation/
         heterozygosity measures this project reports (see this
         module's own docstring for what each name means, in outline,
         and the linked
@@ -1250,6 +1252,18 @@ Fields:
         `_mean_g_st_across_loci`), and if *every* tracked locus is in
         that state, there is no defined value left to average at
         all. Every other field is always a real number.
+    Gs, Gd: The within- and between-deme gene identities (Ryman &
+        Leimar's `J_0`/`J_1`) `H_S`/`H_T`/`G_ST`/`D` are themselves
+        derived from — `fim.statistics.differentiation.gs`/`gd`'s
+        own docstrings have the exact formulas and `fim`'s own
+        with-replacement identity convention. Added by this
+        project's own Ryman & Leimar remediation, `R4`
+        (`dev/doc/apps/selby/jost-finite-island-model/20260903-
+        claude-opus-5-gene-identity-recursion-fim-implications.md`
+        §9). Both linear in `H_S`/`H_T`, so — unlike `G_ST`/`D` —
+        averaging across loci or replicates never needs a ratio-of-
+        means-versus-mean-of-ratios decision; there is only one
+        answer.
 
 <a id="fim.engine.RunResult"></a>
 
@@ -2362,10 +2376,18 @@ at all" case too.
 **Returns**:
 
   One `ConfidenceInterval` per statistic name in `FinalReport`
-  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``)
-  with at least two defined values across `reports`; a statistic
-  short of that (including every statistic, given fewer than two
-  reports overall) is omitted entirely.
+  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
+  ``Gs``, ``Gd``) with at least two defined values across
+  `reports`; a statistic short of that (including every statistic,
+  given fewer than two reports overall) is omitted entirely.
+  `Gs`/`Gd` are both linear in `H_S`/`H_T` (`fim.statistics.
+  differentiation.gs`/`gd`'s own docstrings), so — unlike `D`/
+  `G_ST`, whose own across-replicate treatment this project's own
+  Ryman & Leimar remediation, `R3` part 3, still owes a dedicated
+  derivation — the ordinary Student's-t interval on the sample mean
+  this function already computes for every other field is already
+  the mathematically correct interval for them too, not a
+  placeholder standing in for one.
 
 <a id="fim.engine.replicate_summary"></a>
 
@@ -8812,10 +8834,16 @@ class DifferentiationReport(TypedDict)
 Scalar statistics computed from a frequency table.
 
 One locus's own complete set of results from `statistics_report`,
-below — the same seven values (`fim.engine.FinalReport` reports the
-same six, minus `H_ST`, each averaged across every locus a run
-tracks). `G_ST` alone can be `None`: see `g_st`'s own docstring for
-why. Every other field is always a real number.
+below (`fim.engine.FinalReport` reports the identical set, each
+averaged across every locus a run tracks). `G_ST` alone can be
+`None`: see `g_st`'s own docstring for why. Every other field is
+always a real number. `Gs`/`Gd` (`gs`/`gd`, below) added by this
+project's own Ryman & Leimar remediation, `R4`
+(`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-
+5-gene-identity-recursion-fim-implications.md` §9) — the within-
+and between-deme gene identities `H_S`/`H_T`/`G_ST`/`D` are all
+themselves derived from, exposed directly rather than leaving every
+consumer to re-derive them from `H_S`/`H_T` independently.
 
 <a id="fim.statistics.differentiation.heterozygosity"></a>
 
@@ -8915,6 +8943,44 @@ different populations together cannot make the mixture *less*
 diverse than any one of them was alone), `H_T` is always at least as
 large as `H_S` — the gap between them, `H_T - H_S`, is the raw
 material every differentiation measure in this module works with.
+
+<a id="fim.statistics.differentiation.gs"></a>
+
+#### gs
+
+```python
+def gs(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+```
+
+Return the within-deme gene identity ``Gs`` (Ryman & Leimar's ``J_0``).
+
+``Gs = 1 - H_S`` — the exact complement of `h_s`, above, in `fim`'s
+own with-replacement identity convention (the same ``Σp²`` `identity`
+already uses for one deme), *not* Ryman & Leimar's own distinct-pair
+convention (`doc/migration-conventions.md` has the exact `O(1/N)`
+conversion between the two) — a deliberate choice, for internal
+consistency with `identity`/`h_s`, made explicitly rather than left
+implicit (`dev/doc/apps/selby/jost-finite-island-model/20260903-
+claude-opus-5-gene-identity-recursion-fim-implications.md` §9, `R4`'s
+own "design note worth deciding explicitly"): the conversion is
+applied only at a comparison site that actually needs the paper's
+own convention, never baked into this function itself. Well-defined
+for a single deme, same as `h_s` — there is no "between" for `Gs` to
+need; see `gd`, below, for that.
+
+<a id="fim.statistics.differentiation.gd"></a>
+
+#### gd
+
+```python
+def gd(table: FrequencyTable, deme_weights: DemeWeights = None) -> float
+```
+
+Return the between-deme gene identity ``Gd`` (Ryman & Leimar's ``J_1``).
+
+See `_gd_from_within_and_total`'s own docstring for the formula.
+Needs at least two demes (the `d - 1` denominator is undefined for
+one), the same requirement `g_st`/`h_st` already carry.
 
 <a id="fim.statistics.differentiation.h_st"></a>
 

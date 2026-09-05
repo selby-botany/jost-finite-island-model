@@ -151,6 +151,7 @@ from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
 from fim.statistics.differentiation import (
     DifferentiationReport,
     _g_st_from_demes,
+    _gd_from_within_and_total,
     _jost_d_from_within_and_total,
     statistics_report,
 )
@@ -204,7 +205,7 @@ class FinalReport(TypedDict):
             reason the run stopped (e.g. "statistic converged" or "hit
             the cap") — meant to be read directly by a person looking at
             a results table, not parsed by code.
-        G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The six differentiation/
+        G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The seven differentiation/
             heterozygosity measures this project reports (see this
             module's own docstring for what each name means, in outline,
             and the linked
@@ -216,6 +217,18 @@ class FinalReport(TypedDict):
             `_mean_g_st_across_loci`), and if *every* tracked locus is in
             that state, there is no defined value left to average at
             all. Every other field is always a real number.
+        Gs, Gd: The within- and between-deme gene identities (Ryman &
+            Leimar's `J_0`/`J_1`) `H_S`/`H_T`/`G_ST`/`D` are themselves
+            derived from — `fim.statistics.differentiation.gs`/`gd`'s
+            own docstrings have the exact formulas and `fim`'s own
+            with-replacement identity convention. Added by this
+            project's own Ryman & Leimar remediation, `R4`
+            (`dev/doc/apps/selby/jost-finite-island-model/20260903-
+            claude-opus-5-gene-identity-recursion-fim-implications.md`
+            §9). Both linear in `H_S`/`H_T`, so — unlike `G_ST`/`D` —
+            averaging across loci or replicates never needs a ratio-of-
+            means-versus-mean-of-ratios decision; there is only one
+            answer.
     """
 
     run_id: str
@@ -230,6 +243,8 @@ class FinalReport(TypedDict):
     H_S: float
     H_T: float
     H_ST: float
+    Gs: float
+    Gd: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -1982,6 +1997,8 @@ def report_for_state(
         "H_S": mean_h_s,
         "H_T": mean_h_t,
         "H_ST": _mean(tuple(report["H_ST"] for report in locus_reports)),
+        "Gs": 1.0 - mean_h_s,
+        "Gd": _gd_from_within_and_total(mean_h_s, mean_h_t, state.deme_count),
     }
 
 
@@ -2031,13 +2048,21 @@ def reports_summary(
 
     Returns:
         One `ConfidenceInterval` per statistic name in `FinalReport`
-        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``)
-        with at least two defined values across `reports`; a statistic
-        short of that (including every statistic, given fewer than two
-        reports overall) is omitted entirely.
+        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
+        ``Gs``, ``Gd``) with at least two defined values across
+        `reports`; a statistic short of that (including every statistic,
+        given fewer than two reports overall) is omitted entirely.
+        `Gs`/`Gd` are both linear in `H_S`/`H_T` (`fim.statistics.
+        differentiation.gs`/`gd`'s own docstrings), so — unlike `D`/
+        `G_ST`, whose own across-replicate treatment this project's own
+        Ryman & Leimar remediation, `R3` part 3, still owes a dedicated
+        derivation — the ordinary Student's-t interval on the sample mean
+        this function already computes for every other field is already
+        the mathematically correct interval for them too, not a
+        placeholder standing in for one.
     """
     summary: dict[str, ConfidenceInterval] = {}
-    for statistic in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"):
+    for statistic in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST", "Gs", "Gd"):
         values = [
             value
             for report in reports
@@ -2862,6 +2887,8 @@ def _final_report_statistic(report: FinalReport, statistic: str) -> float | None
         "H_S": report["H_S"],
         "H_T": report["H_T"],
         "H_ST": report["H_ST"],
+        "Gs": report["Gs"],
+        "Gd": report["Gd"],
     }
     if statistic not in fields:
         raise ValueError(f"unsupported statistic: {statistic}")

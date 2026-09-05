@@ -73,10 +73,16 @@ class DifferentiationReport(TypedDict):
     """Scalar statistics computed from a frequency table.
 
     One locus's own complete set of results from `statistics_report`,
-    below — the same seven values (`fim.engine.FinalReport` reports the
-    same six, minus `H_ST`, each averaged across every locus a run
-    tracks). `G_ST` alone can be `None`: see `g_st`'s own docstring for
-    why. Every other field is always a real number.
+    below (`fim.engine.FinalReport` reports the identical set, each
+    averaged across every locus a run tracks). `G_ST` alone can be
+    `None`: see `g_st`'s own docstring for why. Every other field is
+    always a real number. `Gs`/`Gd` (`gs`/`gd`, below) added by this
+    project's own Ryman & Leimar remediation, `R4`
+    (`dev/doc/apps/selby/jost-finite-island-model/20260903-claude-opus-
+    5-gene-identity-recursion-fim-implications.md` §9) — the within-
+    and between-deme gene identities `H_S`/`H_T`/`G_ST`/`D` are all
+    themselves derived from, exposed directly rather than leaving every
+    consumer to re-derive them from `H_S`/`H_T` independently.
     """
 
     H_S: float
@@ -86,6 +92,8 @@ class DifferentiationReport(TypedDict):
     D: float
     E_ST: float
     K_ST: float
+    Gs: float
+    Gd: float
 
 
 def _bounded(value: float, name: str) -> float:
@@ -441,6 +449,62 @@ def h_t(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
     demes = _validate_table(table)
     weights = _validate_weights(len(demes), deme_weights)
     return _h_t_from_demes(demes, weights)
+
+
+def _gd_from_within_and_total(within: float, total: float, deme_count: int) -> float:
+    """``Gd``'s own real math, given already-computed ``H_S``/``H_T``.
+
+    ``Gd = (d * (1 - H_T) - (1 - H_S)) / (d - 1)`` — `dev/doc/apps/
+    selby/jost-finite-island-model/20260903-claude-opus-5-gene-identity-
+    recursion-fim-implications.md` §4.4, inverted from ``H_S = 1 - Gs``
+    and ``H_T``'s own pooled-identity relationship. Linear in ``H_S``/
+    ``H_T``, unlike `G_ST`/`D` — so averaging `Gd` across loci commutes
+    exactly with averaging `H_S`/`H_T` first (`fim.engine.
+    report_for_state` relies on this directly, computing `Gd` once from
+    already-pooled means rather than averaging a per-locus `Gd`
+    separately). Split out from `gd`, below, for the identical reason
+    `_h_s_from_demes`'s own docstring gives: `statistics_report` needs
+    this exact computation without repeating `H_S`/`H_T`, which it has
+    already computed. Requires ``deme_count >= 2``, unchecked here —
+    `gd`/`statistics_report`, its own two call sites, both guarantee it
+    first (`_require_multiple_demes`).
+    """
+    return (deme_count * (1.0 - total) - (1.0 - within)) / (deme_count - 1)
+
+
+def gs(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
+    """Return the within-deme gene identity ``Gs`` (Ryman & Leimar's ``J_0``).
+
+    ``Gs = 1 - H_S`` — the exact complement of `h_s`, above, in `fim`'s
+    own with-replacement identity convention (the same ``Σp²`` `identity`
+    already uses for one deme), *not* Ryman & Leimar's own distinct-pair
+    convention (`doc/migration-conventions.md` has the exact `O(1/N)`
+    conversion between the two) — a deliberate choice, for internal
+    consistency with `identity`/`h_s`, made explicitly rather than left
+    implicit (`dev/doc/apps/selby/jost-finite-island-model/20260903-
+    claude-opus-5-gene-identity-recursion-fim-implications.md` §9, `R4`'s
+    own "design note worth deciding explicitly"): the conversion is
+    applied only at a comparison site that actually needs the paper's
+    own convention, never baked into this function itself. Well-defined
+    for a single deme, same as `h_s` — there is no "between" for `Gs` to
+    need; see `gd`, below, for that.
+    """
+    return 1.0 - h_s(table, deme_weights)
+
+
+def gd(table: FrequencyTable, deme_weights: DemeWeights = None) -> float:
+    """Return the between-deme gene identity ``Gd`` (Ryman & Leimar's ``J_1``).
+
+    See `_gd_from_within_and_total`'s own docstring for the formula.
+    Needs at least two demes (the `d - 1` denominator is undefined for
+    one), the same requirement `g_st`/`h_st` already carry.
+    """
+    demes = _validate_table(table)
+    _require_multiple_demes(demes)
+    weights = _validate_weights(len(demes), deme_weights)
+    within = _h_s_from_demes(demes, weights)
+    total = _h_t_from_demes(demes, weights)
+    return _gd_from_within_and_total(within, total, len(demes))
 
 
 def _h_st_from_within_and_total(total: float, within: float) -> float:
@@ -1623,6 +1687,8 @@ def statistics_report(
         "D": _jost_d_from_within_and_total(len(demes), within, total),
         "E_ST": _e_st_from_demes(demes, entropy_weights),
         "K_ST": _k_st_from_demes(demes),
+        "Gs": 1.0 - within,
+        "Gd": _gd_from_within_and_total(within, total, len(demes)),
     }
 
 
