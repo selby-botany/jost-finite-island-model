@@ -215,6 +215,79 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   raise, when the cache cannot be written at all (a read-only install
   location) — falls back to recompiling every time, exactly the
   pre-`cache=True` behavior, never a new failure mode.
+- `engine_backend="generational-vector"` (explicit, or `"auto"`
+  resolving to it) now fails at `build_engine_backend`/`fim()` call time
+  with a named `ValueError` — naming the missing dependency, or the
+  offending capacity against the configured ceiling — instead of a raw
+  `ImportError` mid-run (numba not installed) or attempting an
+  unrepresentable allocation (a locus capacity exceeding
+  `auto_vector_max_capacity`, reachable only through explicit selection
+  — `"auto"` already refused this on its own). Both failure modes used
+  to strike only after generation zero had already been persisted to
+  the trajectory store.
+- Public `migrate`/`migrate_vectorized_symmetric` no longer disagree on
+  how a single-deme state fails: `d == 1` is now a well-defined identity
+  (no other deme to migrate with) on both paths, instead of
+  `ZeroDivisionError` on one and a silent `NaN` on the other.
+  `drift_vectorized` now raises a named `ValueError` for a non-positive
+  deme size instead of silently dividing by zero; `fim.model.operators.
+  drift`'s own dict-based path already rejected this.
+- The convergence monitor's watched `D`/`G_ST` now respect
+  `SimulationParams.locus_aggregation`, the same way `report_for_state`'s
+  own final `D`/`G_ST` fields already do. A multi-locus run at the
+  default `locus_aggregation="ratio_of_means"` used to watch a
+  materially different estimator (`"mean_of_ratios"`, unconditionally)
+  than the one its own final report showed — this project's own
+  `params.py` docstring measures the two differing by 0.25% vs. 1.88%
+  from the exact gene-identity recursion at reference scale — so a run
+  could stop its trailing window on a `D` value its own `FinalReport`
+  never actually printed. `n_loci=1` (the default) never reached this;
+  any multi-locus config at the default aggregation did.
+- Documented, rather than silently assumed, that `"generational-vector"`'s
+  bit-identity guarantee against `"lineal"`/`"generational"` holds only
+  for a single-locus run with migration off. With two or more loci,
+  tracked regardless of migration, `step_vectorized` fuses `migrate`/
+  `mutate`/`drift` per locus (one whole locus's own dense array per
+  call) while the dict-based backends run each stage across every locus
+  first, in a deme-major order — the two draw from the shared random
+  stream in a genuinely different sequence the instant more than one
+  locus is tracked. A new statistical-parity test (mean `D`/`G_ST` across
+  many seeds, `m=0` to isolate this from migration's own separate,
+  already-documented floating-point divergence) covers the multi-locus
+  case the sole prior exact-match test never exercised.
+- The finite-alleles ("K-allele") mutation model's "mint a fresh state"
+  branch (`FiniteAlleleSpace.mutate_target`, and its two duplicated
+  array-native copies) now draws uniformly at random among every
+  not-yet-minted state, as already documented — it previously always
+  returned the single smallest not-yet-minted state, deterministically:
+  every other unminted state had probability exactly zero of ever being
+  selected, silently narrower than the "uniformly at random" contract
+  both the docstring and every call site described. Aggregate,
+  label-invariant statistics (`D`, `G_ST`, heterozygosity) were
+  unaffected (the two prior cross-backend parity tests validated
+  agreement on the same wrong distribution, which cannot detect a defect
+  every implementation shares); anything reading allele identity
+  directly — a labeled lineage, a cross-check against an external
+  K-allele simulator — was not. A new, independent target-identity
+  distribution test (not cross-backend parity) checks the actual
+  distribution directly. The array-native copies also regain a capacity
+  guard (a named `RuntimeError`, matching the dict-based original) that
+  a prior version had silently dropped, indexing out of bounds instead.
+- `_multinomial_rows_batched` (the array-native multinomial decomposition
+  `mutate_vectorized`/`drift_vectorized` both use) now matches the
+  dict-based backends' own probability normalization exactly whenever a
+  deme-locus has 8 or more present alleles, not only below that count.
+  NumPy's own array `.sum()` — what the dict-based path actually calls,
+  on its own short, present-values-only array — is sequential only
+  below 8 elements, switching to pairwise summation from 8 up; the
+  array-native path's own hand-rolled sequential accumulation could not
+  reproduce that once 8 or more alleles were present, occasionally
+  landing one ULP away and flipping which side of a discrete drift
+  decision boundary the draw fell on. Every existing exact-match test
+  stayed below that threshold, so this stayed invisible until fixing the
+  mint-branch uniformity defect above made 8-present-allele demes newly
+  reachable in already-existing tests — confirmed live via a direct
+  trace, not merely reasoned about.
 
 ---
 
