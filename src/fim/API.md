@@ -5734,7 +5734,10 @@ are designed to quantify.
 
 **Raises**:
 
-- `ValueError` - If ``rng`` is given without ``population_size``.
+- `ValueError` - If ``rng`` is given without ``population_size``; if a
+  scalar ``m`` is a `bool`, non-finite, or outside ``[0, 1]``;
+  or if a matrix ``m`` does not have exactly one row, and one
+  entry per row, for every deme in ``state``.
 
 <a id="fim.model.operators.mutate"></a>
 

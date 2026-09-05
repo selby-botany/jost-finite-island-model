@@ -1676,6 +1676,126 @@ def test_migrate_stochastic_matrix_self_weight_one_matches_continuous(
     assert stochastic.frequency_map(2, 0) == continuous.frequency_map(2, 0)
 
 
+class _NoBinomialRng:
+    """Wraps a real generator, raising if `.binomial()` is ever called.
+
+    Proves a stochastic-migration code path draws its migrant count via
+    `_inversion_binomial` (which only ever calls `.random()` — see that
+    function's own docstring), never `rng.binomial` directly — the exact
+    regression `FIM-11` fixes. Duck-typed rather than a `np.random.
+    Generator` subclass: nothing in `fim.model.operators` ever checks
+    `isinstance(rng, np.random.Generator)`, so forwarding every other
+    attribute straight through to a real generator is sufficient.
+    """
+
+    def __init__(self, inner: np.random.Generator) -> None:
+        self._inner = inner
+
+    def binomial(self, *args: object, **kwargs: object) -> int:
+        del args, kwargs  # unused; the point is that this is never reached
+        raise AssertionError("rng.binomial() should not be called directly")
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+def test_migrate_stochastic_draws_migrant_count_via_inversion_binomial(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The stochastic migrant count comes from `_inversion_binomial`, not `.binomial`.
+
+    Regression test for FIM-11: `_blend` used to call `rng.binomial`
+    directly — the one draw in this module not migrated to the fixed-
+    draw-count `_inversion_binomial` the rest of it was rebuilt around,
+    reintroducing variable, `n`/`p`-dependent stream consumption that
+    breaks cross-backend bit-matching. Exercises both the scalar and
+    matrix stochastic paths, since each has its own call site.
+    """
+    wrapped = _NoBinomialRng(rng(20260818))
+
+    scalar_result = migrate(_state(), 0.3, 100, rng=wrapped)  # type: ignore[arg-type]
+    matrix_result = migrate(
+        _three_deme_state(),
+        ((0.7, 0.2, 0.1), (0.2, 0.7, 0.1), (0.1, 0.1, 0.8)),
+        (100, 100, 100),
+        rng=wrapped,  # type: ignore[arg-type]
+    )
+
+    assert isinstance(scalar_result, ModelState)
+    assert isinstance(matrix_result, ModelState)
+
+
+def test_migrate_stochastic_shares_one_migrant_count_across_every_locus(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Every locus in a deme uses the same drawn migrant count, not one each.
+
+    Regression test for FIM-13: `_blend` used to draw its own migrant
+    count internally, once per call, and every caller called it once per
+    (deme, locus) — modeling loci as independent gametic pools rather
+    than individuals carrying every locus together. Two identical loci
+    must now produce identical post-migration frequencies (one shared
+    migrant fraction applied to the same inputs at both), not two
+    independently drawn counts landing on two different answers.
+    """
+    deme0_locus = {AlleleId(0): 0.8, AlleleId(1): 0.2}
+    deme1_locus = {AlleleId(0): 0.2, AlleleId(1): 0.8}
+    state = ModelState(
+        loci=(LocusSpec(1, 100), LocusSpec(2, 100)),
+        frequencies=((deme0_locus, deme0_locus), (deme1_locus, deme1_locus)),
+    )
+
+    migrated = migrate(state, 0.4, (100, 100), rng=rng(20260818))
+
+    assert migrated.frequency_map(0, 0) == migrated.frequency_map(0, 1)
+    assert migrated.frequency_map(1, 0) == migrated.frequency_map(1, 1)
+
+
+def test_symmetric_pool_mass_clamps_tiny_negative_cancellation_to_zero() -> None:
+    """Catastrophic cancellation can never produce a negative migrant-pool mass.
+
+    Regression test for FIM-14: ``total - destination_size *
+    local_frequency`` is exact in real arithmetic but can round a
+    genuinely non-negative result to a tiny negative `float64` for a
+    heavily skewed allele. The raw formula (asserted first, to confirm
+    this input genuinely triggers the cancellation rather than testing a
+    clamp that never engages) goes negative for `total=0.0` with any
+    positive `local_frequency`; `_symmetric_pool_mass` must clamp that to
+    exactly `0.0`, and must leave an ordinary positive result untouched.
+    """
+    raw = (0.0 - 1 * 1e-300) / 1.0
+    assert raw < 0.0
+
+    assert operators._symmetric_pool_mass(0.0, 1, 1e-300, 1.0) == 0.0
+    assert operators._symmetric_pool_mass(10.0, 2, 0.5, 5.0) == pytest.approx(1.8)
+
+
+@pytest.mark.parametrize(
+    ("m", "message"),
+    [
+        (True, "between 0 and 1"),
+        (-0.1, "between 0 and 1"),
+        (1.1, "between 0 and 1"),
+        (float("nan"), "between 0 and 1"),
+        (((1.0, 0.0),), "one matrix row per deme"),
+        (((0.5, 0.5), (0.5, 0.5), (0.5, 0.5)), "one matrix row per deme"),
+        (((0.5, 0.5, 0.0), (0.5, 0.5)), "must have 2 entries"),
+    ],
+)
+def test_migrate_rejects_invalid_m_shapes(m: object, message: str) -> None:
+    """Public `migrate` validates scalar range and matrix shape directly.
+
+    Regression test for FIM-23: an invalid `m` used to be silently
+    absorbed into a plausible-looking wrong distribution (a `bool`
+    coerced to `0`/`1`, a wrong row/column count just producing a
+    wrong-shaped result) rather than raising. Unreachable through
+    `SimulationParams.from_mapping` (already validated there — see
+    `test_params.py`), but `migrate` is public API on its own.
+    """
+    with pytest.raises(ValueError, match=message):
+        migrate(_state(), m)  # type: ignore[arg-type]
+
+
 def test_mutation_can_have_no_events_without_changing_maps(
     rng: Callable[[int], np.random.Generator],
 ) -> None:

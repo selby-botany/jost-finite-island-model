@@ -8410,6 +8410,92 @@ stochastic and continuous paths must agree exactly for that deme,
 since there is nothing random left to draw once the migrant weight
 is zero.
 
+<a id="model.test_operators.test_migrate_stochastic_draws_migrant_count_via_inversion_binomial"></a>
+
+#### test\_migrate\_stochastic\_draws\_migrant\_count\_via\_inversion\_binomial
+
+```python
+def test_migrate_stochastic_draws_migrant_count_via_inversion_binomial(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The stochastic migrant count comes from `_inversion_binomial`, not `.binomial`.
+
+Regression test for FIM-11: `_blend` used to call `rng.binomial`
+directly — the one draw in this module not migrated to the fixed-
+draw-count `_inversion_binomial` the rest of it was rebuilt around,
+reintroducing variable, `n`/`p`-dependent stream consumption that
+breaks cross-backend bit-matching. Exercises both the scalar and
+matrix stochastic paths, since each has its own call site.
+
+<a id="model.test_operators.test_migrate_stochastic_shares_one_migrant_count_across_every_locus"></a>
+
+#### test\_migrate\_stochastic\_shares\_one\_migrant\_count\_across\_every\_locus
+
+```python
+def test_migrate_stochastic_shares_one_migrant_count_across_every_locus(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Every locus in a deme uses the same drawn migrant count, not one each.
+
+Regression test for FIM-13: `_blend` used to draw its own migrant
+count internally, once per call, and every caller called it once per
+(deme, locus) — modeling loci as independent gametic pools rather
+than individuals carrying every locus together. Two identical loci
+must now produce identical post-migration frequencies (one shared
+migrant fraction applied to the same inputs at both), not two
+independently drawn counts landing on two different answers.
+
+<a id="model.test_operators.test_symmetric_pool_mass_clamps_tiny_negative_cancellation_to_zero"></a>
+
+#### test\_symmetric\_pool\_mass\_clamps\_tiny\_negative\_cancellation\_to\_zero
+
+```python
+def test_symmetric_pool_mass_clamps_tiny_negative_cancellation_to_zero(
+) -> None
+```
+
+Catastrophic cancellation can never produce a negative migrant-pool mass.
+
+Regression test for FIM-14: ``total - destination_size *
+local_frequency`` is exact in real arithmetic but can round a
+genuinely non-negative result to a tiny negative `float64` for a
+heavily skewed allele. The raw formula (asserted first, to confirm
+this input genuinely triggers the cancellation rather than testing a
+clamp that never engages) goes negative for `total=0.0` with any
+positive `local_frequency`; `_symmetric_pool_mass` must clamp that to
+exactly `0.0`, and must leave an ordinary positive result untouched.
+
+<a id="model.test_operators.test_migrate_rejects_invalid_m_shapes"></a>
+
+#### test\_migrate\_rejects\_invalid\_m\_shapes
+
+```python
+@pytest.mark.parametrize(
+    ("m", "message"),
+    [
+        (True, "between 0 and 1"),
+        (-0.1, "between 0 and 1"),
+        (1.1, "between 0 and 1"),
+        (float("nan"), "between 0 and 1"),
+        (((1.0, 0.0), ), "one matrix row per deme"),
+        (((0.5, 0.5), (0.5, 0.5), (0.5, 0.5)), "one matrix row per deme"),
+        (((0.5, 0.5, 0.0), (0.5, 0.5)), "must have 2 entries"),
+    ],
+)
+def test_migrate_rejects_invalid_m_shapes(m: object, message: str) -> None
+```
+
+Public `migrate` validates scalar range and matrix shape directly.
+
+Regression test for FIM-23: an invalid `m` used to be silently
+absorbed into a plausible-looking wrong distribution (a `bool`
+coerced to `0`/`1`, a wrong row/column count just producing a
+wrong-shaped result) rather than raising. Unreachable through
+`SimulationParams.from_mapping` (already validated there — see
+`test_params.py`), but `migrate` is public API on its own.
+
 <a id="model.test_operators.test_mutation_can_have_no_events_without_changing_maps"></a>
 
 #### test\_mutation\_can\_have\_no\_events\_without\_changing\_maps

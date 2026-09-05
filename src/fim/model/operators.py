@@ -1053,10 +1053,35 @@ def migrate(
         A state at the same generation containing post-migration frequencies.
 
     Raises:
-        ValueError: If ``rng`` is given without ``population_size``.
+        ValueError: If ``rng`` is given without ``population_size``; if a
+            scalar ``m`` is a `bool`, non-finite, or outside ``[0, 1]``;
+            or if a matrix ``m`` does not have exactly one row, and one
+            entry per row, for every deme in ``state``.
     """
     if rng is not None and population_size is None:
         raise ValueError("migrate() requires population_size when rng is given")
+    # Reachable directly through this public function even though
+    # `SimulationParams.from_mapping` already rejects every one of these
+    # shapes at config-load time — silently absorbed into a plausible-
+    # looking wrong distribution otherwise, rather than raising, for a
+    # caller (or a future backend) that builds `m` itself instead of
+    # going through `SimulationParams` (this project's own multi-model
+    # engine review, 2026-09-04, `FIM-23`/finding Kimi-FIM-23).
+    if isinstance(m, int | float):
+        if isinstance(m, bool) or not math.isfinite(m) or not 0.0 <= m <= 1.0:
+            raise ValueError("migrate() requires m to be a number between 0 and 1")
+    elif len(m) != state.deme_count:
+        raise ValueError(
+            f"migrate() requires one matrix row per deme ({state.deme_count}), "
+            f"got {len(m)}"
+        )
+    else:
+        for row_index, row in enumerate(m):
+            if len(row) != state.deme_count:
+                raise ValueError(
+                    f"migrate() m[{row_index}] must have {state.deme_count} "
+                    f"entries, got {len(row)}"
+                )
     matrix_sizes: tuple[int, ...] | None = (
         _population_sizes(population_size, state.deme_count)
         if population_size is not None
@@ -1703,37 +1728,58 @@ def _allele_union(frequency_maps: Sequence[FrequencyMap]) -> tuple[AlleleId, ...
     return tuple(observed)
 
 
+def _migrant_fraction(rng: np.random.Generator, size: int, rate: float) -> float:
+    """Draw one deme's own stochastic migrant fraction for this generation.
+
+    ``Binomial(size, rate) / size``, via `_inversion_binomial` — the same
+    fixed-draw-count algorithm every other stochastic draw in this module
+    already uses, not `rng.binomial` directly (this project's own
+    multi-model engine review, 2026-09-04, `FIM-11`/finding M-04/finding
+    P2-3: `rng.binomial` is the one call in this module not migrated to
+    `_inversion_binomial` when the rest of it was rebuilt around that
+    algorithm specifically for its fixed, `n`/`p`-independent stream
+    consumption — without it, `migrant_sampling="stochastic"` cannot be
+    cross-backend bit-matched the way every other stochastic draw here
+    already is).
+
+    Called once per (deme, generation), never once per (deme, locus): a
+    deme's own individual gene copies carry every locus together, so how
+    many of a deme's ``size`` gene copies migrated this generation is one
+    shared fact about the deme, not something a caller should draw
+    independently for each locus (`FIM-13`/finding Kimi-FIM-13 — `_blend`,
+    below, used to draw its own migrant count internally, once per call,
+    and every caller called it once per locus).
+    """
+    return _inversion_binomial(rng, size, rate) / size
+
+
 def _blend(
     local: Mapping[AlleleId, float],
     pool: Mapping[AlleleId, float],
-    rate: float,
-    size: int,
-    rng: np.random.Generator,
+    migrant_fraction: float,
 ) -> Mapping[AlleleId, float]:
-    """Blend one deme/locus using a binomially sampled migrant count.
+    """Blend one deme/locus using an already-drawn migrant fraction.
 
-    ``rate`` is applied as ``Binomial(size, rate) / size`` instead of
-    exactly, so the migrant *count* varies generation to generation with
-    mean ``size * rate`` while the migrant *composition* stays exactly
+    The migrant *count* varies generation to generation with mean
+    ``size * rate`` while the migrant *composition* stays exactly
     ``pool`` — the same deterministic weighted average the continuous path
     always used. Drift, not this step, remains the pipeline's only operator
-    that resamples every gene copy; this only randomizes how many of a
-    deme's ``size`` gene copies are attributed to the migrant pool this
-    generation, versus how many stayed local.
+    that resamples every gene copy; this only blends by however much of a
+    deme's own gene copies `migrant_fraction` already says came from the
+    pool this generation.
 
     Args:
         local: This deme's own pre-migration frequency map.
         pool: The deterministic migrant-pool frequency map.
-        rate: The scalar or per-row migration rate — the binomial draw's
-            success probability.
-        size: This deme's gene-copy count, ``N_i``.
-        rng: The run's explicitly threaded random generator.
+        migrant_fraction: This deme's own migrant fraction for this
+            generation, already drawn once via `_migrant_fraction` and
+            shared across every locus this same call blends — never drawn
+            here, so one call site cannot accidentally draw it once per
+            locus again (`FIM-13`).
 
     Returns:
         A normalized post-migration frequency map.
     """
-    migrant_count = int(rng.binomial(size, rate))
-    migrant_fraction = migrant_count / size
     blended = {
         allele_id: (1.0 - migrant_fraction) * local.get(allele_id, 0.0)
         + migrant_fraction * pool.get(allele_id, 0.0)
@@ -1752,6 +1798,23 @@ def _migrate_matrix(
     """Apply a complete source-weight matrix."""
     result: list[tuple[Mapping[AlleleId, float], ...]] = []
     for destination, weights in enumerate(matrix):
+        # Stochastic path: the row's own diagonal entry is this
+        # destination's self-retention weight; everything else is the
+        # migrant pool, exactly as in the deterministic case below, but
+        # the count drawn from that pool this generation is now random
+        # rather than exactly ``migrant_weight * size``. Drawn once per
+        # destination, before the locus loop, not once per locus inside
+        # it — a deme's own gene copies carry every locus together, so
+        # this generation's own migrant count is one fact about the
+        # deme, shared by every locus's own blend below (`FIM-13`).
+        migrant_weight = 1.0 - weights[destination]
+        destination_migrant_fraction: float | None = None
+        if rng is not None and migrant_weight > 0.0:
+            if sizes is None:
+                raise ValueError("migrate() requires population_size when rng is given")
+            destination_migrant_fraction = _migrant_fraction(
+                rng, sizes[destination], migrant_weight
+            )
         locus_maps: list[Mapping[AlleleId, float]] = []
         for locus_index in range(state.locus_count):
             sources = tuple(
@@ -1769,22 +1832,21 @@ def _migrate_matrix(
                 }
                 locus_maps.append(_normalize(blended))
                 continue
-            # Stochastic path: the row's own diagonal entry is this
-            # destination's self-retention weight; everything else is the
-            # migrant pool, exactly as in the deterministic case above, but
-            # the count drawn from that pool this generation is now random
-            # rather than exactly ``migrant_weight * size``.
-            migrant_weight = 1.0 - weights[destination]
             local = sources[destination]
             if migrant_weight <= 0.0:
                 locus_maps.append(dict(local))
                 continue
-            if sizes is None:
-                raise ValueError("migrate() requires population_size when rng is given")
+            if destination_migrant_fraction is None:
+                # Unreachable: `migrant_weight > 0.0` here is exactly the
+                # condition already checked, above the locus loop, before
+                # `destination_migrant_fraction` was drawn — guarded
+                # explicitly rather than assumed, the same discipline
+                # `_require_lane_result` (`fim.engine`) already uses.
+                raise RuntimeError(
+                    "migrant fraction was not drawn for a migrating destination"
+                )
             pool = _row_pool(weights, sources, destination, migrant_weight)
-            locus_maps.append(
-                _blend(local, pool, migrant_weight, sizes[destination], rng)
-            )
+            locus_maps.append(_blend(local, pool, destination_migrant_fraction))
         result.append(tuple(locus_maps))
     return tuple(result)
 
@@ -2121,6 +2183,15 @@ def _migrate_symmetric(
     for destination in range(state.deme_count):
         destination_size = sizes[destination]
         other_weight = total_size - destination_size
+        # Drawn once per destination, before the locus loop, not once per
+        # locus inside it — the identical `FIM-13` reasoning `_migrate_
+        # matrix`'s own stochastic branch already applies. `rate == 0.0`/
+        # `deme_count == 1` already returned above, so every destination
+        # here genuinely migrates; no `migrant_weight > 0.0` gate needed
+        # the way `_migrate_matrix`'s own per-row weight requires.
+        migrant_fraction = (
+            _migrant_fraction(rng, destination_size, rate) if rng is not None else None
+        )
         locus_maps: list[Mapping[AlleleId, float]] = []
         for locus_index in range(state.locus_count):
             local = state.frequency_map(destination, locus_index)
@@ -2128,22 +2199,54 @@ def _migrate_symmetric(
                 blended: dict[AlleleId, float] = {}
                 for allele_id, total in global_mass[locus_index].items():
                     local_frequency = local.get(allele_id, 0.0)
-                    pool_frequency = (
-                        total - destination_size * local_frequency
-                    ) / other_weight
+                    pool_frequency = _symmetric_pool_mass(
+                        total, destination_size, local_frequency, other_weight
+                    )
                     blended[allele_id] = (
                         1.0 - rate
                     ) * local_frequency + rate * pool_frequency
                 locus_maps.append(_normalize(blended))
             else:
+                if migrant_fraction is None:
+                    # Unreachable: this branch only runs when `rng is not
+                    # None`, the exact condition `migrant_fraction` was
+                    # just computed under, above — guarded explicitly
+                    # rather than assumed, matching `_migrate_matrix`'s
+                    # own identical guard.
+                    raise RuntimeError(
+                        "migrant fraction was not drawn for a stochastic destination"
+                    )
                 pool = {
-                    allele_id: (total - destination_size * local.get(allele_id, 0.0))
-                    / other_weight
+                    allele_id: _symmetric_pool_mass(
+                        total, destination_size, local.get(allele_id, 0.0), other_weight
+                    )
                     for allele_id, total in global_mass[locus_index].items()
                 }
-                locus_maps.append(_blend(local, pool, rate, destination_size, rng))
+                locus_maps.append(_blend(local, pool, migrant_fraction))
         result.append(tuple(locus_maps))
     return tuple(result)
+
+
+def _symmetric_pool_mass(
+    total: float,
+    destination_size: int,
+    local_frequency: float,
+    other_weight: float,
+) -> float:
+    """Return one allele's own migrant-pool frequency, clamped against cancellation.
+
+    ``(total - destination_size * local_frequency) / other_weight``
+    removes one deme's own contribution from the global size-weighted
+    mass to leave every *other* deme's own share — exact in real
+    arithmetic, but floating-point catastrophic cancellation can round a
+    rare allele's own tiny, genuinely positive migrant mass to a tiny
+    *negative* number instead of exactly `0.0` for a heavily skewed
+    allele (this project's own multi-model engine review, 2026-09-04,
+    `FIM-14`/finding Kimi-FIM-14). Clamped here rather than left to
+    propagate into a caller's own weighted blend as a small, physically
+    meaningless negative frequency.
+    """
+    return max(0.0, (total - destination_size * local_frequency) / other_weight)
 
 
 def _normalize(
