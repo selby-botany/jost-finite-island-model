@@ -146,7 +146,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from importlib.metadata import version as installed_version
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import yaml
 
@@ -603,8 +603,56 @@ def _mib(rss_bytes: int | None, *, skip: str = "n/a") -> str:
     return f"{rss_bytes / (1024 * 1024):.1f}" if rss_bytes is not None else skip
 
 
+def _table_header(*, measure_rss: bool = False) -> str:
+    """Build the summary table's own header line (see `_print_table`)."""
+    header = (
+        f"{'value':>10} {'L_1(s)':>8} {'L_b(s)':>8} {'L_b/L1':>7} "
+        f"{'G-off(s)':>9} {'/L1':>6} {'G-jit(s)':>9} {'/L1':>6} "
+        f"{'V(s)':>8} {'/L1':>6} {'fastest':>8}"
+    )
+    if measure_rss:
+        header += f" {'L_b(MiB)':>9} {'G-o(MiB)':>9} {'G-j(MiB)':>9} {'V(MiB)':>8}"
+    return header
+
+
+def _table_row(point: BenchmarkPoint, *, measure_rss: bool = False) -> str:
+    """Build one summary table row (see `_print_table`)."""
+    candidates = {
+        "L": point.lineal_batch_seconds,
+        "G-off": point.generational_jit_off_seconds,
+        "G-jit": point.generational_jit_numba_seconds,
+        "V": point.vector_seconds,
+    }
+    real_candidates = {
+        name: seconds for name, seconds in candidates.items() if seconds is not None
+    }
+    fastest = min(real_candidates, key=lambda name: real_candidates[name])
+    l1 = point.lineal_single_seconds
+    row = (
+        f"{point.swept_value:>10.4g} "
+        f"{l1:>8.3f} "
+        f"{point.lineal_batch_seconds:>8.3f} "
+        f"{point.lineal_batch_seconds / l1:>7.2f} "
+        f"{_seconds(point.generational_jit_off_seconds):>9} "
+        f"{_ratio(point.generational_jit_off_seconds, l1):>6} "
+        f"{_seconds(point.generational_jit_numba_seconds):>9} "
+        f"{_ratio(point.generational_jit_numba_seconds, l1):>6} "
+        f"{_seconds(point.vector_seconds, skip='skip'):>8} "
+        f"{_ratio(point.vector_seconds, l1):>6} "
+        f"{fastest:>8}"
+    )
+    if measure_rss:
+        row += (
+            f" {_mib(point.lineal_batch_rss_bytes):>9}"
+            f" {_mib(point.generational_jit_off_rss_bytes):>9}"
+            f" {_mib(point.generational_jit_numba_rss_bytes):>9}"
+            f" {_mib(point.vector_rss_bytes, skip='skip'):>8}"
+        )
+    return row
+
+
 def _print_table(points: list[BenchmarkPoint], *, measure_rss: bool = False) -> None:
-    """Print a human-readable summary table to stdout.
+    """Print a human-readable summary table to stdout, all at once.
 
     `L_1` is a pure normalization divisor (every `/L_1` column is
     relative to it) — `L_batch` is the real fourth engine series,
@@ -617,49 +665,23 @@ def _print_table(points: list[BenchmarkPoint], *, measure_rss: bool = False) -> 
     so a run with every point skipped (e.g. every point outside Backend
     V's own scope) still shows the columns it asked for, correctly all
     `n/a`, rather than silently reverting to the narrower table.
+
+    `main` no longer calls this directly for its own live progress --
+    it prints the header once and each row as soon as that point is
+    measured (`_table_header`/`_table_row`, both `flush=True`), so a
+    multi-hour or multi-day sweep's own redirected log shows real
+    progress via `tail -f` rather than staying empty until the whole
+    run exits (stdout is fully buffered, not line-buffered, once
+    redirected to a file — a genuinely long sweep's own log otherwise
+    looks indistinguishable from a hang for its entire duration). This
+    function stays for any other caller that wants the complete table
+    built from an already-finished `points` list in one call.
     """
-    header = (
-        f"{'value':>10} {'L_1(s)':>8} {'L_b(s)':>8} {'L_b/L1':>7} "
-        f"{'G-off(s)':>9} {'/L1':>6} {'G-jit(s)':>9} {'/L1':>6} "
-        f"{'V(s)':>8} {'/L1':>6} {'fastest':>8}"
-    )
-    if measure_rss:
-        header += f" {'L_b(MiB)':>9} {'G-o(MiB)':>9} {'G-j(MiB)':>9} {'V(MiB)':>8}"
+    header = _table_header(measure_rss=measure_rss)
     print(header)
     print("-" * len(header))
     for point in points:
-        candidates = {
-            "L": point.lineal_batch_seconds,
-            "G-off": point.generational_jit_off_seconds,
-            "G-jit": point.generational_jit_numba_seconds,
-            "V": point.vector_seconds,
-        }
-        real_candidates = {
-            name: seconds for name, seconds in candidates.items() if seconds is not None
-        }
-        fastest = min(real_candidates, key=lambda name: real_candidates[name])
-        l1 = point.lineal_single_seconds
-        row = (
-            f"{point.swept_value:>10.4g} "
-            f"{l1:>8.3f} "
-            f"{point.lineal_batch_seconds:>8.3f} "
-            f"{point.lineal_batch_seconds / l1:>7.2f} "
-            f"{_seconds(point.generational_jit_off_seconds):>9} "
-            f"{_ratio(point.generational_jit_off_seconds, l1):>6} "
-            f"{_seconds(point.generational_jit_numba_seconds):>9} "
-            f"{_ratio(point.generational_jit_numba_seconds, l1):>6} "
-            f"{_seconds(point.vector_seconds, skip='skip'):>8} "
-            f"{_ratio(point.vector_seconds, l1):>6} "
-            f"{fastest:>8}"
-        )
-        if measure_rss:
-            row += (
-                f" {_mib(point.lineal_batch_rss_bytes):>9}"
-                f" {_mib(point.generational_jit_off_rss_bytes):>9}"
-                f" {_mib(point.generational_jit_numba_rss_bytes):>9}"
-                f" {_mib(point.vector_rss_bytes, skip='skip'):>8}"
-            )
-        print(row)
+        print(_table_row(point, measure_rss=measure_rss))
 
 
 def _render_data(
@@ -729,6 +751,109 @@ def _render_data(
             for point in points
         ],
     }
+
+
+def _point_from_payload(field: SweepField, entry: dict[str, Any]) -> BenchmarkPoint:
+    """Reconstruct one `BenchmarkPoint` from a `_render_data` JSON entry.
+
+    `_load_checkpoint`'s own helper -- `.get(...)` for the four RSS
+    fields, not `[...]`, since a checkpoint written before `--measure-
+    rss` existed (`schema_version` 2) has none of them at all, and a
+    resumed run should treat that exactly like `--measure-rss` not
+    having been given for those already-completed points, not error.
+    `entry` is already-parsed JSON (`dict[str, Any]`, not `Mapping[str,
+    object]`) precisely so this function can trust its own field types
+    without re-validating a schema this same script also writes.
+    """
+    return BenchmarkPoint(
+        swept_field=field,
+        swept_value=float(entry["swept_value"]),
+        d=int(entry["d"]),
+        lineal_single_seconds=float(entry["lineal_single_seconds"]),
+        lineal_batch_seconds=float(entry["lineal_batch_seconds"]),
+        generational_jit_off_seconds=entry["generational_jit_off_seconds"],
+        generational_jit_numba_seconds=entry["generational_jit_numba_seconds"],
+        vector_seconds=entry["vector_seconds"],
+        vector_skip_reason=entry["vector_skip_reason"],
+        lineal_batch_rss_bytes=entry.get("lineal_batch_rss_bytes"),
+        generational_jit_off_rss_bytes=entry.get("generational_jit_off_rss_bytes"),
+        generational_jit_numba_rss_bytes=entry.get("generational_jit_numba_rss_bytes"),
+        vector_rss_bytes=entry.get("vector_rss_bytes"),
+    )
+
+
+def _load_checkpoint(
+    output_path: Path,
+    field: SweepField,
+    fixed: dict[str, object],
+) -> dict[float, BenchmarkPoint]:
+    """Read a prior (possibly partial) `--output` payload for `--resume`.
+
+    Returns already-computed points keyed by their own `swept_value`,
+    but only when the checkpoint's own `swept_field` and `fixed_params`
+    exactly match this invocation's -- refuses (`ValueError`, a loud
+    failure, not a silent one) to resume into a mismatched sweep rather
+    than quietly mixing incompatible runs into one payload. A machine
+    fingerprint intentionally is *not* part of that comparison: the
+    whole point of `--resume` surviving a machine reboot or a
+    `benchmark-queue` timeout-kill is that environment details (load
+    average, `git_commit` if a commit happened to land mid-sweep) may
+    legitimately differ between the run that started a sweep and the
+    one that finishes it -- only whether the sweep *means the same
+    thing* (same field, same fixed baseline/replicates/generations/
+    trials/seed/measure_rss) matters for whether resuming is safe.
+    Returns an empty dict, not an error, when `output_path` does not
+    exist yet -- the ordinary "no prior progress" case every `--resume`
+    invocation's own first run hits.
+    """
+    if not output_path.exists():
+        return {}
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    if payload.get("swept_field") != field:
+        raise ValueError(
+            f"{output_path}: checkpoint swept_field {payload.get('swept_field')!r} "
+            f"does not match --sweep {field!r} -- refusing to resume into a "
+            "mismatched sweep"
+        )
+    if payload.get("fixed_params") != fixed:
+        raise ValueError(
+            f"{output_path}: checkpoint fixed_params {payload.get('fixed_params')!r} "
+            f"do not match this invocation's own settings {fixed!r} -- refusing "
+            "to resume into a mismatched sweep"
+        )
+    return {
+        float(entry["swept_value"]): _point_from_payload(field, entry)
+        for entry in payload.get("points", [])
+    }
+
+
+def _write_checkpoint(
+    output_path: Path,
+    field: SweepField,
+    points: list[BenchmarkPoint],
+    fingerprint: dict[str, object],
+    fixed: dict[str, object],
+) -> None:
+    """Atomically write the current (possibly partial) sweep to `--output`.
+
+    Called after every point, not only once at the very end -- a
+    `--resume`-enabled multi-day sweep killed mid-run (a `benchmark-
+    queue` per-job timeout, a machine reboot, `Ctrl-C`) must never lose
+    more progress than the one point that was in flight when it died.
+    Writes to a temp file in the same directory first, then `os.
+    replace` onto the real path -- an atomic rename on every POSIX
+    filesystem, so a reader (or a process killed mid-write) never
+    observes a half-written, corrupt JSON file; the previous, complete
+    checkpoint stays valid on disk right up until the new one has been
+    written in full.
+    """
+    payload = _render_data(field, points, fingerprint, fixed)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = output_path.with_name(output_path.name + ".tmp")
+    temp_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    temp_path.replace(output_path)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -801,16 +926,72 @@ def main(argv: list[str] | None = None) -> int:
         "--output",
         type=Path,
         default=None,
-        help="Optional path to write the full machine-readable JSON payload.",
+        help="Optional path to write the full machine-readable JSON payload. "
+        "Written incrementally, after every point (not only once at the "
+        "end) -- a killed or interrupted run leaves a valid, up-to-date "
+        "partial file behind, at the cost of one small rewrite per point.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip any --values entry already present in an existing "
+        "--output file, continuing a sweep a prior invocation was killed "
+        "or interrupted partway through, instead of recomputing everything "
+        "from scratch. Refuses (a clear error, not a silent merge) if the "
+        "existing file's own swept field or fixed baseline/replicates/"
+        "generations/trials/seed/measure_rss do not exactly match this "
+        "invocation's. Requires --output; a no-op the first time a given "
+        "--output path is used (nothing to resume from yet).",
     )
     args = parser.parse_args(argv)
+    if args.resume and args.output is None:
+        parser.error("--resume requires --output")
 
     baseline = _load_fixed_baseline(args.config)
     values = [float(v) for v in args.values.split(",")]
+    fixed = {
+        "N": baseline.n,
+        "mu": baseline.mu,
+        "m": baseline.m,
+        "locus_length": baseline.locus_length,
+        "d": baseline.d,
+        "config": str(args.config) if args.config is not None else None,
+        "replicates": args.replicates,
+        "generations": args.generations,
+        "trials": args.trials,
+        "seed": args.seed,
+        "measure_rss": args.measure_rss,
+    }
+
+    done: dict[float, BenchmarkPoint] = (
+        _load_checkpoint(args.output, args.sweep, fixed)
+        if args.resume and args.output is not None
+        else {}
+    )
+    remaining_values = [value for value in values if value not in done]
+
+    print(
+        f"Sweeping {args.sweep} over {values} "
+        f"(replicates={args.replicates}, generations={args.generations}, "
+        f"trials={args.trials}, baseline={baseline}"
+        + (f", config={args.config}" if args.config is not None else "")
+        + (", measure_rss=True" if args.measure_rss else "")
+        + (f", resuming: {len(done)}/{len(values)} already done" if done else "")
+        + ")",
+        flush=True,
+    )
+    print(_table_header(measure_rss=args.measure_rss), flush=True)
+    print("-" * len(_table_header(measure_rss=args.measure_rss)), flush=True)
+    for value in values:
+        if value in done:
+            print(_table_row(done[value], measure_rss=args.measure_rss), flush=True)
+
+    fingerprint = _environment_fingerprint() if args.output is not None else None
     warmed_up_generational_numba = [False]
     warmed_up_vector = [False]
-    points = [
-        _measure_point(
+    points_by_value = dict(done)
+    for value in remaining_values:
+        point = _measure_point(
             args.sweep,
             value,
             baseline=baseline,
@@ -822,40 +1003,21 @@ def main(argv: list[str] | None = None) -> int:
             warmed_up_vector=warmed_up_vector,
             measure_rss=args.measure_rss,
         )
-        for value in values
-    ]
-
-    print(
-        f"Sweeping {args.sweep} over {values} "
-        f"(replicates={args.replicates}, generations={args.generations}, "
-        f"trials={args.trials}, baseline={baseline}"
-        + (f", config={args.config}" if args.config is not None else "")
-        + (", measure_rss=True" if args.measure_rss else "")
-        + ")"
-    )
-    _print_table(points, measure_rss=args.measure_rss)
+        points_by_value[value] = point
+        print(_table_row(point, measure_rss=args.measure_rss), flush=True)
+        if args.output is not None and fingerprint is not None:
+            ordered_so_far = [
+                points_by_value[v] for v in values if v in points_by_value
+            ]
+            _write_checkpoint(
+                args.output, args.sweep, ordered_so_far, fingerprint, fixed
+            )
 
     if args.output is not None:
-        fingerprint = _environment_fingerprint()
-        fixed = {
-            "N": baseline.n,
-            "mu": baseline.mu,
-            "m": baseline.m,
-            "locus_length": baseline.locus_length,
-            "d": baseline.d,
-            "config": str(args.config) if args.config is not None else None,
-            "replicates": args.replicates,
-            "generations": args.generations,
-            "trials": args.trials,
-            "seed": args.seed,
-            "measure_rss": args.measure_rss,
-        }
-        payload = _render_data(args.sweep, points, fingerprint, fixed)
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        print(f"\nWrote {args.output}")
+        if remaining_values:
+            print(f"\nWrote {args.output}")
+        else:
+            print(f"\n{args.output} already had every requested value -- nothing new")
 
     return 0
 

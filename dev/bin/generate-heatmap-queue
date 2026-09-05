@@ -189,6 +189,17 @@ def _build_queue(
             str(config_path),
             "--output",
             str(result_path),
+            # Always resumable: a no-op the first time each job's own
+            # --output path is used (nothing to resume from yet), and
+            # the reason a re-invocation of `benchmark-queue` on this
+            # same queue file after a machine reboot, a `benchmark-
+            # queue` per-job timeout, or a `--stop-on-failure` abort
+            # picks up every job from its own already-checkpointed
+            # points instead of starting over -- not gated behind its
+            # own CLI flag here since it has no observable effect on a
+            # fresh run, only on a re-run of a run that did not finish
+            # cleanly.
+            "--resume",
         ]
         if measure_rss:
             command.append("--measure-rss")
