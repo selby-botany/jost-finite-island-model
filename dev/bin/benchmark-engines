@@ -24,10 +24,42 @@ offers.
 Default sweep is `d` (deme count) -- the axis `auto_vector_min_d`
 (`fim.engine`) already exists to threshold, and the one the project
 owner asked this tool to characterize first. `--sweep N|mu|m|
-loci-length` characterizes the other candidate scaling factors named
-directly (population size, mutation/migration rate, locus
-length/capacity) -- run each independently; this tool does not attempt
-a full multi-factor grid (out of scope, and combinatorially large).
+loci-length|replicates` characterizes the other candidate scaling
+factors named directly (population size, mutation/migration rate, locus
+length/capacity, batch size) -- run each independently; this tool does
+not attempt a full multi-factor grid (out of scope, and combinatorially
+large). `--sweep replicates` varies `L_batch`/G/V's own batch size
+(`n_replicates`) directly via `--values`, holding `d`/`N`/`mu`/`m`/
+locus length at the fixed baseline and `L_1` at its own always-`n_
+replicates=1` reference point regardless -- the one field this tool
+could already vary via `--replicates` for every *other* sweep, now
+itself sweepable, per this project's own multi-model engine review,
+2026-09-04, Tier E's unnamed "benchmarking-process" finding (GPT-5.6;
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md` Phase 7
+item 7): "does not sweep the product of replicas, loci, demes, and
+capacity." This extension covers the two capabilities that finding and
+Phase 7 item 7 name explicitly -- a replica-count sweep and peak-RSS
+capture; the finding's own fuller six-scenario-class matrix (zero/
+migration-only/mutation-only/both; low/med/high active-deme mutation;
+1/several/many loci; bounded/unbounded execution; symmetric/explicit
+matrices; capacity sweeps near the configured budget) is a
+substantially larger scope than a single Tier E line item, and is not
+attempted here -- each of those six is already reachable by composing
+this tool's own existing `--sweep`/`--config`/`--values` options by
+hand, just not yet packaged as a named preset.
+
+`--measure-rss` additionally captures each backend's own peak resident
+set size, in a fresh subprocess per backend per point (`--_rss-worker`,
+this same script re-invoked with `sys.executable`) -- RSS is a
+monotonic high-water mark for the life of a process, so measuring two
+backends, or two points, back to back in one process would report
+whichever ran first's own peak polluting whichever ran after it, not
+either one's real peak (the same reasoning this project's own `FIM-54`
+remediation gives for why any peak-RSS before/after comparison needs
+one process per measurement, unlike the timing path's own safe
+median-of-N-trials-in-one-process harness). Off by default -- every
+existing invocation with no `--measure-rss` pays no extra subprocess
+cost and sees no RSS columns, identical to before this option existed.
 
 `"generational"` here means exactly what `fim(engine_backend=
 "generational")` gives a real caller: `GenerationalBackend(
@@ -104,6 +136,7 @@ import argparse
 import json
 import os
 import platform
+import resource
 import statistics
 import subprocess
 import sys
@@ -129,7 +162,7 @@ from fim.model.locus import LocusSpec  # noqa: E402
 from fim.model.params import SimulationParams  # noqa: E402
 from fim.persistence.store import InMemoryTrajectoryStore  # noqa: E402
 
-SweepField = str  # one of "d", "N", "mu", "m", "loci-length"
+SweepField = str  # one of "d", "N", "mu", "m", "loci-length", "replicates"
 
 DEFAULT_D = 60
 DEFAULT_N = 500
@@ -233,6 +266,15 @@ class BenchmarkPoint:
     generational_jit_numba_seconds: float | None
     vector_seconds: float | None
     vector_skip_reason: str | None
+    # Populated only when `--measure-rss` is given; `None` on every field
+    # otherwise -- `_print_table`/`_render_data` gate their own RSS
+    # columns on that same flag, not on inspecting whether any of these
+    # happen to be `None` (a real Backend-V skip and "RSS was never
+    # measured at all" must stay visibly different).
+    lineal_batch_rss_bytes: int | None = None
+    generational_jit_off_rss_bytes: int | None = None
+    generational_jit_numba_rss_bytes: int | None = None
+    vector_rss_bytes: int | None = None
 
 
 def _base_params(
@@ -296,6 +338,113 @@ def _median_of(
     return statistics.median(samples)
 
 
+def _ru_maxrss_bytes(ru_maxrss: int) -> int:
+    """Normalize `resource.getrusage(...).ru_maxrss` to bytes across platforms.
+
+    Linux reports `ru_maxrss` in kibibytes; macOS (and other BSD-derived
+    platforms) report it in bytes directly -- the same well-known POSIX
+    `getrusage` platform discrepancy this project's own `FIM-54`
+    remediation measured around ad hoc, on a single machine, where the
+    unit could stay implicit because it cancelled out in a same-machine
+    before/after ratio. A reusable tool meant to run on both this
+    development machine (macOS) and citrus-2 (Linux) cannot leave it
+    implicit -- a raw, unnormalized comparison across those two would
+    silently read as a ~1000x difference that is really just the unit.
+    """
+    return ru_maxrss if platform.system() == "Darwin" else ru_maxrss * 1024
+
+
+def _run_rss_worker(argv: list[str]) -> int:
+    """Run one backend/params combination once; print its own peak RSS in bytes.
+
+    The `--_rss-worker` entry point `_measure_rss` re-invokes this same
+    script as a fresh subprocess for -- internal-use only, not part of
+    this tool's own public CLI surface (no `--help` text of its own;
+    `main` dispatches here before building the real argument parser).
+    One run, not `_median_of`'s own several trials: a subprocess-per-
+    measurement design already pays real fork/interpreter-startup
+    overhead per point, and unlike wall-clock time, RSS has no
+    meaningful "median across trials" -- the JIT-compiled backends'
+    first-ever compile in a *fresh* process is itself part of what a
+    real invocation of this configuration would pay, not warm-up noise
+    to discard.
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--engine-backend", required=True)
+    parser.add_argument("--jit", default="off")
+    parser.add_argument("--d", type=int, required=True)
+    parser.add_argument("--n", type=int, required=True)
+    parser.add_argument("--mu", type=float, required=True)
+    parser.add_argument("--m", type=float, required=True)
+    parser.add_argument("--locus-length", type=int, required=True)
+    parser.add_argument("--n-replicates", type=int, required=True)
+    parser.add_argument("--generations", type=int, required=True)
+    parser.add_argument("--seed", type=int, required=True)
+    args = parser.parse_args(argv)
+    params = _base_params(
+        d=args.d,
+        N=args.n,
+        mu=args.mu,
+        m=args.m,
+        locus_length=args.locus_length,
+        n_replicates=args.n_replicates,
+        max_generations=args.generations,
+        seed=args.seed,
+    )
+    _run_once(args.engine_backend, params, jit=args.jit)
+    peak_bytes = _ru_maxrss_bytes(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    print(peak_bytes)
+    return 0
+
+
+def _measure_rss(
+    engine_backend: EngineBackendChoice,
+    params: SimulationParams,
+    *,
+    jit: JitOption = "off",
+) -> int | None:
+    """Peak RSS in bytes for one backend/params combination, via a fresh subprocess.
+
+    Returns `None` on any worker failure -- Backend V outside its own
+    enforced `(d, capacity)` scope, or `numba` unavailable, the same two
+    cases `_measure_point`'s own timing path already turns into `None`/
+    `vector_skip_reason` -- so RSS measurement never raises where timing
+    measurement would silently skip instead; the caller's own existing
+    skip decision, not a new independent one, is what governs whether a
+    point has real numbers here.
+    """
+    locus_length = params.loci[0].length
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--_rss-worker",
+        "--engine-backend",
+        engine_backend,
+        "--jit",
+        jit,
+        "--d",
+        str(params.d),
+        "--n",
+        str(params.N),
+        "--mu",
+        str(params.mu),
+        "--m",
+        str(params.m),
+        "--locus-length",
+        str(locus_length),
+        "--n-replicates",
+        str(params.n_replicates),
+        "--generations",
+        str(params.max_generations),
+        "--seed",
+        str(params.seed),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        return None
+    return int(result.stdout.strip())
+
+
 def _measure_point(
     field: SweepField,
     value: float,
@@ -307,6 +456,7 @@ def _measure_point(
     seed: int,
     warmed_up_generational_numba: list[bool],
     warmed_up_vector: list[bool],
+    measure_rss: bool = False,
 ) -> BenchmarkPoint:
     """Measure one swept value's own L_1/L_batch/G(off)/G(numba)/V times.
 
@@ -322,15 +472,20 @@ def _measure_point(
     Args:
         baseline: The four other fields' own fixed values (`--config`,
             or this module's own `DEFAULT_*` constants) -- consulted
-            for whichever of `d`/`N`/`mu`/`m`/`locus_length` is not
-            `field` itself.
+            for whichever of `d`/`N`/`mu`/`m`/`locus_length`/`replicates`
+            is not `field` itself.
+        measure_rss: When `True`, additionally spawn one fresh subprocess
+            per backend (`_measure_rss`) to capture peak RSS -- doubles
+            this point's own wall-clock cost (one process per backend on
+            top of the timing runs already paid), so left opt-in.
     """
     d = int(value) if field == "d" else baseline.d
     n = int(value) if field == "N" else baseline.n
     mu = float(value) if field == "mu" else baseline.mu
     m = float(value) if field == "m" else baseline.m
     locus_length = int(value) if field == "loci-length" else baseline.locus_length
-    if field not in {"d", "N", "mu", "m", "loci-length"}:
+    point_replicates = int(value) if field == "replicates" else replicates
+    if field not in {"d", "N", "mu", "m", "loci-length", "replicates"}:
         raise ValueError(f"unknown sweep field: {field}")
 
     single_params = _base_params(
@@ -343,7 +498,7 @@ def _measure_point(
         max_generations=generations,
         seed=seed,
     )
-    batch_params = replace(single_params, n_replicates=replicates)
+    batch_params = replace(single_params, n_replicates=point_replicates)
 
     lineal_single_seconds = _median_of("lineal", single_params, trials)
     lineal_batch_seconds = _median_of("lineal", batch_params, trials)
@@ -372,6 +527,20 @@ def _measure_point(
     except ImportError as exc:  # numba not installed
         vector_skip_reason = f"numba unavailable: {exc}"
 
+    lineal_batch_rss_bytes: int | None = None
+    generational_jit_off_rss_bytes: int | None = None
+    generational_jit_numba_rss_bytes: int | None = None
+    vector_rss_bytes: int | None = None
+    if measure_rss:
+        lineal_batch_rss_bytes = _measure_rss("lineal", batch_params)
+        generational_jit_off_rss_bytes = _measure_rss("generational", batch_params)
+        if generational_jit_numba_seconds is not None:
+            generational_jit_numba_rss_bytes = _measure_rss(
+                "generational", batch_params, jit="numba"
+            )
+        if vector_seconds is not None:
+            vector_rss_bytes = _measure_rss("generational-vector", batch_params)
+
     return BenchmarkPoint(
         swept_field=field,
         swept_value=value,
@@ -382,6 +551,10 @@ def _measure_point(
         generational_jit_numba_seconds=generational_jit_numba_seconds,
         vector_seconds=vector_seconds,
         vector_skip_reason=vector_skip_reason,
+        lineal_batch_rss_bytes=lineal_batch_rss_bytes,
+        generational_jit_off_rss_bytes=generational_jit_off_rss_bytes,
+        generational_jit_numba_rss_bytes=generational_jit_numba_rss_bytes,
+        vector_rss_bytes=vector_rss_bytes,
     )
 
 
@@ -425,20 +598,33 @@ def _seconds(seconds: float | None, *, skip: str = "n/a") -> str:
     return f"{seconds:.3f}" if seconds is not None else skip
 
 
-def _print_table(points: list[BenchmarkPoint]) -> None:
+def _mib(rss_bytes: int | None, *, skip: str = "n/a") -> str:
+    """Format a peak-RSS byte count in MiB, or `skip` when `None`."""
+    return f"{rss_bytes / (1024 * 1024):.1f}" if rss_bytes is not None else skip
+
+
+def _print_table(points: list[BenchmarkPoint], *, measure_rss: bool = False) -> None:
     """Print a human-readable summary table to stdout.
 
     `L_1` is a pure normalization divisor (every `/L_1` column is
     relative to it) — `L_batch` is the real fourth engine series,
     `"lineal"` run at the same batch size as every other engine here,
     so its own scaling is visible on the same axis as G and V rather
-    than only implicit in what they are divided by.
+    than only implicit in what they are divided by. `measure_rss` adds
+    four more columns (one peak-RSS figure per backend, in MiB) only
+    when `--measure-rss` was actually given -- gated on that flag, not
+    on inspecting whether any point happens to carry real RSS numbers,
+    so a run with every point skipped (e.g. every point outside Backend
+    V's own scope) still shows the columns it asked for, correctly all
+    `n/a`, rather than silently reverting to the narrower table.
     """
     header = (
         f"{'value':>10} {'L_1(s)':>8} {'L_b(s)':>8} {'L_b/L1':>7} "
         f"{'G-off(s)':>9} {'/L1':>6} {'G-jit(s)':>9} {'/L1':>6} "
         f"{'V(s)':>8} {'/L1':>6} {'fastest':>8}"
     )
+    if measure_rss:
+        header += f" {'L_b(MiB)':>9} {'G-o(MiB)':>9} {'G-j(MiB)':>9} {'V(MiB)':>8}"
     print(header)
     print("-" * len(header))
     for point in points:
@@ -453,7 +639,7 @@ def _print_table(points: list[BenchmarkPoint]) -> None:
         }
         fastest = min(real_candidates, key=lambda name: real_candidates[name])
         l1 = point.lineal_single_seconds
-        print(
+        row = (
             f"{point.swept_value:>10.4g} "
             f"{l1:>8.3f} "
             f"{point.lineal_batch_seconds:>8.3f} "
@@ -466,6 +652,14 @@ def _print_table(points: list[BenchmarkPoint]) -> None:
             f"{_ratio(point.vector_seconds, l1):>6} "
             f"{fastest:>8}"
         )
+        if measure_rss:
+            row += (
+                f" {_mib(point.lineal_batch_rss_bytes):>9}"
+                f" {_mib(point.generational_jit_off_rss_bytes):>9}"
+                f" {_mib(point.generational_jit_numba_rss_bytes):>9}"
+                f" {_mib(point.vector_rss_bytes, skip='skip'):>8}"
+            )
+        print(row)
 
 
 def _render_data(
@@ -480,7 +674,16 @@ def _render_data(
         return seconds / l1_seconds if seconds is not None else None
 
     return {
-        "schema_version": 2,
+        # Bumped from 2: every point payload now carries four more
+        # `*_rss_bytes` fields (`None` on every field when `--measure-
+        # rss` was not given, matching this schema's own existing
+        # `vector_seconds`/`vector_skip_reason` "None means not this
+        # run" precedent) -- nothing existing changed shape or meaning,
+        # so no reader of schema_version 2 payloads needs updating, but
+        # the payload a schema_version 2 reader would not recognize
+        # every key of is worth flagging, not silently reusing the same
+        # version number for a genuinely larger shape.
+        "schema_version": 3,
         "generator": {
             "name": "Claude Code",
             "version": "Claude Sonnet 5",
@@ -516,6 +719,12 @@ def _render_data(
                     point.vector_seconds, point.lineal_single_seconds
                 ),
                 "vector_skip_reason": point.vector_skip_reason,
+                "lineal_batch_rss_bytes": point.lineal_batch_rss_bytes,
+                "generational_jit_off_rss_bytes": point.generational_jit_off_rss_bytes,
+                "generational_jit_numba_rss_bytes": (
+                    point.generational_jit_numba_rss_bytes
+                ),
+                "vector_rss_bytes": point.vector_rss_bytes,
             }
             for point in points
         ],
@@ -523,13 +732,25 @@ def _render_data(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the sweep named by argv, print a table, optionally write JSON."""
+    """Run the sweep named by argv, print a table, optionally write JSON.
+
+    Dispatches to `_run_rss_worker` first, before building the real
+    argument parser below, when invoked as `--_rss-worker ...` --
+    `_measure_rss`'s own internal re-exec of this same script, not part
+    of this tool's own public CLI surface (absent from `--help`).
+    """
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "--_rss-worker":
+        return _run_rss_worker(argv[1:])
+
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--sweep",
-        choices=["d", "N", "mu", "m", "loci-length"],
+        choices=["d", "N", "mu", "m", "loci-length", "replicates"],
         default="d",
-        help="Which SimulationParams field to sweep (default: d).",
+        help="Which SimulationParams field to sweep (default: d). "
+        "'replicates' sweeps batch size (n_replicates) directly.",
     )
     parser.add_argument(
         "--values",
@@ -540,7 +761,16 @@ def main(argv: list[str] | None = None) -> int:
         "--replicates",
         type=int,
         default=16,
-        help="Batch size for the generational/generational-vector runs (default: 16).",
+        help="Batch size for the generational/generational-vector runs "
+        "(default: 16). Ignored -- read from --values instead -- when "
+        "--sweep replicates is given.",
+    )
+    parser.add_argument(
+        "--measure-rss",
+        action="store_true",
+        help="Also capture each backend's own peak RSS per point, via one "
+        "fresh subprocess per backend (roughly doubles this run's own "
+        "wall-clock cost). Off by default.",
     )
     parser.add_argument(
         "--generations",
@@ -590,6 +820,7 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             warmed_up_generational_numba=warmed_up_generational_numba,
             warmed_up_vector=warmed_up_vector,
+            measure_rss=args.measure_rss,
         )
         for value in values
     ]
@@ -599,9 +830,10 @@ def main(argv: list[str] | None = None) -> int:
         f"(replicates={args.replicates}, generations={args.generations}, "
         f"trials={args.trials}, baseline={baseline}"
         + (f", config={args.config}" if args.config is not None else "")
+        + (", measure_rss=True" if args.measure_rss else "")
         + ")"
     )
-    _print_table(points)
+    _print_table(points, measure_rss=args.measure_rss)
 
     if args.output is not None:
         fingerprint = _environment_fingerprint()
@@ -616,6 +848,7 @@ def main(argv: list[str] | None = None) -> int:
             "generations": args.generations,
             "trials": args.trials,
             "seed": args.seed,
+            "measure_rss": args.measure_rss,
         }
         payload = _render_data(args.sweep, points, fingerprint, fixed)
         args.output.parent.mkdir(parents=True, exist_ok=True)

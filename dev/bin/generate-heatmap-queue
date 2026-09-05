@@ -134,8 +134,15 @@ def _build_queue(
     fixed_n: int,
     fixed_m: float,
     fixed_mu: float,
+    measure_rss: bool = False,
 ) -> dict[str, object]:
     """Build the `benchmark-queue` payload: one parallel stage, one job per length.
+
+    `measure_rss`, when `True`, appends `benchmark-engines`'s own
+    `--measure-rss` flag to every generated job's own command -- off by
+    default, matching that flag's own opt-in default, so a queue
+    generated with no `--measure-rss` given here is byte-for-byte
+    identical to one generated before this option existed.
 
     Each job's own command starts with `sys.executable` (this very
     interpreter, whichever venv it actually is), not the bare string
@@ -163,31 +170,29 @@ def _build_queue(
             seed=seed,
         )
         result_path = out_dir / f"result-len{length}.json"
-        jobs.append(
-            {
-                "label": f"heatmap-len{length}",
-                "command": [
-                    sys.executable,
-                    str(ROOT / "dev" / "bin" / "benchmark-engines"),
-                    "--sweep",
-                    "d",
-                    "--values",
-                    d_values_arg,
-                    "--replicates",
-                    str(replicates),
-                    "--generations",
-                    str(generations),
-                    "--trials",
-                    str(trials),
-                    "--seed",
-                    str(seed),
-                    "--config",
-                    str(config_path),
-                    "--output",
-                    str(result_path),
-                ],
-            }
-        )
+        command = [
+            sys.executable,
+            str(ROOT / "dev" / "bin" / "benchmark-engines"),
+            "--sweep",
+            "d",
+            "--values",
+            d_values_arg,
+            "--replicates",
+            str(replicates),
+            "--generations",
+            str(generations),
+            "--trials",
+            str(trials),
+            "--seed",
+            str(seed),
+            "--config",
+            str(config_path),
+            "--output",
+            str(result_path),
+        ]
+        if measure_rss:
+            command.append("--measure-rss")
+        jobs.append({"label": f"heatmap-len{length}", "command": command})
     return {"stages": [jobs]}
 
 
@@ -213,6 +218,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--generations", type=int, default=_DEFAULT_GENERATIONS)
     parser.add_argument("--trials", type=int, default=_DEFAULT_TRIALS)
     parser.add_argument("--seed", type=int, default=20260902)
+    parser.add_argument(
+        "--measure-rss",
+        action="store_true",
+        help="Pass --measure-rss through to every generated benchmark-"
+        "engines job, capturing peak RSS per point alongside timing. Off "
+        "by default.",
+    )
     parser.add_argument(
         "--out-dir",
         type=Path,
@@ -247,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
         fixed_n=args.fixed_N,
         fixed_m=args.fixed_m,
         fixed_mu=args.fixed_mu,
+        measure_rss=args.measure_rss,
     )
     queue_path = args.out_dir / "queue.json"
     queue_path.write_text(json.dumps(queue, indent=2) + "\n", encoding="utf-8")
