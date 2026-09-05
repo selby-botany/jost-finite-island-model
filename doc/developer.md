@@ -245,14 +245,22 @@ reasoned about.
   above has the full story). `"lineal"` and `"generational"` are
   bit-identical for the same seed, always, by construction — different
   execution order over the identical dict-based arithmetic.
-  `"generational-vector"` is bit-identical to both *only* when migration
-  is off (`m: 0`); with migration active it matches them statistically
-  (no directional bias, confirmed) rather than row-for-row, because its
-  own dense-matrix migration blend is a different, equally valid
+  `"generational-vector"` is bit-identical to both *only* for a
+  **single-locus** run with migration off (`m: 0`); with migration
+  active, or with two or more loci regardless of migration, it matches
+  them statistically instead (no directional bias, confirmed) rather
+  than row-for-row. Migration-active divergence is because its own
+  dense-matrix migration blend is a different, equally valid
   floating-point reduction order than the dict-based backends' own
-  arithmetic. Never assume "same seed" alone is enough to reproduce an
-  archived `"generational-vector"` trajectory exactly if that run used
-  nonzero migration — check `manifest.engine_backend` first. The
+  arithmetic. Multi-locus divergence is structural, not floating-point:
+  `step_vectorized` fuses `migrate`/`mutate`/`drift` per locus, one
+  whole locus at a time, while the dict-based backends run each stage
+  across every locus first in a deme-major order — the two draw from
+  the shared RNG stream in a different order whenever more than one
+  locus is tracked, migration on or off. Never assume "same seed" alone
+  is enough to reproduce an archived `"generational-vector"` trajectory
+  exactly unless that run was both single-locus and used zero migration
+  — check `manifest.engine_backend` first. The
   [simulator design's own §4.6](fim-simulator-design.md#46-choosing-an-engine-backend)
   has the equation-level explanation of why (the same weighted-blend
   formula, two different summation orders, occasionally landing on

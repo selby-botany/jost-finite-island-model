@@ -85,12 +85,18 @@ The one entry point everything else in this project ultimately calls.
   (real thread-based replicate fan-out, bit-identical trajectory to
   `"lineal"` for the same seed), `"generational-vector"` (array-native,
   fused `migrate`/`mutate`/`drift`; matches `"lineal"` exactly, same
-  seed, when migration is off, and matches it statistically — same
-  mean differentiation statistics across many seeds, not necessarily
-  the same individual trajectory — when migration is active, since its
-  own dense-matrix migration blend and `"lineal"`'s own arithmetic are
-  two different, equally valid floating-point paths to the same
-  computation), or `"auto"` (picks between `"generational"` and
+  seed, only for a **single-locus** run with migration off, and matches
+  it statistically otherwise — same mean differentiation statistics
+  across many seeds, not necessarily the same individual trajectory —
+  whenever migration is active (its own dense-matrix migration blend
+  and `"lineal"`'s own arithmetic are two different, equally valid
+  floating-point paths to the same computation) or whenever two or more
+  loci are tracked, migration on or off (`step_vectorized` fuses all
+  three operators per locus, one whole locus at a time, while the
+  dict-based backends run each stage across every locus first in a
+  deme-major order — the two draw from the shared RNG stream in a
+  different order the instant more than one locus is tracked)), or
+  `"auto"` (picks between `"generational"` and
   `"generational-vector"` using `params.d`/`auto_vector_min_d` and
   every locus's own capacity against `params.auto_vector_max_capacity`,
   both below — never `"lineal"`).
@@ -167,9 +173,10 @@ The one entry point everything else in this project ultimately calls.
   generation at a time; for the same seed, with `replicate_tolerance`
   unset, bit-identical to `LinealBackend`'s own trajectory under
   `SequentialAdvancer`/`ThreadedAdvancer` — not under `VectorizedAdvancer`
-  in general, which matches exactly only when migration is off (see
-  `engine_backend`'s own entry above for what "statistically" means the
-  rest of the time).
+  in general, which matches exactly only for a single-locus run with
+  migration off (see `engine_backend`'s own entry above for what
+  "statistically" means the rest of the time, including every
+  multi-locus case).
 - **`FinalReport`** (a `TypedDict`) — the seven scalar numbers a finished
   run reports, averaged across every tracked locus: `run_id`,
   `generation`, `converged`, `converged_on`, `reason`, and the six

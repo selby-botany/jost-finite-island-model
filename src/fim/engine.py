@@ -1628,11 +1628,35 @@ def fim(
             `migrant_sampling="continuous"` only; a replicate outside
             that scope raises `ValueError` naming which constraint it
             violated, rather than silently falling back to the other
-            backends' dict-based path. Matches the other two backends
-            exactly (same seed, bit-identical) when migration is off;
-            with migration active, matches them statistically instead
-            (no directional bias, not row-for-row) — see
-            `fim.model.vectorized`'s own module docstring for why.
+            backends' dict-based path. For a **single-locus** config,
+            matches the other two backends exactly (same seed,
+            bit-identical) when migration is off. With two or more loci,
+            bit-identity does **not** hold even with migration off —
+            `step_vectorized` fuses `migrate`/`mutate`/`drift` per locus,
+            while `operators.step` runs each stage across every locus
+            first, so the two draw from the shared RNG stream in a
+            different order the instant more than one locus is tracked
+            (`mutate`/`drift`'s own dict-based loops are deme-major,
+            locus-minor; each vectorized stage processes one whole
+            locus's own dense array per call, so it is inherently
+            locus-major — the two orders cannot be reconciled without
+            flattening deme and locus together inside the batched RNG
+            kernels themselves, a substantially larger change to this
+            module's one-locus-per-array design for a benefit — cross-
+            backend bit-identity — with no scientific value beyond test
+            convenience, since each backend's own per-locus output is
+            independently correct regardless of draw order). With
+            migration active (any locus count), or with two or more
+            loci regardless of migration, matches the other backends
+            statistically instead (no directional bias, not row-for-row)
+            — see `fim.model.vectorized`'s own module docstring for why,
+            and `test_generational_vector_matches_lineal_statistically_
+            multi_locus` for the multi-locus case's own statistical
+            parity proof (this project's own
+            multi-model engine review, 2026-09-04, `FIM-09`/finding
+            C-01/finding P1-1 — the claim here was previously
+            unqualified by locus count, and the sole existing exact-
+            match test used only one locus).
             ``"auto"`` picks between ``"generational"`` and
             ``"generational-vector"`` on `params`'s own behalf, using
             `auto_vector_min_d` (below) — never ``"lineal"`` (see

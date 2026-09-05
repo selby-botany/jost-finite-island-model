@@ -99,10 +99,31 @@ every generation after the first reuses that cached `VectorizedState`
 directly, via `step_vectorized`, so `build_vectorized_state` is not
 even called again for the rest of that lane's own run.
 
-With that fixed, a full run *is* bit-identical to `LinealBackend` when
-migration is off (`test_generational_vector_backend_matches_lineal_
-exactly_without_migration`, `test/engine/test_engine.py`) — but not
-in general with migration active: `migrate_vectorized`'s own dense
+With that fixed, a full **single-locus** run *is* bit-identical to
+`LinealBackend` when migration is off
+(`test_generational_vector_backend_matches_lineal_exactly_without_
+migration`, `test/engine/test_engine.py`) — but not in general with
+migration active, and not at all with **two or more loci**, migration
+on or off: `step_vectorized` fuses `migrate`/`mutate`/`drift` per
+locus, one whole locus's own dense `(deme, capacity)` array per call,
+while `operators.step` runs each stage across every tracked locus
+first — `mutate`/`drift`'s own dict-based loops are deme-major,
+locus-minor, so the two draw from the shared RNG stream in a genuinely
+different order the instant a run tracks more than one locus, migration
+active or not. Reconciling the two would mean flattening deme and
+locus together inside the batched RNG kernels themselves (drawing
+deme-major across every locus, one flat index space, in place of one
+call per locus) — a substantially larger change to this module's own
+one-locus-per-array design, for a benefit (cross-backend bit-identity)
+with no scientific value beyond test convenience: each backend's own
+per-locus output is already independently correct regardless of draw
+order (this project's own multi-model engine review, 2026-09-04,
+`FIM-09`/finding C-01/finding P1-1). A genuine multi-locus config
+instead gets the same *statistical* parity guarantee the
+migration-active single-locus case already has, below
+(`test_generational_vector_matches_lineal_statistically_multi_locus`,
+`test/engine/test_engine.py`). With
+migration active (any locus count): `migrate_vectorized`'s own dense
 matmul and `fim.model.operators.migrate`'s own dict-based blend are
 two different, both fully deterministic, floating-point reduction
 orders for the identical computation (BLAS's own summation order is
@@ -1120,6 +1141,22 @@ def step_vectorized(
     module's own docstring). `mutation_rates` is already resolved per
     locus by the caller (`SimulationParams.mutation_rates` itself
     already resolves a scalar `mu` to one rate per locus).
+
+    Loops `for locus in state.locus_states` below, running all three
+    stages for one locus before moving to the next — locus-major, not
+    `operators.step`'s own stage-major (`migrate` over every locus, then
+    `mutate` over every locus, then `drift` over every locus). This
+    module's own docstring has the full argument for why a single-locus
+    run is still bit-identical to `operators.step` despite that
+    difference (migrate draws no RNG in the deterministic mode this
+    fusion is scoped to) and why a multi-locus run is not (`mutate`/
+    `drift`'s own dict-based loops are deme-major, locus-minor; this
+    loop is unavoidably locus-major, since each iteration processes one
+    locus's whole `(deme, capacity)` array in one call) — deliberately
+    not "fixed" by reordering the loop below to stage-major instead,
+    since that only changes *which* wrong order results, not whether the
+    order matches (this project's own multi-model engine review,
+    2026-09-04, `FIM-09`).
 
     Exactly one of `weights_per_locus`/`symmetric_rate` must be given,
     choosing which of `migrate_vectorized`'s own two implementations

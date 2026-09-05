@@ -2739,6 +2739,82 @@ def test_generational_vector_backend_matches_lineal_statistically() -> None:
         assert vector_mean == pytest.approx(lineal_mean, abs=5.0 * standard_error), stat
 
 
+def test_generational_vector_matches_lineal_statistically_multi_locus() -> None:
+    """Aggregate differentiation statistics agree with `LinealBackend` for 2+ loci.
+
+    A genuinely different mechanism from `test_generational_vector_
+    backend_matches_lineal_statistically`, above, not a duplicate of it:
+    that test isolates *migration's* own floating-point reduction-order
+    divergence by using one locus (where `step_vectorized`'s per-locus
+    fusion cannot diverge from `operators.step`'s own stage ordering at
+    all — there is only one locus to loop over either way). This test
+    instead sets `m=0.0` (no floating-point migration divergence
+    possible) and uses two loci, isolating the *other*, structural
+    mechanism this project's own multi-model engine review, 2026-09-04,
+    found (`FIM-09`/finding C-01/finding P1-1): `step_vectorized` fuses
+    `migrate` → `mutate` → `drift` per locus, one whole locus at a time,
+    while `operators.step` runs each stage across every locus first, in
+    a deme-major order — the two draw from the shared RNG stream in a
+    different sequence the instant more than one locus is tracked, with
+    or without migration. `fim.model.vectorized`'s and `fim.engine.fim`'s
+    own docstrings were previously unqualified by locus count on this
+    exact claim; both now name this test as the multi-locus statistical
+    parity proof superseding the old, narrower claim.
+
+    Same normal-approximation-band methodology as the migration-active
+    test above, applied to the same two watched statistics.
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=40,
+        m=0.0,
+        mu=0.05,
+        d=4,
+        seed=13579,
+        loci=(LocusSpec(1, 2), LocusSpec(2, 2)),
+        mutation_model="finite_alleles",
+        convergence_tolerance=0.0,
+        convergence_window=21,
+        max_generations=20,
+        n_replicates=200,
+        # Explicit, not `SimulationParams`'s own current default
+        # (`0.01`): this test's own paired-mean comparison needs the
+        # exact same fixed replicate count run by both backends,
+        # deliberately not an adaptive stop that could legitimately fire
+        # at a different replicate count for each.
+        replicate_tolerance=None,
+    )
+
+    lineal_results = fim(
+        params.N, params.m, params.mu, params.d, params=params, engine_backend="lineal"
+    )
+    vector_results = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        engine_backend="generational-vector",
+    )
+    assert isinstance(lineal_results, tuple)
+    assert isinstance(vector_results, tuple)
+
+    def _as_float(value: float | None) -> float:
+        assert value is not None
+        return value
+
+    for stat in ("D", "G_ST"):
+        lineal_values = [_as_float(result.report[stat]) for result in lineal_results]
+        vector_values = [_as_float(result.report[stat]) for result in vector_results]
+        lineal_mean = statistics.fmean(lineal_values)
+        vector_mean = statistics.fmean(vector_values)
+        standard_error = (
+            statistics.variance(lineal_values) / len(lineal_values)
+            + statistics.variance(vector_values) / len(vector_values)
+        ) ** 0.5
+        assert vector_mean == pytest.approx(lineal_mean, abs=5.0 * standard_error), stat
+
+
 def test_fim_engine_backend_generational_vector_runs_end_to_end() -> None:
     """`fim(..., engine_backend="generational-vector")` works end to end."""
     pytest.importorskip("numba")

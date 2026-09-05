@@ -3432,6 +3432,39 @@ noise — recorded honestly rather than only reporting the
 comfortable number: real bias would have gotten *more* precisely
 measured as the sample grew, not smaller.
 
+<a id="engine.test_engine.test_generational_vector_matches_lineal_statistically_multi_locus"></a>
+
+#### test\_generational\_vector\_matches\_lineal\_statistically\_multi\_locus
+
+```python
+def test_generational_vector_matches_lineal_statistically_multi_locus(
+) -> None
+```
+
+Aggregate differentiation statistics agree with `LinealBackend` for 2+ loci.
+
+A genuinely different mechanism from `test_generational_vector_
+backend_matches_lineal_statistically`, above, not a duplicate of it:
+that test isolates *migration's* own floating-point reduction-order
+divergence by using one locus (where `step_vectorized`'s per-locus
+fusion cannot diverge from `operators.step`'s own stage ordering at
+all — there is only one locus to loop over either way). This test
+instead sets `m=0.0` (no floating-point migration divergence
+possible) and uses two loci, isolating the *other*, structural
+mechanism this project's own multi-model engine review, 2026-09-04,
+found (`FIM-09`/finding C-01/finding P1-1): `step_vectorized` fuses
+`migrate` → `mutate` → `drift` per locus, one whole locus at a time,
+while `operators.step` runs each stage across every locus first, in
+a deme-major order — the two draw from the shared RNG stream in a
+different sequence the instant more than one locus is tracked, with
+or without migration. `fim.model.vectorized`'s and `fim.engine.fim`'s
+own docstrings were previously unqualified by locus count on this
+exact claim; both now name this test as the multi-locus statistical
+parity proof superseding the old, narrower claim.
+
+Same normal-approximation-band methodology as the migration-active
+test above, applied to the same two watched statistics.
+
 <a id="engine.test_engine.test_fim_engine_backend_generational_vector_runs_end_to_end"></a>
 
 #### test\_fim\_engine\_backend\_generational\_vector\_runs\_end\_to\_end
