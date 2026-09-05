@@ -34,6 +34,8 @@
     - [B.1 `d` (deme count) sweep](#b1-d-deme-count-sweep)
     - [B.2 G thread-count sweep](#b2-g-thread-count-sweep)
     - [B.3 Locus length (capacity) sweep](#b3-locus-length-capacity-sweep)
+    - [B.4 `d` sweep extended to `d=500`](#b4-d-sweep-extended-to-d500)
+    - [B.5 Joint `d` × locus-length sweep (heatmap)](#b5-joint-d--locus-length-sweep-heatmap)
   - [Metadata](#metadata)
     - [Revisions](#revisions)
 
@@ -1508,6 +1510,161 @@ project's own earlier sweep found (backend-factory design §10 item
 10b) — commits `fbb8107` and `a2a9159` change V's own capacity
 scaling, not only its `d` scaling, which is the most likely
 explanation for the difference.
+
+### B.4 `d` sweep extended to `d=500`
+
+Commit `d354608`/`7862dd7` (the boundary between the two is dev-tooling-only —
+`0179bd9`/`a18ba58`/`a8f001d`/`ea966da`/`7862dd7` touch only `dev/bin/`, none
+of `src/fim/model/`or `src/fim/engine.py` — so both runs below share
+functionally identical simulation code), citrus-2 (Intel Core Ultra 9 185H,
+22 threads, 93GB RAM, Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic),
+2026-09-04/05. Fixed: `N=500`, `m=0.05`, `mu=0.001`, locus length 4
+(capacity 256) — `dev/bin/benchmark-engines`'s own default fixed baseline,
+identical to B.1's; run with no `--config` override, so the exact values
+are the tool's own `DEFAULT_N`/`DEFAULT_M`/`DEFAULT_MU`/`DEFAULT_LOCUS_
+LENGTH`, not independently re-confirmed from shell history.
+
+```console
+dev/bin/benchmark-engines --sweep d --values 150,200,300,500 \
+    --replicates 16 --generations 100 --trials 3
+```
+
+First run, isolated (no other benchmark work sharing the host at the time):
+
+```text
+     value   L_1(s)   L_b(s)  L_b/L1  G-off(s)    /L1  G-jit(s)    /L1     V(s)    /L1  fastest
+-----------------------------------------------------------------------------------------------
+       150    7.092  112.691   15.89   121.633  17.15    63.344   8.93   14.368   2.03        V
+       200    9.956  166.283   16.70   177.703  17.85    87.545   8.79   19.058   1.91        V
+       300   15.683  251.352   16.03   271.693  17.32   135.296   8.63   29.211   1.86        V
+       500   27.699  481.363   17.38   552.933  19.96   257.300   9.29   52.614   1.90        V
+```
+
+Second run, the same sweep repeated a few hours later, **overlapping the
+first ~5 minutes of the B.5 heatmap queue's own 4-concurrent-job start**
+(§B.5, below) for roughly the last 40 of its own ~47-minute run:
+
+```text
+     value   L_1(s)   L_b(s)  L_b/L1  G-off(s)    /L1  G-jit(s)    /L1     V(s)    /L1  fastest
+-----------------------------------------------------------------------------------------------
+       150    6.545  111.316   17.01   146.274  22.35    68.672  10.49   10.964   1.68        V
+       200   10.307  167.829   16.28   188.367  18.28    87.467   8.49   14.205   1.38        V
+       300   17.000  266.453   15.67   280.294  16.49   132.860   7.82   21.138   1.24        V
+       500   27.444  426.877   15.55   769.457  28.04   266.820   9.72   38.979   1.42        V
+```
+
+`V` still wins at every `d`, in both runs, extending B.1's own finding to
+`d=500` with no crossover found yet. **The two runs' own `V`-over-`G-jit`
+margins visibly differ (1.86-2.03x vs. 1.24-1.68x) despite functionally
+identical code** — recorded honestly as an open, unexplained-by-code-change
+discrepancy rather than folded into one table as if the two agreed:
+initially read as evidence that this session's persistence/statistics
+validation-skip fixes (`53afe81`/`d354608`) narrowed `V`'s advantage more
+than `G`'s, that reading does not survive checking `git reflog` on the
+benchmark host — both runs already had both fixes applied, so no code
+change separates them at all. The second run's own timing sits inside a
+window that started shortly before, and mostly overlapped, four other
+concurrent `benchmark-engines` jobs on the same 22-thread host (§B.5's own
+heatmap queue) — real host contention, not a code effect, is the far more
+likely explanation, and this pair of runs should not be read as a
+controlled A/B comparison of anything. A genuine re-measurement of whether
+those two fixes changed `V`-vs-`G` scaling would need to hold the commit
+fixed and vary only isolation.
+
+### B.5 Joint `d` × locus-length sweep (heatmap)
+
+Commit `7862dd7`, citrus-2 (Intel Core Ultra 9 185H, 22 threads, 93GB RAM,
+Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic), 2026-09-04/05. Fixed:
+`N=500`, `m=0.05`, `mu=0.001`. B.1 and B.3 each sweep one axis at a time,
+holding the other fixed — this sweeps `d` and locus length together, to
+check whether the two axes' own crossovers move independently of each
+other or interact. Run via `dev/bin/generate-heatmap-queue` (one
+`benchmark-queue` job per locus length, each internally sweeping `d`,
+all four dispatched concurrently) and rendered with `dev/bin/
+render-heatmap`; length 8 (capacity 65536) exceeded the queue's own
+4-hour per-job timeout and produced no data — consistent with B.3's own
+finding that cost rises sharply somewhere between capacity 16384 and
+65536.
+
+```console
+dev/bin/generate-heatmap-queue --d-values 10,35,70,120,300 \
+    --length-values 5,6,7,8 --out-dir /tmp/fim-heatmap
+dev/bin/benchmark-queue /tmp/fim-heatmap/queue.json
+dev/bin/render-heatmap /tmp/fim-heatmap
+```
+
+Length 5 (capacity 1024):
+
+```text
+     value   L_1(s)   L_b(s)  L_b/L1  G-off(s)    /L1  G-jit(s)    /L1     V(s)    /L1  fastest
+-----------------------------------------------------------------------------------------------
+        10    0.153    2.359   15.39     2.931  19.12     2.213  14.43    1.381   9.01        V
+        35    1.720   30.083   17.49    19.831  11.53    12.451   7.24    2.801   1.63        V
+        70    3.329  102.344   30.74    64.094  19.25    36.527  10.97    6.547   1.97        V
+       120    8.260  188.728   22.85   164.821  19.95    84.999  10.29   12.007   1.45        V
+       300   37.267  762.980   20.47   696.033  18.68   340.861   9.15   39.047   1.05        V
+```
+
+Length 6 (capacity 4096):
+
+```text
+     value   L_1(s)   L_b(s)  L_b/L1  G-off(s)    /L1  G-jit(s)    /L1     V(s)    /L1  fastest
+-----------------------------------------------------------------------------------------------
+        10    0.136    2.422   17.85     2.916  21.49     2.345  17.28    2.720  20.05    G-jit
+        35    2.635   35.205   13.36    19.932   7.57    13.980   5.31    8.871   3.37        V
+        70    6.944  105.070   15.13    65.818   9.48    42.739   6.15   10.743   1.55        V
+       120   11.334  208.391   18.39   182.162  16.07   108.416   9.57   37.023   3.27        V
+       300   81.725  879.380   10.76   963.568  11.79   514.111   6.29  102.335   1.25        V
+```
+
+Length 7 (capacity 16384):
+
+```text
+     value   L_1(s)   L_b(s)  L_b/L1  G-off(s)    /L1  G-jit(s)    /L1     V(s)    /L1  fastest
+-----------------------------------------------------------------------------------------------
+        10    0.181    2.397   13.23     2.896  15.98     2.274  12.55    5.093  28.10    G-jit
+        35    1.963   35.020   17.84    19.719  10.04    13.810   7.04   33.764  17.20    G-jit
+        70    3.906  106.571   27.29    66.773  17.10    45.970  11.77   50.844  13.02    G-jit
+       120   10.270  206.832   20.14   183.874  17.90   124.231  12.10   77.499   7.55        V
+       300   50.889  867.887   17.05  1028.933  20.22   645.902  12.69  230.319   4.53        V
+```
+
+Fastest backend, and the `V`/`G-jit` wall-clock ratio (below 1.0 means `V`
+is still ahead), across all three completed lengths:
+
+```text
+Fastest backend
+  d / length         5         6         7
+------------------------------------------
+          10         V     G-jit     G-jit
+          35         V         V     G-jit
+          70         V         V     G-jit
+         120         V         V         V
+         300         V         V         V
+
+V / G-jit wall-clock ratio (below 1.0 = V still ahead)
+  d / length         5         6         7
+------------------------------------------
+          10      0.62      1.16      2.24
+          35      0.22      0.63      2.44
+          70      0.18      0.25      1.11
+         120      0.14      0.34      0.62
+         300      0.11      0.20      0.36
+```
+
+The `V`/`G` boundary this reveals is **diagonal, not rectangular**: `V`'s
+own advantage shrinks steadily as locus length grows at fixed `d`, and
+grows as `d` grows at fixed length — the two axes trade off against each
+other rather than either one alone deciding the winner. At length 7
+specifically, `V` only wins once `d >= 120`; at length 5 it wins at every
+`d` sampled. The current `auto_vector_min_d`/`auto_vector_max_capacity`
+cutover (two independent scalar thresholds, `"auto"` requiring both to
+clear before choosing `V`) cannot express a diagonal boundary — a config
+near one axis's own threshold but comfortably inside the other's could
+still land on the wrong side of this data. Not yet acted on: the current
+defaults still come from B.1/B.3's own single-axis sweeps, and changing
+the cutover shape itself (not just its two threshold values) is a real
+design question, not a parameter tweak.
 
 ## Metadata
 
