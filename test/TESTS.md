@@ -14540,6 +14540,65 @@ own worked scenario; 8 loci, 30 replicates, horizon 300, ancestral
 directly, not merely reasoned about, before being written here: all
 five sampled generations pass at this configuration.
 
+<a id="validation.test_simulator_equilibrium.test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect"></a>
+
+#### test\_engine\_reproduces\_ryman\_leimar\_ancestral\_heterozygosity\_effect
+
+```python
+@pytest.mark.slow
+@pytest.mark.statistical
+def test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect(
+) -> None
+```
+
+A different `H_S(0)` shifts the same demography's own mid-transition `G_ST`.
+
+`R8` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
+claude-opus-5-gene-identity-recursion-fim-implications.md` — Ryman
+& Leimar's own genuinely novel finding (Finding F, their Figure 3):
+during the transition phase, `G_ST` depends on the *ancestral*
+heterozygosity `H_S(0)` a set of demes split from, not only on `N`
+and `m` — a claim with no equilibrium counterpart at all (an
+equilibrium run washes the starting point out entirely, which is
+exactly why `test_engine_reproduces_part_vi_equilibrium`, directly
+below, could never detect it either way). Identical demography
+(`N`, `m`, `mu`, `d`, horizon), several ancestral heterozygosities
+via `founding_condition_for_heterozygosity` (`R7`) — every other
+variable held fixed, only `H_S(0)` itself changes between runs.
+
+A **directional (metamorphic) check**, per this document's own
+guidance, deliberately not a point-value calibration band: the same
+tactic `test_stepping_stone_differentiation_is_at_least_the_island_
+models` already uses for a different claim. Two statistics, both
+already known (from this same recursion, verified numerically
+before this test was written) to move the same direction as `H_S(0)`
+increases here, at different sensitivities:
+
+- `G_ST` — the paper's own statistic — checked as a plain ordering
+  of its own point estimate (`bootstrap_replicate_summary`'s own
+  `"mean"`) across increasing `H_S(0)`, since the effect on `G_ST`
+  itself is real but modest at a scale this test can afford to run.
+- `D` — far more sensitive to this same effect at this configuration
+  (a difference of `Gs`/`Gd` alone move `D`'s own bare ratio far
+  more than they move `G_ST`'s blended one — the identical Jensen-
+  style amplification `R3` part 3's own docstring describes, here
+  working in this test's favor rather than as a bias to correct)
+  — checked as non-overlapping confidence intervals, a stronger
+  claim than ordering alone.
+
+This project's own actual parameters (`N=200, m=0.01, mu=0.001,
+d=6`, ancestral `H_S(0) in (0.1, 0.5, 0.9)`, 8 loci, 60 replicates,
+horizon 150, seed 42) are not the paper's own published Figure 3
+values — those were not available to verify against (this project's
+own Ryman & Leimar analysis document, Part 11.4, records the same
+gap) — so this test reproduces the qualitative *phenomenon* the
+paper reports, confirmed directly by running it before it was
+written, not the paper's own specific published curve.
+
+Runtime is roughly three minutes (three separate 60-replicate,
+8-locus, 150-generation batches) — the most expensive test in this
+file, matching this item's own "large" effort estimate.
+
 <a id="validation.test_simulator_equilibrium.test_engine_reproduces_part_vi_equilibrium"></a>
 
 #### test\_engine\_reproduces\_part\_vi\_equilibrium

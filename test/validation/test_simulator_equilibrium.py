@@ -58,6 +58,7 @@ deterministic PR gate.
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import statistics
@@ -69,7 +70,12 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from fim.engine import EngineBackendChoice, fim, report_for_state
+from fim.engine import (
+    EngineBackendChoice,
+    bootstrap_replicate_summary,
+    fim,
+    report_for_state,
+)
 from fim.model.allele import AlleleId
 from fim.model.initial import founding_condition_for_heterozygosity
 from fim.model.locus import LocusSpec
@@ -78,6 +84,7 @@ from fim.model.state import ModelState
 from fim.model.topology import dense_matrix_from_neighbors, stepping_stone_neighbors
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryRow
 from fim.statistics import (
+    ConfidenceInterval,
     confidence_interval,
     equilibrium_d,
     equilibrium_g_st,
@@ -2181,6 +2188,109 @@ def test_engine_trajectory_matches_the_identity_recursion_gs_and_gd() -> None:
             f"Gd at generation {sample_generation}: recursion predicts "
             f"{expected_between!r}, engine interval is "
             f"[{gd_interval['low']!r}, {gd_interval['high']!r}]"
+        )
+
+
+@pytest.mark.slow
+@pytest.mark.statistical
+def test_engine_reproduces_ryman_leimar_ancestral_heterozygosity_effect() -> None:
+    """A different `H_S(0)` shifts the same demography's own mid-transition `G_ST`.
+
+    `R8` of `dev/doc/apps/selby/jost-finite-island-model/20260903-
+    claude-opus-5-gene-identity-recursion-fim-implications.md` — Ryman
+    & Leimar's own genuinely novel finding (Finding F, their Figure 3):
+    during the transition phase, `G_ST` depends on the *ancestral*
+    heterozygosity `H_S(0)` a set of demes split from, not only on `N`
+    and `m` — a claim with no equilibrium counterpart at all (an
+    equilibrium run washes the starting point out entirely, which is
+    exactly why `test_engine_reproduces_part_vi_equilibrium`, directly
+    below, could never detect it either way). Identical demography
+    (`N`, `m`, `mu`, `d`, horizon), several ancestral heterozygosities
+    via `founding_condition_for_heterozygosity` (`R7`) — every other
+    variable held fixed, only `H_S(0)` itself changes between runs.
+
+    A **directional (metamorphic) check**, per this document's own
+    guidance, deliberately not a point-value calibration band: the same
+    tactic `test_stepping_stone_differentiation_is_at_least_the_island_
+    models` already uses for a different claim. Two statistics, both
+    already known (from this same recursion, verified numerically
+    before this test was written) to move the same direction as `H_S(0)`
+    increases here, at different sensitivities:
+
+    - `G_ST` — the paper's own statistic — checked as a plain ordering
+      of its own point estimate (`bootstrap_replicate_summary`'s own
+      `"mean"`) across increasing `H_S(0)`, since the effect on `G_ST`
+      itself is real but modest at a scale this test can afford to run.
+    - `D` — far more sensitive to this same effect at this configuration
+      (a difference of `Gs`/`Gd` alone move `D`'s own bare ratio far
+      more than they move `G_ST`'s blended one — the identical Jensen-
+      style amplification `R3` part 3's own docstring describes, here
+      working in this test's favor rather than as a bias to correct)
+      — checked as non-overlapping confidence intervals, a stronger
+      claim than ordering alone.
+
+    This project's own actual parameters (`N=200, m=0.01, mu=0.001,
+    d=6`, ancestral `H_S(0) in (0.1, 0.5, 0.9)`, 8 loci, 60 replicates,
+    horizon 150, seed 42) are not the paper's own published Figure 3
+    values — those were not available to verify against (this project's
+    own Ryman & Leimar analysis document, Part 11.4, records the same
+    gap) — so this test reproduces the qualitative *phenomenon* the
+    paper reports, confirmed directly by running it before it was
+    written, not the paper's own specific published curve.
+
+    Runtime is roughly three minutes (three separate 60-replicate,
+    8-locus, 150-generation batches) — the most expensive test in this
+    file, matching this item's own "large" effort estimate.
+    """
+    population_size = 200
+    m = 0.01
+    mu = 0.001
+    d = 6
+    n_loci = 8
+    replicates = 60
+    horizon = 150
+    heterozygosity_values = (0.1, 0.5, 0.9)
+
+    g_st_points: list[float] = []
+    d_intervals: list[ConfidenceInterval] = []
+    for heterozygosity_0 in heterozygosity_values:
+        initial_frequencies = founding_condition_for_heterozygosity(
+            heterozygosity_0, deme_count=d, locus_count=n_loci
+        )
+        params = SimulationParams(
+            N=population_size,
+            m=m,
+            mu=mu,
+            d=d,
+            seed=42,
+            loci=tuple(LocusSpec(index + 1, 200) for index in range(n_loci)),
+            mutation_model="infinite_alleles",
+            max_generations=horizon,
+            convergence_window=4,
+            convergence_tolerance=0.0,
+            n_replicates=replicates,
+            replicate_tolerance=None,
+            initial_frequencies=initial_frequencies,
+        )
+        output = fim(params.N, params.m, params.mu, params.d, params=params)
+        assert isinstance(output, tuple)
+        summary = bootstrap_replicate_summary(
+            output, rng=np.random.default_rng(1), bootstrap_samples=500
+        )
+        g_st_points.append(summary["G_ST"]["mean"])
+        d_intervals.append(summary["D"])
+
+    assert g_st_points == sorted(g_st_points), (
+        f"G_ST point estimates across increasing H_S(0) {heterozygosity_values} "
+        f"were not non-decreasing: {g_st_points}"
+    )
+    paired = tuple(zip(heterozygosity_values, d_intervals, strict=True))
+    for (low_h, low_interval), (high_h, high_interval) in itertools.pairwise(paired):
+        assert low_interval["high"] < high_interval["low"], (
+            f"D at H_S(0)={low_h} ({low_interval['low']!r}, "
+            f"{low_interval['high']!r}) does not fall cleanly below D at "
+            f"H_S(0)={high_h} ({high_interval['low']!r}, "
+            f"{high_interval['high']!r})"
         )
 
 
