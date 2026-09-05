@@ -34,6 +34,82 @@ def test_in_memory_store_round_trips_rows() -> None:
     assert list(store.read("run-a")) == rows
 
 
+def test_in_memory_store_discard_removes_only_the_named_run() -> None:
+    """`discard` drops one run's rows and leaves every other run's alone.
+
+    Phase 5, item 3 of `dev/doc/apps/selby/jost-finite-island-model/
+    20260904-claude-sonnet-5-fim-engine-review-remediations.md`
+    (`FIM-49`/`FIM-50`) — the capability an orphaned or overshoot
+    replicate's own already-written rows are cleaned up through.
+    """
+    store = InMemoryTrajectoryStore()
+    store.write_generation("run-a", 0, _state(0).to_rows("run-a"))
+    store.write_generation("run-b", 0, _state(0).to_rows("run-b"))
+
+    store.discard("run-a")
+
+    assert list(store.read("run-a")) == []
+    assert len(list(store.read("run-b"))) == 3
+
+
+def test_in_memory_store_discard_is_a_no_op_for_an_unknown_run() -> None:
+    """Discarding a run that was never written raises nothing and changes nothing."""
+    store = InMemoryTrajectoryStore()
+    store.write_generation("run-a", 0, _state(0).to_rows("run-a"))
+
+    store.discard("run-never-written")
+
+    assert len(list(store.read("run-a"))) == 3
+
+
+def test_jsonl_store_discard_removes_only_the_named_run(tmp_path: Path) -> None:
+    """`discard` rewrites the file without one run's rows, keeping every other run's.
+
+    One file can hold more than one run's rows (`write_generation`/
+    `read` both filter by `run_id` rather than assuming one file, one
+    run) — this is the case that actually exercises the read-filter-
+    rewrite, not merely deleting the file.
+    """
+    path = tmp_path / "trajectory.jsonl"
+    store = JSONLTrajectoryStore(path)
+    store.write_generation("run-a", 0, _state(0).to_rows("run-a"))
+    store.write_generation("run-b", 0, _state(0).to_rows("run-b"))
+
+    store.discard("run-a")
+
+    assert path.is_file()
+    assert list(store.read("run-b")) == _state(0).to_rows("run-b")
+    with path.open("r", encoding="utf-8") as handle:
+        assert all('"run_id":"run-a"' not in line for line in handle)
+
+
+def test_jsonl_store_discard_removes_the_file_when_nothing_survives(
+    tmp_path: Path,
+) -> None:
+    """The file itself is removed, not left behind empty, once its only run is gone.
+
+    Matches this project's own "a published run directory is complete
+    or absent, never empty" precedent (`_atomic_directory`, `fim.
+    engine`), applied here to one file instead of one directory.
+    """
+    path = tmp_path / "trajectory.jsonl"
+    store = JSONLTrajectoryStore(path)
+    store.write_generation("run-a", 0, _state(0).to_rows("run-a"))
+
+    store.discard("run-a")
+
+    assert not path.exists()
+
+
+def test_jsonl_store_discard_is_a_no_op_for_a_missing_file(tmp_path: Path) -> None:
+    """Discarding from a store whose file was never written raises nothing."""
+    store = JSONLTrajectoryStore(tmp_path / "trajectory.jsonl")
+
+    store.discard("run-never-written")
+
+    assert not (tmp_path / "trajectory.jsonl").exists()
+
+
 def _write_concurrently(
     store: InMemoryTrajectoryStore | JSONLTrajectoryStore, generation_count: int
 ) -> None:

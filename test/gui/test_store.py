@@ -162,6 +162,21 @@ def test_gui_progress_store_read_delegates_to_the_inner_store() -> None:
     assert [row["generation"] for row in store.read("run-1")] == [0]
 
 
+def test_gui_progress_store_discard_delegates_to_the_inner_store() -> None:
+    """`discard` is a pure passthrough — nothing about it needs decorating."""
+    inner = InMemoryTrajectoryStore()
+    inner.write_generation("run-1", 0, _rows(0))
+    store = GuiProgressStore(
+        inner,
+        on_generation=lambda _generation, _rows: None,
+        cancel_event=threading.Event(),
+    )
+
+    store.discard("run-1")
+
+    assert not list(inner.read("run-1"))
+
+
 def test_live_progress_store_writes_a_progress_sidecar_every_generation(
     tmp_path: Path,
 ) -> None:
@@ -254,6 +269,21 @@ def test_live_progress_store_read_delegates_to_the_inner_store(
     )
 
     assert [row["generation"] for row in store.read("run-1")] == [0]
+
+
+def test_live_progress_store_discard_delegates_to_the_inner_store(
+    tmp_path: Path,
+) -> None:
+    """`discard` is a pure passthrough — nothing about it needs decorating."""
+    inner = InMemoryTrajectoryStore()
+    inner.write_generation("run-1", 0, _rows(0))
+    store = LiveProgressStore(
+        inner, progress_path=tmp_path / ".progress", cancel_path=tmp_path / "cancel"
+    )
+
+    store.discard("run-1")
+
+    assert not list(inner.read("run-1"))
 
 
 def test_live_progress_store_is_picklable(tmp_path: Path) -> None:

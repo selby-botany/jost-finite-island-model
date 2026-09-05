@@ -144,10 +144,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_init\_\_](#fim.gui.store.GuiProgressStore.__init__)
     * [write\_generation](#fim.gui.store.GuiProgressStore.write_generation)
     * [read](#fim.gui.store.GuiProgressStore.read)
+    * [discard](#fim.gui.store.GuiProgressStore.discard)
   * [LiveProgressStore](#fim.gui.store.LiveProgressStore)
     * [\_\_init\_\_](#fim.gui.store.LiveProgressStore.__init__)
     * [write\_generation](#fim.gui.store.LiveProgressStore.write_generation)
     * [read](#fim.gui.store.LiveProgressStore.read)
+    * [discard](#fim.gui.store.LiveProgressStore.discard)
   * [write\_progress\_sidecar](#fim.gui.store.write_progress_sidecar)
   * [read\_progress\_sidecar](#fim.gui.store.read_progress_sidecar)
   * [read\_live\_state](#fim.gui.store.read_live_state)
@@ -249,6 +251,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [\_\_getstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__getstate__)
     * [\_\_setstate\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__setstate__)
     * [write\_generation](#fim.persistence.jsonl_store.JSONLTrajectoryStore.write_generation)
+    * [discard](#fim.persistence.jsonl_store.JSONLTrajectoryStore.discard)
     * [read](#fim.persistence.jsonl_store.JSONLTrajectoryStore.read)
 * [fim.persistence.manifest](#fim.persistence.manifest)
   * [ArtifactDigest](#fim.persistence.manifest.ArtifactDigest)
@@ -276,12 +279,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
     * [write\_generation](#fim.persistence.store.TrajectoryStore.write_generation)
     * [read](#fim.persistence.store.TrajectoryStore.read)
+    * [discard](#fim.persistence.store.TrajectoryStore.discard)
   * [InMemoryTrajectoryStore](#fim.persistence.store.InMemoryTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__init__)
     * [\_\_getstate\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__getstate__)
     * [\_\_setstate\_\_](#fim.persistence.store.InMemoryTrajectoryStore.__setstate__)
     * [write\_generation](#fim.persistence.store.InMemoryTrajectoryStore.write_generation)
     * [read](#fim.persistence.store.InMemoryTrajectoryStore.read)
+    * [discard](#fim.persistence.store.InMemoryTrajectoryStore.discard)
   * [normalize\_row](#fim.persistence.store.normalize_row)
 * [fim.reanalyze](#fim.reanalyze)
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
@@ -4377,6 +4382,16 @@ def read(run_id: str) -> Iterator[TrajectoryRow]
 
 Delegate straight to the wrapped store; nothing to decorate here.
 
+<a id="fim.gui.store.GuiProgressStore.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Delegate straight to the wrapped store; nothing to decorate here.
+
 <a id="fim.gui.store.LiveProgressStore"></a>
 
 ## LiveProgressStore Objects
@@ -4445,6 +4460,16 @@ method's own docstring explains.
 
 ```python
 def read(run_id: str) -> Iterator[TrajectoryRow]
+```
+
+Delegate straight to the wrapped store; nothing to decorate here.
+
+<a id="fim.gui.store.LiveProgressStore.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
 ```
 
 Delegate straight to the wrapped store; nothing to decorate here.
@@ -7664,6 +7689,32 @@ as this call returns, instead of remaining vulnerable to being
 lost entirely if the process is interrupted or crashes before
 the file handle would otherwise have been closed.
 
+<a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Rewrite this file without ``run_id``'s own rows; a no-op if there are none.
+
+See `fim.persistence.store.TrajectoryStore.discard`'s own
+docstring for why this exists at all. A plain, whole-file
+read-filter-rewrite under `_lock` — this store's own file can in
+principle hold more than one run's rows (`write_generation`/
+`read` both filter by `run_id` rather than assuming one file,
+one run), so discarding one run's own rows cannot simply be
+"delete the file." If nothing survives the filter, the file is
+removed entirely rather than left behind empty — matching this
+project's own "a published run directory is complete or absent,
+never empty" precedent (`_atomic_directory`, `fim.engine`)
+applied here to one file instead of one directory.
+
+A missing file, or a file that already has none of ``run_id``'s
+own rows, is a no-op either way — this is "make sure this run's
+data is gone," not "assert it was there first."
+
 <a id="fim.persistence.jsonl_store.JSONLTrajectoryStore.read"></a>
 
 #### read
@@ -8208,6 +8259,33 @@ def read(run_id: str) -> Iterator[TrajectoryRow]
 
 Yield rows for one run in stored order.
 
+<a id="fim.persistence.store.TrajectoryStore.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Permanently remove every row belonging to one run, if any exist.
+
+A safe no-op when ``run_id`` has no rows at all — "get rid of
+this run's own data, if there is any" is the whole contract, not
+"assert that some existed first." Exists so an abandoned
+replicate lane's own already-written rows (`fim.engine.
+run_batch`'s own generational adaptive stop, or `_run_batch_
+parallel`'s own worker-batch overshoot — see this project's own
+multi-model engine review, 2026-09-04, `FIM-49`/`FIM-50`) do not
+outlive the fact that the replicate they belong to was never
+actually finished or returned to a caller: a reader of the store
+should never see a `run_id` with no corresponding `RunResult` to
+explain it.
+
+**Arguments**:
+
+- `run_id` - The run whose rows should no longer exist in this
+  store, whether they were ever written or not.
+
 <a id="fim.persistence.store.InMemoryTrajectoryStore"></a>
 
 ## InMemoryTrajectoryStore Objects
@@ -8306,6 +8384,21 @@ Snapshots `_rows` under `_lock` before filtering, rather than
 iterating the live list directly, so a concurrent
 `write_generation` call from another thread can never produce a
 torn read.
+
+<a id="fim.persistence.store.InMemoryTrajectoryStore.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Drop every row matching ``run_id``; a no-op if there are none.
+
+See `TrajectoryStore.discard`'s own docstring for why this
+exists at all. Held under `_lock`, the same guard `write_
+generation`/`read` already use, so a concurrent write from
+another thread can never interleave with this rebuild of `_rows`.
 
 <a id="fim.persistence.store.normalize_row"></a>
 

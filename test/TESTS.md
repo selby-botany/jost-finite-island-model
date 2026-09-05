@@ -6800,6 +6800,16 @@ def test_gui_progress_store_read_delegates_to_the_inner_store() -> None
 
 `read` is a pure passthrough — nothing about it needs decorating.
 
+<a id="gui.test_store.test_gui_progress_store_discard_delegates_to_the_inner_store"></a>
+
+#### test\_gui\_progress\_store\_discard\_delegates\_to\_the\_inner\_store
+
+```python
+def test_gui_progress_store_discard_delegates_to_the_inner_store() -> None
+```
+
+`discard` is a pure passthrough — nothing about it needs decorating.
+
 <a id="gui.test_store.test_live_progress_store_writes_a_progress_sidecar_every_generation"></a>
 
 #### test\_live\_progress\_store\_writes\_a\_progress\_sidecar\_every\_generation
@@ -6859,6 +6869,17 @@ def test_live_progress_store_read_delegates_to_the_inner_store(
 ```
 
 `read` is a pure passthrough — nothing about it needs decorating.
+
+<a id="gui.test_store.test_live_progress_store_discard_delegates_to_the_inner_store"></a>
+
+#### test\_live\_progress\_store\_discard\_delegates\_to\_the\_inner\_store
+
+```python
+def test_live_progress_store_discard_delegates_to_the_inner_store(
+        tmp_path: Path) -> None
+```
+
+`discard` is a pure passthrough — nothing about it needs decorating.
 
 <a id="gui.test_store.test_live_progress_store_is_picklable"></a>
 
@@ -10288,6 +10309,73 @@ def test_in_memory_store_round_trips_rows() -> None
 
 The protocol contract preserves every public-schema field.
 
+<a id="persistence.test_store.test_in_memory_store_discard_removes_only_the_named_run"></a>
+
+#### test\_in\_memory\_store\_discard\_removes\_only\_the\_named\_run
+
+```python
+def test_in_memory_store_discard_removes_only_the_named_run() -> None
+```
+
+`discard` drops one run's rows and leaves every other run's alone.
+
+Phase 5, item 3 of `dev/doc/apps/selby/jost-finite-island-model/
+20260904-claude-sonnet-5-fim-engine-review-remediations.md`
+(`FIM-49`/`FIM-50`) — the capability an orphaned or overshoot
+replicate's own already-written rows are cleaned up through.
+
+<a id="persistence.test_store.test_in_memory_store_discard_is_a_no_op_for_an_unknown_run"></a>
+
+#### test\_in\_memory\_store\_discard\_is\_a\_no\_op\_for\_an\_unknown\_run
+
+```python
+def test_in_memory_store_discard_is_a_no_op_for_an_unknown_run() -> None
+```
+
+Discarding a run that was never written raises nothing and changes nothing.
+
+<a id="persistence.test_store.test_jsonl_store_discard_removes_only_the_named_run"></a>
+
+#### test\_jsonl\_store\_discard\_removes\_only\_the\_named\_run
+
+```python
+def test_jsonl_store_discard_removes_only_the_named_run(
+        tmp_path: Path) -> None
+```
+
+`discard` rewrites the file without one run's rows, keeping every other run's.
+
+One file can hold more than one run's rows (`write_generation`/
+`read` both filter by `run_id` rather than assuming one file, one
+run) — this is the case that actually exercises the read-filter-
+rewrite, not merely deleting the file.
+
+<a id="persistence.test_store.test_jsonl_store_discard_removes_the_file_when_nothing_survives"></a>
+
+#### test\_jsonl\_store\_discard\_removes\_the\_file\_when\_nothing\_survives
+
+```python
+def test_jsonl_store_discard_removes_the_file_when_nothing_survives(
+        tmp_path: Path) -> None
+```
+
+The file itself is removed, not left behind empty, once its only run is gone.
+
+Matches this project's own "a published run directory is complete
+or absent, never empty" precedent (`_atomic_directory`, `fim.
+engine`), applied here to one file instead of one directory.
+
+<a id="persistence.test_store.test_jsonl_store_discard_is_a_no_op_for_a_missing_file"></a>
+
+#### test\_jsonl\_store\_discard\_is\_a\_no\_op\_for\_a\_missing\_file
+
+```python
+def test_jsonl_store_discard_is_a_no_op_for_a_missing_file(
+        tmp_path: Path) -> None
+```
+
+Discarding from a store whose file was never written raises nothing.
+
 <a id="persistence.test_store.test_in_memory_store_write_generation_is_thread_safe"></a>
 
 #### test\_in\_memory\_store\_write\_generation\_is\_thread\_safe
@@ -12920,6 +13008,16 @@ def read(run_id: str) -> Iterator[TrajectoryRow]
 ```
 
 Yield nothing; no trajectory is retained.
+
+<a id="validation.test_simulator_equilibrium._DiscardingStore.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Nothing to discard; nothing is ever retained in the first place.
 
 <a id="validation.test_simulator_equilibrium.test_report_for_state_ratio_of_means_matches_the_pooled_oracle"></a>
 

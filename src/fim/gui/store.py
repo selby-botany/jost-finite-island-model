@@ -145,6 +145,10 @@ class GuiProgressStore:
         """Delegate straight to the wrapped store; nothing to decorate here."""
         return self._inner.read(run_id)
 
+    def discard(self, run_id: str) -> None:
+        """Delegate straight to the wrapped store; nothing to decorate here."""
+        self._inner.discard(run_id)
+
 
 class LiveProgressStore:
     """Decorate a `TrajectoryStore` with file-mediated progress and cancellation.
@@ -207,6 +211,10 @@ class LiveProgressStore:
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Delegate straight to the wrapped store; nothing to decorate here."""
         return self._inner.read(run_id)
+
+    def discard(self, run_id: str) -> None:
+        """Delegate straight to the wrapped store; nothing to decorate here."""
+        self._inner.discard(run_id)
 
 
 def write_progress_sidecar(progress_path: Path, generation: int) -> None:

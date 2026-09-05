@@ -133,6 +133,50 @@ class JSONLTrajectoryStore:
                 self.path,
             )
 
+    def discard(self, run_id: str) -> None:
+        """Rewrite this file without ``run_id``'s own rows; a no-op if there are none.
+
+        See `fim.persistence.store.TrajectoryStore.discard`'s own
+        docstring for why this exists at all. A plain, whole-file
+        read-filter-rewrite under `_lock` — this store's own file can in
+        principle hold more than one run's rows (`write_generation`/
+        `read` both filter by `run_id` rather than assuming one file,
+        one run), so discarding one run's own rows cannot simply be
+        "delete the file." If nothing survives the filter, the file is
+        removed entirely rather than left behind empty — matching this
+        project's own "a published run directory is complete or absent,
+        never empty" precedent (`_atomic_directory`, `fim.engine`)
+        applied here to one file instead of one directory.
+
+        A missing file, or a file that already has none of ``run_id``'s
+        own rows, is a no-op either way — this is "make sure this run's
+        data is gone," not "assert it was there first."
+        """
+        with self._lock:
+            if not self.path.is_file():
+                return
+            kept_lines: list[str] = []
+            discarded_any = False
+            with self.path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    payload = json.loads(stripped)
+                    if payload.get("run_id") == run_id:
+                        discarded_any = True
+                    else:
+                        kept_lines.append(line if line.endswith("\n") else line + "\n")
+            if not discarded_any:
+                return
+            if kept_lines:
+                with self.path.open("w", encoding="utf-8", newline="\n") as handle:
+                    handle.writelines(kept_lines)
+            else:
+                self.path.unlink()
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("discarded run %s from %s", run_id, self.path)
+
     def read(self, run_id: str) -> Iterator[TrajectoryRow]:
         """Yield complete rows matching ``run_id``, oldest first.
 

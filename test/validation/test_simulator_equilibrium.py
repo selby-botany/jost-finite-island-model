@@ -204,6 +204,10 @@ class _DiscardingStore:
         del run_id
         return iter(())
 
+    def discard(self, run_id: str) -> None:
+        """Nothing to discard; nothing is ever retained in the first place."""
+        del run_id
+
 
 def _band(sigma: float, replicates: int) -> float:
     """Return the half-width of a ``_BAND_SIGMA``-sigma band on a mean.
