@@ -160,7 +160,8 @@ from fim.engine import (  # noqa: E402
 )
 from fim.model.locus import LocusSpec  # noqa: E402
 from fim.model.params import SimulationParams  # noqa: E402
-from fim.persistence.store import InMemoryTrajectoryStore  # noqa: E402
+from fim.persistence.jsonl_store import JSONLTrajectoryStore  # noqa: E402
+from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore  # noqa: E402
 
 SweepField = str  # one of "d", "N", "mu", "m", "loci-length", "replicates"
 
@@ -317,10 +318,24 @@ def _run_once(
     params: SimulationParams,
     *,
     jit: JitOption = "off",
+    store: TrajectoryStore | None = None,
 ) -> float:
-    """Run one full batch, return elapsed wall-clock seconds."""
+    """Run one full batch, return elapsed wall-clock seconds.
+
+    `store` defaults to a fresh `InMemoryTrajectoryStore` -- every
+    trajectory this tool ever produces is discarded the moment this
+    function returns, by design: writing a real trajectory to disk adds
+    I/O cost this tool's own reported numbers are not supposed to
+    include, and this tool measures thousands of runs across a typical
+    sweep, most of them never looked at again. Pass a real
+    `JSONLTrajectoryStore` explicitly (`--save-trajectories`, below) for
+    the rare point worth keeping -- as a genuinely separate, untimed
+    run, never as this function's own default, so the reported timing
+    numbers are never silently contaminated by disk I/O.
+    """
     backend = build_engine_backend(engine_backend, jit=jit)
-    store = InMemoryTrajectoryStore()
+    if store is None:
+        store = InMemoryTrajectoryStore()
     start = time.perf_counter()
     backend.run(params, store, None, _clock)
     return time.perf_counter() - start
@@ -445,6 +460,76 @@ def _measure_rss(
     return int(result.stdout.strip())
 
 
+def _save_trajectory(
+    engine_backend: EngineBackendChoice,
+    params: SimulationParams,
+    *,
+    jit: JitOption = "off",
+    output_path: Path,
+) -> None:
+    """Run one extra, untimed batch, persisting its own trajectory to disk.
+
+    A genuinely separate call from every timed trial `_measure_point`
+    already made — never reuses a timed run's own result, and never
+    contributes to any reported timing or RSS figure, so a config saved
+    this way costs one additional full batch run on top of whatever
+    `--trials` (and `--measure-rss`) already paid, but the numbers this
+    tool reports stay exactly as clean as before `--save-trajectories`
+    existed. Uses `fim.persistence.jsonl_store.JSONLTrajectoryStore` —
+    this project's own real, on-disk trajectory format (the same one
+    `fim run` itself writes), not `InMemoryTrajectoryStore`'s own
+    every-other-call default, which discards its own trajectory the
+    moment the call returns.
+    """
+    store = JSONLTrajectoryStore(output_path)
+    _run_once(engine_backend, params, jit=jit, store=store)
+
+
+def _save_point_trajectories(
+    save_trajectories_dir: Path,
+    field: SweepField,
+    value: float,
+    batch_params: SimulationParams,
+    *,
+    generational_jit_numba_available: bool,
+    vector_available: bool,
+) -> None:
+    """`_measure_point`'s own `--save-trajectories` step, factored out.
+
+    One `.jsonl` file per backend that was actually available at this
+    point (skipping `"generational"` with `jit="numba"`/`"generational-
+    vector"` exactly where `_measure_point`'s own timed measurement
+    already skipped them, for the identical reason — an unavailable
+    backend has nothing to persist) named `<field>-<value>-<backend>
+    .jsonl`, e.g. `d-35-vector.jsonl`.
+    """
+    save_trajectories_dir.mkdir(parents=True, exist_ok=True)
+    value_tag = f"{field}-{value:g}"
+    _save_trajectory(
+        "lineal",
+        batch_params,
+        output_path=save_trajectories_dir / f"{value_tag}-lineal.jsonl",
+    )
+    _save_trajectory(
+        "generational",
+        batch_params,
+        output_path=save_trajectories_dir / f"{value_tag}-generational-off.jsonl",
+    )
+    if generational_jit_numba_available:
+        _save_trajectory(
+            "generational",
+            batch_params,
+            jit="numba",
+            output_path=save_trajectories_dir / f"{value_tag}-generational-numba.jsonl",
+        )
+    if vector_available:
+        _save_trajectory(
+            "generational-vector",
+            batch_params,
+            output_path=save_trajectories_dir / f"{value_tag}-vector.jsonl",
+        )
+
+
 def _measure_point(
     field: SweepField,
     value: float,
@@ -457,6 +542,7 @@ def _measure_point(
     warmed_up_generational_numba: list[bool],
     warmed_up_vector: list[bool],
     measure_rss: bool = False,
+    save_trajectories_dir: Path | None = None,
 ) -> BenchmarkPoint:
     """Measure one swept value's own L_1/L_batch/G(off)/G(numba)/V times.
 
@@ -478,6 +564,20 @@ def _measure_point(
             per backend (`_measure_rss`) to capture peak RSS -- doubles
             this point's own wall-clock cost (one process per backend on
             top of the timing runs already paid), so left opt-in.
+        save_trajectories_dir: When given, run one further, untimed,
+            trajectory-persisting batch per available backend
+            (`_save_trajectory`) after every timed measurement above,
+            writing each to its own `.jsonl` file under this directory
+            -- a real, on-disk record of this point's own simulated
+            trajectory, for a caller who wants to inspect what a
+            benchmarked configuration actually produced (allele
+            frequencies, differentiation statistics over time), not
+            only how long it took. Adds up to four full extra batch
+            runs per point (`fim.persistence.jsonl_store.
+            JSONLTrajectoryStore` writes real, potentially large files
+            for a high-capacity/many-generation/many-replicate
+            configuration) -- left opt-in, and best aimed at a handful
+            of specific points of interest, not an entire dense sweep.
     """
     d = int(value) if field == "d" else baseline.d
     n = int(value) if field == "N" else baseline.n
@@ -540,6 +640,16 @@ def _measure_point(
             )
         if vector_seconds is not None:
             vector_rss_bytes = _measure_rss("generational-vector", batch_params)
+
+    if save_trajectories_dir is not None:
+        _save_point_trajectories(
+            save_trajectories_dir,
+            field,
+            value,
+            batch_params,
+            generational_jit_numba_available=generational_jit_numba_seconds is not None,
+            vector_available=vector_seconds is not None,
+        )
 
     return BenchmarkPoint(
         swept_field=field,
@@ -898,6 +1008,21 @@ def main(argv: list[str] | None = None) -> int:
         "wall-clock cost). Off by default.",
     )
     parser.add_argument(
+        "--save-trajectories",
+        type=Path,
+        default=None,
+        help="Directory to persist one real, on-disk .jsonl trajectory per "
+        "available backend per point (an extra, untimed batch run each -- "
+        "never contaminates the reported timing/RSS numbers, but adds up "
+        "to four full extra runs per point). Off by default -- every "
+        "run's own simulated trajectory is otherwise discarded the moment "
+        "it is measured (`InMemoryTrajectoryStore`), by design, since a "
+        "typical sweep runs far too many points to keep them all. Aim "
+        "this at a handful of specific points worth keeping, not an "
+        "entire dense sweep -- files can be large for high-capacity/"
+        "many-generation/many-replicate configurations.",
+    )
+    parser.add_argument(
         "--generations",
         type=int,
         default=100,
@@ -976,6 +1101,11 @@ def main(argv: list[str] | None = None) -> int:
         f"trials={args.trials}, baseline={baseline}"
         + (f", config={args.config}" if args.config is not None else "")
         + (", measure_rss=True" if args.measure_rss else "")
+        + (
+            f", save_trajectories={args.save_trajectories}"
+            if args.save_trajectories is not None
+            else ""
+        )
         + (f", resuming: {len(done)}/{len(values)} already done" if done else "")
         + ")",
         flush=True,
@@ -1002,6 +1132,7 @@ def main(argv: list[str] | None = None) -> int:
             warmed_up_generational_numba=warmed_up_generational_numba,
             warmed_up_vector=warmed_up_vector,
             measure_rss=args.measure_rss,
+            save_trajectories_dir=args.save_trajectories,
         )
         points_by_value[value] = point
         print(_table_row(point, measure_rss=args.measure_rss), flush=True)
