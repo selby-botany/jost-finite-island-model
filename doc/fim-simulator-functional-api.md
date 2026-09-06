@@ -123,14 +123,14 @@ The one entry point everything else in this project ultimately calls.
   detail); `"lineal"` never accepts anything but `jit="off"`.
   `auto_vector_min_d` is the deme-count cutover `"auto"` uses to decide
   — irrelevant under every other `engine_backend`; `params.
-  auto_vector_min_d`'s own default is `DEFAULT_AUTO_VECTOR_MIN_D` (35,
+  auto_vector_min_d`'s own default is `DEFAULT_AUTO_VECTOR_MIN_D` (2,
   defined in `fim.model.params`), a real benchmark-measured default
   with known cross-environment caveats (see that constant's own
   docstring). `auto_vector_max_capacity` is the per-locus capacity
   ceiling `"auto"` uses alongside it — every locus in `params.loci`
   must be at most this value for `"auto"` to pick `"generational-
   vector"`, regardless of `d`; `params.auto_vector_max_capacity`'s own
-  default is `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (1024), likewise a real
+  default is `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (4096), likewise a real
   benchmark-measured default with the same caveats. Whichever backend
   actually ran — the resolved choice, not
   the literal string `"auto"` — and whether `jit` was on are both

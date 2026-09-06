@@ -1447,7 +1447,7 @@ def build_engine_backend(
         auto_vector_min_d: The deme-count cutover `"auto"` uses to
             decide between `"generational"` and `"generational-vector"`
             — irrelevant, and unused, under every other `engine_backend`
-            value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (35), this
+            value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (`2`), this
             project's own best current estimate from a real benchmark
             sweep (see that constant's own docstring for the full
             finding, including its cross-environment caveats) —
@@ -1466,7 +1466,7 @@ def build_engine_backend(
             most this value, in addition to `d >= auto_vector_min_d`,
             for `"auto"` to pick `"generational-vector"`; irrelevant,
             and unused, under every other `engine_backend` value.
-            Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`1024`) —
+            Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`4096`) —
             see that constant's own docstring for the measured finding
             behind it and the same cross-environment/cross-fix
             staleness caveats `auto_vector_min_d` already carries.

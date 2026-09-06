@@ -1952,7 +1952,7 @@ class tree to maintain.
 - `auto_vector_min_d` - The deme-count cutover `"auto"` uses to
   decide between `"generational"` and `"generational-vector"`
   — irrelevant, and unused, under every other `engine_backend`
-  value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (35), this
+  value. Defaults to `DEFAULT_AUTO_VECTOR_MIN_D` (`2`), this
   project's own best current estimate from a real benchmark
   sweep (see that constant's own docstring for the full
   finding, including its cross-environment caveats) —
@@ -1971,7 +1971,7 @@ class tree to maintain.
   most this value, in addition to `d >= auto_vector_min_d`,
   for `"auto"` to pick `"generational-vector"`; irrelevant,
   and unused, under every other `engine_backend` value.
-  Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`1024`) —
+  Defaults to `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` (`4096`) —
   see that constant's own docstring for the measured finding
   behind it and the same cross-environment/cross-fix
   staleness caveats `auto_vector_min_d` already carries.
@@ -6208,9 +6208,27 @@ V) but never comes close to reversing. This confirms, on a second,
 independent, materially different machine, that `35` is not merely
 stale but has never been correct against any post-Stage-F8 build of
 this codebase — every tested value below it would have been routed to
-the slower engine by `"auto"`. Still not changed here: doing so is a
-deliberate act on its own, tracked separately, not a byproduct of
-recording a measurement.
+the slower engine by `"auto"`.
+
+**Changed 2026-09-05, `35` -> `2` (the floor `SimulationParams.d`
+accepts at all)**, after a further, joint `d` x locus-length heatmap
+(`dev/bin/generate-heatmap-queue`/`benchmark-queue`, 104 points, `d` in
+`{2,4,8,...,500}` x locus length `1`-`8`, `citrus-2`, run explicitly to
+check whether this axis and `auto_vector_max_capacity`'s own axis
+interact before changing either value — see that constant's own
+docstring for why a single-axis result alone was not enough to trust).
+That joint sweep found no `d`, at any capacity up to and including
+`4096` (locus length `6`), where `"generational-vector"` loses — the
+`d`-axis crossover this constant thresholds simply does not exist
+inside the region `auto_vector_max_capacity` now admits, so gating on
+`d` at all, within that region, only ever excludes configurations V
+would have won. (Above capacity `4096`, a real, narrower `d`-dependent
+region does exist — see `auto_vector_max_capacity`'s own docstring —
+but a single scalar `auto_vector_min_d` cannot express "conditional on
+capacity" at all, so lowering this threshold to `2` is what the data
+supports regardless: the region where a *higher* `min_d` would help is
+already excluded by `max_capacity`, and everywhere `max_capacity`
+admits, no `min_d` value was ever justified by real evidence.)
 
 <a id="fim.model.params.DEFAULT_AUTO_VECTOR_MAX_CAPACITY"></a>
 
@@ -6271,9 +6289,38 @@ is the expected shape of the result, not a surprising one. `1024`
 significantly understates what current code can actually do — real
 data now supports `4096`, still not an interpolated value (capacity is
 always `4 ** length`; nothing could land between `4096` and `16384`
-either). Still not changed here, for the same reason `auto_vector_
-min_d`'s own docstring gives: a deliberate act of its own, not a
-byproduct of recording a measurement.
+either).
+
+**Changed 2026-09-05, `1024` -> `4096`**, confirmed by the same joint
+`d` x locus-length heatmap `auto_vector_min_d`'s own docstring
+describes (104 points, `citrus-2`, run specifically to check whether
+this axis and `auto_vector_min_d`'s own axis interact before changing
+either): `"generational-vector"` won at *every* tested `d` (`2` through
+`500`) at capacity `4096` — the single-axis result above already found
+this at one fixed `d`; the joint sweep confirms it holds at every `d`
+this project has ever benchmarked, not only that one. The real,
+`d`-dependent losing region the joint sweep also found (capacity
+`16384`: G-jit wins for `16 <= d <= 70`, V regains the lead at `d >=
+100`; capacity `65536`: G-jit wins through `d=250`, V only recovers at
+`d >= 350`) is exactly the "diagonal boundary" shape a single pair of
+independent scalar thresholds cannot express at any choice of values —
+raising `auto_vector_max_capacity` to `16384` to chase that region's
+own large-`d` recovery would require also raising `auto_vector_min_d`
+high enough to exclude its own losing sub-region, which would then
+incorrectly exclude every small-`d` configuration at capacity `<=
+4096` that the data shows V winning unconditionally. `4096` is
+therefore not a compromise pending a future fix — it is the largest
+capacity at which a single threshold, paired with any `auto_vector_
+min_d`, can never misroute a config to the slower engine, given every
+point this project has actually measured. Capacities above it are
+correctly left to `"generational"` by `"auto"`, even in the sub-regions
+above `d=100`/`d=350` where V would actually win — expressing a
+diagonal boundary correctly needs a resolution rule that reads both
+`d` and capacity jointly, not two independent thresholds; that is a
+real design question of its own, not a parameter tweak, and remains
+open (see `doc/fim-simulator-design.md` §B.5's own conclusion, which
+reached the identical judgment from the pre-Phase-7 data this session's
+own joint sweep superseded).
 
 <a id="fim.model.params.DEFAULT_N_REPLICATES"></a>
 

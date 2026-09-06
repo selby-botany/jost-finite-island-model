@@ -530,21 +530,25 @@ no separate toggle to turn off what it already needs unconditionally).</p>
 <h3 id="autovectormind">auto_vector_min_d</h3>
 <ul>
 <li><strong>Type:</strong> integer at least 1</li>
-<li><strong>Default:</strong> <code>35</code></li>
+<li><strong>Default:</strong> <code>2</code></li>
 </ul>
 <p>The deme-count threshold <code>engine_backend: auto</code> uses to choose
 <code>generational-vector</code> over <code>generational</code>. Ignored under every other
-<code>engine_backend</code> value. This default was measured on one specific
-machine, some time ago — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">the simulator design's own section on
-choosing an engine
-backend</a> for how
-current that measurement still is, and <code>dev/bin/benchmark-engines</code>
-(a maintainer tool, see <code>dev/bin/README.md</code>) for how to re-measure it
-on your own hardware.</p>
+<code>engine_backend</code> value. Re-measured 2026-09-05 on a joint <code>d</code> x
+locus-length grid (104 points, real hardware): <code>generational-vector</code>
+never lost to <code>generational</code> at any tested <code>d</code> within
+<code>auto_vector_max_capacity</code>'s own default ceiling, so this threshold is
+set to the smallest <code>d</code> a config can have at all — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">the simulator
+design's own section on choosing an engine
+backend</a> for the
+full joint result, including the narrower, <code>d</code>-dependent region above
+that capacity ceiling this single threshold cannot reach, and
+<code>dev/bin/benchmark-engines</code> (a maintainer tool, see <code>dev/bin/README.md</code>)
+for how to re-measure either threshold on your own hardware.</p>
 <h3 id="autovectormaxcapacity">auto_vector_max_capacity</h3>
 <ul>
 <li><strong>Type:</strong> integer at least 1</li>
-<li><strong>Default:</strong> <code>1024</code></li>
+<li><strong>Default:</strong> <code>4096</code></li>
 </ul>
 <p>The per-locus capacity ceiling <code>engine_backend: auto</code> uses alongside
 <code>auto_vector_min_d</code> — <code>generational-vector</code> is only chosen when <code>d</code>
@@ -552,9 +556,10 @@ clears its own threshold <em>and</em> every locus's own capacity
 (4<sup>length</sup> under <code>mutation_model: finite_alleles</code>) is at most
 this value; a single locus above it falls back to <code>generational</code>
 regardless of <code>d</code>. Ignored under every other <code>engine_backend</code> value.
-Like <code>auto_vector_min_d</code>, this default was measured on one specific
-machine — the same <code>dev/bin/benchmark-engines</code> maintainer tool
-re-measures this axis too (<code>--sweep loci-length</code>).</p>
+Re-measured alongside <code>auto_vector_min_d</code> on the same joint grid: the
+largest capacity at which <code>generational-vector</code> won at every tested
+<code>d</code> — the same <code>dev/bin/benchmark-engines</code> maintainer tool re-measures
+this axis too (<code>--sweep loci-length</code>).</p>
 <h3 id="maxconcurrentreplicates">max_concurrent_replicates</h3>
 <ul>
 <li><strong>Type:</strong> integer at least 1, or omitted</li>

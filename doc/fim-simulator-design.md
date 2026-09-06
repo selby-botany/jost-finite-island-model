@@ -1134,7 +1134,7 @@ built (§11): each names the one place the change lands.
 | …replicate batches ran faster? | max_workers (library) / `--workers`, `--sequential` (CLI); the library default is sequential, the CLI default is one worker per processor | replicates are fully independent (own seed, own registries, own convergence monitor), so `ProcessPoolExecutor` runs _run_one unmodified. Worker *processes*, not threads: per-generation state is Python-object sparse maps that hold the GIL. A store_factory gives each replicate its own trajectory store in either mode, since one store object cannot cross a process boundary |
 | …replicate batches ran faster, without process-per-replicate overhead? | `fim()`'s own `engine_backend="generational"` (a config-file field — see doc/configuration.md#engine-backend-and-jit) | a second engine implementation, `ReplicaLane`/`run_batch`, advances every still-active replicate's own generation together, fanned out across real threads (`ThreadedAdvancer`) rather than processes — one address space, no picklability constraint, bit-identical trajectory to the default for the same seed. `jit="numba"` additionally JIT-compiles `drift`'s own random draw (optional `numba` dependency): a real, substantial speedup that comes from removing CPython interpreter overhead rather than from thread-count parallelism — the same speedup is already present at a single worker and does not grow as more workers are added; `jit="off"` shows no speedup at any worker count ([Appendix B.2](#b2-g-thread-count-sweep) has the measured table). `migrate`'s/`mutate`'s own RNG calls stay unjitted for the matrix-form migration and stochastic migrant-sampling paths, so those two configurations do not see this speedup |
 | …`migrate`/`mutate`/`drift` themselves operated on dense arrays instead of one Python loop per deme, for the bounded-K (finite-alleles) mutation model? | `fim()`'s own `engine_backend="generational-vector"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), scoped to `mutation_model="finite_alleles"` and `migrant_sampling="continuous"` — a config outside that scope raises `ValueError` naming the violated constraint | a third engine implementation, `VectorizedAdvancer`, converts each replicate's own state to a dense `(deme, allele)` array once per generation and runs `migrate`/`mutate`/`drift` fused on that array (`fim.model.vectorized`; [§4.6](#46-choosing-an-engine-backend) explains the underlying math for a scientist reader). Matches the other two backends exactly, same seed, only for a single-locus run with migration off; with migration active, or with two or more loci regardless of migration, matches them statistically rather than bit-for-bit — same mean differentiation statistics across many seeds, confirmed to carry no directional bias, not necessarily the same individual trajectory ([§4.6](#46-choosing-an-engine-backend) has the precise mechanism and a measured figure). Needs the optional `numba` dependency unconditionally (no separate `jit` toggle). `"generational-vector"` is the fastest of the four measured engine/JIT combinations at every `d` tested, from 2 through 120 — [Appendix B.1](#b1-d-deme-count-sweep) has the measured tables |
-| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | `fim()`'s own `engine_backend="auto"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default 35) and `auto_vector_max_capacity` (default 1024) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity (4<sup>length</sup> under `finite_alleles`) is at most the capacity ceiling, *and* the config is otherwise eligible for it (`finite_alleles`/continuous migration), `"generational"` otherwise — never `"lineal"`, since no benchmark data yet characterizes that boundary. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. Checking every locus's own capacity, not `d` alone, is what stops a large-`d`, large-capacity config from resolving to `"generational-vector"` inside a region it actually loses in. Two open questions about both default thresholds — [Appendix B.1](#b1-d-deme-count-sweep) finds `"generational-vector"` fastest at every measured `d` from 2 through 120, with no lower crossover found; [Appendix B.3](#b3-locus-length-capacity-sweep) finds the capacity crossover somewhere between 16384 and 65536, well above the current `auto_vector_max_capacity` default of 1024. Neither default has been changed on the strength of this alone — both stay caller-supplied parameters, not hardcoded literals, so overriding either is already possible without a code change |
+| …the choice between `"generational"` and `"generational-vector"` were made automatically, on `d` and locus capacity, instead of by hand? | `fim()`'s own `engine_backend="auto"` (a config-file field — see doc/configuration.md#engine-backend-and-jit), with `auto_vector_min_d` (default `2`) and `auto_vector_max_capacity` (default `4096`) as the two configurable thresholds | picks `"generational-vector"` when `d` clears its own cutover, *every* locus's own capacity (4<sup>length</sup> under `finite_alleles`) is at most the capacity ceiling, *and* the config is otherwise eligible for it (`finite_alleles`/continuous migration), `"generational"` otherwise — never `"lineal"`, since no benchmark data yet fully characterizes that boundary (though [Appendix B.6](#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05) found `"lineal"` outright winning in two small corners of the grid). Both current defaults come from [Appendix B.6](#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05)'s own 104-point joint `d` × locus-length grid, run specifically because [Appendix B.5](#b5-joint-d--locus-length-sweep-heatmap) found the two axes interact (a diagonal boundary, not a rectangle) — `4096` is the largest capacity at which `"generational-vector"` won at every tested `d`, and `2` is the smallest `d` a config can have at all, since no `d` below that capacity ceiling was ever found losing. The resolved choice (never the literal string `"auto"`) and the `jit` setting are both recorded on the run's own `manifest.engine_backend`/`manifest.jit`, so a saved run's own record always says what actually produced it. Checking every locus's own capacity, not `d` alone, is what stops a large-`d`, large-capacity config from resolving to `"generational-vector"` inside a region it actually loses in. A real, `d`-dependent losing region still exists above the new capacity ceiling (Appendix B.6 again) — a single rectangular threshold pair cannot reach it without also misrouting the region below `4096`, so it stays outside `"auto"`'s reach, reachable only by overriding `auto_vector_max_capacity` by hand with that risk understood |
 
 ### 9.2 Landing spots for changes that are not built
 
@@ -1666,6 +1666,129 @@ defaults still come from B.1/B.3's own single-axis sweeps, and changing
 the cutover shape itself (not just its two threshold values) is a real
 design question, not a parameter tweak.
 
+### B.6 Joint `d` × locus-length sweep, post-Phase-7 (2026-09-05)
+
+Commit `49ab7ca`, `citrus-2`, 2026-09-05/06. Fixed: `N=500`, `m=0.05`,
+`mu=0.001`. Re-runs B.5's own joint grid — wider and denser this time
+(13 `d` values from `2` through `500`, all 8 locus lengths, `capacity
+4` through `65536`, 104 points total) — after every Phase 1-7
+correctness/performance fix landed
+(`20260904-claude-sonnet-5-fim-engine-review-remediations.md`), not
+just Stage F8: `FIM-52`'s own re-measurement of `auto_vector_min_d`/
+`auto_vector_max_capacity`, done as a joint sweep rather than two
+single-axis ones specifically because B.5 already showed the two axes
+interact.
+
+```console
+dev/bin/generate-heatmap-queue \
+    --d-values 2,4,8,16,25,35,50,70,100,150,250,350,500 \
+    --length-values 1,2,3,4,5,6,7,8 \
+    --replicates 12 --generations 75 --trials 3 --measure-rss \
+    --out-dir /tmp/fim-heatmap-v2
+dev/bin/benchmark-queue /tmp/fim-heatmap-v2/queue.json \
+    --default-timeout-seconds 172800
+dev/bin/render-heatmap /tmp/fim-heatmap-v2
+```
+
+Every job used `--resume` (`generate-heatmap-queue`'s own new default —
+see the commit that added it) and `--measure-rss`; the whole grid ran
+as one queue, 8 jobs in parallel (one per locus length, each internally
+sweeping all 13 `d` values), and took just under 11 hours wall-clock,
+dominated by the largest-`d`/largest-capacity cells (`benchmark-queue`'s
+own per-job timings: length 1 finished in 2412s, length 8 in 39350s).
+
+```text
+Fastest backend
+  d / length         1         2         3         4         5         6         7         8
+--------------------------------------------------------------------------------------------
+           2         L         V         V         V         V         L         L         L
+           4         V         V         V         V         V         V         L         L
+           8         V         V         V         V         V         V         L         L
+          16         V         V         V         V         V         V     G-jit     G-jit
+          25         V         V         V         V         V         V         L     G-jit
+          35         V         V         V         V         V         V         L     G-jit
+          50         V         V         V         V         V         V         L     G-jit
+          70         V         V         V         V         V         V     G-jit     G-jit
+         100         V         V         V         V         V         V         V     G-jit
+         150         V         V         V         V         V         V         V     G-jit
+         250         V         V         V         V         V         V         V     G-jit
+         350         V         V         V         V         V         V         V         V
+         500         V         V         V         V         V         V         V         V
+
+V / G-jit wall-clock ratio (below 1.0 = V still ahead)
+  d / length         1         2         3         4         5         6         7         8
+--------------------------------------------------------------------------------------------
+           2      0.71      0.45      0.44      0.52      0.51      1.07      1.99      6.63
+           4      0.56      0.45      0.48      0.37      0.47      0.69      1.59      6.31
+           8      0.42      0.36      0.33      0.32      0.41      0.65      1.69     13.15
+          16      0.36      0.51      0.43      0.30      0.49      0.56      1.03     12.97
+          25      0.96      0.35      0.30      0.56      0.47      0.54      1.18     13.00
+          35      0.45      0.36      0.43      0.28      0.23      0.86      1.84      6.78
+          50      0.38      0.22      0.46      0.21      0.37      0.36      1.32      4.40
+          70      0.45      0.53      0.26      0.20      0.32      0.21      1.39      4.39
+         100      0.80      0.43      0.17      0.15      0.17      0.17      0.68      2.76
+         150      0.87      0.22      0.27      0.08      0.11      0.27      0.56      1.97
+         250      0.40      0.43      0.16      0.15      0.12      0.23      0.35      1.14
+         350      0.43      0.35      0.19      0.13      0.09      0.19      0.32      0.88
+         500      0.39      0.35      0.23      0.14      0.14      0.15      0.24      0.67
+```
+
+Three findings:
+
+1. **Through capacity 4096 (length 6), `V` wins at every tested `d`,
+   with no exception.** This is the load-bearing result: it confirms,
+   at 13 `d` values instead of B.5's 5, that the diagonal-boundary risk
+   B.5 itself raised does not actually reach this capacity range on
+   current code — Phase 7's own capacity-scaling fixes (`FIM-53`,
+   `FIM-54`, `FIM-27`/`FIM-28`) moved the boundary that B.5 found
+   starting at capacity 4096 (length 6, `d<=35` losing to G-jit) up to
+   capacity 16384 (length 7) instead. `auto_vector_max_capacity=4096`
+   and `auto_vector_min_d=2` (both changed in this commit — see each
+   constant's own docstring in `src/fim/model/params.py`) are the
+   direct consequence: the largest rectangle this data supports without
+   ever misrouting a config to the slower engine.
+2. **The diagonal region still exists, just further out.** At capacity
+   16384 (length 7), G-jit wins for `16 <= d <= 70`; `V` regains the
+   lead at `d >= 100`. At capacity 65536 (length 8), G-jit wins through
+   `d=250`; `V` only recovers at `d >= 350`. Both regions sit entirely
+   above the new `auto_vector_max_capacity`, so `"auto"` never enters
+   them — but a caller who overrides `auto_vector_max_capacity` upward
+   by hand should know a real, `d`-dependent losing region starts
+   immediately above `4096`, not a clean win.
+3. **`"lineal"` — never a candidate for `"auto"` at all — outright wins
+   at the smallest scale in two places**: `d=2` at length `1` (capacity
+   `4`) and `d<=8` at length `7` (capacity `16384`). §4.6's own table
+   already flagged this as an open question ("never `"lineal"`, since
+   no benchmark data yet characterizes that boundary") — this is the
+   first real data point toward answering it, not a full
+   characterization; `"auto"`'s own resolution is unchanged by this
+   finding.
+
+A discrepancy worth recording rather than quietly overwriting: B.3
+(commit `883c41e`, also fixed `d=60`) found `V` narrowly *winning* at
+length 7 (`29.629s` vs `30.135s`, ratio `0.98`) — this sweep's own
+nearest points (`d=50`/`d=70` at length 7) both find G-jit winning by a
+wider margin (ratios `1.32`/`1.39`). B.3's own margin was close enough
+to call it noise rather than a real regression between the two
+measurements — this sweep's own larger grid (13 `d` values, corroborated
+by the single-axis re-measurement in the immediately preceding commit,
+which agrees with this one and not with B.3) is treated as the more
+reliable reading, not B.3's, but the disagreement itself is real and
+left visible here rather than silently resolved in one direction.
+
+`--measure-rss` produced a `V`/G-off/G-jit/`L` peak-RSS ratio of
+exactly `1.00` at every single point in this grid — not a finding about
+engine memory behavior, a limitation of the measurement at this
+benchmark's own scale: `InMemoryTrajectoryStore` retains every
+generation's full state for the whole run, and at up to 75 generations
+and `d=500`/capacity `65536`, that accumulated trajectory dwarfs any
+transient difference between the four engines' own internal working
+sets, so the four backends' peak RSS is dominated by the store, not the
+engine. A future RSS characterization aimed at engine-internal memory
+behavior specifically (rather than whole-run memory behavior, which
+this grid does answer, just uninformatively across backends) would need
+either a null/discarding store or a much shorter run.
+
 ## Metadata
 
 ```text
@@ -1783,5 +1906,27 @@ generator-version: Claude Sonnet 5
 generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
 generation-date: 2026-09-03
+generator-responsibility: revision
+```
+
+Added Appendix B.6 (joint `d` × locus-length sweep, post-Phase-7,
+104 points, `citrus-2`) and changed `auto_vector_min_d`/
+`auto_vector_max_capacity`'s own shipped defaults, `35`/`1024` ->
+`2`/`4096` (`FIM-52`, Phase 7 item 6,
+`20260904-claude-sonnet-5-fim-engine-review-remediations.md`) — the
+first time either default has actually been changed rather than merely
+flagged as stale; every prior sweep in this appendix (B.1-B.5) found
+one or the other stale but deliberately left the shipped value alone
+pending a joint characterization, which this sweep is. §9.1's own table
+row updated to cite B.6 instead of B.1/B.3 and describe the new values
+and the real, `d`-dependent losing region that still exists above the
+new capacity ceiling.
+
+```text
+generator-name: Claude Code
+generator-version: Claude Sonnet 5
+generator-model-token: claude-sonnet-5
+generator-provider: Anthropic
+generation-date: 2026-09-06
 generator-responsibility: revision
 ```

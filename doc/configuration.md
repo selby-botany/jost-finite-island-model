@@ -614,22 +614,26 @@ no separate toggle to turn off what it already needs unconditionally).
 ### auto_vector_min_d
 
 - **Type:** integer at least 1
-- **Default:** `35`
+- **Default:** `2`
 
 The deme-count threshold `engine_backend: auto` uses to choose
 `generational-vector` over `generational`. Ignored under every other
-`engine_backend` value. This default was measured on one specific
-machine, some time ago — see [the simulator design's own section on
-choosing an engine
-backend](fim-simulator-design.md#46-choosing-an-engine-backend) for how
-current that measurement still is, and `dev/bin/benchmark-engines`
-(a maintainer tool, see `dev/bin/README.md`) for how to re-measure it
-on your own hardware.
+`engine_backend` value. Re-measured 2026-09-05 on a joint `d` x
+locus-length grid (104 points, real hardware): `generational-vector`
+never lost to `generational` at any tested `d` within
+`auto_vector_max_capacity`'s own default ceiling, so this threshold is
+set to the smallest `d` a config can have at all — see [the simulator
+design's own section on choosing an engine
+backend](fim-simulator-design.md#46-choosing-an-engine-backend) for the
+full joint result, including the narrower, `d`-dependent region above
+that capacity ceiling this single threshold cannot reach, and
+`dev/bin/benchmark-engines` (a maintainer tool, see `dev/bin/README.md`)
+for how to re-measure either threshold on your own hardware.
 
 ### auto_vector_max_capacity
 
 - **Type:** integer at least 1
-- **Default:** `1024`
+- **Default:** `4096`
 
 The per-locus capacity ceiling `engine_backend: auto` uses alongside
 `auto_vector_min_d` — `generational-vector` is only chosen when `d`
@@ -637,9 +641,10 @@ clears its own threshold *and* every locus's own capacity
 (4<sup>length</sup> under `mutation_model: finite_alleles`) is at most
 this value; a single locus above it falls back to `generational`
 regardless of `d`. Ignored under every other `engine_backend` value.
-Like `auto_vector_min_d`, this default was measured on one specific
-machine — the same `dev/bin/benchmark-engines` maintainer tool
-re-measures this axis too (`--sweep loci-length`).
+Re-measured alongside `auto_vector_min_d` on the same joint grid: the
+largest capacity at which `generational-vector` won at every tested
+`d` — the same `dev/bin/benchmark-engines` maintainer tool re-measures
+this axis too (`--sweep loci-length`).
 
 ### max_concurrent_replicates
 
