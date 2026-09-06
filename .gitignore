@@ -46,3 +46,6 @@ packaging/dist/
 # Simulator output
 results/
 run-*/
+
+# Local-only reference material (literature review, not for the public repo)
+/papers/
