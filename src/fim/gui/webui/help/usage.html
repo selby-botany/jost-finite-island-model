@@ -527,6 +527,38 @@ PCA projection.</li>
 </ul>
 <p>One point represents one <code>(locus, allele)</code> pair. Coincident points are enlarged
 and annotated.</p>
+<h4 id="what-the-marker-colors-mean">What the marker colors mean</h4>
+<p>Points are colored to answer one question at a glance: which allele is the
+most common one?</p>
+<table>
+<thead>
+<tr>
+<th>Color</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Blue</td>
+<td>The most frequent allele in either of the two demes shown</td>
+</tr>
+<tr>
+<td>Orange</td>
+<td>Every other allele</td>
+</tr>
+</tbody>
+</table>
+<p>Two blue points is normal and correct. Each of the two demes on the plot
+gets its own most frequent allele marked, and they are often different
+alleles — that difference is frequently the interesting result. You will see
+a single blue point when both demes happen to agree on the same allele.</p>
+<p>If two or more alleles are exactly tied for most frequent, only the first is
+marked, so that one plot never implies more &quot;most frequent&quot; alleles than it
+has demes. The choice is stable: the same data always marks the same allele,
+and the legend states the rule.</p>
+<p>Blue does not mean &quot;important&quot;, &quot;significant&quot;, or &quot;above a cutoff&quot;. It marks
+a maximum, and a maximum exists in every data set — including one where all
+the alleles are rare and nearly equal.</p>
 <h3 id="batch-summaryjson-and-manifestjson">Batch <code>summary.json</code> and <code>manifest.json</code></h3>
 <p>Written only for n<sub>replicates</sub> greater than one, alongside the
 <code>replicate-NNN/</code> subdirectories, each of which holds the four scalar-run

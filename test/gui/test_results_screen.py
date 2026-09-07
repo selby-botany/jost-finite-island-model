@@ -225,6 +225,57 @@ def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
     assert settled["backHidden"] is True
 
 
+def test_completed_scatter_draws_the_marker_color_legend(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The on-screen plot explains its own marker colors.
+
+    Before this, the canvas drew blue and orange markers and defined
+    neither, leaving "why are some dots blue?" answerable only by reading
+    the source -- the same ambiguity that made the original "common
+    allele" marker a reported defect rather than merely an unclear one.
+    The saved `scatter.png` carries a matplotlib legend; this proves the
+    GUI carries the equivalent.
+
+    Records the text the canvas actually draws by wrapping `fillText` on
+    the live 2D context, rather than asserting on pixels: it proves the
+    real render path emitted the real strings, and reports a readable
+    mismatch when it does not.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            # Wrap `fillText` before the run starts, so the completed
+            # state's own first paint is captured rather than a later
+            # incidental redraw.
+            "window.__fimCanvasText = []; "
+            "const ctx = document.getElementById('run-canvas').getContext('2d'); "
+            "const originalFillText = ctx.fillText.bind(ctx); "
+            "ctx.fillText = (text, ...rest) => { "
+            "window.__fimCanvasText.push(String(text)); "
+            "return originalFillText(text, ...rest); "
+            "}; " + _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+        ),
+        read=(
+            "({"
+            "runViewState: window.fim.getRunViewState(), "
+            "drawn: window.__fimCanvasText || []"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("runViewState") == "completed"
+            and any("Other alleles" in text for text in value.get("drawn", []))
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    drawn = settled["drawn"]
+    assert "Most frequent allele in either deme (ties: first)" in drawn
+    assert "Other alleles" in drawn
+
+
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
     window: webview.Window,
 ) -> None:

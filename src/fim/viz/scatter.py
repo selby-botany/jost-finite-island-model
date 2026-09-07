@@ -640,10 +640,23 @@ def _scatter_on_axis(
 
 
 def _add_marker_legend(axis: Axes) -> None:
-    """Add the shared explanation for the scatter-marker colors."""
+    """Add the shared explanation for the scatter-marker colors.
+
+    The tie rule is stated in the legend itself rather than only in this
+    module's docstrings: a viewer looking at one blue marker where two
+    alleles are equally most frequent can otherwise only guess whether the
+    plot is picking one deliberately or has lost the other.
+
+    Worded identically to `drawMarkerLegend` in `webui/scatter.js`, so the
+    saved `scatter.png` and the on-screen plot explain themselves the same
+    way.
+    """
     axis.legend(
         handles=[
-            Patch(color="tab:blue", label="Most frequent allele in either deme"),
+            Patch(
+                color="tab:blue",
+                label="Most frequent allele in either deme (ties: first)",
+            ),
             Patch(color="tab:orange", label="Other alleles"),
         ],
         loc="best",

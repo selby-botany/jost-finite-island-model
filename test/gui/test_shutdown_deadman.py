@@ -194,17 +194,22 @@ def test_a_wedged_shutdown_is_forced_to_exit() -> None:
     assert elapsed < 60
 
 
-def test_await_bridge_threads_waits_for_an_in_flight_bridge_call() -> None:
-    """A live bridge-delivery thread is waited for, not abandoned.
+def _make_bridge_thread(release: threading.Event) -> threading.Thread:
+    """Build a thread matching pywebview's own bridge-delivery shape.
 
     Reproduces the leak's exact shape rather than a stand-in: a
-    *non-daemon* thread whose target is `js_bridge_call.<locals>._call`,
-    which is precisely what pywebview starts for every
-    `window.pywebview.api.*` call and precisely what was named in the
-    2026-09-07 CI diagnostic dump. Destroying a window while one of these
-    is alive is what wedges `Py_FinalizeEx`.
+    *non-daemon* thread whose target's qualified name is
+    `js_bridge_call.<locals>._call`, which is precisely what pywebview
+    starts for every `window.pywebview.api.*` call and precisely what was
+    named in the 2026-09-07 CI diagnostic dump.
+
+    Args:
+        release: Event the thread waits on, so the caller controls
+            exactly when it finishes.
+
+    Returns:
+        An unstarted thread.
     """
-    release = threading.Event()
 
     def js_bridge_call() -> Callable[[], None]:
         # Nested exactly as in `webview.util` so the qualified name the
@@ -215,36 +220,30 @@ def test_await_bridge_threads_waits_for_an_in_flight_bridge_call() -> None:
 
         return _call
 
-    blocker = threading.Thread(target=js_bridge_call())
+    return threading.Thread(target=js_bridge_call())
+
+
+def test_in_flight_bridge_threads_identifies_a_bridge_thread() -> None:
+    """A live bridge-delivery thread is recognized.
+
+    Asserts against an explicit candidate list rather than live
+    interpreter state: a GUI test scheduled earlier in the same `-n auto`
+    worker can legitimately still hold a bridge thread, so testing against
+    `threading.enumerate()` would make this depend on execution order
+    instead of on the code under test.
+    """
+    release = threading.Event()
+    blocker = _make_bridge_thread(release)
     blocker.start()
     try:
-        started = time.monotonic()
-        gui_conftest.await_bridge_threads(timeout=0.5)
-        waited = time.monotonic() - started
-
-        # It actually waited rather than returning immediately.
-        assert waited >= 0.4
-        assert blocker.is_alive()
+        assert gui_conftest.in_flight_bridge_threads([blocker]) == [blocker]
     finally:
         release.set()
         blocker.join(timeout=5)
 
 
-def test_await_bridge_threads_returns_promptly_when_nothing_is_in_flight() -> None:
-    """The healthy path costs nothing.
-
-    This runs in the teardown of every GUI test, so a fixed delay here
-    would be paid by the whole suite on every single test.
-    """
-    started = time.monotonic()
-    gui_conftest.await_bridge_threads(timeout=10.0)
-    waited = time.monotonic() - started
-
-    assert waited < 1.0
-
-
-def test_await_bridge_threads_ignores_unrelated_threads() -> None:
-    """Only pywebview's own bridge threads are waited for.
+def test_in_flight_bridge_threads_ignores_unrelated_threads() -> None:
+    """Only pywebview's own bridge threads are matched.
 
     A non-daemon thread belonging to something else must not make every
     GUI teardown pay the full timeout.
@@ -253,14 +252,47 @@ def test_await_bridge_threads_ignores_unrelated_threads() -> None:
     unrelated = threading.Thread(target=release.wait, name="fim-test-unrelated")
     unrelated.start()
     try:
-        started = time.monotonic()
-        gui_conftest.await_bridge_threads(timeout=5.0)
-        waited = time.monotonic() - started
-
-        assert waited < 1.0
+        assert gui_conftest.in_flight_bridge_threads([unrelated]) == []
     finally:
         release.set()
         unrelated.join(timeout=5)
+
+
+def test_in_flight_bridge_threads_ignores_a_finished_bridge_thread() -> None:
+    """A bridge thread that has already finished does not block shutdown.
+
+    The distinction that makes the whole wait terminate: `Py_FinalizeEx`
+    joins live non-daemon threads, so a completed one is irrelevant.
+    """
+    release = threading.Event()
+    finished = _make_bridge_thread(release)
+    finished.start()
+    release.set()
+    finished.join(timeout=5)
+
+    assert gui_conftest.in_flight_bridge_threads([finished]) == []
+
+
+def test_await_bridge_threads_waits_while_a_bridge_call_is_in_flight() -> None:
+    """The wait actually blocks while a bridge thread is alive.
+
+    Proves the loop consumes its budget rather than returning at once, so
+    a real in-flight delivery is given time to finish before a window is
+    destroyed out from under it.
+    """
+    release = threading.Event()
+    blocker = _make_bridge_thread(release)
+    blocker.start()
+    try:
+        started = time.monotonic()
+        gui_conftest.await_bridge_threads(timeout=0.5)
+        waited = time.monotonic() - started
+
+        assert waited >= 0.4
+        assert blocker.is_alive()
+    finally:
+        release.set()
+        blocker.join(timeout=5)
 
 
 def test_shutdown_dump_streams_always_includes_stderr() -> None:

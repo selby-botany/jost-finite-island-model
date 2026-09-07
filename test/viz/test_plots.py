@@ -376,6 +376,55 @@ def test_pooled_frequency_points_of_no_states_is_empty() -> None:
     assert pooled_frequency_points([]).shape == (0, 0)
 
 
+def test_marker_legend_states_the_tie_breaking_rule() -> None:
+    """The legend explains the tie rule, not only the two colors.
+
+    A viewer seeing one blue marker where two alleles are equally most
+    frequent cannot otherwise tell whether the plot chose one deliberately
+    or lost the other. The rule is part of the display contract, so it
+    belongs on the plot rather than only in the source.
+    """
+    figure = plt.figure()
+    axis = figure.add_subplot(1, 1, 1)
+
+    scatter_module._add_marker_legend(axis)
+
+    legend = axis.get_legend()
+    assert legend is not None
+    labels = [text.get_text() for text in legend.get_texts()]
+    assert labels == [
+        "Most frequent allele in either deme (ties: first)",
+        "Other alleles",
+    ]
+    plt.close(figure)
+
+
+def test_marker_legend_matches_the_gui_canvas_wording() -> None:
+    """The saved PNG and the on-screen plot explain themselves identically.
+
+    Two renderers draw this same plot -- matplotlib for `scatter.png` and
+    a canvas for the GUI -- and a user comparing one against the other must
+    not find the same colors described in two different ways.
+    """
+    figure = plt.figure()
+    axis = figure.add_subplot(1, 1, 1)
+    scatter_module._add_marker_legend(axis)
+    legend = axis.get_legend()
+    assert legend is not None
+    labels = [text.get_text() for text in legend.get_texts()]
+    plt.close(figure)
+
+    canvas_source = (
+        Path(scatter_module.__file__).resolve().parent.parent
+        / "gui"
+        / "webui"
+        / "scatter.js"
+    ).read_text(encoding="utf-8")
+
+    for label in labels:
+        assert label in canvas_source
+
+
 def test_grouped_points_matches_marker_groups_exactly() -> None:
     """`marker_groups` is now a thin reshaping of `grouped_points` — proven directly.
 

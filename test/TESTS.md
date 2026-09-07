@@ -4411,6 +4411,33 @@ to during an actual incident — `sample <pid>` first, check whether the
 blocked thread is a JS bridge delivery or a socket read, and only then
 decide which of the two investigations above it continues.
 
+<a id="gui.conftest.in_flight_bridge_threads"></a>
+
+#### in\_flight\_bridge\_threads
+
+```python
+def in_flight_bridge_threads(
+    candidates: Iterable[threading.Thread] | None = None
+) -> list[threading.Thread]
+```
+
+Return the pywebview bridge-delivery threads that would block shutdown.
+
+Split out from `await_bridge_threads` so it can be tested against an
+explicit thread list. Testing the waiting loop against live interpreter
+state instead would make the result depend on whichever GUI test
+happened to run earlier in the same worker -- the order dependence this
+suite treats as a defect rather than as flakiness.
+
+**Arguments**:
+
+- `candidates` - Threads to examine (default: `threading.enumerate()`).
+  
+
+**Returns**:
+
+  Every candidate that is a live, non-daemon pywebview bridge thread.
+
 <a id="gui.conftest.await_bridge_threads"></a>
 
 #### await\_bridge\_threads
@@ -6952,6 +6979,29 @@ def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
 
 The run title sits above the plot and the Back action returns to p_0.
 
+<a id="gui.test_results_screen.test_completed_scatter_draws_the_marker_color_legend"></a>
+
+#### test\_completed\_scatter\_draws\_the\_marker\_color\_legend
+
+```python
+def test_completed_scatter_draws_the_marker_color_legend(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The on-screen plot explains its own marker colors.
+
+Before this, the canvas drew blue and orange markers and defined
+neither, leaving "why are some dots blue?" answerable only by reading
+the source -- the same ambiguity that made the original "common
+allele" marker a reported defect rather than merely an unclear one.
+The saved `scatter.png` carries a matplotlib legend; this proves the
+GUI carries the equivalent.
+
+Records the text the canvas actually draws by wrapping `fillText` on
+the live 2D context, rather than asserting on pixels: it proves the
+real render path emitted the real strings, and reports a readable
+mismatch when it does not.
+
 <a id="gui.test_results_screen.test_deme_pair_selector_switches_to_a_chosen_pair_and_back"></a>
 
 #### test\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back
@@ -7499,49 +7549,61 @@ a user would experience. `subprocess`'s own generous `timeout` means
 a regression here fails as a timeout rather than hanging this suite
 in turn.
 
-<a id="gui.test_shutdown_deadman.test_await_bridge_threads_waits_for_an_in_flight_bridge_call"></a>
+<a id="gui.test_shutdown_deadman.test_in_flight_bridge_threads_identifies_a_bridge_thread"></a>
 
-#### test\_await\_bridge\_threads\_waits\_for\_an\_in\_flight\_bridge\_call
-
-```python
-def test_await_bridge_threads_waits_for_an_in_flight_bridge_call() -> None
-```
-
-A live bridge-delivery thread is waited for, not abandoned.
-
-Reproduces the leak's exact shape rather than a stand-in: a
-*non-daemon* thread whose target is `js_bridge_call.<locals>._call`,
-which is precisely what pywebview starts for every
-`window.pywebview.api.*` call and precisely what was named in the
-2026-09-07 CI diagnostic dump. Destroying a window while one of these
-is alive is what wedges `Py_FinalizeEx`.
-
-<a id="gui.test_shutdown_deadman.test_await_bridge_threads_returns_promptly_when_nothing_is_in_flight"></a>
-
-#### test\_await\_bridge\_threads\_returns\_promptly\_when\_nothing\_is\_in\_flight
+#### test\_in\_flight\_bridge\_threads\_identifies\_a\_bridge\_thread
 
 ```python
-def test_await_bridge_threads_returns_promptly_when_nothing_is_in_flight(
-) -> None
+def test_in_flight_bridge_threads_identifies_a_bridge_thread() -> None
 ```
 
-The healthy path costs nothing.
+A live bridge-delivery thread is recognized.
 
-This runs in the teardown of every GUI test, so a fixed delay here
-would be paid by the whole suite on every single test.
+Asserts against an explicit candidate list rather than live
+interpreter state: a GUI test scheduled earlier in the same `-n auto`
+worker can legitimately still hold a bridge thread, so testing against
+`threading.enumerate()` would make this depend on execution order
+instead of on the code under test.
 
-<a id="gui.test_shutdown_deadman.test_await_bridge_threads_ignores_unrelated_threads"></a>
+<a id="gui.test_shutdown_deadman.test_in_flight_bridge_threads_ignores_unrelated_threads"></a>
 
-#### test\_await\_bridge\_threads\_ignores\_unrelated\_threads
+#### test\_in\_flight\_bridge\_threads\_ignores\_unrelated\_threads
 
 ```python
-def test_await_bridge_threads_ignores_unrelated_threads() -> None
+def test_in_flight_bridge_threads_ignores_unrelated_threads() -> None
 ```
 
-Only pywebview's own bridge threads are waited for.
+Only pywebview's own bridge threads are matched.
 
 A non-daemon thread belonging to something else must not make every
 GUI teardown pay the full timeout.
+
+<a id="gui.test_shutdown_deadman.test_in_flight_bridge_threads_ignores_a_finished_bridge_thread"></a>
+
+#### test\_in\_flight\_bridge\_threads\_ignores\_a\_finished\_bridge\_thread
+
+```python
+def test_in_flight_bridge_threads_ignores_a_finished_bridge_thread() -> None
+```
+
+A bridge thread that has already finished does not block shutdown.
+
+The distinction that makes the whole wait terminate: `Py_FinalizeEx`
+joins live non-daemon threads, so a completed one is irrelevant.
+
+<a id="gui.test_shutdown_deadman.test_await_bridge_threads_waits_while_a_bridge_call_is_in_flight"></a>
+
+#### test\_await\_bridge\_threads\_waits\_while\_a\_bridge\_call\_is\_in\_flight
+
+```python
+def test_await_bridge_threads_waits_while_a_bridge_call_is_in_flight() -> None
+```
+
+The wait actually blocks while a bridge thread is alive.
+
+Proves the loop consumes its budget rather than returning at once, so
+a real in-flight delivery is given time to finish before a window is
+destroyed out from under it.
 
 <a id="gui.test_shutdown_deadman.test_shutdown_dump_streams_always_includes_stderr"></a>
 
@@ -15928,6 +15990,35 @@ def test_pooled_frequency_points_of_no_states_is_empty() -> None
 ```
 
 An empty pool is empty, not an error — a batch with no replicates yet.
+
+<a id="viz.test_plots.test_marker_legend_states_the_tie_breaking_rule"></a>
+
+#### test\_marker\_legend\_states\_the\_tie\_breaking\_rule
+
+```python
+def test_marker_legend_states_the_tie_breaking_rule() -> None
+```
+
+The legend explains the tie rule, not only the two colors.
+
+A viewer seeing one blue marker where two alleles are equally most
+frequent cannot otherwise tell whether the plot chose one deliberately
+or lost the other. The rule is part of the display contract, so it
+belongs on the plot rather than only in the source.
+
+<a id="viz.test_plots.test_marker_legend_matches_the_gui_canvas_wording"></a>
+
+#### test\_marker\_legend\_matches\_the\_gui\_canvas\_wording
+
+```python
+def test_marker_legend_matches_the_gui_canvas_wording() -> None
+```
+
+The saved PNG and the on-screen plot explain themselves identically.
+
+Two renderers draw this same plot -- matplotlib for `scatter.png` and
+a canvas for the GUI -- and a user comparing one against the other must
+not find the same colors described in two different ways.
 
 <a id="viz.test_plots.test_grouped_points_matches_marker_groups_exactly"></a>
 

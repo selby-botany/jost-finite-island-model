@@ -578,6 +578,30 @@ weighting. deme_weighting affects E<sub>ST</sub>.
 One point represents one `(locus, allele)` pair. Coincident points are enlarged
 and annotated.
 
+#### What the marker colors mean
+
+Points are colored to answer one question at a glance: which allele is the
+most common one?
+
+| Color | Meaning |
+|---|---|
+| Blue | The most frequent allele in either of the two demes shown |
+| Orange | Every other allele |
+
+Two blue points is normal and correct. Each of the two demes on the plot
+gets its own most frequent allele marked, and they are often different
+alleles — that difference is frequently the interesting result. You will see
+a single blue point when both demes happen to agree on the same allele.
+
+If two or more alleles are exactly tied for most frequent, only the first is
+marked, so that one plot never implies more "most frequent" alleles than it
+has demes. The choice is stable: the same data always marks the same allele,
+and the legend states the rule.
+
+Blue does not mean "important", "significant", or "above a cutoff". It marks
+a maximum, and a maximum exists in every data set — including one where all
+the alleles are rare and nearly equal.
+
 ### Batch `summary.json` and `manifest.json`
 
 Written only for n<sub>replicates</sub> greater than one, alongside the

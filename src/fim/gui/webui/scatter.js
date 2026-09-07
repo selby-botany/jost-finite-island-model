@@ -269,6 +269,72 @@ function drawScatterCell(context, rect, panel, opts) {
             context.fillText(String(point.count), cx + radius + 2, cy - radius);
         }
     }
+
+    // Only for a `"frequency"` panel: a `"pca"` panel disables frequency
+    // highlighting entirely (a principal component is not a deme, so
+    // "most frequent in either deme" names nothing there), so a color key
+    // would explain a distinction that panel does not draw.
+    //
+    // Deliberately *not* suppressed on a compact panel, unlike tick
+    // density. Fewer ticks still leave a readable plot; an unexplained
+    // color does not, and a small panel is if anything where a viewer is
+    // least able to infer the rule from the data.
+    if (bounded) {
+        drawMarkerLegend(context, originX, originY, plotSize, opts.tickFontSize);
+    }
+}
+
+/**
+ * Draw the color key explaining what a blue marker means.
+ *
+ * The canvas counterpart of `_add_marker_legend` in `fim/viz/scatter.py`,
+ * and deliberately worded identically: the same plot rendered to
+ * `scatter.png` and rendered on screen must not explain itself
+ * differently.
+ *
+ * Without this, the on-screen plot drew two colors and defined neither --
+ * the exact ambiguity that made the original "common allele" marker a
+ * reported defect rather than merely an unclear one.
+ *
+ * @param {CanvasRenderingContext2D} context
+ * @param {number} originX Left edge of the plot area, in canvas pixels.
+ * @param {number} originY Bottom edge of the plot area, in canvas pixels.
+ * @param {number} plotSize Side length of the plot area, in canvas pixels.
+ * @param {number} fontSize Tick font size, reused for legend text.
+ */
+function drawMarkerLegend(context, originX, originY, plotSize, fontSize) {
+    const entries = [
+        [COLOR_COMMON, "Most frequent allele in either deme (ties: first)"],
+        [COLOR_RARE, "Other alleles"],
+    ];
+    const lineHeight = fontSize + 4;
+    // Top-left of the plot area: the `x=y` diagonal runs corner to
+    // corner, so the upper-left is the region least likely to sit on top
+    // of data in a bounded frequency panel.
+    let y = originY - plotSize + lineHeight;
+
+    context.save();
+    context.font = `${fontSize}px -apple-system, sans-serif`;
+    context.textAlign = "left";
+    context.textBaseline = "middle";
+    for (const [color, label] of entries) {
+        const swatchX = originX + 6;
+        const radius = fontSize * 0.35;
+        context.beginPath();
+        context.arc(swatchX + radius, y, radius, 0, 2 * Math.PI);
+        context.fillStyle = color;
+        context.globalAlpha = 0.75;
+        context.fill();
+        context.globalAlpha = 1;
+        context.strokeStyle = "#000000";
+        context.lineWidth = 0.4;
+        context.stroke();
+
+        context.fillStyle = "#1a1a1a";
+        context.fillText(label, swatchX + 2 * radius + 5, y);
+        y += lineHeight;
+    }
+    context.restore();
 }
 
 /**

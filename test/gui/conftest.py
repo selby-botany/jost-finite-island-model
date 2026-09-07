@@ -153,7 +153,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
 import pytest
@@ -168,6 +168,40 @@ _POLL_INTERVAL_SECONDS = 0.1
 # that is genuinely still running finishes in milliseconds, so anything
 # approaching this bound is already the leak described below.
 _BRIDGE_SETTLE_TIMEOUT_SECONDS = 10.0
+
+
+def in_flight_bridge_threads(
+    candidates: Iterable[threading.Thread] | None = None,
+) -> list[threading.Thread]:
+    """Return the pywebview bridge-delivery threads that would block shutdown.
+
+    Split out from `await_bridge_threads` so it can be tested against an
+    explicit thread list. Testing the waiting loop against live interpreter
+    state instead would make the result depend on whichever GUI test
+    happened to run earlier in the same worker -- the order dependence this
+    suite treats as a defect rather than as flakiness.
+
+    Args:
+        candidates: Threads to examine (default: `threading.enumerate()`).
+
+    Returns:
+        Every candidate that is a live, non-daemon pywebview bridge thread.
+    """
+    return [
+        thread
+        for thread in (
+            threading.enumerate() if candidates is None else list(candidates)
+        )
+        # Identified by target qualified name rather than by thread name:
+        # pywebview numbers these threads (`Thread-1162 (_call)`), so the
+        # number is meaningless, while the target's qualified name is
+        # stable. Matched as a suffix so nesting depth does not matter.
+        if not thread.daemon
+        and thread.is_alive()
+        and getattr(getattr(thread, "_target", None), "__qualname__", "").endswith(
+            "js_bridge_call.<locals>._call"
+        )
+    ]
 
 
 def await_bridge_threads(timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> None:
@@ -203,20 +237,7 @@ def await_bridge_threads(timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> Non
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        # Identified by target qualified name rather than by thread name:
-        # pywebview numbers these threads (`Thread-1162 (_call)`), so the
-        # number is meaningless, while the target's qualified name is
-        # stable. Matched as a suffix so nesting depth does not matter.
-        alive = [
-            thread
-            for thread in threading.enumerate()
-            if not thread.daemon
-            and thread.is_alive()
-            and getattr(getattr(thread, "_target", None), "__qualname__", "").endswith(
-                "js_bridge_call.<locals>._call"
-            )
-        ]
-        if not alive:
+        if not in_flight_bridge_threads():
             return
         time.sleep(_POLL_INTERVAL_SECONDS)
 
