@@ -41,6 +41,8 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_input_screen`](#gui.test_input_screen)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
   - [`test_preferences`](#gui.test_preferences)
+  - [`test_presets`](#gui.test_presets)
+  - [`test_presets_screen`](#gui.test_presets_screen)
   - [`test_recent_runs`](#gui.test_recent_runs)
   - [`test_results_screen`](#gui.test_results_screen)
   - [`test_runner`](#gui.test_runner)
@@ -5027,6 +5029,58 @@ def test_get_default_max_workers_matches_batch_runner_directly() -> None
 
 The Batch tab's default is `batch_runner.default_max_workers`, not invented.
 
+<a id="gui.test_app_api.test_list_presets_matches_presets_module_directly"></a>
+
+#### test\_list\_presets\_matches\_presets\_module\_directly
+
+```python
+def test_list_presets_matches_presets_module_directly() -> None
+```
+
+The bridge method adds no logic beyond `fim.gui.presets.list_presets`.
+
+<a id="gui.test_app_api.test_get_preset_form_values_loads_a_representable_preset"></a>
+
+#### test\_get\_preset\_form\_values\_loads\_a\_representable\_preset
+
+```python
+def test_get_preset_form_values_loads_a_representable_preset() -> None
+```
+
+A preset with no unrepresentable construct loads into real form values.
+
+`m`'s own stepping-stone topology shorthand has already expanded to
+a dense matrix by the time `SimulationParams.from_mapping` returns
+it (`configuration.md`'s own documented behavior) — `m_from_params`
+therefore renders it as `m_mode="loaded"`, the identical "loaded
+from file" badge a hand-loaded copy of this same YAML file would
+already get via `load_yaml`, not a preset-specific gap.
+
+<a id="gui.test_app_api.test_get_preset_form_values_rejects_an_unknown_id"></a>
+
+#### test\_get\_preset\_form\_values\_rejects\_an\_unknown\_id
+
+```python
+def test_get_preset_form_values_rejects_an_unknown_id() -> None
+```
+
+An unknown preset id is a clear error, not a silent empty form.
+
+<a id="gui.test_app_api.test_get_preset_form_values_surfaces_the_per_locus_mu_limitation"></a>
+
+#### test\_get\_preset\_form\_values\_surfaces\_the\_per\_locus\_mu\_limitation
+
+```python
+def test_get_preset_form_values_surfaces_the_per_locus_mu_limitation() -> None
+```
+
+The preset with a genuinely per-locus `mu` fails exactly like `load_yaml` would.
+
+`mu_from_params`'s own docstring already documents this as a form
+limitation ("edit the YAML file directly"), not specific to presets
+— this proves `get_preset_form_values` surfaces that same message
+rather than crashing or silently loading a wrong value.
+
 <a id="gui.test_app_api.test_validate_form_accepts_the_starter_values"></a>
 
 #### test\_validate\_form\_accepts\_the\_starter\_values
@@ -7558,6 +7612,133 @@ An injected clock gives `_quarantine` a deterministic filename.
 `load_preferences`'s own public contract — this test only pins down
 the exact timestamp format via a fixed instant, matching `fim.
 paths.default_output_directory`'s own injected-clock test pattern.
+
+<a id="gui.test_presets"></a>
+
+# gui.test\_presets
+
+Unit tests for `fim.gui.presets` (no display, no `gui` marker).
+
+`list_presets`/`get_preset` only ever read a plain HTML file from disk —
+none of the pywebview machinery this package's other tests need.
+
+<a id="gui.test_presets.test_list_presets_returns_the_seven_worked_examples"></a>
+
+#### test\_list\_presets\_returns\_the\_seven\_worked\_examples
+
+```python
+def test_list_presets_returns_the_seven_worked_examples() -> None
+```
+
+Every `doc/usage.md` worked example is found, in its own document order.
+
+Reads the real, committed `webui/help/usage.html` directly — this
+is the one test proving that file (and this module's own parser)
+actually agree, not a synthetic fixture standing in for it.
+
+<a id="gui.test_presets.test_get_preset_returns_the_matching_preset"></a>
+
+#### test\_get\_preset\_returns\_the\_matching\_preset
+
+```python
+def test_get_preset_returns_the_matching_preset() -> None
+```
+
+`get_preset` finds one preset by its own id, out of the real seven.
+
+<a id="gui.test_presets.test_get_preset_returns_none_for_an_unknown_id"></a>
+
+#### test\_get\_preset\_returns\_none\_for\_an\_unknown\_id
+
+```python
+def test_get_preset_returns_none_for_an_unknown_id() -> None
+```
+
+An id naming no real preset is `None`, not a raised exception.
+
+<a id="gui.test_presets.test_list_presets_returns_empty_for_a_directory_with_no_help_html"></a>
+
+#### test\_list\_presets\_returns\_empty\_for\_a\_directory\_with\_no\_help\_html
+
+```python
+def test_list_presets_returns_empty_for_a_directory_with_no_help_html(
+        tmp_path: Path) -> None
+```
+
+A missing `help/usage.html` (a stale install) is `[]`, not a crash.
+
+<a id="gui.test_presets.test_parser_scopes_to_the_worked_examples_section_only"></a>
+
+#### test\_parser\_scopes\_to\_the\_worked\_examples\_section\_only
+
+```python
+def test_parser_scopes_to_the_worked_examples_section_only(
+        tmp_path: Path) -> None
+```
+
+A heading and YAML block outside the section are not mistaken for a preset.
+
+Direct regression coverage for a real bug found writing this
+module: the opening `<h2 id="worked-examples">Worked examples</h2>`
+tag's own *closing* tag was originally mistaken for the section's
+own end (both tags are on the same line, immediately adjacent),
+closing the section before a single `<h3>` inside it was ever
+reached — every real preset silently vanished (`list_presets`
+returned `[]` against the real file, not a subtly wrong single
+entry). This synthetic fixture puts one heading before the section,
+one correctly inside it, and one after — the exact shape that bug
+would get wrong in three different ways at once.
+
+<a id="gui.test_presets.test_every_preset_parses_as_yaml"></a>
+
+#### test\_every\_preset\_parses\_as\_yaml
+
+```python
+@pytest.mark.parametrize("preset",
+                         _REAL_PRESETS,
+                         ids=[p.preset_id for p in _REAL_PRESETS])
+def test_every_preset_parses_as_yaml(preset: Preset) -> None
+```
+
+Every real preset's own text is at least syntactically valid YAML.
+
+Whether it also validates as a full `SimulationParams` (six of the
+seven do; the seventh's own genuinely per-locus `mu` has no form
+representation, exactly like a hand-loaded YAML file with the same
+shape already does not) is `test/gui/test_app_api.py`'s own concern
+(`get_preset_form_values`), not this module's.
+
+<a id="gui.test_presets_screen"></a>
+
+# gui.test\_presets\_screen
+
+Headless functional tests for the Presets picker (botanist GUI design
+doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.5).
+
+Real DOM-driven proof that `webui/screens/presets.js` actually wires the
+page correctly — `test/gui/test_app_api.py`'s own `test_list_presets_*`/
+`test_get_preset_form_values_*` tests already prove the bridge methods
+themselves are correct as plain Python calls; these tests prove the
+page's own JavaScript calls them at the right moments and updates the
+right fields, which no Python-only test can check.
+
+<a id="gui.test_presets_screen.test_load_example_populates_the_list_and_applies_the_chosen_preset"></a>
+
+#### test\_load\_example\_populates\_the\_list\_and\_applies\_the\_chosen\_preset
+
+```python
+def test_load_example_populates_the_list_and_applies_the_chosen_preset(
+        window: webview.Window) -> None
+```
+
+`fim.menu.loadExample` lists every preset; clicking one loads its own values.
+
+The trigger wraps `fim.menu.loadExample()` in `setTimeout(..., 0)`,
+matching `fim.gui.app._build_menu`'s own real dispatcher exactly —
+calling an `async` `fim.menu.*` method directly as a bare
+`evaluate_js` expression deadlocks (`test_input_screen.py`'s own
+`test_menu_new_configuration_resets_an_edited_field` docstring has
+the full mechanism).
 
 <a id="gui.test_recent_runs"></a>
 

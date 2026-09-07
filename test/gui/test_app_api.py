@@ -33,6 +33,7 @@ from fim.engine import (
 from fim.engine import fim as engine_fim
 from fim.gui import app as app_module
 from fim.gui import batch_runner
+from fim.gui import presets as presets_module
 from fim.gui import recent_runs as recent_runs_module
 from fim.gui import runner as runner_module
 from fim.gui.app import Api, _save_dialog_path, format_statistic
@@ -65,6 +66,60 @@ def test_get_starter_form_matches_config_form_directly() -> None:
 def test_get_default_max_workers_matches_batch_runner_directly() -> None:
     """The Batch tab's default is `batch_runner.default_max_workers`, not invented."""
     assert Api().get_default_max_workers() == default_max_workers()
+
+
+def test_list_presets_matches_presets_module_directly() -> None:
+    """The bridge method adds no logic beyond `fim.gui.presets.list_presets`."""
+    result = Api().list_presets()
+
+    assert result["ok"] is True
+    expected = presets_module.list_presets(app_module._webui_directory())
+    assert result["presets"] == [
+        {"id": preset.preset_id, "title": preset.title} for preset in expected
+    ]
+    assert len(result["presets"]) > 0
+
+
+def test_get_preset_form_values_loads_a_representable_preset() -> None:
+    """A preset with no unrepresentable construct loads into real form values.
+
+    `m`'s own stepping-stone topology shorthand has already expanded to
+    a dense matrix by the time `SimulationParams.from_mapping` returns
+    it (`configuration.md`'s own documented behavior) — `m_from_params`
+    therefore renders it as `m_mode="loaded"`, the identical "loaded
+    from file" badge a hand-loaded copy of this same YAML file would
+    already get via `load_yaml`, not a preset-specific gap.
+    """
+    result = Api().get_preset_form_values("stepping-stone-spatial-migration")
+
+    assert result["ok"] is True
+    assert result["values"]["N"] == "150"
+    assert result["values"]["m_mode"] == "loaded"
+    assert "6" in result["values"]["m_loaded_summary"]
+
+
+def test_get_preset_form_values_rejects_an_unknown_id() -> None:
+    """An unknown preset id is a clear error, not a silent empty form."""
+    result = Api().get_preset_form_values("not-a-real-preset")
+
+    assert result["ok"] is False
+    assert "not-a-real-preset" in result["message"]
+
+
+def test_get_preset_form_values_surfaces_the_per_locus_mu_limitation() -> None:
+    """The preset with a genuinely per-locus `mu` fails exactly like `load_yaml` would.
+
+    `mu_from_params`'s own docstring already documents this as a form
+    limitation ("edit the YAML file directly"), not specific to presets
+    — this proves `get_preset_form_values` surfaces that same message
+    rather than crashing or silently loading a wrong value.
+    """
+    result = Api().get_preset_form_values(
+        "per-base-mutation-rate-across-unequal-locus-lengths"
+    )
+
+    assert result["ok"] is False
+    assert "per-locus mu" in result["message"]
 
 
 def test_validate_form_accepts_the_starter_values() -> None:
@@ -1295,6 +1350,7 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         "New configuration",
         "Open configuration…",
         "Save configuration…",
+        "Load example…",
         "Open run…",
         "Reveal output folder",
         "Explore predictions…",

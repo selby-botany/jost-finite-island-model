@@ -64,7 +64,7 @@ from fim.engine import (
     report_for_state,
     reports_summary,
 )
-from fim.gui import batch_runner, recent_runs, runner
+from fim.gui import batch_runner, presets, recent_runs, runner
 from fim.gui.animation import pre_render_frames
 from fim.gui.config_form import (
     CONVERGENCE_STATISTIC_NAMES,
@@ -1061,6 +1061,64 @@ class Api:
             params = load_config(Path(selection[0]))
             values = params_to_form_values(params)
         except (OSError, ValueError, yaml.YAMLError) as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "values": values}
+
+    @_log_bridge_call
+    def list_presets(self) -> dict[str, Any]:
+        """Return every worked-example preset's own id and title.
+
+        Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+        redesign.md` §4.5, `selby/restricted`: `fim.gui.presets` parses
+        these directly from the bundled `webui/help/usage.html` — see
+        that module's own docstring for why that file, not `doc/
+        usage.md` itself, is the one this reads. No YAML text is sent
+        here; `get_preset_form_values` fetches one preset's own values
+        only once the user actually picks it.
+
+        Returns:
+            `{"ok": True, "presets": [{"id": ..., "title": ...}, ...]}`,
+            in the same order `doc/usage.md` presents them. `presets` is
+            an empty list if the bundled help file is missing or has no
+            worked-examples section at all (a stale or hand-modified
+            install) — never an error on its own; the Configure screen
+            simply has nothing to offer.
+        """
+        found = presets.list_presets(_webui_directory())
+        return {
+            "ok": True,
+            "presets": [
+                {"id": preset.preset_id, "title": preset.title} for preset in found
+            ],
+        }
+
+    @_log_bridge_call
+    def get_preset_form_values(self, preset_id: str) -> dict[str, Any]:
+        """Return one preset's own form values, ready for `applyFormValues`.
+
+        Args:
+            preset_id: A `preset_id` from a prior `list_presets` call.
+
+        Returns:
+            `{"ok": True, "values": {...}}` on success — the identical
+            shape `load_yaml` returns, so both share one JS-side apply
+            path; `{"ok": False, "message": ...}` if `preset_id` names
+            no known preset, or if the preset's own configuration uses a
+            construct this form cannot represent (the "Per-base mutation
+            rate across unequal locus lengths" example's own genuinely
+            per-locus `mu` is the one worked example this affects today)
+            — the identical message a hand-loaded YAML file with the
+            same shape would already produce via `load_yaml`, not a new
+            failure mode this method introduces.
+        """
+        preset = presets.get_preset(_webui_directory(), preset_id)
+        if preset is None:
+            return {"ok": False, "message": f"no such preset: {preset_id}"}
+        try:
+            payload = yaml.safe_load(preset.yaml_text)
+            params = SimulationParams.from_mapping(payload)
+            values = params_to_form_values(params)
+        except (ValueError, yaml.YAMLError) as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "values": values}
 
@@ -2356,6 +2414,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             MenuAction("New configuration", dispatch("fim.menu.newConfiguration()")),
             MenuAction("Open configuration…", dispatch("fim.menu.openConfiguration()")),
             MenuAction("Save configuration…", dispatch("fim.menu.saveConfiguration()")),
+            MenuAction("Load example…", dispatch("fim.menu.loadExample()")),
             MenuSeparator(),
             MenuAction("Open run…", dispatch("fim.menu.openRun()")),
             MenuAction(

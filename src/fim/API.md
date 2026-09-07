@@ -89,6 +89,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_equilibrium\_predictions](#fim.gui.app.Api.get_equilibrium_predictions)
     * [get\_equilibrium\_sweep](#fim.gui.app.Api.get_equilibrium_sweep)
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
+    * [list\_presets](#fim.gui.app.Api.list_presets)
+    * [get\_preset\_form\_values](#fim.gui.app.Api.get_preset_form_values)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
     * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
@@ -145,6 +147,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
   * [save\_preferences](#fim.gui.preferences.save_preferences)
+* [fim.gui.presets](#fim.gui.presets)
+  * [Preset](#fim.gui.presets.Preset)
+  * [list\_presets](#fim.gui.presets.list_presets)
+  * [get\_preset](#fim.gui.presets.get_preset)
 * [fim.gui.recent\_runs](#fim.gui.recent_runs)
   * [RecentRun](#fim.gui.recent_runs.RecentRun)
   * [list\_recent\_runs](#fim.gui.recent_runs.list_recent_runs)
@@ -3134,6 +3140,63 @@ terminal loads identically here, error for error.
   (no banner to show); `{"ok": False, "message": "..."}` on a
   real load or validation failure.
 
+<a id="fim.gui.app.Api.list_presets"></a>
+
+#### list\_presets
+
+```python
+@_log_bridge_call
+def list_presets() -> dict[str, Any]
+```
+
+Return every worked-example preset's own id and title.
+
+Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §4.5, `selby/restricted`: `fim.gui.presets` parses
+these directly from the bundled `webui/help/usage.html` — see
+that module's own docstring for why that file, not `doc/
+usage.md` itself, is the one this reads. No YAML text is sent
+here; `get_preset_form_values` fetches one preset's own values
+only once the user actually picks it.
+
+**Returns**:
+
+- ``{"ok"` - True, "presets": [{"id": ..., "title": ...}, ...]}`,
+  in the same order `doc/usage.md` presents them. `presets` is
+  an empty list if the bundled help file is missing or has no
+  worked-examples section at all (a stale or hand-modified
+  install) — never an error on its own; the Configure screen
+  simply has nothing to offer.
+
+<a id="fim.gui.app.Api.get_preset_form_values"></a>
+
+#### get\_preset\_form\_values
+
+```python
+@_log_bridge_call
+def get_preset_form_values(preset_id: str) -> dict[str, Any]
+```
+
+Return one preset's own form values, ready for `applyFormValues`.
+
+**Arguments**:
+
+- `preset_id` - A `preset_id` from a prior `list_presets` call.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "values": {...}}` on success — the identical
+  shape `load_yaml` returns, so both share one JS-side apply
+  path; `{"ok": False, "message": ...}` if `preset_id` names
+  no known preset, or if the preset's own configuration uses a
+  construct this form cannot represent (the "Per-base mutation
+  rate across unequal locus lengths" example's own genuinely
+  per-locus `mu` is the one worked example this affects today)
+  — the identical message a hand-loaded YAML file with the
+  same shape would already produce via `load_yaml`, not a new
+  failure mode this method introduces.
+
 <a id="fim.gui.app.Api.save_yaml"></a>
 
 #### save\_yaml
@@ -4615,6 +4678,104 @@ Atomically write `preferences` to `path`, creating parent directories as needed.
 Same mkstemp-then-`os.replace` idiom as `fim.gui.store.
 write_progress_sidecar` — a concurrent reader always sees either the
 previous complete file or the new one, never a torn write.
+
+<a id="fim.gui.presets"></a>
+
+# fim.gui.presets
+
+Parse the "Worked examples" section of the bundled usage guide into
+selectable Configure presets (botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.5, `selby/restricted`).
+
+`doc/usage.md` already documents seven complete, runnable configurations
+under "Worked examples" — each demonstrating one `configuration.md`
+option, worked through by hand and committed once, nowhere else.
+`dev/bin/generate-help-html` already renders that same file into
+`webui/help/usage.html` at commit time (the Help screen's own content
+source, `screens/help.js`), and `packaging/fim.spec` already bundles the
+whole `webui/` tree into every packaged executable — so that rendered
+HTML, not `doc/usage.md` itself, is the one artifact guaranteed to exist
+both in a development checkout and inside a frozen `.exe`/`.app`
+(`doc/usage.md` is not bundled on its own; only `webui/` is).
+
+This module reads that already-bundled HTML back, rather than embedding
+a second, hand-copied set of example configurations the way `fim.cli.
+STARTER_CONFIG` embeds its own single starter scenario: `doc/usage.md`
+stays the one and only place these seven examples are written, exactly
+as `dev/bin/generate-help-html`'s own "never hand-edit the generated
+file" rule already establishes for the HTML itself, one level up.
+Staleness between `doc/usage.md` and the committed `usage.html` is
+already a generic, existing gate (`dev/git-hooks/pre-push`/`./build
+--ci`, `dev/bin/generate-help-html --help`'s own documented purpose for
+`--output-dir`) — nothing here duplicates that. `test/gui/test_presets.
+py`'s own `test_list_presets_returns_the_seven_worked_examples` instead
+guards this module's own parser against the real, committed file
+directly, by name and count, the same "if it changes, a human notices
+and updates this test" precedent `test_starter_form_values_reflects_
+the_cli_starter_config` already sets for `STARTER_CONFIG`.
+
+<a id="fim.gui.presets.Preset"></a>
+
+## Preset Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class Preset()
+```
+
+One worked example: its stable id, display title, and raw YAML text.
+
+**Arguments**:
+
+- `preset_id` - The heading's own HTML `id` attribute (`dev/bin/
+  generate-help-html`'s own GitHub-style slug of the title) —
+  stable across a regeneration as long as the title itself
+  does not change, and already unique (one `<h3>` per
+  example, `doc/usage.md`'s own structure).
+- `title` - The example's own heading text, plain (no embedded
+  `<code>` markup — none of the seven titles use any).
+- `yaml_text` - The example's own complete YAML configuration, exactly
+  as `doc/usage.md` presents it — ready for `yaml.safe_load`.
+
+<a id="fim.gui.presets.list_presets"></a>
+
+#### list\_presets
+
+```python
+def list_presets(webui_directory: Path) -> list[Preset]
+```
+
+Return every worked-example preset bundled at `webui_directory`.
+
+**Arguments**:
+
+- `webui_directory` - `fim.gui.app._webui_directory()`'s own return
+  value — the directory holding `index.html` and `help/
+  usage.html`, frozen or not.
+
+
+**Returns**:
+
+  One `Preset` per `doc/usage.md` "Worked examples" `<h3>`
+  section, in the same order the guide presents them. Empty if
+  `help/usage.html` is missing or has no such section — callers
+  treat that as "no presets available" (a stale or hand-modified
+  install), not a reason to fail the Configure screen outright.
+
+<a id="fim.gui.presets.get_preset"></a>
+
+#### get\_preset
+
+```python
+def get_preset(webui_directory: Path, preset_id: str) -> Preset | None
+```
+
+Return one preset by its own id, or `None` if no such preset exists.
+
+**Arguments**:
+
+- `webui_directory` - Same as `list_presets`.
+- `preset_id` - A `Preset.preset_id` from a prior `list_presets` call.
 
 <a id="fim.gui.recent_runs"></a>
 

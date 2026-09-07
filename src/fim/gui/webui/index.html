@@ -406,6 +406,26 @@
       <legend>m (migration)</legend>
       <label><input type="radio" name="m_mode" value="scalar" checked form="input-form"> scalar rate</label>
       <label><input type="radio" name="m_mode" value="topology" form="input-form"> named topology</label>
+      <!-- Not a user-facing third choice -- `m_from_params`'s own
+           "loaded" mode (any matrix-shaped `m`: a full d-by-d matrix, a
+           sparse neighbor map, or a stepping-stone topology, all
+           already expanded to a dense matrix by the time they reach
+           here) has no scalar-rate/topology form of its own to show,
+           only the read-only summary below. `RadioNodeList`-based radio
+           groups (`setFieldValue`'s own `applyFormValues` helper)
+           require a real, matching `value="loaded"` option to actually
+           check -- without this, loading such a configuration (Load
+           YAML…, or a preset like "Unequal island sizes with a
+           migration hub") leaves the whole `m_mode` group unchecked,
+           and an unchecked radio group contributes nothing at all to
+           `FormData`, which crashed `revalidate`'s own `m_to_payload`
+           with a bare `KeyError` the first time this was driven through
+           a real DOM rather than only checked at the `config_form.py`
+           level. `hidden` (not `disabled`) keeps it invisible to the
+           user while still participating in `FormData` like any other
+           radio in the group. -->
+      <input type="radio" name="m_mode" value="loaded" form="input-form" hidden
+             tabindex="-1" aria-hidden="true">
       <div class="field" id="m-scalar-fields">
         <label for="field-m_rate">rate</label>
         <input type="text" id="field-m_rate" name="m_rate" form="input-form">
@@ -555,6 +575,21 @@
     <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
 
+  <!-- Presets (botanist GUI design doc §4.5): every `doc/usage.md`
+       worked example, one click away, sourced live from `Api.list_
+       presets` -- not a `.config-modal` (it edits nothing of its own;
+       picking a row loads that preset into the real Configure fields
+       and closes this dialog immediately, so it needs no "Close"
+       button of its own beyond Cancel). -->
+  <dialog class="config-modal" id="modal-presets">
+    <h2>Start from an example</h2>
+    <p id="presets-empty-note" class="hint" hidden>
+      No worked examples are bundled with this build.
+    </p>
+    <ul id="presets-list" class="presets-list"></ul>
+    <button type="button" class="modal-close" data-modal-close tabindex="0">Cancel</button>
+  </dialog>
+
   <!-- Not user-facing: `app.js`'s own automatic bootstrap still writes
        the bridge's real connect/error status here for a test to read
        (`test/gui/test_app.py`'s own proof that the bridge auto-connects
@@ -576,5 +611,6 @@
 <script src="screens/open-run.js"></script>
 <script src="screens/help.js"></script>
 <script src="screens/explore.js"></script>
+<script src="screens/presets.js"></script>
 </body>
 </html>
