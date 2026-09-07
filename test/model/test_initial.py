@@ -7,6 +7,8 @@ import pytest
 
 from fim.model.allele import AlleleId
 from fim.model.initial import (
+    EquilibrationOutcome,
+    EquilibriumSplitInitialCondition,
     ExplicitInitialCondition,
     founding_condition_for_heterozygosity,
     generate_initial_state,
@@ -186,3 +188,146 @@ def test_founding_condition_rejects_invalid_inputs(
     """Every argument is validated, not passed straight into the arithmetic."""
     with pytest.raises(ValueError, match=message):
         founding_condition_for_heterozygosity(**kwargs)  # type: ignore[arg-type]
+
+
+def _equilibrium_condition(
+    **changes: object,
+) -> EquilibriumSplitInitialCondition:
+    """Build a fast-converging condition: window 2, tolerance 1.0 (H_S is bounded
+    in [0, 1), so any two values are within it) -- converges as soon as the
+    trailing window fills, exercising at least one real mutate/drift step
+    without a slow test."""
+    values: dict[str, object] = {
+        "convergence_window": 2,
+        "convergence_tolerance": 1.0,
+        "max_generations": 50,
+    }
+    values.update(changes)
+    return EquilibriumSplitInitialCondition(**values)  # type: ignore[arg-type]
+
+
+def test_equilibrium_split_produces_a_valid_d_deme_state(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The split state has the right shape and generation, for every deme."""
+    params = _params(N=20, d=3, mu=0.01)
+
+    state, outcome = _equilibrium_condition().generate_with_outcome(params, rng(0))
+
+    assert state.deme_count == 3
+    assert state.generation == 0
+    assert isinstance(outcome, EquilibrationOutcome)
+
+
+def test_equilibrium_split_conserves_the_ancestral_gene_count_per_locus(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Every locus's own gene copies are conserved exactly across the split.
+
+    The whole point of a finite-pool partition (P1 item 5's own design
+    doc, decision 1): no gene copy is created or lost at the moment of
+    founding, only reassigned to one of the `d` new demes.
+    """
+    params = _params(N=(15, 25), d=2, mu=0.05)
+
+    state, _outcome = _equilibrium_condition().generate_with_outcome(params, rng(0))
+
+    for locus_index in range(state.locus_count):
+        totals: dict[AlleleId, float] = {}
+        for deme_index, size in enumerate(params.population_sizes):
+            for allele_id, frequency in state.frequency_map(
+                deme_index, locus_index
+            ).items():
+                totals[allele_id] = totals.get(allele_id, 0.0) + frequency * size
+        assert sum(round(count) for count in totals.values()) == sum(
+            params.population_sizes
+        )
+
+
+def test_equilibrium_split_is_a_function_of_the_seed(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The same seed reproduces the identical split; a different seed does not."""
+    params = _params(N=20, d=2, mu=0.02, seed=7)
+
+    first_state, first_outcome = _equilibrium_condition().generate_with_outcome(
+        params, rng(0)
+    )
+    second_state, second_outcome = _equilibrium_condition().generate_with_outcome(
+        params, rng(999)
+    )
+    different_seed_state, _ = _equilibrium_condition().generate_with_outcome(
+        _params(N=20, d=2, mu=0.02, seed=8), rng(0)
+    )
+
+    assert first_state == second_state
+    assert first_outcome == second_outcome
+    assert first_state != different_seed_state
+
+
+def test_generate_matches_generate_with_outcome_state(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`generate` returns exactly `generate_with_outcome`'s own state."""
+    params = _params(N=20, d=2, mu=0.02)
+    condition = _equilibrium_condition()
+
+    via_generate = condition.generate(params, rng(0))
+    via_generate_with_outcome, _outcome = condition.generate_with_outcome(
+        params, rng(0)
+    )
+
+    assert via_generate == via_generate_with_outcome
+
+
+def test_equilibration_outcome_history_ends_at_the_final_heterozygosity(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """`history`'s last entry is `final_heterozygosity`, both valid `H_S` values."""
+    params = _params(N=20, d=2, mu=0.02)
+
+    _state, outcome = _equilibrium_condition().generate_with_outcome(params, rng(0))
+
+    assert outcome.history[-1] == outcome.final_heterozygosity
+    assert 0.0 <= outcome.final_heterozygosity < 1.0
+    assert len(outcome.history) == outcome.generation_count + 1
+    assert outcome.generation_count >= 1
+
+
+def test_equilibrium_split_rejects_finite_alleles_mutation_model(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Finite-alleles support needs a shared `_build_finite_allele_spaces`,
+    not yet extracted from `fim.engine` (design doc's own noted scope limit)."""
+    params = _params(N=20, d=2, mu=0.02, mutation_model="finite_alleles")
+
+    with pytest.raises(ValueError, match="infinite_alleles"):
+        _equilibrium_condition().generate_with_outcome(params, rng(0))
+
+
+def test_equilibrium_split_raises_when_it_never_converges(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """Hitting the cap without stabilizing is fatal (design doc's own decision 4) --
+
+    unlike the main run's own benign generation-cap outcome, a `d`-deme
+    run must never be silently founded from a non-equilibrium ancestral
+    population. `max_generations=1` can never satisfy a `window=2`
+    criterion (it requires at least two recorded generations), so this
+    is guaranteed to hit the cap without ever having a chance to converge.
+    """
+    params = _params(N=20, d=2, mu=0.02)
+    condition = _equilibrium_condition(
+        convergence_window=2, convergence_tolerance=0.0, max_generations=1
+    )
+
+    with pytest.raises(ValueError, match="did not reach equilibrium"):
+        condition.generate_with_outcome(params, rng(0))
+
+
+def test_equilibrium_split_condition_rejects_a_non_positive_max_generations() -> None:
+    """`max_generations` is validated at construction time, not first use."""
+    with pytest.raises(ValueError, match="max_generations"):
+        EquilibriumSplitInitialCondition(
+            convergence_window=2, convergence_tolerance=0.01, max_generations=0
+        )

@@ -8853,6 +8853,105 @@ def test_founding_condition_rejects_invalid_inputs(kwargs: dict[str, object],
 
 Every argument is validated, not passed straight into the arithmetic.
 
+<a id="model.test_initial.test_equilibrium_split_produces_a_valid_d_deme_state"></a>
+
+#### test\_equilibrium\_split\_produces\_a\_valid\_d\_deme\_state
+
+```python
+def test_equilibrium_split_produces_a_valid_d_deme_state(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The split state has the right shape and generation, for every deme.
+
+<a id="model.test_initial.test_equilibrium_split_conserves_the_ancestral_gene_count_per_locus"></a>
+
+#### test\_equilibrium\_split\_conserves\_the\_ancestral\_gene\_count\_per\_locus
+
+```python
+def test_equilibrium_split_conserves_the_ancestral_gene_count_per_locus(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Every locus's own gene copies are conserved exactly across the split.
+
+The whole point of a finite-pool partition (P1 item 5's own design
+doc, decision 1): no gene copy is created or lost at the moment of
+founding, only reassigned to one of the `d` new demes.
+
+<a id="model.test_initial.test_equilibrium_split_is_a_function_of_the_seed"></a>
+
+#### test\_equilibrium\_split\_is\_a\_function\_of\_the\_seed
+
+```python
+def test_equilibrium_split_is_a_function_of_the_seed(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The same seed reproduces the identical split; a different seed does not.
+
+<a id="model.test_initial.test_generate_matches_generate_with_outcome_state"></a>
+
+#### test\_generate\_matches\_generate\_with\_outcome\_state
+
+```python
+def test_generate_matches_generate_with_outcome_state(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`generate` returns exactly `generate_with_outcome`'s own state.
+
+<a id="model.test_initial.test_equilibration_outcome_history_ends_at_the_final_heterozygosity"></a>
+
+#### test\_equilibration\_outcome\_history\_ends\_at\_the\_final\_heterozygosity
+
+```python
+def test_equilibration_outcome_history_ends_at_the_final_heterozygosity(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+`history`'s last entry is `final_heterozygosity`, both valid `H_S` values.
+
+<a id="model.test_initial.test_equilibrium_split_rejects_finite_alleles_mutation_model"></a>
+
+#### test\_equilibrium\_split\_rejects\_finite\_alleles\_mutation\_model
+
+```python
+def test_equilibrium_split_rejects_finite_alleles_mutation_model(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Finite-alleles support needs a shared `_build_finite_allele_spaces`,
+not yet extracted from `fim.engine` (design doc's own noted scope limit).
+
+<a id="model.test_initial.test_equilibrium_split_raises_when_it_never_converges"></a>
+
+#### test\_equilibrium\_split\_raises\_when\_it\_never\_converges
+
+```python
+def test_equilibrium_split_raises_when_it_never_converges(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+Hitting the cap without stabilizing is fatal (design doc's own decision 4) --
+
+unlike the main run's own benign generation-cap outcome, a `d`-deme
+run must never be silently founded from a non-equilibrium ancestral
+population. `max_generations=1` can never satisfy a `window=2`
+criterion (it requires at least two recorded generations), so this
+is guaranteed to hit the cap without ever having a chance to converge.
+
+<a id="model.test_initial.test_equilibrium_split_condition_rejects_a_non_positive_max_generations"></a>
+
+#### test\_equilibrium\_split\_condition\_rejects\_a\_non\_positive\_max\_generations
+
+```python
+def test_equilibrium_split_condition_rejects_a_non_positive_max_generations(
+) -> None
+```
+
+`max_generations` is validated at construction time, not first use.
+
 <a id="model.test_locus"></a>
 
 # model.test\_locus

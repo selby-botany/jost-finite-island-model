@@ -200,6 +200,11 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [generate](#fim.model.initial.DirichletInitialCondition.generate)
   * [ExplicitInitialCondition](#fim.model.initial.ExplicitInitialCondition)
     * [generate](#fim.model.initial.ExplicitInitialCondition.generate)
+  * [EquilibrationOutcome](#fim.model.initial.EquilibrationOutcome)
+  * [EquilibriumSplitInitialCondition](#fim.model.initial.EquilibriumSplitInitialCondition)
+    * [\_\_init\_\_](#fim.model.initial.EquilibriumSplitInitialCondition.__init__)
+    * [generate](#fim.model.initial.EquilibriumSplitInitialCondition.generate)
+    * [generate\_with\_outcome](#fim.model.initial.EquilibriumSplitInitialCondition.generate_with_outcome)
   * [generate\_initial\_state](#fim.model.initial.generate_initial_state)
   * [founding\_condition\_for\_heterozygosity](#fim.model.initial.founding_condition_for_heterozygosity)
 * [fim.model.locus](#fim.model.locus)
@@ -5789,15 +5794,27 @@ Seeded initial-condition strategies.
 
 Before a simulation can run at all, every deme needs a starting set of
 allele frequencies at generation zero — this module is where that
-starting point comes from. Two strategies are provided, both reachable
+starting point comes from. Three strategies are provided, all reachable
 through `generate_initial_state`: `DirichletInitialCondition` (the
 default) draws a random starting frequency for each deme/locus from a
 symmetric Dirichlet distribution (a standard way of picking a random
 set of proportions that add up to 1, used throughout population
-genetics for exactly this purpose), while `ExplicitInitialCondition`
-instead uses a frequency table the caller supplied directly in
+genetics for exactly this purpose); `ExplicitInitialCondition` instead
+uses a frequency table the caller supplied directly in
 `SimulationParams` (``p_0`` in a config file), for reproducing a
-specific known starting condition rather than a random one.
+specific known starting condition rather than a random one;
+`EquilibriumSplitInitialCondition` instead simulates one ancestral
+population to mutation-drift equilibrium and founds every deme by
+sampling from it (see that class's own docstring).
+
+Every strategy but the last shares one contract, stated precisely by
+`DirichletInitialCondition`'s own docstring: generation zero is a
+*continuous belief*, not yet a sampled population — `fim.model.
+operators.drift`'s first application is what turns it into the model's
+first actual `N`-gene-copy realization. `EquilibriumSplitInitialCondition`
+does not fit that contract, and its own docstring explains why not: its
+generation zero is already sampled, finite, and real by the time it is
+returned.
 
 <a id="fim.model.initial.InitialConditionGenerator"></a>
 
@@ -5907,6 +5924,206 @@ Return the configured explicit state.
 **Raises**:
 
 - `ValueError` - If no explicit frequencies were configured.
+
+<a id="fim.model.initial.EquilibrationOutcome"></a>
+
+## EquilibrationOutcome Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class EquilibrationOutcome()
+```
+
+One panmictic ancestral phase's own recorded outcome.
+
+Returned alongside the split generation-zero state by
+`EquilibriumSplitInitialCondition.generate_with_outcome` — never by
+the bare `generate` (the `InitialConditionGenerator` Protocol
+method), which every other strategy also satisfies and which has no
+return-shape room for this. `fim.engine`'s own run orchestration is
+the one caller that needs this: it threads these three values into
+`RunManifest`'s own `equilibrium_generation_count`/`equilibrium_
+final_heterozygosity` fields and persists `history` in full as the
+`equilibrium_trajectory.jsonl` sibling artifact
+(`20260907-claude-sonnet-5-equilibrium-split-design.md` §5).
+
+**Arguments**:
+
+- `generation_count` - The generation at which the ancestral phase's
+  own `H_S` trailing window stabilized —
+  `ConvergenceMonitor.outcome().generation`.
+- `final_heterozygosity` - The ancestral population's own `H_S` at
+  that generation — the actual value split into `d` demes,
+  not a value the caller chose.
+- `history` - `H_S` at every recorded generation of the ancestral
+  phase, oldest first, generation zero (the pre-drift
+  Dirichlet draw) included — `ConvergenceMonitor.history`.
+
+<a id="fim.model.initial.EquilibriumSplitInitialCondition"></a>
+
+## EquilibriumSplitInitialCondition Objects
+
+```python
+class EquilibriumSplitInitialCondition()
+```
+
+Simulate one ancestral population to equilibrium, then found every deme from it.
+
+P1 item 5 of the 2026-09-06 open-issues doc, and its own design doc
+(`20260907-claude-sonnet-5-equilibrium-split-design.md`): "run a
+single panmictic population of size N·d forward
+until convergence (verified via the Ht parameter), then split it
+into d demes." Two real simulation phases, not one:
+
+1. **Equilibrate.** Build one deme of size `sum(params.
+   population_sizes)` — the same total gene-copy count the real
+   `d`-deme run will have, just concentrated in one deme — starting
+   from the identical continuous Dirichlet draw
+   `DirichletInitialCondition` uses (`_dirichlet_locus_maps`,
+   above), then repeatedly apply `fim.model.operators.mutate`/
+   `drift` (no `migrate` — there is nothing to migrate between with
+   one deme) until this ancestral population's own mean `H_S`
+   (identical to `H_T` at one deme; every *differentiation*
+   statistic is undefined there) stabilizes under a
+   `TrailingWindowCriterion`, or raise if it never does within
+   `max_generations` (the design doc's own decision 4: unlike the
+   main run's own benign generation-cap outcome, this cap is fatal
+   — a `d`-deme run silently founded from a non-equilibrium ancestral
+   population would defeat the one thing this mode exists to
+   guarantee).
+2. **Split.** By the time equilibration stops, the ancestral
+   population is already a real, finite, `drift`-realized
+   population — not the continuous "belief" every other strategy's
+   own generation zero is (this class's own module docstring). Each
+   output deme draws its own `N` gene copies *without replacement*
+   from that one finite pool, independently per locus (this model
+   has no notion of an individual's genotype linking its loci
+   together — every locus is already independent everywhere else in
+   this codebase, so there is no "same individuals" for a joint
+   draw to preserve), via `numpy.random.Generator.
+   multivariate_hypergeometric`, deme by deme in order, each draw
+   depleting what remains for the next. The last deme receives
+   exactly what is left, so the total gene count is conserved
+   exactly, not just in expectation — a genuine founder effect: real
+   divergence between demes at generation zero, from finite-sampling
+   noise at the moment of founding, which no other strategy in this
+   module can produce.
+
+Runs on its own random-number stream, independent of the real run's
+own — `numpy.random.SeedSequence(params.seed).spawn(1)[0]`, not
+`params.seed` directly. Reusing the bare seed here would make the
+founder split's own randomness a shifted echo of what the real
+run's own early drift would have drawn (two `PCG64` generators
+built from the identical seed integer produce the identical draw
+sequence); a spawned child stream is decorrelated from its own
+plain-seed sibling by design, while remaining fully deterministic —
+the same parent seed always yields the same child, so reproducibility
+is unaffected, and it composes for free with a batch's own
+per-replicate seed (`params.seed + replicate_index`): each
+replicate's own equilibration derives from *that replicate's own*
+seed, so a batch's replicates stay genuinely independent trials.
+
+Supports `mutation_model="infinite_alleles"` (the default) only.
+`"finite_alleles"` needs `fim.engine._build_finite_allele_spaces`,
+which `fim.engine` itself imports `generate_initial_state` from this
+module — importing it back here would be circular. Raises a clear
+`ValueError` for that combination rather than silently ignoring the
+configured mutation model; lifting this is future work, gated on
+moving that function to a shared module both sides can import.
+
+<a id="fim.model.initial.EquilibriumSplitInitialCondition.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(*, convergence_window: int, convergence_tolerance: float,
+             max_generations: int) -> None
+```
+
+Configure one ancestral-equilibration phase.
+
+**Arguments**:
+
+- `convergence_window` - Trailing-window size for the ancestral
+  phase's own `H_S` stability check
+  (`TrailingWindowCriterion`) — independent of the real
+  run's own `convergence_window`, since the two phases run
+  at different population scales with no principled reason
+  to share a threshold.
+- `convergence_tolerance` - Trailing-window tolerance for the
+  same check.
+- `max_generations` - Hard cap on the ancestral phase's own
+  generation count. Reaching it without the trailing
+  window stabilizing is fatal (`generate_with_outcome`
+  raises `ValueError`), not the main run's own benign
+  cap outcome.
+
+
+**Raises**:
+
+- `ValueError` - If `convergence_window`/`convergence_tolerance`
+  is invalid (`TrailingWindowCriterion`'s own validation),
+  or `max_generations` is not a positive integer.
+
+<a id="fim.model.initial.EquilibriumSplitInitialCondition.generate"></a>
+
+#### generate
+
+```python
+def generate(params: SimulationParams, rng: np.random.Generator) -> ModelState
+```
+
+Return the split generation-zero state, discarding its own outcome.
+
+The `InitialConditionGenerator` Protocol method — satisfied so
+every caller that only ever wants a bare `ModelState` (the GUI's
+own initial-state preview endpoints among them) transparently
+supports this mode too. `fim.engine`'s own run orchestration
+calls `generate_with_outcome` directly instead, to persist what
+this method throws away.
+
+<a id="fim.model.initial.EquilibriumSplitInitialCondition.generate_with_outcome"></a>
+
+#### generate\_with\_outcome
+
+```python
+def generate_with_outcome(
+        params: SimulationParams,
+        rng: np.random.Generator) -> tuple[ModelState, EquilibrationOutcome]
+```
+
+Equilibrate one ancestral population, then split it into `params.d` demes.
+
+**Arguments**:
+
+- `params` - The real, validated `d`-deme run's own parameters —
+  never a second, invalid `SimulationParams(d=1, ...)`;
+  `d` must always be at least 2 (`SimulationParams.
+  __post_init__`), so the ancestral phase runs directly
+  against a bare `ModelState`/`fim.model.operators`
+  primitives instead, extracting only the scalar fields it
+  needs (`mu`, `loci`, `initial_allele_count`, `initial_
+  concentration`, `population_sizes`) from `params`.
+- `rng` - Unused directly — accepted by the strategy contract,
+  but every draw this method makes comes from its own
+  independent, `params.seed`-derived stream (this class's
+  own docstring). Kept as a parameter anyway so this
+  method's signature matches every other strategy's
+  `generate`, and so a future caller cannot accidentally
+  assume it is unused by inspecting the signature alone.
+
+
+**Returns**:
+
+  The split, `params.d`-deme generation-zero state, and the
+  ancestral phase's own recorded outcome.
+
+
+**Raises**:
+
+- `ValueError` - If `params.mutation_model != "infinite_alleles"`,
+  or the ancestral phase does not converge within
+  `max_generations`.
 
 <a id="fim.model.initial.generate_initial_state"></a>
 
