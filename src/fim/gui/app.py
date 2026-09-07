@@ -443,6 +443,13 @@ class Api:
             params = SimulationParams.from_mapping(payload)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
+        # Remembered as `get_initial_form`'s own default for the next
+        # launch only once `values` is known to round-trip through the
+        # exact validation path above — never a value that failed it,
+        # and never re-validated by a second, separate rule of this
+        # store's own (`fim.gui.preferences`'s own top docstring).
+        self._preferences = self._preferences.with_form_values(values)
+        save_preferences(self._preferences_path, self._preferences)
         try:
             output_directory = paths.default_output_directory()
         except FileExistsError as error:
@@ -585,9 +592,37 @@ class Api:
         `config_form.starter_form_values` is the single source of "GUI
         defaults" — the identical values `fim.cli.STARTER_CONFIG` itself
         expands to — so this bridge method adds no logic of its own
-        beyond calling it.
+        beyond calling it. `fim.menu.newConfiguration`'s own explicit,
+        unconditional reset — distinct from `get_initial_form`, just
+        below, which a fresh app launch calls instead.
         """
         return starter_form_values()
+
+    @_log_bridge_call
+    def get_initial_form(self) -> dict[str, str]:
+        """Return the values a fresh app launch's own Input screen should show.
+
+        Prefers the last successfully submitted form
+        (`GuiPreferences.form_values`, saved by `start_run` below) over
+        `get_starter_form`'s own true starter values — the confirmed gap
+        P1 item 4 of the 2026-09-06 open-issues doc names directly
+        ("form values... remain process-local"). Re-validated through
+        the exact same `form_values_to_payload`/`SimulationParams.
+        from_mapping` path `start_run` itself uses: a saved form that no
+        longer validates (a hand-edited file, or a `config_form` field
+        set that changed since it was saved) is discarded wholesale
+        rather than applied partially — `starter_form_values()` is
+        exactly as safe a fallback here as it is for a first-ever launch
+        with nothing saved at all.
+        """
+        values = self._preferences.form_values
+        if values is None:
+            return starter_form_values()
+        try:
+            SimulationParams.from_mapping(form_values_to_payload(values))
+        except ValueError:
+            return starter_form_values()
+        return values
 
     @_log_bridge_call
     def validate_form(self, values: dict[str, str]) -> dict[str, Any]:

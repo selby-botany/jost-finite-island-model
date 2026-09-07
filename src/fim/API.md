@@ -82,6 +82,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [cancel\_run](#fim.gui.app.Api.cancel_run)
     * [open\_output\_folder](#fim.gui.app.Api.open_output_folder)
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
+    * [get\_initial\_form](#fim.gui.app.Api.get_initial_form)
     * [validate\_form](#fim.gui.app.Api.validate_form)
     * [get\_initial\_state\_panels](#fim.gui.app.Api.get_initial_state_panels)
     * [get\_initial\_state\_deme\_pair\_panel](#fim.gui.app.Api.get_initial_state_deme_pair_panel)
@@ -2895,7 +2896,33 @@ Return a fresh form's default values.
 `config_form.starter_form_values` is the single source of "GUI
 defaults" — the identical values `fim.cli.STARTER_CONFIG` itself
 expands to — so this bridge method adds no logic of its own
-beyond calling it.
+beyond calling it. `fim.menu.newConfiguration`'s own explicit,
+unconditional reset — distinct from `get_initial_form`, just
+below, which a fresh app launch calls instead.
+
+<a id="fim.gui.app.Api.get_initial_form"></a>
+
+#### get\_initial\_form
+
+```python
+@_log_bridge_call
+def get_initial_form() -> dict[str, str]
+```
+
+Return the values a fresh app launch's own Input screen should show.
+
+Prefers the last successfully submitted form
+(`GuiPreferences.form_values`, saved by `start_run` below) over
+`get_starter_form`'s own true starter values — the confirmed gap
+P1 item 4 of the 2026-09-06 open-issues doc names directly
+("form values... remain process-local"). Re-validated through
+the exact same `form_values_to_payload`/`SimulationParams.
+from_mapping` path `start_run` itself uses: a saved form that no
+longer validates (a hand-edited file, or a `config_form` field
+set that changed since it was saved) is discarded wholesale
+rather than applied partially — `starter_form_values()` is
+exactly as safe a fallback here as it is for a first-ever launch
+with nothing saved at all.
 
 <a id="fim.gui.app.Api.validate_form"></a>
 

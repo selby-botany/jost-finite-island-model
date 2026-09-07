@@ -144,17 +144,40 @@ async function revalidate() {
 }
 
 /**
- * Fetch the starter form and apply it -- the fetch-and-apply half of
- * entering the `initial` state (`run-view-initial.js`), factored out
- * here alongside every other form-manipulation function so `fim.menu.
- * newConfiguration` and a fresh `initial` transition share the one
- * implementation.
+ * Fetch the true starter form and apply it -- `fim.menu.
+ * newConfiguration`'s own unconditional reset (design doc `20260907-
+ * claude-sonnet-5-gui-preferences-persistence-design.md`: an explicit
+ * "New configuration" always means `STARTER_CONFIG`, never whatever
+ * happens to be saved). `get_starter_form` never includes `max_workers`
+ * (`config_form.starter_form_values`'s own docstring: it is not a
+ * `SimulationParams` field at all), so this fetches and applies
+ * `get_default_max_workers` itself, same as it always has.
+ *
+ * Distinct from `loadInitialForm`, just below, which a fresh app launch
+ * uses instead -- the two used to be the same call (`get_starter_form`)
+ * before saved form values existed to restore, which is exactly the
+ * process-local-only gap P1 item 4 fixes.
  */
 async function resetInputForm() {
     const values = await window.pywebview.api.get_starter_form();
     applyFormValues(values);
     const defaultWorkers = await window.pywebview.api.get_default_max_workers();
     form.elements.namedItem("max_workers").value = String(defaultWorkers);
+    await revalidate();
+}
+
+/**
+ * Fetch this launch's own initial form and apply it -- prefers the last
+ * successfully submitted form (`Api.get_initial_form`, re-validated
+ * server-side) over the true starter values `resetInputForm` above
+ * always uses, so a botanist's own values survive a relaunch. Already
+ * includes a usable `max_workers` (`collectFormValues`'s own `FormData`
+ * scan covers every form field, not only `SimulationParams` ones), so —
+ * unlike `resetInputForm` -- there is no second bridge call to make here.
+ */
+async function loadInitialForm() {
+    const values = await window.pywebview.api.get_initial_form();
+    applyFormValues(values);
     await revalidate();
 }
 

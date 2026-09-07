@@ -162,16 +162,19 @@ function enterInitialState(renderPreview = true) {
 window.fim.enterInitialState = enterInitialState;
 
 /**
- * `fim.menu.newConfiguration` (native File menu) -- a genuine reset,
- * unlike `configureTab`'s own "never resets a field" contract: fetches
- * fresh starter values and applies them, the same as a first app
- * launch. Cycles `window.__fimRunViewReady` false-then-true around the
- * reset so a test (or anything else) waiting for "the form is in a
- * fully settled state" has one reliable signal for both the initial
- * load and a later reset, instead of racing a DOM value change alone --
- * `resetInputForm` still has two more real bridge calls in flight
- * (`get_default_max_workers`, `revalidate`'s own `validate_form`) after
- * `field-N` itself already shows the new value.
+ * `fim.menu.newConfiguration` (native File menu) -- a genuine, explicit
+ * reset to the true `STARTER_CONFIG` values, unlike `configureTab`'s
+ * own "never resets a field" contract. No longer the same as a first
+ * app launch (`initializeRunView`, below, prefers a saved form there
+ * instead) -- an explicit "New configuration" click always means
+ * starter values regardless of what got saved, which is exactly the
+ * distinction P1 item 4's own design doc draws between the two.
+ * Cycles `window.__fimRunViewReady` false-then-true around the reset so
+ * a test (or anything else) waiting for "the form is in a fully settled
+ * state" has one reliable signal, instead of racing a DOM value change
+ * alone -- `resetInputForm` still has two more real bridge calls in
+ * flight (`get_default_max_workers`, `revalidate`'s own `validate_form`)
+ * after `field-N` itself already shows the new value.
  */
 window.fim.menu.newConfiguration = async function newConfiguration() {
     window.fim.showScreen("screen-run");
@@ -187,9 +190,12 @@ window.fim.menu.newConfiguration = async function newConfiguration() {
 
 async function initializeRunView() {
     // Avoid starting a preview against the blank form before its initial
-    // reset has completed.
+    // load has completed. `loadInitialForm` (not `resetInputForm`): a
+    // fresh launch prefers the last successfully submitted form over
+    // the true starter values -- `fim.menu.newConfiguration` above is
+    // the only caller that still wants an unconditional reset.
     enterInitialState(false);
-    await resetInputForm();
+    await loadInitialForm();
     await renderInitialPreview();
     window.__fimRunViewReady = true;
 }

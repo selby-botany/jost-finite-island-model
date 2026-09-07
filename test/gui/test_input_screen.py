@@ -13,12 +13,15 @@ elements, which no Python-only test can check.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
 
+from fim.gui.app import Api, create_window
 from fim.gui.config_form import starter_form_values
+from fim.gui.preferences import GuiPreferences, save_preferences
 
 pytestmark = pytest.mark.gui
 
@@ -201,14 +204,17 @@ def test_input_screen_switches_to_the_tab_with_an_invalid_field(
 def test_menu_new_configuration_resets_an_edited_field(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """`fim.menu.newConfiguration` resets the form to starter values.
+    """`fim.menu.newConfiguration` resets the form to true starter values.
 
     The one behavioral difference from the existing "New run" buttons:
-    those only navigate back to Screen 1,
-    leaving whatever was already in the form; the menu's own "New
-    configuration" genuinely resets it, the same way a fresh app
-    launch's own `initializeInputScreen` does — this test exists
-    specifically to keep that distinction honest.
+    those only navigate back to Screen 1, leaving whatever was already
+    in the form; the menu's own "New configuration" genuinely resets it
+    — this test exists specifically to keep that distinction honest.
+    No longer the same as a fresh app launch's own `initializeRunView`
+    (P1 item 4: a launch now prefers a saved form over starter values,
+    `loadInitialForm` vs. this menu item's own unconditional
+    `resetInputForm`) — see `test_initial_launch_prefers_a_saved_form_
+    over_starter_values`, below, for that distinction's own coverage.
 
     The trigger wraps the call in `setTimeout(..., 0)`, matching
     `fim.gui.app._build_menu`'s own real dispatcher exactly (not a test
@@ -249,6 +255,62 @@ def test_menu_new_configuration_resets_an_edited_field(
     )
 
     assert value["fieldN"] == starter_n
+
+
+def test_initial_launch_prefers_a_saved_form_over_starter_values(
+    tmp_path: Path, drive: Callable[..., Any]
+) -> None:
+    """A fresh launch's own Input screen shows a saved form, not starter values.
+
+    Builds its own window rather than using the shared `window` fixture:
+    the preferences file has to exist on disk *before* `Api.__init__`
+    (and therefore `initializeRunView`'s own `loadInitialForm`) ever
+    runs, and the shared fixture's own window is already built by the
+    time a test body gets to execute at all. `drive` (the fixture) still
+    handles this window exactly like the shared one -- `drive_and_read`
+    takes any `target_window`, not only the fixture's own.
+    """
+    preferences_path = tmp_path / "preferences.json"
+    saved_values = dict(starter_form_values())
+    saved_values["N"] = "424242"
+    save_preferences(preferences_path, GuiPreferences(form_values=saved_values))
+    window = create_window(api=Api(preferences_path=preferences_path), hidden=True)
+
+    field_n = drive(
+        window,
+        trigger="null",
+        read="document.getElementById('field-N').value",
+        ready=_INPUT_SCREEN_READY,
+    )
+
+    assert field_n == "424242"
+
+
+def test_initial_launch_falls_back_to_starter_values_for_an_invalid_saved_form(
+    tmp_path: Path, drive: Callable[..., Any]
+) -> None:
+    """A saved form that no longer validates is discarded, never applied partially.
+
+    `Api.get_initial_form` re-validates through the exact same path
+    `start_run` itself uses (`fim.gui.preferences`'s own module
+    docstring) -- a hand-edited or stale file that fails it falls all
+    the way back to `starter_form_values()`, the same as a first-ever
+    launch with nothing saved at all.
+    """
+    preferences_path = tmp_path / "preferences.json"
+    saved_values = dict(starter_form_values())
+    saved_values["N"] = "not-a-number"
+    save_preferences(preferences_path, GuiPreferences(form_values=saved_values))
+    window = create_window(api=Api(preferences_path=preferences_path), hidden=True)
+
+    field_n = drive(
+        window,
+        trigger="null",
+        read="document.getElementById('field-N').value",
+        ready=_INPUT_SCREEN_READY,
+    )
+
+    assert field_n == starter_form_values()["N"]
 
 
 def test_menu_configure_tab_switches_tabs_without_resetting_the_form(

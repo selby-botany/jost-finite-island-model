@@ -6682,14 +6682,17 @@ def test_menu_new_configuration_resets_an_edited_field(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-`fim.menu.newConfiguration` resets the form to starter values.
+`fim.menu.newConfiguration` resets the form to true starter values.
 
 The one behavioral difference from the existing "New run" buttons:
-those only navigate back to Screen 1,
-leaving whatever was already in the form; the menu's own "New
-configuration" genuinely resets it, the same way a fresh app
-launch's own `initializeInputScreen` does — this test exists
-specifically to keep that distinction honest.
+those only navigate back to Screen 1, leaving whatever was already
+in the form; the menu's own "New configuration" genuinely resets it
+— this test exists specifically to keep that distinction honest.
+No longer the same as a fresh app launch's own `initializeRunView`
+(P1 item 4: a launch now prefers a saved form over starter values,
+`loadInitialForm` vs. this menu item's own unconditional
+`resetInputForm`) — see `test_initial_launch_prefers_a_saved_form_
+over_starter_values`, below, for that distinction's own coverage.
 
 The trigger wraps the call in `setTimeout(..., 0)`, matching
 `fim.gui.app._build_menu`'s own real dispatcher exactly (not a test
@@ -6709,6 +6712,42 @@ the same class of failure `test_open_run_screen.py`'s own
 `refreshRecentRuns`, confirmed as a real, reproducible
 `JavascriptException` (not merely theoretical) against a `results/`
 directory large enough for the bridge call it raced to take real time.
+
+<a id="gui.test_input_screen.test_initial_launch_prefers_a_saved_form_over_starter_values"></a>
+
+#### test\_initial\_launch\_prefers\_a\_saved\_form\_over\_starter\_values
+
+```python
+def test_initial_launch_prefers_a_saved_form_over_starter_values(
+        tmp_path: Path, drive: Callable[..., Any]) -> None
+```
+
+A fresh launch's own Input screen shows a saved form, not starter values.
+
+Builds its own window rather than using the shared `window` fixture:
+the preferences file has to exist on disk *before* `Api.__init__`
+(and therefore `initializeRunView`'s own `loadInitialForm`) ever
+runs, and the shared fixture's own window is already built by the
+time a test body gets to execute at all. `drive` (the fixture) still
+handles this window exactly like the shared one -- `drive_and_read`
+takes any `target_window`, not only the fixture's own.
+
+<a id="gui.test_input_screen.test_initial_launch_falls_back_to_starter_values_for_an_invalid_saved_form"></a>
+
+#### test\_initial\_launch\_falls\_back\_to\_starter\_values\_for\_an\_invalid\_saved\_form
+
+```python
+def test_initial_launch_falls_back_to_starter_values_for_an_invalid_saved_form(
+        tmp_path: Path, drive: Callable[..., Any]) -> None
+```
+
+A saved form that no longer validates is discarded, never applied partially.
+
+`Api.get_initial_form` re-validates through the exact same path
+`start_run` itself uses (`fim.gui.preferences`'s own module
+docstring) -- a hand-edited or stale file that fails it falls all
+the way back to `starter_form_values()`, the same as a first-ever
+launch with nothing saved at all.
 
 <a id="gui.test_input_screen.test_menu_configure_tab_switches_tabs_without_resetting_the_form"></a>
 
