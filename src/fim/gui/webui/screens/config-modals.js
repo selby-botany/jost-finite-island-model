@@ -87,6 +87,14 @@ function syncConditionalVisibility() {
     document.getElementById("mu-mu-field").hidden = muMode !== "mu";
     document.getElementById("mu-mu_b-field").hidden = muMode !== "mu_b";
 
+    const initialConditionsMode = form.elements.namedItem(
+        "initial_conditions_mode"
+    ).value;
+    document.getElementById("initial-conditions-dirichlet-fields").hidden =
+        initialConditionsMode !== "dirichlet";
+    document.getElementById("initial-conditions-equilibrium-fields").hidden =
+        initialConditionsMode !== "equilibrium_split";
+
     document.getElementById("combinator-field").hidden = checkedStatisticCount() < 2;
 
     const nReplicatesField = form.elements.namedItem("n_replicates");
@@ -195,10 +203,29 @@ async function loadInitialForm() {
  * field either way and ignores every field that is not this form's
  * own, without re-deriving that logic by hand.
  */
+// Equilibrium split's own three fields (botanist GUI design doc §4.3)
+// drive a real, possibly-slow ancestral simulation
+// (`EquilibriumSplitInitialCondition`) inside `renderInitialPreview`'s
+// own `get_initial_state_panels` call — unlike every other field here,
+// whose own preview cost is negligible. Re-running that simulation on
+// every "input" event (each keystroke, while a value like "10000" is
+// still being typed one digit at a time) would be wasteful and could
+// make the dialog feel unresponsive, so these three wait for "change"
+// (blur or Enter) instead — the same commit discipline Explore's own
+// fields already use, for the identical reason.
+const EQUILIBRIUM_SPLIT_FIELD_NAMES = [
+    "equilibrium_convergence_window",
+    "equilibrium_convergence_tolerance",
+    "equilibrium_max_generations",
+];
+
 function wireConfigModalEvents() {
     const revalidateIfOwnField = (event) => {
         if (event.target && event.target.form === form) {
             syncConditionalVisibility();
+            const skipPreview =
+                event.type === "input" &&
+                EQUILIBRIUM_SPLIT_FIELD_NAMES.includes(event.target.name);
             // Re-render the `initial` state's own p_0 preview after
             // validation settles, so it tracks the field the visitor
             // is actually editing instead of only ever reflecting
@@ -207,9 +234,13 @@ function wireConfigModalEvents() {
             // values itself and silently no-ops both when the form is
             // not currently valid and when a different state is
             // showing by the time it runs, so calling it unconditionally
-            // here is safe.
+            // here is safe -- except for the three equilibrium fields on
+            // a plain keystroke (`skipPreview`, above), where revalidate
+            // (cheap: parses and range-checks, never simulates) still
+            // runs for live inline error feedback, but the expensive
+            // preview itself waits for "change".
             revalidate().then(() => {
-                if (window.fim.getRunViewState() === "initial") {
+                if (!skipPreview && window.fim.getRunViewState() === "initial") {
                     window.fim.renderInitialPreview();
                 }
             });

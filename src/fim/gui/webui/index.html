@@ -439,14 +439,39 @@
 
   <dialog class="config-modal" id="modal-initial_conditions">
     <h2>Initial conditions</h2>
-    <div class="field">
-      <label for="field-initial_allele_count">initial allele count</label>
-      <input type="text" id="field-initial_allele_count" name="initial_allele_count" form="input-form">
-    </div>
-    <div class="field">
-      <label for="field-initial_concentration">concentration</label>
-      <input type="text" id="field-initial_concentration" name="initial_concentration" form="input-form">
-    </div>
+    <fieldset class="composite" id="initial-conditions-selector">
+      <legend>starting frequencies</legend>
+      <label><input type="radio" name="initial_conditions_mode" value="dirichlet" checked form="input-form"> Dirichlet draw</label>
+      <label><input type="radio" name="initial_conditions_mode" value="equilibrium_split" form="input-form"> equilibrium split</label>
+      <div class="field" id="initial-conditions-dirichlet-fields">
+        <label for="field-initial_allele_count">initial allele count</label>
+        <input type="text" id="field-initial_allele_count" name="initial_allele_count" form="input-form">
+        <label for="field-initial_concentration">concentration</label>
+        <input type="text" id="field-initial_concentration" name="initial_concentration" form="input-form">
+      </div>
+      <!-- Equilibrium split (botanist GUI design doc §4.3): simulates
+           one ancestral panmictic population forward to its own H_S
+           equilibrium, then splits it into the configured `d` demes --
+           `fim.model.initial.EquilibriumSplitInitialCondition`. This is
+           itself a real, possibly-slow simulation (it runs until its
+           own trailing-window criterion converges, or its own
+           max_generations cap), so it recomputes only when this modal
+           closes (`config-modals.js`'s own dialog-close-triggered
+           `renderInitialPreview`), never live per keystroke. -->
+      <div class="field" id="initial-conditions-equilibrium-fields" hidden>
+        <p class="hint">
+          Simulates one ancestral population of size N&times;d forward
+          (no migration) until its own heterozygosity stabilizes, then
+          splits it into d demes. Can take real time for a large N or d.
+        </p>
+        <label for="field-equilibrium_convergence_window">convergence window</label>
+        <input type="text" id="field-equilibrium_convergence_window" name="equilibrium_convergence_window" form="input-form">
+        <label for="field-equilibrium_convergence_tolerance">convergence tolerance</label>
+        <input type="text" id="field-equilibrium_convergence_tolerance" name="equilibrium_convergence_tolerance" form="input-form">
+        <label for="field-equilibrium_max_generations">max generations</label>
+        <input type="text" id="field-equilibrium_max_generations" name="equilibrium_max_generations" form="input-form">
+      </div>
+    </fieldset>
     <p class="loaded-summary" id="p0-summary" hidden></p>
     <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>

@@ -265,6 +265,100 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
     assert settled["generationLabel"] != ""
 
 
+# Selects the "equilibrium split" radio (`config-modals.js`'s own
+# `initial_conditions_mode` selector) and fills its three fields with
+# values chosen to converge almost immediately — a loose tolerance
+# (`1.0`, effectively "the first two half-windows never differ enough to
+# matter") over a `2`-generation window, capped at `10` generations,
+# against an `N=4`, `d=2` ancestral population (`sum(N) == 8`) small
+# enough that `EquilibriumSplitInitialCondition`'s own drift/mutation
+# steps cost nothing measurable. Proves the real end-to-end pipeline
+# (mode toggle -> payload inclusion -> `generate_initial_state`'s own
+# dispatch -> a real run) works, not only `test_config_form.py`'s own
+# marshaling-level round trip.
+_SET_EQUILIBRIUM_SPLIT_FIELDS = """
+function setField(name, value) {
+    const field = document.getElementById(`field-${name}`);
+    field.value = value;
+    field.dispatchEvent(new Event('input', {bubbles: true}));
+}
+setField('N', '4');
+setField('d', '2');
+setField('seed', '20260814');
+setField('m_rate', '0.1');
+setField('mu_value', '0.01');
+setField('locus_lengths', '200');
+setField('convergence_window', '4');
+setField('convergence_tolerance', '1.0');
+setField('max_generations', '10');
+setField('n_replicates', '1');
+document.querySelector(
+    'input[name="initial_conditions_mode"][value="equilibrium_split"]'
+).click();
+setField('equilibrium_convergence_window', '2');
+setField('equilibrium_convergence_tolerance', '1.0');
+setField('equilibrium_max_generations', '10');
+"""
+
+
+def test_run_button_starts_a_real_equilibrium_split_run() -> None:
+    """A real run using the equilibrium-split initial condition completes.
+
+    Same event-driven "wait on a real `threading.Event`, never poll a
+    live background run" shape as `test_run_button_starts_a_real_run_
+    that_pushes_live_progress`, above, for the identical reason that
+    test's own docstring records.
+    """
+    started_event = threading.Event()
+    done_event = threading.Event()
+    messages: list[RunMessage | BatchMessage] = []
+
+    def on_run_started() -> None:
+        started_event.set()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        messages.append(message)
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(
+        api=Api(on_run_started=on_run_started, on_message=on_message), hidden=True
+    )
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_EQUILIBRIUM_SPLIT_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                settled = window.evaluate_js(
+                    "({"
+                    "runViewState: window.fim.getRunViewState(), "
+                    "outcomeText: document.getElementById('results-outcome')"
+                    ".textContent"
+                    "})"
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, (
+        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
+        f"(start_run called: {started_event.is_set()}, "
+        f"messages received: {messages!r})"
+    )
+    assert settled["runViewState"] == "completed"
+    assert settled["outcomeText"] != ""
+    assert messages[-1][0] == "done"
+
+
 def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
     """Clicking Cancel reaches the same real background run `Api.start_run` started.
 

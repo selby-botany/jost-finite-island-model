@@ -6471,6 +6471,113 @@ def test_mu_from_params_scalar_mu_renders_mu_mode() -> None
 
 A scalar `params.mu` always renders as `mu_mode="mu"`.
 
+<a id="gui.test_config_form.test_initial_conditions_to_payload_dirichlet_omits_equilibrium_fields"></a>
+
+#### test\_initial\_conditions\_to\_payload\_dirichlet\_omits\_equilibrium\_fields
+
+```python
+def test_initial_conditions_to_payload_dirichlet_omits_equilibrium_fields(
+) -> None
+```
+
+Dirichlet mode's payload has none of the three equilibrium keys at all.
+
+Omitted, not set to `None` or an empty string — `SimulationParams.
+from_mapping`'s own equilibrium fields default to `None` by
+absence, exactly like `replicate_tolerance`'s own omission
+convention.
+
+<a id="gui.test_config_form.test_initial_conditions_to_payload_equilibrium_split_mode_parses_all_three"></a>
+
+#### test\_initial\_conditions\_to\_payload\_equilibrium\_split\_mode\_parses\_all\_three
+
+```python
+def test_initial_conditions_to_payload_equilibrium_split_mode_parses_all_three(
+) -> (None)
+```
+
+Equilibrium-split mode submits all three fields, parsed to their own types.
+
+<a id="gui.test_config_form.test_initial_conditions_to_payload_rejects_an_invalid_equilibrium_field"></a>
+
+#### test\_initial\_conditions\_to\_payload\_rejects\_an\_invalid\_equilibrium\_field
+
+```python
+def test_initial_conditions_to_payload_rejects_an_invalid_equilibrium_field(
+) -> None
+```
+
+A bad equilibrium field's own error names that field, like any other.
+
+<a id="gui.test_config_form.test_initial_conditions_from_params_dirichlet_is_all_empty"></a>
+
+#### test\_initial\_conditions\_from\_params\_dirichlet\_is\_all\_empty
+
+```python
+def test_initial_conditions_from_params_dirichlet_is_all_empty() -> None
+```
+
+An ordinary Dirichlet-mode configuration renders empty equilibrium fields.
+
+<a id="gui.test_config_form.test_initial_conditions_from_params_equilibrium_split_round_trips"></a>
+
+#### test\_initial\_conditions\_from\_params\_equilibrium\_split\_round\_trips
+
+```python
+def test_initial_conditions_from_params_equilibrium_split_round_trips(
+) -> None
+```
+
+An equilibrium-split configuration's three fields render back exactly.
+
+<a id="gui.test_config_form.test_form_values_to_payload_equilibrium_split_round_trips"></a>
+
+#### test\_form\_values\_to\_payload\_equilibrium\_split\_round\_trips
+
+```python
+def test_form_values_to_payload_equilibrium_split_round_trips() -> None
+```
+
+A full form submission in equilibrium-split mode builds a valid configuration.
+
+<a id="gui.test_config_form.test_equilibrium_split_errors_route_to_the_initial_conditions_tab"></a>
+
+#### test\_equilibrium\_split\_errors\_route\_to\_the\_initial\_conditions\_tab
+
+```python
+@pytest.mark.parametrize(
+    ("message", "expected_field", "expected_tab"),
+    [
+        (
+            "equilibrium_convergence_tolerance must be finite and non-negative",
+            "equilibrium_convergence_tolerance",
+            "initial_conditions",
+        ),
+        (
+            "equilibrium_convergence_window, equilibrium_convergence_tolerance, "
+            "and equilibrium_max_generations must be set together, or not at all",
+            None,
+            "initial_conditions",
+        ),
+        (
+            "equilibrium-split fields cannot be combined with an explicit p_0",
+            None,
+            "initial_conditions",
+        ),
+    ],
+)
+def test_equilibrium_split_errors_route_to_the_initial_conditions_tab(
+        message: str, expected_field: str | None, expected_tab: str) -> None
+```
+
+Every equilibrium-split validation message reaches the right tab.
+
+A message naming one specific field (the tolerance range check)
+also highlights that field directly; the two "group" messages (all-
+or-none, and the `p_0` conflict) name no single field, so only the
+tab is located — the same distinction `m`/`mu_b`'s own composite
+errors already draw.
+
 <a id="gui.test_config_form.test_mu_from_params_rejects_a_genuinely_per_locus_mu"></a>
 
 #### test\_mu\_from\_params\_rejects\_a\_genuinely\_per\_locus\_mu
@@ -7903,6 +8010,21 @@ fast-converging run for exactly that reason. `progress-generation-
 label` starts empty in the markup and is set only by `onRunProgress`,
 so it stays a direct, generation-number-independent proof a push
 landed.
+
+<a id="gui.test_running_screen.test_run_button_starts_a_real_equilibrium_split_run"></a>
+
+#### test\_run\_button\_starts\_a\_real\_equilibrium\_split\_run
+
+```python
+def test_run_button_starts_a_real_equilibrium_split_run() -> None
+```
+
+A real run using the equilibrium-split initial condition completes.
+
+Same event-driven "wait on a real `threading.Event`, never poll a
+live background run" shape as `test_run_button_starts_a_real_run_
+that_pushes_live_progress`, above, for the identical reason that
+test's own docstring records.
 
 <a id="gui.test_running_screen.test_cancel_button_stops_the_run_and_shows_the_cancelled_banner"></a>
 

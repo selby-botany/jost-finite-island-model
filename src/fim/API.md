@@ -128,6 +128,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [m\_from\_params](#fim.gui.config_form.m_from_params)
   * [mu\_to\_payload](#fim.gui.config_form.mu_to_payload)
   * [mu\_from\_params](#fim.gui.config_form.mu_from_params)
+  * [initial\_conditions\_to\_payload](#fim.gui.config_form.initial_conditions_to_payload)
+  * [initial\_conditions\_from\_params](#fim.gui.config_form.initial_conditions_from_params)
   * [convergence\_statistic\_to\_payload](#fim.gui.config_form.convergence_statistic_to_payload)
   * [convergence\_statistic\_from\_params](#fim.gui.config_form.convergence_statistic_from_params)
   * [p0\_summary\_from\_params](#fim.gui.config_form.p0_summary_from_params)
@@ -4228,6 +4230,68 @@ Render `params.mu` back into the mu/mu_b selector's form-value keys.
   so the message says to edit the YAML file directly, the
   same pattern this form already uses for every other
   construct it cannot represent at all.
+
+<a id="fim.gui.config_form.initial_conditions_to_payload"></a>
+
+#### initial\_conditions\_to\_payload
+
+```python
+def initial_conditions_to_payload(
+        values: Mapping[str, str]) -> dict[str, object]
+```
+
+Build the `equilibrium_*` payload keys from the selector's mode.
+
+**Arguments**:
+
+- `values` - The full form-values mapping; only
+  `initial_conditions_mode`, `equilibrium_convergence_window`,
+  `equilibrium_convergence_tolerance`, and
+  `equilibrium_max_generations` are read.
+
+
+**Returns**:
+
+  An empty mapping in `"dirichlet"` mode (the three fields are
+  simply absent from the payload, exactly like an unset
+  `replicate_tolerance`'s own `None`-by-omission convention);
+  otherwise the three fields, parsed to their declared types.
+
+
+**Raises**:
+
+- `ValueError` - If `"equilibrium_split"` mode is selected and any
+  of the three fields' text does not parse as its declared
+  type. Every message begins with the field's own name,
+  matching `SimulationParams.from_mapping`'s own wording —
+  `field_for_error` locates each of the three individually,
+  the same as any other plain `FormField`.
+
+<a id="fim.gui.config_form.initial_conditions_from_params"></a>
+
+#### initial\_conditions\_from\_params
+
+```python
+def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]
+```
+
+Render `params`'s `equilibrium_*` fields into the selector's form-value keys.
+
+**Arguments**:
+
+- `params` - A validated configuration.
+
+
+**Returns**:
+
+  `initial_conditions_mode`/`equilibrium_convergence_window`/
+  `equilibrium_convergence_tolerance`/`equilibrium_max_generations`.
+  The three equilibrium fields render as empty strings in
+  `"dirichlet"` mode (`params.equilibrium_convergence_window is
+  None`, guaranteed to mean all three are `None` together by
+  `SimulationParams`'s own all-or-none validation) rather than
+  `"None"` — an empty field, not a placeholder value the user
+  would otherwise have to notice and clear.
 
 <a id="fim.gui.config_form.convergence_statistic_to_payload"></a>
 

@@ -205,6 +205,10 @@ _COMPOSITE_FIELD_TABS: Final[Mapping[str, str]] = {
     "mu": "mutation",
     "mu_b": "mutation",
     "convergence_statistic": "convergence",
+    "equilibrium": "initial_conditions",
+    "equilibrium_convergence_window": "initial_conditions",
+    "equilibrium_convergence_tolerance": "initial_conditions",
+    "equilibrium_max_generations": "initial_conditions",
 }
 
 
@@ -252,7 +256,15 @@ def tab_for_error(message: str) -> str | None:
     # of "m.topology", "m.rate", "mu", and "mu_b", so checking it first
     # would misroute every one of those to Migration instead of their
     # own tab.
-    for name in ("m.topology", "m.rate", "mu_b", "mu", "m", "convergence_statistic"):
+    for name in (
+        "m.topology",
+        "m.rate",
+        "mu_b",
+        "mu",
+        "m",
+        "convergence_statistic",
+        "equilibrium",
+    ):
         if message.startswith(name):
             return tab_for_field(name)
     return None
@@ -285,6 +297,22 @@ def field_for_error(message: str) -> str | None:
             continue
         if message.startswith(f"{field.name} "):
             return field.name
+    # The three equilibrium-split fields (§4.3): each a plain,
+    # single-widget leaf like any other field — unlike `m`/`mu_b`,
+    # which span several alternate representations with no one single
+    # widget — but excluded from `all_fields()`/`TABS` itself (not from
+    # `INITIAL_CONDITIONS_FIELDS`) because their presence in the
+    # payload is conditional on `initial_conditions_mode`
+    # (`initial_conditions_to_payload`), unlike every ordinary
+    # `FormField` `form_values_to_payload`'s main loop includes
+    # unconditionally.
+    for name in (
+        "equilibrium_convergence_window",
+        "equilibrium_convergence_tolerance",
+        "equilibrium_max_generations",
+    ):
+        if message.startswith(f"{name} "):
+            return name
     return None
 
 
@@ -327,6 +355,7 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
             payload[field.name] = text
     payload["m"] = m_to_payload(values)
     payload.update(mu_to_payload(values))
+    payload.update(initial_conditions_to_payload(values))
     payload["convergence_statistic"] = convergence_statistic_to_payload(values)
     return payload
 
@@ -471,6 +500,97 @@ def mu_from_params(params: SimulationParams) -> dict[str, str]:
     return {"mu_mode": "mu", "mu_value": str(params.mu), "mu_b_value": ""}
 
 
+# The two initial-conditions modes (botanist GUI design doc §4.3):
+# `"dirichlet"` (the library default — `initial_allele_count`/
+# `initial_concentration`, both always present, plain `FormField`s
+# already on `INITIAL_CONDITIONS_FIELDS`) and `"equilibrium_split"`
+# (`fim.model.initial.EquilibriumSplitInitialCondition`, triggered by
+# its own three `equilibrium_*` fields' joint presence — see
+# `initial_conditions_to_payload`, below). Unlike `m`'s scalar-vs-
+# topology modes or `mu`'s mu-vs-mu_b modes, the two are not mutually
+# exclusive at the `SimulationParams` level (`initial_allele_count`/
+# `initial_concentration` stay set and simply go unused whenever the
+# equilibrium fields are also set — `generate_initial_state`'s own
+# dispatch checks the equilibrium fields first) — only the *payload
+# inclusion* of the three equilibrium fields is mode-gated here.
+InitialConditionsMode = Literal["dirichlet", "equilibrium_split"]
+
+
+def initial_conditions_to_payload(values: Mapping[str, str]) -> dict[str, object]:
+    """Build the `equilibrium_*` payload keys from the selector's mode.
+
+    Args:
+        values: The full form-values mapping; only
+            `initial_conditions_mode`, `equilibrium_convergence_window`,
+            `equilibrium_convergence_tolerance`, and
+            `equilibrium_max_generations` are read.
+
+    Returns:
+        An empty mapping in `"dirichlet"` mode (the three fields are
+        simply absent from the payload, exactly like an unset
+        `replicate_tolerance`'s own `None`-by-omission convention);
+        otherwise the three fields, parsed to their declared types.
+
+    Raises:
+        ValueError: If `"equilibrium_split"` mode is selected and any
+            of the three fields' text does not parse as its declared
+            type. Every message begins with the field's own name,
+            matching `SimulationParams.from_mapping`'s own wording —
+            `field_for_error` locates each of the three individually,
+            the same as any other plain `FormField`.
+    """
+    mode = values.get("initial_conditions_mode", "dirichlet")
+    if mode != "equilibrium_split":
+        return {}
+    return {
+        "equilibrium_convergence_window": _parse_int_named(
+            "equilibrium_convergence_window",
+            values["equilibrium_convergence_window"].strip(),
+        ),
+        "equilibrium_convergence_tolerance": _parse_float_named(
+            "equilibrium_convergence_tolerance",
+            values["equilibrium_convergence_tolerance"].strip(),
+        ),
+        "equilibrium_max_generations": _parse_int_named(
+            "equilibrium_max_generations",
+            values["equilibrium_max_generations"].strip(),
+        ),
+    }
+
+
+def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]:
+    """Render `params`'s `equilibrium_*` fields into the selector's form-value keys.
+
+    Args:
+        params: A validated configuration.
+
+    Returns:
+        `initial_conditions_mode`/`equilibrium_convergence_window`/
+        `equilibrium_convergence_tolerance`/`equilibrium_max_generations`.
+        The three equilibrium fields render as empty strings in
+        `"dirichlet"` mode (`params.equilibrium_convergence_window is
+        None`, guaranteed to mean all three are `None` together by
+        `SimulationParams`'s own all-or-none validation) rather than
+        `"None"` — an empty field, not a placeholder value the user
+        would otherwise have to notice and clear.
+    """
+    if params.equilibrium_convergence_window is None:
+        return {
+            "initial_conditions_mode": "dirichlet",
+            "equilibrium_convergence_window": "",
+            "equilibrium_convergence_tolerance": "",
+            "equilibrium_max_generations": "",
+        }
+    return {
+        "initial_conditions_mode": "equilibrium_split",
+        "equilibrium_convergence_window": str(params.equilibrium_convergence_window),
+        "equilibrium_convergence_tolerance": str(
+            params.equilibrium_convergence_tolerance
+        ),
+        "equilibrium_max_generations": str(params.equilibrium_max_generations),
+    }
+
+
 def convergence_statistic_to_payload(values: Mapping[str, str]) -> str | list[str]:
     """Build `convergence_statistic`'s payload from the multi-select checkboxes.
 
@@ -574,6 +694,7 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
     }
     values.update(m_from_params(params))
     values.update(mu_from_params(params))
+    values.update(initial_conditions_from_params(params))
     values.update(convergence_statistic_from_params(params))
     return values
 
@@ -609,6 +730,9 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "mutation_model",
     "initial_allele_count",
     "initial_concentration",
+    "equilibrium_convergence_window",
+    "equilibrium_convergence_tolerance",
+    "equilibrium_max_generations",
     "deme_weighting",
     "convergence_statistic",
     "convergence_combinator",

@@ -301,6 +301,146 @@ def test_mu_from_params_scalar_mu_renders_mu_mode() -> None:
     assert values == {"mu_mode": "mu", "mu_value": "0.002", "mu_b_value": ""}
 
 
+def test_initial_conditions_to_payload_dirichlet_omits_equilibrium_fields() -> None:
+    """Dirichlet mode's payload has none of the three equilibrium keys at all.
+
+    Omitted, not set to `None` or an empty string — `SimulationParams.
+    from_mapping`'s own equilibrium fields default to `None` by
+    absence, exactly like `replicate_tolerance`'s own omission
+    convention.
+    """
+    payload = config_form.initial_conditions_to_payload(
+        {
+            "initial_conditions_mode": "dirichlet",
+            "equilibrium_convergence_window": "",
+            "equilibrium_convergence_tolerance": "",
+            "equilibrium_max_generations": "",
+        }
+    )
+
+    assert payload == {}
+
+
+def test_initial_conditions_to_payload_equilibrium_split_mode_parses_all_three() -> (
+    None
+):
+    """Equilibrium-split mode submits all three fields, parsed to their own types."""
+    payload = config_form.initial_conditions_to_payload(
+        {
+            "initial_conditions_mode": "equilibrium_split",
+            "equilibrium_convergence_window": "50",
+            "equilibrium_convergence_tolerance": "0.01",
+            "equilibrium_max_generations": "10000",
+        }
+    )
+
+    assert payload == {
+        "equilibrium_convergence_window": 50,
+        "equilibrium_convergence_tolerance": 0.01,
+        "equilibrium_max_generations": 10000,
+    }
+
+
+def test_initial_conditions_to_payload_rejects_an_invalid_equilibrium_field() -> None:
+    """A bad equilibrium field's own error names that field, like any other."""
+    with pytest.raises(ValueError, match="equilibrium_max_generations must be"):
+        config_form.initial_conditions_to_payload(
+            {
+                "initial_conditions_mode": "equilibrium_split",
+                "equilibrium_convergence_window": "50",
+                "equilibrium_convergence_tolerance": "0.01",
+                "equilibrium_max_generations": "not-a-number",
+            }
+        )
+
+
+def test_initial_conditions_from_params_dirichlet_is_all_empty() -> None:
+    """An ordinary Dirichlet-mode configuration renders empty equilibrium fields."""
+    values = config_form.initial_conditions_from_params(_params())
+
+    assert values == {
+        "initial_conditions_mode": "dirichlet",
+        "equilibrium_convergence_window": "",
+        "equilibrium_convergence_tolerance": "",
+        "equilibrium_max_generations": "",
+    }
+
+
+def test_initial_conditions_from_params_equilibrium_split_round_trips() -> None:
+    """An equilibrium-split configuration's three fields render back exactly."""
+    params = _params(
+        equilibrium_convergence_window=50,
+        equilibrium_convergence_tolerance=0.01,
+        equilibrium_max_generations=10000,
+    )
+
+    values = config_form.initial_conditions_from_params(params)
+
+    assert values == {
+        "initial_conditions_mode": "equilibrium_split",
+        "equilibrium_convergence_window": "50",
+        "equilibrium_convergence_tolerance": "0.01",
+        "equilibrium_max_generations": "10000",
+    }
+
+
+def test_form_values_to_payload_equilibrium_split_round_trips() -> None:
+    """A full form submission in equilibrium-split mode builds a valid configuration."""
+    values = dict(config_form.starter_form_values())
+    values.update(
+        config_form.initial_conditions_from_params(
+            _params(
+                equilibrium_convergence_window=50,
+                equilibrium_convergence_tolerance=0.01,
+                equilibrium_max_generations=10000,
+            )
+        )
+    )
+
+    payload = config_form.form_values_to_payload(values)
+    params = SimulationParams.from_mapping(payload)
+
+    assert params.equilibrium_convergence_window == 50
+    assert params.equilibrium_convergence_tolerance == 0.01
+    assert params.equilibrium_max_generations == 10000
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_field", "expected_tab"),
+    [
+        (
+            "equilibrium_convergence_tolerance must be finite and non-negative",
+            "equilibrium_convergence_tolerance",
+            "initial_conditions",
+        ),
+        (
+            "equilibrium_convergence_window, equilibrium_convergence_tolerance, "
+            "and equilibrium_max_generations must be set together, or not at all",
+            None,
+            "initial_conditions",
+        ),
+        (
+            "equilibrium-split fields cannot be combined with an explicit p_0",
+            None,
+            "initial_conditions",
+        ),
+    ],
+)
+def test_equilibrium_split_errors_route_to_the_initial_conditions_tab(
+    message: str, expected_field: str | None, expected_tab: str
+) -> None:
+    """Every equilibrium-split validation message reaches the right tab.
+
+    A message naming one specific field (the tolerance range check)
+    also highlights that field directly; the two "group" messages (all-
+    or-none, and the `p_0` conflict) name no single field, so only the
+    tab is located — the same distinction `m`/`mu_b`'s own composite
+    errors already draw.
+    """
+    assert config_form.field_for_error(message) == expected_field
+    assert config_form.tab_for_error(message) == expected_tab
+
+
 def test_mu_from_params_rejects_a_genuinely_per_locus_mu() -> None:
     """A per-locus `mu` (unequal rates across loci) has no form representation."""
     params = _params(
