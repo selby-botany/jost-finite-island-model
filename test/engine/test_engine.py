@@ -2547,6 +2547,94 @@ def test_fim_default_lineal_records_engine_backend_in_the_manifest(
     assert result.manifest.engine_backend == "lineal"
 
 
+def test_fim_records_equilibrium_split_provenance_in_the_manifest(
+    tiny_params: SimulationParams,
+) -> None:
+    """A real, small equilibrium-split run populates all three new manifest fields.
+
+    `20260907-claude-sonnet-5-equilibrium-split-design.md`, decision 5.
+    `equilibrium_convergence_window=2`/`equilibrium_convergence_tolerance=
+    1.0` guarantee convergence as soon as the trailing window fills (`H_S`
+    is bounded in `[0, 1)`, so any two values are within a tolerance of
+    `1.0`) -- exercising at least one real mutate/drift step of the
+    ancestral phase without a slow test.
+    """
+    params = replace(
+        tiny_params,
+        equilibrium_convergence_window=2,
+        equilibrium_convergence_tolerance=1.0,
+        equilibrium_max_generations=50,
+    )
+
+    result = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        clock=_clock,
+    )
+
+    assert isinstance(result, RunResult)
+    manifest = result.manifest
+    assert manifest.initial_condition_mode == "equilibrium_split"
+    assert manifest.equilibrium_generation_count is not None
+    assert manifest.equilibrium_generation_count >= 1
+    assert manifest.equilibrium_final_heterozygosity is not None
+    assert 0.0 <= manifest.equilibrium_final_heterozygosity < 1.0
+
+
+def test_fim_records_equilibrium_split_provenance_under_the_generational_backend(
+    tiny_params: SimulationParams,
+) -> None:
+    """The Generational backend's own separate manifest-construction path
+    (`_finalize_replica_lane`, not `_run_one`) records the identical
+    provenance -- both code paths call `_generate_initial_state_with_
+    outcome` independently, so both need their own coverage.
+    """
+    params = replace(
+        tiny_params,
+        equilibrium_convergence_window=2,
+        equilibrium_convergence_tolerance=1.0,
+        equilibrium_max_generations=50,
+    )
+
+    result = fim(
+        params.N,
+        params.m,
+        params.mu,
+        params.d,
+        params=params,
+        clock=_clock,
+        engine_backend="generational",
+    )
+
+    assert isinstance(result, RunResult)
+    manifest = result.manifest
+    assert manifest.initial_condition_mode == "equilibrium_split"
+    assert manifest.equilibrium_generation_count is not None
+    assert manifest.equilibrium_final_heterozygosity is not None
+
+
+def test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none(
+    tiny_params: SimulationParams,
+) -> None:
+    """An ordinary Dirichlet-prior run never populates the equilibrium-only fields."""
+    result = fim(
+        tiny_params.N,
+        tiny_params.m,
+        tiny_params.mu,
+        tiny_params.d,
+        params=tiny_params,
+        clock=_clock,
+    )
+
+    assert isinstance(result, RunResult)
+    assert result.manifest.initial_condition_mode == "dirichlet"
+    assert result.manifest.equilibrium_generation_count is None
+    assert result.manifest.equilibrium_final_heterozygosity is None
+
+
 def test_fim_auto_records_the_resolved_choice_not_the_literal_auto() -> None:
     """`"auto"`'s own manifest never contains the literal string `"auto"`.
 

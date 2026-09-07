@@ -123,7 +123,11 @@ from fim.model.allele import (
     FiniteAlleleRegistry,
     FiniteAlleleSpace,
 )
-from fim.model.initial import generate_initial_state
+from fim.model.initial import (
+    EquilibrationOutcome,
+    EquilibriumSplitInitialCondition,
+    generate_initial_state,
+)
 from fim.model.locus import finite_allele_capacity
 from fim.model.operators import _population_sizes, step
 from fim.model.params import (
@@ -558,6 +562,13 @@ class ReplicaLane:
     `None`) by `_finalize_replica_lane` the instant a lane stops, not
     held for the rest of the batch's own run — see that function's own
     docstring (`FIM-48`).
+
+    `equilibration_outcome` is set once, by `_build_replica_lane`
+    (`_generate_initial_state_with_outcome`'s own return value), and
+    only when this lane's own `params` configured equilibrium-split —
+    `None` for every other initial-condition mode. `_finalize_replica_
+    lane` reads it to populate this lane's own manifest fields and
+    `equilibrium_trajectory.jsonl` artifact.
     """
 
     replica_index: int
@@ -573,6 +584,7 @@ class ReplicaLane:
     result: RunResult | None = None
     migration_weights: tuple[np.ndarray, ...] | None = None
     vectorized_state: VectorizedState | None = None
+    equilibration_outcome: EquilibrationOutcome | None = None
 
 
 class Advancer(Protocol):
@@ -1003,7 +1015,9 @@ def _build_replica_lane(
         statistics=lane_params.convergence_statistics,
         combinator=lane_params.convergence_combinator,
     )
-    state = generate_initial_state(lane_params, rng)
+    state, equilibration_outcome = _generate_initial_state_with_outcome(
+        lane_params, rng
+    )
     highest_initial_id = max(
         (
             int(allele_id)
@@ -1033,6 +1047,7 @@ def _build_replica_lane(
         finite_alleles=finite_alleles,
         monitor=monitor,
         started_at=started_at,
+        equilibration_outcome=equilibration_outcome,
     )
 
 
@@ -1097,6 +1112,17 @@ def _finalize_replica_lane(
         generation=lane.state.generation,
         generation_count=len(lane.monitor.generations),
         software_version=__version__,
+        initial_condition_mode=_initial_condition_mode(lane.params),
+        equilibrium_generation_count=(
+            lane.equilibration_outcome.generation_count
+            if lane.equilibration_outcome is not None
+            else None
+        ),
+        equilibrium_final_heterozygosity=(
+            lane.equilibration_outcome.final_heterozygosity
+            if lane.equilibration_outcome is not None
+            else None
+        ),
     )
     return RunResult(
         run_id=lane.run_id,
@@ -2293,6 +2319,56 @@ def bootstrap_replicate_summary(
     return summary
 
 
+def _generate_initial_state_with_outcome(
+    params: SimulationParams,
+    rng: np.random.Generator,
+) -> tuple[ModelState, EquilibrationOutcome | None]:
+    """Generate generation zero, capturing the equilibration outcome when relevant.
+
+    `generate_initial_state` itself always discards `EquilibriumSplit
+    InitialCondition`'s own richer `EquilibrationOutcome` (see that
+    function's own docstring) — `_build_replica_lane`/`_run_one`, this
+    function's own two callers, are the ones that actually need it, to
+    persist it into this run's own manifest and `equilibrium_
+    trajectory.jsonl` (`20260907-claude-sonnet-5-equilibrium-split-
+    design.md`, decision 5). The dispatch condition below intentionally
+    mirrors `generate_initial_state`'s own: `SimulationParams.
+    __post_init__` guarantees all three `equilibrium_*` fields are set
+    together or not at all, so checking all three here (rather than
+    reusing that function's own boolean result) is what actually lets
+    the fields be passed to `EquilibriumSplitInitialCondition` below
+    without a further, unchecked `None` for type-checking purposes.
+    """
+    if (
+        params.equilibrium_convergence_window is not None
+        and params.equilibrium_convergence_tolerance is not None
+        and params.equilibrium_max_generations is not None
+    ):
+        generator = EquilibriumSplitInitialCondition(
+            convergence_window=params.equilibrium_convergence_window,
+            convergence_tolerance=params.equilibrium_convergence_tolerance,
+            max_generations=params.equilibrium_max_generations,
+        )
+        return generator.generate_with_outcome(params, rng)
+    return generate_initial_state(params, rng), None
+
+
+def _initial_condition_mode(params: SimulationParams) -> str:
+    """Return this run's own resolved initial-condition strategy name.
+
+    `RunManifest.initial_condition_mode`'s own value — computed here
+    rather than stored as a matching `SimulationParams` field, the same
+    "record the resolved runtime choice, not a repeated copy of the
+    dispatch rule" shape `engine_backend`'s own manifest field already
+    uses for `engine_backend="auto"`.
+    """
+    if params.equilibrium_convergence_window is not None:
+        return "equilibrium_split"
+    if params.initial_frequencies is not None:
+        return "explicit"
+    return "dirichlet"
+
+
 def _build_finite_allele_spaces(
     state: ModelState,
     params: SimulationParams,
@@ -2672,7 +2748,7 @@ def _run_one(
     # numbering has to start strictly after the highest id already in
     # use, or a freshly minted mutation could collide with (and be
     # mistaken for) an allele that was already present at the start.
-    state = generate_initial_state(params, rng)
+    state, equilibration_outcome = _generate_initial_state_with_outcome(params, rng)
     highest_initial_id = max(
         (
             int(allele_id)
@@ -2781,6 +2857,17 @@ def _run_one(
         generation=state.generation,
         generation_count=len(monitor.generations),
         software_version=__version__,
+        initial_condition_mode=_initial_condition_mode(params),
+        equilibrium_generation_count=(
+            equilibration_outcome.generation_count
+            if equilibration_outcome is not None
+            else None
+        ),
+        equilibrium_final_heterozygosity=(
+            equilibration_outcome.final_heterozygosity
+            if equilibration_outcome is not None
+            else None
+        ),
     )
     return RunResult(
         run_id=run_id,

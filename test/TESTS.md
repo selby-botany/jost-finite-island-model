@@ -3774,6 +3774,49 @@ def test_fim_default_lineal_records_engine_backend_in_the_manifest(
 
 Even the untouched default (`"lineal"`) gets recorded, not left `None`.
 
+<a id="engine.test_engine.test_fim_records_equilibrium_split_provenance_in_the_manifest"></a>
+
+#### test\_fim\_records\_equilibrium\_split\_provenance\_in\_the\_manifest
+
+```python
+def test_fim_records_equilibrium_split_provenance_in_the_manifest(
+        tiny_params: SimulationParams) -> None
+```
+
+A real, small equilibrium-split run populates all three new manifest fields.
+
+`20260907-claude-sonnet-5-equilibrium-split-design.md`, decision 5.
+`equilibrium_convergence_window=2`/`equilibrium_convergence_tolerance=
+1.0` guarantee convergence as soon as the trailing window fills (`H_S`
+is bounded in `[0, 1)`, so any two values are within a tolerance of
+`1.0`) -- exercising at least one real mutate/drift step of the
+ancestral phase without a slow test.
+
+<a id="engine.test_engine.test_fim_records_equilibrium_split_provenance_under_the_generational_backend"></a>
+
+#### test\_fim\_records\_equilibrium\_split\_provenance\_under\_the\_generational\_backend
+
+```python
+def test_fim_records_equilibrium_split_provenance_under_the_generational_backend(
+        tiny_params: SimulationParams) -> None
+```
+
+The Generational backend's own separate manifest-construction path
+(`_finalize_replica_lane`, not `_run_one`) records the identical
+provenance -- both code paths call `_generate_initial_state_with_
+outcome` independently, so both need their own coverage.
+
+<a id="engine.test_engine.test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none"></a>
+
+#### test\_fim\_dirichlet\_run\_leaves\_equilibrium\_manifest\_fields\_none
+
+```python
+def test_fim_dirichlet_run_leaves_equilibrium_manifest_fields_none(
+        tiny_params: SimulationParams) -> None
+```
+
+An ordinary Dirichlet-prior run never populates the equilibrium-only fields.
+
 <a id="engine.test_engine.test_fim_auto_records_the_resolved_choice_not_the_literal_auto"></a>
 
 #### test\_fim\_auto\_records\_the\_resolved\_choice\_not\_the\_literal\_auto
@@ -5023,6 +5066,100 @@ def test_validate_form_rejects_an_invalid_choice_field() -> None
 ```
 
 A "choice"-kind field's own error is located exactly like an "int" field's.
+
+<a id="gui.test_app_api.test_get_equilibrium_predictions_matches_the_statistics_functions_directly"></a>
+
+#### test\_get\_equilibrium\_predictions\_matches\_the\_statistics\_functions\_directly
+
+```python
+def test_get_equilibrium_predictions_matches_the_statistics_functions_directly(
+) -> (None)
+```
+
+Every prediction is exactly what calling `fim.statistics` directly gives.
+
+<a id="gui.test_app_api.test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_zero"></a>
+
+#### test\_get\_equilibrium\_predictions\_reports\_d\_as\_undefined\_at\_mu\_zero
+
+```python
+def test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_zero(
+) -> None
+```
+
+`equilibrium_d` alone requires `mu > 0`; the other three do not.
+
+<a id="gui.test_app_api.test_get_equilibrium_predictions_rejects_invalid_input"></a>
+
+#### test\_get\_equilibrium\_predictions\_rejects\_invalid\_input
+
+```python
+@pytest.mark.parametrize(
+    ("n", "m", "mu", "d"),
+    [
+        ("not-a-number", "0.001", "0.00003", "20"),
+        ("450", "0.001", "0.00003", "not-a-number"),
+        ("0", "0.001", "0.00003", "20"),  # N below the minimum of 1
+        ("450", "0.001", "0.00003", "1"),  # d below the minimum of 2
+        ("450", "1.5", "0.00003", "20"),  # m outside [0, 1]
+        ("450", "0.001", "-0.1", "20"),  # mu outside [0, 1]
+    ],
+)
+def test_get_equilibrium_predictions_rejects_invalid_input(
+        n: str, m: str, mu: str, d: str) -> None
+```
+
+A non-numeric or out-of-range field is reported once, not silently dropped.
+
+<a id="gui.test_app_api.test_get_equilibrium_predictions_honors_significant_digits"></a>
+
+#### test\_get\_equilibrium\_predictions\_honors\_significant\_digits
+
+```python
+def test_get_equilibrium_predictions_honors_significant_digits() -> None
+```
+
+Explore reads the same display precision every other screen does.
+
+<a id="gui.test_app_api.test_get_equilibrium_sweep_holds_the_other_three_fields_fixed"></a>
+
+#### test\_get\_equilibrium\_sweep\_holds\_the\_other\_three\_fields\_fixed
+
+```python
+def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None
+```
+
+Sweeping `m` recomputes `D`/`G_ST` at each point using the same N/d/mu.
+
+<a id="gui.test_app_api.test_get_equilibrium_sweep_rounds_integer_axes"></a>
+
+#### test\_get\_equilibrium\_sweep\_rounds\_integer\_axes
+
+```python
+def test_get_equilibrium_sweep_rounds_integer_axes() -> None
+```
+
+A swept `N` or `d` is a whole number, never a fractional geometric step.
+
+<a id="gui.test_app_api.test_get_equilibrium_sweep_rejects_an_unknown_axis"></a>
+
+#### test\_get\_equilibrium\_sweep\_rejects\_an\_unknown\_axis
+
+```python
+def test_get_equilibrium_sweep_rejects_an_unknown_axis() -> None
+```
+
+Only the four sweepable field names are accepted.
+
+<a id="gui.test_app_api.test_get_equilibrium_sweep_rejects_invalid_input"></a>
+
+#### test\_get\_equilibrium\_sweep\_rejects\_invalid\_input
+
+```python
+def test_get_equilibrium_sweep_rejects_invalid_input() -> None
+```
+
+Bad field values are rejected the same way `get_equilibrium_predictions` does.
 
 <a id="gui.test_app_api.test_format_statistic_matches_the_cli_own_format_optional"></a>
 
@@ -12559,6 +12696,47 @@ Backward compatibility, checked directly: `from_dict` on a payload
 with `engine_backend`/`jit` simply absent (not `null`, genuinely
 missing — the exact shape of a manifest written by an older `fim`
 version) must not raise, and both fields must come back `None`.
+
+<a id="persistence.test_validation.test_manifest_equilibrium_fields_default_to_none_and_round_trip"></a>
+
+#### test\_manifest\_equilibrium\_fields\_default\_to\_none\_and\_round\_trip
+
+```python
+def test_manifest_equilibrium_fields_default_to_none_and_round_trip(
+        tmp_path: Path) -> None
+```
+
+The three equilibrium-split provenance fields round-trip, `None` otherwise.
+
+Mirrors `test_manifest_engine_backend_and_jit_default_to_none_and_
+round_trip` -- same pattern, for the three fields `fim.engine`'s
+own run orchestration stamps only for `initial_condition_mode ==
+"equilibrium_split"` (`20260907-claude-sonnet-5-equilibrium-split-
+design.md`, decision 5).
+
+<a id="persistence.test_validation.test_manifest_from_dict_tolerates_missing_equilibrium_fields"></a>
+
+#### test\_manifest\_from\_dict\_tolerates\_missing\_equilibrium\_fields
+
+```python
+def test_manifest_from_dict_tolerates_missing_equilibrium_fields() -> None
+```
+
+A manifest written before these fields existed (schema_version 1) still parses.
+
+Backward compatibility, checked directly, mirroring `test_manifest_
+from_dict_tolerates_missing_engine_backend_and_jit`.
+
+<a id="persistence.test_validation.test_manifest_equilibrium_final_heterozygosity_rejects_out_of_range"></a>
+
+#### test\_manifest\_equilibrium\_final\_heterozygosity\_rejects\_out\_of\_range
+
+```python
+def test_manifest_equilibrium_final_heterozygosity_rejects_out_of_range(
+) -> None
+```
+
+`equilibrium_final_heterozygosity` shares `heterozygosity`'s `[0, 1)` domain.
 
 <a id="persistence.test_validation.test_manifest_artifact_digests_are_validated"></a>
 

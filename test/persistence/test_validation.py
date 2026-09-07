@@ -316,6 +316,72 @@ def test_manifest_from_dict_tolerates_missing_engine_backend_and_jit() -> None:
     assert restored.jit is None
 
 
+def test_manifest_equilibrium_fields_default_to_none_and_round_trip(
+    tmp_path: Path,
+) -> None:
+    """The three equilibrium-split provenance fields round-trip, `None` otherwise.
+
+    Mirrors `test_manifest_engine_backend_and_jit_default_to_none_and_
+    round_trip` -- same pattern, for the three fields `fim.engine`'s
+    own run orchestration stamps only for `initial_condition_mode ==
+    "equilibrium_split"` (`20260907-claude-sonnet-5-equilibrium-split-
+    design.md`, decision 5).
+    """
+    manifest = _manifest()
+    assert manifest.initial_condition_mode is None
+    assert manifest.equilibrium_generation_count is None
+    assert manifest.equilibrium_final_heterozygosity is None
+
+    stamped = replace(
+        manifest,
+        initial_condition_mode="equilibrium_split",
+        equilibrium_generation_count=57,
+        equilibrium_final_heterozygosity=0.42,
+    )
+    path = tmp_path / "manifest.json"
+    write_manifest(path, stamped)
+    restored = read_manifest(path)
+
+    assert restored == stamped
+    assert restored.initial_condition_mode == "equilibrium_split"
+    assert restored.equilibrium_generation_count == 57
+    assert restored.equilibrium_final_heterozygosity == 0.42
+
+
+def test_manifest_from_dict_tolerates_missing_equilibrium_fields() -> None:
+    """A manifest written before these fields existed (schema_version 1) still parses.
+
+    Backward compatibility, checked directly, mirroring `test_manifest_
+    from_dict_tolerates_missing_engine_backend_and_jit`.
+    """
+    value = dict(_manifest().to_dict())
+    del value["initial_condition_mode"]
+    del value["equilibrium_generation_count"]
+    del value["equilibrium_final_heterozygosity"]
+
+    restored = RunManifest.from_dict(value)
+
+    assert restored.initial_condition_mode is None
+    assert restored.equilibrium_generation_count is None
+    assert restored.equilibrium_final_heterozygosity is None
+
+
+def test_manifest_equilibrium_final_heterozygosity_rejects_out_of_range() -> None:
+    """`equilibrium_final_heterozygosity` shares `heterozygosity`'s `[0, 1)` domain."""
+    with pytest.raises(ValueError, match="equilibrium_final_heterozygosity must be in"):
+        replace(_manifest(), equilibrium_final_heterozygosity=1.0)
+
+    with pytest.raises(ValueError, match="equilibrium_final_heterozygosity must be in"):
+        replace(_manifest(), equilibrium_final_heterozygosity=-0.1)
+
+
+def test_manifest_equilibrium_generation_count_rejects_negative() -> None:
+    with pytest.raises(
+        ValueError, match="equilibrium_generation_count must be non-negative"
+    ):
+        replace(_manifest(), equilibrium_generation_count=-1)
+
+
 @pytest.mark.parametrize(
     ("digest", "message"),
     [

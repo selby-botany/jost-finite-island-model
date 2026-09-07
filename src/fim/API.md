@@ -86,6 +86,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [validate\_form](#fim.gui.app.Api.validate_form)
     * [get\_initial\_state\_panels](#fim.gui.app.Api.get_initial_state_panels)
     * [get\_initial\_state\_deme\_pair\_panel](#fim.gui.app.Api.get_initial_state_deme_pair_panel)
+    * [get\_equilibrium\_predictions](#fim.gui.app.Api.get_equilibrium_predictions)
+    * [get\_equilibrium\_sweep](#fim.gui.app.Api.get_equilibrium_sweep)
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
@@ -1505,6 +1507,13 @@ stays `None` for the whole run under those. Released (set back to
 `None`) by `_finalize_replica_lane` the instant a lane stops, not
 held for the rest of the batch's own run — see that function's own
 docstring (`FIM-48`).
+
+`equilibration_outcome` is set once, by `_build_replica_lane`
+(`_generate_initial_state_with_outcome`'s own return value), and
+only when this lane's own `params` configured equilibrium-split —
+`None` for every other initial-condition mode. `_finalize_replica_
+lane` reads it to populate this lane's own manifest fields and
+`equilibrium_trajectory.jsonl` artifact.
 
 <a id="fim.engine.Advancer"></a>
 
@@ -3018,6 +3027,87 @@ pair as separate panels (`d > 6`).
 
 - ``{"ok"` - True, "panel": ...}` on success; `{"ok": False,
 - `"message"` - ...}` if the form is invalid or the pair is invalid.
+
+<a id="fim.gui.app.Api.get_equilibrium_predictions"></a>
+
+#### get\_equilibrium\_predictions
+
+```python
+@_log_bridge_call
+def get_equilibrium_predictions(n: str, m: str, mu: str,
+                                d: str) -> dict[str, Any]
+```
+
+Return no-simulation-needed theoretical equilibrium predictions.
+
+The Explore workspace's own data source (design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §5): every
+prediction here is a pure function of `(N, m, mu, d)` alone,
+computed directly from `fim.statistics`'s own equilibrium/
+identity-recovery family — no simulation ever runs to produce
+any of it, so this call returns essentially instantly regardless
+of how large `N`/`d` are.
+
+**Arguments**:
+
+- `n` - Population size (gene copies per deme), as typed.
+- `m` - Migration rate, as typed.
+- `mu` - Mutation rate, as typed.
+- `d` - Deme count, as typed.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "predictions": {"D": ..., "G_ST": ...,
+- `"E_ST"` - ..., "identity_recovery_half_life": ...}}`, each
+  value a string already formatted by `format_statistic`
+  (including its own `"undefined"` convention where a
+  prediction has no defined value for these inputs — `D` when
+  `mu` is exactly `0`, for instance); `{"ok": False,
+- `"message"` - ...}` if `n`/`d`/`m`/`mu` do not even parse as
+  numbers, or if a value parses but is out of range (that
+  `ValueError`'s own message, verbatim, from whichever
+  `fim.statistics` function first rejected it).
+
+<a id="fim.gui.app.Api.get_equilibrium_sweep"></a>
+
+#### get\_equilibrium\_sweep
+
+```python
+@_log_bridge_call
+def get_equilibrium_sweep(axis: str, n: str, m: str, mu: str,
+                          d: str) -> dict[str, Any]
+```
+
+Sweep one of N/d/m/mu and return predicted D/G_ST across it.
+
+Explore's own curve (design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §5.2):
+`axis` sweeps across `_EQUILIBRIUM_SWEEP_DOMAINS[axis]`, a fixed
+display range independent of the other three fields' current
+values, which are held fixed at whatever `get_equilibrium_
+predictions` was just called with.
+
+**Arguments**:
+
+- `axis` - Which field to sweep — one of `"N"`, `"d"`, `"m"`,
+  `"mu"`.
+- `n` - Population size, held fixed unless `axis == "N"`.
+- `m` - Migration rate, held fixed unless `axis == "m"`.
+- `mu` - Mutation rate, held fixed unless `axis == "mu"`.
+- `d` - Deme count, held fixed unless `axis == "d"`.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "axis": axis, "current": <parsed current value
+  of axis>, "points": [{"x": ..., "D": ..., "G_ST": ...},
+  ...]}` — `D`/`G_ST` are `None` (not a formatted string —
+  plotting reads these as numbers) wherever that point's own
+  configuration makes the prediction undefined, e.g. `D` at
+  `mu == 0`; `{"ok": False, "message": ...}` if `axis` is not
+  one of the four names above, or if `n`/`d`/`m`/`mu` do not
+  parse.
 
 <a id="fim.gui.app.Api.load_yaml"></a>
 
@@ -8818,6 +8908,22 @@ never the literal string `"auto"` itself — the whole reason this
 field exists is so a runtime-data-dependent choice is not lost
 (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
 §7.4).
+
+`initial_condition_mode`/`equilibrium_generation_count`/
+`equilibrium_final_heterozygosity` record which strategy
+(`fim.model.initial`) actually produced this run's own generation
+zero, and — for `"equilibrium_split"` only — the ancestral phase's
+own runtime outcome (`20260907-claude-sonnet-5-equilibrium-split-
+design.md`, decision 5). `initial_condition_mode` is deliberately a
+plain string, not a stricter type, for the identical reason
+`engine_backend`/`jit` already are: it always records the
+*resolved* strategy a caller actually got, and a manifest should
+stay readable even if a future strategy's own name is not one this
+module has ever heard of. All three are `None` for a manifest
+written before this field existed, or whenever the run used
+`"dirichlet"`/`"explicit"` instead — the two equilibrium-specific
+fields have no meaning outside `"equilibrium_split"` and are never
+populated for either of the other two.
 
 <a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
 

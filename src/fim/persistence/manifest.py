@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,7 +34,13 @@ logger = logging.getLogger(__name__)
 # Bumped whenever RunManifest's on-disk shape changes incompatibly. Recorded
 # in every manifest so a future reader can tell which contract wrote it,
 # rather than guessing from which fields happen to be present.
-CURRENT_SCHEMA_VERSION = 1
+#
+# 2 (from 1): adds `initial_condition_mode`/`equilibrium_generation_count`/
+# `equilibrium_final_heterozygosity` (`20260907-claude-sonnet-5-
+# equilibrium-split-design.md`, decision 5) — every one `None` on a
+# manifest written before this schema version, the same backward-
+# compatible shape `engine_backend`/`jit` already established.
+CURRENT_SCHEMA_VERSION = 2
 
 # Bumped whenever BatchManifest's on-disk shape changes incompatibly —
 # tracked independently of CURRENT_SCHEMA_VERSION, since a batch manifest
@@ -122,6 +129,22 @@ class RunManifest:
     field exists is so a runtime-data-dependent choice is not lost
     (`20260901-claude-sonnet-5-fim-engine-backend-factory-design.md`
     §7.4).
+
+    `initial_condition_mode`/`equilibrium_generation_count`/
+    `equilibrium_final_heterozygosity` record which strategy
+    (`fim.model.initial`) actually produced this run's own generation
+    zero, and — for `"equilibrium_split"` only — the ancestral phase's
+    own runtime outcome (`20260907-claude-sonnet-5-equilibrium-split-
+    design.md`, decision 5). `initial_condition_mode` is deliberately a
+    plain string, not a stricter type, for the identical reason
+    `engine_backend`/`jit` already are: it always records the
+    *resolved* strategy a caller actually got, and a manifest should
+    stay readable even if a future strategy's own name is not one this
+    module has ever heard of. All three are `None` for a manifest
+    written before this field existed, or whenever the run used
+    `"dirichlet"`/`"explicit"` instead — the two equilibrium-specific
+    fields have no meaning outside `"equilibrium_split"` and are never
+    populated for either of the other two.
     """
 
     schema_version: int
@@ -138,6 +161,9 @@ class RunManifest:
     artifacts: Mapping[str, ArtifactDigest] | None = None
     engine_backend: str | None = None
     jit: str | None = None
+    initial_condition_mode: str | None = None
+    equilibrium_generation_count: int | None = None
+    equilibrium_final_heterozygosity: float | None = None
 
     def __post_init__(self) -> None:
         """Validate required manifest identity, terminal, and digest fields."""
@@ -149,6 +175,18 @@ class RunManifest:
             raise ValueError("manifest timestamps must not be empty")
         if self.generation < 0:
             raise ValueError("manifest generation must be non-negative")
+        if self.equilibrium_generation_count is not None and (
+            self.equilibrium_generation_count < 0
+        ):
+            raise ValueError(
+                "manifest equilibrium_generation_count must be non-negative"
+            )
+        if self.equilibrium_final_heterozygosity is not None and not (
+            0.0 <= self.equilibrium_final_heterozygosity < 1.0
+        ):
+            raise ValueError(
+                "manifest equilibrium_final_heterozygosity must be in [0, 1)"
+            )
         if self.generation_count < 1:
             raise ValueError("manifest generation_count must be at least 1")
         if not self.software_version:
@@ -203,6 +241,9 @@ class RunManifest:
             ),
             "engine_backend": self.engine_backend,
             "jit": self.jit,
+            "initial_condition_mode": self.initial_condition_mode,
+            "equilibrium_generation_count": self.equilibrium_generation_count,
+            "equilibrium_final_heterozygosity": self.equilibrium_final_heterozygosity,
         }
 
     @classmethod
@@ -248,6 +289,13 @@ class RunManifest:
             artifacts=_optional_artifacts(value.get("artifacts")),
             engine_backend=_optional_string(value, "engine_backend"),
             jit=_optional_string(value, "jit"),
+            initial_condition_mode=_optional_string(value, "initial_condition_mode"),
+            equilibrium_generation_count=_optional_int(
+                value, "equilibrium_generation_count"
+            ),
+            equilibrium_final_heterozygosity=_optional_float(
+                value, "equilibrium_final_heterozygosity"
+            ),
         )
 
 
@@ -616,6 +664,42 @@ def _optional_string(value: Mapping[str, Any], key: str) -> str | None:
     if not isinstance(raw_value, str) or not raw_value:
         raise ValueError(f"manifest field {key!r} must be a nonempty string or null")
     return raw_value
+
+
+def _optional_int(
+    value: Mapping[str, Any], key: str, *, minimum: int = 0
+) -> int | None:
+    """Read one optional integer field, or `None` when absent/null.
+
+    Used for `equilibrium_generation_count` — `None` in any manifest
+    written before that field existed, or whenever the run did not use
+    equilibrium-split at all (`RunManifest`'s own docstring).
+    """
+    raw_value = value.get(key)
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, bool) or not isinstance(raw_value, int):
+        raise ValueError(f"manifest field {key!r} must be an integer or null")
+    if raw_value < minimum:
+        raise ValueError(f"manifest field {key!r} must be at least {minimum}")
+    return raw_value
+
+
+def _optional_float(value: Mapping[str, Any], key: str) -> float | None:
+    """Read one optional finite float field, or `None` when absent/null.
+
+    Used for `equilibrium_final_heterozygosity` — the same "absent
+    before this field existed, or not applicable to this run's own
+    initial-condition mode" cases `_optional_int` documents.
+    """
+    raw_value = value.get(key)
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, bool) or not isinstance(raw_value, int | float):
+        raise ValueError(f"manifest field {key!r} must be a number or null")
+    if not math.isfinite(raw_value):
+        raise ValueError(f"manifest field {key!r} must be finite")
+    return float(raw_value)
 
 
 def _required_string(value: Mapping[str, Any], key: str) -> str:
