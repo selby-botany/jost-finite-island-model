@@ -48,6 +48,7 @@ from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import read_manifest
 from fim.statistics import (
+    effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
     equilibrium_shannon_differentiation,
@@ -242,6 +243,25 @@ def test_format_statistic_honors_an_explicit_digits_count() -> None:
     """
     assert format_statistic(0.123456789, 3) == "0.123"
     assert format_statistic(None, 3) == "undefined"
+
+
+def test_effective_allele_summary_matches_the_closed_form_directly() -> None:
+    """Both readouts equal `effective_allele_count` applied to H_S/H_T directly."""
+    report = {"H_S": 0.6, "H_T": 0.8}
+
+    summary = app_module._effective_allele_summary(report, digits=6)
+
+    assert summary["H_S"] == format_statistic(effective_allele_count(0.6), 6)
+    assert summary["H_T"] == format_statistic(effective_allele_count(0.8), 6)
+
+
+def test_effective_allele_summary_caution_flag_only_above_the_threshold() -> None:
+    """`gStCaution` fires only once H_S exceeds the documented cutover."""
+    below = app_module._effective_allele_summary({"H_S": 0.5, "H_T": 0.9}, digits=3)
+    above = app_module._effective_allele_summary({"H_S": 0.9, "H_T": 0.95}, digits=3)
+
+    assert below["gStCaution"] is False
+    assert above["gStCaution"] is True
 
 
 def test_api_starts_with_the_default_significant_digits() -> None:

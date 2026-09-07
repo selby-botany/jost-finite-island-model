@@ -246,7 +246,8 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
                     "runViewState: window.fim.getRunViewState(), "
                     "generationLabel: "
                     "document.getElementById('progress-generation-label')"
-                    ".textContent"
+                    ".textContent, "
+                    "neSText: document.getElementById('stat-Ne_S').textContent"
                     "})"
                 )
             outcome.put(settled)
@@ -263,6 +264,12 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
     )
     assert settled["runViewState"] == "completed"
     assert settled["generationLabel"] != ""
+    # The order-2 Hill number's own closed form (botanist GUI design doc
+    # §7.7) -- proves the full stack (`_effective_allele_summary`'s own
+    # payload key -> JSON -> `renderEffectiveAlleles`) rendered, not
+    # only that `Api`'s own Python-level helper computes the right
+    # number in isolation (`test_app_api.py`'s own coverage of that).
+    assert settled["neSText"] != ""
 
 
 # Selects the "equilibrium split" radio (`config-modals.js`'s own

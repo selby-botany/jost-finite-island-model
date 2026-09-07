@@ -323,6 +323,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [heterozygosity](#fim.statistics.differentiation.heterozygosity)
   * [identity](#fim.statistics.differentiation.identity)
   * [hill\_number](#fim.statistics.differentiation.hill_number)
+  * [effective\_allele\_count](#fim.statistics.differentiation.effective_allele_count)
   * [h\_s](#fim.statistics.differentiation.h_s)
   * [h\_t](#fim.statistics.differentiation.h_t)
   * [gs](#fim.statistics.differentiation.gs)
@@ -9931,6 +9932,59 @@ however rare; `order = 2` is dominated almost entirely by whichever
 alleles are already common (and equals `1 / (1 - H)`, the classic
 "effective number of alleles"); `order = 1` sits in between, weighting
 each allele by its own actual frequency.
+
+<a id="fim.statistics.differentiation.effective_allele_count"></a>
+
+#### effective\_allele\_count
+
+```python
+def effective_allele_count(heterozygosity_value: float) -> float
+```
+
+Return the order-2 Hill number's own closed form, ``1 / (1 - H)``.
+
+`hill_number`'s own docstring already states this identity for a
+real, individual frequency table; this is the same "classic
+effective number of alleles" transform, but for the one case that
+table is not on hand — an already-*aggregated* heterozygosity
+(`FinalReport`'s own `H_S`/`H_T`, a weighted mean across demes and/or
+an arithmetic mean across loci) that no single deme's frequency
+mapping could reproduce exactly. Jost's own foundational argument
+(Jost 2006, *Oikos* 113:363-375; Jost 2009, *Ecological Economics*
+68:925-928 — see `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+§7.7, `selby/restricted`) is that a raw heterozygosity is not itself
+a "diversity" in the sense a biologist's intuition expects (doubling
+the number of equally common alleles does not double `H`), and that
+reasoning about diversity by a ratio of raw heterozygosities — which
+is exactly how `G_ST` is built — can badly understate real
+differentiation whenever `H_S` is already high. Converting to this
+effective number first is the corrected reading this function
+exists to make cheap and available everywhere an already-aggregated
+`H_S`/`H_T` is the only diversity value on hand.
+
+**Arguments**:
+
+- `heterozygosity_value` - An expected heterozygosity (`heterozygosity`,
+  `h_s`, `h_t`, or a `FinalReport`'s own `H_S`/`H_T`) — a real
+  number in `[0, 1)`. Never exactly `1.0`: `heterozygosity`'s
+  own docstring already states why no finite allele count can
+  reach it, so `1.0` here always means invalid input, not a
+  legitimate (if extreme) diversity value.
+
+
+**Returns**:
+
+  ``1.0 / (1.0 - heterozygosity_value)`` — the number of equally
+  common alleles that would show exactly this much heterozygosity.
+  Always at least `1.0` (a fixed deme, `H = 0`, is "one effective
+  allele"), growing without bound as `heterozygosity_value`
+  approaches `1`.
+
+
+**Raises**:
+
+- `ValueError` - If `heterozygosity_value` is not a finite real
+  number in `[0, 1)`.
 
 <a id="fim.statistics.differentiation.h_s"></a>
 

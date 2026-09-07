@@ -394,6 +394,57 @@ def hill_number(frequencies: Mapping[Any, Any], order: float | int) -> float:
     return _hill(deme, _validate_order(order))
 
 
+def effective_allele_count(heterozygosity_value: float) -> float:
+    """Return the order-2 Hill number's own closed form, ``1 / (1 - H)``.
+
+    `hill_number`'s own docstring already states this identity for a
+    real, individual frequency table; this is the same "classic
+    effective number of alleles" transform, but for the one case that
+    table is not on hand — an already-*aggregated* heterozygosity
+    (`FinalReport`'s own `H_S`/`H_T`, a weighted mean across demes and/or
+    an arithmetic mean across loci) that no single deme's frequency
+    mapping could reproduce exactly. Jost's own foundational argument
+    (Jost 2006, *Oikos* 113:363-375; Jost 2009, *Ecological Economics*
+    68:925-928 — see `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+    §7.7, `selby/restricted`) is that a raw heterozygosity is not itself
+    a "diversity" in the sense a biologist's intuition expects (doubling
+    the number of equally common alleles does not double `H`), and that
+    reasoning about diversity by a ratio of raw heterozygosities — which
+    is exactly how `G_ST` is built — can badly understate real
+    differentiation whenever `H_S` is already high. Converting to this
+    effective number first is the corrected reading this function
+    exists to make cheap and available everywhere an already-aggregated
+    `H_S`/`H_T` is the only diversity value on hand.
+
+    Args:
+        heterozygosity_value: An expected heterozygosity (`heterozygosity`,
+            `h_s`, `h_t`, or a `FinalReport`'s own `H_S`/`H_T`) — a real
+            number in `[0, 1)`. Never exactly `1.0`: `heterozygosity`'s
+            own docstring already states why no finite allele count can
+            reach it, so `1.0` here always means invalid input, not a
+            legitimate (if extreme) diversity value.
+
+    Returns:
+        ``1.0 / (1.0 - heterozygosity_value)`` — the number of equally
+        common alleles that would show exactly this much heterozygosity.
+        Always at least `1.0` (a fixed deme, `H = 0`, is "one effective
+        allele"), growing without bound as `heterozygosity_value`
+        approaches `1`.
+
+    Raises:
+        ValueError: If `heterozygosity_value` is not a finite real
+            number in `[0, 1)`.
+    """
+    if (
+        isinstance(heterozygosity_value, bool)
+        or not isinstance(heterozygosity_value, int | float)
+        or not isfinite(heterozygosity_value)
+        or not 0.0 <= heterozygosity_value < 1.0
+    ):
+        raise ValueError("heterozygosity_value must be a real number in [0, 1)")
+    return 1.0 / (1.0 - heterozygosity_value)
+
+
 def _h_s_from_demes(
     demes: tuple[dict[int, float], ...], weights: tuple[float, ...]
 ) -> float:

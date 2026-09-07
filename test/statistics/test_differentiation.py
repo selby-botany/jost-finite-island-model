@@ -15,6 +15,7 @@ from fim.statistics import (
     differentiation,
     differentiation_q,
     e_st,
+    effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
     g_st,
@@ -421,6 +422,39 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         """
         value = hill_number({0: 0.1, 1: 0.9}, 10_000)
         self.assertAlmostEqual(value, 1.0 / 0.9, places=3)
+
+    def test_effective_allele_count_matches_the_order_2_hill_number(self) -> None:
+        """The closed form and the general Hill-number formula agree exactly."""
+        frequencies = {0: 0.4, 1: 0.35, 2: 0.25}
+        h = heterozygosity(frequencies)
+
+        self.assertAlmostEqual(effective_allele_count(h), hill_number(frequencies, 2))
+
+    def test_effective_allele_count_at_zero_is_one_effective_allele(self) -> None:
+        """A fixed deme (`H = 0`) is exactly one effective allele."""
+        self.assertEqual(effective_allele_count(0.0), 1.0)
+
+    def test_effective_allele_count_grows_without_bound_as_h_approaches_one(
+        self,
+    ) -> None:
+        """Effective allele count increases monotonically as H rises toward 1."""
+        low = effective_allele_count(0.5)
+        high = effective_allele_count(0.99)
+
+        self.assertGreater(high, low)
+        self.assertGreater(effective_allele_count(0.999999), 100_000.0)
+
+    def test_effective_allele_count_rejects_out_of_range_input(self) -> None:
+        """`H` outside `[0, 1)` — including exactly `1.0` — is rejected."""
+        for value in (-0.1, 1.0, 1.5, math.inf, math.nan):
+            with self.assertRaises(ValueError):
+                effective_allele_count(value)
+
+    def test_effective_allele_count_rejects_non_numeric_input(self) -> None:
+        """A non-numeric `H` (including `bool`, an `int` subtype) is rejected."""
+        for value in (True, "0.5", None):
+            with self.assertRaises(ValueError):
+                effective_allele_count(value)  # type: ignore[arg-type]
 
     def test_digamma_accuracy_at_its_own_asymptotic_threshold(self) -> None:
         """`_digamma` meets its own documented, corrected accuracy bound.

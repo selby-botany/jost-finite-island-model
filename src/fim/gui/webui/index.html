@@ -145,8 +145,25 @@
             <tr id="stat-K_ST"></tr>
             <tr id="stat-H_S"></tr>
             <tr id="stat-H_T"></tr>
+            <!-- The order-2 Hill number's own closed form, `1 / (1 - H)`
+                 (botanist GUI design doc §7.7) -- shown beside H_S/H_T,
+                 not instead of them, per Jost's own foundational
+                 argument that this "effective number of alleles"
+                 reading is the one a biologist's intuition about
+                 "diversity" actually expects. -->
+            <tr id="stat-Ne_S"></tr>
+            <tr id="stat-Ne_T"></tr>
           </tbody>
         </table>
+        <!-- Shown only once this run's own H_S crosses the threshold
+             where G_ST's own ratio-of-heterozygosities construction can
+             under-report real differentiation (`Api._effective_
+             allele_summary`'s own `gStCaution` flag). -->
+        <p class="hint" id="g-st-caution-note" hidden>
+          G<sub>ST</sub> is compressed toward zero when within-deme
+          diversity is this high, even between demes that share no
+          alleles at all — Jost's D does not have this artifact.
+        </p>
         <!-- Batch `completed`-only: `renderBatchSummary` rebuilds this
              table's rows from scratch on every render (unlike the two
              slot-based tables above), so only the `<tbody>` needs to

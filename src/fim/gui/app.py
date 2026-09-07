@@ -43,7 +43,7 @@ import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from math import isfinite
 from pathlib import Path
@@ -88,6 +88,7 @@ from fim.model.state import ModelState
 from fim.persistence.manifest import read_manifest
 from fim.reanalyze import reanalyze_trajectory
 from fim.statistics import (
+    effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
     equilibrium_shannon_differentiation,
@@ -237,6 +238,55 @@ def format_statistic(
     six regardless of that configurable value's own default.
     """
     return "undefined" if value is None else f"{value:.{digits}g}"
+
+
+# `H_S` above this value is the regime where `G_ST`'s own ratio-of-
+# heterozygosities construction can badly under-report real
+# differentiation between demes that in fact share no alleles at all
+# (design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §7.7,
+# `effective_allele_count`'s own docstring has the full citation) — the
+# threshold at which `_effective_allele_summary`'s own `gStCaution` flag
+# starts firing. A plain, disclosed choice, not a measured one: nothing
+# about the underlying mathematics singles out one exact cutover point,
+# so this exists to bound the note to a real, materially-affected regime
+# rather than showing on every run regardless of how small the effect is.
+_EFFECTIVE_ALLELE_CAUTION_THRESHOLD: Final = 0.7
+
+
+def _effective_allele_summary(
+    report: Mapping[str, Any], digits: int
+) -> dict[str, str | bool]:
+    """Return `H_S`/`H_T`'s own effective-allele-count readout, plus a caution flag.
+
+    Design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §7.7:
+    the "effective number of alleles" transform
+    (`fim.statistics.effective_allele_count`) is the corrected reading
+    Jost's own foundational papers argue for over a raw heterozygosity —
+    shown here beside `H_S`/`H_T`, not instead of them, so a reader
+    already used to reading `H_S`/`H_T` directly loses nothing.
+
+    Args:
+        report: A finished run's own `FinalReport` (or an equivalent
+            mapping — the p_0 preview's own `report_for_state` result
+            shares the same shape); only `H_S`/`H_T` are read, both
+            always defined floats (unlike `G_ST`, `FinalReport`'s own
+            docstring has the one field that can be `None`).
+        digits: The GUI's own configured display precision.
+
+    Returns:
+        `{"H_S": "<formatted effective count>", "H_T": "<formatted
+        effective count>", "gStCaution": <bool>}` — `gStCaution` is
+        `True` exactly when this run's own `H_S` exceeds
+        `_EFFECTIVE_ALLELE_CAUTION_THRESHOLD`.
+    """
+    within = effective_allele_count(cast("float", report["H_S"]))
+    total = effective_allele_count(cast("float", report["H_T"]))
+    return {
+        "H_S": format_statistic(within, digits),
+        "H_T": format_statistic(total, digits),
+        "gStCaution": cast("float", report["H_S"])
+        > _EFFECTIVE_ALLELE_CAUTION_THRESHOLD,
+    }
 
 
 # The Explore workspace (design doc `20260907-claude-sonnet-5-botanist-
@@ -1318,6 +1368,9 @@ class Api:
                 )
                 for name in _RESULT_STATISTIC_NAMES
             },
+            "effectiveAlleles": _effective_allele_summary(
+                report, self._significant_digits
+            ),
             "outputDirectory": str(trajectory_path.parent),
             "generationCount": reanalyzed.manifest.generation_count,
             "demeCount": reanalyzed.params.d,
@@ -1715,6 +1768,7 @@ def _drain_run_messages(
                     name: format_statistic(result.report[name], digits)
                     for name in _RESULT_STATISTIC_NAMES
                 },
+                "effectiveAlleles": _effective_allele_summary(result.report, digits),
                 "outputDirectory": str(output_directory),
                 "generationCount": result.manifest.generation_count,
                 "demeCount": deme_count,

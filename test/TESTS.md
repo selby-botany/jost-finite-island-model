@@ -5187,6 +5187,27 @@ The GUI's own configured precision (`Api._significant_digits`,
 by a real caller — this is the same rounding a fresh `Api()`
 actually produces for every displayed statistic today.
 
+<a id="gui.test_app_api.test_effective_allele_summary_matches_the_closed_form_directly"></a>
+
+#### test\_effective\_allele\_summary\_matches\_the\_closed\_form\_directly
+
+```python
+def test_effective_allele_summary_matches_the_closed_form_directly() -> None
+```
+
+Both readouts equal `effective_allele_count` applied to H_S/H_T directly.
+
+<a id="gui.test_app_api.test_effective_allele_summary_caution_flag_only_above_the_threshold"></a>
+
+#### test\_effective\_allele\_summary\_caution\_flag\_only\_above\_the\_threshold
+
+```python
+def test_effective_allele_summary_caution_flag_only_above_the_threshold(
+) -> None
+```
+
+`gStCaution` fires only once H_S exceeds the documented cutover.
+
 <a id="gui.test_app_api.test_api_starts_with_the_default_significant_digits"></a>
 
 #### test\_api\_starts\_with\_the\_default\_significant\_digits
@@ -13317,6 +13338,57 @@ past that threshold, not merely assumed to be. As `order` grows,
 a Hill number converges to the reciprocal of the single largest
 frequency (the "Berger-Parker" limit); this also checks the
 result actually approaches it, not merely that nothing raised.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_matches_the_order_2_hill_number"></a>
+
+#### test\_effective\_allele\_count\_matches\_the\_order\_2\_hill\_number
+
+```python
+def test_effective_allele_count_matches_the_order_2_hill_number() -> None
+```
+
+The closed form and the general Hill-number formula agree exactly.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_at_zero_is_one_effective_allele"></a>
+
+#### test\_effective\_allele\_count\_at\_zero\_is\_one\_effective\_allele
+
+```python
+def test_effective_allele_count_at_zero_is_one_effective_allele() -> None
+```
+
+A fixed deme (`H = 0`) is exactly one effective allele.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_grows_without_bound_as_h_approaches_one"></a>
+
+#### test\_effective\_allele\_count\_grows\_without\_bound\_as\_h\_approaches\_one
+
+```python
+def test_effective_allele_count_grows_without_bound_as_h_approaches_one(
+) -> None
+```
+
+Effective allele count increases monotonically as H rises toward 1.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_rejects_out_of_range_input"></a>
+
+#### test\_effective\_allele\_count\_rejects\_out\_of\_range\_input
+
+```python
+def test_effective_allele_count_rejects_out_of_range_input() -> None
+```
+
+`H` outside `[0, 1)` — including exactly `1.0` — is rejected.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_effective_allele_count_rejects_non_numeric_input"></a>
+
+#### test\_effective\_allele\_count\_rejects\_non\_numeric\_input
+
+```python
+def test_effective_allele_count_rejects_non_numeric_input() -> None
+```
+
+A non-numeric `H` (including `bool`, an `int` subtype) is rejected.
 
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_digamma_accuracy_at_its_own_asymptotic_threshold"></a>
 

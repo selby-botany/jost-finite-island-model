@@ -154,7 +154,7 @@ body {
     border-color: #d64545;
 }
 
-.field .hint {
+.hint {
     font-size: 0.75rem;
     color: var(--fim-muted);
     margin: 0;

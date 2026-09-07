@@ -46,6 +46,7 @@ const resultsRunId = document.getElementById("results-run-id");
 const resultsOutcome = document.getElementById("results-outcome");
 const resultsStats = document.getElementById("results-stats");
 const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
+const gStCautionNote = document.getElementById("g-st-caution-note");
 // `batchResultsTableEl` is the `<table>` whose own `hidden` attribute
 // gates visibility; `batchResultsSummary` is its `<tbody>`, where
 // `renderBatchSummary` rebuilds rows -- kept as two names rather than
@@ -63,6 +64,43 @@ const resultsBackButton = document.getElementById("results-back-button");
 // documented "omitted entirely rather than raising, since a single
 // point has no interval."
 const OMITTED_SUMMARY_TEXT = "omitted (fewer than two defined replicates)";
+
+/**
+ * Render the two effective-allele-count rows (botanist GUI design doc
+ * §7.7) and show/hide the G_ST caution note alongside them.
+ *
+ * `effectiveAlleles` is tolerated as absent (both call sites that build
+ * a scalar "completed" payload -- `_drain_run_messages`'s own `"done"`
+ * push and `Api.open_run` -- already include it, but a defensive
+ * fallback here, matching `renderDifferentiationQ`'s own established
+ * "hide, don't throw, on a payload shape this render function does not
+ * recognize" precedent, means a future payload-builder that has not
+ * caught up yet degrades to "rows hidden" rather than aborting the rest
+ * of this function -- which silently skipped `wireCompletedScrubber`
+ * entirely the one time this actually happened, a real regression this
+ * fallback exists to make structurally impossible again.
+ *
+ * @param {{H_S: string, H_T: string, gStCaution: boolean}|undefined} effectiveAlleles
+ */
+function renderEffectiveAlleles(effectiveAlleles) {
+    const neSRow = document.getElementById("stat-Ne_S");
+    const neTRow = document.getElementById("stat-Ne_T");
+    if (!effectiveAlleles) {
+        neSRow.replaceChildren();
+        neTRow.replaceChildren();
+        gStCautionNote.hidden = true;
+        return;
+    }
+    applyStatRow(
+        neSRow,
+        buildPointMeter("Effective alleles (within-deme)", effectiveAlleles.H_S)
+    );
+    applyStatRow(
+        neTRow,
+        buildPointMeter("Effective alleles (total)", effectiveAlleles.H_T)
+    );
+    gStCautionNote.hidden = !effectiveAlleles.gStCaution;
+}
 
 function renderDifferentiationQ(report) {
     // Only `Api.open_run`'s own payload can carry this (design §4.6's
@@ -320,6 +358,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             const element = document.getElementById(`stat-${name}`);
             applyStatRow(element, buildPointMeter(name, value));
         }
+        renderEffectiveAlleles(payload.effectiveAlleles);
         renderDifferentiationQ(report);
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }
