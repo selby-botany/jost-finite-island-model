@@ -465,6 +465,16 @@ fieldset.composite > label {
     font-variant-numeric: tabular-nums;
 }
 
+#results-differentiation-q-canvas {
+    display: block;
+    width: min(100%, 360px);
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    background: var(--fim-background);
+    margin-bottom: 0.5rem;
+}
+
 .batch-results-table {
     width: 100%;
     border-collapse: collapse;

@@ -185,3 +185,74 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
     assert output.exists()
+
+
+def test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A requested differentiation-q sweep renders both the lines and the curve.
+
+    No existing test drove this specific field through the real DOM at
+    all before this one (`test/gui/test_app_api.py`'s own `Api.open_run`
+    coverage only ever calls it as a plain Python function) — this is
+    also the first real proof that `run-view-completed.js`'s own
+    `drawDifferentiationQCurve` (botanist GUI design doc `20260907-
+    claude-sonnet-5-botanist-gui-redesign.md` §7.7) actually draws
+    something, not only that the per-order text lines still render.
+    """
+    _write_run(tmp_path)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            row_count = _poll_until(
+                window,
+                "document.getElementById('open-run-recent-runs-body').children.length",
+                lambda value: value is not None and value > 0,
+            )
+            settled = None
+            if row_count == 1:
+                window.evaluate_js(
+                    "document.querySelector('#open-run-recent-runs-body tr').click();"
+                )
+                window.evaluate_js(
+                    "document.getElementById('open-run-differentiation-orders')"
+                    ".value = '0, 1, 2';"
+                )
+                window.evaluate_js(
+                    "document.getElementById('open-run-open-button').click();"
+                )
+                settled = _poll_until(
+                    window,
+                    "({"
+                    "runViewState: window.fim.getRunViewState(), "
+                    "qHidden: "
+                    "document.getElementById('results-differentiation-q').hidden, "
+                    "lineCount: "
+                    "document.getElementById('results-differentiation-q-lines')"
+                    ".children.length, "
+                    "canvasWidth: "
+                    "document.getElementById('results-differentiation-q-canvas')"
+                    ".width"
+                    "})",
+                    lambda value: (
+                        value is not None and value.get("runViewState") == "completed"
+                    ),
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None, "`completed` was never reached after opening the run"
+    assert settled["qHidden"] is False
+    assert settled["lineCount"] == 3
+    assert settled["canvasWidth"] > 0

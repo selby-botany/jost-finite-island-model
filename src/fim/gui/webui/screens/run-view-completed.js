@@ -46,6 +46,12 @@ const resultsRunId = document.getElementById("results-run-id");
 const resultsOutcome = document.getElementById("results-outcome");
 const resultsStats = document.getElementById("results-stats");
 const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
+const resultsDifferentiationQCanvas = document.getElementById(
+    "results-differentiation-q-canvas"
+);
+const resultsDifferentiationQLines = document.getElementById(
+    "results-differentiation-q-lines"
+);
 const gStCautionNote = document.getElementById("g-st-caution-note");
 // `batchResultsTableEl` is the `<table>` whose own `hidden` attribute
 // gates visibility; `batchResultsSummary` is its `<tbody>`, where
@@ -102,6 +108,92 @@ function renderEffectiveAlleles(effectiveAlleles) {
     gStCautionNote.hidden = !effectiveAlleles.gStCaution;
 }
 
+/**
+ * Draw the swept `(order, value)` curve — a diversity-order profile in
+ * the sense botanist GUI design doc `20260907-claude-sonnet-5-botanist-
+ * gui-redesign.md` §7.7 describes: `D`/`G_ST`/`K_ST` are all one family,
+ * evaluated at different `q`, not unrelated numbers that happen to
+ * disagree. Deliberately not a generalized version of `explore.js`'s
+ * own `drawSweepCurve` (a single linear-x-axis line, no log scale, no
+ * "current value" marker needed here) — the two draw different enough
+ * data shapes that sharing one function would need more parameters than
+ * it would save code.
+ * @param {HTMLCanvasElement} canvas
+ * @param {Array<{order: number, value: number}>} points
+ */
+function drawDifferentiationQCurve(canvas, points) {
+    const context = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    context.clearRect(0, 0, width, height);
+    if (points.length === 0) {
+        return;
+    }
+
+    const plotLeft = 40;
+    const plotRight = width - 12;
+    const plotTop = 12;
+    const plotBottom = height - 28;
+
+    const orders = points.map((point) => point.order);
+    const minOrder = Math.min(...orders);
+    const maxOrder = Math.max(...orders);
+
+    function xToPixel(order) {
+        const fraction =
+            maxOrder === minOrder ? 0 : (order - minOrder) / (maxOrder - minOrder);
+        return plotLeft + fraction * (plotRight - plotLeft);
+    }
+
+    function yToPixel(value) {
+        return plotBottom - value * (plotBottom - plotTop);
+    }
+
+    const style = getComputedStyle(document.documentElement);
+    const borderColor = style.getPropertyValue("--fim-border").trim();
+    const mutedColor = style.getPropertyValue("--fim-muted").trim();
+    const accentColor = style.getPropertyValue("--fim-accent").trim();
+
+    context.strokeStyle = borderColor;
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(plotLeft, plotTop);
+    context.lineTo(plotLeft, plotBottom);
+    context.lineTo(plotRight, plotBottom);
+    context.stroke();
+
+    context.fillStyle = mutedColor;
+    context.font = "10px sans-serif";
+    context.textAlign = "right";
+    context.textBaseline = "middle";
+    for (const tick of PROBABILITY_TICK_VALUES) {
+        context.fillText(tick.toFixed(1), plotLeft - 6, yToPixel(tick));
+    }
+    context.textAlign = "center";
+    context.textBaseline = "top";
+    for (const point of points) {
+        context.fillText(`q=${point.order}`, xToPixel(point.order), plotBottom + 4);
+    }
+
+    context.strokeStyle = accentColor;
+    context.lineWidth = 2;
+    context.beginPath();
+    points.forEach((point, index) => {
+        const x = xToPixel(point.order);
+        const y = yToPixel(Math.min(1, Math.max(0, point.value)));
+        if (index === 0) {
+            context.moveTo(x, y);
+        } else {
+            context.lineTo(x, y);
+        }
+        context.fillStyle = accentColor;
+        context.beginPath();
+        context.arc(x, y, 3, 0, 2 * Math.PI);
+        context.fill();
+    });
+    context.stroke();
+}
+
 function renderDifferentiationQ(report) {
     // Only `Api.open_run`'s own payload can carry this (design §4.6's
     // q-sweep field) -- a live run's own `"done"` push never does, so
@@ -109,11 +201,12 @@ function renderDifferentiationQ(report) {
     const sweep = report.Differentiation_q;
     if (!sweep) {
         resultsDifferentiationQ.hidden = true;
-        resultsDifferentiationQ.replaceChildren();
+        resultsDifferentiationQLines.replaceChildren();
         return;
     }
     resultsDifferentiationQ.hidden = false;
-    resultsDifferentiationQ.replaceChildren();
+    resultsDifferentiationQLines.replaceChildren();
+    const points = [];
     for (const [order, value] of Object.entries(sweep)) {
         const line = document.createElement("p");
         line.className = "field-stat";
@@ -123,8 +216,14 @@ function renderDifferentiationQ(report) {
         // side) -- `toPrecision` mirrors that same `%.6g`-style rounding
         // client-side for this one, not-yet-server-formatted field.
         line.textContent = `q=${order}: ${Number(value).toPrecision(6)}`;
-        resultsDifferentiationQ.appendChild(line);
+        resultsDifferentiationQLines.appendChild(line);
+        points.push({ order: Number(order), value: Number(value) });
     }
+    points.sort((a, b) => a.order - b.order);
+    const canvas = resultsDifferentiationQCanvas;
+    canvas.width = canvas.clientWidth || canvas.width;
+    canvas.height = canvas.clientHeight || canvas.height;
+    drawDifferentiationQCurve(canvas, points);
 }
 
 function renderBatchSummary(summary) {

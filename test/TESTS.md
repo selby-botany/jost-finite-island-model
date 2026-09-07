@@ -7419,6 +7419,25 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
 
 A real recent run, selected and opened, ends on a populated Screen 3.
 
+<a id="gui.test_open_run_screen.test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve"></a>
+
+#### test\_opening\_a\_run\_with\_a\_differentiation\_q\_sweep\_draws\_the\_curve
+
+```python
+def test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A requested differentiation-q sweep renders both the lines and the curve.
+
+No existing test drove this specific field through the real DOM at
+all before this one (`test/gui/test_app_api.py`'s own `Api.open_run`
+coverage only ever calls it as a plain Python function) — this is
+also the first real proof that `run-view-completed.js`'s own
+`drawDifferentiationQCurve` (botanist GUI design doc `20260907-
+claude-sonnet-5-botanist-gui-redesign.md` §7.7) actually draws
+something, not only that the per-order text lines still render.
+
 <a id="gui.test_preferences"></a>
 
 # gui.test\_preferences
