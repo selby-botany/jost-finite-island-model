@@ -23,6 +23,7 @@ const scrubberControls = document.getElementById("scrubber-controls");
 const runDemePairSelector = document.getElementById("run-deme-pair-selector");
 const runXDeme = document.getElementById("run-x-deme");
 const runYDeme = document.getElementById("run-y-deme");
+const runDemePairSelfNote = document.getElementById("run-deme-pair-self-note");
 
 // The progress bar / label elements (declared in run-view-running.js
 // but needed here too -- run-view-initial.js loads before run-view-
@@ -91,6 +92,7 @@ async function renderInitialPreview() {
             xSelect: runXDeme,
             ySelect: runYDeme,
             container: runDemePairSelector,
+            selfComparisonNote: runDemePairSelfNote,
             demeCount: result.demeCount,
             onShowPair: async (x, y) => {
                 const pairResult =

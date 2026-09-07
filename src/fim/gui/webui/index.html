@@ -100,6 +100,14 @@
             <label for="run-x-deme" class="axis-selector axis-selector-x">
               <select id="run-x-deme" aria-label="X deme selector"></select>
             </label>
+            <!-- Shown only while the two selectors above name the same
+                 deme (`app.js`'s own `wireDemePairSelector`) -- P1 item
+                 6 of the 2026-09-06 open-issues doc permits this as a
+                 deliberate diagonal-baseline self-comparison rather
+                 than forcing the selectors apart. -->
+            <span id="run-deme-pair-self-note" class="self-comparison-note" hidden
+              >Self-comparison</span
+            >
           </div>
         <!-- Shared across all three states: `running`/`completed` draw
              into it; `initial` now draws the p_0 scatter (Phase F).

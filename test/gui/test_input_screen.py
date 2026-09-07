@@ -136,6 +136,42 @@ def test_initial_view_shows_axis_selectors_for_deme_pair_choice(
     assert settled["yCount"] == settled["xCount"]
 
 
+def test_deme_pair_selector_permits_a_self_comparison_and_shows_a_note(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Selecting the same deme in both selectors is permitted, not forced apart.
+
+    P1 item 6 of the 2026-09-06 open-issues doc: an earlier version of
+    `wireDemePairSelector` silently bumped one selector back to a
+    distinct value whenever the two matched. This proves the current
+    one leaves a same-deme selection exactly as chosen, and surfaces it
+    with a visible note (`run-deme-pair-self-note`) rather than leaving
+    it unlabeled.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "document.getElementById('run-y-deme').value = "
+            "document.getElementById('run-x-deme').value; "
+            "document.getElementById('run-y-deme')"
+            ".dispatchEvent(new Event('change'));"
+        ),
+        read=(
+            "({"
+            "xValue: document.getElementById('run-x-deme').value, "
+            "yValue: document.getElementById('run-y-deme').value, "
+            "noteHidden: document.getElementById('run-deme-pair-self-note').hidden"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("noteHidden") is False,
+        poll_attempts=500,
+    )
+
+    assert settled["xValue"] == settled["yValue"]
+    assert settled["noteHidden"] is False
+
+
 def test_input_screen_invalid_value_disables_the_run_button(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

@@ -906,12 +906,14 @@ class Api:
         subsequent push, since polling a static trajectory on demand
         makes no sense for one still being written.
 
-        No range/distinctness validation here (unlike `set_significant_
-        digits`'s own bounds check) — this setter has no `d` or points
-        on hand to validate against, and `screens/progress.js`'s own
-        selector already disables "Show pair" whenever `first_deme ==
-        second_deme` (`app.js`'s shared `wireDemePairSelector`). An
-        out-of-range or identical pair reaching a push anyway is caught
+        No range validation here (unlike `set_significant_digits`'s own
+        bounds check) — this setter has no `d` or points on hand to
+        validate against. `first_deme == second_deme` needs none at
+        all: it is a deliberate self-comparison (P1 item 6 of the
+        2026-09-06 open-issues doc; `deme_pair_panel`'s own docstring),
+        permitted in both `app.js`'s shared `wireDemePairSelector` and
+        here. An out-of-range pair reaching a push anyway (a stale
+        selection from a previous run with a different `d`) is caught
         per-tick instead, where real data exists to catch it against
         (`_drain_run_messages`/`_push_batch_progress`'s own `deme_pair_
         panel` call, wrapped to skip that one tick's `pairPanel` rather
@@ -1206,7 +1208,9 @@ class Api:
             `{"ok": True, "panel": ...}`, `panel` being one
             `deme_pair_panel`-shaped entry. `{"ok": False, "message":
             ...}` if the trajectory cannot be read, or the requested
-            demes are out of range or identical.
+            demes are out of range. `first_deme == second_deme` is a
+            deliberate self-comparison, not an error
+            (`deme_pair_panel`'s own docstring).
         """
         trajectory_path = Path(output_directory) / "trajectory.jsonl"
         try:
@@ -1244,8 +1248,9 @@ class Api:
         Returns:
             `{"ok": True, "panel": ...}` on success; `{"ok": False,
             "message": ...}` if no replicate trajectory can be found or
-            read, or the requested demes are out of range or
-            identical.
+            read, or the requested demes are out of range.
+            `first_deme == second_deme` is a deliberate self-comparison,
+            not an error (`deme_pair_panel`'s own docstring).
         """
         directory = Path(output_directory)
         trajectory_paths = sorted(directory.glob("replicate-*/trajectory.jsonl"))
@@ -1432,12 +1437,15 @@ def _drain_run_messages(
             pair = live_deme_pair()
             if pair is not None:
                 first_deme, second_deme = pair
-                # Out of range for this run's own `d`, or the two demes
-                # match: `screens/progress.js`'s own selector already
-                # keeps "Show pair" disabled whenever X equals Y, so
-                # this is a defensive fallback, not an expected path —
-                # skip this one tick's `pairPanel` rather than drop the
-                # whole progress push over it.
+                # Out of range for this run's own `d` — a stale
+                # selection from a previous run with a different `d`,
+                # since the selector itself only ever offers `1..d` for
+                # the run actually in progress. `first_deme ==
+                # second_deme` is a deliberate self-comparison, not an
+                # error (`deme_pair_panel`'s own docstring), so it never
+                # reaches this `suppress` at all; skip this one tick's
+                # `pairPanel` rather than drop the whole progress push
+                # over the genuinely out-of-range case.
                 with contextlib.suppress(ValueError):
                     progress_payload["pairPanel"] = deme_pair_panel(
                         message[3], first_deme - 1, second_deme - 1
@@ -1639,8 +1647,8 @@ def _push_batch_progress(
     if pair is not None and pooled_points is not None:
         first_deme, second_deme = pair
         # Same defensive fallback as `_drain_run_messages`'s own
-        # identical case: out of range for this batch's own `d`, or
-        # the two demes match.
+        # identical case: only a stale, out-of-range selection ever
+        # reaches this `suppress` — a self-comparison is not an error.
         with contextlib.suppress(ValueError):
             progress_payload["pairPanel"] = deme_pair_panel(
                 pooled_points, first_deme - 1, second_deme - 1

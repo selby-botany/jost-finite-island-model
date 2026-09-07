@@ -682,17 +682,35 @@ def test_deme_pair_panel_matches_panels_from_points_own_default_output() -> None
         (20, 5, "first deme index 20"),
         (5, -1, "second deme index -1"),
         (5, 20, "second deme index 20"),
-        (5, 5, "must name different demes"),
     ],
 )
 def test_deme_pair_panel_rejects_invalid_indices(
     first: int, second: int, match: str
 ) -> None:
-    """Out-of-range or identical indices fail loudly, not with a silent misread."""
+    """Out-of-range indices fail loudly, not with a silent misread."""
     points = frequency_points(_state(20))
 
     with pytest.raises(ValueError, match=match):
         deme_pair_panel(points, first, second)
+
+
+def test_deme_pair_panel_permits_a_self_comparison() -> None:
+    """`first == second` is a deliberate diagonal baseline, not a rejected input.
+
+    P1 item 6 of the 2026-09-06 open-issues doc: every point falls
+    exactly on `x == y` by construction — the same column plotted
+    against itself — and both axes name the identical deme.
+    """
+    points = np.array([[0.9, 0.1], [0.8, 0.98]], dtype=np.float64)
+
+    panel = deme_pair_panel(points, first=0, second=0)
+
+    assert panel["x_label"] == "Deme 1"
+    assert panel["y_label"] == "Deme 1"
+    assert panel["points"] == [
+        {"x": 0.9, "y": 0.9, "count": 1, "common": True},
+        {"x": 0.8, "y": 0.8, "count": 1, "common": False},
+    ]
 
 
 def test_pca_project_matches_the_rendered_pca_plot() -> None:

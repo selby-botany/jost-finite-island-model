@@ -5525,6 +5525,18 @@ def test_get_deme_pair_panel_names_the_requested_pair(tmp_path: Path) -> None
 
 The Screen 3 on-demand pair view names its axes by 1-based deme number.
 
+<a id="gui.test_app_api.test_get_deme_pair_panel_permits_a_self_comparison"></a>
+
+#### test\_get\_deme\_pair\_panel\_permits\_a\_self\_comparison
+
+```python
+def test_get_deme_pair_panel_permits_a_self_comparison(tmp_path: Path) -> None
+```
+
+`first_deme == second_deme` succeeds as a deliberate diagonal baseline.
+
+P1 item 6 of the 2026-09-06 open-issues doc.
+
 <a id="gui.test_app_api.test_get_batch_deme_pair_panel_pools_every_replicate"></a>
 
 #### test\_get\_batch\_deme\_pair\_panel\_pools\_every\_replicate
@@ -5542,6 +5554,37 @@ is above or below `scatter.PAIRWISE_MAX_DEMES` -- this bridge
 method exists specifically for the case where it is, so the point
 is proving the pooling and directory-rediscovery, not `d`'s own
 size.
+
+<a id="gui.test_app_api.test_get_batch_deme_pair_panel_permits_a_self_comparison"></a>
+
+#### test\_get\_batch\_deme\_pair\_panel\_permits\_a\_self\_comparison
+
+```python
+def test_get_batch_deme_pair_panel_permits_a_self_comparison(
+        tmp_path: Path) -> None
+```
+
+`first_deme == second_deme` succeeds for a pooled batch panel too.
+
+<a id="gui.test_app_api.test_get_initial_state_deme_pair_panel_names_the_requested_pair"></a>
+
+#### test\_get\_initial\_state\_deme\_pair\_panel\_names\_the\_requested\_pair
+
+```python
+def test_get_initial_state_deme_pair_panel_names_the_requested_pair() -> None
+```
+
+The Initial-state preview's on-demand pair view names its own axes.
+
+<a id="gui.test_app_api.test_get_initial_state_deme_pair_panel_permits_a_self_comparison"></a>
+
+#### test\_get\_initial\_state\_deme\_pair\_panel\_permits\_a\_self\_comparison
+
+```python
+def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None
+```
+
+`first_deme == second_deme` succeeds for the initial-state preview too.
 
 <a id="gui.test_app_api.test_build_menu_has_file_configure_run_view_and_help"></a>
 
@@ -6640,6 +6683,24 @@ def test_initial_view_shows_axis_selectors_for_deme_pair_choice(
 ```
 
 The initial p_0 view shows axis selectors when at least two demes exist.
+
+<a id="gui.test_input_screen.test_deme_pair_selector_permits_a_self_comparison_and_shows_a_note"></a>
+
+#### test\_deme\_pair\_selector\_permits\_a\_self\_comparison\_and\_shows\_a\_note
+
+```python
+def test_deme_pair_selector_permits_a_self_comparison_and_shows_a_note(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Selecting the same deme in both selectors is permitted, not forced apart.
+
+P1 item 6 of the 2026-09-06 open-issues doc: an earlier version of
+`wireDemePairSelector` silently bumped one selector back to a
+distinct value whenever the two matched. This proves the current
+one leaves a same-deme selection exactly as chosen, and surfaces it
+with a visible note (`run-deme-pair-self-note`) rather than leaving
+it unlabeled.
 
 <a id="gui.test_input_screen.test_input_screen_invalid_value_disables_the_run_button"></a>
 
@@ -16570,14 +16631,27 @@ direct equality check, not a separately reimplemented one.
         (20, 5, "first deme index 20"),
         (5, -1, "second deme index -1"),
         (5, 20, "second deme index 20"),
-        (5, 5, "must name different demes"),
     ],
 )
 def test_deme_pair_panel_rejects_invalid_indices(first: int, second: int,
                                                  match: str) -> None
 ```
 
-Out-of-range or identical indices fail loudly, not with a silent misread.
+Out-of-range indices fail loudly, not with a silent misread.
+
+<a id="viz.test_plots.test_deme_pair_panel_permits_a_self_comparison"></a>
+
+#### test\_deme\_pair\_panel\_permits\_a\_self\_comparison
+
+```python
+def test_deme_pair_panel_permits_a_self_comparison() -> None
+```
+
+`first == second` is a deliberate diagonal baseline, not a rejected input.
+
+P1 item 6 of the 2026-09-06 open-issues doc: every point falls
+exactly on `x == y` by construction — the same column plotted
+against itself — and both axes name the identical deme.
 
 <a id="viz.test_plots.test_pca_project_matches_the_rendered_pca_plot"></a>
 

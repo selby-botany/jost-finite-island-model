@@ -160,6 +160,7 @@ function wireLiveDemePairSelector(demeCount) {
         xSelect: runXDeme,
         ySelect: runYDeme,
         container: runDemePairSelector,
+        selfComparisonNote: runDemePairSelfNote,
         demeCount,
         onShowPair: async (x, y) => {
             // Set *before* awaiting the bridge call, not after it

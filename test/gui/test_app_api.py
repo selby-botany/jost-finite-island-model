@@ -992,6 +992,20 @@ def test_get_deme_pair_panel_names_the_requested_pair(tmp_path: Path) -> None:
     assert isinstance(panel["points"], list)
 
 
+def test_get_deme_pair_panel_permits_a_self_comparison(tmp_path: Path) -> None:
+    """`first_deme == second_deme` succeeds as a deliberate diagonal baseline.
+
+    P1 item 6 of the 2026-09-06 open-issues doc.
+    """
+    output = _write_run(tmp_path, d=4)
+
+    result = Api().get_deme_pair_panel(str(output), first_deme=2, second_deme=2)
+
+    assert result["ok"] is True
+    panel = result["panel"]
+    assert panel["x_label"] == panel["y_label"] == "Deme 2"
+
+
 def test_get_deme_pair_panel_rejects_an_out_of_range_deme(tmp_path: Path) -> None:
     output = _write_run(tmp_path, d=4)
 
@@ -1033,12 +1047,55 @@ def test_get_batch_deme_pair_panel_pools_every_replicate(tmp_path: Path) -> None
     assert isinstance(panel["points"], list)
 
 
+def test_get_batch_deme_pair_panel_permits_a_self_comparison(tmp_path: Path) -> None:
+    """`first_deme == second_deme` succeeds for a pooled batch panel too."""
+    output = _write_run(tmp_path, d=4, n_replicates=3)
+
+    result = Api().get_batch_deme_pair_panel(str(output), first_deme=3, second_deme=3)
+
+    assert result["ok"] is True
+    panel = result["panel"]
+    assert panel["x_label"] == panel["y_label"] == "Deme 3"
+
+
 def test_get_batch_deme_pair_panel_rejects_an_out_of_range_deme(
     tmp_path: Path,
 ) -> None:
     output = _write_run(tmp_path, d=4, n_replicates=3)
 
     result = Api().get_batch_deme_pair_panel(str(output), first_deme=1, second_deme=5)
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_get_initial_state_deme_pair_panel_names_the_requested_pair() -> None:
+    """The Initial-state preview's on-demand pair view names its own axes."""
+    result = Api().get_initial_state_deme_pair_panel(
+        starter_form_values(), first_deme=2, second_deme=4
+    )
+
+    assert result["ok"] is True
+    panel = result["panel"]
+    assert panel["x_label"] == "Deme 2"
+    assert panel["y_label"] == "Deme 4"
+
+
+def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None:
+    """`first_deme == second_deme` succeeds for the initial-state preview too."""
+    result = Api().get_initial_state_deme_pair_panel(
+        starter_form_values(), first_deme=5, second_deme=5
+    )
+
+    assert result["ok"] is True
+    panel = result["panel"]
+    assert panel["x_label"] == panel["y_label"] == "Deme 5"
+
+
+def test_get_initial_state_deme_pair_panel_rejects_an_out_of_range_deme() -> None:
+    result = Api().get_initial_state_deme_pair_panel(
+        starter_form_values(), first_deme=1, second_deme=999
+    )
 
     assert result["ok"] is False
     assert "message" in result

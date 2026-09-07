@@ -107,17 +107,25 @@ const fim = {
      * The selectors apply immediately on change; there is no separate
      * "Show pair" button, and no "Show overview" button either
      * (simplify-main-plot design) — selecting Deme 1/Deme 2 directly is
-     * how a user returns to the default panel.
+     * how a user returns to the default panel. Selecting the *same*
+     * deme in both is permitted, not forced apart (P1 item 6, 2026-09-06
+     * open-issues doc): a self-comparison is a deliberate, useful
+     * diagonal baseline (`fim.viz.scatter.deme_pair_panel`'s own
+     * docstring), not a mistake to silently correct on the user's
+     * behalf the way an earlier version of this function did.
      *
      * @param {Object} config
      * @param {HTMLSelectElement} config.xSelect
      * @param {HTMLSelectElement} config.ySelect
      * @param {HTMLElement} config.container - Hidden when `demeCount < 2`.
+     * @param {HTMLElement} config.selfComparisonNote - Shown only while
+     *     `xSelect`/`ySelect` name the same deme; hidden otherwise.
      * @param {number} config.demeCount
      * @param {(x: number, y: number) => (void|Promise<void>)} config.onShowPair
      */
     wireDemePairSelector(config) {
-        const { xSelect, ySelect, container, demeCount, onShowPair } = config;
+        const { xSelect, ySelect, container, selfComparisonNote, demeCount, onShowPair } =
+            config;
         if (!demeCount || demeCount < 2) {
             container.hidden = true;
             return;
@@ -135,28 +143,18 @@ const fim = {
         xSelect.value = "1";
         ySelect.value = "2";
 
-        function forceDistinctSelect(changed) {
-            if (xSelect.value !== ySelect.value) {
-                return;
-            }
-            const other = changed === xSelect ? ySelect : xSelect;
-            const current = Number(changed.value);
-            const replacement = current === demeCount ? current - 1 : current + 1;
-            other.value = String(replacement);
+        function updateSelfComparisonNote() {
+            selfComparisonNote.hidden = xSelect.value !== ySelect.value;
         }
 
         async function applyPairSelection() {
+            updateSelfComparisonNote();
             await onShowPair(Number(xSelect.value), Number(ySelect.value));
         }
 
-        xSelect.onchange = async () => {
-            forceDistinctSelect(xSelect);
-            await applyPairSelection();
-        };
-        ySelect.onchange = async () => {
-            forceDistinctSelect(ySelect);
-            await applyPairSelection();
-        };
+        xSelect.onchange = applyPairSelection;
+        ySelect.onchange = applyPairSelection;
+        updateSelfComparisonNote();
     },
 
     /**

@@ -3186,12 +3186,14 @@ own background thread which pair to keep including in every
 subsequent push, since polling a static trajectory on demand
 makes no sense for one still being written.
 
-No range/distinctness validation here (unlike `set_significant_
-digits`'s own bounds check) — this setter has no `d` or points
-on hand to validate against, and `screens/progress.js`'s own
-selector already disables "Show pair" whenever `first_deme ==
-second_deme` (`app.js`'s shared `wireDemePairSelector`). An
-out-of-range or identical pair reaching a push anyway is caught
+No range validation here (unlike `set_significant_digits`'s own
+bounds check) — this setter has no `d` or points on hand to
+validate against. `first_deme == second_deme` needs none at
+all: it is a deliberate self-comparison (P1 item 6 of the
+2026-09-06 open-issues doc; `deme_pair_panel`'s own docstring),
+permitted in both `app.js`'s shared `wireDemePairSelector` and
+here. An out-of-range pair reaching a push anyway (a stale
+selection from a previous run with a different `d`) is caught
 per-tick instead, where real data exists to catch it against
 (`_drain_run_messages`/`_push_batch_progress`'s own `deme_pair_
 panel` call, wrapped to skip that one tick's `pairPanel` rather
@@ -3426,7 +3428,9 @@ small `d`).
 - ``{"ok"` - True, "panel": ...}`, `panel` being one
   `deme_pair_panel`-shaped entry. `{"ok": False, "message":
   ...}` if the trajectory cannot be read, or the requested
-  demes are out of range or identical.
+  demes are out of range. `first_deme == second_deme` is a
+  deliberate self-comparison, not an error
+  (`deme_pair_panel`'s own docstring).
 
 <a id="fim.gui.app.Api.get_batch_deme_pair_panel"></a>
 
@@ -3463,8 +3467,9 @@ itself.
 
 - ``{"ok"` - True, "panel": ...}` on success; `{"ok": False,
 - `"message"` - ...}` if no replicate trajectory can be found or
-  read, or the requested demes are out of range or
-  identical.
+  read, or the requested demes are out of range.
+  `first_deme == second_deme` is a deliberate self-comparison,
+  not an error (`deme_pair_panel`'s own docstring).
 
 <a id="fim.gui.app.Api.ping"></a>
 
@@ -11316,6 +11321,16 @@ caller-chosen pair is a different question with a different
   one row per (locus, allele) pair, one column per deme.
 - `first` - Zero-based index of the deme to plot on the X axis.
 - `second` - Zero-based index of the deme to plot on the Y axis.
+  May equal `first` — a deliberate self-comparison
+  (2026-09-06 open-issues doc, P1 item 6), not an error: every
+  point then falls exactly on the `x=y` diagonal by
+  construction (each allele's frequency plotted against
+  itself), which is a legitimate baseline a botanist can read
+  directly off the plot, not a degenerate or meaningless
+  request. The GUI's own axis selectors show the identical
+  deme name in both, which already labels the comparison
+  unambiguously — nothing about this function's own output
+  shape needs to change to represent it.
 
 
 **Returns**:
@@ -11327,7 +11342,7 @@ caller-chosen pair is a different question with a different
 **Raises**:
 
 - `ValueError` - If `first`/`second` are out of range for `points`'
-  own deme count, or name the same deme twice.
+  own deme count.
 
 <a id="fim.viz.scatter.pca_project"></a>
 

@@ -332,6 +332,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             xSelect: runXDeme,
             ySelect: runYDeme,
             container: runDemePairSelector,
+            selfComparisonNote: runDemePairSelfNote,
             demeCount: payload.demeCount,
             onShowPair: async (x, y) => {
                 const outputDirectory = window.fim.getCompletedOutputDirectory();

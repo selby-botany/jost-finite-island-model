@@ -359,6 +359,16 @@ def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, ob
             one row per (locus, allele) pair, one column per deme.
         first: Zero-based index of the deme to plot on the X axis.
         second: Zero-based index of the deme to plot on the Y axis.
+            May equal `first` — a deliberate self-comparison
+            (2026-09-06 open-issues doc, P1 item 6), not an error: every
+            point then falls exactly on the `x=y` diagonal by
+            construction (each allele's frequency plotted against
+            itself), which is a legitimate baseline a botanist can read
+            directly off the plot, not a degenerate or meaningless
+            request. The GUI's own axis selectors show the identical
+            deme name in both, which already labels the comparison
+            unambiguously — nothing about this function's own output
+            shape needs to change to represent it.
 
     Returns:
         The same `{"x_label", "y_label", "points", "kind"}` shape every other
@@ -366,7 +376,7 @@ def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, ob
 
     Raises:
         ValueError: If `first`/`second` are out of range for `points`'
-            own deme count, or name the same deme twice.
+            own deme count.
     """
     deme_count = points.shape[1]
     for index, which in ((first, "first"), (second, "second")):
@@ -374,8 +384,6 @@ def deme_pair_panel(points: FloatArray, first: int, second: int) -> dict[str, ob
             raise ValueError(
                 f"{which} deme index {index} is out of range for {deme_count} deme(s)"
             )
-    if first == second:
-        raise ValueError("first and second must name different demes")
     return _panel(
         points[:, first], points[:, second], f"Deme {first + 1}", f"Deme {second + 1}"
     )
