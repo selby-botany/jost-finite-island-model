@@ -90,22 +90,32 @@ def test_results_directory_accepts_a_root_override(tmp_path: Path) -> None:
     assert paths.results_directory(tmp_path) == tmp_path / "results"
 
 
-def test_default_output_directory_matches_previous_cli_behavior(
+def test_default_output_directory_uses_microsecond_timestamp(
     tmp_path: Path,
 ) -> None:
-    """`fim.paths` reproduces `cli.py`'s pre-extraction directory naming.
-
-    Regression proof for Milestone G0 (`doc/fim-gui-design.md` §12): the
-    timestamped folder name format (`run-YYYYMMDD-HHMMSS`, UTC) is
-    unchanged from the version this logic replaced inside `fim.cli`.
-    """
+    """Default output names include microseconds to prevent same-second collisions."""
 
     def clock() -> datetime:
         return datetime(2026, 8, 27, 14, 22, 5, tzinfo=UTC)
 
     output = paths.default_output_directory(tmp_path, clock=clock)
 
-    assert output == tmp_path / "run-20260827-142205"
+    assert output == tmp_path / "run-20260827-142205-000000"
+
+
+def test_default_output_directory_retries_existing_timestamped_name(
+    tmp_path: Path,
+) -> None:
+    """An existing automatic name receives a deterministic numeric suffix."""
+
+    def clock() -> datetime:
+        return datetime(2026, 8, 27, 14, 22, 5, tzinfo=UTC)
+
+    (tmp_path / "run-20260827-142205-000000").mkdir()
+
+    assert paths.default_output_directory(tmp_path, clock=clock) == (
+        tmp_path / "run-20260827-142205-000000-001"
+    )
 
 
 def test_default_output_directory_uses_results_directory_by_default() -> None:

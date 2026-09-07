@@ -15,6 +15,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_mypy_scope`](#test.test_mypy_scope)
   - [`test_paths`](#test.test_paths)
   - [`test_reanalyze`](#test.test_reanalyze)
+  - [`test_shutdown_diagnostics`](#test.test_shutdown_diagnostics)
   - [`test_update`](#test.test_update)
 - [`test/cli/`](#group-cli)
   - [`conftest`](#cli.conftest)
@@ -42,6 +43,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_results_screen`](#gui.test_results_screen)
   - [`test_runner`](#gui.test_runner)
   - [`test_running_screen`](#gui.test_running_screen)
+  - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_store`](#gui.test_store)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
 - [`test/model/`](#group-model)
@@ -91,6 +93,155 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 # test.conftest
 
 Shared deterministic fixtures for the simulator test suite.
+
+Also arms this suite's own interpreter-shutdown diagnostics (see
+`pytest_unconfigure` below). `test/gui/conftest.py`'s own module
+docstring records several separate investigations into a `pytest` process
+that finished every test, printed its own summary, and then hung
+indefinitely in CPython's `Py_FinalizeEx -> wait_for_thread_shutdown` --
+each one diagnosed by catching the stalled process live and running
+`sample <pid>` against it by hand. That technique works, but it needs a
+person watching at the moment it happens, and the hang reproduces most
+often on CI where nobody is. These two hooks capture the same evidence
+automatically, on every run, with nothing installed: they are pure
+standard library (`threading`, `faulthandler`), so they add no dependency
+and work identically on every platform this suite runs on.
+
+`atexit` was tried first and is **wrong for this specific hang**, proven
+by the end-to-end test in `test/test_shutdown_diagnostics.py` before this
+comment was written: `Py_FinalizeEx` calls `wait_for_thread_shutdown`
+(joining every non-daemon thread) *before* it runs `atexit` callbacks, so
+on the one failure these diagnostics exist to catch, an `atexit` hook is
+never reached at all -- the first version of this file hung a child
+interpreter with completely empty stderr. `pytest_unconfigure` runs at
+the end of the session while the interpreter is still fully alive, which
+is the last moment ordinary Python code is guaranteed to run.
+
+<a id="test.conftest.live_non_daemon_threads"></a>
+
+#### live\_non\_daemon\_threads
+
+```python
+def live_non_daemon_threads() -> list[threading.Thread]
+```
+
+Return every non-daemon thread other than the main one.
+
+Exactly the set `threading._shutdown` -- and therefore
+`Py_FinalizeEx -> wait_for_thread_shutdown` -- blocks on. A daemon
+thread never delays shutdown and the main thread is the one doing the
+waiting, so neither can explain a hang; both are excluded rather than
+reported as noise a reader has to filter out under incident pressure.
+
+**Arguments**:
+
+  None
+  
+
+**Returns**:
+
+  The threads still alive that will block interpreter shutdown, in
+  `threading.enumerate()` order. Empty when shutdown is unblocked.
+
+<a id="test.conftest.report_live_non_daemon_threads"></a>
+
+#### report\_live\_non\_daemon\_threads
+
+```python
+def report_live_non_daemon_threads() -> list[threading.Thread]
+```
+
+Name every thread that is about to block interpreter shutdown.
+
+Runs from `pytest_unconfigure`, while the interpreter is still fully
+working: ordinary Python code, ordinary `stderr`. That timing is the
+entire point -- once `Py_FinalizeEx` is actually wedged, Python-level
+code can no longer run and nothing can say anything at all, which is
+why every previous incident needed `sample <pid>` by hand.
+
+Prints nothing when shutdown is unblocked, so a healthy run's own
+output is completely unchanged.
+
+**Arguments**:
+
+  None
+  
+
+**Returns**:
+
+  The offending threads, so a caller (and this suite's own tests)
+  can act on the same list that was reported. Empty when shutdown
+  is unblocked.
+
+<a id="test.conftest.arm_shutdown_watchdog"></a>
+
+#### arm\_shutdown\_watchdog
+
+```python
+def arm_shutdown_watchdog() -> None
+```
+
+Bound interpreter shutdown, dumping every thread's stack if it hangs.
+
+`faulthandler`'s watchdog is a real C thread, so unlike
+`report_live_non_daemon_threads` above it still fires *during*
+finalization, once Python-level code can no longer run at all --
+which is precisely the window this suite's own hang lives in. It
+dumps the same per-thread stacks `sample <pid>` was previously
+collected by hand for, into the run's own captured output.
+
+Armed at the end of the session rather than at import: a timer
+started at session start would have to outlast the entire test run
+and would kill a legitimately slow one. Started here, its whole
+budget applies to shutdown alone.
+
+`exit=True` turns an unbounded hang into a bounded, non-zero-exit
+failure. That matters beyond diagnostics: a hang gives CI no result
+at all and blocks the runner indefinitely, whereas a failure is a
+reported, actionable outcome that still carries the stacks needed to
+fix it.
+
+**Arguments**:
+
+  None
+  
+
+**Returns**:
+
+  None
+
+<a id="test.conftest.pytest_unconfigure"></a>
+
+#### pytest\_unconfigure
+
+```python
+def pytest_unconfigure(config: pytest.Config) -> None
+```
+
+Run both shutdown diagnostics as the session ends.
+
+Ordering is deliberate and load-bearing. The readable report runs
+first, while ordinary Python still works, so the plain-language "here
+is the offending thread and what started it" line is always written.
+The watchdog is armed second, so its budget covers everything after
+this hook returns -- pytest's own remaining teardown *and*
+interpreter finalization, which is where the hang actually lives.
+
+`pytest_unconfigure`, not `atexit`: `Py_FinalizeEx` joins non-daemon
+threads before running `atexit` callbacks, so an `atexit` hook is
+unreachable on exactly the hang being diagnosed (see this module's
+own docstring -- an `atexit` version was written first and proven
+silent by `test/test_shutdown_diagnostics.py`'s end-to-end test).
+
+**Arguments**:
+
+- `config` - The finishing session's own configuration. Unused --
+  the hook's signature is pytest's, not this module's choice.
+  
+
+**Returns**:
+
+  None
 
 <a id="test.conftest.rng"></a>
 
@@ -859,20 +1010,27 @@ def test_results_directory_accepts_a_root_override(tmp_path: Path) -> None
 
 An explicit root bypasses `project_root` entirely.
 
-<a id="test.test_paths.test_default_output_directory_matches_previous_cli_behavior"></a>
+<a id="test.test_paths.test_default_output_directory_uses_microsecond_timestamp"></a>
 
-#### test\_default\_output\_directory\_matches\_previous\_cli\_behavior
+#### test\_default\_output\_directory\_uses\_microsecond\_timestamp
 
 ```python
-def test_default_output_directory_matches_previous_cli_behavior(
+def test_default_output_directory_uses_microsecond_timestamp(
         tmp_path: Path) -> None
 ```
 
-`fim.paths` reproduces `cli.py`'s pre-extraction directory naming.
+Default output names include microseconds to prevent same-second collisions.
 
-Regression proof for Milestone G0 (`doc/fim-gui-design.md` §12): the
-timestamped folder name format (`run-YYYYMMDD-HHMMSS`, UTC) is
-unchanged from the version this logic replaced inside `fim.cli`.
+<a id="test.test_paths.test_default_output_directory_retries_existing_timestamped_name"></a>
+
+#### test\_default\_output\_directory\_retries\_existing\_timestamped\_name
+
+```python
+def test_default_output_directory_retries_existing_timestamped_name(
+        tmp_path: Path) -> None
+```
+
+An existing automatic name receives a deterministic numeric suffix.
 
 <a id="test.test_paths.test_default_output_directory_uses_results_directory_by_default"></a>
 
@@ -1049,6 +1207,124 @@ def test_group_rows_by_generation_groups_every_persisted_generation(
 ```
 
 Every persisted generation appears, keyed by its own generation number.
+
+<a id="test.test_shutdown_diagnostics"></a>
+
+# test.test\_shutdown\_diagnostics
+
+Regression guard for the suite's own interpreter-shutdown diagnostics.
+
+`test/conftest.py`'s own module docstring has the history these exist
+for: a `pytest` process that finished every test, printed its summary,
+and then hung in `Py_FinalizeEx -> wait_for_thread_shutdown`, diagnosed
+only by catching it live with `sample <pid>`. The diagnostics replace
+that manual step, so they are worth their own direct tests -- a
+diagnostic that has silently stopped working is worse than none, since
+the next incident will be read as "no offending thread found" rather
+than "the detector is broken."
+
+`test_a_real_hung_interpreter_is_reported_and_bounded` is the one that
+matters most, and it earned that status immediately: the first version
+of these diagnostics used `atexit`, every unit test below passed against
+it, and only the end-to-end test caught that `Py_FinalizeEx` joins
+non-daemon threads *before* running `atexit` callbacks -- making the
+whole mechanism silent on precisely the hang it was built for. The unit
+tests check the pieces; only a real hung child interpreter checks the
+assumption the pieces rest on.
+
+<a id="test.test_shutdown_diagnostics.test_live_non_daemon_threads_ignores_a_quiet_interpreter"></a>
+
+#### test\_live\_non\_daemon\_threads\_ignores\_a\_quiet\_interpreter
+
+```python
+def test_live_non_daemon_threads_ignores_a_quiet_interpreter() -> None
+```
+
+Nothing is reported when no thread would block shutdown.
+
+The healthy case, and the one that must stay silent: every passing
+run reaches this state, so a false positive here would print noise on
+every single `pytest` invocation this project makes.
+
+Runs on the main thread of a session that starts no threads of its
+own, so the only candidates are any this suite's own machinery
+happens to keep alive -- all of which must be daemon threads
+precisely so they cannot block shutdown.
+
+<a id="test.test_shutdown_diagnostics.test_live_non_daemon_threads_finds_a_thread_that_blocks_shutdown"></a>
+
+#### test\_live\_non\_daemon\_threads\_finds\_a\_thread\_that\_blocks\_shutdown
+
+```python
+def test_live_non_daemon_threads_finds_a_thread_that_blocks_shutdown() -> None
+```
+
+A live non-daemon thread is reported -- the exact hang signature.
+
+This is the shape every incident in `test/gui/conftest.py`'s own
+history had: one non-daemon thread outliving the work that started
+it, which `threading._shutdown` then waits on forever. The thread is
+held open on an `Event` (not a sleep) so the assertion runs while it
+is genuinely alive, deterministically, with no timing race.
+
+<a id="test.test_shutdown_diagnostics.test_live_non_daemon_threads_ignores_daemon_threads"></a>
+
+#### test\_live\_non\_daemon\_threads\_ignores\_daemon\_threads
+
+```python
+def test_live_non_daemon_threads_ignores_daemon_threads() -> None
+```
+
+A daemon thread is excluded: it cannot delay shutdown.
+
+`threading._shutdown` never joins daemon threads, so reporting one
+would point an incident investigation at a thread that provably is
+not the cause.
+
+<a id="test.test_shutdown_diagnostics.test_the_diagnostics_are_wired_to_a_real_pytest_hook"></a>
+
+#### test\_the\_diagnostics\_are\_wired\_to\_a\_real\_pytest\_hook
+
+```python
+def test_the_diagnostics_are_wired_to_a_real_pytest_hook() -> None
+```
+
+`pytest_unconfigure` is what actually runs the diagnostics.
+
+Wiring is the whole mechanism: both functions only ever run because
+pytest calls this hook at the end of the session, and nothing else
+references them. A refactor that renamed or dropped the hook would
+leave both functions fully tested above and completely inert in a
+real run -- the exact "the detector is broken, but silently" failure
+this file exists to prevent.
+
+<a id="test.test_shutdown_diagnostics.test_a_real_hung_interpreter_is_reported_and_bounded"></a>
+
+#### test\_a\_real\_hung\_interpreter\_is\_reported\_and\_bounded
+
+```python
+def test_a_real_hung_interpreter_is_reported_and_bounded() -> None
+```
+
+End to end: a genuinely stuck shutdown reports, dumps stacks, and exits.
+
+The unit tests above each prove one piece in isolation; only this one
+proves the whole mechanism works on the failure it was built for, and
+it is the test that caught the original `atexit`-based design being
+entirely silent on that failure (see this module's own docstring).
+
+It reproduces the real bug exactly -- a non-daemon thread left alive
+after the work finishes, wedging `Py_FinalizeEx ->
+wait_for_thread_shutdown` -- in a real child interpreter driven
+through the same `pytest_unconfigure` entry point pytest itself uses,
+and verifies all three required outcomes.
+
+Without these diagnostics this child would hang forever, which is
+precisely the observed CI symptom. A short `FIM_TEST_SHUTDOWN_TIMEOUT`
+keeps the test fast; `subprocess`'s own `timeout` is set well above it
+so a genuine regression fails as a timeout rather than hanging this
+suite in turn -- the one failure mode this whole file exists to make
+impossible.
 
 <a id="test.test_update"></a>
 
@@ -4696,55 +4972,6 @@ Mirrors the Tk-era `ResultsScreen`'s own `open_folder` injection
 point (`test_results_screen_open_folder_invokes_the_injected_
 opener`), carried into `Api.__init__` unchanged in spirit.
 
-<a id="gui.test_app_api.test_resolve_available_output_directory_returns_a_free_path_immediately"></a>
-
-#### test\_resolve\_available\_output\_directory\_returns\_a\_free\_path\_immediately
-
-```python
-def test_resolve_available_output_directory_returns_a_free_path_immediately(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-No collision, no retry: the first candidate is returned as-is.
-
-<a id="gui.test_app_api.test_resolve_available_output_directory_retries_past_a_collision"></a>
-
-#### test\_resolve\_available\_output\_directory\_retries\_past\_a\_collision
-
-```python
-def test_resolve_available_output_directory_retries_past_a_collision(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-A same-second collision (`paths.default_output_directory`'s own
-real, timestamp-based naming — see `_START_RUN_COLLISION_*`'s own
-comment) is retried until a free path is returned, not surfaced as
-a failure on the very first attempt.
-
-Direct regression coverage for the real, repeatedly-reproduced
-failure this fixed: several of this project's own `gui`-marked
-tests, each starting a real run within the same wall-clock second,
-previously received `{"ok": False, "message": "output directory
-already exists"}` for what was, from each test's perspective, an
-entirely fresh run — see `test/gui/test_running_screen.py`'s own
-module docstring for the full investigation.
-
-<a id="gui.test_app_api.test_resolve_available_output_directory_gives_up_after_the_max_wait"></a>
-
-#### test\_resolve\_available\_output\_directory\_gives\_up\_after\_the\_max\_wait
-
-```python
-def test_resolve_available_output_directory_gives_up_after_the_max_wait(
-        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
-```
-
-A collision that never clears is returned anyway once the wait budget expires.
-
-`Api.start_run` is the one that turns a still-colliding directory
-into a real `{"ok": False, ...}` (via `runner.start_run`'s own
-`FileExistsError`) — this function's own job ends at "stop
-retrying," not at deciding what a persistent collision means.
-
 <a id="gui.test_app_api.test_parse_max_workers"></a>
 
 #### test\_parse\_max\_workers
@@ -6897,25 +7124,10 @@ caller would remove the collision.
 It did not fully explain the failures that remained. The actual cause,
 found only once `on_message` gave a test a way to record whether
 `Api.start_run` even ran at all: `fim.paths.default_output_directory()`
-names its directory by the current wall-clock *second*
-(`run-YYYYMMDD-HHMMSS`, unchanged from the CLI's own pre-existing
-behavior — see `test/test_paths.py`'s own regression proof for that), so
-two calls landing in the same second collide. Several of this project's
-own `gui`-marked tests each start a real run in quick succession, and —
-running in the same pytest process, sometimes only a fraction of a
-second apart — occasionally did exactly that: `Api.start_run` correctly
-and immediately returned `{"ok": False, "message": "output directory
-already exists: ..."}`, `_drain_run_messages` was never even reached,
-and every DOM-polling assertion this file had was simply waiting for a
-push that could never come — indistinguishable, from a pure DOM-polling
-vantage point, from a genuinely stuck background thread. Fixed at the
-source: `Api.start_run` now resolves its output directory through
-`fim.gui.app._resolve_available_output_directory`, which retries past a
-same-second collision by waiting for the wall clock to cross into a new
-second (`test/gui/test_app_api.py` covers that function directly and
-fast, with `time.sleep` mocked out) — a real, if narrow, production
-reliability gap this fixed for a live user too, not only for this test
-suite's own rapid succession of runs.
+used to name its directory only to the wall-clock second, so two rapid
+calls collided and no drain thread started. The shared allocator now uses
+microsecond timestamps and bounded numeric suffixes, removing that
+collision without a GUI-only wait loop.
 
 The `on_run_started`/`on_message` hooks stayed even once the real cause
 was found: waiting on a plain `threading.Event` a real background thread
@@ -7065,46 +7277,127 @@ draw had not caught up yet. Fixed at that same source: the flag
 now flips synchronously, before the bridge call is even awaited, so
 it is never later than the click.
 
-A third defect surfaced later still, this time in the *data*, not
-the wiring: the very next tick after the round trip lands is
-genuinely showing `pairPanel`, exactly as intended, but `fim.cli.
-STARTER_CONFIG` (this test's own starter defaults,
-`_SET_UNREACHABLE_CONVERGENCE` deliberately leaves untouched) pairs
-a single, `initial_allele_count=2` locus with weak migration and
-mutation (`m=0.001`, `mu=0.00003`) — one discrete point per deme
-pair. `Deme 2` and `Deme 3` (the default panel's and this test's own
-chosen pair's other axis) have not necessarily drifted apart from
-*each other* yet only a tick or two after the run starts, and two
-demes independently landing back on the same discrete allele count
-this early is a real, narrowing-over-time coincidence — confirmed
-live, reproducing on every attempt right after the fix below was
-tried first: retrying the pixel comparison itself on each
-subsequent tick, an `evaluate_js` call every time. That retry loop
-is what this file's own module docstring already warned a fix must
-not do — competing `evaluate_js` calls against the background
-thread's own concurrent pushes, the exact collision shape recorded
-there (macOS `AppHelper.callAfter`, one thread's call going
-unanswered under contention) — and it reproduced that exact
-failure mode: `progress_count` itself stopped advancing for the
-rest of the run, confirmed by direct instrumentation, not a
-coincidence of population genetics at all. Waiting for a fixed,
-larger generation count first was also considered and rejected: it
-would only change which specific coincidence the test gambles on,
-not remove the gamble, for parameters this test does not otherwise
-own.
+A selected pair can legitimately have the same rendered coordinates
+as the default pair at a particular stochastic generation. This test
+therefore proves that the requested pair reaches the bridge state;
+visual rendering is exercised separately with fixed panel data.
 
-Closed at the actual source instead, with no new `evaluate_js`
-calls at all: `on_message` below recomputes `viz.scatter.
-deme_pair_panel`'s own points from each tick's raw state (`message
-[3]`, the same array `_drain_run_messages` itself calls it on) and
-compares them to that tick's `panels[0]` (`message[2]`) — pure
-Python, no bridge call, safe to do on every tick. `_drive` then
-waits, by polling that pure-Python flag only, for a tick at or past
-`progress_count_when_pair_landed` whose own data has already
-diverged, before making the *one* `evaluate_js` snapshot call this
-test has always made — preserving the "one-off call" shape the
-Cancel test above and this file's own module docstring establish,
-while no longer gambling on which specific tick's snapshot to take.
+<a id="gui.test_shutdown_deadman"></a>
+
+# gui.test\_shutdown\_deadman
+
+Tests for the GUI's own shutdown deadman timer (`fim.gui.app`).
+
+Window-free and unmarked `gui`: none of this needs a real pywebview
+window, since the deadman is armed *after* `webview.start()` has already
+returned. The one test that needs a genuinely wedged process builds it in
+a child interpreter instead, which is both faster and far more honest
+than trying to provoke a real hang in-process.
+
+Why this exists at all: a closed window that leaves the process running
+is, to a user, an app that "won't quit" -- fixable only by Force Quit or
+Task Manager. `fim.gui.app.create_window` already carries one fix for
+that exact class (pywebview's own non-daemon HTTP handler threads) and
+`test/gui/conftest.py` records several more, each an in-flight bridge
+call or leftover thread wedging `Py_FinalizeEx`. The deadman is the
+backstop for the next one, which is why its own correctness is worth
+testing directly rather than trusting by inspection.
+
+<a id="gui.test_shutdown_deadman.test_shutdown_timeout_defaults_when_unset"></a>
+
+#### test\_shutdown\_timeout\_defaults\_when\_unset
+
+```python
+def test_shutdown_timeout_defaults_when_unset(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+With no environment override, the built-in default applies.
+
+<a id="gui.test_shutdown_deadman.test_shutdown_timeout_honors_the_environment"></a>
+
+#### test\_shutdown\_timeout\_honors\_the\_environment
+
+```python
+def test_shutdown_timeout_honors_the_environment(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`FIM_GUI_SHUTDOWN_TIMEOUT` overrides the default.
+
+The documented escape hatch for a developer chasing a real shutdown
+hang, who needs the process to stay alive and inspectable rather than
+be terminated out from under them.
+
+<a id="gui.test_shutdown_deadman.test_shutdown_timeout_falls_back_on_a_malformed_value"></a>
+
+#### test\_shutdown\_timeout\_falls\_back\_on\_a\_malformed\_value
+
+```python
+def test_shutdown_timeout_falls_back_on_a_malformed_value(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A mistyped timeout falls back instead of raising.
+
+This is a safety net; crashing on exit because the safety net's own
+configuration was mistyped would be a worse failure than the hang it
+guards against, and would hit the user at the least recoverable
+possible moment.
+
+<a id="gui.test_shutdown_deadman.test_a_zero_timeout_disables_the_deadman"></a>
+
+#### test\_a\_zero\_timeout\_disables\_the\_deadman
+
+```python
+def test_a_zero_timeout_disables_the_deadman() -> None
+```
+
+Zero starts no timer at all, leaving shutdown completely unbounded.
+
+Verified by observing that no deadman thread exists afterward, rather
+than by trusting the early return: the thread is the entire
+mechanism, so its absence is the only thing that actually proves the
+disable worked.
+
+<a id="gui.test_shutdown_deadman.test_the_deadman_thread_is_a_daemon_so_it_cannot_itself_block_exit"></a>
+
+#### test\_the\_deadman\_thread\_is\_a\_daemon\_so\_it\_cannot\_itself\_block\_exit
+
+```python
+def test_the_deadman_thread_is_a_daemon_so_it_cannot_itself_block_exit(
+) -> None
+```
+
+The guard must never become the thing it guards against.
+
+A non-daemon timer thread would be joined by
+`wait_for_thread_shutdown` and would delay every ordinary exit by the
+full timeout -- turning a safety net into a guaranteed, universal
+version of the exact bug it exists to prevent. A generous timeout is
+used so the timer is certain to still be waiting when it is
+inspected, and never fires during this test.
+
+<a id="gui.test_shutdown_deadman.test_a_wedged_shutdown_is_forced_to_exit"></a>
+
+#### test\_a\_wedged\_shutdown\_is\_forced\_to\_exit
+
+```python
+def test_a_wedged_shutdown_is_forced_to_exit() -> None
+```
+
+End to end: a process that cannot finalize is terminated anyway.
+
+Reproduces the real user-visible failure exactly -- a non-daemon
+thread outliving the closed window, wedging `Py_FinalizeEx ->
+wait_for_thread_shutdown` -- in a child interpreter, and proves the
+deadman converts an app that "won't quit" into a bounded exit with a
+real explanation.
+
+Without the deadman this child runs forever, which is precisely what
+a user would experience. `subprocess`'s own generous `timeout` means
+a regression here fails as a timeout rather than hanging this suite
+in turn.
 
 <a id="gui.test_store"></a>
 
@@ -13284,6 +13577,17 @@ def test_pre_commit_formats_and_restages_python_with_spaces(
 
 Staged Python is formatted and re-staged without splitting paths.
 
+<a id="validation.test_git_hooks.test_pre_commit_rejects_partially_staged_python_without_changing_the_index"></a>
+
+#### test\_pre\_commit\_rejects\_partially\_staged\_python\_without\_changing\_the\_index
+
+```python
+def test_pre_commit_rejects_partially_staged_python_without_changing_the_index(
+        tmp_path: Path) -> None
+```
+
+A formatter must not stage an author's deliberately unstaged hunk.
+
 <a id="validation.test_git_hooks.test_pre_commit_refreshes_api_only_for_staged_python"></a>
 
 #### test\_pre\_commit\_refreshes\_api\_only\_for\_staged\_python
@@ -15436,6 +15740,27 @@ panels`: the two functions'
 grouping must never silently drift apart, since `marker_groups` is
 implemented in terms of `grouped_points` specifically to make that
 impossible by construction.
+
+<a id="viz.test_plots.test_deme_pair_panel_highlights_each_demes_deterministic_top_allele"></a>
+
+#### test\_deme\_pair\_panel\_highlights\_each\_demes\_deterministic\_top\_allele
+
+```python
+def test_deme_pair_panel_highlights_each_demes_deterministic_top_allele(
+) -> None
+```
+
+Distinct axis maxima remain identity-selected before point grouping.
+
+<a id="viz.test_plots.test_deme_pair_panel_breaks_top_allele_ties_by_source_row_order"></a>
+
+#### test\_deme\_pair\_panel\_breaks\_top\_allele\_ties\_by\_source\_row\_order
+
+```python
+def test_deme_pair_panel_breaks_top_allele_ties_by_source_row_order() -> None
+```
+
+Equal-frequency alleles do not produce ambiguous multiple blue markers.
 
 <a id="viz.test_plots.test_panels_from_points_matches_scatter_panels_directly"></a>
 

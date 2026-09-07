@@ -1,8 +1,36 @@
-"""Shared deterministic fixtures for the simulator test suite."""
+r"""Shared deterministic fixtures for the simulator test suite.
+
+Also arms this suite's own interpreter-shutdown diagnostics (see
+`pytest_unconfigure` below). `test/gui/conftest.py`'s own module
+docstring records several separate investigations into a `pytest` process
+that finished every test, printed its own summary, and then hung
+indefinitely in CPython's `Py_FinalizeEx -> wait_for_thread_shutdown` --
+each one diagnosed by catching the stalled process live and running
+`sample <pid>` against it by hand. That technique works, but it needs a
+person watching at the moment it happens, and the hang reproduces most
+often on CI where nobody is. These two hooks capture the same evidence
+automatically, on every run, with nothing installed: they are pure
+standard library (`threading`, `faulthandler`), so they add no dependency
+and work identically on every platform this suite runs on.
+
+`atexit` was tried first and is **wrong for this specific hang**, proven
+by the end-to-end test in `test/test_shutdown_diagnostics.py` before this
+comment was written: `Py_FinalizeEx` calls `wait_for_thread_shutdown`
+(joining every non-daemon thread) *before* it runs `atexit` callbacks, so
+on the one failure these diagnostics exist to catch, an `atexit` hook is
+never reached at all -- the first version of this file hung a child
+interpreter with completely empty stderr. `pytest_unconfigure` runs at
+the end of the session while the interpreter is still fully alive, which
+is the last moment ordinary Python code is guaranteed to run.
+"""
 
 from __future__ import annotations
 
+import faulthandler
 import logging
+import os
+import sys
+import threading
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -21,6 +49,140 @@ settings.register_profile(
     max_examples=100,
 )
 settings.load_profile("deterministic")
+
+# How long interpreter shutdown may take before the watchdog dumps every
+# thread's stack and kills the process. Shutdown after a finished test
+# session is normally instantaneous, so any value here is generous; this
+# only has to be longer than a legitimately slow teardown (flushing
+# coverage data, joining a briefly-busy worker) to avoid a false kill.
+_SHUTDOWN_TIMEOUT_SECONDS = float(os.environ.get("FIM_TEST_SHUTDOWN_TIMEOUT", "120"))
+
+
+def live_non_daemon_threads() -> list[threading.Thread]:
+    """Return every non-daemon thread other than the main one.
+
+    Exactly the set `threading._shutdown` -- and therefore
+    `Py_FinalizeEx -> wait_for_thread_shutdown` -- blocks on. A daemon
+    thread never delays shutdown and the main thread is the one doing the
+    waiting, so neither can explain a hang; both are excluded rather than
+    reported as noise a reader has to filter out under incident pressure.
+
+    Args:
+        None
+
+    Returns:
+        The threads still alive that will block interpreter shutdown, in
+        `threading.enumerate()` order. Empty when shutdown is unblocked.
+    """
+    main = threading.main_thread()
+    return [
+        thread
+        for thread in threading.enumerate()
+        if thread is not main and not thread.daemon and thread.is_alive()
+    ]
+
+
+def report_live_non_daemon_threads() -> list[threading.Thread]:
+    """Name every thread that is about to block interpreter shutdown.
+
+    Runs from `pytest_unconfigure`, while the interpreter is still fully
+    working: ordinary Python code, ordinary `stderr`. That timing is the
+    entire point -- once `Py_FinalizeEx` is actually wedged, Python-level
+    code can no longer run and nothing can say anything at all, which is
+    why every previous incident needed `sample <pid>` by hand.
+
+    Prints nothing when shutdown is unblocked, so a healthy run's own
+    output is completely unchanged.
+
+    Args:
+        None
+
+    Returns:
+        The offending threads, so a caller (and this suite's own tests)
+        can act on the same list that was reported. Empty when shutdown
+        is unblocked.
+    """
+    blocking = live_non_daemon_threads()
+    if not blocking:
+        return blocking
+    print(
+        f"\nfim: {len(blocking)} non-daemon thread(s) alive at interpreter "
+        f"shutdown; these will block Py_FinalizeEx:",
+        file=sys.stderr,
+    )
+    for thread in blocking:
+        # `_target` is private, but it is the single most useful fact
+        # here: `repr(Thread)` alone gives a name like `Thread-7`, which
+        # does not identify the code that started it. Read defensively so
+        # a Thread subclass that does not set it still reports the rest.
+        target = getattr(thread, "_target", None)
+        target_name = getattr(target, "__qualname__", None) or repr(target)
+        print(
+            f"  {thread!r} target={target_name} "
+            f"module={getattr(target, '__module__', None)}",
+            file=sys.stderr,
+        )
+    sys.stderr.flush()
+    return blocking
+
+
+def arm_shutdown_watchdog() -> None:
+    """Bound interpreter shutdown, dumping every thread's stack if it hangs.
+
+    `faulthandler`'s watchdog is a real C thread, so unlike
+    `report_live_non_daemon_threads` above it still fires *during*
+    finalization, once Python-level code can no longer run at all --
+    which is precisely the window this suite's own hang lives in. It
+    dumps the same per-thread stacks `sample <pid>` was previously
+    collected by hand for, into the run's own captured output.
+
+    Armed at the end of the session rather than at import: a timer
+    started at session start would have to outlast the entire test run
+    and would kill a legitimately slow one. Started here, its whole
+    budget applies to shutdown alone.
+
+    `exit=True` turns an unbounded hang into a bounded, non-zero-exit
+    failure. That matters beyond diagnostics: a hang gives CI no result
+    at all and blocks the runner indefinitely, whereas a failure is a
+    reported, actionable outcome that still carries the stacks needed to
+    fix it.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
+    if _SHUTDOWN_TIMEOUT_SECONDS > 0:
+        faulthandler.dump_traceback_later(_SHUTDOWN_TIMEOUT_SECONDS, exit=True)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Run both shutdown diagnostics as the session ends.
+
+    Ordering is deliberate and load-bearing. The readable report runs
+    first, while ordinary Python still works, so the plain-language "here
+    is the offending thread and what started it" line is always written.
+    The watchdog is armed second, so its budget covers everything after
+    this hook returns -- pytest's own remaining teardown *and*
+    interpreter finalization, which is where the hang actually lives.
+
+    `pytest_unconfigure`, not `atexit`: `Py_FinalizeEx` joins non-daemon
+    threads before running `atexit` callbacks, so an `atexit` hook is
+    unreachable on exactly the hang being diagnosed (see this module's
+    own docstring -- an `atexit` version was written first and proven
+    silent by `test/test_shutdown_diagnostics.py`'s end-to-end test).
+
+    Args:
+        config: The finishing session's own configuration. Unused --
+            the hook's signature is pytest's, not this module's choice.
+
+    Returns:
+        None
+    """
+    del config
+    report_live_non_daemon_threads()
+    arm_shutdown_watchdog()
 
 
 @pytest.fixture

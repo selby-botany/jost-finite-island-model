@@ -362,7 +362,8 @@ def test_pooled_frequency_points_concatenates_before_grouping() -> None:
 
     assert pooled.shape == (2, 2)
     unique, sizes, colors, labels = marker_groups(
-        tuple((float(x), float(y)) for x, y in pooled)
+        tuple((float(x), float(y)) for x, y in pooled),
+        highlighted_indices=frozenset({0}),
     )
     assert len(unique) == 1
     assert sizes[0] > 30.0
@@ -396,6 +397,46 @@ def test_grouped_points_matches_marker_groups_exactly() -> None:
         assert size == pytest.approx(30.0 + 18.0 * entry["count"] ** 0.5)
         assert color == ("tab:blue" if entry["common"] else "tab:orange")
         assert label == (str(entry["count"]) if entry["count"] > 1 else "")
+
+
+def test_deme_pair_panel_highlights_each_demes_deterministic_top_allele() -> None:
+    """Distinct axis maxima remain identity-selected before point grouping."""
+    points = np.array(
+        [
+            [0.9, 0.1],
+            [0.8, 0.98],
+            [0.9, 0.1],
+        ],
+        dtype=np.float64,
+    )
+
+    panel = deme_pair_panel(points, 0, 1)
+    grouped = panel["points"]
+
+    assert grouped == [
+        {"x": 0.9, "y": 0.1, "count": 2, "common": True},
+        {"x": 0.8, "y": 0.98, "count": 1, "common": True},
+    ]
+
+
+def test_deme_pair_panel_breaks_top_allele_ties_by_source_row_order() -> None:
+    """Equal-frequency alleles do not produce ambiguous multiple blue markers."""
+    points = np.array(
+        [
+            [0.9, 0.9],
+            [0.9, 0.9],
+            [0.1, 0.1],
+        ],
+        dtype=np.float64,
+    )
+
+    panel = deme_pair_panel(points, 0, 1)
+    grouped = panel["points"]
+
+    assert grouped == [
+        {"x": 0.9, "y": 0.9, "count": 2, "common": True},
+        {"x": 0.1, "y": 0.1, "count": 1, "common": False},
+    ]
 
 
 def test_panels_from_points_matches_scatter_panels_directly() -> None:

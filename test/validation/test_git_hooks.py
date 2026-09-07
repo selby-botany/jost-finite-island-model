@@ -130,6 +130,27 @@ def test_pre_commit_formats_and_restages_python_with_spaces(
     assert staged == "def answer():\n    return 42\n"
 
 
+def test_pre_commit_rejects_partially_staged_python_without_changing_the_index(
+    tmp_path: Path,
+) -> None:
+    """A formatter must not stage an author's deliberately unstaged hunk."""
+    _initialize_repo(tmp_path)
+    source = tmp_path / "module.py"
+    source.write_text("FIRST = 1\nSECOND = 1\n", encoding="utf-8")
+    _git(tmp_path, "add", "pyproject.toml", source.name)
+    _git(tmp_path, "commit", "--quiet", "-m", "test: create fixture")
+    source.write_text("FIRST = 2\nSECOND = 1\n", encoding="utf-8")
+    _git(tmp_path, "add", source.name)
+    source.write_text("FIRST = 2\nSECOND = 2\n", encoding="utf-8")
+
+    result = _run_hook(tmp_path, "pre-commit")
+
+    assert result.returncode == 1
+    assert "module.py has unstaged changes" in result.stderr
+    assert _git(tmp_path, "show", f":{source.name}").stdout == "FIRST = 2\nSECOND = 1\n"
+    assert source.read_text(encoding="utf-8") == "FIRST = 2\nSECOND = 2\n"
+
+
 def test_pre_commit_refreshes_api_only_for_staged_python(
     tmp_path: Path,
 ) -> None:

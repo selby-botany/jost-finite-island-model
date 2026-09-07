@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import math
-from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, TypeAlias, TypedDict, cast
@@ -17,6 +16,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.patches import Patch
 from numpy.typing import NDArray
 
 from fim.model.allele import AlleleId
@@ -36,7 +36,6 @@ class PcaSummary(TypedDict):
 
 
 PAIRWISE_MAX_DEMES = 6
-COMMON_ALLELE_THRESHOLD = 0.05
 DIRECT_2D_DEMES = 2
 DIRECT_3D_DEMES = 3
 MINIMUM_PAIRWISE_MAX_DEMES = 4
@@ -175,8 +174,10 @@ def pooled_frequency_points(states: Sequence[ModelState]) -> FloatArray:
 
 def grouped_points(
     coordinates: Sequence[tuple[float, float]],
+    *,
+    highlighted_indices: frozenset[int] = frozenset(),
 ) -> list[dict[str, float | int | bool]]:
-    """Collapse coincident points into JSON-ready `{x, y, count, common}` entries.
+    """Collapse points into JSON-ready `{x, y, count, common}` entries.
 
     Public (`doc/fim-gui-design.md` §12): the GUI
     bridge's own shape for `webui/scatter.js`'s Canvas renderer —
@@ -186,20 +187,21 @@ def grouped_points(
     functions' outputs can never silently drift out of sync with each
     other.
     """
-    counts = Counter(coordinates)
-    return [
-        {
-            "x": point[0],
-            "y": point[1],
-            "count": count,
-            "common": max(point) >= COMMON_ALLELE_THRESHOLD,
-        }
-        for point, count in counts.items()
-    ]
+    grouped: dict[tuple[float, float], dict[str, float | int | bool]] = {}
+    for index, point in enumerate(coordinates):
+        entry = grouped.setdefault(
+            point,
+            {"x": point[0], "y": point[1], "count": 0, "common": False},
+        )
+        entry["count"] = int(entry["count"]) + 1
+        entry["common"] = bool(entry["common"]) or index in highlighted_indices
+    return list(grouped.values())
 
 
 def marker_groups(
     coordinates: Sequence[tuple[float, float]],
+    *,
+    highlighted_indices: frozenset[int] = frozenset(),
 ) -> tuple[FloatArray, FloatArray, list[str], list[str]]:
     """Collapse coincident points and derive marker sizes, colors, and labels.
 
@@ -208,7 +210,7 @@ def marker_groups(
     output as readily as over one state's own `frequency_points` output
     — coincidence counting has no notion of where a point came from.
     """
-    grouped = grouped_points(coordinates)
+    grouped = grouped_points(coordinates, highlighted_indices=highlighted_indices)
     unique = np.asarray(
         [(point["x"], point["y"]) for point in grouped], dtype=np.float64
     )
@@ -409,7 +411,10 @@ def _panel(
     return {
         "x_label": x_label,
         "y_label": y_label,
-        "points": grouped_points(coordinates),
+        "points": grouped_points(
+            coordinates,
+            highlighted_indices=_highlighted_indices(horizontal, vertical),
+        ),
         "kind": kind,
     }
 
@@ -551,7 +556,13 @@ def _plot_pca(points: FloatArray) -> Figure:
     projected = pca_project(points)
     x_label, y_label = pca_axis_labels(points)
     figure, axis = plt.subplots(figsize=(7, 6))
-    _scatter_on_axis(axis, projected[:, 0], projected[:, 1], reference=False)
+    _scatter_on_axis(
+        axis,
+        projected[:, 0],
+        projected[:, 1],
+        reference=False,
+        highlight=False,
+    )
     axis.set_xlabel(x_label)
     axis.set_ylabel(y_label)
     axis.set_title("2-D PCA projection of deme-frequency coordinates")
@@ -562,11 +573,11 @@ def _plot_three_dimensional(points: FloatArray) -> Figure:
     """Render direct three-dimensional deme coordinates."""
     figure = plt.figure(figsize=(8, 7))
     axis = cast(Any, figure.add_subplot(111, projection="3d"))
-    colors = np.where(
-        points.max(axis=1) >= COMMON_ALLELE_THRESHOLD,
-        "tab:blue",
-        "tab:orange",
-    )
+    highlighted = _highlighted_indices(points[:, 0], points[:, 1], points[:, 2])
+    colors = [
+        "tab:blue" if index in highlighted else "tab:orange"
+        for index in range(len(points))
+    ]
     axis.scatter(points[:, 0], points[:, 1], points[:, 2], c=colors, alpha=0.75)
     axis.set_xlabel("Deme 1")
     axis.set_ylabel("Deme 2")
@@ -574,6 +585,7 @@ def _plot_three_dimensional(points: FloatArray) -> Figure:
     axis.set_xlim(0.0, 1.0)
     axis.set_ylim(0.0, 1.0)
     axis.set_zlim(0.0, 1.0)
+    _add_marker_legend(axis)
     return figure
 
 
@@ -592,12 +604,19 @@ def _scatter_on_axis(
     vertical: FloatArray,
     *,
     reference: bool = True,
+    highlight: bool = True,
 ) -> None:
     """Render grouped points, coincidence labels, and optional diagonal."""
     coordinates = tuple(
         (float(x), float(y)) for x, y in zip(horizontal, vertical, strict=True)
     )
-    unique, sizes, colors, labels = marker_groups(coordinates)
+    highlighted = (
+        _highlighted_indices(horizontal, vertical) if highlight else frozenset()
+    )
+    unique, sizes, colors, labels = marker_groups(
+        coordinates,
+        highlighted_indices=highlighted,
+    )
     axis.scatter(
         unique[:, 0],
         unique[:, 1],
@@ -616,6 +635,30 @@ def _scatter_on_axis(
         axis.plot((0.0, 1.0), (0.0, 1.0), color="0.65", linestyle="--")
         axis.set_xlim(0.0, 1.0)
         axis.set_ylim(0.0, 1.0)
+    if highlight:
+        _add_marker_legend(axis)
+
+
+def _add_marker_legend(axis: Axes) -> None:
+    """Add the shared explanation for the scatter-marker colors."""
+    axis.legend(
+        handles=[
+            Patch(color="tab:blue", label="Most frequent allele in either deme"),
+            Patch(color="tab:orange", label="Other alleles"),
+        ],
+        loc="best",
+    )
+
+
+def _highlighted_indices(*frequencies: FloatArray) -> frozenset[int]:
+    """Return each displayed deme's first most-frequent allele row.
+
+    The row index remains attached to an allele through this selection and
+    is applied only after coincident coordinates are grouped. `np.argmax`
+    deliberately breaks equal-frequency ties by the stable row order from
+    `frequency_points`.
+    """
+    return frozenset(int(np.argmax(frequency)) for frequency in frequencies)
 
 
 def _title(params: SimulationParams) -> str:

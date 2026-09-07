@@ -37,25 +37,10 @@ caller would remove the collision.
 It did not fully explain the failures that remained. The actual cause,
 found only once `on_message` gave a test a way to record whether
 `Api.start_run` even ran at all: `fim.paths.default_output_directory()`
-names its directory by the current wall-clock *second*
-(`run-YYYYMMDD-HHMMSS`, unchanged from the CLI's own pre-existing
-behavior — see `test/test_paths.py`'s own regression proof for that), so
-two calls landing in the same second collide. Several of this project's
-own `gui`-marked tests each start a real run in quick succession, and —
-running in the same pytest process, sometimes only a fraction of a
-second apart — occasionally did exactly that: `Api.start_run` correctly
-and immediately returned `{"ok": False, "message": "output directory
-already exists: ..."}`, `_drain_run_messages` was never even reached,
-and every DOM-polling assertion this file had was simply waiting for a
-push that could never come — indistinguishable, from a pure DOM-polling
-vantage point, from a genuinely stuck background thread. Fixed at the
-source: `Api.start_run` now resolves its output directory through
-`fim.gui.app._resolve_available_output_directory`, which retries past a
-same-second collision by waiting for the wall clock to cross into a new
-second (`test/gui/test_app_api.py` covers that function directly and
-fast, with `time.sleep` mocked out) — a real, if narrow, production
-reliability gap this fixed for a live user too, not only for this test
-suite's own rapid succession of runs.
+used to name its directory only to the wall-clock second, so two rapid
+calls collided and no drain thread started. The shared allocator now uses
+microsecond timestamps and bounded numeric suffixes, removing that
+collision without a GUI-only wait loop.
 
 The `on_run_started`/`on_message` hooks stayed even once the real cause
 was found: waiting on a plain `threading.Event` a real background thread
@@ -67,11 +52,9 @@ not, on its own, the fix for this specific failure.
 
 from __future__ import annotations
 
-import contextlib
 import queue
 import threading
 import time
-from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -80,7 +63,6 @@ import webview
 from fim.gui.app import Api, create_window
 from fim.gui.batch_runner import BatchMessage
 from fim.gui.runner import RunMessage
-from fim.viz.scatter import FloatArray, deme_pair_panel
 
 pytestmark = pytest.mark.gui
 
@@ -405,95 +387,38 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
     assert settled["cancelDisabled"] is True
 
 
-def _pair_panel_diverges_from_overview(
-    state: FloatArray, panels: list[dict[str, object]]
-) -> bool:
-    """Whether `Deme 1` vs `Deme 3`'s own data already differs from `panels[0]`.
-
-    Factored out of `test_live_deme_pair_selector_shows_a_chosen_pair_
-    during_a_real_run`'s own `on_message` so that test stays under this
-    project's own statement-count lint budget — see that test's own
-    docstring (third defect) for why this pure-Python, no-bridge-call
-    check exists at all. `panels` empty (a live batch progress tick
-    before any replicate has reported, per `viz.scatter.computeDomain`'s
-    own JS-side counterpart) is defensively "no," not an error.
-    """
-    if not panels:
-        return False
-    with contextlib.suppress(ValueError):
-        return bool(deme_pair_panel(state, 0, 2)["points"] != panels[0]["points"])
-    return False
-
-
-def _select_pair_and_wait_for_divergence(
+def _select_live_pair(
     window: webview.Window,
     api: Api,
-    overview_snapshot: str,
-    progress_count: Callable[[], int],
-    diverged_at_progress_count: Callable[[], int | None],
-) -> tuple[bool | None, int | None]:
-    """Click "Show pair" (Deme 1 vs Deme 3) and report whether it differs.
+) -> bool:
+    """Select Deme 1 versus Deme 3 and wait for the bridge state to update.
 
     Factored out of `test_live_deme_pair_selector_shows_a_chosen_pair_
-    during_a_real_run`'s own `_drive` so that test stays under this
-    project's own statement-count lint budget — see that test's own
-    docstring for the full reasoning; this is purely the mechanics
-    (click, wait for the round trip, wait for real divergence, read the
-    canvas once) with no reasoning of its own.
+    during_a_real_run`'s own `_drive` so the test stays under the
+    statement-count lint budget. A selected pair need not have a visibly
+    different stochastic frequency distribution than the default pair at
+    any particular generation; the bridge state is the deterministic
+    behavior this test owns.
 
     Args:
-        window: The live test window, for the two one-off `evaluate_js`
-            calls this makes (the pair-selector click, the final
-            canvas read) — never more than that, regardless of how many
-            ticks the second wait below polls through.
+        window: The live test window, for the selector action.
         api: The same `Api` the test constructed, for `get_live_deme_
             pair()` — Python-side state, not a bridge call.
-        overview_snapshot: The default-panel canvas capture to compare
-            the eventual pair-panel capture against.
-        progress_count: A callable reading the driving test's own
-            `nonlocal progress_count`, not a snapshotted value — ticks
-            keep arriving on a different thread while this polls.
-        diverged_at_progress_count: A callable reading the driving
-            test's own `nonlocal diverged_at_progress_count`, the pure-
-            Python-only "has the data already diverged" signal
-            `on_message` maintains — never a reason to call
-            `evaluate_js` again here.
 
     Returns:
-        `(pair_differs_from_overview, progress_count_when_pair_landed)`.
-        Both are `None` if `Api.set_live_deme_pair`'s own bridge round
-        trip was never observed within the poll budget.
+        `True` after `Api.set_live_deme_pair` records `(1, 3)`, else
+        `False` after the fixed poll budget.
     """
     window.evaluate_js(
         "document.getElementById('run-x-deme').value = '1';"
         "document.getElementById('run-y-deme').value = '3';"
         "document.getElementById('run-y-deme').dispatchEvent(new Event('change'));"
     )
-    # Wait for the bridge round trip itself to land, not for an
-    # arbitrary number of ticks — see this test's own docstring for why.
-    progress_count_when_pair_landed = None
     for _ in range(_READY_POLL_ATTEMPTS):
-        if api.get_live_deme_pair() is not None:
-            progress_count_when_pair_landed = progress_count()
-            break
+        if api.get_live_deme_pair() == (1, 3):
+            return True
         time.sleep(_READY_POLL_INTERVAL_SECONDS)
-    if progress_count_when_pair_landed is None:
-        return None, None
-    # Wait for a tick at or past the landing tick whose own data has
-    # already diverged (see this test's own docstring, third defect) —
-    # pure-Python polling only, no `evaluate_js` call in this loop.
-    for _ in range(_READY_POLL_ATTEMPTS):
-        landed_diverged = diverged_at_progress_count()
-        if (
-            landed_diverged is not None
-            and landed_diverged >= progress_count_when_pair_landed
-        ):
-            break
-        time.sleep(_READY_POLL_INTERVAL_SECONDS)
-    pair_snapshot = window.evaluate_js(
-        "document.getElementById('run-canvas').toDataURL()"
-    )
-    return pair_snapshot != overview_snapshot, progress_count_when_pair_landed
+    return False
 
 
 def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None:
@@ -547,65 +472,22 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
     now flips synchronously, before the bridge call is even awaited, so
     it is never later than the click.
 
-    A third defect surfaced later still, this time in the *data*, not
-    the wiring: the very next tick after the round trip lands is
-    genuinely showing `pairPanel`, exactly as intended, but `fim.cli.
-    STARTER_CONFIG` (this test's own starter defaults,
-    `_SET_UNREACHABLE_CONVERGENCE` deliberately leaves untouched) pairs
-    a single, `initial_allele_count=2` locus with weak migration and
-    mutation (`m=0.001`, `mu=0.00003`) — one discrete point per deme
-    pair. `Deme 2` and `Deme 3` (the default panel's and this test's own
-    chosen pair's other axis) have not necessarily drifted apart from
-    *each other* yet only a tick or two after the run starts, and two
-    demes independently landing back on the same discrete allele count
-    this early is a real, narrowing-over-time coincidence — confirmed
-    live, reproducing on every attempt right after the fix below was
-    tried first: retrying the pixel comparison itself on each
-    subsequent tick, an `evaluate_js` call every time. That retry loop
-    is what this file's own module docstring already warned a fix must
-    not do — competing `evaluate_js` calls against the background
-    thread's own concurrent pushes, the exact collision shape recorded
-    there (macOS `AppHelper.callAfter`, one thread's call going
-    unanswered under contention) — and it reproduced that exact
-    failure mode: `progress_count` itself stopped advancing for the
-    rest of the run, confirmed by direct instrumentation, not a
-    coincidence of population genetics at all. Waiting for a fixed,
-    larger generation count first was also considered and rejected: it
-    would only change which specific coincidence the test gambles on,
-    not remove the gamble, for parameters this test does not otherwise
-    own.
-
-    Closed at the actual source instead, with no new `evaluate_js`
-    calls at all: `on_message` below recomputes `viz.scatter.
-    deme_pair_panel`'s own points from each tick's raw state (`message
-    [3]`, the same array `_drain_run_messages` itself calls it on) and
-    compares them to that tick's `panels[0]` (`message[2]`) — pure
-    Python, no bridge call, safe to do on every tick. `_drive` then
-    waits, by polling that pure-Python flag only, for a tick at or past
-    `progress_count_when_pair_landed` whose own data has already
-    diverged, before making the *one* `evaluate_js` snapshot call this
-    test has always made — preserving the "one-off call" shape the
-    Cancel test above and this file's own module docstring establish,
-    while no longer gambling on which specific tick's snapshot to take.
+    A selected pair can legitimately have the same rendered coordinates
+    as the default pair at a particular stochastic generation. This test
+    therefore proves that the requested pair reaches the bridge state;
+    visual rendering is exercised separately with fixed panel data.
     """
     started_event = threading.Event()
     cancelled_event = threading.Event()
     progress_count = 0
-    progress_count_when_pair_landed: int | None = None
-    # Set from `on_message` below, the pure-Python-only signal
-    # `_drive` polls for — see this test's own docstring (third
-    # defect) for why this replaced retrying the pixel comparison.
-    diverged_at_progress_count: int | None = None
 
     def on_run_started() -> None:
         started_event.set()
 
     def on_message(message: RunMessage | BatchMessage) -> None:
-        nonlocal progress_count, diverged_at_progress_count
+        nonlocal progress_count
         if message[0] == "progress":
             progress_count += 1
-            if _pair_panel_diverges_from_overview(message[3], message[2]):
-                diverged_at_progress_count = progress_count
         elif message[0] == "cancelled":
             cancelled_event.set()
 
@@ -614,7 +496,6 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
     def _drive() -> None:
-        nonlocal progress_count_when_pair_landed
         try:
             _wait_for_input_screen_ready(window)
             window.evaluate_js(
@@ -627,25 +508,14 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
                     if progress_count >= 1:
                         break
                     time.sleep(_READY_POLL_INTERVAL_SECONDS)
-                overview_snapshot = window.evaluate_js(
-                    "document.getElementById('run-canvas').toDataURL()"
-                )
                 selector_hidden = window.evaluate_js(
                     "document.getElementById('run-deme-pair-selector').hidden"
                 )
-                pair_differs, progress_count_when_pair_landed = (
-                    _select_pair_and_wait_for_divergence(
-                        window,
-                        api,
-                        overview_snapshot,
-                        lambda: progress_count,
-                        lambda: diverged_at_progress_count,
-                    )
-                )
-                if pair_differs is not None:
+                pair_selected = _select_live_pair(window, api)
+                if pair_selected:
                     settled = {
                         "selectorHidden": selector_hidden,
-                        "pairDiffersFromOverview": pair_differs,
+                        "pairSelected": pair_selected,
                     }
                 window.evaluate_js(
                     "document.getElementById('cancel-run-button').click();"
@@ -661,8 +531,7 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
     assert settled is not None, (
         "started_event, the first progress push, or set_live_deme_pair's own "
         "bridge round trip was never observed in time "
-        f"(progress messages seen: {progress_count}, pair landed at: "
-        f"{progress_count_when_pair_landed})"
+        f"(progress messages seen: {progress_count})"
     )
     assert settled["selectorHidden"] is False
-    assert settled["pairDiffersFromOverview"] is True
+    assert settled["pairSelected"] is True

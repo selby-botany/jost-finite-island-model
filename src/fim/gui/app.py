@@ -32,6 +32,7 @@ after the `await` resolves.
 from __future__ import annotations
 
 import contextlib
+import faulthandler
 import functools
 import json
 import logging
@@ -110,6 +111,21 @@ _WINDOW_TITLE = "Finite Island Model (fim)"
 _REPOSITORY_URL = "https://github.com/selby-botany/jost-finite-island-model"
 _DOCUMENTATION_URL = f"{_REPOSITORY_URL}#readme"
 
+# How long ordinary shutdown may take before the deadman forces exit
+# (`_start_shutdown_deadman`). Generous on purpose: closing a GUI has no
+# real work left to do, so honest shutdown is effectively instantaneous
+# and anything approaching this bound is already a hang. The margin
+# exists only so an unusually loaded machine -- a batch run's worker
+# processes still winding down, a slow filesystem flushing a trajectory
+# -- can never be mistaken for one.
+_SHUTDOWN_DEADMAN_SECONDS: Final[float] = 20.0
+
+# Distinct from every ordinary exit status this application produces (0
+# success, 2 usage/configuration error) so a forced exit is
+# recognizable as such in a log, a shell's `$?`, or a bug report,
+# rather than being confused with a clean close.
+_SHUTDOWN_DEADMAN_EXIT_CODE: Final[int] = 3
+
 
 def _log_bridge_call[ApiMethod: Callable[..., Any]](method: ApiMethod) -> ApiMethod:
     """Log every `Api` bridge call at DEBUG, by method name only.
@@ -148,22 +164,6 @@ class _EvaluatesJs(Protocol):
 
     def evaluate_js(self, script: str) -> Any: ...
 
-
-# `paths.default_output_directory()` names a directory by the current
-# second (`run-YYYYMMDD-HHMMSS`, UTC) — deliberately unchanged here
-# (`test/test_paths.py`'s own regression proof for Milestone G0, "the
-# timestamped folder name format... is unchanged"), so two calls inside
-# the same real second collide on the identical path. A real, if narrow,
-# reliability gap this bridge owns fixing, not `fim.paths` itself: a
-# user clicking "Run simulation" again within the same second a previous
-# attempt's directory was created — or several of this project's own
-# `gui`-marked tests, each starting a real run in quick succession —
-# would otherwise see a confusing "output directory already exists"
-# error for what is, from their perspective, an entirely fresh run.
-# `_START_RUN_COLLISION_*` bounds how long `start_run` waits for the
-# wall clock to cross into a new second before giving up for real.
-_START_RUN_COLLISION_RETRY_INTERVAL_SECONDS: Final = 0.1
-_START_RUN_COLLISION_MAX_WAIT_SECONDS: Final = 2.0
 
 # How often `_drain_batch_messages` re-polls every in-flight replicate's
 # own `.progress` sidecar between checking `message_queue` for the
@@ -224,31 +224,6 @@ def format_statistic(
     six regardless of that configurable value's own default.
     """
     return "undefined" if value is None else f"{value:.{digits}g}"
-
-
-def _resolve_available_output_directory() -> Path:
-    """Return a fresh, not-yet-existing timestamped output directory.
-
-    Retries past a same-second collision with `paths.default_output_
-    directory()` (`_START_RUN_COLLISION_*`'s own comment: "a user
-    clicking Run again within the same second") by waiting for the wall
-    clock to cross into a new second, up to `_START_RUN_COLLISION_MAX_
-    WAIT_SECONDS`. A separate, pure function rather than inlined into
-    `Api.start_run` specifically so it can be unit-tested directly
-    (`test/gui/test_app_api.py`) — `Api.start_run` itself cannot be,
-    since it also touches `webview.windows[0]`, unavailable without a
-    real window.
-    """
-    output_directory = paths.default_output_directory()
-    waited_seconds = 0.0
-    while (
-        output_directory.exists()
-        and waited_seconds < _START_RUN_COLLISION_MAX_WAIT_SECONDS
-    ):
-        time.sleep(_START_RUN_COLLISION_RETRY_INTERVAL_SECONDS)
-        waited_seconds += _START_RUN_COLLISION_RETRY_INTERVAL_SECONDS
-        output_directory = paths.default_output_directory()
-    return output_directory
 
 
 def _active_window() -> webview.Window | None:
@@ -424,19 +399,17 @@ class Api:
             `{"ok": True}` once the run has *started* — not once it
             finishes; the real outcome arrives via the pushed calls
             above. `{"ok": False, "message": ...}` if the form does not
-            validate, or if a fresh timestamp-named `output_directory`
-            still collides after waiting out
-            `_START_RUN_COLLISION_MAX_WAIT_SECONDS` for the wall clock
-            to cross into a new second (see that constant's own
-            comment) — in practice reached only if something else is
-            actively writing into `results/` at exactly this rate.
+            validate or the output directory cannot be allocated.
         """
         try:
             payload = form_values_to_payload(values)
             params = SimulationParams.from_mapping(payload)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
-        output_directory = _resolve_available_output_directory()
+        try:
+            output_directory = paths.default_output_directory()
+        except FileExistsError as error:
+            return {"ok": False, "message": str(error)}
         if params.n_replicates > 1:
             return self._start_batch_run(params, output_directory, values)
         return self._start_scalar_run(params, output_directory)
@@ -2126,6 +2099,122 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     return [file_menu, configure_menu, run_menu, view_menu, help_menu]
 
 
+def shutdown_timeout() -> float:
+    """Return how long ordinary GUI shutdown is allowed to take.
+
+    Reads `FIM_GUI_SHUTDOWN_TIMEOUT` (seconds) and falls back to
+    `_SHUTDOWN_DEADMAN_SECONDS`. A malformed value falls back rather than
+    raising: this is a safety net, and refusing to start -- or crashing
+    on exit -- because its own timeout was mistyped would be a worse
+    outcome than the hang it guards against.
+
+    Args:
+        None
+
+    Returns:
+        The timeout in seconds. Zero or negative disables the deadman.
+    """
+    raw = os.environ.get("FIM_GUI_SHUTDOWN_TIMEOUT")
+    if raw is None:
+        return _SHUTDOWN_DEADMAN_SECONDS
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning(
+            "ignoring malformed FIM_GUI_SHUTDOWN_TIMEOUT=%r; using %gs",
+            raw,
+            _SHUTDOWN_DEADMAN_SECONDS,
+        )
+        return _SHUTDOWN_DEADMAN_SECONDS
+
+
+def _start_shutdown_deadman(timeout_seconds: float) -> None:
+    """Guarantee the process actually exits after the window closes.
+
+    A closed window that leaves the process alive is, from the user's
+    point of view, indistinguishable from a crash with none of a crash's
+    honesty: the app is gone from the screen, nothing can be clicked, and
+    yet `fim` is still running -- holding its port, its lock, and its
+    place in the dock or task manager. Reopening it may silently do
+    nothing, and the only cure is Force Quit or Task Manager, which no
+    part of this application's own documentation should ever have to
+    ask a user to do.
+
+    That failure is not hypothetical here. `create_window` already
+    carries one fix for this exact class (pywebview's own HTTP handler
+    threads, forced to `daemon_threads` so they cannot outlive a closed
+    window), and this suite's own history (`test/gui/conftest.py`) has
+    several more, each an in-flight bridge call or leftover thread
+    wedging `Py_FinalizeEx -> wait_for_thread_shutdown` indefinitely.
+    Every one of those was found and fixed, but each was found *after*
+    reaching a real build; the mechanism that produces them -- one
+    non-daemon thread outliving the GUI -- is a property of the
+    libraries involved, not of any one bug, so the next one is a matter
+    of when.
+
+    A GUI has nothing legitimate to do after its window closes: no
+    unsaved state (a run's own output is written as it goes, by the
+    worker that owns it), no network flush, no user waiting on a result.
+    Shutdown is expected to be effectively instantaneous, which is
+    exactly what makes a deadman timer safe here -- the timeout is orders
+    of magnitude longer than any honest shutdown, so it can only ever
+    fire on a genuine hang. `os._exit` is deliberate and is the whole
+    point: it terminates immediately without running finalization, which
+    is precisely the step that is stuck.
+
+    The daemon timer thread cannot itself delay shutdown, so on every
+    healthy exit this function is invisible: the process is gone long
+    before the timer would fire, and nothing is printed.
+
+    Args:
+        timeout_seconds: How long to allow for ordinary shutdown before
+            forcing exit. Values at or below zero disable the deadman
+            entirely, which `FIM_GUI_SHUTDOWN_TIMEOUT=0` exposes as a
+            documented escape hatch for anyone who needs to debug a hang
+            rather than have it terminated out from under them.
+
+    Returns:
+        None
+    """
+    if timeout_seconds <= 0:
+        logger.debug("shutdown deadman disabled")
+        return
+
+    def force_exit() -> None:
+        # Reached only when ordinary shutdown has already failed, so
+        # this reports rather than exiting mutely -- a user who runs
+        # `fim` from a terminal, and any log file, gets a real
+        # explanation instead of an unexplained hard exit.
+        message = (
+            f"fim: shutdown did not complete within {timeout_seconds:g}s; forcing exit"
+        )
+        logger.error("shutdown deadman fired after %gs; forcing exit", timeout_seconds)
+        print(message, file=sys.stderr, flush=True)
+        # Dump every thread's stack first: this is the one moment the
+        # offending thread can still be identified, and without it a
+        # forced exit would trade a diagnosable hang for a silent one.
+        faulthandler.dump_traceback()
+        sys.stderr.flush()
+        # `os._exit`, not `sys.exit`: `sys.exit` raises an exception that
+        # unwinds into the very interpreter finalization that is stuck,
+        # so it would join the hang rather than end it.
+        os._exit(_SHUTDOWN_DEADMAN_EXIT_CODE)
+
+    def wait_then_force_exit() -> None:
+        time.sleep(timeout_seconds)
+        force_exit()
+
+    # `daemon=True` is essential: a non-daemon timer would itself become
+    # a thread blocking shutdown -- the exact bug this guards against.
+    timer = threading.Thread(
+        target=wait_then_force_exit,
+        name="fim-shutdown-deadman",
+        daemon=True,
+    )
+    timer.start()
+    logger.debug("shutdown deadman armed (%gs)", timeout_seconds)
+
+
 def main() -> int:
     """Launch the GUI and block until the window closes.
 
@@ -2140,7 +2229,10 @@ def main() -> int:
         0 on an ordinary close — `webview.start()` returning means the
         user closed the window, not an error condition to report
         differently — or 2 if `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` is
-        malformed.
+        malformed. A hung shutdown never returns from here at all: the
+        deadman terminates the process with
+        `_SHUTDOWN_DEADMAN_EXIT_CODE` instead (see
+        `_start_shutdown_deadman`).
     """
     try:
         logging_setup.configure(
@@ -2154,6 +2246,10 @@ def main() -> int:
     window = create_window()
     webview.start(menu=_build_menu(window))
     logger.info("window closed")
+    # Armed only now, after the window has closed: the timer's budget
+    # covers shutdown alone, never the arbitrarily long time a user may
+    # legitimately leave the application open.
+    _start_shutdown_deadman(shutdown_timeout())
     return 0
 
 

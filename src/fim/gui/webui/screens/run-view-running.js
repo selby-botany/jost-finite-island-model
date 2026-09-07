@@ -34,9 +34,9 @@
  * a test's own return, hanging the whole interpreter at shutdown) took
  * real, methodical root-causing to pin down, traced to `fim.paths.
  * default_output_directory()` naming its directory by the current
- * wall-clock *second* and two runs landing in the same one -- fixed at
- * the source, `fim.gui.app._resolve_available_output_directory`, not
- * here. `Api.__init__`'s own `on_run_started`/`on_message` test hooks
+ * wall-clock *second* and two runs landing in the same one -- fixed in
+ * the shared allocator with microsecond timestamps and bounded suffixes.
+ * `Api.__init__`'s own `on_run_started`/`on_message` test hooks
  * exist because of that investigation.
  *
  * A second, later regression of the identical *shape* -- a genuine

@@ -169,14 +169,14 @@ def default_output_directory(
     *,
     clock: Clock = lambda: datetime.now(UTC),
 ) -> Path:
-    """Return a timestamped output folder without affecting run data.
+    """Return a collision-resistant timestamped output folder.
 
     Called whenever a run is started without the caller naming a
     specific output folder — `fim run` with no `--output`, or the
     desktop app's own default. Two different, unnamed runs started at
-    different times get two different folders this way (each one's own
-    start time, encoded into the folder's name), so they can never
-    collide by both trying to write into the exact same place.
+    different times get different folders. The microsecond timestamp avoids
+    ordinary same-second collisions; a bounded numeric suffix resolves an
+    existing name without replacing any run data.
 
     Args:
         results: Optional results-directory override (default:
@@ -187,16 +187,20 @@ def default_output_directory(
             needs to.
 
     Returns:
-        `results / f"run-{timestamp}"`. The timestamp names the folder
-        only; it never enters any persisted scientific value — two runs
-        with the exact same configuration and seed still produce
-        identical scientific results regardless of which folder name
-        each one happened to land in (see `fim.engine`'s own docstring
-        for why that determinism matters).
+        A non-existing path below `results`. The name never enters a
+        persisted scientific value, so equivalent seeded runs remain
+        scientifically identical regardless of their folder names.
+
+    Raises:
+        FileExistsError: If all bounded fallback names already exist.
     """
     base = results if results is not None else results_directory()
-    stamp = clock().strftime("%Y%m%d-%H%M%S")
-    return base / f"run-{stamp}"
+    stem = f"run-{clock().strftime('%Y%m%d-%H%M%S-%f')}"
+    for suffix in range(1000):
+        candidate = base / (stem if suffix == 0 else f"{stem}-{suffix:03d}")
+        if not candidate.exists():
+            return candidate
+    raise FileExistsError(f"could not allocate a unique output directory below: {base}")
 
 
 def project_root() -> Path:

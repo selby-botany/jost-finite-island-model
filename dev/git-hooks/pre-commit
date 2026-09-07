@@ -22,6 +22,14 @@ done < <(git diff --cached --name-only --diff-filter=ACMR -z)
 
 # Normalize staged Python and refresh its generated API documentation.
 if ((${#python_files[@]})); then
+    for path in "${python_files[@]}"; do
+        if ! git diff --quiet -- "${path}"; then
+            printf 'pre-commit: %s has unstaged changes; stage or stash them before committing\n' \
+                "${path}" >&2
+            exit 1
+        fi
+    done
+
     if command -v ruff >/dev/null 2>&1; then
         ruff format -- "${python_files[@]}"
         ruff check --fix -- "${python_files[@]}"

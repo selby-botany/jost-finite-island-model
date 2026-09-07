@@ -377,7 +377,9 @@ def test_running_simulation_again_from_completed_starts_a_new_run(
             window.evaluate_js("document.getElementById('run-button').click();")
             second_run_id = _poll_until(
                 window,
-                "window.fim.getRunViewState() === 'completed' ? "
+                "window.fim.getRunViewState() === 'completed' && "
+                "window.fim.getCompletedOutputDirectory() !== "
+                f"{first_output_directory!r} ? "
                 "document.getElementById('results-run-id').textContent : null",
                 lambda value: value is not None,
             )

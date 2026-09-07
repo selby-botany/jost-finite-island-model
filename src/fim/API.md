@@ -105,6 +105,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [check\_for\_updates](#fim.gui.app.Api.check_for_updates)
     * [get\_about\_info](#fim.gui.app.Api.get_about_info)
   * [create\_window](#fim.gui.app.create_window)
+  * [shutdown\_timeout](#fim.gui.app.shutdown_timeout)
   * [main](#fim.gui.app.main)
 * [fim.gui.batch\_runner](#fim.gui.batch_runner)
   * [default\_max\_workers](#fim.gui.batch_runner.default_max_workers)
@@ -2827,12 +2828,7 @@ driver thread, before this method was written; see
 - ``{"ok"` - True}` once the run has *started* — not once it
   finishes; the real outcome arrives via the pushed calls
   above. `{"ok": False, "message": ...}` if the form does not
-  validate, or if a fresh timestamp-named `output_directory`
-  still collides after waiting out
-  `_START_RUN_COLLISION_MAX_WAIT_SECONDS` for the wall clock
-  to cross into a new second (see that constant's own
-  comment) — in practice reached only if something else is
-  actively writing into `results/` at exactly this rate.
+  validate or the output directory cannot be allocated.
 
 <a id="fim.gui.app.Api.cancel_run"></a>
 
@@ -3552,6 +3548,31 @@ pywebview's own API instead of Tk's.
   silently narrowed away, since nothing downstream of this
   function is prepared to run without a real window.
 
+<a id="fim.gui.app.shutdown_timeout"></a>
+
+#### shutdown\_timeout
+
+```python
+def shutdown_timeout() -> float
+```
+
+Return how long ordinary GUI shutdown is allowed to take.
+
+Reads `FIM_GUI_SHUTDOWN_TIMEOUT` (seconds) and falls back to
+`_SHUTDOWN_DEADMAN_SECONDS`. A malformed value falls back rather than
+raising: this is a safety net, and refusing to start -- or crashing
+on exit -- because its own timeout was mistyped would be a worse
+outcome than the hang it guards against.
+
+**Arguments**:
+
+  None
+
+
+**Returns**:
+
+  The timeout in seconds. Zero or negative disables the deadman.
+
 <a id="fim.gui.app.main"></a>
 
 #### main
@@ -3574,7 +3595,10 @@ for any future caller that reaches it another way.
   0 on an ordinary close — `webview.start()` returning means the
   user closed the window, not an error condition to report
   differently — or 2 if `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` is
-  malformed.
+  malformed. A hung shutdown never returns from here at all: the
+  deadman terminates the process with
+  `_SHUTDOWN_DEADMAN_EXIT_CODE` instead (see
+  `_start_shutdown_deadman`).
 
 <a id="fim.gui.batch_runner"></a>
 
@@ -7784,14 +7808,14 @@ def default_output_directory(results: Path | None = None,
                              clock: Clock = lambda: datetime.now(UTC)) -> Path
 ```
 
-Return a timestamped output folder without affecting run data.
+Return a collision-resistant timestamped output folder.
 
 Called whenever a run is started without the caller naming a
 specific output folder — `fim run` with no `--output`, or the
 desktop app's own default. Two different, unnamed runs started at
-different times get two different folders this way (each one's own
-start time, encoded into the folder's name), so they can never
-collide by both trying to write into the exact same place.
+different times get different folders. The microsecond timestamp avoids
+ordinary same-second collisions; a bounded numeric suffix resolves an
+existing name without replacing any run data.
 
 **Arguments**:
 
@@ -7805,12 +7829,14 @@ collide by both trying to write into the exact same place.
 
 **Returns**:
 
-  `results / f"run-{timestamp}"`. The timestamp names the folder
-  only; it never enters any persisted scientific value — two runs
-  with the exact same configuration and seed still produce
-  identical scientific results regardless of which folder name
-  each one happened to land in (see `fim.engine`'s own docstring
-  for why that determinism matters).
+  A non-existing path below `results`. The name never enters a
+  persisted scientific value, so equivalent seeded runs remain
+  scientifically identical regardless of their folder names.
+
+
+**Raises**:
+
+- `FileExistsError` - If all bounded fallback names already exist.
 
 <a id="fim.paths.project_root"></a>
 
@@ -10801,11 +10827,13 @@ special case needed either way.
 
 ```python
 def grouped_points(
-    coordinates: Sequence[tuple[float, float]]
+    coordinates: Sequence[tuple[float, float]],
+    *,
+    highlighted_indices: frozenset[int] = frozenset()
 ) -> list[dict[str, float | int | bool]]
 ```
 
-Collapse coincident points into JSON-ready `{x, y, count, common}` entries.
+Collapse points into JSON-ready `{x, y, count, common}` entries.
 
 Public (`doc/fim-gui-design.md` §12): the GUI
 bridge's own shape for `webui/scatter.js`'s Canvas renderer —
@@ -10821,7 +10849,9 @@ other.
 
 ```python
 def marker_groups(
-    coordinates: Sequence[tuple[float, float]]
+    coordinates: Sequence[tuple[float, float]],
+    *,
+    highlighted_indices: frozenset[int] = frozenset()
 ) -> tuple[FloatArray, FloatArray, list[str], list[str]]
 ```
 

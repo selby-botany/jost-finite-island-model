@@ -377,6 +377,23 @@ configured from two environment variables instead — <code>FIM_LOG_LEVEL</code>
 <code>FIM_LOG_OPTIONS</code>, the exact equivalents of <code>-l</code>/<code>-L</code> below, set before
 launching (a modified shortcut's own &quot;Target&quot; field, or a wrapper
 script). See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-logging-design.md">operational logging design</a> §5.</p>
+<h3 id="if-the-window-closes-but-fim-keeps-running">If the window closes but <code>fim</code> keeps running</h3>
+<p>Closing the window should end the program immediately. If something
+inside it fails to stop, <code>fim</code> guards against being left running
+invisibly — with no window to click and no obvious way to quit — by
+forcing itself to exit about 20 seconds after the window closes. When
+that happens it prints a line explaining why, so the cause can be
+reported rather than guessed at:</p>
+<pre><code class="language-text">fim: shutdown did not complete within 20s; forcing exit
+</code></pre>
+<p>Your results are unaffected. Everything a run produces is written to its
+output directory as the run proceeds, so a forced exit after the window
+is already closed cannot lose any of it.</p>
+<p>If you are investigating such a shutdown yourself and need the process to
+stay alive rather than be terminated, set <code>FIM_GUI_SHUTDOWN_TIMEOUT</code> to
+the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
+<pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
+</code></pre>
 <h2 id="global-flags">Global flags</h2>
 <pre><code class="language-console">fim --help
 fim --version

@@ -9,7 +9,8 @@
  * landed on it (`30 + 18*sqrt(count)`, matching the CLI's own
  * `plot_frequency_scatter` marker-size formula so the GUI's live view
  * and the CLI's saved `scatter.png` read the same way), colored
- * `tab:blue`/`tab:orange` by the same common-allele threshold, and
+ * `tab:blue` for the most frequent allele in either displayed deme and
+ * `tab:orange` for other alleles, and
  * labeled with its own coincidence count once it exceeds one -- the
  * exact visual encoding the reference visualization
  * (`Dear-NolanMarch17Final.pdf` Figs. 1-2) uses (design §0.5), now

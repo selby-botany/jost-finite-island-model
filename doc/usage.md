@@ -435,6 +435,31 @@ configured from two environment variables instead — `FIM_LOG_LEVEL` and
 launching (a modified shortcut's own "Target" field, or a wrapper
 script). See [operational logging design](fim-logging-design.md) §5.
 
+### If the window closes but `fim` keeps running
+
+Closing the window should end the program immediately. If something
+inside it fails to stop, `fim` guards against being left running
+invisibly — with no window to click and no obvious way to quit — by
+forcing itself to exit about 20 seconds after the window closes. When
+that happens it prints a line explaining why, so the cause can be
+reported rather than guessed at:
+
+```text
+fim: shutdown did not complete within 20s; forcing exit
+```
+
+Your results are unaffected. Everything a run produces is written to its
+output directory as the run proceeds, so a forced exit after the window
+is already closed cannot lose any of it.
+
+If you are investigating such a shutdown yourself and need the process to
+stay alive rather than be terminated, set `FIM_GUI_SHUTDOWN_TIMEOUT` to
+the number of seconds to allow, or to `0` to wait indefinitely:
+
+```console
+FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
+```
+
 ## Global flags
 
 ```console

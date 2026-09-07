@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import queue
-import time as time_module
 import webbrowser
 from collections.abc import Sequence
 from dataclasses import replace
@@ -25,7 +24,6 @@ from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
 from fim import cli, update
-from fim import paths as paths_module
 from fim.engine import (
     RunResult,
     deterministic_run_id,
@@ -207,79 +205,6 @@ def test_open_output_folder_calls_the_injected_opener(tmp_path: Path) -> None:
     api.open_output_folder(str(tmp_path))
 
     assert opened == [tmp_path]
-
-
-def test_resolve_available_output_directory_returns_a_free_path_immediately(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """No collision, no retry: the first candidate is returned as-is."""
-    free = tmp_path / "run-free"
-    monkeypatch.setattr(paths_module, "default_output_directory", lambda: free)
-    sleeps: list[float] = []
-    monkeypatch.setattr(time_module, "sleep", sleeps.append)
-
-    result = app_module._resolve_available_output_directory()
-
-    assert result == free
-    assert sleeps == []
-
-
-def test_resolve_available_output_directory_retries_past_a_collision(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A same-second collision (`paths.default_output_directory`'s own
-    real, timestamp-based naming — see `_START_RUN_COLLISION_*`'s own
-    comment) is retried until a free path is returned, not surfaced as
-    a failure on the very first attempt.
-
-    Direct regression coverage for the real, repeatedly-reproduced
-    failure this fixed: several of this project's own `gui`-marked
-    tests, each starting a real run within the same wall-clock second,
-    previously received `{"ok": False, "message": "output directory
-    already exists"}` for what was, from each test's perspective, an
-    entirely fresh run — see `test/gui/test_running_screen.py`'s own
-    module docstring for the full investigation.
-    """
-    colliding = tmp_path / "run-colliding"
-    colliding.mkdir()
-    free = tmp_path / "run-free"
-    candidates = iter([colliding, colliding, free])
-    monkeypatch.setattr(
-        paths_module, "default_output_directory", lambda: next(candidates)
-    )
-    sleeps: list[float] = []
-    monkeypatch.setattr(time_module, "sleep", sleeps.append)
-
-    result = app_module._resolve_available_output_directory()
-
-    assert result == free
-    assert sleeps == [app_module._START_RUN_COLLISION_RETRY_INTERVAL_SECONDS] * 2
-
-
-def test_resolve_available_output_directory_gives_up_after_the_max_wait(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A collision that never clears is returned anyway once the wait budget expires.
-
-    `Api.start_run` is the one that turns a still-colliding directory
-    into a real `{"ok": False, ...}` (via `runner.start_run`'s own
-    `FileExistsError`) — this function's own job ends at "stop
-    retrying," not at deciding what a persistent collision means.
-    """
-    colliding = tmp_path / "run-colliding"
-    colliding.mkdir()
-    monkeypatch.setattr(paths_module, "default_output_directory", lambda: colliding)
-    sleeps: list[float] = []
-    monkeypatch.setattr(time_module, "sleep", sleeps.append)
-
-    result = app_module._resolve_available_output_directory()
-
-    assert result == colliding
-    expected_retries = round(
-        app_module._START_RUN_COLLISION_MAX_WAIT_SECONDS
-        / app_module._START_RUN_COLLISION_RETRY_INTERVAL_SECONDS
-    )
-    assert len(sleeps) == expected_retries
 
 
 @pytest.mark.parametrize(
