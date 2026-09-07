@@ -39,6 +39,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_help_screen`](#gui.test_help_screen)
   - [`test_input_screen`](#gui.test_input_screen)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
+  - [`test_preferences`](#gui.test_preferences)
   - [`test_recent_runs`](#gui.test_recent_runs)
   - [`test_results_screen`](#gui.test_results_screen)
   - [`test_runner`](#gui.test_runner)
@@ -6844,6 +6845,190 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
 ```
 
 A real recent run, selected and opened, ends on a populated Screen 3.
+
+<a id="gui.test_preferences"></a>
+
+# gui.test\_preferences
+
+Unit tests for `fim.gui.preferences`.
+
+Pure filesystem tests against `tmp_path` — no GUI window, no `Api`, no
+real home directory ever touched (`preferences_file_path`'s own
+`home`/`environ`/`platform` overrides exist specifically so these tests
+never need one).
+
+<a id="gui.test_preferences.test_round_trip_preserves_every_field"></a>
+
+#### test\_round\_trip\_preserves\_every\_field
+
+```python
+def test_round_trip_preserves_every_field(tmp_path: Path) -> None
+```
+
+Saving then loading returns an equal `GuiPreferences`.
+
+<a id="gui.test_preferences.test_missing_file_returns_defaults_with_no_warning"></a>
+
+#### test\_missing\_file\_returns\_defaults\_with\_no\_warning
+
+```python
+def test_missing_file_returns_defaults_with_no_warning(tmp_path: Path) -> None
+```
+
+A first launch (no preferences file yet) is not a warning-worthy event.
+
+<a id="gui.test_preferences.test_malformed_json_is_quarantined_and_defaults_returned"></a>
+
+#### test\_malformed\_json\_is\_quarantined\_and\_defaults\_returned
+
+```python
+def test_malformed_json_is_quarantined_and_defaults_returned(
+        tmp_path: Path) -> None
+```
+
+Unreadable JSON is renamed aside, never deleted, and never trusted.
+
+<a id="gui.test_preferences.test_unrecognized_schema_version_is_quarantined"></a>
+
+#### test\_unrecognized\_schema\_version\_is\_quarantined
+
+```python
+def test_unrecognized_schema_version_is_quarantined(tmp_path: Path) -> None
+```
+
+A schema_version this build does not recognize is treated as corrupt.
+
+Never guessed at or partially merged — the same policy `fim.
+persistence.manifest` already applies to run manifests.
+
+<a id="gui.test_preferences.test_malformed_form_section_is_quarantined"></a>
+
+#### test\_malformed\_form\_section\_is\_quarantined
+
+```python
+def test_malformed_form_section_is_quarantined(tmp_path: Path) -> None
+```
+
+A non-string-map 'form' section is rejected, not silently coerced.
+
+<a id="gui.test_preferences.test_quarantine_never_overwrites_a_second_corrupt_file"></a>
+
+#### test\_quarantine\_never\_overwrites\_a\_second\_corrupt\_file
+
+```python
+def test_quarantine_never_overwrites_a_second_corrupt_file(
+        tmp_path: Path) -> None
+```
+
+Two corrupt files in a row each get their own, distinct quarantined name.
+
+<a id="gui.test_preferences.test_save_creates_parent_directories"></a>
+
+#### test\_save\_creates\_parent\_directories
+
+```python
+def test_save_creates_parent_directories(tmp_path: Path) -> None
+```
+
+A first-ever save works even though `fim/` doesn't exist yet.
+
+<a id="gui.test_preferences.test_save_is_atomic_no_temp_file_left_behind"></a>
+
+#### test\_save\_is\_atomic\_no\_temp\_file\_left\_behind
+
+```python
+def test_save_is_atomic_no_temp_file_left_behind(tmp_path: Path) -> None
+```
+
+A successful save leaves only the target file, no `.preferences-*` leftovers.
+
+<a id="gui.test_preferences.test_to_dict_omits_unset_fields"></a>
+
+#### test\_to\_dict\_omits\_unset\_fields
+
+```python
+def test_to_dict_omits_unset_fields() -> None
+```
+
+A field never saved is simply absent, not a literal JSON `null` for every one.
+
+<a id="gui.test_preferences.test_with_form_values_leaves_other_fields_untouched"></a>
+
+#### test\_with\_form\_values\_leaves\_other\_fields\_untouched
+
+```python
+def test_with_form_values_leaves_other_fields_untouched() -> None
+```
+
+`with_form_values` updates only `form_values`.
+
+<a id="gui.test_preferences.test_preferences_file_path_macos"></a>
+
+#### test\_preferences\_file\_path\_macos
+
+```python
+def test_preferences_file_path_macos(tmp_path: Path) -> None
+```
+
+macOS resolves under `~/Library/Application Support/fim`.
+
+<a id="gui.test_preferences.test_preferences_file_path_windows_with_appdata"></a>
+
+#### test\_preferences\_file\_path\_windows\_with\_appdata
+
+```python
+def test_preferences_file_path_windows_with_appdata(tmp_path: Path) -> None
+```
+
+Windows resolves under `%APPDATA%\fim` when `APPDATA` is set.
+
+<a id="gui.test_preferences.test_preferences_file_path_windows_without_appdata_falls_back"></a>
+
+#### test\_preferences\_file\_path\_windows\_without\_appdata\_falls\_back
+
+```python
+def test_preferences_file_path_windows_without_appdata_falls_back(
+        tmp_path: Path) -> None
+```
+
+A packaged Windows launch missing `APPDATA` still resolves somewhere writable.
+
+<a id="gui.test_preferences.test_preferences_file_path_linux_with_xdg_config_home"></a>
+
+#### test\_preferences\_file\_path\_linux\_with\_xdg\_config\_home
+
+```python
+def test_preferences_file_path_linux_with_xdg_config_home(
+        tmp_path: Path) -> None
+```
+
+Linux honors `XDG_CONFIG_HOME` when set.
+
+<a id="gui.test_preferences.test_preferences_file_path_linux_without_xdg_falls_back"></a>
+
+#### test\_preferences\_file\_path\_linux\_without\_xdg\_falls\_back
+
+```python
+def test_preferences_file_path_linux_without_xdg_falls_back(
+        tmp_path: Path) -> None
+```
+
+Linux falls back to `~/.config` when `XDG_CONFIG_HOME` is unset.
+
+<a id="gui.test_preferences.test_quarantine_injected_clock_produces_exact_name"></a>
+
+#### test\_quarantine\_injected\_clock\_produces\_exact\_name
+
+```python
+def test_quarantine_injected_clock_produces_exact_name(tmp_path: Path) -> None
+```
+
+An injected clock gives `_quarantine` a deterministic filename.
+
+`_quarantine` is private, but its effect is fully observable through
+`load_preferences`'s own public contract — this test only pins down
+the exact timestamp format via a fixed instant, matching `fim.
+paths.default_output_directory`'s own injected-clock test pattern.
 
 <a id="gui.test_recent_runs"></a>
 

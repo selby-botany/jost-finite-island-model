@@ -130,6 +130,14 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
+* [fim.gui.preferences](#fim.gui.preferences)
+  * [GuiPreferences](#fim.gui.preferences.GuiPreferences)
+    * [to\_dict](#fim.gui.preferences.GuiPreferences.to_dict)
+    * [from\_dict](#fim.gui.preferences.GuiPreferences.from_dict)
+    * [with\_form\_values](#fim.gui.preferences.GuiPreferences.with_form_values)
+  * [load\_preferences](#fim.gui.preferences.load_preferences)
+  * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
+  * [save\_preferences](#fim.gui.preferences.save_preferences)
 * [fim.gui.recent\_runs](#fim.gui.recent_runs)
   * [RecentRun](#fim.gui.recent_runs.RecentRun)
   * [list\_recent\_runs](#fim.gui.recent_runs.list_recent_runs)
@@ -4187,6 +4195,190 @@ Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
   `_YAML_KEY_ORDER` (none exist today; a defensive fallback
   against this list drifting out of sync with a future field) is
   appended afterward rather than silently dropped.
+
+<a id="fim.gui.preferences"></a>
+
+# fim.gui.preferences
+
+Versioned, atomic GUI-preferences store (P1 item 4, design doc
+`20260907-claude-sonnet-5-gui-preferences-persistence-design.md`).
+
+Persists exactly the things a botanist actually asks a desktop app to
+remember between launches — the View menu's display precision, the
+Batch tab's worker-count override, the Progress screen's default
+deme-pair selection, and the last successfully submitted model-input
+form — never a run's own scientific configuration, which already has a
+permanent, replayable record in its own `manifest.json`
+(`fim.persistence.manifest`). Every field here is optional (`None`
+means "no saved preference yet"); a caller merges a loaded
+`GuiPreferences` with its own hardcoded defaults rather than this
+module carrying a second copy of those defaults (`fim.gui.app`'s own
+`_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS` etc. stay the single source of
+truth there).
+
+The on-disk shape is one small JSON document,
+`{"schema_version": 1, "gui": {...}, "form": {...}}`, written with the
+same mkstemp-then-`os.replace` atomic idiom `fim.gui.store.
+write_progress_sidecar` already uses — this module is that idiom's
+second caller, not a second implementation of it. A file this module
+cannot parse, or whose `schema_version` it does not recognize, is never
+silently ignored or partially trusted: it is renamed aside with a
+timestamp (never deleted — always a recoverable copy) and `load_
+preferences` returns fresh defaults plus a human-readable warning the
+caller is expected to actually show, not just log
+(`fim.gui.app.Api.get_startup_warnings`).
+
+<a id="fim.gui.preferences.GuiPreferences"></a>
+
+## GuiPreferences Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class GuiPreferences()
+```
+
+One loaded (or default) snapshot of the GUI's own preferences.
+
+**Arguments**:
+
+- `significant_digits` - The View menu's display-rounding precision,
+  or `None` if never saved — `Api.__init__` falls back to its
+  own `_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS` in that case.
+- `max_workers` - The Batch tab's worker-count override, or `None`
+  to keep using `batch_runner.default_max_workers()`'s
+  computed value.
+- `default_live_deme_pair` - The Progress screen's default selector
+  state for the *next* run, or `None`. Distinct from `Api.
+  _live_deme_pair`, which also starts `None` for a fresh run
+  regardless of this value but can then change live, mid-run
+  (`Api.set_live_deme_pair`) — that in-flight value is never
+  persisted, only this default-for-a-new-run one.
+- `form_values` - The model-input form's last successfully submitted
+  values (`Api.start_run`'s own `values: dict[str, str]`
+  argument, restricted to `config_form.all_fields()` names),
+  or `None` if no run has ever been started. Re-validated
+  through `config_form.form_values_to_payload`/
+  `SimulationParams.from_mapping` on load, exactly like a
+  real submission — this store never carries its own copy of
+  that validation.
+
+<a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, Any]
+```
+
+Return the on-disk JSON shape this preference set writes as.
+
+<a id="fim.gui.preferences.GuiPreferences.from_dict"></a>
+
+#### from\_dict
+
+```python
+@staticmethod
+def from_dict(data: Mapping[str, Any]) -> GuiPreferences
+```
+
+Parse the on-disk JSON shape `to_dict` writes.
+
+**Raises**:
+
+- `ValueError` - `data["schema_version"]` is absent or does not
+  equal `CURRENT_SCHEMA_VERSION`, or a field has the wrong
+  shape — either way, the caller (`load_preferences`)
+  treats this identically to malformed JSON: quarantine
+  and fall back to defaults, never a partial, guessed-at
+  merge of an unrecognized shape.
+
+<a id="fim.gui.preferences.GuiPreferences.with_form_values"></a>
+
+#### with\_form\_values
+
+```python
+def with_form_values(form_values: Mapping[str, str]) -> GuiPreferences
+```
+
+Return a copy with `form_values` replaced — the common `start_run` update.
+
+<a id="fim.gui.preferences.load_preferences"></a>
+
+#### load\_preferences
+
+```python
+def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]
+```
+
+Load `path`, quarantining and defaulting on any unreadable content.
+
+**Arguments**:
+
+- `path` - Usually `preferences_file_path()`'s own return value.
+
+
+**Returns**:
+
+  A `(preferences, warning)` pair. `warning` is `None` on a clean
+  load (including a `path` that simply does not exist yet — a
+  normal first launch, not a warning-worthy event); otherwise a
+  human-readable message naming the quarantined file, meant to
+  reach the user via `Api.get_startup_warnings`, not just a log
+  line (`fim.gui.app`'s own comment on why `Api.__init__` has no
+  inline-error surface to return one through instead).
+
+<a id="fim.gui.preferences.preferences_file_path"></a>
+
+#### preferences\_file\_path
+
+```python
+def preferences_file_path(*,
+                          platform: str = sys.platform,
+                          environ: Mapping[str, str] | None = None,
+                          home: Path | None = None) -> Path
+```
+
+Return the platform-appropriate `preferences.json` path.
+
+**Arguments**:
+
+- `platform` - Defaults to `sys.platform`; overridable so a test can
+  exercise all three branches on any one host, exactly like
+  `fim.paths.default_output_directory`'s injectable `clock`.
+- `environ` - Defaults to `os.environ`; overridable for the same
+  reason (`XDG_CONFIG_HOME`, below).
+- `home` - Defaults to `Path.home()`; overridable so a test never
+  touches a real home directory.
+
+
+**Returns**:
+
+  `~/Library/Application Support/fim/preferences.json` on macOS,
+  `%APPDATA%\fim\preferences.json` on Windows (falling back to
+  `home / "AppData" / "Roaming"` if `APPDATA` is unset — the same
+  defensive fallback `os.environ.get` already needs, since a
+  packaged Windows build's own launch environment is not
+  guaranteed to set every variable a normal interactive shell
+  would), and `$XDG_CONFIG_HOME/fim/preferences.json` (or
+  `~/.config/fim/preferences.json` if that variable is unset) on
+  Linux and everywhere else. Mirrors `fim.paths.project_root`'s
+  own three-case OS split rather than introducing a second,
+  differently structured convention for "where does per-platform
+  state live" (this module's own top docstring).
+
+<a id="fim.gui.preferences.save_preferences"></a>
+
+#### save\_preferences
+
+```python
+def save_preferences(path: Path, preferences: GuiPreferences) -> None
+```
+
+Atomically write `preferences` to `path`, creating parent directories as needed.
+
+Same mkstemp-then-`os.replace` idiom as `fim.gui.store.
+write_progress_sidecar` — a concurrent reader always sees either the
+previous complete file or the new one, never a torn write.
 
 <a id="fim.gui.recent_runs"></a>
 
