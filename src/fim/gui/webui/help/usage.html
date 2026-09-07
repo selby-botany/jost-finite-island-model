@@ -305,7 +305,8 @@ freezes the view exactly as it last rendered, with a banner on top,
 rather than switching anywhere else:</p>
 <p>A native File/Configure/Run/View/Help menu bar is available from any screen,
 including mid-run. File covers configuration/run file-system actions
-(New/Open/Save configuration, Open run…, Reveal output folder, Quit);
+(New/Open/Save configuration, Open run…, Reveal output folder, Explore
+predictions…, Quit);
 Configure jumps straight to any one of six configuration sections
 (Population/Migration/Mutation/Initial conditions/Convergence/Batch), each
 opening as a small dialog over whatever screen is currently showing,
@@ -355,6 +356,11 @@ where they are first, rather than doing nothing.</p>
 <td>Open a run</td>
 <td>Pick a previous run from a recent-runs list — a batch entry is labeled distinctly and opened one replicate at a time from its own completed batch view, not from here — or browse for a <code>trajectory.jsonl</code> directly, then re-render its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-<code>q</code> sweep</td>
 <td><a href="#re-analyze-a-trajectory">Re-analyze a trajectory</a></td>
+</tr>
+<tr>
+<td>Explore</td>
+<td>Four fields (N, d, m, mu) and a theoretical-prediction table (D, G<sub>ST</sub>, E<sub>ST</sub>, and Whitlock's identity-recovery half-life) that update the instant a field is committed — no simulation ever runs, so this never takes measurable time regardless of N or d. A sweep curve plots the selected field's predicted D/G<sub>ST</sub> across a fixed range, with the current configuration marked. Reachable from the File menu (&quot;Explore predictions…&quot;) from any screen; &quot;Back&quot; returns to whichever screen was showing, not a fixed default</td>
+<td>No CLI equivalent — a direct <code>fim.statistics</code> call from Python or a script is the closest terminal equivalent</td>
 </tr>
 <tr>
 <td>Help</td>

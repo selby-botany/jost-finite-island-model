@@ -47,6 +47,12 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import read_manifest
+from fim.statistics import (
+    equilibrium_d,
+    equilibrium_g_st,
+    equilibrium_shannon_differentiation,
+    identity_recovery_half_life,
+)
 from fim.viz.scatter import frequency_points, pooled_scatter_panels
 
 
@@ -103,6 +109,120 @@ def test_validate_form_rejects_an_invalid_choice_field() -> None:
     assert result["field"] == "deme_weighting"
     assert result["tab"] == "population"
     assert "deme_weighting" in result["message"]
+
+
+def test_get_equilibrium_predictions_matches_the_statistics_functions_directly() -> (
+    None
+):
+    """Every prediction is exactly what calling `fim.statistics` directly gives."""
+    result = Api().get_equilibrium_predictions(n="450", m="0.001", mu="0.00003", d="20")
+
+    assert result["ok"] is True
+    assert result["predictions"]["D"] == format_statistic(
+        equilibrium_d(0.001, 0.00003, 20), 3
+    )
+    assert result["predictions"]["G_ST"] == format_statistic(
+        equilibrium_g_st(450, 0.001, 0.00003, 20), 3
+    )
+    assert result["predictions"]["E_ST"] == format_statistic(
+        equilibrium_shannon_differentiation(450, 0.001, 0.00003, 20), 3
+    )
+    assert result["predictions"]["identity_recovery_half_life"] == format_statistic(
+        identity_recovery_half_life(450, 0.001), 3
+    )
+
+
+def test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_zero() -> None:
+    """`equilibrium_d` alone requires `mu > 0`; the other three do not."""
+    result = Api().get_equilibrium_predictions(n="450", m="0.001", mu="0", d="20")
+
+    assert result["ok"] is True
+    assert result["predictions"]["D"] == "undefined"
+    assert result["predictions"]["G_ST"] != "undefined"
+    assert result["predictions"]["identity_recovery_half_life"] != "undefined"
+
+
+@pytest.mark.parametrize(
+    ("n", "m", "mu", "d"),
+    [
+        ("not-a-number", "0.001", "0.00003", "20"),
+        ("450", "0.001", "0.00003", "not-a-number"),
+        ("0", "0.001", "0.00003", "20"),  # N below the minimum of 1
+        ("450", "0.001", "0.00003", "1"),  # d below the minimum of 2
+        ("450", "1.5", "0.00003", "20"),  # m outside [0, 1]
+        ("450", "0.001", "-0.1", "20"),  # mu outside [0, 1]
+    ],
+)
+def test_get_equilibrium_predictions_rejects_invalid_input(
+    n: str, m: str, mu: str, d: str
+) -> None:
+    """A non-numeric or out-of-range field is reported once, not silently dropped."""
+    result = Api().get_equilibrium_predictions(n=n, m=m, mu=mu, d=d)
+
+    assert result["ok"] is False
+    assert isinstance(result["message"], str)
+    assert result["message"] != ""
+
+
+def test_get_equilibrium_predictions_honors_significant_digits() -> None:
+    """Explore reads the same display precision every other screen does."""
+    api = Api()
+    api.set_significant_digits(6)
+
+    result = api.get_equilibrium_predictions(n="450", m="0.001", mu="0.00003", d="20")
+
+    assert result["predictions"]["D"] == format_statistic(
+        equilibrium_d(0.001, 0.00003, 20), 6
+    )
+
+
+def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None:
+    """Sweeping `m` recomputes `D`/`G_ST` at each point using the same N/d/mu."""
+    result = Api().get_equilibrium_sweep(
+        axis="m", n="450", m="0.001", mu="0.00003", d="20"
+    )
+
+    assert result["ok"] is True
+    assert result["axis"] == "m"
+    assert result["current"] == pytest.approx(0.001)
+    assert len(result["points"]) == app_module._EQUILIBRIUM_SWEEP_POINTS
+    low, high = app_module._EQUILIBRIUM_SWEEP_DOMAINS["m"]
+    assert result["points"][0]["x"] == pytest.approx(low)
+    assert result["points"][-1]["x"] == pytest.approx(high)
+    for point in result["points"]:
+        expected_g_st = equilibrium_g_st(450, point["x"], 0.00003, 20)
+        assert point["G_ST"] == pytest.approx(expected_g_st)
+
+
+def test_get_equilibrium_sweep_rounds_integer_axes() -> None:
+    """A swept `N` or `d` is a whole number, never a fractional geometric step."""
+    result = Api().get_equilibrium_sweep(
+        axis="d", n="450", m="0.001", mu="0.00003", d="20"
+    )
+
+    assert result["ok"] is True
+    for point in result["points"]:
+        assert point["x"] == int(point["x"])
+
+
+def test_get_equilibrium_sweep_rejects_an_unknown_axis() -> None:
+    """Only the four sweepable field names are accepted."""
+    result = Api().get_equilibrium_sweep(
+        axis="not-a-field", n="450", m="0.001", mu="0.00003", d="20"
+    )
+
+    assert result["ok"] is False
+    assert "axis" in result["message"]
+
+
+def test_get_equilibrium_sweep_rejects_invalid_input() -> None:
+    """Bad field values are rejected the same way `get_equilibrium_predictions` does."""
+    result = Api().get_equilibrium_sweep(
+        axis="m", n="450", m="0.001", mu="0.00003", d="1"
+    )
+
+    assert result["ok"] is False
+    assert "d" in result["message"]
 
 
 def test_format_statistic_matches_the_cli_own_format_optional() -> None:
@@ -1157,6 +1277,7 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         "Save configuration…",
         "Open run…",
         "Reveal output folder",
+        "Explore predictions…",
         "Quit fim",
     ]
     configure_items = [item.title for item in menus[1].items if hasattr(item, "title")]

@@ -525,3 +525,36 @@ fieldset.composite > label {
     background: var(--fim-accent);
     color: #ffffff;
 }
+
+/* Explore (design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+ * §5) -- the four headline fields laid out in one row (narrower than
+ * `.field`'s own 22rem default, which assumes a single vertical stack of
+ * unrelated fields, not four short numbers meant to be read together),
+ * and the sweep curve beside its own predictions table, reusing
+ * `.run-plot-row`/`.stats-table` from the run view rather than
+ * duplicating that layout. */
+.explore-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.explore-fields .field {
+    max-width: 10rem;
+}
+
+.explore-plot-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+
+#explore-canvas {
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    background: var(--fim-background);
+    display: block;
+    width: min(100%, 480px);
+    aspect-ratio: 4 / 3;
+}

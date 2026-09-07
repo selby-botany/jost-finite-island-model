@@ -45,6 +45,7 @@ import time
 import webbrowser
 from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor
+from math import isfinite
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from typing import Any, Final, Protocol, TextIO, cast
@@ -86,6 +87,12 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.manifest import read_manifest
 from fim.reanalyze import reanalyze_trajectory
+from fim.statistics import (
+    equilibrium_d,
+    equilibrium_g_st,
+    equilibrium_shannon_differentiation,
+    identity_recovery_half_life,
+)
 from fim.viz.scatter import (
     deme_pair_panel,
     frequency_points,
@@ -230,6 +237,106 @@ def format_statistic(
     six regardless of that configurable value's own default.
     """
     return "undefined" if value is None else f"{value:.{digits}g}"
+
+
+# The Explore workspace (design doc `20260907-claude-sonnet-5-botanist-
+# gui-redesign.md` §5): fixed *display* domains for `get_equilibrium_
+# sweep`'s own curve, one per sweepable axis -- chosen to show a
+# genuinely informative curve on their own, independent of whatever the
+# caller's current value happens to be, so the same axis always
+# produces a comparably-shaped plot rather than one whose range quietly
+# depends on where the user started. `mu`'s own lower bound is strictly
+# positive (never `0.0`) since `equilibrium_d` rejects `mu == 0`
+# outright (see that function's own docstring).
+_EQUILIBRIUM_SWEEP_POINTS: Final = 24
+_EQUILIBRIUM_SWEEP_DOMAINS: Final[dict[str, tuple[float, float]]] = {
+    "N": (10.0, 5000.0),
+    "d": (2.0, 50.0),
+    "m": (0.0001, 0.5),
+    "mu": (0.000001, 0.1),
+}
+
+# The fewest points `_geometric_sweep` can produce a real ratio from —
+# below this, "spaced between two values" has no geometric meaning left.
+_MINIMUM_SWEEP_POINTS: Final = 2
+
+
+def _geometric_sweep(low: float, high: float, count: int) -> list[float]:
+    """Return `count` values geometrically spaced from `low` to `high`, inclusive.
+
+    Used instead of a linear sweep because every axis
+    `_EQUILIBRIUM_SWEEP_DOMAINS` names spans several orders of magnitude
+    (a migration or mutation rate meaningfully differs at `0.001` versus
+    `0.01` versus `0.1`) — a linear sweep across the same bounds would
+    spend almost every point on the least interesting, largest-value
+    end of the range.
+
+    Args:
+        low: First value (must be strictly positive).
+        high: Last value (must be greater than `low`).
+        count: How many values to return, at least `2`.
+
+    Returns:
+        `count` values, `low` and `high` themselves included as the
+        first and last.
+    """
+    if count < _MINIMUM_SWEEP_POINTS:
+        return [low]
+    ratio = (high / low) ** (1.0 / (count - 1))
+    return [low * ratio**index for index in range(count)]
+
+
+_MINIMUM_EQUILIBRIUM_N: Final = 1
+_MINIMUM_EQUILIBRIUM_DEMES: Final = 2
+
+
+def _parse_equilibrium_inputs(
+    n: str, m: str, mu: str, d: str
+) -> tuple[int, float, float, int]:
+    """Parse and range-check Explore's four scalar fields.
+
+    Deliberately lighter than `form_values_to_payload`/`SimulationParams.
+    from_mapping`: Explore has no seed, loci, or convergence settings to
+    validate — only these four numbers. Range checks mirror `fim.
+    statistics.differentiation`'s own private `_validate_equilibrium_
+    inputs`/`_validate_identity_recovery_inputs` (not imported directly —
+    both start with `_`, this project's own "always private" rule) so
+    every genuinely invalid input (an `N` under `1`, a `d` under `2`, an
+    `m`/`mu` outside `[0, 1]`) is rejected once, here, before any
+    individual prediction call — rather than four of the five
+    predictions each independently raising and being caught as
+    "undefined." A field that parses and is in range but still leaves a
+    *specific* prediction undefined (`equilibrium_d` requires `mu`
+    strictly greater than `0`, unlike every other function here) is
+    deliberately left to that one prediction's own try/except instead —
+    that is a real "undefined at this configuration" case, not a bad
+    input, and only `D` should read as undefined for it.
+
+    Args:
+        n: Population size, as typed.
+        m: Migration rate, as typed.
+        mu: Mutation rate, as typed.
+        d: Deme count, as typed.
+
+    Returns:
+        `(n, m, mu, d)` as `(int, float, float, int)`.
+
+    Raises:
+        ValueError: If any of the four does not parse as a number, or
+            parses but is out of range.
+    """
+    try:
+        n_value, m_value, mu_value, d_value = (int(n), float(m), float(mu), int(d))
+    except (TypeError, ValueError) as error:
+        raise ValueError("N, d, m, and mu must all be numbers") from error
+    if n_value < _MINIMUM_EQUILIBRIUM_N:
+        raise ValueError("N must be a positive gene-copy count")
+    if d_value < _MINIMUM_EQUILIBRIUM_DEMES:
+        raise ValueError("d must be at least 2")
+    for name, value in (("m", m_value), ("mu", mu_value)):
+        if not isfinite(value) or not 0.0 <= value <= 1.0:
+            raise ValueError(f"{name} must be between 0 and 1")
+    return (n_value, m_value, mu_value, d_value)
 
 
 def _active_window() -> webview.Window | None:
@@ -734,6 +841,149 @@ class Api:
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "panel": panel}
+
+    @_log_bridge_call
+    def get_equilibrium_predictions(
+        self, n: str, m: str, mu: str, d: str
+    ) -> dict[str, Any]:
+        """Return no-simulation-needed theoretical equilibrium predictions.
+
+        The Explore workspace's own data source (design doc
+        `20260907-claude-sonnet-5-botanist-gui-redesign.md` §5): every
+        prediction here is a pure function of `(N, m, mu, d)` alone,
+        computed directly from `fim.statistics`'s own equilibrium/
+        identity-recovery family — no simulation ever runs to produce
+        any of it, so this call returns essentially instantly regardless
+        of how large `N`/`d` are.
+
+        Args:
+            n: Population size (gene copies per deme), as typed.
+            m: Migration rate, as typed.
+            mu: Mutation rate, as typed.
+            d: Deme count, as typed.
+
+        Returns:
+            `{"ok": True, "predictions": {"D": ..., "G_ST": ...,
+            "E_ST": ..., "identity_recovery_half_life": ...}}`, each
+            value a string already formatted by `format_statistic`
+            (including its own `"undefined"` convention where a
+            prediction has no defined value for these inputs — `D` when
+            `mu` is exactly `0`, for instance); `{"ok": False,
+            "message": ...}` if `n`/`d`/`m`/`mu` do not even parse as
+            numbers, or if a value parses but is out of range (that
+            `ValueError`'s own message, verbatim, from whichever
+            `fim.statistics` function first rejected it).
+        """
+        try:
+            n_value, m_value, mu_value, d_value = _parse_equilibrium_inputs(n, m, mu, d)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+
+        digits = self._significant_digits
+
+        def predict(function: Callable[..., float], *args: float | int) -> str:
+            try:
+                return format_statistic(function(*args), digits)
+            except ValueError:
+                return format_statistic(None, digits)
+
+        # `_parse_equilibrium_inputs` already rejected every out-of-range
+        # input above; the only `ValueError` any one `predict` call below
+        # can still raise is `equilibrium_d`'s own `mu == 0` case (a
+        # legitimately in-range input that leaves *that one* prediction
+        # undefined), which `predict`'s own inner try/except already
+        # turns into `"undefined"` rather than failing the whole call.
+        predictions = {
+            "D": predict(equilibrium_d, m_value, mu_value, d_value),
+            "G_ST": predict(equilibrium_g_st, n_value, m_value, mu_value, d_value),
+            "E_ST": predict(
+                equilibrium_shannon_differentiation,
+                n_value,
+                m_value,
+                mu_value,
+                d_value,
+            ),
+            "identity_recovery_half_life": predict(
+                identity_recovery_half_life, n_value, m_value
+            ),
+        }
+        return {"ok": True, "predictions": predictions}
+
+    @_log_bridge_call
+    def get_equilibrium_sweep(
+        self, axis: str, n: str, m: str, mu: str, d: str
+    ) -> dict[str, Any]:
+        """Sweep one of N/d/m/mu and return predicted D/G_ST across it.
+
+        Explore's own curve (design doc
+        `20260907-claude-sonnet-5-botanist-gui-redesign.md` §5.2):
+        `axis` sweeps across `_EQUILIBRIUM_SWEEP_DOMAINS[axis]`, a fixed
+        display range independent of the other three fields' current
+        values, which are held fixed at whatever `get_equilibrium_
+        predictions` was just called with.
+
+        Args:
+            axis: Which field to sweep — one of `"N"`, `"d"`, `"m"`,
+                `"mu"`.
+            n: Population size, held fixed unless `axis == "N"`.
+            m: Migration rate, held fixed unless `axis == "m"`.
+            mu: Mutation rate, held fixed unless `axis == "mu"`.
+            d: Deme count, held fixed unless `axis == "d"`.
+
+        Returns:
+            `{"ok": True, "axis": axis, "current": <parsed current value
+            of axis>, "points": [{"x": ..., "D": ..., "G_ST": ...},
+            ...]}` — `D`/`G_ST` are `None` (not a formatted string —
+            plotting reads these as numbers) wherever that point's own
+            configuration makes the prediction undefined, e.g. `D` at
+            `mu == 0`; `{"ok": False, "message": ...}` if `axis` is not
+            one of the four names above, or if `n`/`d`/`m`/`mu` do not
+            parse.
+        """
+        if axis not in _EQUILIBRIUM_SWEEP_DOMAINS:
+            return {
+                "ok": False,
+                "message": f"axis must be one of {sorted(_EQUILIBRIUM_SWEEP_DOMAINS)}",
+            }
+        try:
+            n_value, m_value, mu_value, d_value = _parse_equilibrium_inputs(n, m, mu, d)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+
+        low, high = _EQUILIBRIUM_SWEEP_DOMAINS[axis]
+        swept = _geometric_sweep(low, high, _EQUILIBRIUM_SWEEP_POINTS)
+        current: float | int = {
+            "N": n_value,
+            "d": d_value,
+            "m": m_value,
+            "mu": mu_value,
+        }[axis]
+
+        def value_at(current_axis_value: float) -> float | int:
+            return (
+                round(current_axis_value) if axis in ("N", "d") else current_axis_value
+            )
+
+        points = []
+        for raw_value in swept:
+            value = value_at(raw_value)
+            sweep_n = int(value) if axis == "N" else n_value
+            sweep_d = int(value) if axis == "d" else d_value
+            sweep_m = float(value) if axis == "m" else m_value
+            sweep_mu = float(value) if axis == "mu" else mu_value
+            try:
+                predicted_d: float | None = equilibrium_d(sweep_m, sweep_mu, sweep_d)
+            except ValueError:
+                predicted_d = None
+            try:
+                predicted_g_st: float | None = equilibrium_g_st(
+                    sweep_n, sweep_m, sweep_mu, sweep_d
+                )
+            except ValueError:
+                predicted_g_st = None
+            points.append({"x": value, "D": predicted_d, "G_ST": predicted_g_st})
+
+        return {"ok": True, "axis": axis, "current": current, "points": points}
 
     @_log_bridge_call
     def load_yaml(self) -> dict[str, Any]:
@@ -2057,6 +2307,8 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             MenuAction(
                 "Reveal output folder", dispatch("fim.menu.revealOutputFolder()")
             ),
+            MenuSeparator(),
+            MenuAction("Explore predictions…", dispatch("fim.menu.explore()")),
             MenuSeparator(),
             MenuAction("Quit fim", window.destroy),
         ],

@@ -268,6 +268,61 @@
     <div id="help-content" class="help-content"></div>
   </section>
 
+  <!-- Explore (design doc `20260907-claude-sonnet-5-botanist-gui-
+       redesign.md` §5): no-simulation-needed theoretical predictions
+       from `(N, m, mu, d)` alone, straight from `fim.statistics`'s own
+       equilibrium/identity-recovery family. Reachable from any screen
+       (File menu, `fim.menu.explore`), returning to whichever screen
+       was showing before it -- the same "Back" contract `screen-help`
+       already established (`help.js`'s own `returnScreen`), not a
+       fixed target. -->
+  <section id="screen-explore" class="screen" hidden>
+    <div id="explore-banner" class="banner" hidden></div>
+    <div class="actions">
+      <button type="button" id="explore-back-button">Back</button>
+    </div>
+    <div class="explore-fields">
+      <div class="field">
+        <label for="explore-n">N (gene copies/deme)</label>
+        <input type="text" id="explore-n" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="explore-d">d (demes)</label>
+        <input type="text" id="explore-d" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="explore-m">m (migration rate)</label>
+        <input type="text" id="explore-m" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label for="explore-mu">μ (mutation rate)</label>
+        <input type="text" id="explore-mu" inputmode="decimal">
+      </div>
+    </div>
+    <div class="run-plot-row">
+      <div class="explore-plot-column">
+        <div class="field">
+          <label for="explore-axis">Sweep</label>
+          <select id="explore-axis">
+            <option value="m">m (migration rate)</option>
+            <option value="mu">μ (mutation rate)</option>
+            <option value="N">N (gene copies/deme)</option>
+            <option value="d">d (demes)</option>
+          </select>
+        </div>
+        <canvas id="explore-canvas"></canvas>
+      </div>
+      <table class="stats-table" id="explore-predictions">
+        <tbody>
+          <tr id="explore-stat-D"></tr>
+          <tr id="explore-stat-G_ST"></tr>
+          <tr id="explore-stat-E_ST"></tr>
+          <tr id="explore-stat-identity_recovery_half_life"></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <!-- Configure modals (unified-run-view design §3.1): live outside
        every .screen section on purpose, confirmed live rather than
        assumed -- a <dialog> nested inside a `hidden` ancestor still
@@ -478,5 +533,6 @@
 <script src="screens/run-view-completed.js"></script>
 <script src="screens/open-run.js"></script>
 <script src="screens/help.js"></script>
+<script src="screens/explore.js"></script>
 </body>
 </html>

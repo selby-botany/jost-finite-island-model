@@ -36,6 +36,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_batch_running`](#gui.test_batch_running)
   - [`test_config_form`](#gui.test_config_form)
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
+  - [`test_explore_screen`](#gui.test_explore_screen)
   - [`test_help_screen`](#gui.test_help_screen)
   - [`test_input_screen`](#gui.test_input_screen)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
@@ -6681,6 +6682,62 @@ A `<button>` is natively focusable, but this project's own WKWebView
 host does not include it in the `Tab` order without this explicit
 opt-in (see this module's own docstring) — a future dialog copied
 from an existing one without it would silently reintroduce the gap.
+
+<a id="gui.test_explore_screen"></a>
+
+# gui.test\_explore\_screen
+
+Headless functional tests for the Explore screen (design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §5).
+
+Real DOM-driven proof that `webui/screens/explore.js` actually wires the
+page correctly — `test/gui/test_app_api.py`'s own `test_get_equilibrium_
+predictions_*`/`test_get_equilibrium_sweep_*` tests already prove the
+bridge methods themselves are correct as plain Python calls; these tests
+prove the page's own JavaScript calls them at the right moments and
+updates the right elements, which no Python-only test can check.
+
+<a id="gui.test_explore_screen.test_menu_explore_shows_predictions_and_back_returns_to_the_prior_screen"></a>
+
+#### test\_menu\_explore\_shows\_predictions\_and\_back\_returns\_to\_the\_prior\_screen
+
+```python
+def test_menu_explore_shows_predictions_and_back_returns_to_the_prior_screen(
+        window: webview.Window) -> None
+```
+
+`fim.menu.explore` opens Explore with real predictions; Back returns.
+
+One `webview.start()` call driving several sequential trigger-then-
+poll round trips (`test_help_screen.py`'s own precedent for why: more
+than one round trip against a single window needs a manual driver,
+not the `drive` fixture, which destroys its window after one).
+
+The trigger wraps `fim.menu.explore()` in `setTimeout(..., 0)`,
+matching `fim.gui.app._build_menu`'s own real dispatcher exactly —
+calling an `async` `fim.menu.*` method directly as a bare
+`evaluate_js` expression deadlocks (`test_input_screen.py`'s own
+`test_menu_new_configuration_resets_an_edited_field` docstring has
+the full mechanism).
+
+<a id="gui.test_explore_screen.test_changing_a_field_recomputes_predictions"></a>
+
+#### test\_changing\_a\_field\_recomputes\_predictions
+
+```python
+def test_changing_a_field_recomputes_predictions(
+        window: webview.Window) -> None
+```
+
+Committing (`change`) a new `m` value recomputes the predictions table.
+
+`equilibrium_d`'s own formula (`fim.statistics.differentiation`)
+means a much larger migration rate, everything else held fixed,
+strictly increases `D` — a large enough gap between the two `m`
+values below is not a hand-picked coincidence, it is guaranteed by
+the formula's own monotonicity in `m`, so a real recomputation is
+distinguishable from a stale, unchanged reading by simple inequality,
+with no dependency on either value's own exact digits.
 
 <a id="gui.test_help_screen"></a>
 

@@ -258,6 +258,9 @@ const fim = {
         openRun() {
             window.fim.showOpenRunScreen();
         },
+        explore() {
+            window.fim.showExplore();
+        },
         cancelRun() {
             document.getElementById("cancel-run-button").click();
         },
