@@ -16,19 +16,23 @@ against a second, GUI-local copy of a rule.
 headings do. The cardinality rule (`doc/fim-gui-design.md` §6.1)
 decides what earns a live widget here at all: O(1) and O(d)/O(loci)-
 sized fields do (a comma-separated text field faithfully represents
-either); a `d`-by-`d` migration matrix, an arbitrary sparse map, a
-per-locus `p_0`, a genuinely per-locus `mu`, or a `loci` list with
-custom `locus_id`s do not. `m` and `p_0` get the read-only "loaded
-from file" badge treatment when a loaded configuration actually uses
-one; `mu`-per-locus and custom-ID `loci` instead raise a clear
-`ValueError` from `params_to_form_values` (the same "edit the YAML
-file directly" pattern this form has always used for a construct it
-cannot represent at all, load-only badge or not) — see `doc/
-fim-gui-design.md` §6.2 for both paths.
+either); a `d`-by-`d` migration matrix now does too, edited cell by
+cell (botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4,
+`m_to_payload`/`m_from_params`'s own `"matrix"` mode); a per-locus
+`p_0`, a genuinely per-locus `mu`, or a `loci` list with custom
+`locus_id`s still do not. `p_0` gets the read-only "loaded from file"
+badge treatment when a loaded configuration actually uses one;
+`mu`-per-locus and custom-ID `loci` instead raise a clear `ValueError`
+from `params_to_form_values` (the same "edit the YAML file directly"
+pattern this form has always used for a construct it cannot represent
+at all, load-only badge or not) — see `doc/fim-gui-design.md` §6.2 for
+both paths.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final, Literal
@@ -46,7 +50,7 @@ FieldKind = Literal[
 # and a named topology) and the topologies `fim.model.topology` itself
 # accepts — kept here, not imported from there, since the GUI only ever
 # needs the two literal option strings, not the topology machinery.
-MigrationMode = Literal["scalar", "topology"]
+MigrationMode = Literal["scalar", "topology", "matrix"]
 MIGRATION_TOPOLOGIES: Final[tuple[str, ...]] = ("ring", "linear")
 
 
@@ -360,7 +364,9 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
     return payload
 
 
-def m_to_payload(values: Mapping[str, str]) -> float | dict[str, object]:
+def m_to_payload(
+    values: Mapping[str, str],
+) -> float | dict[str, object] | list[list[float]]:
     """Build `m`'s payload from the selector's mode and its own sub-fields.
 
     Args:
@@ -368,20 +374,23 @@ def m_to_payload(values: Mapping[str, str]) -> float | dict[str, object]:
             `m_topology`, and `m_topology_rate` are read.
 
     Returns:
-        A bare scalar rate (`m_mode == "scalar"`), or a `{"topology",
-        "rate"}` mapping (`m_mode == "topology"`) —
-        `fim.model.params._parse_migration` accepts either verbatim.
+        A bare scalar rate (`m_mode == "scalar"`), a `{"topology",
+        "rate"}` mapping (`m_mode == "topology"`), or a dense
+        `list[list[float]]` matrix (`m_mode == "matrix"`) —
+        `fim.model.params._parse_migration` accepts any of the three
+        verbatim.
 
     Raises:
         ValueError: If the active sub-field's text is not a number, if
-            `m_mode == "loaded"` (a loaded matrix/sparse map has no
-            editable representation here at all — §3.6, §4.0 #3; the
-            screen itself is responsible for re-submitting a loaded,
-            untouched `m` from the `SimulationParams` it was loaded
-            from, rather than asking this function to reconstruct a
-            matrix from a summary string), or `m_mode` is none of the
-            three (a programming error in the caller, not a
-            user-facing validation case).
+            `m_matrix_json` (mode `"matrix"`) is not valid JSON or not a
+            list of lists of numbers (the grid editor's own JS keeps
+            this field in sync with the visible cells on every change,
+            so a malformed value here means the grid itself was never
+            actually rendered — a programming error to surface loudly,
+            not a validation message a user would recognize as their
+            own mistake), or `m_mode` is none of the three (a
+            programming error in the caller, not a user-facing
+            validation case).
     """
     mode = values["m_mode"]
     if mode == "scalar":
@@ -391,13 +400,46 @@ def m_to_payload(values: Mapping[str, str]) -> float | dict[str, object]:
             "topology": values["m_topology"],
             "rate": _parse_float_named("m.rate", values["m_topology_rate"]),
         }
-    if mode == "loaded":
-        raise ValueError(
-            "m uses a loaded migration matrix or sparse map; it cannot be "
-            "edited here — load a different configuration, or switch to a "
-            "scalar rate or named topology, to change it"
-        )
+    if mode == "matrix":
+        return _parse_m_matrix_json(values["m_matrix_json"])
     raise ValueError(f"unknown m selector mode: {mode!r}")
+
+
+def _parse_m_matrix_json(text: str) -> list[list[float]]:
+    """Parse the migration-matrix grid editor's own serialized JSON value.
+
+    Args:
+        text: `m_matrix_json`'s own current value — a JSON array of
+            equal-length arrays of numbers, written by `webui/screens/
+            migration-matrix.js` from the grid's own live cell values.
+
+    Raises:
+        ValueError: If `text` is not valid JSON, or is not a nonempty
+            list of nonempty lists of numbers — the exact shape `fim.
+            model.params._parse_migration` itself expects for a dense
+            matrix, checked here only well enough to give a clear error
+            for a malformed *shape* (this function's own concern); a
+            well-shaped matrix with the wrong dimensions for the
+            configured `d`, or rows that do not each sum to 1, is still
+            `from_mapping`'s own concern to reject, exactly like a
+            hand-authored YAML matrix already is.
+    """
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"m matrix must be valid JSON: {error}") from error
+    if not isinstance(parsed, list) or not parsed:
+        raise ValueError("m matrix must be a nonempty list of rows")
+    matrix: list[list[float]] = []
+    for row in parsed:
+        if (
+            not isinstance(row, list)
+            or not row
+            or not all(isinstance(value, int | float) for value in row)
+        ):
+            raise ValueError("m matrix must be a nonempty list of nonempty number rows")
+        matrix.append([float(value) for value in row])
+    return matrix
 
 
 def m_from_params(params: SimulationParams) -> dict[str, str]:
@@ -408,17 +450,19 @@ def m_from_params(params: SimulationParams) -> dict[str, str]:
 
     Returns:
         `m_mode`/`m_rate`/`m_topology`/`m_topology_rate`/
-        `m_loaded_summary`. A scalar `params.m` renders as `"scalar"`
-        mode. A matrix-shaped `params.m` renders as `"loaded"` mode
-        with a read-only summary (§3.6, §4.0 #3) — a stepping-stone
-        topology's own `{topology, rate}` sugar expands into a full
-        dense matrix the moment `from_mapping` parses it
-        (`fim.model.params.Migration = float | tuple[tuple[float,
-        ...], ...]`), so there is no way to tell, from the matrix
-        alone, which topology (or none at all, an explicit or sparse-
-        map matrix) produced it — "loaded" is the only honest
-        representation for any matrix-shaped `m`, not only a sparse-
-        map or explicitly-authored one.
+        `m_matrix_json`. A scalar `params.m` renders as `"scalar"`
+        mode. A matrix-shaped `params.m` — a full matrix, a sparse
+        neighbor map, or a stepping-stone topology, all already
+        expanded to one dense matrix by the time `from_mapping` parses
+        it (`fim.model.params.Migration = float | tuple[tuple[float,
+        ...], ...]`) — renders as `"matrix"` mode with the actual dense
+        values, editable cell by cell (botanist GUI design doc
+        `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4,
+        replacing an earlier, read-only `"loaded"` mode that could only
+        show a size summary: there is still no way to tell, from the
+        matrix alone, which topology — or none at all — produced it,
+        but that no longer matters once every cell is directly
+        editable rather than frozen behind a badge).
     """
     if isinstance(params.m, float):
         return {
@@ -426,18 +470,14 @@ def m_from_params(params: SimulationParams) -> dict[str, str]:
             "m_rate": str(params.m),
             "m_topology": MIGRATION_TOPOLOGIES[0],
             "m_topology_rate": "",
-            "m_loaded_summary": "",
+            "m_matrix_json": "",
         }
-    size = len(params.m)
     return {
-        "m_mode": "loaded",
+        "m_mode": "matrix",
         "m_rate": "",
         "m_topology": MIGRATION_TOPOLOGIES[0],
         "m_topology_rate": "",
-        "m_loaded_summary": (
-            f"{size}\N{MULTIPLICATION SIGN}{size} migration matrix "
-            "(loaded from file — edit via Load YAML…)"
-        ),
+        "m_matrix_json": json.dumps([list(row) for row in params.m]),
     }
 
 

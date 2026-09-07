@@ -613,6 +613,68 @@ fieldset.composite > label {
     background: var(--fim-border);
 }
 
+/* The migration-matrix grid editor (`m-matrix-fields`) -- a scrollable
+ * table so a large `d` (the starter config's own default is 20) stays
+ * usable rather than overflowing the whole dialog; cells are narrow and
+ * right-aligned (`font-variant-numeric: tabular-nums`, matching every
+ * other numeric table on this page) since a migration rate is always a
+ * short decimal. */
+.matrix-grid {
+    max-height: 16rem;
+    max-width: 100%;
+    overflow: auto;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.matrix-grid table {
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.matrix-grid th,
+.matrix-grid td {
+    padding: 0.15rem 0.3rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.matrix-grid th {
+    color: var(--fim-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    position: sticky;
+    top: 0;
+    background: var(--fim-background);
+}
+
+.matrix-grid tbody th {
+    position: static;
+    text-align: right;
+}
+
+.matrix-cell {
+    width: 4.5rem;
+    font: inherit;
+    color: inherit;
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.2rem 0.35rem;
+    text-align: right;
+}
+
+.matrix-row-sum {
+    color: var(--fim-muted);
+    font-size: 0.85rem;
+}
+
+.matrix-row-sum-invalid {
+    color: #d64545;
+    font-weight: 600;
+}
+
 #explore-canvas {
     border: 1px solid var(--fim-border);
     border-radius: 4px;

@@ -38,7 +38,7 @@ from fim.gui import recent_runs as recent_runs_module
 from fim.gui import runner as runner_module
 from fim.gui.app import Api, _save_dialog_path, format_statistic
 from fim.gui.batch_runner import default_max_workers
-from fim.gui.config_form import starter_form_values
+from fim.gui.config_form import form_values_to_payload, starter_form_values
 from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.gui.recent_runs import RecentRun
 from fim.gui.store import LiveProgressStore
@@ -181,21 +181,32 @@ def test_named_presets_persist_across_a_second_api(tmp_path: Path) -> None:
 
 
 def test_get_preset_form_values_loads_a_representable_preset() -> None:
-    """A preset with no unrepresentable construct loads into real form values.
+    """A preset with no unrepresentable construct loads into resubmittable form values.
 
     `m`'s own stepping-stone topology shorthand has already expanded to
     a dense matrix by the time `SimulationParams.from_mapping` returns
     it (`configuration.md`'s own documented behavior) — `m_from_params`
-    therefore renders it as `m_mode="loaded"`, the identical "loaded
-    from file" badge a hand-loaded copy of this same YAML file would
-    already get via `load_yaml`, not a preset-specific gap.
+    renders it as `m_mode="matrix"`, with the actual dense values.
+    Submitting those values back through `form_values_to_payload`
+    unchanged reproduces the identical matrix: a real, previously-
+    reproduced regression found writing this test — before `"matrix"`
+    mode existed, `m_from_params` rendered any matrix-shaped `m` as a
+    read-only `"loaded"` badge, and `m_to_payload` raised on that mode
+    unconditionally, so this exact preset (and "Unequal island sizes
+    with a migration hub", the other matrix-shaped one) could be loaded
+    but never actually run, unmodified, through the GUI at all.
     """
     result = Api().get_preset_form_values("stepping-stone-spatial-migration")
 
     assert result["ok"] is True
     assert result["values"]["N"] == "150"
-    assert result["values"]["m_mode"] == "loaded"
-    assert "6" in result["values"]["m_loaded_summary"]
+    assert result["values"]["m_mode"] == "matrix"
+    matrix = json.loads(result["values"]["m_matrix_json"])
+    assert len(matrix) == 6
+
+    payload = form_values_to_payload(result["values"])
+
+    assert payload["m"] == matrix
 
 
 def test_get_preset_form_values_rejects_an_unknown_id() -> None:

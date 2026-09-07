@@ -73,7 +73,13 @@ def test_load_example_populates_the_list_and_applies_the_chosen_preset(
                 "dialogOpen: document.getElementById('modal-presets').open, "
                 "mMode: document.querySelector("
                 "'input[name=\"m_mode\"]:checked').value, "
-                "nValue: document.getElementById('field-N').value"
+                "nValue: document.getElementById('field-N').value, "
+                "matrixFieldsHidden: "
+                "document.getElementById('m-matrix-fields').hidden, "
+                "matrixRowCount: "
+                "document.querySelectorAll('#m-matrix-grid tbody tr').length, "
+                "firstCellValue: "
+                "document.querySelector('#m-matrix-grid .matrix-cell').value"
                 "})",
                 lambda value: value is not None and value["dialogOpen"] is False,
             )
@@ -86,8 +92,13 @@ def test_load_example_populates_the_list_and_applies_the_chosen_preset(
 
     assert result["itemCount"] > 0
     assert result["settled"]["dialogOpen"] is False
-    assert result["settled"]["mMode"] == "loaded"
+    assert result["settled"]["mMode"] == "matrix"
     assert result["settled"]["nValue"] == "150"
+    # The stepping-stone preset's own d=6 ring matrix, real values in a
+    # real, rendered, editable grid — not a read-only "loaded" badge.
+    assert result["settled"]["matrixFieldsHidden"] is False
+    assert result["settled"]["matrixRowCount"] == 6
+    assert result["settled"]["firstCellValue"] != ""
 
 
 def test_save_current_as_preset_then_delete_it(window: webview.Window) -> None:

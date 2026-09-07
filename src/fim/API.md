@@ -4058,15 +4058,18 @@ against a second, GUI-local copy of a rule.
 headings do. The cardinality rule (`doc/fim-gui-design.md` §6.1)
 decides what earns a live widget here at all: O(1) and O(d)/O(loci)-
 sized fields do (a comma-separated text field faithfully represents
-either); a `d`-by-`d` migration matrix, an arbitrary sparse map, a
-per-locus `p_0`, a genuinely per-locus `mu`, or a `loci` list with
-custom `locus_id`s do not. `m` and `p_0` get the read-only "loaded
-from file" badge treatment when a loaded configuration actually uses
-one; `mu`-per-locus and custom-ID `loci` instead raise a clear
-`ValueError` from `params_to_form_values` (the same "edit the YAML
-file directly" pattern this form has always used for a construct it
-cannot represent at all, load-only badge or not) — see `doc/
-fim-gui-design.md` §6.2 for both paths.
+either); a `d`-by-`d` migration matrix now does too, edited cell by
+cell (botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4,
+`m_to_payload`/`m_from_params`'s own `"matrix"` mode); a per-locus
+`p_0`, a genuinely per-locus `mu`, or a `loci` list with custom
+`locus_id`s still do not. `p_0` gets the read-only "loaded from file"
+badge treatment when a loaded configuration actually uses one;
+`mu`-per-locus and custom-ID `loci` instead raise a clear `ValueError`
+from `params_to_form_values` (the same "edit the YAML file directly"
+pattern this form has always used for a construct it cannot represent
+at all, load-only badge or not) — see `doc/fim-gui-design.md` §6.2 for
+both paths.
 
 <a id="fim.gui.config_form.FormField"></a>
 
@@ -4233,7 +4236,9 @@ Coerce the form's string values into a `from_mapping`-ready payload.
 #### m\_to\_payload
 
 ```python
-def m_to_payload(values: Mapping[str, str]) -> float | dict[str, object]
+def m_to_payload(
+    values: Mapping[str,
+                    str]) -> float | dict[str, object] | list[list[float]]
 ```
 
 Build `m`'s payload from the selector's mode and its own sub-fields.
@@ -4246,22 +4251,25 @@ Build `m`'s payload from the selector's mode and its own sub-fields.
 
 **Returns**:
 
-  A bare scalar rate (`m_mode == "scalar"`), or a `{"topology",
-  "rate"}` mapping (`m_mode == "topology"`) —
-  `fim.model.params._parse_migration` accepts either verbatim.
+  A bare scalar rate (`m_mode == "scalar"`), a `{"topology",
+  "rate"}` mapping (`m_mode == "topology"`), or a dense
+  `list[list[float]]` matrix (`m_mode == "matrix"`) —
+  `fim.model.params._parse_migration` accepts any of the three
+  verbatim.
 
 
 **Raises**:
 
 - `ValueError` - If the active sub-field's text is not a number, if
-  `m_mode == "loaded"` (a loaded matrix/sparse map has no
-  editable representation here at all — §3.6, §4.0 `3`; the
-  screen itself is responsible for re-submitting a loaded,
-  untouched `m` from the `SimulationParams` it was loaded
-  from, rather than asking this function to reconstruct a
-  matrix from a summary string), or `m_mode` is none of the
-  three (a programming error in the caller, not a
-  user-facing validation case).
+  `m_matrix_json` (mode `"matrix"`) is not valid JSON or not a
+  list of lists of numbers (the grid editor's own JS keeps
+  this field in sync with the visible cells on every change,
+  so a malformed value here means the grid itself was never
+  actually rendered — a programming error to surface loudly,
+  not a validation message a user would recognize as their
+  own mistake), or `m_mode` is none of the three (a
+  programming error in the caller, not a user-facing
+  validation case).
 
 <a id="fim.gui.config_form.m_from_params"></a>
 
@@ -4281,17 +4289,19 @@ Render `params.m` back into the selector's form-value keys.
 **Returns**:
 
   `m_mode`/`m_rate`/`m_topology`/`m_topology_rate`/
-  `m_loaded_summary`. A scalar `params.m` renders as `"scalar"`
-  mode. A matrix-shaped `params.m` renders as `"loaded"` mode
-  with a read-only summary (§3.6, §4.0 `3`) — a stepping-stone
-  topology's own `{topology, rate}` sugar expands into a full
-  dense matrix the moment `from_mapping` parses it
-  (`fim.model.params.Migration = float | tuple[tuple[float,
-  ...], ...]`), so there is no way to tell, from the matrix
-  alone, which topology (or none at all, an explicit or sparse-
-  map matrix) produced it — "loaded" is the only honest
-  representation for any matrix-shaped `m`, not only a sparse-
-  map or explicitly-authored one.
+  `m_matrix_json`. A scalar `params.m` renders as `"scalar"`
+  mode. A matrix-shaped `params.m` — a full matrix, a sparse
+  neighbor map, or a stepping-stone topology, all already
+  expanded to one dense matrix by the time `from_mapping` parses
+  it (`fim.model.params.Migration = float | tuple[tuple[float,
+  ...], ...]`) — renders as `"matrix"` mode with the actual dense
+  values, editable cell by cell (botanist GUI design doc
+  `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4,
+  replacing an earlier, read-only `"loaded"` mode that could only
+  show a size summary: there is still no way to tell, from the
+  matrix alone, which topology — or none at all — produced it,
+  but that no longer matters once every cell is directly
+  editable rather than frozen behind a badge).
 
 <a id="fim.gui.config_form.mu_to_payload"></a>
 

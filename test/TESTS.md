@@ -39,6 +39,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_explore_screen`](#gui.test_explore_screen)
   - [`test_help_screen`](#gui.test_help_screen)
   - [`test_input_screen`](#gui.test_input_screen)
+  - [`test_migration_matrix_screen`](#gui.test_migration_matrix_screen)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
   - [`test_preferences`](#gui.test_preferences)
   - [`test_presets`](#gui.test_presets)
@@ -5133,14 +5134,20 @@ two separate `Api()` calls in one test.
 def test_get_preset_form_values_loads_a_representable_preset() -> None
 ```
 
-A preset with no unrepresentable construct loads into real form values.
+A preset with no unrepresentable construct loads into resubmittable form values.
 
 `m`'s own stepping-stone topology shorthand has already expanded to
 a dense matrix by the time `SimulationParams.from_mapping` returns
 it (`configuration.md`'s own documented behavior) — `m_from_params`
-therefore renders it as `m_mode="loaded"`, the identical "loaded
-from file" badge a hand-loaded copy of this same YAML file would
-already get via `load_yaml`, not a preset-specific gap.
+renders it as `m_mode="matrix"`, with the actual dense values.
+Submitting those values back through `form_values_to_payload`
+unchanged reproduces the identical matrix: a real, previously-
+reproduced regression found writing this test — before `"matrix"`
+mode existed, `m_from_params` rendered any matrix-shaped `m` as a
+read-only `"loaded"` badge, and `m_to_payload` raised on that mode
+unconditionally, so this exact preset (and "Unequal island sizes
+with a migration hub", the other matrix-shaped one) could be loaded
+but never actually run, unmodified, through the GUI at all.
 
 <a id="gui.test_app_api.test_get_preset_form_values_rejects_an_unknown_id"></a>
 
@@ -6749,25 +6756,51 @@ def test_mu_from_params_rejects_a_genuinely_per_locus_mu() -> None
 
 A per-locus `mu` (unequal rates across loci) has no form representation.
 
-<a id="gui.test_config_form.test_m_from_params_matrix_shows_the_loaded_badge"></a>
+<a id="gui.test_config_form.test_m_from_params_matrix_renders_matrix_mode_with_the_real_values"></a>
 
-#### test\_m\_from\_params\_matrix\_shows\_the\_loaded\_badge
-
-```python
-def test_m_from_params_matrix_shows_the_loaded_badge() -> None
-```
-
-A matrix-shaped `m` renders `m_mode="loaded"` with a size summary.
-
-<a id="gui.test_config_form.test_m_to_payload_rejects_loaded_mode"></a>
-
-#### test\_m\_to\_payload\_rejects\_loaded\_mode
+#### test\_m\_from\_params\_matrix\_renders\_matrix\_mode\_with\_the\_real\_values
 
 ```python
-def test_m_to_payload_rejects_loaded_mode() -> None
+def test_m_from_params_matrix_renders_matrix_mode_with_the_real_values(
+) -> None
 ```
 
-"Loaded" mode has no editable payload — the screen must splice it in itself.
+A matrix-shaped `m` renders `m_mode="matrix"` with its own dense values.
+
+<a id="gui.test_config_form.test_m_to_payload_matrix_mode_round_trips_through_m_from_params"></a>
+
+#### test\_m\_to\_payload\_matrix\_mode\_round\_trips\_through\_m\_from\_params
+
+```python
+def test_m_to_payload_matrix_mode_round_trips_through_m_from_params() -> None
+```
+
+A matrix rendered by `m_from_params` submits back to the identical matrix.
+
+<a id="gui.test_config_form.test_m_to_payload_matrix_mode_rejects_malformed_json"></a>
+
+#### test\_m\_to\_payload\_matrix\_mode\_rejects\_malformed\_json
+
+```python
+def test_m_to_payload_matrix_mode_rejects_malformed_json() -> None
+```
+
+A syntactically invalid `m_matrix_json` is a clear error, not a crash.
+
+<a id="gui.test_config_form.test_m_to_payload_matrix_mode_rejects_the_wrong_shape"></a>
+
+#### test\_m\_to\_payload\_matrix\_mode\_rejects\_the\_wrong\_shape
+
+```python
+@pytest.mark.parametrize(
+    "malformed",
+    ["[]", "[[]]", '["not-a-number-row"]', '[[1, "x"]]', '"not-a-list"'],
+)
+def test_m_to_payload_matrix_mode_rejects_the_wrong_shape(
+        malformed: str) -> None
+```
+
+Valid JSON that is not a list of number rows is still rejected.
 
 <a id="gui.test_config_form.test_convergence_statistic_to_payload_returns_a_bare_string_for_one_checked"></a>
 
@@ -7438,6 +7471,70 @@ test, not the batch-execution timing that triggers it. No explicit
 reset call needed first: every test gets a fresh page load of its
 own, so the module-scoped high-water mark this proves already
 starts at its own initial `0` regardless.
+
+<a id="gui.test_migration_matrix_screen"></a>
+
+# gui.test\_migration\_matrix\_screen
+
+Headless functional tests for the migration-matrix grid editor
+(botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+§4.4).
+
+Real DOM-driven proof that `webui/screens/migration-matrix.js` actually
+builds, resizes, and reads back a real grid of cells —
+`test/gui/test_config_form.py`'s own `test_m_to_payload_matrix_mode_*`/
+`test_m_from_params_matrix_*` tests already prove `m_to_payload`/
+`m_from_params` correct as plain Python calls; these tests prove the
+page's own JavaScript builds the grid those functions actually read
+from and write to, which no Python-only test can check.
+
+<a id="gui.test_migration_matrix_screen.test_selecting_matrix_mode_builds_an_identity_grid_matching_d"></a>
+
+#### test\_selecting\_matrix\_mode\_builds\_an\_identity\_grid\_matching\_d
+
+```python
+def test_selecting_matrix_mode_builds_an_identity_grid_matching_d(
+        window: webview.Window) -> None
+```
+
+Switching to matrix mode with no prior matrix builds a d-by-d identity grid.
+
+<a id="gui.test_migration_matrix_screen.test_editing_a_cell_updates_the_row_sum_and_flags_an_invalid_row"></a>
+
+#### test\_editing\_a\_cell\_updates\_the\_row\_sum\_and\_flags\_an\_invalid\_row
+
+```python
+def test_editing_a_cell_updates_the_row_sum_and_flags_an_invalid_row(
+        window: webview.Window) -> None
+```
+
+Typing into a cell recomputes that row's own sum and warns when it isn't 1.
+
+<a id="gui.test_migration_matrix_screen.test_changing_d_resizes_the_grid_preserving_existing_values"></a>
+
+#### test\_changing\_d\_resizes\_the\_grid\_preserving\_existing\_values
+
+```python
+def test_changing_d_resizes_the_grid_preserving_existing_values(
+        window: webview.Window) -> None
+```
+
+Growing `d` while matrix mode is active adds rows/columns without losing data.
+
+<a id="gui.test_migration_matrix_screen.test_a_real_run_with_a_hand_edited_matrix_completes"></a>
+
+#### test\_a\_real\_run\_with\_a\_hand\_edited\_matrix\_completes
+
+```python
+def test_a_real_run_with_a_hand_edited_matrix_completes() -> None
+```
+
+A run submitted with a hand-edited full matrix actually completes.
+
+Same event-driven "wait on a real `threading.Event`, never poll a
+live background run" shape `test_running_screen.py`'s own real-run
+tests already use, for the identical reason those tests' own
+docstrings record.
 
 <a id="gui.test_open_run_screen"></a>
 

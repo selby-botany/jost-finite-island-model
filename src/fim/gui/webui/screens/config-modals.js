@@ -22,8 +22,12 @@ const form = document.getElementById("input-form");
 
 /* Composite/derived fields config_form.py's params_to_form_values
  * returns that have no directly-name-matched form input (read-only
- * summaries, shown as plain text instead). */
-const SUMMARY_ONLY_KEYS = ["m_loaded_summary", "p0_summary"];
+ * summaries, shown as plain text instead). `m_matrix_json` is *not*
+ * one of these -- it has a real, named `<input type="hidden">`
+ * (`m-matrix-fields`'s own field), so `setFieldValue` already handles
+ * it like any other field; only its own *visible* grid needs a
+ * separate rebuild, wired below. */
+const SUMMARY_ONLY_KEYS = ["p0_summary"];
 
 function setFieldValue(name, value) {
     const field = form.elements.namedItem(name);
@@ -50,12 +54,14 @@ function applyFormValues(values) {
         }
         setFieldValue(key, value);
     }
-    const loadedSummary = document.getElementById("m-loaded-summary");
-    loadedSummary.textContent = values.m_loaded_summary || "";
-    loadedSummary.hidden = !values.m_loaded_summary;
     const p0Summary = document.getElementById("p0-summary");
     p0Summary.textContent = values.p0_summary || "";
     p0Summary.hidden = !values.p0_summary;
+    // `field-m_matrix_json`'s own value is now set (by the loop above,
+    // like any other field), but the *visible* grid it drives is a
+    // separate set of cells `migration-matrix.js` owns -- rebuilding it
+    // from that value is that file's own concern, not this function's.
+    window.fim.rebuildMigrationMatrixGrid();
     syncConditionalVisibility();
 }
 
@@ -81,7 +87,7 @@ function syncConditionalVisibility() {
     const mMode = form.elements.namedItem("m_mode").value;
     document.getElementById("m-scalar-fields").hidden = mMode !== "scalar";
     document.getElementById("m-topology-fields").hidden = mMode !== "topology";
-    document.getElementById("m-loaded-summary").hidden = mMode !== "loaded";
+    document.getElementById("m-matrix-fields").hidden = mMode !== "matrix";
 
     const muMode = form.elements.namedItem("mu_mode").value;
     document.getElementById("mu-mu-field").hidden = muMode !== "mu";

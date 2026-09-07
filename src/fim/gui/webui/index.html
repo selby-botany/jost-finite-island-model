@@ -409,26 +409,7 @@
       <legend>m (migration)</legend>
       <label><input type="radio" name="m_mode" value="scalar" checked form="input-form"> scalar rate</label>
       <label><input type="radio" name="m_mode" value="topology" form="input-form"> named topology</label>
-      <!-- Not a user-facing third choice -- `m_from_params`'s own
-           "loaded" mode (any matrix-shaped `m`: a full d-by-d matrix, a
-           sparse neighbor map, or a stepping-stone topology, all
-           already expanded to a dense matrix by the time they reach
-           here) has no scalar-rate/topology form of its own to show,
-           only the read-only summary below. `RadioNodeList`-based radio
-           groups (`setFieldValue`'s own `applyFormValues` helper)
-           require a real, matching `value="loaded"` option to actually
-           check -- without this, loading such a configuration (Load
-           YAML…, or a preset like "Unequal island sizes with a
-           migration hub") leaves the whole `m_mode` group unchecked,
-           and an unchecked radio group contributes nothing at all to
-           `FormData`, which crashed `revalidate`'s own `m_to_payload`
-           with a bare `KeyError` the first time this was driven through
-           a real DOM rather than only checked at the `config_form.py`
-           level. `hidden` (not `disabled`) keeps it invisible to the
-           user while still participating in `FormData` like any other
-           radio in the group. -->
-      <input type="radio" name="m_mode" value="loaded" form="input-form" hidden
-             tabindex="-1" aria-hidden="true">
+      <label><input type="radio" name="m_mode" value="matrix" form="input-form"> full matrix</label>
       <div class="field" id="m-scalar-fields">
         <label for="field-m_rate">rate</label>
         <input type="text" id="field-m_rate" name="m_rate" form="input-form">
@@ -442,7 +423,21 @@
         <label for="field-m_topology_rate">rate</label>
         <input type="text" id="field-m_topology_rate" name="m_topology_rate" form="input-form">
       </div>
-      <p class="loaded-summary" id="m-loaded-summary" hidden></p>
+      <!-- The migration-matrix grid editor (botanist GUI design doc
+           `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4):
+           `webui/screens/migration-matrix.js` builds a d-by-d table of
+           cells into `m-matrix-grid` and keeps the hidden `m_matrix_
+           json` field (the one `config_form.m_to_payload`/`m_from_
+           params` actually read/write) in sync with it on every edit.
+           A loaded matrix-shaped `m` (a full matrix, a sparse map, or
+           an expanded stepping-stone topology -- `m_from_params`'s own
+           docstring) renders here too, real values in real editable
+           cells, not a read-only summary. -->
+      <div class="field" id="m-matrix-fields" hidden>
+        <p class="hint">Each row must sum to 1 -- a row that doesn't is highlighted.</p>
+        <div id="m-matrix-grid" class="matrix-grid"></div>
+        <input type="hidden" id="field-m_matrix_json" name="m_matrix_json" form="input-form">
+      </div>
     </fieldset>
     <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
@@ -633,6 +628,7 @@
 <script src="meters.js"></script>
 <script src="scrubber.js"></script>
 <script src="screens/config-modals.js"></script>
+<script src="screens/migration-matrix.js"></script>
 <script src="screens/run-view-controls.js"></script>
 <script src="screens/run-view-initial.js"></script>
 <script src="screens/run-view-running.js"></script>

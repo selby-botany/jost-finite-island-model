@@ -8,6 +8,8 @@ equivalent `SimulationParams`.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 import yaml
 
@@ -452,26 +454,55 @@ def test_mu_from_params_rejects_a_genuinely_per_locus_mu() -> None:
         config_form.mu_from_params(params)
 
 
-def test_m_from_params_matrix_shows_the_loaded_badge() -> None:
-    """A matrix-shaped `m` renders `m_mode="loaded"` with a size summary."""
-    params = _params(d=3, m=((0.9, 0.05, 0.05), (0.05, 0.9, 0.05), (0.05, 0.05, 0.9)))
+def test_m_from_params_matrix_renders_matrix_mode_with_the_real_values() -> None:
+    """A matrix-shaped `m` renders `m_mode="matrix"` with its own dense values."""
+    matrix = ((0.9, 0.05, 0.05), (0.05, 0.9, 0.05), (0.05, 0.05, 0.9))
+    params = _params(d=3, m=matrix)
 
     values = config_form.m_from_params(params)
 
-    assert values["m_mode"] == "loaded"
-    assert "3" in values["m_loaded_summary"]
-    assert "loaded from file" in values["m_loaded_summary"]
+    assert values["m_mode"] == "matrix"
+    assert json.loads(values["m_matrix_json"]) == [list(row) for row in matrix]
 
 
-def test_m_to_payload_rejects_loaded_mode() -> None:
-    """ "Loaded" mode has no editable payload — the screen must splice it in itself."""
-    with pytest.raises(ValueError, match="cannot be edited here"):
+def test_m_to_payload_matrix_mode_round_trips_through_m_from_params() -> None:
+    """A matrix rendered by `m_from_params` submits back to the identical matrix."""
+    matrix = ((0.9, 0.05, 0.05), (0.05, 0.9, 0.05), (0.05, 0.05, 0.9))
+    values = config_form.m_from_params(_params(d=3, m=matrix))
+
+    payload = config_form.m_to_payload(values)
+
+    assert payload == [list(row) for row in matrix]
+
+
+def test_m_to_payload_matrix_mode_rejects_malformed_json() -> None:
+    """A syntactically invalid `m_matrix_json` is a clear error, not a crash."""
+    with pytest.raises(ValueError, match="valid JSON"):
         config_form.m_to_payload(
             {
-                "m_mode": "loaded",
+                "m_mode": "matrix",
                 "m_rate": "",
                 "m_topology": "ring",
                 "m_topology_rate": "",
+                "m_matrix_json": "{not valid json",
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    ["[]", "[[]]", '["not-a-number-row"]', '[[1, "x"]]', '"not-a-list"'],
+)
+def test_m_to_payload_matrix_mode_rejects_the_wrong_shape(malformed: str) -> None:
+    """Valid JSON that is not a list of number rows is still rejected."""
+    with pytest.raises(ValueError, match="nonempty"):
+        config_form.m_to_payload(
+            {
+                "m_mode": "matrix",
+                "m_rate": "",
+                "m_topology": "ring",
+                "m_topology_rate": "",
+                "m_matrix_json": malformed,
             }
         )
 
