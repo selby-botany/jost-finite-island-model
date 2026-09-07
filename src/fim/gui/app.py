@@ -74,6 +74,7 @@ from fim.gui.config_form import (
     starter_form_values,
     tab_for_error,
 )
+from fim.gui.preferences import GuiPreferences, load_preferences, preferences_file_path
 from fim.gui.store import read_live_state, read_progress_sidecar
 from fim.model.initial import generate_initial_state
 from fim.model.params import SimulationParams
@@ -318,6 +319,7 @@ class Api:
         on_message: (
             Callable[[runner.RunMessage | batch_runner.BatchMessage], None] | None
         ) = None,
+        preferences_path: Path | None = None,
     ) -> None:
         """Start with no run in flight.
 
@@ -348,19 +350,49 @@ class Api:
                 Event`/`queue.Queue`, no `evaluate_js` call of the
                 test's own involved) instead of polling the DOM for the
                 same fact.
+            preferences_path: Where `GuiPreferences` are loaded from and
+                saved to (`fim.gui.preferences`). Defaults to
+                `preferences_file_path()`'s own real, platform-specific
+                location; overridable so a test never touches — or
+                collides with — a real user's saved preferences.
         """
         self._cancel_event: threading.Event | None = None
         self._open_folder = open_folder
         self._on_run_started = on_run_started
         self._on_message = on_message
+        self._preferences_path = (
+            preferences_path
+            if preferences_path is not None
+            else preferences_file_path()
+        )
+        # `load_preferences` never raises — an unreadable file is
+        # quarantined and defaults returned (`fim.gui.preferences`'s own
+        # docstring) — so this always succeeds, even on a corrupted or
+        # first-ever launch. `_startup_warnings` is drained exactly once
+        # by `get_startup_warnings`, called from `webui/app.js` right
+        # after the first screen mounts: `__init__` runs before any
+        # screen exists, so there is nowhere yet to show an inline
+        # `{"ok": False, "message": ...}` error the way `start_run`'s own
+        # error path does.
+        preferences, warning = load_preferences(self._preferences_path)
+        self._preferences: GuiPreferences = preferences
+        self._startup_warnings: list[str] = [warning] if warning is not None else []
         # The View menu's own "Significant digits" submenu (`set_
         # significant_digits`) mutates this directly; every real
         # `format_statistic` call site below reads it fresh at the
         # moment a screen is populated, so a change here takes effect
         # starting with the next run's own results — an already-open
         # Screen 3/4 was formatted once, at push time, and is not
-        # retroactively reformatted.
-        self._significant_digits: int = _DEFAULT_DISPLAY_SIGNIFICANT_DIGITS
+        # retroactively reformatted. Seeded from a saved preference when
+        # one exists, falling back to the hardcoded default otherwise —
+        # `GuiPreferences` itself carries no default of its own
+        # (`fim.gui.preferences`'s own docstring: this constant stays the
+        # single source of truth).
+        self._significant_digits: int = (
+            preferences.significant_digits
+            if preferences.significant_digits is not None
+            else _DEFAULT_DISPLAY_SIGNIFICANT_DIGITS
+        )
         # The Progress screen's own live "Compare demes directly"
         # selector (`set_live_deme_pair`) mutates this directly; unlike
         # `_significant_digits` above, a background run's own thread
@@ -782,6 +814,22 @@ class Api:
             }
         self._significant_digits = digits
         return {"ok": True, "digits": digits}
+
+    @_log_bridge_call
+    def get_startup_warnings(self) -> list[str]:
+        """Drain and return any warnings collected while loading saved preferences.
+
+        One-shot: returns the warnings collected so far and clears them,
+        so a second call (a page reload, a second screen re-checking)
+        never re-shows an already-acknowledged warning. Called by
+        `webui/app.js` once, right after the first screen mounts —
+        `Api.__init__` runs too early to show anything itself: there is
+        no screen yet to display an inline `{"ok": False, "message":
+        ...}` error against (`fim.gui.preferences.load_preferences`'s
+        own docstring on why this exists instead of one).
+        """
+        warnings, self._startup_warnings = self._startup_warnings, []
+        return warnings
 
     @_log_bridge_call
     def get_live_deme_pair(self) -> tuple[int, int] | None:

@@ -334,6 +334,32 @@ async function connectBridge() {
     }
 }
 
+/**
+ * Fetch and display any warning collected while loading saved
+ * preferences (`Api.get_startup_warnings`, `fim.gui.preferences`'s own
+ * quarantine-on-corrupt-file recovery path) -- the one place a
+ * malformed `preferences.json` actually reaches the user, rather than
+ * only a log line nobody launching a double-clicked desktop app would
+ * ever see. One-shot: `get_startup_warnings` drains its own list on the
+ * Python side, so calling this again (there is currently only ever one
+ * call, at bootstrap) would simply find nothing left to show.
+ */
+async function showStartupWarnings() {
+    const warnings = await window.pywebview.api.get_startup_warnings();
+    if (warnings.length === 0) {
+        return;
+    }
+    const banner = document.getElementById("startup-warning-banner");
+    document.getElementById("startup-warning-text").textContent = warnings.join(" ");
+    banner.hidden = false;
+}
+
+document
+    .getElementById("startup-warning-dismiss")
+    .addEventListener("click", () => {
+        document.getElementById("startup-warning-banner").hidden = true;
+    });
+
 function whenApiReady(callback) {
     if (window.pywebview && window.pywebview.api) {
         callback();
@@ -343,3 +369,4 @@ function whenApiReady(callback) {
 }
 
 whenApiReady(connectBridge);
+whenApiReady(showStartupWarnings);

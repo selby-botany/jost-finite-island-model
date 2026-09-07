@@ -90,6 +90,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
     * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
     * [set\_significant\_digits](#fim.gui.app.Api.set_significant_digits)
+    * [get\_startup\_warnings](#fim.gui.app.Api.get_startup_warnings)
     * [get\_live\_deme\_pair](#fim.gui.app.Api.get_live_deme_pair)
     * [set\_live\_deme\_pair](#fim.gui.app.Api.set_live_deme_pair)
     * [list\_recent\_runs](#fim.gui.app.Api.list_recent_runs)
@@ -2760,13 +2761,13 @@ reimplemented here.
 #### \_\_init\_\_
 
 ```python
-def __init__(
-    *,
-    open_folder: Callable[[Path], None] = _reveal_in_file_browser,
-    on_run_started: Callable[[], None] | None = None,
-    on_message: (Callable[[runner.RunMessage | batch_runner.BatchMessage],
-                          None] | None) = None
-) -> None
+def __init__(*,
+             open_folder: Callable[[Path], None] = _reveal_in_file_browser,
+             on_run_started: Callable[[], None] | None = None,
+             on_message: (
+                 Callable[[runner.RunMessage | batch_runner.BatchMessage],
+                          None] | None) = None,
+             preferences_path: Path | None = None) -> None
 ```
 
 Start with no run in flight.
@@ -2799,6 +2800,11 @@ Start with no run in flight.
   Event`/`queue.Queue`, no `evaluate_js` call of the
   test's own involved) instead of polling the DOM for the
   same fact.
+- `preferences_path` - Where `GuiPreferences` are loaded from and
+  saved to (`fim.gui.preferences`). Defaults to
+  `preferences_file_path()`'s own real, platform-specific
+  location; overridable so a test never touches — or
+  collides with — a real user's saved preferences.
 
 <a id="fim.gui.app.Api.start_run"></a>
 
@@ -3087,6 +3093,26 @@ once, at push time, and is not retroactively reformatted.
   precision floats carry roughly seventeen significant
   decimal digits, so anything past that bound would just
   print noise, not real information.
+
+<a id="fim.gui.app.Api.get_startup_warnings"></a>
+
+#### get\_startup\_warnings
+
+```python
+@_log_bridge_call
+def get_startup_warnings() -> list[str]
+```
+
+Drain and return any warnings collected while loading saved preferences.
+
+One-shot: returns the warnings collected so far and clears them,
+so a second call (a page reload, a second screen re-checking)
+never re-shows an already-acknowledged warning. Called by
+`webui/app.js` once, right after the first screen mounts —
+`Api.__init__` runs too early to show anything itself: there is
+no screen yet to display an inline `{"ok": False, "message":
+...}` error against (`fim.gui.preferences.load_preferences`'s
+own docstring on why this exists instead of one).
 
 <a id="fim.gui.app.Api.get_live_deme_pair"></a>
 

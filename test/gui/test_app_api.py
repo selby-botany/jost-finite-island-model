@@ -38,6 +38,7 @@ from fim.gui import runner as runner_module
 from fim.gui.app import Api, _save_dialog_path, format_statistic
 from fim.gui.batch_runner import default_max_workers
 from fim.gui.config_form import starter_form_values
+from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.gui.recent_runs import RecentRun
 from fim.gui.store import LiveProgressStore
 from fim.model.allele import AlleleId
@@ -162,6 +163,45 @@ def test_set_significant_digits_rejects_values_outside_the_valid_range(
     assert (
         api.get_significant_digits() == app_module._DEFAULT_DISPLAY_SIGNIFICANT_DIGITS
     )
+
+
+def test_api_seeds_significant_digits_from_a_saved_preference(tmp_path: Path) -> None:
+    """A fresh `Api` prefers a saved `significant_digits` over the hardcoded default."""
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(preferences_path, GuiPreferences(significant_digits=7))
+
+    api = Api(preferences_path=preferences_path)
+
+    assert api.get_significant_digits() == 7
+
+
+def test_get_startup_warnings_is_empty_on_a_clean_or_first_launch(
+    tmp_path: Path,
+) -> None:
+    """No saved preferences file at all is not a warning-worthy event."""
+    api = Api(preferences_path=tmp_path / "does-not-exist.json")
+
+    assert api.get_startup_warnings() == []
+
+
+def test_get_startup_warnings_reports_a_quarantined_file_exactly_once(
+    tmp_path: Path,
+) -> None:
+    """A corrupt preferences file produces one warning, drained on first read.
+
+    `get_startup_warnings` is one-shot (`fim.gui.app.Api.get_startup_
+    warnings`'s own docstring) so a page reload never re-shows a warning
+    the user already dismissed.
+    """
+    preferences_path = tmp_path / "preferences.json"
+    preferences_path.write_text("{not valid json", encoding="utf-8")
+
+    api = Api(preferences_path=preferences_path)
+
+    first = api.get_startup_warnings()
+    assert len(first) == 1
+    assert "could not read saved preferences" in first[0]
+    assert api.get_startup_warnings() == []
 
 
 def test_api_starts_with_no_live_deme_pair_selected() -> None:

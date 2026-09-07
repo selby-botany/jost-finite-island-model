@@ -75,6 +75,50 @@ def test_set_significant_digits_round_trip(
     assert result == 5
 
 
+def test_startup_warning_banner_stays_hidden_with_nothing_to_report(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A clean launch (this fixture's own fresh `tmp_path` preferences) shows no banner.
+
+    `app.js`'s own bootstrap already calls `get_startup_warnings` once,
+    automatically, on page load (`whenApiReady(showStartupWarnings)`) —
+    no manually injected `trigger` needed, the same shape `test_create_
+    window_loads_index_html` above uses for `#bridge-status`.
+    """
+    hidden = drive(
+        window,
+        trigger="null",
+        read="document.getElementById('startup-warning-banner').hidden",
+        is_ready=lambda value: value is True,
+    )
+
+    assert hidden is True
+
+
+def test_get_startup_warnings_bridge_round_trip(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The bridge call itself round-trips an empty list, not `None` or an error.
+
+    Complements `test/gui/test_app_api.py`'s own direct-call tests
+    (which cover the quarantine/warning-text content) with proof the
+    same call actually works across the real JS bridge.
+    """
+    result = drive(
+        window,
+        trigger=(
+            "(async () => { "
+            "window.__fimTestResult = "
+            "await window.pywebview.api.get_startup_warnings(); "
+            "})()"
+        ),
+        read="window.__fimTestResult",
+        is_ready=lambda value: value == [],
+    )
+
+    assert result == []
+
+
 def test_menu_set_significant_digits_calls_the_bridge(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

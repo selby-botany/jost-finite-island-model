@@ -207,6 +207,17 @@ fieldset.composite > label {
     }
 }
 
+#startup-warning-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+#startup-warning-text {
+    margin: 0;
+}
+
 .run-toolbar {
     display: flex;
     align-items: center;

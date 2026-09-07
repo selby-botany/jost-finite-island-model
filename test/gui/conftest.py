@@ -154,11 +154,13 @@ import queue
 import threading
 import time
 from collections.abc import Callable, Iterable, Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 import webview
 
+from fim.gui import app as app_module
 from fim.gui.app import create_window
 
 _POLL_INTERVAL_SECONDS = 0.1
@@ -403,3 +405,28 @@ def _isolate_logging(log_isolation: None) -> None:
     `create_window()`/`webview.start()` directly, never `main()`), but
     this stays package-wide so that stays true for any future test too.
     """
+
+
+@pytest.fixture(autouse=True)
+def _isolate_gui_preferences(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Never let a bare `Api()`/`create_window()` touch a real preferences file.
+
+    `Api.__init__`'s own `preferences_path` parameter — and `create_
+    window`'s own default `Api()` — fall back to `preferences_file_
+    path()`, the real, platform-specific location a packaged desktop
+    build actually uses. The overwhelming majority of this package's
+    tests construct `Api()`/`create_window()` with no `preferences_path`
+    of their own; without this fixture, every one of them would read,
+    and — since `set_significant_digits`/`start_run` persist changes —
+    write, a real developer's own `~/Library/Application Support/fim/
+    preferences.json` (or platform equivalent) on every test run. This
+    redirects `fim.gui.app.preferences_file_path`'s default to a fresh,
+    per-test `tmp_path` location instead, matching `test/gui/
+    test_preferences.py`'s own injectable `home` parameter — the same
+    "never touch a real home directory" discipline, applied here at the
+    `Api`/`create_window` boundary rather than inside `preferences.py`
+    itself.
+    """
+    monkeypatch.setattr(
+        app_module, "preferences_file_path", lambda: tmp_path / "preferences.json"
+    )

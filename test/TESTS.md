@@ -4845,6 +4845,37 @@ def test_set_significant_digits_round_trip(window: webview.Window,
 `set_significant_digits`/`get_significant_digits`, round-tripped
 through the bridge.
 
+<a id="gui.test_app.test_startup_warning_banner_stays_hidden_with_nothing_to_report"></a>
+
+#### test\_startup\_warning\_banner\_stays\_hidden\_with\_nothing\_to\_report
+
+```python
+def test_startup_warning_banner_stays_hidden_with_nothing_to_report(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A clean launch (this fixture's own fresh `tmp_path` preferences) shows no banner.
+
+`app.js`'s own bootstrap already calls `get_startup_warnings` once,
+automatically, on page load (`whenApiReady(showStartupWarnings)`) —
+no manually injected `trigger` needed, the same shape `test_create_
+window_loads_index_html` above uses for ``bridge`-status`.
+
+<a id="gui.test_app.test_get_startup_warnings_bridge_round_trip"></a>
+
+#### test\_get\_startup\_warnings\_bridge\_round\_trip
+
+```python
+def test_get_startup_warnings_bridge_round_trip(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The bridge call itself round-trips an empty list, not `None` or an error.
+
+Complements `test/gui/test_app_api.py`'s own direct-call tests
+(which cover the quarantine/warning-text content) with proof the
+same call actually works across the real JS bridge.
+
 <a id="gui.test_app.test_menu_set_significant_digits_calls_the_bridge"></a>
 
 #### test\_menu\_set\_significant\_digits\_calls\_the\_bridge
@@ -5055,6 +5086,43 @@ Outside the valid digit range, `set_significant_digits` leaves it unchanged.
 double-precision float carries roughly that many significant
 decimal digits, so anything past it would print noise a real
 `FinalReport` statistic never actually carries.
+
+<a id="gui.test_app_api.test_api_seeds_significant_digits_from_a_saved_preference"></a>
+
+#### test\_api\_seeds\_significant\_digits\_from\_a\_saved\_preference
+
+```python
+def test_api_seeds_significant_digits_from_a_saved_preference(
+        tmp_path: Path) -> None
+```
+
+A fresh `Api` prefers a saved `significant_digits` over the hardcoded default.
+
+<a id="gui.test_app_api.test_get_startup_warnings_is_empty_on_a_clean_or_first_launch"></a>
+
+#### test\_get\_startup\_warnings\_is\_empty\_on\_a\_clean\_or\_first\_launch
+
+```python
+def test_get_startup_warnings_is_empty_on_a_clean_or_first_launch(
+        tmp_path: Path) -> None
+```
+
+No saved preferences file at all is not a warning-worthy event.
+
+<a id="gui.test_app_api.test_get_startup_warnings_reports_a_quarantined_file_exactly_once"></a>
+
+#### test\_get\_startup\_warnings\_reports\_a\_quarantined\_file\_exactly\_once
+
+```python
+def test_get_startup_warnings_reports_a_quarantined_file_exactly_once(
+        tmp_path: Path) -> None
+```
+
+A corrupt preferences file produces one warning, drained on first read.
+
+`get_startup_warnings` is one-shot (`fim.gui.app.Api.get_startup_
+warnings`'s own docstring) so a page reload never re-shows a warning
+the user already dismissed.
 
 <a id="gui.test_app_api.test_api_starts_with_no_live_deme_pair_selected"></a>
 

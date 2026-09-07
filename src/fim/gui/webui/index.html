@@ -10,6 +10,20 @@
 <body>
 <div id="app">
 
+  <!-- Startup-time warnings (`Api.get_startup_warnings`,
+       `fim.gui.preferences`'s own quarantine-on-corrupt-file recovery
+       path) -- deliberately outside every `.screen` section, so
+       `showScreen` (which hides every `.screen` but one) never hides
+       this: a launch-time warning has nothing to do with which
+       top-level screen is currently showing. Dismissible, since a
+       quarantined-file warning describes a one-time event this launch
+       already recovered from, not an ongoing condition to keep
+       displaying. -->
+  <div id="startup-warning-banner" class="banner" hidden>
+    <p id="startup-warning-text"></p>
+    <button type="button" id="startup-warning-dismiss">Dismiss</button>
+  </div>
+
   <!-- The unified run view (unified-run-view design §3.2, §8 Phase E):
        one screen, one shared canvas/selector/scrubber, in exactly one
        of three states (`initial`/`running`/`completed`, `run-view-
