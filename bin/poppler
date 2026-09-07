@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+# Mount one level above the repository, not the repository itself: PDFs
+# this tool is actually asked to read (paper collections, correspondence
+# attachments) commonly live in a sibling directory rather than inside
+# this repository's own tree. A path relative to the repository root
+# (e.g. "doc/foo.pdf") still resolves unchanged, since the workdir below
+# is the repository's own location inside that wider mount; a sibling
+# path (e.g. "../lou-jost-papers/some-paper.pdf") now resolves too.
+workspace_root=$(dirname -- "${root}")
+repo_name=$(basename -- "${root}")
+image=${POPPLER_IMAGE:-minidocks/poppler}
+default_digest=sha256:e688bf4649f4300ec744d3c7001b5bc16375bb1bf777bcf95884a71621e4489d
+digest=${POPPLER_IMAGE_DIGEST:-${default_digest}}
+
+# poppler-utils ships several binaries (pdftotext, pdftoppm, pdfinfo,
+# pdftocairo, ...); the first argument names which one to run, matching
+# how the underlying image's entrypoint already execs its argv directly.
+# Prefer writing output to stdout ("-" as the output path, where the
+# chosen binary supports it) rather than into the mounted volume, so
+# nothing is ever written back into the repository owned by the
+# container's root user.
+exec docker run --rm \
+    --volume "${workspace_root}:/workspace" \
+    --workdir "/workspace/${repo_name}" \
+    "${image}@${digest}" "$@"
