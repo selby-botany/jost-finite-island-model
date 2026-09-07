@@ -1,18 +1,27 @@
 """Versioned, atomic GUI-preferences store (P1 item 4, design doc
 `20260907-claude-sonnet-5-gui-preferences-persistence-design.md`).
 
-Persists exactly the things a botanist actually asks a desktop app to
-remember between launches — the View menu's display precision, the
-Batch tab's worker-count override, the Progress screen's default
-deme-pair selection, and the last successfully submitted model-input
-form — never a run's own scientific configuration, which already has a
-permanent, replayable record in its own `manifest.json`
-(`fim.persistence.manifest`). Every field here is optional (`None`
-means "no saved preference yet"); a caller merges a loaded
-`GuiPreferences` with its own hardcoded defaults rather than this
-module carrying a second copy of those defaults (`fim.gui.app`'s own
-`_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS` etc. stay the single source of
-truth there).
+Persists exactly the two things the remediation item names as confirmed
+gaps — the View menu's display precision and the model-input form's
+last successfully submitted values (including the Batch tab's own
+`max_workers` field, which is already one of those values;
+`start_run`'s own docstring: "the Batch tab's own `max_workers`
+field... parsed here directly") — never a run's own scientific
+configuration, which already has a permanent, replayable record in its
+own `manifest.json` (`fim.persistence.manifest`). Both fields are
+optional (`None` means "no saved preference yet"); a caller merges a
+loaded `GuiPreferences` with its own hardcoded default rather than this
+module carrying a second copy of it (`fim.gui.app`'s own `_DEFAULT_
+DISPLAY_SIGNIFICANT_DIGITS` stays the single source of truth there).
+
+Deliberately excludes a "default deme pair for the next run": `Api.
+_start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
+at the start of every run on purpose ("a fresh run never inherits a
+previous run's own live pair selection... never left showing stale
+state from whichever screen used it last") — persisting a value that
+would then need to override that reset contradicts a documented,
+deliberate design choice already in `app.py`, not an oversight this
+store should paper over.
 
 The on-disk shape is one small JSON document,
 `{"schema_version": 1, "gui": {...}, "form": {...}}`, written with the
@@ -54,9 +63,6 @@ CURRENT_SCHEMA_VERSION: Final = 1
 # parameter — a real caller never supplies this.
 Clock = Callable[[], datetime]
 
-# `default_live_deme_pair` is always exactly a (deme, deme) pair.
-_DEME_PAIR_LENGTH: Final = 2
-
 
 @dataclass(frozen=True, slots=True)
 class GuiPreferences:
@@ -66,28 +72,17 @@ class GuiPreferences:
         significant_digits: The View menu's display-rounding precision,
             or `None` if never saved — `Api.__init__` falls back to its
             own `_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS` in that case.
-        max_workers: The Batch tab's worker-count override, or `None`
-            to keep using `batch_runner.default_max_workers()`'s
-            computed value.
-        default_live_deme_pair: The Progress screen's default selector
-            state for the *next* run, or `None`. Distinct from `Api.
-            _live_deme_pair`, which also starts `None` for a fresh run
-            regardless of this value but can then change live, mid-run
-            (`Api.set_live_deme_pair`) — that in-flight value is never
-            persisted, only this default-for-a-new-run one.
         form_values: The model-input form's last successfully submitted
             values (`Api.start_run`'s own `values: dict[str, str]`
-            argument, restricted to `config_form.all_fields()` names),
-            or `None` if no run has ever been started. Re-validated
-            through `config_form.form_values_to_payload`/
-            `SimulationParams.from_mapping` on load, exactly like a
-            real submission — this store never carries its own copy of
-            that validation.
+            argument, which already includes the Batch tab's
+            `max_workers` field for a batch run), or `None` if no run
+            has ever been started. Re-validated through `config_form.
+            form_values_to_payload`/`SimulationParams.from_mapping` on
+            load, exactly like a real submission — this store never
+            carries its own copy of that validation.
     """
 
     significant_digits: int | None = None
-    max_workers: int | None = None
-    default_live_deme_pair: tuple[int, int] | None = None
     form_values: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -95,10 +90,6 @@ class GuiPreferences:
         gui: dict[str, Any] = {}
         if self.significant_digits is not None:
             gui["significant_digits"] = self.significant_digits
-        if self.max_workers is not None:
-            gui["max_workers"] = self.max_workers
-        if self.default_live_deme_pair is not None:
-            gui["default_live_deme_pair"] = list(self.default_live_deme_pair)
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
         if self.form_values is not None:
             result["form"] = dict(self.form_values)
@@ -124,13 +115,6 @@ class GuiPreferences:
         gui = data.get("gui", {})
         if not isinstance(gui, Mapping):
             raise ValueError("preferences 'gui' section must be an object")
-        deme_pair = gui.get("default_live_deme_pair")
-        if deme_pair is not None:
-            if not (
-                isinstance(deme_pair, list) and len(deme_pair) == _DEME_PAIR_LENGTH
-            ):
-                raise ValueError("'default_live_deme_pair' must be a 2-element list")
-            deme_pair = (int(deme_pair[0]), int(deme_pair[1]))
         form_values = data.get("form")
         if form_values is not None:
             if not isinstance(form_values, Mapping) or not all(
@@ -141,8 +125,6 @@ class GuiPreferences:
             form_values = dict(form_values)
         return GuiPreferences(
             significant_digits=gui.get("significant_digits"),
-            max_workers=gui.get("max_workers"),
-            default_live_deme_pair=deme_pair,
             form_values=form_values,
         )
 

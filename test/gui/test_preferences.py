@@ -27,8 +27,6 @@ def test_round_trip_preserves_every_field(tmp_path: Path) -> None:
     path = tmp_path / "preferences.json"
     original = GuiPreferences(
         significant_digits=5,
-        max_workers=4,
-        default_live_deme_pair=(1, 3),
         form_values={"N": "500", "m": "0.01"},
     )
     save_preferences(path, original)
@@ -127,10 +125,9 @@ def test_to_dict_omits_unset_fields() -> None:
 
 def test_with_form_values_leaves_other_fields_untouched() -> None:
     """`with_form_values` updates only `form_values`."""
-    original = GuiPreferences(significant_digits=7, max_workers=2)
+    original = GuiPreferences(significant_digits=7)
     updated = original.with_form_values({"N": "100"})
     assert updated.significant_digits == 7
-    assert updated.max_workers == 2
     assert updated.form_values == {"N": "100"}
 
 
