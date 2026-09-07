@@ -400,6 +400,50 @@ stay alive rather than be terminated, set <code>FIM_GUI_SHUTDOWN_TIMEOUT</code> 
 the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
 <pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 </code></pre>
+<h3 id="saved-preferences">Saved preferences</h3>
+<p>The GUI remembers two things between launches: the View menu's Significant
+digits setting, and the last configuration you successfully clicked &quot;Run
+simulation&quot; with — a fresh launch's own Run view starts from that
+configuration rather than from the built-in starter values. File menu → &quot;New
+configuration&quot; always resets to the built-in starter values regardless of
+what is saved; it is the one action that ignores this file on purpose.</p>
+<p>Nothing scientific is stored here: a run's own configuration, seed, and
+results always live in that run's own <code>manifest.json</code>/<code>trajectory.jsonl</code>
+under <code>results/</code>, exactly as described throughout this guide. This file
+holds only the two GUI conveniences above.</p>
+<p>It lives in the platform's normal per-user settings location — you do not
+need to find or edit it for ordinary use:</p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS</td>
+<td><code>~/Library/Application Support/fim/preferences.json</code></td>
+</tr>
+<tr>
+<td>Windows</td>
+<td><code>%APPDATA%\fim\preferences.json</code></td>
+</tr>
+<tr>
+<td>Linux</td>
+<td><code>$XDG_CONFIG_HOME/fim/preferences.json</code> (usually <code>~/.config/fim/preferences.json</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>If this file is ever unreadable — edited by hand into invalid JSON, or left
+over from an incompatible future version — the GUI notices on the next
+launch, shows a dismissible banner naming the problem, and starts from
+built-in defaults instead of failing to open or guessing at a broken value.
+The unreadable file is never deleted: it is renamed alongside itself with a
+timestamp (<code>preferences.invalid-&lt;timestamp&gt;.json</code>) so nothing is lost, and a
+fresh, working file is written in its place. Deleting the whole <code>fim</code>
+folder shown above is always a safe way to reset both saved preferences
+from scratch; it never touches anything under <code>results/</code>.</p>
 <h2 id="global-flags">Global flags</h2>
 <pre><code class="language-console">fim --help
 fim --version

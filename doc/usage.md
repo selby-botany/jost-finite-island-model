@@ -467,6 +467,39 @@ the number of seconds to allow, or to `0` to wait indefinitely:
 FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 ```
 
+### Saved preferences
+
+The GUI remembers two things between launches: the View menu's Significant
+digits setting, and the last configuration you successfully clicked "Run
+simulation" with — a fresh launch's own Run view starts from that
+configuration rather than from the built-in starter values. File menu → "New
+configuration" always resets to the built-in starter values regardless of
+what is saved; it is the one action that ignores this file on purpose.
+
+Nothing scientific is stored here: a run's own configuration, seed, and
+results always live in that run's own `manifest.json`/`trajectory.jsonl`
+under `results/`, exactly as described throughout this guide. This file
+holds only the two GUI conveniences above.
+
+It lives in the platform's normal per-user settings location — you do not
+need to find or edit it for ordinary use:
+
+| Platform | Location |
+|---|---|
+| macOS | `~/Library/Application Support/fim/preferences.json` |
+| Windows | `%APPDATA%\fim\preferences.json` |
+| Linux | `$XDG_CONFIG_HOME/fim/preferences.json` (usually `~/.config/fim/preferences.json`) |
+
+If this file is ever unreadable — edited by hand into invalid JSON, or left
+over from an incompatible future version — the GUI notices on the next
+launch, shows a dismissible banner naming the problem, and starts from
+built-in defaults instead of failing to open or guessing at a broken value.
+The unreadable file is never deleted: it is renamed alongside itself with a
+timestamp (`preferences.invalid-<timestamp>.json`) so nothing is lost, and a
+fresh, working file is written in its place. Deleting the whole `fim`
+folder shown above is always a safe way to reset both saved preferences
+from scratch; it never touches anything under `results/`.
+
 ## Global flags
 
 ```console
