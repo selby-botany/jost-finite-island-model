@@ -6138,10 +6138,15 @@ def generate_initial_state(
 Generate generation zero with the configured strategy.
 
 This is the one function most callers actually use — it picks
-`DirichletInitialCondition` or `ExplicitInitialCondition`
-automatically, based on whether `params` has an explicit ``p_0``
-table configured, so a caller never needs to choose between the two
-itself.
+`EquilibriumSplitInitialCondition`, `DirichletInitialCondition`, or
+`ExplicitInitialCondition` automatically, based on whether `params`
+has the `equilibrium_*` fields or an explicit ``p_0`` table
+configured, so a caller never needs to choose between the three
+itself. A caller that needs `EquilibriumSplitInitialCondition`'s own
+richer `EquilibrationOutcome` (`fim.engine`'s own run orchestration,
+to persist it) calls that class directly instead — this function
+always returns a bare `ModelState`, discarding it, exactly like
+`EquilibriumSplitInitialCondition.generate` itself does.
 
 **Arguments**:
 
@@ -6151,7 +6156,9 @@ itself.
   is the specific, high-quality pseudo-random number algorithm
   NumPy recommends by default; passing the same ``params.seed``
   always produces the exact same generator state, which is what
-  makes a run reproducible.
+  makes a run reproducible. Unused by `EquilibriumSplitInitialCondition`
+  (see its own docstring for why); still accepted here so every
+  strategy shares one dispatch signature.
 
 
 **Returns**:
@@ -7093,6 +7100,28 @@ functions that actually use each one.
   `run_batch` at all (see `fim.engine.LinealBackend`'s own
   docstring).
 - `initial_frequencies` - Optional explicit deme/locus frequency table.
+- `equilibrium_convergence_window` - Trailing stability-window length
+  for the equilibrium-split ancestral phase's own `H_S` check
+  — independent of `convergence_window` above, since that
+  phase runs at a different population scale
+  (`sum(population_sizes)` in one deme) with no principled
+  reason to share a threshold with the real `d`-deme run.
+  `None` (the default) selects the ordinary Dirichlet-prior
+  initial condition instead. Set together with `equilibrium_
+  convergence_tolerance`/`equilibrium_max_generations`, or not
+  at all — a partial equilibrium configuration is rejected
+  (`__post_init__`), and combining any of the three with
+  `initial_frequencies` is rejected as ambiguous (a run cannot
+  both fix an explicit `p_0` and derive one from equilibrium-
+  split).
+- `equilibrium_convergence_tolerance` - Trailing-window tolerance for
+  the same check.
+- `equilibrium_max_generations` - Hard cap on the ancestral phase's
+  own generation count. Unlike `max_generations` above,
+  reaching this cap without the trailing window stabilizing
+  is fatal, not a benign non-convergence outcome — see
+  `fim.model.initial.EquilibriumSplitInitialCondition`'s own
+  docstring for why.
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>
 

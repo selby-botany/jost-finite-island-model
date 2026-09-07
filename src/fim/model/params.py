@@ -256,6 +256,9 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "auto_vector_min_d": DEFAULT_AUTO_VECTOR_MIN_D,
     "auto_vector_max_capacity": DEFAULT_AUTO_VECTOR_MAX_CAPACITY,
     "max_concurrent_replicates": None,
+    "equilibrium_convergence_window": None,
+    "equilibrium_convergence_tolerance": None,
+    "equilibrium_max_generations": None,
 }
 
 _CONFIG_KEYS: Final = frozenset(
@@ -290,6 +293,9 @@ _CONFIG_KEYS: Final = frozenset(
         "migrant_sampling",
         "mutation_model",
         "p_0",
+        "equilibrium_convergence_window",
+        "equilibrium_convergence_tolerance",
+        "equilibrium_max_generations",
     }
 )
 
@@ -494,6 +500,28 @@ class SimulationParams:
             `run_batch` at all (see `fim.engine.LinealBackend`'s own
             docstring).
         initial_frequencies: Optional explicit deme/locus frequency table.
+        equilibrium_convergence_window: Trailing stability-window length
+            for the equilibrium-split ancestral phase's own `H_S` check
+            — independent of `convergence_window` above, since that
+            phase runs at a different population scale
+            (`sum(population_sizes)` in one deme) with no principled
+            reason to share a threshold with the real `d`-deme run.
+            `None` (the default) selects the ordinary Dirichlet-prior
+            initial condition instead. Set together with `equilibrium_
+            convergence_tolerance`/`equilibrium_max_generations`, or not
+            at all — a partial equilibrium configuration is rejected
+            (`__post_init__`), and combining any of the three with
+            `initial_frequencies` is rejected as ambiguous (a run cannot
+            both fix an explicit `p_0` and derive one from equilibrium-
+            split).
+        equilibrium_convergence_tolerance: Trailing-window tolerance for
+            the same check.
+        equilibrium_max_generations: Hard cap on the ancestral phase's
+            own generation count. Unlike `max_generations` above,
+            reaching this cap without the trailing window stabilizing
+            is fatal, not a benign non-convergence outcome — see
+            `fim.model.initial.EquilibriumSplitInitialCondition`'s own
+            docstring for why.
     """
 
     N: PopulationSize
@@ -525,6 +553,9 @@ class SimulationParams:
     auto_vector_max_capacity: int = DEFAULT_AUTO_VECTOR_MAX_CAPACITY
     max_concurrent_replicates: int | None = None
     initial_frequencies: InitialFrequencies | None = None
+    equilibrium_convergence_window: int | None = None
+    equilibrium_convergence_tolerance: float | None = None
+    equilibrium_max_generations: int | None = None
 
     def __post_init__(self) -> None:
         """Normalize sequence inputs and validate every parameter.
@@ -642,6 +673,13 @@ class SimulationParams:
                     self.max_concurrent_replicates, self.n_replicates
                 ),
             )
+
+        _validate_equilibrium_split_config(
+            equilibrium_convergence_window=self.equilibrium_convergence_window,
+            equilibrium_convergence_tolerance=self.equilibrium_convergence_tolerance,
+            equilibrium_max_generations=self.equilibrium_max_generations,
+            initial_frequencies=self.initial_frequencies,
+        )
 
         initial_frequencies = _normalize_initial_frequencies(
             self.initial_frequencies,
@@ -799,6 +837,22 @@ class SimulationParams:
             # cannot arise here. Matches `initial_frequencies`, below,
             # for the same reason.
             result["max_concurrent_replicates"] = self.max_concurrent_replicates
+        if self.equilibrium_convergence_window is not None:
+            # Omitted rather than always written, matching `max_
+            # concurrent_replicates`'s own comment just above: this
+            # field's own default is already `None`, so an absent key
+            # and an explicit `None` mean the same thing to `from_
+            # mapping`, and `__post_init__`'s own all-or-none check
+            # (`_validate_equilibrium_split_config`) guarantees the
+            # other two equilibrium fields are set here too whenever
+            # this one is.
+            result["equilibrium_convergence_window"] = (
+                self.equilibrium_convergence_window
+            )
+            result["equilibrium_convergence_tolerance"] = (
+                self.equilibrium_convergence_tolerance
+            )
+            result["equilibrium_max_generations"] = self.equilibrium_max_generations
         if self.initial_frequencies is not None:
             result["p_0"] = [
                 [
@@ -995,6 +1049,27 @@ class SimulationParams:
                 ),
             ),
             initial_frequencies=_parse_initial_frequencies(config.get("p_0")),
+            equilibrium_convergence_window=_parse_optional_int(
+                "equilibrium_convergence_window",
+                config.get(
+                    "equilibrium_convergence_window",
+                    PARAMETER_DEFAULTS["equilibrium_convergence_window"],
+                ),
+            ),
+            equilibrium_convergence_tolerance=_parse_optional_float(
+                "equilibrium_convergence_tolerance",
+                config.get(
+                    "equilibrium_convergence_tolerance",
+                    PARAMETER_DEFAULTS["equilibrium_convergence_tolerance"],
+                ),
+            ),
+            equilibrium_max_generations=_parse_optional_int(
+                "equilibrium_max_generations",
+                config.get(
+                    "equilibrium_max_generations",
+                    PARAMETER_DEFAULTS["equilibrium_max_generations"],
+                ),
+            ),
         )
 
 
@@ -1684,6 +1759,94 @@ def _validate_stopping_rules(
             "convergence_window cannot exceed max_generations + 1 (a "
             "window this large can never fill before the generation cap "
             "stops the run, so convergence could never be detected)"
+        )
+
+
+def _validate_equilibrium_split_config(
+    *,
+    equilibrium_convergence_window: int | None,
+    equilibrium_convergence_tolerance: float | None,
+    equilibrium_max_generations: int | None,
+    initial_frequencies: InitialFrequencies | None,
+) -> None:
+    """Reject a partial, over-specified, or structurally impossible equilibrium config.
+
+    The three `equilibrium_*` fields are triggered by their own joint
+    presence, mirroring `initial_frequencies`'s own existing "presence
+    selects the strategy" dispatch (`fim.model.initial.
+    generate_initial_state`) rather than a separate mode-discriminator
+    field (`20260907-claude-sonnet-5-equilibrium-split-design.md`,
+    decision 6) — so a caller who sets only one or two of the three has
+    made a mistake this rejects directly, rather than silently guessing
+    which one was meant. Combining any of the three with an explicit
+    `p_0` is rejected too, for the same reason: a run cannot both fix an
+    explicit starting frequency table and derive one from equilibrium-
+    split.
+
+    Args:
+        equilibrium_convergence_window: See `SimulationParams`'s own
+            docstring.
+        equilibrium_convergence_tolerance: See `SimulationParams`'s own
+            docstring.
+        equilibrium_max_generations: See `SimulationParams`'s own
+            docstring.
+        initial_frequencies: The same raw field `__post_init__` has not
+            yet normalized — `None`-ness is unaffected by normalization,
+            so checking it here first is exactly as accurate as checking
+            it after.
+
+    Raises:
+        ValueError: If exactly one or two of the three fields are set,
+            any is set together with `initial_frequencies`, a set
+            field's own value is out of range, or the window could
+            structurally never fill before the cap (the identical
+            reasoning `_validate_stopping_rules` already applies to the
+            main run's own `convergence_window`/`max_generations`).
+    """
+    values = (
+        equilibrium_convergence_window,
+        equilibrium_convergence_tolerance,
+        equilibrium_max_generations,
+    )
+    set_count = sum(value is not None for value in values)
+    if set_count == 0:
+        return
+    if set_count != len(values):
+        raise ValueError(
+            "equilibrium_convergence_window, equilibrium_convergence_tolerance, "
+            "and equilibrium_max_generations must be set together, or not at all"
+        )
+    if initial_frequencies is not None:
+        raise ValueError(
+            "equilibrium-split fields cannot be combined with an explicit p_0"
+        )
+    if equilibrium_convergence_window is not None:
+        _require_integer(
+            "equilibrium_convergence_window",
+            equilibrium_convergence_window,
+            minimum=2,
+        )
+    if equilibrium_convergence_tolerance is not None and (
+        not math.isfinite(equilibrium_convergence_tolerance)
+        or equilibrium_convergence_tolerance < 0.0
+    ):
+        raise ValueError(
+            "equilibrium_convergence_tolerance must be finite and non-negative"
+        )
+    if equilibrium_max_generations is not None:
+        _require_integer(
+            "equilibrium_max_generations", equilibrium_max_generations, minimum=1
+        )
+    if (
+        equilibrium_convergence_window is not None
+        and equilibrium_max_generations is not None
+        and equilibrium_convergence_window > equilibrium_max_generations + 1
+    ):
+        raise ValueError(
+            "equilibrium_convergence_window cannot exceed "
+            "equilibrium_max_generations + 1 (a window this large can never "
+            "fill before the generation cap stops the ancestral phase, so "
+            "convergence could never be detected)"
         )
 
 

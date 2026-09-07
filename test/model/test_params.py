@@ -927,3 +927,101 @@ def test_explicit_frequency_support_cannot_exceed_deme_size() -> None:
     }
     with pytest.raises(ValueError, match="support"):
         SimulationParams.from_mapping(config)
+
+
+def _equilibrium_config(**changes: object) -> dict[str, object]:
+    """Return a valid config with all three equilibrium_* fields set."""
+    return {
+        **_valid_config(),
+        "equilibrium_convergence_window": 2,
+        "equilibrium_convergence_tolerance": 0.01,
+        "equilibrium_max_generations": 100,
+        **changes,
+    }
+
+
+def test_equilibrium_split_fields_default_to_none_and_round_trip() -> None:
+    """All three fields are `None` by default, omitted from `to_dict()`.
+
+    Matches `max_concurrent_replicates`'s own round-trip contract
+    (`test_max_concurrent_replicates_defaults_to_none_and_round_trips`):
+    an absent key and an explicit `None` mean the same thing here, so
+    omitting them keeps `from_mapping(to_dict())` lossless without
+    needing `replicate_tolerance`'s own always-present workaround.
+    """
+    default_params = SimulationParams.from_mapping(_valid_config())
+    assert default_params.equilibrium_convergence_window is None
+    assert default_params.equilibrium_convergence_tolerance is None
+    assert default_params.equilibrium_max_generations is None
+    assert "equilibrium_convergence_window" not in default_params.to_dict()
+    assert SimulationParams.from_mapping(default_params.to_dict()) == default_params
+
+    configured = SimulationParams.from_mapping(_equilibrium_config())
+    assert configured.equilibrium_convergence_window == 2
+    assert configured.equilibrium_convergence_tolerance == 0.01
+    assert configured.equilibrium_max_generations == 100
+    assert configured.to_dict()["equilibrium_convergence_window"] == 2
+    assert SimulationParams.from_mapping(configured.to_dict()) == configured
+
+
+@pytest.mark.parametrize(
+    "omit",
+    [
+        "equilibrium_convergence_window",
+        "equilibrium_convergence_tolerance",
+        "equilibrium_max_generations",
+    ],
+)
+def test_equilibrium_split_fields_must_be_set_together(omit: str) -> None:
+    """Setting only one or two of the three fields is rejected, not guessed at."""
+    config = _equilibrium_config()
+    del config[omit]
+    with pytest.raises(ValueError, match="must be set together, or not at all"):
+        SimulationParams.from_mapping(config)
+
+
+def test_equilibrium_split_fields_reject_an_explicit_p_0() -> None:
+    """A run cannot both fix an explicit p_0 and derive one from equilibrium-split."""
+    config = _equilibrium_config(p_0=[[{"0": 1.0}], [{"0": 1.0}]])
+    with pytest.raises(ValueError, match="cannot be combined with an explicit p_0"):
+        SimulationParams.from_mapping(config)
+
+
+def test_equilibrium_convergence_window_rejects_below_two() -> None:
+    """`equilibrium_convergence_window` shares `TrailingWindowCriterion`'s minimum."""
+    config = _equilibrium_config(equilibrium_convergence_window=1)
+    with pytest.raises(
+        ValueError, match="equilibrium_convergence_window must be at least 2"
+    ):
+        SimulationParams.from_mapping(config)
+
+
+def test_equilibrium_convergence_tolerance_rejects_negative() -> None:
+    config = _equilibrium_config(equilibrium_convergence_tolerance=-0.1)
+    with pytest.raises(
+        ValueError, match="equilibrium_convergence_tolerance must be finite"
+    ):
+        SimulationParams.from_mapping(config)
+
+
+def test_equilibrium_max_generations_rejects_non_positive() -> None:
+    config = _equilibrium_config(equilibrium_max_generations=0)
+    with pytest.raises(
+        ValueError, match="equilibrium_max_generations must be at least 1"
+    ):
+        SimulationParams.from_mapping(config)
+
+
+def test_equilibrium_convergence_window_cannot_exceed_max_generations_plus_one() -> (
+    None
+):
+    """The same structural-impossibility rule `convergence_window`/`max_generations`
+    already enforce for the main run, applied to the ancestral phase's own pair.
+    """
+    config = _equilibrium_config(
+        equilibrium_convergence_window=10, equilibrium_max_generations=5
+    )
+    with pytest.raises(
+        ValueError, match="equilibrium_convergence_window cannot exceed"
+    ):
+        SimulationParams.from_mapping(config)

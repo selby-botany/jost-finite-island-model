@@ -517,10 +517,15 @@ def generate_initial_state(
     """Generate generation zero with the configured strategy.
 
     This is the one function most callers actually use — it picks
-    `DirichletInitialCondition` or `ExplicitInitialCondition`
-    automatically, based on whether `params` has an explicit ``p_0``
-    table configured, so a caller never needs to choose between the two
-    itself.
+    `EquilibriumSplitInitialCondition`, `DirichletInitialCondition`, or
+    `ExplicitInitialCondition` automatically, based on whether `params`
+    has the `equilibrium_*` fields or an explicit ``p_0`` table
+    configured, so a caller never needs to choose between the three
+    itself. A caller that needs `EquilibriumSplitInitialCondition`'s own
+    richer `EquilibrationOutcome` (`fim.engine`'s own run orchestration,
+    to persist it) calls that class directly instead — this function
+    always returns a bare `ModelState`, discarding it, exactly like
+    `EquilibriumSplitInitialCondition.generate` itself does.
 
     Args:
         params: Validated simulation parameters.
@@ -529,7 +534,9 @@ def generate_initial_state(
             is the specific, high-quality pseudo-random number algorithm
             NumPy recommends by default; passing the same ``params.seed``
             always produces the exact same generator state, which is what
-            makes a run reproducible.
+            makes a run reproducible. Unused by `EquilibriumSplitInitialCondition`
+            (see its own docstring for why); still accepted here so every
+            strategy shares one dispatch signature.
 
     Returns:
         A reproducible generation-zero state.
@@ -538,7 +545,17 @@ def generate_initial_state(
         rng if rng is not None else np.random.Generator(np.random.PCG64(params.seed))
     )
     generator: InitialConditionGenerator
-    if params.initial_frequencies is None:
+    if (
+        params.equilibrium_convergence_window is not None
+        and params.equilibrium_convergence_tolerance is not None
+        and params.equilibrium_max_generations is not None
+    ):
+        generator = EquilibriumSplitInitialCondition(
+            convergence_window=params.equilibrium_convergence_window,
+            convergence_tolerance=params.equilibrium_convergence_tolerance,
+            max_generations=params.equilibrium_max_generations,
+        )
+    elif params.initial_frequencies is None:
         generator = DirichletInitialCondition()
     else:
         generator = ExplicitInitialCondition()

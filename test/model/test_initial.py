@@ -44,6 +44,30 @@ def test_same_seed_produces_identical_dirichlet_state(
     )
 
 
+def test_generate_initial_state_dispatches_to_equilibrium_split_when_configured(
+    rng: Callable[[int], np.random.Generator],
+) -> None:
+    """The three `equilibrium_*` fields' own presence selects the new strategy.
+
+    Mirrors `initial_frequencies`'s own existing "presence selects the
+    strategy" dispatch, per the design doc's own decision 6 -- no
+    separate mode field to check.
+    """
+    params = _params(
+        N=20,
+        d=2,
+        mu=0.02,
+        equilibrium_convergence_window=2,
+        equilibrium_convergence_tolerance=1.0,
+        equilibrium_max_generations=50,
+    )
+
+    state = generate_initial_state(params, rng(0))
+
+    assert state.deme_count == 2
+    assert state.generation == 0
+
+
 def test_initial_concentration_changes_evenness(
     rng: Callable[[int], np.random.Generator],
 ) -> None:

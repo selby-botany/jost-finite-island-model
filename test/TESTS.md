@@ -8707,6 +8707,21 @@ def test_same_seed_produces_identical_dirichlet_state(
 
 Random starts are exact functions of the seed.
 
+<a id="model.test_initial.test_generate_initial_state_dispatches_to_equilibrium_split_when_configured"></a>
+
+#### test\_generate\_initial\_state\_dispatches\_to\_equilibrium\_split\_when\_configured
+
+```python
+def test_generate_initial_state_dispatches_to_equilibrium_split_when_configured(
+        rng: Callable[[int], np.random.Generator]) -> None
+```
+
+The three `equilibrium_*` fields' own presence selects the new strategy.
+
+Mirrors `initial_frequencies`'s own existing "presence selects the
+strategy" dispatch, per the design doc's own decision 6 -- no
+separate mode field to check.
+
 <a id="model.test_initial.test_initial_concentration_changes_evenness"></a>
 
 #### test\_initial\_concentration\_changes\_evenness
@@ -11006,6 +11021,72 @@ def test_explicit_frequency_support_cannot_exceed_deme_size() -> None
 ```
 
 Explicit support is bounded by the configured gene-copy count.
+
+<a id="model.test_params.test_equilibrium_split_fields_default_to_none_and_round_trip"></a>
+
+#### test\_equilibrium\_split\_fields\_default\_to\_none\_and\_round\_trip
+
+```python
+def test_equilibrium_split_fields_default_to_none_and_round_trip() -> None
+```
+
+All three fields are `None` by default, omitted from `to_dict()`.
+
+Matches `max_concurrent_replicates`'s own round-trip contract
+(`test_max_concurrent_replicates_defaults_to_none_and_round_trips`):
+an absent key and an explicit `None` mean the same thing here, so
+omitting them keeps `from_mapping(to_dict())` lossless without
+needing `replicate_tolerance`'s own always-present workaround.
+
+<a id="model.test_params.test_equilibrium_split_fields_must_be_set_together"></a>
+
+#### test\_equilibrium\_split\_fields\_must\_be\_set\_together
+
+```python
+@pytest.mark.parametrize(
+    "omit",
+    [
+        "equilibrium_convergence_window",
+        "equilibrium_convergence_tolerance",
+        "equilibrium_max_generations",
+    ],
+)
+def test_equilibrium_split_fields_must_be_set_together(omit: str) -> None
+```
+
+Setting only one or two of the three fields is rejected, not guessed at.
+
+<a id="model.test_params.test_equilibrium_split_fields_reject_an_explicit_p_0"></a>
+
+#### test\_equilibrium\_split\_fields\_reject\_an\_explicit\_p\_0
+
+```python
+def test_equilibrium_split_fields_reject_an_explicit_p_0() -> None
+```
+
+A run cannot both fix an explicit p_0 and derive one from equilibrium-split.
+
+<a id="model.test_params.test_equilibrium_convergence_window_rejects_below_two"></a>
+
+#### test\_equilibrium\_convergence\_window\_rejects\_below\_two
+
+```python
+def test_equilibrium_convergence_window_rejects_below_two() -> None
+```
+
+`equilibrium_convergence_window` shares `TrailingWindowCriterion`'s minimum.
+
+<a id="model.test_params.test_equilibrium_convergence_window_cannot_exceed_max_generations_plus_one"></a>
+
+#### test\_equilibrium\_convergence\_window\_cannot\_exceed\_max\_generations\_plus\_one
+
+```python
+def test_equilibrium_convergence_window_cannot_exceed_max_generations_plus_one(
+) -> (None)
+```
+
+The same structural-impossibility rule `convergence_window`/`max_generations`
+already enforce for the main run, applied to the ancestral phase's own pair.
 
 <a id="model.test_state"></a>
 
