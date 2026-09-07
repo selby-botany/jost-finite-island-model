@@ -205,6 +205,7 @@ defines the complete scientific and architectural contract.
 - [Worked examples](doc/examples/README.md)
 - [Installation alternatives](install/README.md)
 - [Security model](SECURITY.md)
+- [Known issues](ISSUES.md)
 - [Release history](CHANGELOG.md)
 
 ### Understanding the science

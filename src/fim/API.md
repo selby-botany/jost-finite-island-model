@@ -159,6 +159,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [main](#fim.launcher.main)
 * [fim.logging\_setup](#fim.logging_setup)
   * [resolve\_level](#fim.logging_setup.resolve_level)
+  * [log\_file\_streams](#fim.logging_setup.log_file_streams)
   * [parse\_log\_options](#fim.logging_setup.parse_log_options)
   * [configure](#fim.logging_setup.configure)
 * [fim.model](#fim.model)
@@ -4838,6 +4839,41 @@ Resolve a `-l`-style level name (or an already-numeric level).
 **Raises**:
 
 - `ValueError` - If `level` is a string that names no known level.
+
+<a id="fim.logging_setup.log_file_streams"></a>
+
+#### log\_file\_streams
+
+```python
+def log_file_streams() -> list[TextIO]
+```
+
+Return the open file streams behind the `fim` logger's file handlers.
+
+Exists for one caller and one purpose: `faulthandler.dump_traceback`
+writes to a *file object*, not through `logging`, so a caller that
+wants a thread dump preserved alongside the log records explaining it
+needs the underlying stream rather than a logger. Reaching into
+handler internals is confined here rather than repeated at the call
+site, so the "only this module knows how handlers are built" property
+this module's own docstring promises still holds.
+
+A `RotatingFileHandler` opens lazily and may legitimately have no
+stream yet (`delay=True`, or already closed during shutdown), so a
+handler without an open stream is skipped rather than treated as an
+error -- callers use this on paths where failing to dump must never
+be worse than not dumping.
+
+**Arguments**:
+
+  None
+
+
+**Returns**:
+
+  Every currently open file stream, in handler order; empty when
+  file logging is disabled (`-L file=none`) or nothing has opened
+  a stream yet.
 
 <a id="fim.logging_setup.parse_log_options"></a>
 

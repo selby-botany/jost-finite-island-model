@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import logging.handlers
+import sys
 import warnings
 from pathlib import Path
 
@@ -101,6 +102,63 @@ def test_parse_log_options_rejects_an_unknown_key() -> None:
     """A typo'd key is rejected outright, never silently ignored."""
     with pytest.raises(ValueError, match="unknown --log-options key 'leveel'"):
         logging_setup.parse_log_options("leveel=debug")
+
+
+def test_log_file_streams_returns_the_open_file_handler_stream(
+    tmp_path: Path,
+) -> None:
+    """The stream behind an active file handler is exposed to callers.
+
+    `faulthandler.dump_traceback` writes to a file object rather than
+    through `logging`, so a caller preserving a thread dump alongside the
+    records that explain it needs the stream itself.
+    """
+    log_file = tmp_path / "fim.log"
+    logging_setup.configure("info", {"file": str(log_file)})
+
+    streams = logging_setup.log_file_streams()
+
+    assert [getattr(stream, "name", None) for stream in streams] == [str(log_file)]
+
+
+def test_log_file_streams_excludes_the_stderr_stream_handler(
+    tmp_path: Path,
+) -> None:
+    """Only file handlers are returned, never the stderr handler.
+
+    `logging.FileHandler` subclasses `StreamHandler`, so a naive isinstance
+    check would also match stderr and hand a caller a duplicate of a
+    destination it already writes to directly.
+    """
+    log_file = tmp_path / "fim.log"
+    logging_setup.configure("info", {"file": str(log_file)})
+
+    streams = logging_setup.log_file_streams()
+
+    assert sys.stderr not in streams
+
+
+def test_log_file_streams_is_empty_when_file_logging_is_disabled() -> None:
+    """`file=none` yields no streams rather than raising."""
+    logging_setup.configure("info", {"file": "none"})
+
+    assert logging_setup.log_file_streams() == []
+
+
+def test_log_file_streams_skips_a_closed_stream(tmp_path: Path) -> None:
+    """A closed handler stream is skipped, not returned.
+
+    Handlers can legitimately be closed mid-shutdown, which is exactly
+    when the one caller runs. Returning a closed stream would turn a
+    best-effort diagnostic into an exception on an already-failing path.
+    """
+    log_file = tmp_path / "fim.log"
+    logging_setup.configure("info", {"file": str(log_file)})
+    for handler in logging.getLogger(logging_setup.LOGGER_NAME).handlers:
+        if isinstance(handler, logging.FileHandler):
+            handler.close()
+
+    assert logging_setup.log_file_streams() == []
 
 
 def test_configure_attaches_a_file_and_a_stream_handler_by_default(

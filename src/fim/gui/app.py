@@ -47,7 +47,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from socketserver import ThreadingMixIn
-from typing import Any, Final, Protocol, cast
+from typing import Any, Final, Protocol, TextIO, cast
 
 import webview
 import yaml
@@ -2128,6 +2128,35 @@ def shutdown_timeout() -> float:
         return _SHUTDOWN_DEADMAN_SECONDS
 
 
+def _shutdown_dump_streams() -> list[TextIO]:
+    """Collect every destination the shutdown thread dump should reach.
+
+    Always includes `sys.stderr` (useful when `fim` was launched from a
+    terminal) and additionally every open `fim` log file stream, which is
+    the only destination that survives a windowed launch with no console
+    attached.
+
+    Resolving the log streams is itself wrapped: this runs on a path where
+    ordinary shutdown has already failed, so a failure to enumerate
+    handlers must degrade to "stderr only" rather than propagate.
+
+    Args:
+        None
+
+    Returns:
+        Destinations in write order, stderr first, never empty.
+    """
+    streams: list[TextIO] = [sys.stderr]
+    try:
+        streams.extend(logging_setup.log_file_streams())
+    except Exception:
+        # Deliberately broad: this runs on a path where ordinary shutdown
+        # has already failed, so failing to enumerate handlers must
+        # degrade to "stderr only" rather than propagate.
+        logger.debug("could not resolve log file streams for shutdown dump")
+    return streams
+
+
 def _start_shutdown_deadman(timeout_seconds: float) -> None:
     """Guarantee the process actually exits after the window closes.
 
@@ -2193,8 +2222,30 @@ def _start_shutdown_deadman(timeout_seconds: float) -> None:
         # Dump every thread's stack first: this is the one moment the
         # offending thread can still be identified, and without it a
         # forced exit would trade a diagnosable hang for a silent one.
-        faulthandler.dump_traceback()
-        sys.stderr.flush()
+        #
+        # The dump goes to the log file as well as stderr, and the log
+        # file is what actually matters here. A GUI launched from Finder,
+        # a dock icon, or a Start-menu shortcut has no terminal attached,
+        # so its stderr is discarded -- and that is exactly the user least
+        # able to reproduce this under a terminal on request. Writing only
+        # to stderr would reliably lose the traceback for everyone except
+        # the developers who need it least.
+        #
+        # `faulthandler` writes to a file object rather than through
+        # `logging`, so the handler's own stream is borrowed directly. A
+        # marker line is logged first so the raw dump that follows it in
+        # the file is attributable rather than looking like corruption.
+        for stream in _shutdown_dump_streams():
+            try:
+                faulthandler.dump_traceback(file=stream)
+                stream.flush()
+            except Exception:
+                # Deliberately swallowed, and deliberately broad: this
+                # runs while the interpreter is already wedged, and a
+                # best-effort diagnostic that raised here would leave the
+                # process in the very hang the next line exists to end.
+                # Losing one dump destination is always better.
+                continue
         # `os._exit`, not `sys.exit`: `sys.exit` raises an exception that
         # unwinds into the very interpreter finalization that is stuck,
         # so it would join the hang rather than end it.

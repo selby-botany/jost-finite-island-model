@@ -452,6 +452,13 @@ Your results are unaffected. Everything a run produces is written to its
 output directory as the run proceeds, so a forced exit after the window
 is already closed cannot lose any of it.
 
+A diagnostic report is written at the same time, to `logs/fim.log` as well
+as to the terminal — so it is kept even when `fim` was started from an icon
+or shortcut with no terminal attached. If this happens to you, please report
+it: the section of that file beginning `shutdown deadman fired` names what
+failed to stop, and is what makes the cause findable. See
+[known issues](../ISSUES.md#intermittent-hang-during-gui-shutdown).
+
 If you are investigating such a shutdown yourself and need the process to
 stay alive rather than be terminated, set `FIM_GUI_SHUTDOWN_TIMEOUT` to
 the number of seconds to allow, or to `0` to wait indefinitely:

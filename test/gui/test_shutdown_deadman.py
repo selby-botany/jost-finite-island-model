@@ -18,18 +18,47 @@ testing directly rather than trusting by inspection.
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 import textwrap
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
+from fim import logging_setup
 from fim.gui import app as app_module
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _load_gui_conftest() -> ModuleType:
+    """Import this package's own `conftest`, not the top-level one.
+
+    A bare `import conftest` resolves to `test/conftest.py`, since pytest
+    inserts the rootdir on `sys.path` first -- so the helper under test
+    would silently be missing rather than wrong. Loading by explicit path
+    removes the ambiguity.
+
+    Args:
+        None
+
+    Returns:
+        The imported `test/gui/conftest` module object.
+    """
+    path = Path(__file__).resolve().parent / "conftest.py"
+    spec = importlib.util.spec_from_file_location("fim_test_gui_conftest", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+gui_conftest = _load_gui_conftest()
 
 
 def test_shutdown_timeout_defaults_when_unset(
@@ -163,3 +192,164 @@ def test_a_wedged_shutdown_is_forced_to_exit() -> None:
     # Bounded by the timeout, not merely "eventually" -- proving the
     # deadman ended it rather than the wedge resolving on its own.
     assert elapsed < 60
+
+
+def test_await_bridge_threads_waits_for_an_in_flight_bridge_call() -> None:
+    """A live bridge-delivery thread is waited for, not abandoned.
+
+    Reproduces the leak's exact shape rather than a stand-in: a
+    *non-daemon* thread whose target is `js_bridge_call.<locals>._call`,
+    which is precisely what pywebview starts for every
+    `window.pywebview.api.*` call and precisely what was named in the
+    2026-09-07 CI diagnostic dump. Destroying a window while one of these
+    is alive is what wedges `Py_FinalizeEx`.
+    """
+    release = threading.Event()
+
+    def js_bridge_call() -> Callable[[], None]:
+        # Nested exactly as in `webview.util` so the qualified name the
+        # matcher keys on is identical -- a flat function would be named
+        # differently and would silently not be matched.
+        def _call() -> None:
+            release.wait()
+
+        return _call
+
+    blocker = threading.Thread(target=js_bridge_call())
+    blocker.start()
+    try:
+        started = time.monotonic()
+        gui_conftest.await_bridge_threads(timeout=0.5)
+        waited = time.monotonic() - started
+
+        # It actually waited rather than returning immediately.
+        assert waited >= 0.4
+        assert blocker.is_alive()
+    finally:
+        release.set()
+        blocker.join(timeout=5)
+
+
+def test_await_bridge_threads_returns_promptly_when_nothing_is_in_flight() -> None:
+    """The healthy path costs nothing.
+
+    This runs in the teardown of every GUI test, so a fixed delay here
+    would be paid by the whole suite on every single test.
+    """
+    started = time.monotonic()
+    gui_conftest.await_bridge_threads(timeout=10.0)
+    waited = time.monotonic() - started
+
+    assert waited < 1.0
+
+
+def test_await_bridge_threads_ignores_unrelated_threads() -> None:
+    """Only pywebview's own bridge threads are waited for.
+
+    A non-daemon thread belonging to something else must not make every
+    GUI teardown pay the full timeout.
+    """
+    release = threading.Event()
+    unrelated = threading.Thread(target=release.wait, name="fim-test-unrelated")
+    unrelated.start()
+    try:
+        started = time.monotonic()
+        gui_conftest.await_bridge_threads(timeout=5.0)
+        waited = time.monotonic() - started
+
+        assert waited < 1.0
+    finally:
+        release.set()
+        unrelated.join(timeout=5)
+
+
+def test_shutdown_dump_streams_always_includes_stderr() -> None:
+    """stderr is a destination even when no log file handler exists.
+
+    A terminal-launched `fim` must still get the dump, and the collector
+    must never return an empty list -- a dump with nowhere to go is the
+    silent forced exit this whole mechanism exists to avoid.
+    """
+    streams = app_module._shutdown_dump_streams()
+
+    assert sys.stderr in streams
+
+
+def test_shutdown_dump_streams_includes_open_log_file(tmp_path: Path) -> None:
+    """An active log file is offered as a dump destination.
+
+    This is the destination that matters: a GUI launched from Finder or a
+    Start-menu shortcut has no console, so stderr goes nowhere and the log
+    file is the only place a traceback can survive to reach a maintainer.
+    """
+    log_file = tmp_path / "fim.log"
+    logging_setup.configure("debug", {"file": str(log_file)})
+    try:
+        streams = app_module._shutdown_dump_streams()
+
+        assert any(getattr(stream, "name", None) == str(log_file) for stream in streams)
+    finally:
+        # Restore the suite's own logging rather than leaving every later
+        # test writing into a tmp_path that is about to be deleted.
+        logging_setup.configure("warning", {"file": "none"})
+
+
+def test_shutdown_dump_streams_survives_unresolvable_handlers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failure to enumerate log handlers degrades to stderr, not a raise.
+
+    This runs when shutdown has already failed. A diagnostic helper that
+    raised here would leave the process wedged in exactly the hang the
+    caller's next line exists to end, so failing soft is the required
+    behavior rather than a nicety.
+    """
+
+    def explode() -> list[object]:
+        raise RuntimeError("handlers unavailable")
+
+    monkeypatch.setattr(logging_setup, "log_file_streams", explode)
+
+    streams = app_module._shutdown_dump_streams()
+
+    assert streams == [sys.stderr]
+
+
+def test_forced_exit_writes_traceback_to_log_file(tmp_path: Path) -> None:
+    """A real wedged child leaves its thread dump in the log file.
+
+    The end-to-end proof of the windowed-launch case: stderr is
+    deliberately discarded here, exactly as it is for a GUI started from a
+    dock icon or shortcut, so anything asserted below reached the log file
+    on its own merits. Without this, a recurrence would be recorded as
+    "it hung" with no way to identify the thread responsible.
+    """
+    log_file = tmp_path / "fim.log"
+    program = textwrap.dedent(
+        f"""
+        import sys, threading
+        sys.path.insert(0, "src")
+        from fim import logging_setup
+        from fim.gui import app
+
+        logging_setup.configure("debug", {{"file": {str(log_file)!r}}})
+        threading.Thread(target=threading.Event().wait).start()
+        app._start_shutdown_deadman(3)
+        """
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", program],
+        stdout=subprocess.DEVNULL,
+        # Discarded on purpose: proves the log file stands alone.
+        stderr=subprocess.DEVNULL,
+        timeout=120,
+        check=False,
+        cwd=str(_REPOSITORY_ROOT),
+    )
+
+    assert completed.returncode == app_module._SHUTDOWN_DEADMAN_EXIT_CODE
+    contents = log_file.read_text(encoding="utf-8")
+    # The log records that it fired ...
+    assert "shutdown deadman fired" in contents
+    # ... and, crucially, why -- the stacks that name the offending thread.
+    assert "Thread" in contents

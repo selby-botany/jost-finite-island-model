@@ -20,7 +20,7 @@ import logging.handlers
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final
+from typing import Final, TextIO
 
 from fim import paths
 
@@ -76,6 +76,43 @@ def resolve_level(level: str | int) -> int:
         )
         raise ValueError(f"unknown log level {level!r} (expected one of: {valid})")
     return mapping[name]
+
+
+def log_file_streams() -> list[TextIO]:
+    """Return the open file streams behind the `fim` logger's file handlers.
+
+    Exists for one caller and one purpose: `faulthandler.dump_traceback`
+    writes to a *file object*, not through `logging`, so a caller that
+    wants a thread dump preserved alongside the log records explaining it
+    needs the underlying stream rather than a logger. Reaching into
+    handler internals is confined here rather than repeated at the call
+    site, so the "only this module knows how handlers are built" property
+    this module's own docstring promises still holds.
+
+    A `RotatingFileHandler` opens lazily and may legitimately have no
+    stream yet (`delay=True`, or already closed during shutdown), so a
+    handler without an open stream is skipped rather than treated as an
+    error -- callers use this on paths where failing to dump must never
+    be worse than not dumping.
+
+    Args:
+        None
+
+    Returns:
+        Every currently open file stream, in handler order; empty when
+        file logging is disabled (`-L file=none`) or nothing has opened
+        a stream yet.
+    """
+    streams: list[TextIO] = []
+    for handler in logging.getLogger(LOGGER_NAME).handlers:
+        # `FileHandler` alone, not `StreamHandler`: the latter would also
+        # match the stderr handler, and the caller already writes there.
+        if not isinstance(handler, logging.FileHandler):
+            continue
+        stream = getattr(handler, "stream", None)
+        if stream is not None and not getattr(stream, "closed", False):
+            streams.append(stream)
+    return streams
 
 
 def parse_log_options(text: str | None) -> dict[str, str]:

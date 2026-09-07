@@ -389,6 +389,12 @@ reported rather than guessed at:</p>
 <p>Your results are unaffected. Everything a run produces is written to its
 output directory as the run proceeds, so a forced exit after the window
 is already closed cannot lose any of it.</p>
+<p>A diagnostic report is written at the same time, to <code>logs/fim.log</code> as well
+as to the terminal — so it is kept even when <code>fim</code> was started from an icon
+or shortcut with no terminal attached. If this happens to you, please report
+it: the section of that file beginning <code>shutdown deadman fired</code> names what
+failed to stop, and is what makes the cause findable. See
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/ISSUES.md#intermittent-hang-during-gui-shutdown">known issues</a>.</p>
 <p>If you are investigating such a shutdown yourself and need the process to
 stay alive rather than be terminated, set <code>FIM_GUI_SHUTDOWN_TIMEOUT</code> to
 the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>

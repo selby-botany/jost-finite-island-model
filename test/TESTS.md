@@ -677,6 +677,60 @@ def test_parse_log_options_rejects_an_unknown_key() -> None
 
 A typo'd key is rejected outright, never silently ignored.
 
+<a id="test.test_logging_setup.test_log_file_streams_returns_the_open_file_handler_stream"></a>
+
+#### test\_log\_file\_streams\_returns\_the\_open\_file\_handler\_stream
+
+```python
+def test_log_file_streams_returns_the_open_file_handler_stream(
+        tmp_path: Path) -> None
+```
+
+The stream behind an active file handler is exposed to callers.
+
+`faulthandler.dump_traceback` writes to a file object rather than
+through `logging`, so a caller preserving a thread dump alongside the
+records that explain it needs the stream itself.
+
+<a id="test.test_logging_setup.test_log_file_streams_excludes_the_stderr_stream_handler"></a>
+
+#### test\_log\_file\_streams\_excludes\_the\_stderr\_stream\_handler
+
+```python
+def test_log_file_streams_excludes_the_stderr_stream_handler(
+        tmp_path: Path) -> None
+```
+
+Only file handlers are returned, never the stderr handler.
+
+`logging.FileHandler` subclasses `StreamHandler`, so a naive isinstance
+check would also match stderr and hand a caller a duplicate of a
+destination it already writes to directly.
+
+<a id="test.test_logging_setup.test_log_file_streams_is_empty_when_file_logging_is_disabled"></a>
+
+#### test\_log\_file\_streams\_is\_empty\_when\_file\_logging\_is\_disabled
+
+```python
+def test_log_file_streams_is_empty_when_file_logging_is_disabled() -> None
+```
+
+`file=none` yields no streams rather than raising.
+
+<a id="test.test_logging_setup.test_log_file_streams_skips_a_closed_stream"></a>
+
+#### test\_log\_file\_streams\_skips\_a\_closed\_stream
+
+```python
+def test_log_file_streams_skips_a_closed_stream(tmp_path: Path) -> None
+```
+
+A closed handler stream is skipped, not returned.
+
+Handlers can legitimately be closed mid-shutdown, which is exactly
+when the one caller runs. Returning a closed stream would turn a
+best-effort diagnostic into an exception on an already-failing path.
+
 <a id="test.test_logging_setup.test_configure_attaches_a_file_and_a_stream_handler_by_default"></a>
 
 #### test\_configure\_attaches\_a\_file\_and\_a\_stream\_handler\_by\_default
@@ -1240,16 +1294,20 @@ assumption the pieces rest on.
 def test_live_non_daemon_threads_ignores_a_quiet_interpreter() -> None
 ```
 
-Nothing is reported when no thread would block shutdown.
+Only shutdown-blocking threads are reported; daemons are ignored.
 
-The healthy case, and the one that must stay silent: every passing
-run reaches this state, so a false positive here would print noise on
-every single `pytest` invocation this project makes.
+The healthy case, and the one that must stay silent: a false positive
+here would print noise on every passing `pytest` invocation.
 
-Runs on the main thread of a session that starts no threads of its
-own, so the only candidates are any this suite's own machinery
-happens to keep alive -- all of which must be daemon threads
-precisely so they cannot block shutdown.
+Deliberately does *not* assert the whole interpreter is quiet. This
+suite runs under `pytest-xdist` with randomized ordering, so a GUI
+test scheduled earlier in the same worker can legitimately still have
+a pywebview bridge thread alive when this runs -- that is the very
+condition being diagnosed elsewhere, and asserting its absence here
+made this test's result depend on execution order rather than on the
+code under test. The real contract is narrower and order-independent:
+a daemon thread, however many are running, is never reported, because
+a daemon thread cannot block `Py_FinalizeEx`.
 
 <a id="test.test_shutdown_diagnostics.test_live_non_daemon_threads_finds_a_thread_that_blocks_shutdown"></a>
 
@@ -4353,6 +4411,48 @@ to during an actual incident — `sample <pid>` first, check whether the
 blocked thread is a JS bridge delivery or a socket read, and only then
 decide which of the two investigations above it continues.
 
+<a id="gui.conftest.await_bridge_threads"></a>
+
+#### await\_bridge\_threads
+
+```python
+def await_bridge_threads(
+        timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> None
+```
+
+Wait for pywebview's own in-flight bridge-call threads to finish.
+
+pywebview delivers each `window.pywebview.api.*` call on a *non-daemon*
+thread (`js_bridge_call.<locals>._call` in `webview.util`). A window
+destroyed while one is still in flight leaves that thread running, and
+`threading._shutdown` then waits on it forever -- the `Py_FinalizeEx`
+hang this package's own docstring history records five separate
+instances of, and which recurred in CI on 2026-09-07 with this exact
+thread named in the diagnostic dump (see `ISSUES.md`).
+
+Each individual instance was previously fixed at its own call site, by
+awaiting the call and polling a settle flag. That works but is
+per-call-site and must be repeated for every new screen; this is the
+structural backstop for the ones nobody remembered to fix, applied
+once in teardown where it covers every test uniformly.
+
+Deliberately does not fail on timeout. A leaked bridge thread is a real
+defect, but reporting it as a teardown error would attribute it to
+whichever test happened to run last rather than to the one that caused
+it. The suite-level `pytest_unconfigure` diagnostics in
+`test/conftest.py` name the thread precisely, which is the actionable
+signal; this function's job is only to stop it wedging the run.
+
+**Arguments**:
+
+- `timeout` - Total seconds to wait for all such threads to finish.
+  
+
+**Returns**:
+
+  None. Returns as soon as no bridge thread is alive, or when
+  `timeout` elapses, whichever comes first.
+
 <a id="gui.conftest.window"></a>
 
 #### window
@@ -7398,6 +7498,110 @@ Without the deadman this child runs forever, which is precisely what
 a user would experience. `subprocess`'s own generous `timeout` means
 a regression here fails as a timeout rather than hanging this suite
 in turn.
+
+<a id="gui.test_shutdown_deadman.test_await_bridge_threads_waits_for_an_in_flight_bridge_call"></a>
+
+#### test\_await\_bridge\_threads\_waits\_for\_an\_in\_flight\_bridge\_call
+
+```python
+def test_await_bridge_threads_waits_for_an_in_flight_bridge_call() -> None
+```
+
+A live bridge-delivery thread is waited for, not abandoned.
+
+Reproduces the leak's exact shape rather than a stand-in: a
+*non-daemon* thread whose target is `js_bridge_call.<locals>._call`,
+which is precisely what pywebview starts for every
+`window.pywebview.api.*` call and precisely what was named in the
+2026-09-07 CI diagnostic dump. Destroying a window while one of these
+is alive is what wedges `Py_FinalizeEx`.
+
+<a id="gui.test_shutdown_deadman.test_await_bridge_threads_returns_promptly_when_nothing_is_in_flight"></a>
+
+#### test\_await\_bridge\_threads\_returns\_promptly\_when\_nothing\_is\_in\_flight
+
+```python
+def test_await_bridge_threads_returns_promptly_when_nothing_is_in_flight(
+) -> None
+```
+
+The healthy path costs nothing.
+
+This runs in the teardown of every GUI test, so a fixed delay here
+would be paid by the whole suite on every single test.
+
+<a id="gui.test_shutdown_deadman.test_await_bridge_threads_ignores_unrelated_threads"></a>
+
+#### test\_await\_bridge\_threads\_ignores\_unrelated\_threads
+
+```python
+def test_await_bridge_threads_ignores_unrelated_threads() -> None
+```
+
+Only pywebview's own bridge threads are waited for.
+
+A non-daemon thread belonging to something else must not make every
+GUI teardown pay the full timeout.
+
+<a id="gui.test_shutdown_deadman.test_shutdown_dump_streams_always_includes_stderr"></a>
+
+#### test\_shutdown\_dump\_streams\_always\_includes\_stderr
+
+```python
+def test_shutdown_dump_streams_always_includes_stderr() -> None
+```
+
+stderr is a destination even when no log file handler exists.
+
+A terminal-launched `fim` must still get the dump, and the collector
+must never return an empty list -- a dump with nowhere to go is the
+silent forced exit this whole mechanism exists to avoid.
+
+<a id="gui.test_shutdown_deadman.test_shutdown_dump_streams_includes_open_log_file"></a>
+
+#### test\_shutdown\_dump\_streams\_includes\_open\_log\_file
+
+```python
+def test_shutdown_dump_streams_includes_open_log_file(tmp_path: Path) -> None
+```
+
+An active log file is offered as a dump destination.
+
+This is the destination that matters: a GUI launched from Finder or a
+Start-menu shortcut has no console, so stderr goes nowhere and the log
+file is the only place a traceback can survive to reach a maintainer.
+
+<a id="gui.test_shutdown_deadman.test_shutdown_dump_streams_survives_unresolvable_handlers"></a>
+
+#### test\_shutdown\_dump\_streams\_survives\_unresolvable\_handlers
+
+```python
+def test_shutdown_dump_streams_survives_unresolvable_handlers(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A failure to enumerate log handlers degrades to stderr, not a raise.
+
+This runs when shutdown has already failed. A diagnostic helper that
+raised here would leave the process wedged in exactly the hang the
+caller's next line exists to end, so failing soft is the required
+behavior rather than a nicety.
+
+<a id="gui.test_shutdown_deadman.test_forced_exit_writes_traceback_to_log_file"></a>
+
+#### test\_forced\_exit\_writes\_traceback\_to\_log\_file
+
+```python
+def test_forced_exit_writes_traceback_to_log_file(tmp_path: Path) -> None
+```
+
+A real wedged child leaves its thread dump in the log file.
+
+The end-to-end proof of the windowed-launch case: stderr is
+deliberately discarded here, exactly as it is for a GUI started from a
+dock icon or shortcut, so anything asserted below reached the log file
+on its own merits. Without this, a recurrence would be recorded as
+"it hung" with no way to identify the thread responsible.
 
 <a id="gui.test_store"></a>
 

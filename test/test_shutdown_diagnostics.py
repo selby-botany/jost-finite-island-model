@@ -33,18 +33,29 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_live_non_daemon_threads_ignores_a_quiet_interpreter() -> None:
-    """Nothing is reported when no thread would block shutdown.
+    """Only shutdown-blocking threads are reported; daemons are ignored.
 
-    The healthy case, and the one that must stay silent: every passing
-    run reaches this state, so a false positive here would print noise on
-    every single `pytest` invocation this project makes.
+    The healthy case, and the one that must stay silent: a false positive
+    here would print noise on every passing `pytest` invocation.
 
-    Runs on the main thread of a session that starts no threads of its
-    own, so the only candidates are any this suite's own machinery
-    happens to keep alive -- all of which must be daemon threads
-    precisely so they cannot block shutdown.
+    Deliberately does *not* assert the whole interpreter is quiet. This
+    suite runs under `pytest-xdist` with randomized ordering, so a GUI
+    test scheduled earlier in the same worker can legitimately still have
+    a pywebview bridge thread alive when this runs -- that is the very
+    condition being diagnosed elsewhere, and asserting its absence here
+    made this test's result depend on execution order rather than on the
+    code under test. The real contract is narrower and order-independent:
+    a daemon thread, however many are running, is never reported, because
+    a daemon thread cannot block `Py_FinalizeEx`.
     """
-    assert conftest.live_non_daemon_threads() == []
+    idle = threading.Event()
+    daemon = threading.Thread(target=idle.wait, name="fim-test-daemon", daemon=True)
+    daemon.start()
+    try:
+        assert daemon not in conftest.live_non_daemon_threads()
+    finally:
+        idle.set()
+        daemon.join(timeout=5)
 
 
 def test_live_non_daemon_threads_finds_a_thread_that_blocks_shutdown() -> None:
