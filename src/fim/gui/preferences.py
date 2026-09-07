@@ -14,6 +14,18 @@ loaded `GuiPreferences` with its own hardcoded default rather than this
 module carrying a second copy of it (`fim.gui.app`'s own `_DEFAULT_
 DISPLAY_SIGNIFICANT_DIGITS` stays the single source of truth there).
 
+A third, optional field — `named_presets` — was added later (botanist
+GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §12:
+"User-saved presets... live in the same preferences store, alongside...
+the last-submitted form snapshot"), a user's own named form-value
+snapshots, distinct from the built-in worked-example presets `fim.gui.
+presets` reads from the bundled usage guide — those are read-only and
+ship with the app; these are created, renamed by overwrite, and deleted
+entirely by the user, at any time, with no relationship to any run's
+own scientific record either. Purely additive to the on-disk shape
+(schema_version does not change): an older file with no `"presets"` key
+loads exactly as it already did, with `named_presets` simply `None`.
+
 Deliberately excludes a "default deme pair for the next run": `Api.
 _start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
 at the start of every run on purpose ("a fresh run never inherits a
@@ -80,10 +92,16 @@ class GuiPreferences:
             form_values_to_payload`/`SimulationParams.from_mapping` on
             load, exactly like a real submission — this store never
             carries its own copy of that validation.
+        named_presets: The user's own saved configurations, name ->
+            form values (the identical shape `form_values` above uses),
+            or `None` if none have ever been saved. Re-validated on load
+            exactly like `form_values` — see `with_named_preset`'s own
+            docstring for how a name is added or overwritten.
     """
 
     significant_digits: int | None = None
     form_values: dict[str, str] | None = None
+    named_presets: dict[str, dict[str, str]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
@@ -93,6 +111,10 @@ class GuiPreferences:
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
         if self.form_values is not None:
             result["form"] = dict(self.form_values)
+        if self.named_presets is not None:
+            result["presets"] = {
+                name: dict(values) for name, values in self.named_presets.items()
+            }
         return result
 
     @staticmethod
@@ -123,14 +145,65 @@ class GuiPreferences:
             ):
                 raise ValueError("preferences 'form' section must be a str->str object")
             form_values = dict(form_values)
+        named_presets = data.get("presets")
+        if named_presets is not None:
+            if not isinstance(named_presets, Mapping) or not all(
+                isinstance(name, str)
+                and isinstance(values, Mapping)
+                and all(
+                    isinstance(key, str) and isinstance(value, str)
+                    for key, value in values.items()
+                )
+                for name, values in named_presets.items()
+            ):
+                raise ValueError(
+                    "preferences 'presets' section must be a str->(str->str) object"
+                )
+            named_presets = {
+                name: dict(values) for name, values in named_presets.items()
+            }
         return GuiPreferences(
             significant_digits=gui.get("significant_digits"),
             form_values=form_values,
+            named_presets=named_presets,
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
         """Return a copy with `form_values` replaced — the common `start_run` update."""
         return replace(self, form_values=dict(form_values))
+
+    def with_named_preset(
+        self, name: str, form_values: Mapping[str, str]
+    ) -> GuiPreferences:
+        """Return a copy with one named preset added, or overwritten by the same name.
+
+        Args:
+            name: The preset's own display name — also its unique key;
+                saving under a name that already exists silently
+                overwrites it (the same "the newest save wins, no
+                separate rename/overwrite prompt" convention a plain
+                file save already uses).
+            form_values: The current form's own values to remember —
+                the identical shape `with_form_values` already takes.
+        """
+        updated = dict(self.named_presets) if self.named_presets is not None else {}
+        updated[name] = dict(form_values)
+        return replace(self, named_presets=updated)
+
+    def without_named_preset(self, name: str) -> GuiPreferences:
+        """Return a copy with one named preset removed, if it existed.
+
+        A `name` that does not exist is a silent no-op, not an error —
+        the GUI's own delete affordance only ever offers a name it just
+        listed, so this can only race a preference file edited by hand
+        or by a second launch, not a real user-facing mistake worth
+        surfacing.
+        """
+        if self.named_presets is None or name not in self.named_presets:
+            return self
+        updated = dict(self.named_presets)
+        del updated[name]
+        return replace(self, named_presets=updated)
 
     def with_significant_digits(self, significant_digits: int) -> GuiPreferences:
         """Return a copy with `significant_digits` replaced.

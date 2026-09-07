@@ -195,6 +195,13 @@ _BATCH_POLL_INTERVAL_SECONDS: Final = 0.5
 # these six, so `H_ST` stays out of it.
 _RESULT_STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T")
 
+# Distinguishes a user-saved preset's own id (`Api.save_current_as_
+# preset`) from a built-in worked-example's bare slug (`fim.gui.
+# presets.Preset.preset_id`) in `list_presets`'s combined result, so the
+# two id spaces can never collide even if a user happens to choose a
+# name matching a built-in slug.
+_USER_PRESET_ID_PREFIX: Final = "user:"
+
 # `format_statistic`'s own bare-call default — `cli._format_optional`'s
 # `.6g`, preserved unchanged so `test_format_statistic_matches_the_cli_
 # own_format_optional` keeps proving genuine CLI/GUI parity at this one
@@ -1066,51 +1073,80 @@ class Api:
 
     @_log_bridge_call
     def list_presets(self) -> dict[str, Any]:
-        """Return every worked-example preset's own id and title.
+        """Return every preset's own id, title, and origin — built-in or user-saved.
 
         Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
-        redesign.md` §4.5, `selby/restricted`: `fim.gui.presets` parses
-        these directly from the bundled `webui/help/usage.html` — see
-        that module's own docstring for why that file, not `doc/
-        usage.md` itself, is the one this reads. No YAML text is sent
+        redesign.md` §4.5/§12, `selby/restricted`: built-in presets are
+        the worked examples `fim.gui.presets` parses from the bundled
+        `webui/help/usage.html` — see that module's own docstring for
+        why that file, not `doc/usage.md` itself, is the one this reads.
+        User-saved presets are `self._preferences.named_presets`
+        (`save_current_as_preset`, below) — distinct in every way that
+        matters: created and deleted by the user, at any time, never
+        shipped with the app. No YAML/form text is sent for either kind
         here; `get_preset_form_values` fetches one preset's own values
         only once the user actually picks it.
 
         Returns:
-            `{"ok": True, "presets": [{"id": ..., "title": ...}, ...]}`,
-            in the same order `doc/usage.md` presents them. `presets` is
-            an empty list if the bundled help file is missing or has no
-            worked-examples section at all (a stale or hand-modified
-            install) — never an error on its own; the Configure screen
-            simply has nothing to offer.
+            `{"ok": True, "presets": [{"id": ..., "title": ...,
+            "builtin": <bool>}, ...]}` — built-in presets first, in
+            `doc/usage.md`'s own document order, then user-saved presets
+            sorted by name. A built-in preset's own `id` is its bare
+            slug (`get_preset_form_values` reads it directly); a
+            user-saved preset's own `id` is `"user:<name>"`
+            (`_USER_PRESET_ID_PREFIX`), so the two id spaces can never
+            collide even if a user happens to choose a name matching a
+            built-in slug.
         """
         found = presets.list_presets(_webui_directory())
-        return {
-            "ok": True,
-            "presets": [
-                {"id": preset.preset_id, "title": preset.title} for preset in found
-            ],
-        }
+        result = [
+            {"id": preset.preset_id, "title": preset.title, "builtin": True}
+            for preset in found
+        ]
+        named_presets = self._preferences.named_presets or {}
+        result.extend(
+            {"id": f"{_USER_PRESET_ID_PREFIX}{name}", "title": name, "builtin": False}
+            for name in sorted(named_presets)
+        )
+        return {"ok": True, "presets": result}
 
     @_log_bridge_call
     def get_preset_form_values(self, preset_id: str) -> dict[str, Any]:
         """Return one preset's own form values, ready for `applyFormValues`.
 
         Args:
-            preset_id: A `preset_id` from a prior `list_presets` call.
+            preset_id: A `preset_id` from a prior `list_presets` call —
+                either a built-in slug or a `"user:<name>"` id.
 
         Returns:
             `{"ok": True, "values": {...}}` on success — the identical
             shape `load_yaml` returns, so both share one JS-side apply
             path; `{"ok": False, "message": ...}` if `preset_id` names
-            no known preset, or if the preset's own configuration uses a
-            construct this form cannot represent (the "Per-base mutation
-            rate across unequal locus lengths" example's own genuinely
-            per-locus `mu` is the one worked example this affects today)
-            — the identical message a hand-loaded YAML file with the
-            same shape would already produce via `load_yaml`, not a new
-            failure mode this method introduces.
+            no known preset, or if the preset's own configuration no
+            longer validates. For a built-in preset this can only be a
+            construct this form cannot represent (the "Per-base
+            mutation rate across unequal locus lengths" example's own
+            genuinely per-locus `mu` is the one worked example this
+            affects today) — the identical message a hand-loaded YAML
+            file with the same shape would already produce via
+            `load_yaml`. For a user-saved preset this is re-validated
+            the same way `get_initial_form` re-validates a saved
+            `form_values` snapshot — a config that validated when saved
+            can stop validating later only if a range this project
+            itself enforces changed in the meantime, not through any
+            fault of the saved file itself.
         """
+        if preset_id.startswith(_USER_PRESET_ID_PREFIX):
+            name = preset_id[len(_USER_PRESET_ID_PREFIX) :]
+            named_presets = self._preferences.named_presets or {}
+            values = named_presets.get(name)
+            if values is None:
+                return {"ok": False, "message": f"no such preset: {preset_id}"}
+            try:
+                SimulationParams.from_mapping(form_values_to_payload(values))
+            except ValueError as error:
+                return {"ok": False, "message": str(error)}
+            return {"ok": True, "values": values}
         preset = presets.get_preset(_webui_directory(), preset_id)
         if preset is None:
             return {"ok": False, "message": f"no such preset: {preset_id}"}
@@ -1121,6 +1157,52 @@ class Api:
         except (ValueError, yaml.YAMLError) as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "values": values}
+
+    @_log_bridge_call
+    def save_current_as_preset(
+        self, name: str, values: dict[str, str]
+    ) -> dict[str, Any]:
+        """Save `values` as a user preset named `name`, persisted immediately.
+
+        Args:
+            name: The preset's own display name and unique key — saving
+                under a name that already exists silently overwrites it
+                (`GuiPreferences.with_named_preset`'s own docstring).
+                Leading/trailing whitespace is stripped; an empty name
+                is rejected.
+            values: The current form's own values (the identical shape
+                `start_run`/`save_yaml` already accept).
+
+        Returns:
+            `{"ok": True}` on success; `{"ok": False, "message": ...}`
+            if `name` is empty (after stripping) or `values` does not
+            currently validate — saving an invalid configuration under a
+            name would only defer the same error to whenever it is next
+            loaded, with less context than reporting it now, at the
+            point the user can still fix it.
+        """
+        stripped_name = name.strip()
+        if not stripped_name:
+            return {"ok": False, "message": "a preset needs a name"}
+        try:
+            SimulationParams.from_mapping(form_values_to_payload(values))
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        self._preferences = self._preferences.with_named_preset(stripped_name, values)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True}
+
+    @_log_bridge_call
+    def delete_user_preset(self, name: str) -> dict[str, Any]:
+        """Delete one user-saved preset by name, persisted immediately.
+
+        A `name` that does not exist is a silent no-op (`GuiPreferences.
+        without_named_preset`'s own docstring) — the GUI's own delete
+        affordance only ever offers a name it just listed.
+        """
+        self._preferences = self._preferences.without_named_preset(name)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True}
 
     @_log_bridge_call
     def save_yaml(self, values: dict[str, str]) -> dict[str, Any]:

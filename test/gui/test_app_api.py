@@ -69,15 +69,115 @@ def test_get_default_max_workers_matches_batch_runner_directly() -> None:
 
 
 def test_list_presets_matches_presets_module_directly() -> None:
-    """The bridge method adds no logic beyond `fim.gui.presets.list_presets`."""
+    """With no user presets saved, the bridge method lists only the built-ins."""
     result = Api().list_presets()
 
     assert result["ok"] is True
     expected = presets_module.list_presets(app_module._webui_directory())
     assert result["presets"] == [
-        {"id": preset.preset_id, "title": preset.title} for preset in expected
+        {"id": preset.preset_id, "title": preset.title, "builtin": True}
+        for preset in expected
     ]
     assert len(result["presets"]) > 0
+
+
+def test_save_current_as_preset_then_list_and_load_it_back() -> None:
+    """A saved preset appears in `list_presets` and loads back its own values."""
+    api = Api()
+    save_result = api.save_current_as_preset("My scenario", starter_form_values())
+    assert save_result == {"ok": True}
+
+    list_result = api.list_presets()
+    user_entries = [
+        preset for preset in list_result["presets"] if not preset["builtin"]
+    ]
+    assert user_entries == [
+        {"id": "user:My scenario", "title": "My scenario", "builtin": False}
+    ]
+
+    load_result = api.get_preset_form_values("user:My scenario")
+    assert load_result == {"ok": True, "values": starter_form_values()}
+
+
+def test_save_current_as_preset_rejects_an_empty_name() -> None:
+    """A blank (or all-whitespace) name is rejected, not silently accepted."""
+    result = Api().save_current_as_preset("   ", starter_form_values())
+
+    assert result["ok"] is False
+    assert "name" in result["message"]
+
+
+def test_save_current_as_preset_rejects_an_invalid_configuration() -> None:
+    """An invalid form is rejected at save time, not deferred to load time."""
+    values = dict(starter_form_values())
+    values["N"] = "not-a-number"
+
+    result = Api().save_current_as_preset("Broken", values)
+
+    assert result["ok"] is False
+
+
+def test_save_current_as_preset_overwrites_an_existing_name() -> None:
+    """Saving under an existing name replaces its own values."""
+    api = Api()
+    api.save_current_as_preset("My scenario", starter_form_values())
+    other_values = dict(starter_form_values())
+    other_values["N"] = "999"
+
+    api.save_current_as_preset("My scenario", other_values)
+
+    loaded = api.get_preset_form_values("user:My scenario")
+    assert loaded["values"]["N"] == "999"
+
+
+def test_get_preset_form_values_rejects_an_unknown_user_preset() -> None:
+    """A `user:` id naming no saved preset is a clear error, not a crash."""
+    result = Api().get_preset_form_values("user:not-a-real-name")
+
+    assert result["ok"] is False
+    assert "not-a-real-name" in result["message"]
+
+
+def test_delete_user_preset_removes_it_from_the_list() -> None:
+    """A deleted preset no longer appears in `list_presets`."""
+    api = Api()
+    api.save_current_as_preset("Temporary", starter_form_values())
+
+    delete_result = api.delete_user_preset("Temporary")
+
+    assert delete_result == {"ok": True}
+    user_entries = [
+        preset for preset in api.list_presets()["presets"] if not preset["builtin"]
+    ]
+    assert user_entries == []
+
+
+def test_delete_user_preset_is_a_no_op_for_an_unknown_name() -> None:
+    """Deleting a name that was never saved still reports success."""
+    assert Api().delete_user_preset("not-a-real-name") == {"ok": True}
+
+
+def test_named_presets_persist_across_a_second_api(tmp_path: Path) -> None:
+    """A saved user preset survives to a fresh `Api()` — the same launch it will hit.
+
+    Mirrors `test_set_significant_digits_persists_across_a_second_api`'s
+    own precedent: constructs each `Api` with the identical injected
+    `preferences_path`, rather than relying on the `_isolate_gui_
+    preferences` autouse fixture's own directory to stay stable across
+    two separate `Api()` calls in one test.
+    """
+    preferences_path = tmp_path / "preferences.json"
+    first = Api(preferences_path=preferences_path)
+    first.save_current_as_preset("Persisted", starter_form_values())
+
+    second = Api(preferences_path=preferences_path)
+
+    user_entries = [
+        preset for preset in second.list_presets()["presets"] if not preset["builtin"]
+    ]
+    assert user_entries == [
+        {"id": "user:Persisted", "title": "Persisted", "builtin": False}
+    ]
 
 
 def test_get_preset_form_values_loads_a_representable_preset() -> None:

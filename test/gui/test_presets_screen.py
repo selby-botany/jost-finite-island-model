@@ -88,3 +88,137 @@ def test_load_example_populates_the_list_and_applies_the_chosen_preset(
     assert result["settled"]["dialogOpen"] is False
     assert result["settled"]["mMode"] == "loaded"
     assert result["settled"]["nValue"] == "150"
+
+
+def test_save_current_as_preset_then_delete_it(window: webview.Window) -> None:
+    """ "Save current as…" adds a real, listed, loadable, deletable preset.
+
+    One `webview.start()` call driving several sequential trigger-then-
+    poll stages against the same window (`test_help_screen.py`'s own
+    precedent for why: more than one round trip against a single window
+    needs a manual driver, not the `drive` fixture, which destroys its
+    window after one).
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
+            )
+            _poll_until(
+                "document.getElementById('presets-list').children.length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                "document.getElementById('save-current-as-preset-button').click();"
+            )
+            _poll_until(
+                "document.getElementById('modal-save-preset').open",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                "document.getElementById('save-preset-name').value = "
+                "'My saved scenario';"
+                "document.getElementById('save-preset-accept-button').click();"
+            )
+            after_save = _poll_until(
+                "({"
+                "saveDialogOpen: "
+                "document.getElementById('modal-save-preset').open, "
+                "titles: Array.from("
+                "document.querySelectorAll('#presets-list li > button:first-child')"
+                ").map((button) => button.textContent), "
+                "deleteButtonCount: "
+                "document.querySelectorAll('.presets-delete-button').length"
+                "})",
+                lambda value: value is not None and value["saveDialogOpen"] is False,
+            )
+            window.evaluate_js(
+                "document.querySelector('.presets-delete-button').click();"
+            )
+            after_delete = _poll_until(
+                "document.querySelectorAll('.presets-delete-button').length",
+                lambda value: value == 0,
+            )
+            outcome.put({"afterSave": after_save, "afterDeleteCount": after_delete})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    assert "My saved scenario" in result["afterSave"]["titles"]
+    assert result["afterSave"]["deleteButtonCount"] == 1
+    assert result["afterDeleteCount"] == 0
+
+
+def test_save_current_as_preset_shows_a_validation_error_without_closing(
+    window: webview.Window,
+) -> None:
+    """An invalid current form's own error shows in the dialog, which stays open."""
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "const field = document.getElementById('field-N'); "
+                "field.value = 'not-a-number'; "
+                "field.dispatchEvent(new Event('input', {bubbles: true}));"
+            )
+            window.evaluate_js(
+                "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
+            )
+            _poll_until(
+                "document.getElementById('presets-list').children.length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                "document.getElementById('save-current-as-preset-button').click();"
+            )
+            _poll_until(
+                "document.getElementById('modal-save-preset').open",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                "document.getElementById('save-preset-name').value = 'Broken';"
+                "document.getElementById('save-preset-accept-button').click();"
+            )
+            settled = _poll_until(
+                "({"
+                "errorHidden: "
+                "document.getElementById('save-preset-error').hidden, "
+                "dialogOpen: "
+                "document.getElementById('modal-save-preset').open"
+                "})",
+                lambda value: value is not None and value["errorHidden"] is False,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=10)
+
+    assert settled["errorHidden"] is False
+    assert settled["dialogOpen"] is True

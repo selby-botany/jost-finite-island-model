@@ -576,6 +576,11 @@ fieldset.composite > label {
     margin-top: 0.35rem;
 }
 
+.presets-list li {
+    display: flex;
+    gap: 0.35rem;
+}
+
 .presets-list button {
     display: block;
     width: 100%;
@@ -587,6 +592,21 @@ fieldset.composite > label {
     border-radius: 4px;
     padding: 0.5rem 0.75rem;
     cursor: pointer;
+}
+
+/* A built-in preset's own `<li>` has one button (its title); a user-
+ * saved preset's own `<li>` has two (title, then a small "Delete") --
+ * `flex: 1` on the title button alone means it always fills whatever
+ * space the delete button (sized to its own content, unset `flex`)
+ * does not need, in both cases. */
+.presets-list li > button:first-child {
+    flex: 1;
+}
+
+.presets-list .presets-delete-button {
+    width: auto;
+    flex: none;
+    color: var(--fim-muted);
 }
 
 .presets-list button:hover {

@@ -91,6 +91,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [list\_presets](#fim.gui.app.Api.list_presets)
     * [get\_preset\_form\_values](#fim.gui.app.Api.get_preset_form_values)
+    * [save\_current\_as\_preset](#fim.gui.app.Api.save_current_as_preset)
+    * [delete\_user\_preset](#fim.gui.app.Api.delete_user_preset)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
     * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
@@ -143,6 +145,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [to\_dict](#fim.gui.preferences.GuiPreferences.to_dict)
     * [from\_dict](#fim.gui.preferences.GuiPreferences.from_dict)
     * [with\_form\_values](#fim.gui.preferences.GuiPreferences.with_form_values)
+    * [with\_named\_preset](#fim.gui.preferences.GuiPreferences.with_named_preset)
+    * [without\_named\_preset](#fim.gui.preferences.GuiPreferences.without_named_preset)
     * [with\_significant\_digits](#fim.gui.preferences.GuiPreferences.with_significant_digits)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
@@ -3149,24 +3153,31 @@ terminal loads identically here, error for error.
 def list_presets() -> dict[str, Any]
 ```
 
-Return every worked-example preset's own id and title.
+Return every preset's own id, title, and origin — built-in or user-saved.
 
 Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
-redesign.md` §4.5, `selby/restricted`: `fim.gui.presets` parses
-these directly from the bundled `webui/help/usage.html` — see
-that module's own docstring for why that file, not `doc/
-usage.md` itself, is the one this reads. No YAML text is sent
+redesign.md` §4.5/§12, `selby/restricted`: built-in presets are
+the worked examples `fim.gui.presets` parses from the bundled
+`webui/help/usage.html` — see that module's own docstring for
+why that file, not `doc/usage.md` itself, is the one this reads.
+User-saved presets are `self._preferences.named_presets`
+(`save_current_as_preset`, below) — distinct in every way that
+matters: created and deleted by the user, at any time, never
+shipped with the app. No YAML/form text is sent for either kind
 here; `get_preset_form_values` fetches one preset's own values
 only once the user actually picks it.
 
 **Returns**:
 
-- ``{"ok"` - True, "presets": [{"id": ..., "title": ...}, ...]}`,
-  in the same order `doc/usage.md` presents them. `presets` is
-  an empty list if the bundled help file is missing or has no
-  worked-examples section at all (a stale or hand-modified
-  install) — never an error on its own; the Configure screen
-  simply has nothing to offer.
+- ``{"ok"` - True, "presets": [{"id": ..., "title": ...,
+- `"builtin"` - <bool>}, ...]}` — built-in presets first, in
+  `doc/usage.md`'s own document order, then user-saved presets
+  sorted by name. A built-in preset's own `id` is its bare
+  slug (`get_preset_form_values` reads it directly); a
+  user-saved preset's own `id` is `"user:<name>"`
+  (`_USER_PRESET_ID_PREFIX`), so the two id spaces can never
+  collide even if a user happens to choose a name matching a
+  built-in slug.
 
 <a id="fim.gui.app.Api.get_preset_form_values"></a>
 
@@ -3181,7 +3192,8 @@ Return one preset's own form values, ready for `applyFormValues`.
 
 **Arguments**:
 
-- `preset_id` - A `preset_id` from a prior `list_presets` call.
+- `preset_id` - A `preset_id` from a prior `list_presets` call —
+  either a built-in slug or a `"user:<name>"` id.
 
 
 **Returns**:
@@ -3189,13 +3201,66 @@ Return one preset's own form values, ready for `applyFormValues`.
 - ``{"ok"` - True, "values": {...}}` on success — the identical
   shape `load_yaml` returns, so both share one JS-side apply
   path; `{"ok": False, "message": ...}` if `preset_id` names
-  no known preset, or if the preset's own configuration uses a
-  construct this form cannot represent (the "Per-base mutation
-  rate across unequal locus lengths" example's own genuinely
-  per-locus `mu` is the one worked example this affects today)
-  — the identical message a hand-loaded YAML file with the
-  same shape would already produce via `load_yaml`, not a new
-  failure mode this method introduces.
+  no known preset, or if the preset's own configuration no
+  longer validates. For a built-in preset this can only be a
+  construct this form cannot represent (the "Per-base
+  mutation rate across unequal locus lengths" example's own
+  genuinely per-locus `mu` is the one worked example this
+  affects today) — the identical message a hand-loaded YAML
+  file with the same shape would already produce via
+  `load_yaml`. For a user-saved preset this is re-validated
+  the same way `get_initial_form` re-validates a saved
+  `form_values` snapshot — a config that validated when saved
+  can stop validating later only if a range this project
+  itself enforces changed in the meantime, not through any
+  fault of the saved file itself.
+
+<a id="fim.gui.app.Api.save_current_as_preset"></a>
+
+#### save\_current\_as\_preset
+
+```python
+@_log_bridge_call
+def save_current_as_preset(name: str, values: dict[str,
+                                                   str]) -> dict[str, Any]
+```
+
+Save `values` as a user preset named `name`, persisted immediately.
+
+**Arguments**:
+
+- `name` - The preset's own display name and unique key — saving
+  under a name that already exists silently overwrites it
+  (`GuiPreferences.with_named_preset`'s own docstring).
+  Leading/trailing whitespace is stripped; an empty name
+  is rejected.
+- `values` - The current form's own values (the identical shape
+  `start_run`/`save_yaml` already accept).
+
+
+**Returns**:
+
+- ``{"ok"` - True}` on success; `{"ok": False, "message": ...}`
+  if `name` is empty (after stripping) or `values` does not
+  currently validate — saving an invalid configuration under a
+  name would only defer the same error to whenever it is next
+  loaded, with less context than reporting it now, at the
+  point the user can still fix it.
+
+<a id="fim.gui.app.Api.delete_user_preset"></a>
+
+#### delete\_user\_preset
+
+```python
+@_log_bridge_call
+def delete_user_preset(name: str) -> dict[str, Any]
+```
+
+Delete one user-saved preset by name, persisted immediately.
+
+A `name` that does not exist is a silent no-op (`GuiPreferences.
+without_named_preset`'s own docstring) — the GUI's own delete
+affordance only ever offers a name it just listed.
 
 <a id="fim.gui.app.Api.save_yaml"></a>
 
@@ -4503,6 +4568,18 @@ loaded `GuiPreferences` with its own hardcoded default rather than this
 module carrying a second copy of it (`fim.gui.app`'s own `_DEFAULT_
 DISPLAY_SIGNIFICANT_DIGITS` stays the single source of truth there).
 
+A third, optional field — `named_presets` — was added later (botanist
+GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §12:
+"User-saved presets... live in the same preferences store, alongside...
+the last-submitted form snapshot"), a user's own named form-value
+snapshots, distinct from the built-in worked-example presets `fim.gui.
+presets` reads from the bundled usage guide — those are read-only and
+ship with the app; these are created, renamed by overwrite, and deleted
+entirely by the user, at any time, with no relationship to any run's
+own scientific record either. Purely additive to the on-disk shape
+(schema_version does not change): an older file with no `"presets"` key
+loads exactly as it already did, with `named_presets` simply `None`.
+
 Deliberately excludes a "default deme pair for the next run": `Api.
 _start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
 at the start of every run on purpose ("a fresh run never inherits a
@@ -4548,6 +4625,11 @@ One loaded (or default) snapshot of the GUI's own preferences.
   form_values_to_payload`/`SimulationParams.from_mapping` on
   load, exactly like a real submission — this store never
   carries its own copy of that validation.
+- `named_presets` - The user's own saved configurations, name ->
+  form values (the identical shape `form_values` above uses),
+  or `None` if none have ever been saved. Re-validated on load
+  exactly like `form_values` — see `with_named_preset`'s own
+  docstring for how a name is added or overwritten.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
@@ -4588,6 +4670,43 @@ def with_form_values(form_values: Mapping[str, str]) -> GuiPreferences
 ```
 
 Return a copy with `form_values` replaced — the common `start_run` update.
+
+<a id="fim.gui.preferences.GuiPreferences.with_named_preset"></a>
+
+#### with\_named\_preset
+
+```python
+def with_named_preset(name: str, form_values: Mapping[str,
+                                                      str]) -> GuiPreferences
+```
+
+Return a copy with one named preset added, or overwritten by the same name.
+
+**Arguments**:
+
+- `name` - The preset's own display name — also its unique key;
+  saving under a name that already exists silently
+  overwrites it (the same "the newest save wins, no
+  separate rename/overwrite prompt" convention a plain
+  file save already uses).
+- `form_values` - The current form's own values to remember —
+  the identical shape `with_form_values` already takes.
+
+<a id="fim.gui.preferences.GuiPreferences.without_named_preset"></a>
+
+#### without\_named\_preset
+
+```python
+def without_named_preset(name: str) -> GuiPreferences
+```
+
+Return a copy with one named preset removed, if it existed.
+
+A `name` that does not exist is a silent no-op, not an error —
+the GUI's own delete affordance only ever offers a name it just
+listed, so this can only race a preference file edited by hand
+or by a second launch, not a real user-facing mistake worth
+surfacing.
 
 <a id="fim.gui.preferences.GuiPreferences.with_significant_digits"></a>
 

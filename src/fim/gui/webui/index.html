@@ -590,7 +590,33 @@
       No worked examples are bundled with this build.
     </p>
     <ul id="presets-list" class="presets-list"></ul>
-    <button type="button" class="modal-close" data-modal-close tabindex="0">Cancel</button>
+    <div class="actions">
+      <button type="button" class="modal-close" data-modal-close tabindex="0">Cancel</button>
+      <button type="button" id="save-current-as-preset-button" tabindex="0">Save current as…</button>
+    </div>
+  </dialog>
+
+  <!-- Save current as… (botanist GUI design doc §4.7's own Accept/
+       Cancel discipline): a native `<form method="dialog">` closes with
+       `dialog.returnValue` set to whichever submit button's own
+       `value` was clicked -- "Save" is a real `type="submit"` (Enter in
+       the name field triggers it, and the browser's own `required`
+       validation on the name field runs first), "Cancel" is a plain
+       `type="button"` with its own `dialog.close("cancel")` handler so
+       it never triggers that same validation. -->
+  <dialog class="config-modal" id="modal-save-preset">
+    <h2>Save current configuration as…</h2>
+    <form method="dialog" id="save-preset-form">
+      <div class="field">
+        <label for="save-preset-name">Name</label>
+        <input type="text" id="save-preset-name" required>
+      </div>
+      <p class="hint" id="save-preset-error" hidden></p>
+      <div class="actions">
+        <button type="button" id="save-preset-cancel-button" tabindex="0">Cancel</button>
+        <button type="submit" value="save" id="save-preset-accept-button" tabindex="0">Save</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- Not user-facing: `app.js`'s own automatic bootstrap still writes

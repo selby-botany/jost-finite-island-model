@@ -5037,7 +5037,93 @@ The Batch tab's default is `batch_runner.default_max_workers`, not invented.
 def test_list_presets_matches_presets_module_directly() -> None
 ```
 
-The bridge method adds no logic beyond `fim.gui.presets.list_presets`.
+With no user presets saved, the bridge method lists only the built-ins.
+
+<a id="gui.test_app_api.test_save_current_as_preset_then_list_and_load_it_back"></a>
+
+#### test\_save\_current\_as\_preset\_then\_list\_and\_load\_it\_back
+
+```python
+def test_save_current_as_preset_then_list_and_load_it_back() -> None
+```
+
+A saved preset appears in `list_presets` and loads back its own values.
+
+<a id="gui.test_app_api.test_save_current_as_preset_rejects_an_empty_name"></a>
+
+#### test\_save\_current\_as\_preset\_rejects\_an\_empty\_name
+
+```python
+def test_save_current_as_preset_rejects_an_empty_name() -> None
+```
+
+A blank (or all-whitespace) name is rejected, not silently accepted.
+
+<a id="gui.test_app_api.test_save_current_as_preset_rejects_an_invalid_configuration"></a>
+
+#### test\_save\_current\_as\_preset\_rejects\_an\_invalid\_configuration
+
+```python
+def test_save_current_as_preset_rejects_an_invalid_configuration() -> None
+```
+
+An invalid form is rejected at save time, not deferred to load time.
+
+<a id="gui.test_app_api.test_save_current_as_preset_overwrites_an_existing_name"></a>
+
+#### test\_save\_current\_as\_preset\_overwrites\_an\_existing\_name
+
+```python
+def test_save_current_as_preset_overwrites_an_existing_name() -> None
+```
+
+Saving under an existing name replaces its own values.
+
+<a id="gui.test_app_api.test_get_preset_form_values_rejects_an_unknown_user_preset"></a>
+
+#### test\_get\_preset\_form\_values\_rejects\_an\_unknown\_user\_preset
+
+```python
+def test_get_preset_form_values_rejects_an_unknown_user_preset() -> None
+```
+
+A `user:` id naming no saved preset is a clear error, not a crash.
+
+<a id="gui.test_app_api.test_delete_user_preset_removes_it_from_the_list"></a>
+
+#### test\_delete\_user\_preset\_removes\_it\_from\_the\_list
+
+```python
+def test_delete_user_preset_removes_it_from_the_list() -> None
+```
+
+A deleted preset no longer appears in `list_presets`.
+
+<a id="gui.test_app_api.test_delete_user_preset_is_a_no_op_for_an_unknown_name"></a>
+
+#### test\_delete\_user\_preset\_is\_a\_no\_op\_for\_an\_unknown\_name
+
+```python
+def test_delete_user_preset_is_a_no_op_for_an_unknown_name() -> None
+```
+
+Deleting a name that was never saved still reports success.
+
+<a id="gui.test_app_api.test_named_presets_persist_across_a_second_api"></a>
+
+#### test\_named\_presets\_persist\_across\_a\_second\_api
+
+```python
+def test_named_presets_persist_across_a_second_api(tmp_path: Path) -> None
+```
+
+A saved user preset survives to a fresh `Api()` — the same launch it will hit.
+
+Mirrors `test_set_significant_digits_persists_across_a_second_api`'s
+own precedent: constructs each `Api` with the identical injected
+`preferences_path`, rather than relying on the `_isolate_gui_
+preferences` autouse fixture's own directory to stay stable across
+two separate `Api()` calls in one test.
 
 <a id="gui.test_app_api.test_get_preset_form_values_loads_a_representable_preset"></a>
 
@@ -7564,6 +7650,67 @@ def test_with_significant_digits_leaves_other_fields_untouched() -> None
 
 `with_significant_digits` updates only `significant_digits`.
 
+<a id="gui.test_preferences.test_with_named_preset_adds_and_overwrites_by_name"></a>
+
+#### test\_with\_named\_preset\_adds\_and\_overwrites\_by\_name
+
+```python
+def test_with_named_preset_adds_and_overwrites_by_name() -> None
+```
+
+Saving under an existing name overwrites it; other names are untouched.
+
+<a id="gui.test_preferences.test_without_named_preset_removes_only_the_named_one"></a>
+
+#### test\_without\_named\_preset\_removes\_only\_the\_named\_one
+
+```python
+def test_without_named_preset_removes_only_the_named_one() -> None
+```
+
+Deleting one name leaves every other saved preset in place.
+
+<a id="gui.test_preferences.test_without_named_preset_is_a_no_op_for_an_unknown_name"></a>
+
+#### test\_without\_named\_preset\_is\_a\_no\_op\_for\_an\_unknown\_name
+
+```python
+def test_without_named_preset_is_a_no_op_for_an_unknown_name() -> None
+```
+
+Deleting a name that was never saved changes nothing, not an error.
+
+<a id="gui.test_preferences.test_without_named_preset_is_a_no_op_when_none_were_ever_saved"></a>
+
+#### test\_without\_named\_preset\_is\_a\_no\_op\_when\_none\_were\_ever\_saved
+
+```python
+def test_without_named_preset_is_a_no_op_when_none_were_ever_saved() -> None
+```
+
+Deleting from a fresh `GuiPreferences` (`named_presets` still `None`) is safe.
+
+<a id="gui.test_preferences.test_named_presets_round_trip_through_save_and_load"></a>
+
+#### test\_named\_presets\_round\_trip\_through\_save\_and\_load
+
+```python
+def test_named_presets_round_trip_through_save_and_load(
+        tmp_path: Path) -> None
+```
+
+A saved-and-reloaded `GuiPreferences` preserves every named preset exactly.
+
+<a id="gui.test_preferences.test_malformed_presets_section_is_quarantined"></a>
+
+#### test\_malformed\_presets\_section\_is\_quarantined
+
+```python
+def test_malformed_presets_section_is_quarantined(tmp_path: Path) -> None
+```
+
+A non-`str -> (str -> str)` 'presets' section is rejected, not coerced.
+
 <a id="gui.test_preferences.test_preferences_file_path_macos"></a>
 
 #### test\_preferences\_file\_path\_macos
@@ -7758,6 +7905,33 @@ calling an `async` `fim.menu.*` method directly as a bare
 `evaluate_js` expression deadlocks (`test_input_screen.py`'s own
 `test_menu_new_configuration_resets_an_edited_field` docstring has
 the full mechanism).
+
+<a id="gui.test_presets_screen.test_save_current_as_preset_then_delete_it"></a>
+
+#### test\_save\_current\_as\_preset\_then\_delete\_it
+
+```python
+def test_save_current_as_preset_then_delete_it(window: webview.Window) -> None
+```
+
+"Save current as…" adds a real, listed, loadable, deletable preset.
+
+One `webview.start()` call driving several sequential trigger-then-
+poll stages against the same window (`test_help_screen.py`'s own
+precedent for why: more than one round trip against a single window
+needs a manual driver, not the `drive` fixture, which destroys its
+window after one).
+
+<a id="gui.test_presets_screen.test_save_current_as_preset_shows_a_validation_error_without_closing"></a>
+
+#### test\_save\_current\_as\_preset\_shows\_a\_validation\_error\_without\_closing
+
+```python
+def test_save_current_as_preset_shows_a_validation_error_without_closing(
+        window: webview.Window) -> None
+```
+
+An invalid current form's own error shows in the dialog, which stays open.
 
 <a id="gui.test_recent_runs"></a>
 

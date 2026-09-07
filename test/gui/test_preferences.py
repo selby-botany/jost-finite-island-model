@@ -139,6 +139,70 @@ def test_with_significant_digits_leaves_other_fields_untouched() -> None:
     assert updated.form_values == {"N": "100"}
 
 
+def test_with_named_preset_adds_and_overwrites_by_name() -> None:
+    """Saving under an existing name overwrites it; other names are untouched."""
+    original = GuiPreferences().with_named_preset("A", {"N": "100"})
+    updated = original.with_named_preset("B", {"N": "200"})
+    overwritten = updated.with_named_preset("A", {"N": "999"})
+
+    assert overwritten.named_presets == {"A": {"N": "999"}, "B": {"N": "200"}}
+
+
+def test_without_named_preset_removes_only_the_named_one() -> None:
+    """Deleting one name leaves every other saved preset in place."""
+    preferences = (
+        GuiPreferences()
+        .with_named_preset("A", {"N": "100"})
+        .with_named_preset("B", {"N": "200"})
+    )
+
+    updated = preferences.without_named_preset("A")
+
+    assert updated.named_presets == {"B": {"N": "200"}}
+
+
+def test_without_named_preset_is_a_no_op_for_an_unknown_name() -> None:
+    """Deleting a name that was never saved changes nothing, not an error."""
+    preferences = GuiPreferences().with_named_preset("A", {"N": "100"})
+
+    assert preferences.without_named_preset("not-a-real-name") == preferences
+
+
+def test_without_named_preset_is_a_no_op_when_none_were_ever_saved() -> None:
+    """Deleting from a fresh `GuiPreferences` (`named_presets` still `None`) is safe."""
+    assert GuiPreferences().without_named_preset("anything") == GuiPreferences()
+
+
+def test_named_presets_round_trip_through_save_and_load(tmp_path: Path) -> None:
+    """A saved-and-reloaded `GuiPreferences` preserves every named preset exactly."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences().with_named_preset("My scenario", {"N": "300", "d": "5"})
+
+    save_preferences(path, original)
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded == original
+
+
+def test_malformed_presets_section_is_quarantined(tmp_path: Path) -> None:
+    """A non-`str -> (str -> str)` 'presets' section is rejected, not coerced."""
+    path = tmp_path / "preferences.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {},
+                "presets": {"A": {"N": 500}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded, warning = load_preferences(path)
+    assert loaded == GuiPreferences()
+    assert warning is not None
+
+
 def test_preferences_file_path_macos(tmp_path: Path) -> None:
     """macOS resolves under `~/Library/Application Support/fim`."""
     path = preferences_file_path(platform="darwin", environ={}, home=tmp_path)
