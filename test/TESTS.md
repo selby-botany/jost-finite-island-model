@@ -5087,6 +5087,35 @@ double-precision float carries roughly that many significant
 decimal digits, so anything past it would print noise a real
 `FinalReport` statistic never actually carries.
 
+<a id="gui.test_app_api.test_set_significant_digits_persists_across_a_second_api"></a>
+
+#### test\_set\_significant\_digits\_persists\_across\_a\_second\_api
+
+```python
+def test_set_significant_digits_persists_across_a_second_api(
+        tmp_path: Path) -> None
+```
+
+A valid change survives to a second `Api` sharing the same preferences file.
+
+The real-world shape this proves: quit the app, relaunch it, and
+the View menu's own setting is exactly where it was left --
+`create_window`'s default `Api()` in production always resolves the
+same real `preferences_file_path()` across two separate launches,
+which this test's own two `Api(preferences_path=...)` calls against
+one shared `tmp_path` file stand in for.
+
+<a id="gui.test_app_api.test_set_significant_digits_rejecting_a_value_does_not_persist"></a>
+
+#### test\_set\_significant\_digits\_rejecting\_a\_value\_does\_not\_persist
+
+```python
+def test_set_significant_digits_rejecting_a_value_does_not_persist(
+        tmp_path: Path) -> None
+```
+
+An out-of-range `digits` value is never written to disk.
+
 <a id="gui.test_app_api.test_api_seeds_significant_digits_from_a_saved_preference"></a>
 
 #### test\_api\_seeds\_significant\_digits\_from\_a\_saved\_preference
@@ -7029,6 +7058,16 @@ def test_with_form_values_leaves_other_fields_untouched() -> None
 ```
 
 `with_form_values` updates only `form_values`.
+
+<a id="gui.test_preferences.test_with_significant_digits_leaves_other_fields_untouched"></a>
+
+#### test\_with\_significant\_digits\_leaves\_other\_fields\_untouched
+
+```python
+def test_with_significant_digits_leaves_other_fields_untouched() -> None
+```
+
+`with_significant_digits` updates only `significant_digits`.
 
 <a id="gui.test_preferences.test_preferences_file_path_macos"></a>
 

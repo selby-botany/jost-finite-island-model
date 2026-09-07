@@ -131,6 +131,14 @@ def test_with_form_values_leaves_other_fields_untouched() -> None:
     assert updated.form_values == {"N": "100"}
 
 
+def test_with_significant_digits_leaves_other_fields_untouched() -> None:
+    """`with_significant_digits` updates only `significant_digits`."""
+    original = GuiPreferences(form_values={"N": "100"})
+    updated = original.with_significant_digits(9)
+    assert updated.significant_digits == 9
+    assert updated.form_values == {"N": "100"}
+
+
 def test_preferences_file_path_macos(tmp_path: Path) -> None:
     """macOS resolves under `~/Library/Application Support/fim`."""
     path = preferences_file_path(platform="darwin", environ={}, home=tmp_path)

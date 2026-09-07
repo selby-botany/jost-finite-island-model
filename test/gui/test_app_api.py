@@ -165,6 +165,37 @@ def test_set_significant_digits_rejects_values_outside_the_valid_range(
     )
 
 
+def test_set_significant_digits_persists_across_a_second_api(tmp_path: Path) -> None:
+    """A valid change survives to a second `Api` sharing the same preferences file.
+
+    The real-world shape this proves: quit the app, relaunch it, and
+    the View menu's own setting is exactly where it was left --
+    `create_window`'s default `Api()` in production always resolves the
+    same real `preferences_file_path()` across two separate launches,
+    which this test's own two `Api(preferences_path=...)` calls against
+    one shared `tmp_path` file stand in for.
+    """
+    preferences_path = tmp_path / "preferences.json"
+    first = Api(preferences_path=preferences_path)
+
+    first.set_significant_digits(8)
+
+    second = Api(preferences_path=preferences_path)
+    assert second.get_significant_digits() == 8
+
+
+def test_set_significant_digits_rejecting_a_value_does_not_persist(
+    tmp_path: Path,
+) -> None:
+    """An out-of-range `digits` value is never written to disk."""
+    preferences_path = tmp_path / "preferences.json"
+    api = Api(preferences_path=preferences_path)
+
+    api.set_significant_digits(100)
+
+    assert not preferences_path.exists()
+
+
 def test_api_seeds_significant_digits_from_a_saved_preference(tmp_path: Path) -> None:
     """A fresh `Api` prefers a saved `significant_digits` over the hardcoded default."""
     preferences_path = tmp_path / "preferences.json"

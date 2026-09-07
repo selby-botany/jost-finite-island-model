@@ -132,6 +132,13 @@ class GuiPreferences:
         """Return a copy with `form_values` replaced — the common `start_run` update."""
         return replace(self, form_values=dict(form_values))
 
+    def with_significant_digits(self, significant_digits: int) -> GuiPreferences:
+        """Return a copy with `significant_digits` replaced.
+
+        The `set_significant_digits` bridge method's own update.
+        """
+        return replace(self, significant_digits=significant_digits)
+
 
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:
     """Load `path`, quarantining and defaulting on any unreadable content.

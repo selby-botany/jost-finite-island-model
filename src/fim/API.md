@@ -136,6 +136,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [to\_dict](#fim.gui.preferences.GuiPreferences.to_dict)
     * [from\_dict](#fim.gui.preferences.GuiPreferences.from_dict)
     * [with\_form\_values](#fim.gui.preferences.GuiPreferences.with_form_values)
+    * [with\_significant\_digits](#fim.gui.preferences.GuiPreferences.with_significant_digits)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
   * [save\_preferences](#fim.gui.preferences.save_preferences)
@@ -3078,12 +3079,17 @@ def set_significant_digits(digits: int) -> dict[str, Any]
 
 Change the GUI's display-rounding precision (View menu).
 
-Purely cosmetic and "no record": every persisted artifact keeps
-full float precision regardless of this value (`_DEFAULT_
-DISPLAY_SIGNIFICANT_DIGITS`'s own comment). Takes effect
-starting with the next `format_statistic` call a running or
-future screen makes — an already-open Screen 3/4 was formatted
-once, at push time, and is not retroactively reformatted.
+Purely cosmetic and "no scientific record": every persisted run
+artifact keeps full float precision regardless of this value
+(`_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS`'s own comment). Takes
+effect starting with the next `format_statistic` call a running
+or future screen makes — an already-open Screen 3/4 was
+formatted once, at push time, and is not retroactively
+reformatted. A valid change is saved to `self._preferences`
+immediately (`fim.gui.preferences`'s own "synchronous, no
+debounce" design choice), so it survives to the next launch —
+distinct from the "no record" property above, which is only
+ever about a *run's own* output, never this GUI-local setting.
 
 **Returns**:
 
@@ -4327,6 +4333,18 @@ def with_form_values(form_values: Mapping[str, str]) -> GuiPreferences
 ```
 
 Return a copy with `form_values` replaced — the common `start_run` update.
+
+<a id="fim.gui.preferences.GuiPreferences.with_significant_digits"></a>
+
+#### with\_significant\_digits
+
+```python
+def with_significant_digits(significant_digits: int) -> GuiPreferences
+```
+
+Return a copy with `significant_digits` replaced.
+
+The `set_significant_digits` bridge method's own update.
 
 <a id="fim.gui.preferences.load_preferences"></a>
 

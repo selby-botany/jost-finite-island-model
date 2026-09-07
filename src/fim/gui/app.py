@@ -74,7 +74,12 @@ from fim.gui.config_form import (
     starter_form_values,
     tab_for_error,
 )
-from fim.gui.preferences import GuiPreferences, load_preferences, preferences_file_path
+from fim.gui.preferences import (
+    GuiPreferences,
+    load_preferences,
+    preferences_file_path,
+    save_preferences,
+)
 from fim.gui.store import read_live_state, read_progress_sidecar
 from fim.model.initial import generate_initial_state
 from fim.model.params import SimulationParams
@@ -789,12 +794,17 @@ class Api:
     def set_significant_digits(self, digits: int) -> dict[str, Any]:
         """Change the GUI's display-rounding precision (View menu).
 
-        Purely cosmetic and "no record": every persisted artifact keeps
-        full float precision regardless of this value (`_DEFAULT_
-        DISPLAY_SIGNIFICANT_DIGITS`'s own comment). Takes effect
-        starting with the next `format_statistic` call a running or
-        future screen makes — an already-open Screen 3/4 was formatted
-        once, at push time, and is not retroactively reformatted.
+        Purely cosmetic and "no scientific record": every persisted run
+        artifact keeps full float precision regardless of this value
+        (`_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS`'s own comment). Takes
+        effect starting with the next `format_statistic` call a running
+        or future screen makes — an already-open Screen 3/4 was
+        formatted once, at push time, and is not retroactively
+        reformatted. A valid change is saved to `self._preferences`
+        immediately (`fim.gui.preferences`'s own "synchronous, no
+        debounce" design choice), so it survives to the next launch —
+        distinct from the "no record" property above, which is only
+        ever about a *run's own* output, never this GUI-local setting.
 
         Returns:
             `{"ok": True, "digits": digits}` on success; `{"ok": False,
@@ -813,6 +823,8 @@ class Api:
                 ),
             }
         self._significant_digits = digits
+        self._preferences = self._preferences.with_significant_digits(digits)
+        save_preferences(self._preferences_path, self._preferences)
         return {"ok": True, "digits": digits}
 
     @_log_bridge_call
