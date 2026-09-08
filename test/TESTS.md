@@ -34,6 +34,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_batch_results_screen`](#gui.test_batch_results_screen)
   - [`test_batch_runner`](#gui.test_batch_runner)
   - [`test_batch_running`](#gui.test_batch_running)
+  - [`test_compare_screen`](#gui.test_compare_screen)
   - [`test_config_form`](#gui.test_config_form)
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
   - [`test_explore_screen`](#gui.test_explore_screen)
@@ -5796,6 +5797,49 @@ A real regression: `reanalyze_trajectory`'s own manifest read raises
 `FileNotFoundError` (an `OSError`), not the `ValueError` this bridge
 method's exception handling originally caught alone.
 
+<a id="gui.test_app_api.test_compare_runs_rejects_fewer_than_two_paths"></a>
+
+#### test\_compare\_runs\_rejects\_fewer\_than\_two\_paths
+
+```python
+def test_compare_runs_rejects_fewer_than_two_paths() -> None
+```
+
+A single run has nothing to overlay against.
+
+<a id="gui.test_app_api.test_compare_runs_overlays_two_runs_and_names_the_differing_field"></a>
+
+#### test\_compare\_runs\_overlays\_two\_runs\_and\_names\_the\_differing\_field
+
+```python
+def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
+        tmp_path: Path) -> None
+```
+
+Two runs differing only in `seed` are overlaid, with `seed` the sole diff.
+
+<a id="gui.test_app_api.test_compare_runs_names_no_differing_field_for_identical_configs"></a>
+
+#### test\_compare\_runs\_names\_no\_differing\_field\_for\_identical\_configs
+
+```python
+def test_compare_runs_names_no_differing_field_for_identical_configs(
+        tmp_path: Path) -> None
+```
+
+Two runs with the same configuration (different output dirs) report no diff.
+
+<a id="gui.test_app_api.test_compare_runs_reports_a_missing_trajectory_without_raising"></a>
+
+#### test\_compare\_runs\_reports\_a\_missing\_trajectory\_without\_raising
+
+```python
+def test_compare_runs_reports_a_missing_trajectory_without_raising(
+        tmp_path: Path) -> None
+```
+
+One unreadable path fails the whole comparison, matching `open_run`'s shape.
+
 <a id="gui.test_app_api.test_get_animation_frames_ships_client_ready_panels"></a>
 
 #### test\_get\_animation\_frames\_ships\_client\_ready\_panels
@@ -6391,6 +6435,76 @@ message, so `done_event` firing is itself proof that call
 *succeeded* — a `JavascriptException` from a missing page-side
 handler would raise inside `_drain_batch_messages` first, and
 `on_message` (hence `done_event`) would never fire at all.
+
+<a id="gui.test_compare_screen"></a>
+
+# gui.test\_compare\_screen
+
+Headless functional tests for the Compare workspace (botanist GUI
+design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §8).
+
+Real DOM-driven proof that the File menu's "Compare runs…" action
+reaches the Compare screen, that its recent-runs list is populated from
+real completed runs, and that checking two of them and clicking
+"Compare" renders the real overlay `Api.compare_runs` returns —
+`test/gui/test_app_api.py`'s own `test_compare_runs_*` tests already
+prove that bridge method correct as a plain Python call; this file
+proves the page's own JavaScript wires it together, which no
+Python-only test can check.
+
+<a id="gui.test_compare_screen.test_compare_runs_menu_action_reaches_the_compare_screen"></a>
+
+#### test\_compare\_runs\_menu\_action\_reaches\_the\_compare\_screen
+
+```python
+def test_compare_runs_menu_action_reaches_the_compare_screen(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Triggering the File menu's "Compare runs…" action shows the Compare screen.
+
+Polls for `window.__fimCompareRecentRunsLoaded` alongside screen
+visibility, not screen visibility alone — the identical race
+`test_open_run_screen.py`'s own `test_open_run_menu_action_reaches_
+screen_six` already documents for the same "shown synchronously,
+populated asynchronously" shape.
+
+<a id="gui.test_compare_screen.test_compare_button_disabled_until_two_runs_are_checked"></a>
+
+#### test\_compare\_button\_disabled\_until\_two\_runs\_are\_checked
+
+```python
+def test_compare_button_disabled_until_two_runs_are_checked(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The "Compare" button stays disabled with zero or one run checked.
+
+<a id="gui.test_compare_screen.test_comparing_two_runs_renders_panels_and_the_differing_field"></a>
+
+#### test\_comparing\_two\_runs\_renders\_panels\_and\_the\_differing\_field
+
+```python
+def test_comparing_two_runs_renders_panels_and_the_differing_field(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Checking two runs differing only in `seed` and comparing renders both panels.
+
+Same "several sequential trigger-then-poll stages against one live
+window" shape `test_open_run_screen.py`'s own real-run test already
+uses, for the identical reason.
+
+<a id="gui.test_compare_screen.test_comparing_runs_with_identical_configs_shows_no_differences"></a>
+
+#### test\_comparing\_runs\_with\_identical\_configs\_shows\_no\_differences
+
+```python
+def test_comparing_runs_with_identical_configs_shows_no_differences(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Two identically-configured runs report no differing field in the legend.
 
 <a id="gui.test_config_form"></a>
 

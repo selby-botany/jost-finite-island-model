@@ -1197,6 +1197,79 @@ def test_open_run_reports_a_missing_trajectory_without_raising(tmp_path: Path) -
     assert "message" in result
 
 
+def test_compare_runs_rejects_fewer_than_two_paths() -> None:
+    """A single run has nothing to overlay against."""
+    assert Api().compare_runs(["only-one.jsonl"]) == {
+        "ok": False,
+        "message": "select at least two runs to compare",
+    }
+
+
+def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
+    tmp_path: Path,
+) -> None:
+    """Two runs differing only in `seed` are overlaid, with `seed` the sole diff."""
+    (tmp_path / "first").mkdir()
+    (tmp_path / "second").mkdir()
+    first = _write_run(tmp_path / "first", seed=1)
+    second = _write_run(tmp_path / "second", seed=2)
+
+    result = Api().compare_runs(
+        [
+            str(first / "trajectory.jsonl"),
+            str(second / "trajectory.jsonl"),
+        ]
+    )
+
+    assert result["ok"] is True
+    assert len(result["runs"]) == 2
+    assert result["differingFields"] == ["seed"]
+    for run in result["runs"]:
+        assert isinstance(run["panel"], dict)
+        assert set(run["statistics"]) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
+        assert run["configSummary"]["N"] == "20"
+        assert run["configSummary"]["m"] == "0.1"
+    assert {run["configSummary"]["seed"] for run in result["runs"]} == {"1", "2"}
+
+
+def test_compare_runs_names_no_differing_field_for_identical_configs(
+    tmp_path: Path,
+) -> None:
+    """Two runs with the same configuration (different output dirs) report no diff."""
+    (tmp_path / "first").mkdir()
+    (tmp_path / "second").mkdir()
+    first = _write_run(tmp_path / "first")
+    second = _write_run(tmp_path / "second")
+
+    result = Api().compare_runs(
+        [
+            str(first / "trajectory.jsonl"),
+            str(second / "trajectory.jsonl"),
+        ]
+    )
+
+    assert result["ok"] is True
+    assert result["differingFields"] == []
+
+
+def test_compare_runs_reports_a_missing_trajectory_without_raising(
+    tmp_path: Path,
+) -> None:
+    """One unreadable path fails the whole comparison, matching `open_run`'s shape."""
+    (tmp_path / "first").mkdir()
+    first = _write_run(tmp_path / "first")
+
+    result = Api().compare_runs(
+        [
+            str(first / "trajectory.jsonl"),
+            str(tmp_path / "never-written" / "trajectory.jsonl"),
+        ]
+    )
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
 def test_get_animation_frames_ships_client_ready_panels(tmp_path: Path) -> None:
     """Every sampled frame's points already arrive as `scatter_panels`-shaped panels."""
     output = _write_run(tmp_path)
@@ -1465,6 +1538,7 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         "Open run…",
         "Reveal output folder",
         "Explore predictions…",
+        "Compare runs…",
         "Quit fim",
     ]
     configure_items = [item.title for item in menus[1].items if hasattr(item, "title")]

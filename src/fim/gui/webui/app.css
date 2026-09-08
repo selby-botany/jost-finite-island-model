@@ -788,3 +788,36 @@ fieldset.composite > label {
     width: min(100%, 480px);
     aspect-ratio: 4 / 3;
 }
+
+/* Compare workspace small multiples (`compare.js`'s own `renderCompare
+ * Panels`): one fixed-size scatter panel per compared run, wrapping to
+ * a new row once the container's own width runs out -- no window-
+ * resize tracking for these (`drawComparePanel`'s own docstring has
+ * why), so a fixed pixel size, not `#explore-canvas`'s own
+ * percentage-of-container width, keeps every panel's own drawing-
+ * buffer resolution matching its CSS size exactly.
+ */
+.compare-panels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.compare-panel {
+    width: 260px;
+}
+
+.compare-panel h3 {
+    margin: 0 0 0.25rem;
+    font-size: 0.9rem;
+}
+
+.compare-panel canvas {
+    display: block;
+    width: 260px;
+    height: 260px;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    background: var(--fim-background);
+}

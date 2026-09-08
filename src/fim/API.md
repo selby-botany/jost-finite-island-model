@@ -103,6 +103,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [list\_recent\_runs](#fim.gui.app.Api.list_recent_runs)
     * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
+    * [compare\_runs](#fim.gui.app.Api.compare_runs)
     * [get\_animation\_frames](#fim.gui.app.Api.get_animation_frames)
     * [get\_animation\_deme\_pair\_frames](#fim.gui.app.Api.get_animation_deme_pair_frames)
     * [get\_deme\_pair\_panel](#fim.gui.app.Api.get_deme_pair_panel)
@@ -3532,6 +3533,54 @@ reuse, not a second rendering path.
   trajectory-integrity failure, an edited file, or a
   generation that does not exist) — `message` is shown
   verbatim, matching `fim stats`'s own wording.
+
+<a id="fim.gui.app.Api.compare_runs"></a>
+
+#### compare\_runs
+
+```python
+@_log_bridge_call
+def compare_runs(trajectory_paths: list[str]) -> dict[str, Any]
+```
+
+Overlay two or more previously completed runs (design doc §8).
+
+This first slice covers the small-multiples scatter half of the
+Compare workspace — one final-state deme-1-vs-2 panel per run,
+plus a legend naming which configuration field(s) actually
+differ across the selection — reusing `reanalyze_trajectory`/
+`scatter_panels` exactly as `open_run` already does, one call
+per selected run; "no new engine computation" (design doc's
+own resolution-ledger entry for this workspace) since every
+number here is already what a plain "open a run" already
+computes. The trajectory-over-generations overlay the design
+doc also describes is not yet built: no such curve exists
+anywhere in this GUI today (only a final-state scatter and
+point-in-time statistic meters), so overlaying it is deferred
+to its own, separate slice rather than folded in here.
+
+**Arguments**:
+
+- `trajectory_paths` - Two or more `trajectory.jsonl` paths,
+  typically `webui/screens/compare.js`'s own checked
+  rows from the recent-runs list.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "runs": [{"runId", "trajectoryPath", "panel",
+  "statistics", "configSummary"}, ...], "differingFields":
+  [...]}` — `differingFields` names every `_run_config_
+  summary` key whose value is not identical across every
+  run, in that function's own fixed key order, so the page
+  can render exactly those rows highlighted without
+  recomputing the comparison itself. `{"ok": False,
+- `"message"` - ...}` if fewer than two paths were given, or any
+  one trajectory/manifest cannot be read — the whole compare
+  fails together rather than silently dropping the
+  unreadable run, since a comparison missing a run the user
+  explicitly picked would be misleading, not merely
+  incomplete.
 
 <a id="fim.gui.app.Api.get_animation_frames"></a>
 

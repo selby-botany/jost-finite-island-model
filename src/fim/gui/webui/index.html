@@ -343,6 +343,45 @@
     </div>
   </section>
 
+  <!-- Compare (botanist GUI design doc `20260907-claude-sonnet-5-
+       botanist-gui-redesign.md` §8): pick two or more previously
+       completed runs from the recent-runs list, overlay their final-
+       state scatter panels as small multiples, and name whichever
+       configuration field(s) actually differ across them -- "how does
+       the conclusion change as I vary this one knob," on real
+       simulated runs, without re-running anything (`webui/screens/
+       compare.js`'s own module docstring has the full mechanism, and
+       the current scope: the trajectory-over-generations overlay
+       this section of the design doc also describes has no underlying
+       curve anywhere in this GUI yet, so it is not part of this first
+       slice). Reachable from any screen (File menu,
+       `fim.menu.compareRuns`), returning to whichever screen was
+       showing before it, the same "Back" contract `screen-explore`
+       already established. -->
+  <section id="screen-compare" class="screen" hidden>
+    <div id="compare-banner" class="banner" hidden></div>
+    <p>Select two or more runs to compare (results/*/manifest.json):</p>
+    <table class="open-run-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Run</th>
+          <th>Ended</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody id="compare-recent-runs-body"></tbody>
+    </table>
+    <div class="actions">
+      <button type="button" id="compare-back-button">Back</button>
+      <button type="button" id="compare-run-button" disabled>Compare ▶</button>
+    </div>
+    <div id="compare-results" hidden>
+      <table class="stats-table" id="compare-legend"></table>
+      <div id="compare-panels" class="compare-panels"></div>
+    </div>
+  </section>
+
   <!-- Configure modals (unified-run-view design §3.1): live outside
        every .screen section on purpose, confirmed live rather than
        assumed -- a <dialog> nested inside a `hidden` ancestor still
@@ -706,6 +745,7 @@
 <script src="screens/open-run.js"></script>
 <script src="screens/help.js"></script>
 <script src="screens/explore.js"></script>
+<script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
 </body>
 </html>

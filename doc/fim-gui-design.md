@@ -164,6 +164,7 @@ as a structured `{"error": ...}` payload the page renders).
 | `get_live_deme_pair` / `set_live_deme_pair` | The deme-pair selector for a `d > 3` scatter (matching `fim.viz.scatter`'s own large-`d` fallback). |
 | `list_recent_runs` | Screen 6's/File-menu's recent-runs list (§9). |
 | `browse_for_trajectory` / `open_run` | Open an arbitrary persisted run by file dialog. |
+| `compare_runs` | The Compare workspace: overlay two or more completed runs' own final-state scatter panels, naming which configuration field(s) differ (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §8). |
 | `get_animation_frames` / `get_animation_deme_pair_frames` | Sampled scatter coordinates for the scrubber (§8). |
 | `get_deme_pair_panel` / `get_batch_deme_pair_panel` | Re-render a completed run's scatter at a different deme pair. |
 | `ping` / `ping_from_worker` | The walking-skeleton round-trip proof, in-process and cross-process. |
@@ -372,7 +373,8 @@ trajectory of its own to verify or re-analyze.
 Five native menus, built once in `fim.gui.app._build_menu` and stable
 across the whole window's lifetime:
 
-- **File** — New/Open/Save configuration, Open run…, Quit.
+- **File** — New/Open/Save configuration, Load example…, Open run…,
+  Reveal output folder, Explore predictions…, Compare runs…, Quit.
 - **Configure** — the modals and value-selectors the unified run view's
   `initial`/`running` states use to change model-input values without
   leaving the current run's own view.

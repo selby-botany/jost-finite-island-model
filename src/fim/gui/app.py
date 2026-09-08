@@ -70,6 +70,8 @@ from fim.gui.config_form import (
     CONVERGENCE_STATISTIC_NAMES,
     field_for_error,
     form_values_to_payload,
+    m_from_params,
+    mu_from_params,
     params_to_form_values,
     payload_to_yaml_text,
     starter_form_values,
@@ -259,6 +261,12 @@ def format_statistic(
 # rather than showing on every run regardless of how small the effect is.
 _EFFECTIVE_ALLELE_CAUTION_THRESHOLD: Final = 0.7
 
+# The Compare workspace's own minimum selection (design doc §8: "pick
+# two or more previously completed runs") -- a single run has nothing
+# to overlay against, so `compare_runs` rejects it outright rather than
+# rendering a one-run "comparison" with an empty legend.
+_COMPARE_MINIMUM_RUNS: Final = 2
+
 
 def _effective_allele_summary(
     report: Mapping[str, Any], digits: int
@@ -293,6 +301,61 @@ def _effective_allele_summary(
         "H_T": format_statistic(total, digits),
         "gStCaution": cast("float", report["H_S"])
         > _EFFECTIVE_ALLELE_CAUTION_THRESHOLD,
+    }
+
+
+def _run_config_summary(params: SimulationParams) -> dict[str, str]:
+    """Summarize one run's configuration into a fixed set of commonly-swept fields.
+
+    The Compare workspace's own "for runs that differ in exactly one
+    field... the legend highlights that one field's differing value"
+    (design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §8)
+    needs a *comparable* representation, not the full configuration —
+    reusing `m_from_params`/`mu_from_params` rather than a second,
+    bespoke summarizer keeps this in lockstep with the Configure form's
+    own notion of "the same value" (a scalar `m` and a `d`-by-`d`
+    matrix that happens to encode that same scalar are still different
+    configurations, and are reported as such — no equivalence-checking
+    beyond string equality is attempted).
+
+    Args:
+        params: A validated configuration, typically `ReanalyzedGeneration.
+            params` from `reanalyze_trajectory`.
+
+    Returns:
+        `{"N", "d", "seed", "m", "mu", "mutation_model"}` — every value
+        a short, human-readable string. `m`/`mu` collapse their own
+        composite modes to one representative string each (a scalar
+        rate, a `"<topology> @ <rate>"` pair, `"matrix"`, or
+        `"mu_b=<rate>"`) rather than every sub-field, so a `d`-by-`d`
+        matrix or a `mu_b`-derived rate compares as a single field like
+        every other, not several.
+    """
+    n_text = (
+        str(params.N)
+        if isinstance(params.N, int)
+        else ",".join(str(value) for value in params.N)
+    )
+    m_values = m_from_params(params)
+    if m_values["m_mode"] == "scalar":
+        m_text = m_values["m_rate"]
+    elif m_values["m_mode"] == "topology":
+        m_text = f"{m_values['m_topology']} @ {m_values['m_topology_rate']}"
+    else:
+        m_text = "matrix"
+    mu_values = mu_from_params(params)
+    mu_text = (
+        mu_values["mu_value"]
+        if mu_values["mu_mode"] == "mu"
+        else f"mu_b={mu_values['mu_b_value']}"
+    )
+    return {
+        "N": n_text,
+        "d": str(params.d),
+        "seed": str(params.seed),
+        "m": m_text,
+        "mu": mu_text,
+        "mutation_model": params.mutation_model,
     }
 
 
@@ -1517,6 +1580,78 @@ class Api:
         }
 
     @_log_bridge_call
+    def compare_runs(self, trajectory_paths: list[str]) -> dict[str, Any]:
+        """Overlay two or more previously completed runs (design doc §8).
+
+        This first slice covers the small-multiples scatter half of the
+        Compare workspace — one final-state deme-1-vs-2 panel per run,
+        plus a legend naming which configuration field(s) actually
+        differ across the selection — reusing `reanalyze_trajectory`/
+        `scatter_panels` exactly as `open_run` already does, one call
+        per selected run; "no new engine computation" (design doc's
+        own resolution-ledger entry for this workspace) since every
+        number here is already what a plain "open a run" already
+        computes. The trajectory-over-generations overlay the design
+        doc also describes is not yet built: no such curve exists
+        anywhere in this GUI today (only a final-state scatter and
+        point-in-time statistic meters), so overlaying it is deferred
+        to its own, separate slice rather than folded in here.
+
+        Args:
+            trajectory_paths: Two or more `trajectory.jsonl` paths,
+                typically `webui/screens/compare.js`'s own checked
+                rows from the recent-runs list.
+
+        Returns:
+            `{"ok": True, "runs": [{"runId", "trajectoryPath", "panel",
+            "statistics", "configSummary"}, ...], "differingFields":
+            [...]}` — `differingFields` names every `_run_config_
+            summary` key whose value is not identical across every
+            run, in that function's own fixed key order, so the page
+            can render exactly those rows highlighted without
+            recomputing the comparison itself. `{"ok": False,
+            "message": ...}` if fewer than two paths were given, or any
+            one trajectory/manifest cannot be read — the whole compare
+            fails together rather than silently dropping the
+            unreadable run, since a comparison missing a run the user
+            explicitly picked would be misleading, not merely
+            incomplete.
+        """
+        if len(trajectory_paths) < _COMPARE_MINIMUM_RUNS:
+            return {"ok": False, "message": "select at least two runs to compare"}
+        runs: list[dict[str, Any]] = []
+        summaries: list[dict[str, str]] = []
+        for path_text in trajectory_paths:
+            try:
+                reanalyzed = reanalyze_trajectory(Path(path_text))
+            except (OSError, ValueError) as error:
+                return {"ok": False, "message": f"{path_text}: {error}"}
+            summary = _run_config_summary(reanalyzed.params)
+            summaries.append(summary)
+            report = reanalyzed.report
+            runs.append(
+                {
+                    "runId": reanalyzed.manifest.run_id,
+                    "trajectoryPath": path_text,
+                    "panel": scatter_panels(reanalyzed.state)[0],
+                    "statistics": {
+                        name: format_statistic(
+                            cast("float | None", report[name]),
+                            self._significant_digits,
+                        )
+                        for name in _RESULT_STATISTIC_NAMES
+                    },
+                    "configSummary": summary,
+                }
+            )
+        differing_fields = [
+            key
+            for key in summaries[0]
+            if len({summary[key] for summary in summaries}) > 1
+        ]
+        return {"ok": True, "runs": runs, "differingFields": differing_fields}
+
+    @_log_bridge_call
     def get_animation_frames(self, output_directory: str) -> dict[str, Any]:
         """Sample and ship every animation frame for one run, in a single call.
 
@@ -2504,6 +2639,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             ),
             MenuSeparator(),
             MenuAction("Explore predictions…", dispatch("fim.menu.explore()")),
+            MenuAction("Compare runs…", dispatch("fim.menu.compareRuns()")),
             MenuSeparator(),
             MenuAction("Quit fim", window.destroy),
         ],
