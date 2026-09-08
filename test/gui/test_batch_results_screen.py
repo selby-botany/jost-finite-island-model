@@ -143,7 +143,9 @@ def test_a_completed_batch_renders_the_run_view() -> None:
                     "secondRowCells: Array.from("
                     "document.getElementById('batch-results-table-body')"
                     ".children[1].children"
-                    ").map((cell) => cell.textContent)"
+                    ").map((cell) => cell.textContent), "
+                    "trajectoryFrameHidden: "
+                    "document.getElementById('run-trajectory-frame').hidden"
                     "})"
                 )
             outcome.put(settled)
@@ -174,6 +176,11 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     # reader did not already know.
     second_row = settled["secondRowCells"]
     assert second_row[2] == "Converged"
+    # A batch's own `completed` view is a pooled final-state scatter
+    # across replicates (`run-view-completed.js`'s own module docstring)
+    # -- no one trajectory of its own to plot (botanist GUI design doc
+    # §6.2's own trajectory panel is scalar-run-only, this slice).
+    assert settled["trajectoryFrameHidden"] is True
 
 
 def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:

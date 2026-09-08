@@ -116,6 +116,23 @@
           <canvas id="run-canvas"></canvas>
         </div>
 
+        <!-- Scalar `completed`-only (botanist GUI design doc
+             `20260907-claude-sonnet-5-botanist-gui-redesign.md` §6.2):
+             the statistic-vs-generation trajectory, side by side with
+             the scatter panel above -- "how it got here," not just
+             "what it looks like now." First slice only: the currently-
+             watched statistic(s) (`Api.start_run`'s own live `RunResult.
+             convergence_generations`/`convergence_histories`, already
+             computed, never before sent to this page at all) for a
+             just-completed live run; `Api.open_run`'s own payload
+             carries neither field yet, so this frame stays hidden for
+             a re-analyzed run (`run-view-completed.js`'s own
+             `renderTrajectory`). -->
+        <div id="run-trajectory-frame" class="run-trajectory-frame" hidden>
+          <canvas id="run-trajectory-canvas"></canvas>
+          <div id="run-trajectory-legend" class="run-trajectory-legend"></div>
+        </div>
+
         <!-- `initial`-only: p_0 statistics shown before any run starts
              (Phase F: `run-view-initial.js` populates these via
              `Api.get_initial_state_panels`). Same meter slots as

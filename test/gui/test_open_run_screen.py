@@ -168,7 +168,9 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
                     "({"
                     "runViewState: window.fim.getRunViewState(), "
                     "runId: "
-                    "document.getElementById('results-run-id').textContent"
+                    "document.getElementById('results-run-id').textContent, "
+                    "trajectoryFrameHidden: "
+                    "document.getElementById('run-trajectory-frame').hidden"
                     "})",
                     lambda value: (
                         value is not None and value.get("runViewState") == "completed"
@@ -185,6 +187,12 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     assert settled["runViewState"] == "completed"
     assert settled["runId"].startswith("run-")
     assert output.exists()
+    # `Api.open_run`'s own payload carries neither `convergenceGenerations`
+    # nor `convergenceHistories` (no live monitor to have recorded a
+    # history from a re-analyzed run) — botanist GUI design doc §6.2's
+    # trajectory panel is a live-run-only first slice, a named scope
+    # boundary, not an oversight.
+    assert settled["trajectoryFrameHidden"] is True
 
 
 def test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve(

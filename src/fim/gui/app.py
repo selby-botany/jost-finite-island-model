@@ -2047,6 +2047,18 @@ def _drain_run_messages(
                 "outputDirectory": str(output_directory),
                 "generationCount": result.manifest.generation_count,
                 "demeCount": deme_count,
+                # The trajectory panel (botanist GUI design doc
+                # `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+                # §6.2) — `RunResult` already computes both, for free,
+                # as a byproduct of the run's own `ConvergenceMonitor`;
+                # never sent to this page before this. `Api.open_run`'s
+                # own payload carries neither key at all (a re-analyzed
+                # run has no live monitor to have recorded a history
+                # from), which is exactly how `run-view-completed.js`'s
+                # own `renderTrajectory` already knows to hide the panel
+                # rather than needing an explicit "not available" flag.
+                "convergenceGenerations": result.convergence_generations,
+                "convergenceHistories": result.convergence_histories,
             }
             logger.info("run done: %s", output_directory)
             window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")

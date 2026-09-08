@@ -38,6 +38,20 @@
 
 const STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"];
 
+// A fixed, colorblind-safe qualitative palette (Okabe-Ito), one color
+// per named statistic — botanist GUI design doc §11.3's own "disciplined
+// statistic color language" is not otherwise built yet; this is a
+// narrow, self-contained first use of the same idea, scoped to this one
+// legend/curve rather than a page-wide system.
+const STATISTIC_TRAJECTORY_COLORS = {
+    D: "#0072b2",
+    G_ST: "#d55e00",
+    E_ST: "#009e73",
+    K_ST: "#cc79a7",
+    H_S: "#e69f00",
+    H_T: "#56b4e9",
+};
+
 // See `wireCompletedScrubber`'s own comment: counts its own in-flight
 // `get_animation_frames` calls. Zero means settled.
 window.__fimScrubberPending = 0;
@@ -45,6 +59,9 @@ window.__fimScrubberPending = 0;
 const resultsRunId = document.getElementById("results-run-id");
 const resultsOutcome = document.getElementById("results-outcome");
 const resultsStats = document.getElementById("results-stats");
+const runTrajectoryFrame = document.getElementById("run-trajectory-frame");
+const runTrajectoryCanvas = document.getElementById("run-trajectory-canvas");
+const runTrajectoryLegend = document.getElementById("run-trajectory-legend");
 const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
 const resultsDifferentiationQCanvas = document.getElementById(
     "results-differentiation-q-canvas"
@@ -192,6 +209,149 @@ function drawDifferentiationQCurve(canvas, points) {
         context.fill();
     });
     context.stroke();
+}
+
+/**
+ * Draw one or more named statistic-vs-generation curves on shared axes
+ * (botanist GUI design doc §6.2's own "how it got here" trajectory
+ * panel) — deliberately not a generalized version of `drawDifferentiation
+ * QCurve` just below (a single, always-[0,1] curve against a `q`-order
+ * x-axis, no per-series color/legend) — the two draw different enough
+ * data shapes that sharing one function would need more parameters than
+ * it would save code.
+ * @param {HTMLCanvasElement} canvas
+ * @param {number[]} generations
+ * @param {Object<string, number[]>} histories one array per statistic,
+ *     each already the same length as `generations` (`renderTrajectory`,
+ *     below, filters out any that is not before this ever runs).
+ */
+function drawTrajectoryCurve(canvas, generations, histories) {
+    const context = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    context.clearRect(0, 0, width, height);
+    if (generations.length === 0) {
+        return;
+    }
+
+    const plotLeft = 42;
+    const plotRight = width - 12;
+    const plotTop = 12;
+    const plotBottom = height - 22;
+
+    const minGeneration = generations[0];
+    const maxGeneration = generations[generations.length - 1];
+    const allValues = Object.values(histories).flat();
+    // The domain always includes [0, 1] even if every plotted value
+    // happens to sit inside it already — every named statistic's own
+    // natural range starts there, so a run that never leaves, say,
+    // [0.1, 0.3] still reads against the same fixed floor/ceiling a
+    // reader of any other statistic meter on this page already expects,
+    // rather than an auto-scaled domain that would make a small,
+    // ordinary wobble look dramatic.
+    const minValue = Math.min(0, ...allValues);
+    const maxValue = Math.max(1, ...allValues);
+
+    function xToPixel(generation) {
+        const fraction =
+            maxGeneration === minGeneration
+                ? 0
+                : (generation - minGeneration) / (maxGeneration - minGeneration);
+        return plotLeft + fraction * (plotRight - plotLeft);
+    }
+    function yToPixel(value) {
+        const fraction =
+            maxValue === minValue ? 0 : (value - minValue) / (maxValue - minValue);
+        return plotBottom - fraction * (plotBottom - plotTop);
+    }
+
+    const style = getComputedStyle(document.documentElement);
+    const borderColor = style.getPropertyValue("--fim-border").trim();
+    const mutedColor = style.getPropertyValue("--fim-muted").trim();
+
+    context.strokeStyle = borderColor;
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(plotLeft, plotTop);
+    context.lineTo(plotLeft, plotBottom);
+    context.lineTo(plotRight, plotBottom);
+    context.stroke();
+
+    context.fillStyle = mutedColor;
+    context.font = "10px sans-serif";
+    context.textAlign = "right";
+    context.textBaseline = "middle";
+    context.fillText(maxValue.toFixed(2), plotLeft - 6, plotTop);
+    context.fillText(minValue.toFixed(2), plotLeft - 6, plotBottom);
+    context.textBaseline = "top";
+    context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + 4);
+    context.textAlign = "left";
+    context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + 4);
+
+    for (const [name, values] of Object.entries(histories)) {
+        context.strokeStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
+        context.lineWidth = 2;
+        context.beginPath();
+        values.forEach((value, index) => {
+            const x = xToPixel(generations[index]);
+            const y = yToPixel(value);
+            if (index === 0) {
+                context.moveTo(x, y);
+            } else {
+                context.lineTo(x, y);
+            }
+        });
+        context.stroke();
+    }
+}
+
+/**
+ * Show (or hide) the trajectory panel for the just-completed run.
+ *
+ * First slice only (botanist GUI design doc §6.2): a live scalar run's
+ * own already-computed `RunResult.convergence_generations`/
+ * `convergence_histories` (`_drain_run_messages`'s own `"done"` push),
+ * never live-updated during `running` and never available at all for a
+ * re-analyzed run (`Api.open_run`'s own payload carries neither field
+ * yet) — both real, named scope boundaries this slice leaves for a
+ * follow-on, not oversights.
+ * @param {number[]|undefined} generations
+ * @param {Object<string, number[]>|undefined} histories
+ */
+function renderTrajectory(generations, histories) {
+    if (!generations || !histories || generations.length === 0) {
+        runTrajectoryFrame.hidden = true;
+        runTrajectoryLegend.replaceChildren();
+        return;
+    }
+    runTrajectoryFrame.hidden = false;
+    const canvas = runTrajectoryCanvas;
+    canvas.width = canvas.clientWidth || canvas.width;
+    canvas.height = canvas.clientHeight || canvas.height;
+    // A statistic whose own history is shorter than `generations` went
+    // undefined on at least one recorded tick (only `G_ST` can, at a
+    // currently-monomorphic locus — `_convergence_values`'s own
+    // docstring) — skipped here rather than drawn with its own values
+    // misaligned against the wrong generation numbers; a future slice
+    // can thread each statistic's own generation list through
+    // separately to lift this.
+    const plottable = Object.fromEntries(
+        Object.entries(histories).filter(
+            ([, values]) => values.length === generations.length
+        )
+    );
+    drawTrajectoryCurve(canvas, generations, plottable);
+    runTrajectoryLegend.replaceChildren();
+    for (const name of Object.keys(plottable)) {
+        const item = document.createElement("span");
+        const swatch = document.createElement("span");
+        swatch.className = "swatch";
+        swatch.style.backgroundColor =
+            STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
+        item.appendChild(swatch);
+        item.appendChild(document.createTextNode(name));
+        runTrajectoryLegend.appendChild(item);
+    }
 }
 
 function renderDifferentiationQ(report) {
@@ -448,6 +608,10 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         renderBatchTable(payload.replicates, payload.p0Statistics);
         scrubberControls.hidden = true;
         window.fim.resetScrubber();
+        // A batch's own `completed` view is a pooled final-state
+        // scatter across replicates (this file's own module docstring)
+        // — no one trajectory of its own to plot either.
+        renderTrajectory(undefined, undefined);
     } else {
         const report = payload.report;
         const reason = report.reason.charAt(0).toUpperCase() + report.reason.slice(1);
@@ -459,6 +623,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         }
         renderEffectiveAlleles(payload.effectiveAlleles);
         renderDifferentiationQ(report);
+        renderTrajectory(payload.convergenceGenerations, payload.convergenceHistories);
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }
 

@@ -400,6 +400,48 @@ fieldset.composite > label {
     color: var(--fim-muted);
 }
 
+/* The trajectory frame (botanist GUI design doc §6.2) sits beside
+ * `.run-canvas-frame` in the same `.run-plot-row`, below -- narrower
+ * than the scatter frame's own 760px cap (a time-series line chart
+ * reads fine landscape-oriented at a more modest width; it does not
+ * need the scatter panel's own strict 1:1 aspect ratio). */
+.run-trajectory-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: min(100%, 480px);
+}
+
+#run-trajectory-canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    background: var(--fim-background);
+}
+
+.run-trajectory-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+}
+
+.run-trajectory-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.run-trajectory-legend .swatch {
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 2px;
+}
+
 .results-run-id {
     font-weight: 600;
 }

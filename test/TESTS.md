@@ -9162,6 +9162,25 @@ label` starts empty in the markup and is set only by `onRunProgress`,
 so it stays a direct, generation-number-independent proof a push
 landed.
 
+<a id="gui.test_running_screen.test_run_button_shows_the_trajectory_panel_for_the_watched_statistic"></a>
+
+#### test\_run\_button\_shows\_the\_trajectory\_panel\_for\_the\_watched\_statistic
+
+```python
+def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
+) -> None
+```
+
+A completed scalar run draws its own statistic-vs-generation trajectory.
+
+Botanist GUI design doc §6.2's own "how it got here" panel, first
+slice: proves the full stack (`RunResult.convergence_generations`/
+`convergence_histories` -> `_drain_run_messages`'s own `"done"`
+payload -> JSON -> `run-view-completed.js`'s own `renderTrajectory`)
+actually renders something, not only that `Api`'s own Python-level
+`RunResult` already carries the data (`test_app_api.py`'s own
+coverage of that).
+
 <a id="gui.test_running_screen.test_run_button_starts_a_real_equilibrium_split_run"></a>
 
 #### test\_run\_button\_starts\_a\_real\_equilibrium\_split\_run

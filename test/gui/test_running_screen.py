@@ -272,6 +272,72 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
     assert settled["neSText"] != ""
 
 
+def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> None:
+    """A completed scalar run draws its own statistic-vs-generation trajectory.
+
+    Botanist GUI design doc §6.2's own "how it got here" panel, first
+    slice: proves the full stack (`RunResult.convergence_generations`/
+    `convergence_histories` -> `_drain_run_messages`'s own `"done"`
+    payload -> JSON -> `run-view-completed.js`'s own `renderTrajectory`)
+    actually renders something, not only that `Api`'s own Python-level
+    `RunResult` already carries the data (`test_app_api.py`'s own
+    coverage of that).
+    """
+    started_event = threading.Event()
+    done_event = threading.Event()
+    messages: list[RunMessage | BatchMessage] = []
+
+    def on_run_started() -> None:
+        started_event.set()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        messages.append(message)
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(
+        api=Api(on_run_started=on_run_started, on_message=on_message), hidden=True
+    )
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                settled = window.evaluate_js(
+                    "({"
+                    "frameHidden: "
+                    "document.getElementById('run-trajectory-frame').hidden, "
+                    "canvasWidth: "
+                    "document.getElementById('run-trajectory-canvas').width, "
+                    "legendText: "
+                    "document.getElementById('run-trajectory-legend').textContent"
+                    "})"
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, (
+        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
+        f"(start_run called: {started_event.is_set()}, "
+        f"messages received: {messages!r})"
+    )
+    assert settled["frameHidden"] is False
+    assert settled["canvasWidth"] > 0
+    # The starter form's own default `convergence_statistic` is `D`
+    # alone (`config_form.starter_form_values`) — `_SET_TINY_FIELDS`
+    # never overrides it, so exactly one name is expected here.
+    assert settled["legendText"] == "D"
+
+
 # Selects the "equilibrium split" radio (`config-modals.js`'s own
 # `initial_conditions_mode` selector) and fills its three fields with
 # values chosen to converge almost immediately — a loose tolerance
