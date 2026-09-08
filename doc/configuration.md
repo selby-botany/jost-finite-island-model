@@ -420,6 +420,52 @@ value.
 This safety cap always ends a run. Reaching it is reported as a valid
 non-converged outcome.
 
+### sigma_band_multiplier
+
+- **Type:** `2.0` or `3.0`
+- **Default:** unset (the within-run sigma band is disabled)
+
+Once the main run genuinely converges (never after merely hitting
+max_generations), the engine continues for sigma_band_window further
+generations and reports each watched statistic (convergence_statistic)
+as mean ± (sigma_band_multiplier × sigma) over that trailing window —
+a measure of how much the statistic still wobbles, generation to
+generation, immediately after being declared stable. This is a
+different question from the cross-replicate confidence interval
+(replicate_confidence, n<sub>replicates</sub> > 1 required): that one
+asks how much the average would differ across independent replicate
+runs; this one asks about a single run's own remaining generation-to-
+generation noise. Must be set together with sigma_band_window, or not
+at all — never combined with any other field's own constraints (unlike
+the equilibrium-split fields, this measures the end of a run,
+regardless of how generation 0 was produced).
+
+```yaml
+sigma_band_multiplier: 2.0
+sigma_band_window: 100
+```
+
+When enabled, the run writes an additional
+`sigma_band_trajectory.jsonl` artifact alongside `trajectory.jsonl` —
+one JSON object per extension generation, `{"generation": ...,
+"D": ...}` (one key per watched statistic, only when that statistic
+was actually defined that generation) — and records the resulting
+band in `manifest.json`'s own `sigma_band_multiplier`/
+`sigma_band_window`/`sigma_band` fields. A run that requested the band
+but only ever hit max_generations produces neither the artifact nor
+the manifest fields — an unconverged tail is never extended.
+
+### sigma_band_window
+
+- **Type:** integer at least 2
+- **Default:** unset (the within-run sigma band is disabled)
+
+The extension's own trailing-window length, independent of
+convergence_window — the two describe different things (whether the
+run has settled, versus how much it still wobbles once settled), so
+there is no principled reason to share one number between them. See
+sigma_band_multiplier, above, for the full mechanism.
+
 ## Analysis and execution
 
 ### deme_weighting
@@ -725,3 +771,7 @@ on this page).
 | engine_backend: generational-vector without mutation_model: finite_alleles and migrant_sampling: continuous | rejected |
 | max_concurrent_replicates less than 1 | rejected |
 | max_concurrent_replicates greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
+| sigma_band_multiplier and sigma_band_window not both given, or neither | rejected |
+| sigma_band_multiplier not `2.0` or `3.0` | rejected |
+| sigma_band_window less than 2 | rejected |
+| sigma_band_multiplier/sigma_band_window with engine_backend resolving to anything but lineal | rejected |

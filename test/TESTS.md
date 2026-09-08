@@ -1549,6 +1549,21 @@ def test_run_writes_exactly_four_documented_artifacts(tmp_path: Path) -> None
 
 A real seeded run produces the complete v1 output set.
 
+<a id="cli.test_cli.test_run_with_sigma_band_writes_the_fifth_trajectory_artifact"></a>
+
+#### test\_run\_with\_sigma\_band\_writes\_the\_fifth\_trajectory\_artifact
+
+```python
+def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
+        tmp_path: Path) -> None
+```
+
+A real seeded run with the sigma band enabled writes and digests it too.
+
+`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`,
+v1 step 5 — mirrors `test_run_writes_exactly_four_documented_
+artifacts`, with the sigma band requested this time.
+
 <a id="cli.test_cli.test_run_accepts_per_deme_population_sizes"></a>
 
 #### test\_run\_accepts\_per\_deme\_population\_sizes

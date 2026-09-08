@@ -63,6 +63,7 @@ from fim.persistence.manifest import (
     write_batch_manifest,
     write_manifest,
 )
+from fim.persistence.report import write_jsonl_rows
 
 # Explicit re-export (not a rename): test/cli/test_cli.py patches
 # `cli.write_report` directly to inject a failure at a specific artifact
@@ -623,18 +624,24 @@ def _replicate_store_factory(
 
 
 def _run_artifact_targets(directory: Path) -> dict[str, Path]:
-    """Return the four documented scalar-run artifact paths in one directory.
+    """Return every documented scalar-run artifact path in one directory.
 
-    A single, shared source for these four exact filenames, used by
-    both `_command_run_scalar` (writing them) and anything checking a
+    A single, shared source for these exact filenames, used by both
+    `_command_run_scalar` (writing them) and anything checking a
     completed run's own output (reading them back) — so the two can
     never quietly disagree about where a given artifact actually lives.
+    `sigma_band_trajectory`'s own path is always returned, the same way
+    every other key is, regardless of whether a given run actually
+    produced one — this dict names *where a thing would live*, not
+    which artifacts a particular run happens to have; a caller checks
+    on-disk existence (or `manifest.artifacts` membership) for that.
     """
     return {
         "trajectory": directory / "trajectory.jsonl",
         "manifest": directory / "manifest.json",
         "report": directory / "report.json",
         "scatter": directory / "scatter.png",
+        "sigma_band_trajectory": directory / "sigma_band_trajectory.jsonl",
     }
 
 
@@ -677,12 +684,18 @@ def _write_run_artifacts(result: RunResult, directory: Path) -> dict[str, Path]:
         result.final_state, result.params, targets["scatter"]
     )
     plt.close(figure)
+    digested_names = ["trajectory", "report", "scatter"]
+    if result.sigma_band_trajectory is not None:
+        # Written — and digested — only when the within-run sigma band
+        # actually ran (`RunResult.sigma_band_trajectory`'s own
+        # docstring); a run that never requested one, or requested one
+        # but only hit the hard cap, produces no such file at all,
+        # exactly like `manifest.sigma_band` itself stays `None`.
+        write_jsonl_rows(targets["sigma_band_trajectory"], result.sigma_band_trajectory)
+        digested_names.append("sigma_band_trajectory")
     manifest = replace(
         result.manifest,
-        artifacts={
-            name: hash_file(targets[name])
-            for name in ("trajectory", "report", "scatter")
-        },
+        artifacts={name: hash_file(targets[name]) for name in digested_names},
     )
     write_manifest(targets["manifest"], manifest)
     return targets

@@ -310,6 +310,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_batch\_manifest](#fim.persistence.manifest.write_batch_manifest)
 * [fim.persistence.report](#fim.persistence.report)
   * [write\_report](#fim.persistence.report.write_report)
+  * [write\_jsonl\_rows](#fim.persistence.report.write_jsonl_rows)
 * [fim.persistence.store](#fim.persistence.store)
   * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
@@ -1367,6 +1368,18 @@ Fields:
         analyze an earlier generation) already has a handle to it,
         without needing to separately track down which store this
         particular run used.
+    sigma_band_trajectory: The within-run sigma band's own raw
+        per-generation values (`20260907-claude-sonnet-5-within-run-
+        sigma-band-backend-design.md` decision 4), one row per
+        extension generation — `{"generation": int, "<statistic
+        name>": float, ...}`, only the watched statistics that were
+        actually defined that generation present in a given row.
+        `None` whenever the sigma band was not requested, or was
+        requested but the run only ever hit the hard cap (`manifest.
+        sigma_band` is `None` under the identical two conditions).
+        A caller that persists this run's own files (`fim.cli.
+        _write_run_artifacts`) writes this as the `sigma_band_
+        trajectory.jsonl` sibling artifact when present.
 
 <a id="fim.engine.EngineBackend"></a>
 
@@ -9691,6 +9704,14 @@ batch's `summary.json` (`fim.engine.replicate_summary`'s across-replicate
 confidence intervals) — every caller needing byte-identical, sorted-key,
 newline-terminated JSON, not just report.json specifically.
 
+`write_jsonl_rows`, below, is the same determinism guarantee applied to
+a *sequence* of small JSON objects, one per line, rather than one large
+object — `sigma_band_trajectory.jsonl`'s own per-generation rows
+(`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
+decision 4), and any future artifact shaped the same way, share this one
+writer rather than each hand-rolling its own line-by-line `json.dumps`
+loop.
+
 <a id="fim.persistence.report.write_report"></a>
 
 #### write\_report
@@ -9720,6 +9741,30 @@ somewhere else.
 
 - `path` - Destination file path. Parent directories are created.
 - `value` - JSON-serializable mapping.
+
+<a id="fim.persistence.report.write_jsonl_rows"></a>
+
+#### write\_jsonl\_rows
+
+```python
+def write_jsonl_rows(path: Path | str,
+                     rows: Iterable[Mapping[str, object]]) -> None
+```
+
+Write a sequence of small JSON objects as one deterministic JSON Lines artifact.
+
+One compact JSON object per line (`fim.persistence.jsonl_store.
+JSONLTrajectoryStore.write_generation`'s own `sort_keys=True,
+separators=(",", ":")` convention, applied here to an artifact
+written once, all at once, rather than appended generation by
+generation) — the exact same bytes for the exact same `rows`, for
+the identical "a plain `diff` shows a real change, never a
+formatting difference" reason `write_report` documents.
+
+**Arguments**:
+
+- `path` - Destination file path. Parent directories are created.
+- `rows` - JSON-serializable mappings, one per line, in order.
 
 <a id="fim.persistence.store"></a>
 

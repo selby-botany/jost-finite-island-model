@@ -305,6 +305,18 @@ class RunResult:
             analyze an earlier generation) already has a handle to it,
             without needing to separately track down which store this
             particular run used.
+        sigma_band_trajectory: The within-run sigma band's own raw
+            per-generation values (`20260907-claude-sonnet-5-within-run-
+            sigma-band-backend-design.md` decision 4), one row per
+            extension generation — `{"generation": int, "<statistic
+            name>": float, ...}`, only the watched statistics that were
+            actually defined that generation present in a given row.
+            `None` whenever the sigma band was not requested, or was
+            requested but the run only ever hit the hard cap (`manifest.
+            sigma_band` is `None` under the identical two conditions).
+            A caller that persists this run's own files (`fim.cli.
+            _write_run_artifacts`) writes this as the `sigma_band_
+            trajectory.jsonl` sibling artifact when present.
     """
 
     run_id: str
@@ -316,6 +328,7 @@ class RunResult:
     convergence_histories: Mapping[str, tuple[float, ...]]
     manifest: RunManifest
     store: TrajectoryStore
+    sigma_band_trajectory: tuple[dict[str, object], ...] | None = None
 
 
 SimulationOutput: TypeAlias = RunResult | tuple[RunResult, ...]
@@ -2864,6 +2877,7 @@ def _run_one(
     # id) — no new seeded stream, unlike the equilibrium-split ancestral
     # phase's own decorrelated one.
     sigma_band: dict[str, dict[str, float]] | None = None
+    sigma_band_trajectory: tuple[dict[str, object], ...] | None = None
     if (
         params.sigma_band_multiplier is not None
         and params.sigma_band_window is not None
@@ -2872,14 +2886,18 @@ def _run_one(
         band_values: dict[str, list[float]] = {
             name: [] for name in params.convergence_statistics
         }
+        band_rows: list[dict[str, object]] = []
         extension_state = state
         for _ in range(params.sigma_band_window):
             extension_state = step(
                 extension_state, params, registry, rng, finite_alleles=finite_alleles
             )
-            for name, value in _convergence_values(extension_state, params).items():
+            values = _convergence_values(extension_state, params)
+            for name, value in values.items():
                 band_values[name].append(value)
+            band_rows.append({"generation": extension_state.generation, **values})
         sigma_band = _sigma_band_summary(band_values, params.sigma_band_multiplier)
+        sigma_band_trajectory = tuple(band_rows)
     ended_at = _format_timestamp(clock())
     logger.info(
         "replicate %s finished: %s at generation %d (converged=%s)",
@@ -2940,6 +2958,7 @@ def _run_one(
         convergence_histories=monitor.histories,
         manifest=manifest,
         store=store,
+        sigma_band_trajectory=sigma_band_trajectory,
     )
 
 

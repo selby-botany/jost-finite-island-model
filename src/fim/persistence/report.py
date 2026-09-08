@@ -15,13 +15,21 @@ writer for both `report.json` (a `fim.engine.FinalReport`, plus the CLI's
 batch's `summary.json` (`fim.engine.replicate_summary`'s across-replicate
 confidence intervals) — every caller needing byte-identical, sorted-key,
 newline-terminated JSON, not just report.json specifically.
+
+`write_jsonl_rows`, below, is the same determinism guarantee applied to
+a *sequence* of small JSON objects, one per line, rather than one large
+object — `sigma_band_trajectory.jsonl`'s own per-generation rows
+(`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`
+decision 4), and any future artifact shaped the same way, share this one
+writer rather than each hand-rolling its own line-by-line `json.dumps`
+loop.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -55,3 +63,31 @@ def write_report(path: Path | str, value: Mapping[str, object]) -> None:
         json.dump(dict(value), handle, indent=2, sort_keys=True, allow_nan=False)
         handle.write("\n")
     logger.debug("wrote report: %s", report_path)
+
+
+def write_jsonl_rows(path: Path | str, rows: Iterable[Mapping[str, object]]) -> None:
+    """Write a sequence of small JSON objects as one deterministic JSON Lines artifact.
+
+    One compact JSON object per line (`fim.persistence.jsonl_store.
+    JSONLTrajectoryStore.write_generation`'s own `sort_keys=True,
+    separators=(",", ":")` convention, applied here to an artifact
+    written once, all at once, rather than appended generation by
+    generation) — the exact same bytes for the exact same `rows`, for
+    the identical "a plain `diff` shows a real change, never a
+    formatting difference" reason `write_report` documents.
+
+    Args:
+        path: Destination file path. Parent directories are created.
+        rows: JSON-serializable mappings, one per line, in order.
+    """
+    jsonl_path = Path(path)
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    with jsonl_path.open("w", encoding="utf-8", newline="\n") as handle:
+        for row in rows:
+            handle.write(
+                json.dumps(
+                    dict(row), sort_keys=True, separators=(",", ":"), allow_nan=False
+                )
+            )
+            handle.write("\n")
+    logger.debug("wrote JSON Lines artifact: %s", jsonl_path)

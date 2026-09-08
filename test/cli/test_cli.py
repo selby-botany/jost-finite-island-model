@@ -77,6 +77,51 @@ def test_run_writes_exactly_four_documented_artifacts(tmp_path: Path) -> None:
     }
 
 
+def test_run_with_sigma_band_writes_the_fifth_trajectory_artifact(
+    tmp_path: Path,
+) -> None:
+    """A real seeded run with the sigma band enabled writes and digests it too.
+
+    `20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`,
+    v1 step 5 — mirrors `test_run_writes_exactly_four_documented_
+    artifacts`, with the sigma band requested this time.
+    """
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config, sigma_band_multiplier=2.0, sigma_band_window=5)
+
+    status = cli.main(["run", str(config), "--output", str(output), "--quiet"])
+
+    assert status == 0
+    assert {path.name for path in output.iterdir()} == {
+        "trajectory.jsonl",
+        "manifest.json",
+        "report.json",
+        "scatter.png",
+        "sigma_band_trajectory.jsonl",
+    }
+    rows = [
+        json.loads(line)
+        for line in (output / "sigma_band_trajectory.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(rows) == 5
+    assert {row["generation"] for row in rows} == set(
+        range(rows[0]["generation"], rows[0]["generation"] + 5)
+    )
+    assert all("D" in row for row in rows)
+
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert "sigma_band_trajectory" in manifest["artifacts"]
+    assert manifest["sigma_band_multiplier"] == 2.0
+    assert manifest["sigma_band_window"] == 5
+    assert "D" in manifest["sigma_band"]
+    assert manifest["artifacts"]["sigma_band_trajectory"] == hash_file(
+        output / "sigma_band_trajectory.jsonl"
+    )
+
+
 def test_run_accepts_per_deme_population_sizes(tmp_path: Path) -> None:
     """A config with a per-deme N list runs end to end through the CLI."""
     config = tmp_path / "run.yaml"
