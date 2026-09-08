@@ -502,6 +502,7 @@
       <legend>starting frequencies</legend>
       <label><input type="radio" name="initial_conditions_mode" value="dirichlet" checked form="input-form"> Dirichlet draw</label>
       <label><input type="radio" name="initial_conditions_mode" value="equilibrium_split" form="input-form"> equilibrium split</label>
+      <label><input type="radio" name="initial_conditions_mode" value="explicit_p0" form="input-form"> explicit p&#8320;</label>
       <div class="field" id="initial-conditions-dirichlet-fields">
         <label for="field-initial_allele_count">initial allele count</label>
         <input type="text" id="field-initial_allele_count" name="initial_allele_count" form="input-form">
@@ -530,8 +531,32 @@
         <label for="field-equilibrium_max_generations">max generations</label>
         <input type="text" id="field-equilibrium_max_generations" name="equilibrium_max_generations" form="input-form">
       </div>
+      <!-- The explicit p_0 grid editor (botanist GUI design doc
+           `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4): one
+           row per deme, one column per locus (`webui/screens/p0-
+           grid.js`'s own `currentLocusIds`, read from whichever loci
+           selector mode is active), each cell a compact
+           `alleleId:frequency[,alleleId:frequency...]` mapping kept in
+           sync with the hidden `p0_json` field (the one `config_form.
+           initial_conditions_to_payload`/`initial_conditions_from_
+           params` actually read/write). Rebuilt automatically whenever
+           `d` or the loci configuration changes -- there is no separate
+           "add deme"/"add locus" control here, since both counts are
+           already governed elsewhere. Replaces the earlier read-only
+           "loaded from file" summary: a loaded explicit `p_0` now
+           renders here too, real values in real editable cells, not a
+           rejected re-run. -->
+      <div class="field" id="initial-conditions-explicit-fields" hidden>
+        <p class="hint">
+          Each cell is one deme's starting allele frequencies at one
+          locus, written as <code>alleleId:frequency</code> pairs
+          (e.g. <code>0:0.6,1:0.4</code>); each cell's own frequencies
+          must sum to 1.
+        </p>
+        <div id="p0-grid" class="p0-grid"></div>
+        <input type="hidden" id="field-p0_json" name="p0_json" form="input-form">
+      </div>
     </fieldset>
-    <p class="loaded-summary" id="p0-summary" hidden></p>
     <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
   </dialog>
 
@@ -654,6 +679,7 @@
 <script src="screens/config-modals.js"></script>
 <script src="screens/migration-matrix.js"></script>
 <script src="screens/loci-grid.js"></script>
+<script src="screens/p0-grid.js"></script>
 <script src="screens/run-view-controls.js"></script>
 <script src="screens/run-view-initial.js"></script>
 <script src="screens/run-view-running.js"></script>

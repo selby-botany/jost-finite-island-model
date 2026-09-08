@@ -245,22 +245,25 @@ Six tabs, grouped the same way
 
 The cardinality rule decides what earns a live widget at all: `O(1)`
 and `O(d)`/`O(loci)`-sized fields do (a comma-separated text field
-faithfully represents either); a `d`-by-`d` migration matrix, an
-arbitrary sparse migration map, a per-locus `p_0`, a genuinely
-per-locus `mu`, or a `loci` list with custom `locus_id`s do not.
+faithfully represents either); a `d`-by-`d` migration matrix, a `loci`
+list with custom `locus_id`s, and a `d`-by-locus explicit `p_0` now do
+too, each as a real grid editor (botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4); a genuinely
+per-locus `mu` still does not.
 
 ### 6.2 Load-only badges and unrepresentable constructs
 
-A loaded configuration that actually uses one of the widget-unfriendly
-constructs above is handled one of two ways:
+`m`'s `"matrix"` mode, `loci`'s `"custom"` mode, and the initial-
+conditions selector's `"explicit_p0"` mode each replaced an earlier
+read-only "loaded from file" badge with a real, editable grid — a
+loaded configuration using any of the three now renders as real values
+in real editable cells, not a rejected re-run. The one remaining
+widget-unfriendly construct:
 
-- **`m` and `p_0`** get a read-only "loaded from file" badge: the form
-  displays the value but does not let it be edited through a widget.
-- **A genuinely per-locus `mu`, or a `loci` list with custom
-  `locus_id`s**, raise a clear `ValueError` from
+- **A genuinely per-locus `mu`** raises a clear `ValueError` from
   `params_to_form_values` instead — the same "edit the YAML file
   directly" pattern this form has always used for a construct it
-  cannot represent at all, badge or not.
+  cannot represent at all.
 
 ## 7. Run orchestration
 

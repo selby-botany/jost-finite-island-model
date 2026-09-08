@@ -20,15 +20,6 @@
 
 const form = document.getElementById("input-form");
 
-/* Composite/derived fields config_form.py's params_to_form_values
- * returns that have no directly-name-matched form input (read-only
- * summaries, shown as plain text instead). `m_matrix_json` is *not*
- * one of these -- it has a real, named `<input type="hidden">`
- * (`m-matrix-fields`'s own field), so `setFieldValue` already handles
- * it like any other field; only its own *visible* grid needs a
- * separate rebuild, wired below. */
-const SUMMARY_ONLY_KEYS = ["p0_summary"];
-
 function setFieldValue(name, value) {
     const field = form.elements.namedItem(name);
     if (field === null) {
@@ -49,21 +40,18 @@ function setFieldValue(name, value) {
 
 function applyFormValues(values) {
     for (const [key, value] of Object.entries(values)) {
-        if (SUMMARY_ONLY_KEYS.includes(key)) {
-            continue;
-        }
         setFieldValue(key, value);
     }
-    const p0Summary = document.getElementById("p0-summary");
-    p0Summary.textContent = values.p0_summary || "";
-    p0Summary.hidden = !values.p0_summary;
-    // `field-m_matrix_json`/`field-loci_json`'s own values are now set
-    // (by the loop above, like any other field), but the *visible*
-    // grids they drive are separate DOM rows `migration-matrix.js`/
-    // `loci-grid.js` each own -- rebuilding them from those values is
-    // each file's own concern, not this function's.
+    // `field-m_matrix_json`/`field-loci_json`/`field-p0_json`'s own
+    // values are now set (by the loop above, like any other field), but
+    // the *visible* grids they drive are separate DOM rows
+    // `migration-matrix.js`/`loci-grid.js`/`p0-grid.js` each own --
+    // rebuilding them from those values is each file's own concern, not
+    // this function's. `rebuildP0Grid` runs last since its own grid
+    // shape depends on the loci grid the previous call just rebuilt.
     window.fim.rebuildMigrationMatrixGrid();
     window.fim.rebuildLociGrid();
+    window.fim.rebuildP0Grid();
     syncConditionalVisibility();
 }
 
@@ -102,6 +90,8 @@ function syncConditionalVisibility() {
         initialConditionsMode !== "dirichlet";
     document.getElementById("initial-conditions-equilibrium-fields").hidden =
         initialConditionsMode !== "equilibrium_split";
+    document.getElementById("initial-conditions-explicit-fields").hidden =
+        initialConditionsMode !== "explicit_p0";
 
     const lociMode = form.elements.namedItem("loci_mode").value;
     document.getElementById("loci-lengths-fields").hidden = lociMode !== "lengths";

@@ -16,18 +16,18 @@ against a second, GUI-local copy of a rule.
 headings do. The cardinality rule (`doc/fim-gui-design.md` §6.1)
 decides what earns a live widget here at all: O(1) and O(d)/O(loci)-
 sized fields do (a comma-separated text field faithfully represents
-either); a `d`-by-`d` migration matrix now does too, edited cell by
-cell (botanist GUI design doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4,
-`m_to_payload`/`m_from_params`'s own `"matrix"` mode); a per-locus
-`p_0`, a genuinely per-locus `mu`, or a `loci` list with custom
-`locus_id`s still do not. `p_0` gets the read-only "loaded from file"
-badge treatment when a loaded configuration actually uses one;
-`mu`-per-locus and custom-ID `loci` instead raise a clear `ValueError`
-from `params_to_form_values` (the same "edit the YAML file directly"
-pattern this form has always used for a construct it cannot represent
-at all, load-only badge or not) — see `doc/fim-gui-design.md` §6.2 for
-both paths.
+either); a `d`-by-`d` migration matrix, a `loci` list with custom
+`locus_id`s, and a `d`-by-locus explicit `p_0` now do too, each edited
+cell by cell (botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4 —
+`m_to_payload`/`m_from_params`'s own `"matrix"` mode,
+`loci_to_payload`/`loci_from_params`'s own `"custom"` mode, and
+`initial_conditions_to_payload`/`initial_conditions_from_params`'s own
+`"explicit_p0"` mode, respectively); a genuinely per-locus `mu` still
+does not, and instead raises a clear `ValueError` from
+`params_to_form_values` (the same "edit the YAML file directly" pattern
+this form has always used for a construct it cannot represent at all)
+— see `doc/fim-gui-design.md` §6.2.
 """
 
 from __future__ import annotations
@@ -124,12 +124,12 @@ MIGRATION_FIELDS: Final[tuple[FormField, ...]] = (
     ),
 )
 
-# `mu`/`mu_b` (§4.0 #4), `p_0`'s read-only summary (§3.6, §4.0 #3), and
-# `loci` (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
-# redesign.md` §4.4 -- a mode selector between the simple comma-list
-# shorthand and a real per-locus grid for custom IDs, `loci_to_payload`/
-# `loci_from_params` below) are all composite, not plain `FormField`s —
-# so this tab's only plain field is `mutation_model` itself.
+# `mu`/`mu_b` (§4.0 #4) and `loci` (botanist GUI design doc
+# `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4 -- a mode
+# selector between the simple comma-list shorthand and a real per-locus
+# grid for custom IDs, `loci_to_payload`/`loci_from_params` below) are
+# both composite, not plain `FormField`s — so this tab's only plain
+# field is `mutation_model` itself.
 MUTATION_FIELDS: Final[tuple[FormField, ...]] = (
     FormField(
         "mutation_model",
@@ -212,6 +212,7 @@ _COMPOSITE_FIELD_TABS: Final[Mapping[str, str]] = {
     "equilibrium_convergence_window": "initial_conditions",
     "equilibrium_convergence_tolerance": "initial_conditions",
     "equilibrium_max_generations": "initial_conditions",
+    "p_0": "initial_conditions",
     "loci": "mutation",
     "locus": "mutation",
     "locus_lengths": "mutation",
@@ -270,6 +271,7 @@ def tab_for_error(message: str) -> str | None:
         "m",
         "convergence_statistic",
         "equilibrium",
+        "p_0",
         "loci",
         "locus",
     ):
@@ -553,83 +555,160 @@ def mu_from_params(params: SimulationParams) -> dict[str, str]:
 # The two initial-conditions modes (botanist GUI design doc §4.3):
 # `"dirichlet"` (the library default — `initial_allele_count`/
 # `initial_concentration`, both always present, plain `FormField`s
-# already on `INITIAL_CONDITIONS_FIELDS`) and `"equilibrium_split"`
+# already on `INITIAL_CONDITIONS_FIELDS`), `"equilibrium_split"`
 # (`fim.model.initial.EquilibriumSplitInitialCondition`, triggered by
-# its own three `equilibrium_*` fields' joint presence — see
-# `initial_conditions_to_payload`, below). Unlike `m`'s scalar-vs-
-# topology modes or `mu`'s mu-vs-mu_b modes, the two are not mutually
-# exclusive at the `SimulationParams` level (`initial_allele_count`/
-# `initial_concentration` stay set and simply go unused whenever the
-# equilibrium fields are also set — `generate_initial_state`'s own
-# dispatch checks the equilibrium fields first) — only the *payload
-# inclusion* of the three equilibrium fields is mode-gated here.
-InitialConditionsMode = Literal["dirichlet", "equilibrium_split"]
+# its own three `equilibrium_*` fields' joint presence), and
+# `"explicit_p0"` (a real `p_0` grid, triggered by `initial_frequencies`
+# — see `initial_conditions_to_payload`, below). `SimulationParams`
+# itself rejects combining `initial_frequencies` with any equilibrium
+# field (`_validate_equilibrium_split_config`'s own docstring), so
+# these three are genuinely mutually exclusive at that level too —
+# unlike `initial_allele_count`/`initial_concentration`, which stay set
+# and simply go unused whenever either of the other two modes is
+# active (`generate_initial_state`'s own dispatch order) — only the
+# *payload inclusion* of the equilibrium fields and `p_0` is mode-gated
+# here.
+InitialConditionsMode = Literal["dirichlet", "equilibrium_split", "explicit_p0"]
 
 
 def initial_conditions_to_payload(values: Mapping[str, str]) -> dict[str, object]:
-    """Build the `equilibrium_*` payload keys from the selector's mode.
+    """Build the `equilibrium_*`/`p_0` payload keys from the selector's mode.
 
     Args:
         values: The full form-values mapping; only
             `initial_conditions_mode`, `equilibrium_convergence_window`,
-            `equilibrium_convergence_tolerance`, and
-            `equilibrium_max_generations` are read.
+            `equilibrium_convergence_tolerance`,
+            `equilibrium_max_generations`, and `p0_json` are read.
 
     Returns:
-        An empty mapping in `"dirichlet"` mode (the three fields are
-        simply absent from the payload, exactly like an unset
-        `replicate_tolerance`'s own `None`-by-omission convention);
-        otherwise the three fields, parsed to their declared types.
+        An empty mapping in `"dirichlet"` mode (the three equilibrium
+        fields and `p_0` are simply absent from the payload, exactly
+        like an unset `replicate_tolerance`'s own `None`-by-omission
+        convention); the three equilibrium fields, parsed to their
+        declared types, in `"equilibrium_split"` mode; or `{"p_0":
+        ...}` in `"explicit_p0"` mode.
 
     Raises:
         ValueError: If `"equilibrium_split"` mode is selected and any
             of the three fields' text does not parse as its declared
-            type. Every message begins with the field's own name,
+            type (every message begins with the field's own name,
             matching `SimulationParams.from_mapping`'s own wording —
             `field_for_error` locates each of the three individually,
-            the same as any other plain `FormField`.
+            the same as any other plain `FormField`), if
+            `"explicit_p0"` mode is selected and `p0_json` is not valid
+            JSON in the expected shape, or `initial_conditions_mode` is
+            none of the three.
     """
     mode = values.get("initial_conditions_mode", "dirichlet")
-    if mode != "equilibrium_split":
-        return {}
-    return {
-        "equilibrium_convergence_window": _parse_int_named(
-            "equilibrium_convergence_window",
-            values["equilibrium_convergence_window"].strip(),
-        ),
-        "equilibrium_convergence_tolerance": _parse_float_named(
-            "equilibrium_convergence_tolerance",
-            values["equilibrium_convergence_tolerance"].strip(),
-        ),
-        "equilibrium_max_generations": _parse_int_named(
-            "equilibrium_max_generations",
-            values["equilibrium_max_generations"].strip(),
-        ),
-    }
+    if mode == "equilibrium_split":
+        return {
+            "equilibrium_convergence_window": _parse_int_named(
+                "equilibrium_convergence_window",
+                values["equilibrium_convergence_window"].strip(),
+            ),
+            "equilibrium_convergence_tolerance": _parse_float_named(
+                "equilibrium_convergence_tolerance",
+                values["equilibrium_convergence_tolerance"].strip(),
+            ),
+            "equilibrium_max_generations": _parse_int_named(
+                "equilibrium_max_generations",
+                values["equilibrium_max_generations"].strip(),
+            ),
+        }
+    if mode == "explicit_p0":
+        return {"p_0": _parse_p0_json(values["p0_json"])}
+    if mode != "dirichlet":
+        raise ValueError(f"unknown initial_conditions selector mode: {mode!r}")
+    return {}
+
+
+def _parse_p0_json(text: str) -> list[list[dict[str, float]]]:
+    """Parse the `p_0` grid editor's own serialized JSON value.
+
+    Args:
+        text: `p0_json`'s own current value — a JSON array of arrays of
+            `{alleleId: frequency}` mappings (one outer entry per deme,
+            one inner entry per locus), written by `webui/screens/
+            p0-grid.js` from the grid's own live cell values. The exact
+            raw shape `fim.model.params._parse_initial_frequencies`
+            itself accepts for a hand-authored YAML `p_0` — allele IDs
+            stay as JSON's own string mapping keys, parsed to integers
+            only by that function, not here.
+
+    Raises:
+        ValueError: If `text` is not valid JSON, or is not a list of
+            lists of `{alleleId: frequency}` mappings — checked here
+            only well enough to give a clear error for a malformed
+            *shape* (this function's own concern, with the identical
+            per-index wording `_parse_initial_frequencies`'s own
+            messages use); the deme count, per-deme locus count, and
+            each locus's own frequencies summing to 1 all stay that
+            function's concern to reject, exactly like a hand-authored
+            YAML `p_0` already is.
+    """
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"p_0 must be valid JSON: {error}") from error
+    if not isinstance(parsed, list):
+        raise ValueError("p_0 must be a list of demes")
+    demes: list[list[dict[str, float]]] = []
+    for deme_index, raw_deme in enumerate(parsed):
+        if not isinstance(raw_deme, list):
+            raise ValueError(f"p_0[{deme_index}] must be a list of loci")
+        loci: list[dict[str, float]] = []
+        for locus_index, raw_locus in enumerate(raw_deme):
+            if not isinstance(raw_locus, dict) or not all(
+                isinstance(frequency, int | float) and not isinstance(frequency, bool)
+                for frequency in raw_locus.values()
+            ):
+                raise ValueError(
+                    f"p_0[{deme_index}][{locus_index}] must be a mapping of "
+                    "allele ID to frequency"
+                )
+            loci.append(dict(raw_locus))
+        demes.append(loci)
+    return demes
 
 
 def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]:
-    """Render `params`'s `equilibrium_*` fields into the selector's form-value keys.
+    """Render `params`'s starting-frequency fields into the selector's form-value keys.
 
     Args:
         params: A validated configuration.
 
     Returns:
         `initial_conditions_mode`/`equilibrium_convergence_window`/
-        `equilibrium_convergence_tolerance`/`equilibrium_max_generations`.
-        The three equilibrium fields render as empty strings in
-        `"dirichlet"` mode (`params.equilibrium_convergence_window is
-        None`, guaranteed to mean all three are `None` together by
-        `SimulationParams`'s own all-or-none validation) rather than
-        `"None"` — an empty field, not a placeholder value the user
-        would otherwise have to notice and clear.
+        `equilibrium_convergence_tolerance`/`equilibrium_max_generations`/
+        `p0_json`. An explicit `p_0` (`params.initial_frequencies is not
+        None`) renders as `"explicit_p0"` mode with every deme/locus's
+        own real allele-frequency mapping (mutually exclusive with the
+        equilibrium fields at the `SimulationParams` level, so checking
+        it first is unambiguous); otherwise the three equilibrium
+        fields render as empty strings in `"dirichlet"` mode
+        (`params.equilibrium_convergence_window is None`, guaranteed to
+        mean all three are `None` together by `SimulationParams`'s own
+        all-or-none validation) rather than `"None"` — an empty field,
+        not a placeholder value the user would otherwise have to notice
+        and clear.
     """
+    if params.initial_frequencies is not None:
+        return {
+            "initial_conditions_mode": "explicit_p0",
+            "equilibrium_convergence_window": "",
+            "equilibrium_convergence_tolerance": "",
+            "equilibrium_max_generations": "",
+            "p0_json": json.dumps(
+                [[dict(locus) for locus in deme] for deme in params.initial_frequencies]
+            ),
+        }
     if params.equilibrium_convergence_window is None:
         return {
             "initial_conditions_mode": "dirichlet",
             "equilibrium_convergence_window": "",
             "equilibrium_convergence_tolerance": "",
             "equilibrium_max_generations": "",
+            "p0_json": "",
         }
     return {
         "initial_conditions_mode": "equilibrium_split",
@@ -638,6 +717,7 @@ def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]:
             params.equilibrium_convergence_tolerance
         ),
         "equilibrium_max_generations": str(params.equilibrium_max_generations),
+        "p0_json": "",
     }
 
 
@@ -786,25 +866,6 @@ def convergence_statistic_from_params(params: SimulationParams) -> dict[str, str
     }
 
 
-def p0_summary_from_params(params: SimulationParams) -> str:
-    """Return the Initial conditions tab's read-only `p_0` summary.
-
-    Returns:
-        A description naming the deme and locus counts when
-        `params.initial_frequencies` is set (§2.3: `p_0` is genuinely
-        unbounded and load-only, unlike every other field this
-        revision brings into scope — there is no editable widget for
-        it at all, load-only badge or not), or `""` otherwise.
-    """
-    if params.initial_frequencies is None:
-        return ""
-    return (
-        f"initial frequencies loaded for {params.d} deme(s), "
-        f"{len(params.loci)} locus/loci (loaded from file — edit via "
-        "Load YAML…)"
-    )
-
-
 def params_to_form_values(params: SimulationParams) -> dict[str, str]:
     """Render a validated `SimulationParams` back into the form's fields.
 
@@ -814,7 +875,7 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
 
     Returns:
         One string per `all_fields()` entry, plus every composite
-        field's own keys (`m_*`, `mu_*`, `cs_*`, `p0_summary`),
+        field's own keys (`m_*`, `mu_*`, `cs_*`, `p0_json`),
         suitable for `screens.input_screen.InputScreen.set_values`.
 
     Raises:
@@ -839,7 +900,6 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         "mutation_model": params.mutation_model,
         "initial_allele_count": str(params.initial_allele_count),
         "initial_concentration": str(params.initial_concentration),
-        "p0_summary": p0_summary_from_params(params),
         "convergence_combinator": params.convergence_combinator,
         "convergence_window": str(params.convergence_window),
         "convergence_tolerance": str(params.convergence_tolerance),
@@ -895,6 +955,7 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "equilibrium_convergence_window",
     "equilibrium_convergence_tolerance",
     "equilibrium_max_generations",
+    "p_0",
     "deme_weighting",
     "convergence_statistic",
     "convergence_combinator",

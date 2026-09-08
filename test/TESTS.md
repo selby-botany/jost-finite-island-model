@@ -42,6 +42,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
   - [`test_migration_matrix_screen`](#gui.test_migration_matrix_screen)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
+  - [`test_p0_grid_screen`](#gui.test_p0_grid_screen)
   - [`test_preferences`](#gui.test_preferences)
   - [`test_presets`](#gui.test_presets)
   - [`test_presets_screen`](#gui.test_presets_screen)
@@ -6699,6 +6700,68 @@ def test_initial_conditions_from_params_equilibrium_split_round_trips(
 
 An equilibrium-split configuration's three fields render back exactly.
 
+<a id="gui.test_config_form.test_initial_conditions_to_payload_explicit_p0_mode_parses_p0_json"></a>
+
+#### test\_initial\_conditions\_to\_payload\_explicit\_p0\_mode\_parses\_p0\_json
+
+```python
+def test_initial_conditions_to_payload_explicit_p0_mode_parses_p0_json(
+) -> None
+```
+
+Explicit-p0 mode's payload is `{"p_0": ...}`, parsed from the grid's own JSON.
+
+<a id="gui.test_config_form.test_initial_conditions_to_payload_rejects_malformed_p0_json"></a>
+
+#### test\_initial\_conditions\_to\_payload\_rejects\_malformed\_p0\_json
+
+```python
+def test_initial_conditions_to_payload_rejects_malformed_p0_json() -> None
+```
+
+A syntactically invalid `p0_json` is a clear error, not a crash.
+
+<a id="gui.test_config_form.test_initial_conditions_to_payload_rejects_the_wrong_p0_shape"></a>
+
+#### test\_initial\_conditions\_to\_payload\_rejects\_the\_wrong\_p0\_shape
+
+```python
+@pytest.mark.parametrize(
+    "malformed",
+    ['"not-a-list"', "[1]", "[[1]]", '[[{"0": "not-a-number"}]]'],
+)
+def test_initial_conditions_to_payload_rejects_the_wrong_p0_shape(
+        malformed: str) -> None
+```
+
+Valid JSON that is not demes-of-loci-of-frequency-mappings is still rejected.
+
+<a id="gui.test_config_form.test_initial_conditions_to_payload_rejects_an_unknown_mode"></a>
+
+#### test\_initial\_conditions\_to\_payload\_rejects\_an\_unknown\_mode
+
+```python
+def test_initial_conditions_to_payload_rejects_an_unknown_mode() -> None
+```
+
+An unrecognized mode is a clear programming error, not a silent default.
+
+<a id="gui.test_config_form.test_initial_conditions_from_params_explicit_p0_round_trips"></a>
+
+#### test\_initial\_conditions\_from\_params\_explicit\_p0\_round\_trips
+
+```python
+def test_initial_conditions_from_params_explicit_p0_round_trips() -> None
+```
+
+An explicit `p_0` configuration renders back as a real, loadable grid.
+
+Submitting that grid's own values back reproduces the identical
+`p_0` — the same "loaded badge to real editor" upgrade `m_from_
+params`'s own `"matrix"` mode already made for a loaded migration
+matrix, and `loci_from_params`'s own `"custom"` mode for custom
+locus IDs.
+
 <a id="gui.test_config_form.test_form_values_to_payload_equilibrium_split_round_trips"></a>
 
 #### test\_form\_values\_to\_payload\_equilibrium\_split\_round\_trips
@@ -6708,6 +6771,20 @@ def test_form_values_to_payload_equilibrium_split_round_trips() -> None
 ```
 
 A full form submission in equilibrium-split mode builds a valid configuration.
+
+<a id="gui.test_config_form.test_form_values_to_payload_explicit_p0_round_trips"></a>
+
+#### test\_form\_values\_to\_payload\_explicit\_p0\_round\_trips
+
+```python
+def test_form_values_to_payload_explicit_p0_round_trips() -> None
+```
+
+A full form submission in explicit-p0 mode builds a valid configuration.
+
+Matches the starter config's own `d=20`, single-locus shape
+(`fim.cli.STARTER_CONFIG`) so the grid's own deme/locus counts are
+accepted without also having to override `d`/`loci` in `values`.
 
 <a id="gui.test_config_form.test_equilibrium_split_errors_route_to_the_initial_conditions_tab"></a>
 
@@ -6730,6 +6807,16 @@ A full form submission in equilibrium-split mode builds a valid configuration.
         ),
         (
             "equilibrium-split fields cannot be combined with an explicit p_0",
+            None,
+            "initial_conditions",
+        ),
+        (
+            "p_0 must contain exactly d demes",
+            None,
+            "initial_conditions",
+        ),
+        (
+            "p_0 deme 1, locus 1 frequencies must sum to 1",
             None,
             "initial_conditions",
         ),
@@ -6835,26 +6922,6 @@ def test_convergence_statistic_from_params_checks_only_the_watched_names(
 ```
 
 `convergence_statistic_from_params` checks exactly the watched statistics.
-
-<a id="gui.test_config_form.test_p0_summary_from_params_is_empty_when_not_loaded"></a>
-
-#### test\_p0\_summary\_from\_params\_is\_empty\_when\_not\_loaded
-
-```python
-def test_p0_summary_from_params_is_empty_when_not_loaded() -> None
-```
-
-No `p_0` means an empty summary — nothing to badge.
-
-<a id="gui.test_config_form.test_p0_summary_from_params_describes_a_loaded_p0"></a>
-
-#### test\_p0\_summary\_from\_params\_describes\_a\_loaded\_p0
-
-```python
-def test_p0_summary_from_params_describes_a_loaded_p0() -> None
-```
-
-A loaded `p_0` renders a non-empty, informative summary.
 
 <a id="gui.test_config_form.test_loci_from_params_sequential_ids_render_lengths_mode"></a>
 
@@ -7747,6 +7814,84 @@ also the first real proof that `run-view-completed.js`'s own
 `drawDifferentiationQCurve` (botanist GUI design doc `20260907-
 claude-sonnet-5-botanist-gui-redesign.md` §7.7) actually draws
 something, not only that the per-order text lines still render.
+
+<a id="gui.test_p0_grid_screen"></a>
+
+# gui.test\_p0\_grid\_screen
+
+Headless functional tests for the explicit p_0 grid editor
+(botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+§4.4).
+
+Real DOM-driven proof that `webui/screens/p0-grid.js` actually builds,
+resizes, and reads back a real grid of per-cell allele-frequency
+mappings — `test/gui/test_config_form.py`'s own
+`test_initial_conditions_to_payload_explicit_p0_*`/
+`test_initial_conditions_from_params_explicit_p0_*` tests already prove
+`initial_conditions_to_payload`/`initial_conditions_from_params`
+correct as plain Python calls; these tests prove the page's own
+JavaScript builds the grid those functions actually read from and
+write to, which no Python-only test can check. Mirrors
+`test_migration_matrix_screen.py`'s own shape exactly.
+
+<a id="gui.test_p0_grid_screen.test_selecting_explicit_p0_mode_builds_a_default_grid_matching_d_and_loci"></a>
+
+#### test\_selecting\_explicit\_p0\_mode\_builds\_a\_default\_grid\_matching\_d\_and\_loci
+
+```python
+def test_selecting_explicit_p0_mode_builds_a_default_grid_matching_d_and_loci(
+        window: webview.Window) -> None
+```
+
+Switching to explicit-p0 mode with no prior `p_0` builds a d-by-locus grid.
+
+<a id="gui.test_p0_grid_screen.test_editing_a_cell_updates_its_own_sum_and_flags_an_invalid_cell"></a>
+
+#### test\_editing\_a\_cell\_updates\_its\_own\_sum\_and\_flags\_an\_invalid\_cell
+
+```python
+def test_editing_a_cell_updates_its_own_sum_and_flags_an_invalid_cell(
+        window: webview.Window) -> None
+```
+
+Typing into a cell recomputes that cell's own sum and warns when it isn't 1.
+
+<a id="gui.test_p0_grid_screen.test_changing_d_resizes_the_grid_preserving_existing_values"></a>
+
+#### test\_changing\_d\_resizes\_the\_grid\_preserving\_existing\_values
+
+```python
+def test_changing_d_resizes_the_grid_preserving_existing_values(
+        window: webview.Window) -> None
+```
+
+Growing `d` while explicit mode is active adds rows without losing data.
+
+<a id="gui.test_p0_grid_screen.test_adding_a_custom_locus_grows_the_p0_grids_own_columns"></a>
+
+#### test\_adding\_a\_custom\_locus\_grows\_the\_p0\_grids\_own\_columns
+
+```python
+def test_adding_a_custom_locus_grows_the_p0_grids_own_columns(
+        window: webview.Window) -> None
+```
+
+Adding a row to the custom loci grid grows p_0's own column count to match.
+
+<a id="gui.test_p0_grid_screen.test_a_real_run_with_a_hand_edited_p0_completes"></a>
+
+#### test\_a\_real\_run\_with\_a\_hand\_edited\_p0\_completes
+
+```python
+def test_a_real_run_with_a_hand_edited_p0_completes() -> None
+```
+
+A run submitted with a hand-edited explicit p_0 actually completes.
+
+Same event-driven "wait on a real `threading.Event`, never poll a
+live background run" shape `test_running_screen.py`'s own real-run
+tests already use, for the identical reason those tests' own
+docstrings record.
 
 <a id="gui.test_preferences"></a>
 

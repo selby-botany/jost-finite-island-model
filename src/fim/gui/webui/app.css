@@ -722,6 +722,64 @@ fieldset.composite > label {
     text-align: right;
 }
 
+/* The explicit p_0 grid editor (`initial-conditions-explicit-fields`)
+ * -- a scrollable table of small per-cell allele-frequency mappings,
+ * styled to match the migration-matrix grid's own numeric-table
+ * conventions (`.matrix-grid` above), with a wider cell to fit a short
+ * comma-separated mapping instead of one bare number.
+ */
+.p0-grid {
+    max-height: 16rem;
+    max-width: 100%;
+    overflow: auto;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.p0-grid table {
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.p0-grid th,
+.p0-grid td {
+    padding: 0.15rem 0.3rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.p0-grid th {
+    color: var(--fim-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    position: sticky;
+    top: 0;
+    background: var(--fim-background);
+}
+
+.p0-cell {
+    width: 8rem;
+    font: inherit;
+    color: inherit;
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.2rem 0.35rem;
+    text-align: right;
+}
+
+.p0-cell-sum {
+    display: block;
+    color: var(--fim-muted);
+    font-size: 0.75rem;
+}
+
+.p0-cell-sum-invalid {
+    color: #d64545;
+    font-weight: 600;
+}
+
 #explore-canvas {
     border: 1px solid var(--fim-border);
     border-radius: 4px;

@@ -138,7 +138,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [loci\_from\_params](#fim.gui.config_form.loci_from_params)
   * [convergence\_statistic\_to\_payload](#fim.gui.config_form.convergence_statistic_to_payload)
   * [convergence\_statistic\_from\_params](#fim.gui.config_form.convergence_statistic_from_params)
-  * [p0\_summary\_from\_params](#fim.gui.config_form.p0_summary_from_params)
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
@@ -4060,18 +4059,18 @@ against a second, GUI-local copy of a rule.
 headings do. The cardinality rule (`doc/fim-gui-design.md` §6.1)
 decides what earns a live widget here at all: O(1) and O(d)/O(loci)-
 sized fields do (a comma-separated text field faithfully represents
-either); a `d`-by-`d` migration matrix now does too, edited cell by
-cell (botanist GUI design doc
-`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4,
-`m_to_payload`/`m_from_params`'s own `"matrix"` mode); a per-locus
-`p_0`, a genuinely per-locus `mu`, or a `loci` list with custom
-`locus_id`s still do not. `p_0` gets the read-only "loaded from file"
-badge treatment when a loaded configuration actually uses one;
-`mu`-per-locus and custom-ID `loci` instead raise a clear `ValueError`
-from `params_to_form_values` (the same "edit the YAML file directly"
-pattern this form has always used for a construct it cannot represent
-at all, load-only badge or not) — see `doc/fim-gui-design.md` §6.2 for
-both paths.
+either); a `d`-by-`d` migration matrix, a `loci` list with custom
+`locus_id`s, and a `d`-by-locus explicit `p_0` now do too, each edited
+cell by cell (botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4 —
+`m_to_payload`/`m_from_params`'s own `"matrix"` mode,
+`loci_to_payload`/`loci_from_params`'s own `"custom"` mode, and
+`initial_conditions_to_payload`/`initial_conditions_from_params`'s own
+`"explicit_p0"` mode, respectively); a genuinely per-locus `mu` still
+does not, and instead raises a clear `ValueError` from
+`params_to_form_values` (the same "edit the YAML file directly" pattern
+this form has always used for a construct it cannot represent at all)
+— see `doc/fim-gui-design.md` §6.2.
 
 <a id="fim.gui.config_form.FormField"></a>
 
@@ -4381,32 +4380,37 @@ def initial_conditions_to_payload(
         values: Mapping[str, str]) -> dict[str, object]
 ```
 
-Build the `equilibrium_*` payload keys from the selector's mode.
+Build the `equilibrium_*`/`p_0` payload keys from the selector's mode.
 
 **Arguments**:
 
 - `values` - The full form-values mapping; only
   `initial_conditions_mode`, `equilibrium_convergence_window`,
-  `equilibrium_convergence_tolerance`, and
-  `equilibrium_max_generations` are read.
+  `equilibrium_convergence_tolerance`,
+  `equilibrium_max_generations`, and `p0_json` are read.
 
 
 **Returns**:
 
-  An empty mapping in `"dirichlet"` mode (the three fields are
-  simply absent from the payload, exactly like an unset
-  `replicate_tolerance`'s own `None`-by-omission convention);
-  otherwise the three fields, parsed to their declared types.
+  An empty mapping in `"dirichlet"` mode (the three equilibrium
+  fields and `p_0` are simply absent from the payload, exactly
+  like an unset `replicate_tolerance`'s own `None`-by-omission
+  convention); the three equilibrium fields, parsed to their
+  declared types, in `"equilibrium_split"` mode; or `{"p_0":
+  ...}` in `"explicit_p0"` mode.
 
 
 **Raises**:
 
 - `ValueError` - If `"equilibrium_split"` mode is selected and any
   of the three fields' text does not parse as its declared
-  type. Every message begins with the field's own name,
+  type (every message begins with the field's own name,
   matching `SimulationParams.from_mapping`'s own wording —
   `field_for_error` locates each of the three individually,
-  the same as any other plain `FormField`.
+  the same as any other plain `FormField`), if
+  `"explicit_p0"` mode is selected and `p0_json` is not valid
+  JSON in the expected shape, or `initial_conditions_mode` is
+  none of the three.
 
 <a id="fim.gui.config_form.initial_conditions_from_params"></a>
 
@@ -4416,7 +4420,7 @@ Build the `equilibrium_*` payload keys from the selector's mode.
 def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]
 ```
 
-Render `params`'s `equilibrium_*` fields into the selector's form-value keys.
+Render `params`'s starting-frequency fields into the selector's form-value keys.
 
 **Arguments**:
 
@@ -4426,13 +4430,18 @@ Render `params`'s `equilibrium_*` fields into the selector's form-value keys.
 **Returns**:
 
   `initial_conditions_mode`/`equilibrium_convergence_window`/
-  `equilibrium_convergence_tolerance`/`equilibrium_max_generations`.
-  The three equilibrium fields render as empty strings in
-  `"dirichlet"` mode (`params.equilibrium_convergence_window is
-  None`, guaranteed to mean all three are `None` together by
-  `SimulationParams`'s own all-or-none validation) rather than
-  `"None"` — an empty field, not a placeholder value the user
-  would otherwise have to notice and clear.
+  `equilibrium_convergence_tolerance`/`equilibrium_max_generations`/
+  `p0_json`. An explicit `p_0` (`params.initial_frequencies is not
+  None`) renders as `"explicit_p0"` mode with every deme/locus's
+  own real allele-frequency mapping (mutually exclusive with the
+  equilibrium fields at the `SimulationParams` level, so checking
+  it first is unambiguous); otherwise the three equilibrium
+  fields render as empty strings in `"dirichlet"` mode
+  (`params.equilibrium_convergence_window is None`, guaranteed to
+  mean all three are `None` together by `SimulationParams`'s own
+  all-or-none validation) rather than `"None"` — an empty field,
+  not a placeholder value the user would otherwise have to notice
+  and clear.
 
 <a id="fim.gui.config_form.loci_to_payload"></a>
 
@@ -4528,24 +4537,6 @@ def convergence_statistic_from_params(
 
 Render `params.convergence_statistic` back into the checkbox keys.
 
-<a id="fim.gui.config_form.p0_summary_from_params"></a>
-
-#### p0\_summary\_from\_params
-
-```python
-def p0_summary_from_params(params: SimulationParams) -> str
-```
-
-Return the Initial conditions tab's read-only `p_0` summary.
-
-**Returns**:
-
-  A description naming the deme and locus counts when
-  `params.initial_frequencies` is set (§2.3: `p_0` is genuinely
-  unbounded and load-only, unlike every other field this
-  revision brings into scope — there is no editable widget for
-  it at all, load-only badge or not), or `""` otherwise.
-
 <a id="fim.gui.config_form.params_to_form_values"></a>
 
 #### params\_to\_form\_values
@@ -4565,7 +4556,7 @@ Render a validated `SimulationParams` back into the form's fields.
 **Returns**:
 
   One string per `all_fields()` entry, plus every composite
-  field's own keys (`m_*`, `mu_*`, `cs_*`, `p0_summary`),
+  field's own keys (`m_*`, `mu_*`, `cs_*`, `p0_json`),
   suitable for `screens.input_screen.InputScreen.set_values`.
 
 

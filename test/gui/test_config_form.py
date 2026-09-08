@@ -56,8 +56,8 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "replicate_confidence",
     }
     # `m`, `mu`/`mu_b`, `loci`/`locus_lengths`, `convergence_statistic`,
-    # and `p_0` are composite (mode selectors or read-only summaries) —
-    # never plain `FormField`s.
+    # and `p_0` are all composite mode selectors — never plain
+    # `FormField`s.
     assert "m" not in names
     assert "locus_lengths" not in names
     assert "mu" not in names
@@ -366,6 +366,7 @@ def test_initial_conditions_from_params_dirichlet_is_all_empty() -> None:
         "equilibrium_convergence_window": "",
         "equilibrium_convergence_tolerance": "",
         "equilibrium_max_generations": "",
+        "p0_json": "",
     }
 
 
@@ -384,7 +385,69 @@ def test_initial_conditions_from_params_equilibrium_split_round_trips() -> None:
         "equilibrium_convergence_window": "50",
         "equilibrium_convergence_tolerance": "0.01",
         "equilibrium_max_generations": "10000",
+        "p0_json": "",
     }
+
+
+def test_initial_conditions_to_payload_explicit_p0_mode_parses_p0_json() -> None:
+    """Explicit-p0 mode's payload is `{"p_0": ...}`, parsed from the grid's own JSON."""
+    payload = config_form.initial_conditions_to_payload(
+        {
+            "initial_conditions_mode": "explicit_p0",
+            "p0_json": '[[{"0": 0.5, "1": 0.5}], [{"0": 1.0}]]',
+        }
+    )
+
+    assert payload == {"p_0": [[{"0": 0.5, "1": 0.5}], [{"0": 1.0}]]}
+
+
+def test_initial_conditions_to_payload_rejects_malformed_p0_json() -> None:
+    """A syntactically invalid `p0_json` is a clear error, not a crash."""
+    with pytest.raises(ValueError, match="valid JSON"):
+        config_form.initial_conditions_to_payload(
+            {"initial_conditions_mode": "explicit_p0", "p0_json": "{not valid"}
+        )
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    ['"not-a-list"', "[1]", "[[1]]", '[[{"0": "not-a-number"}]]'],
+)
+def test_initial_conditions_to_payload_rejects_the_wrong_p0_shape(
+    malformed: str,
+) -> None:
+    """Valid JSON that is not demes-of-loci-of-frequency-mappings is still rejected."""
+    with pytest.raises(ValueError, match="p_0"):
+        config_form.initial_conditions_to_payload(
+            {"initial_conditions_mode": "explicit_p0", "p0_json": malformed}
+        )
+
+
+def test_initial_conditions_to_payload_rejects_an_unknown_mode() -> None:
+    """An unrecognized mode is a clear programming error, not a silent default."""
+    with pytest.raises(ValueError, match="unknown initial_conditions selector mode"):
+        config_form.initial_conditions_to_payload({"initial_conditions_mode": "bogus"})
+
+
+def test_initial_conditions_from_params_explicit_p0_round_trips() -> None:
+    """An explicit `p_0` configuration renders back as a real, loadable grid.
+
+    Submitting that grid's own values back reproduces the identical
+    `p_0` — the same "loaded badge to real editor" upgrade `m_from_
+    params`'s own `"matrix"` mode already made for a loaded migration
+    matrix, and `loci_from_params`'s own `"custom"` mode for custom
+    locus IDs.
+    """
+    params = _params(d=2, initial_frequencies=(({0: 1.0},), ({0: 0.5, 1: 0.5},)))
+
+    values = config_form.initial_conditions_from_params(params)
+
+    assert values["initial_conditions_mode"] == "explicit_p0"
+    assert json.loads(values["p0_json"]) == [[{"0": 1.0}], [{"0": 0.5, "1": 0.5}]]
+
+    payload = config_form.initial_conditions_to_payload(values)
+
+    assert payload == {"p_0": [[{"0": 1.0}], [{"0": 0.5, "1": 0.5}]]}
 
 
 def test_form_values_to_payload_equilibrium_split_round_trips() -> None:
@@ -408,6 +471,28 @@ def test_form_values_to_payload_equilibrium_split_round_trips() -> None:
     assert params.equilibrium_max_generations == 10000
 
 
+def test_form_values_to_payload_explicit_p0_round_trips() -> None:
+    """A full form submission in explicit-p0 mode builds a valid configuration.
+
+    Matches the starter config's own `d=20`, single-locus shape
+    (`fim.cli.STARTER_CONFIG`) so the grid's own deme/locus counts are
+    accepted without also having to override `d`/`loci` in `values`.
+    """
+    values = dict(config_form.starter_form_values())
+    values.update(
+        config_form.initial_conditions_from_params(
+            _params(d=20, initial_frequencies=tuple(({0: 1.0},) for _ in range(20)))
+        )
+    )
+
+    payload = config_form.form_values_to_payload(values)
+    params = SimulationParams.from_mapping(payload)
+
+    assert params.initial_frequencies is not None
+    assert len(params.initial_frequencies) == 20
+    assert params.initial_frequencies[0] == ({0: 1.0},)
+
+
 @pytest.mark.parametrize(
     ("message", "expected_field", "expected_tab"),
     [
@@ -424,6 +509,16 @@ def test_form_values_to_payload_equilibrium_split_round_trips() -> None:
         ),
         (
             "equilibrium-split fields cannot be combined with an explicit p_0",
+            None,
+            "initial_conditions",
+        ),
+        (
+            "p_0 must contain exactly d demes",
+            None,
+            "initial_conditions",
+        ),
+        (
+            "p_0 deme 1, locus 1 frequencies must sum to 1",
             None,
             "initial_conditions",
         ),
@@ -541,21 +636,6 @@ def test_convergence_statistic_from_params_checks_only_the_watched_names() -> No
     assert values["cs_H_T"] == "false"
 
 
-def test_p0_summary_from_params_is_empty_when_not_loaded() -> None:
-    """No `p_0` means an empty summary — nothing to badge."""
-    assert config_form.p0_summary_from_params(_params()) == ""
-
-
-def test_p0_summary_from_params_describes_a_loaded_p0() -> None:
-    """A loaded `p_0` renders a non-empty, informative summary."""
-    params = _params(d=2, initial_frequencies=(({0: 1.0},), ({0: 1.0},)))
-
-    summary = config_form.p0_summary_from_params(params)
-
-    assert summary != ""
-    assert "loaded from file" in summary
-
-
 def test_loci_from_params_sequential_ids_render_lengths_mode() -> None:
     """Default, sequential locus IDs render the simple comma-list mode."""
     params = _params(loci=(LocusSpec(1, 50), LocusSpec(2, 8000)))
@@ -630,7 +710,7 @@ def test_params_to_form_values_includes_every_composite_fields_keys() -> None:
     """A round-tripped params object populates every composite's own keys too."""
     values = config_form.params_to_form_values(_params())
 
-    for key in ("m_mode", "mu_mode", "p0_summary", "loci_mode", "loci_json"):
+    for key in ("m_mode", "mu_mode", "p0_json", "loci_mode", "loci_json"):
         assert key in values
     for name in config_form.CONVERGENCE_STATISTIC_NAMES:
         assert f"cs_{name}" in values
