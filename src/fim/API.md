@@ -7679,6 +7679,26 @@ functions that actually use each one.
   is fatal, not a benign non-convergence outcome — see
   `fim.model.initial.EquilibriumSplitInitialCondition`'s own
   docstring for why.
+- `sigma_band_multiplier` - Sigma multiplier (`2.0` or `3.0` — a
+  closed set, not merely a suggestion) for the within-run
+  sigma band: once the main run converges, the engine
+  continues for `sigma_band_window` further generations and
+  reports each watched statistic as "mean plus or minus
+  (sigma_band_multiplier times sigma)" over that trailing
+  window (`20260907-claude-sonnet-5-within-run-sigma-band-
+  backend-design.md`). `None` (the default) disables the
+  extension entirely — a plain converged run costs nothing
+  extra. Set together with `sigma_band_window`, or not at
+  all; unlike `equilibrium_*` above, this is never mutually
+  exclusive with any other field — the sigma band measures
+  the *end* of a run, regardless of how generation 0 was
+  produced.
+- `sigma_band_window` - Trailing-window length (at least 2, the same
+  "a single point cannot establish spread" reasoning
+  `convergence_window` itself uses) for the same extension —
+  independent of `convergence_window`, since the two describe
+  different things (whether the run has settled, versus how
+  much it still wobbles once settled).
 
 <a id="fim.model.params.SimulationParams.__post_init__"></a>
 
@@ -9391,6 +9411,22 @@ written before this field existed, or whenever the run used
 `"dirichlet"`/`"explicit"` instead — the two equilibrium-specific
 fields have no meaning outside `"equilibrium_split"` and are never
 populated for either of the other two.
+
+`sigma_band_multiplier`/`sigma_band_window`/`sigma_band` record the
+within-run sigma band's own configuration and result
+(`20260907-claude-sonnet-5-within-run-sigma-band-backend-design.md`,
+decision 4): once the main run converges, `fim.engine._run_one`
+continues for `sigma_band_window` further generations and reports
+each watched statistic as a mean/sigma/bounds summary over that
+trailing window. All three are `None` for a manifest written before
+this field existed, whenever the run did not request the extension
+at all, or whenever it was requested but the run only ever hit the
+hard cap, never genuinely converging (decision 3: an unconverged
+tail is never extended). `sigma_band` itself is one entry per
+watched statistic that had at least one defined value during the
+extension, each `{"mean", "sigma", "lower", "upper"}` — see
+`fim.engine._sigma_band_summary`'s own docstring for exactly how
+those four numbers are computed.
 
 <a id="fim.persistence.manifest.RunManifest.__post_init__"></a>
 

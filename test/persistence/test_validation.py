@@ -382,6 +382,87 @@ def test_manifest_equilibrium_generation_count_rejects_negative() -> None:
         replace(_manifest(), equilibrium_generation_count=-1)
 
 
+def test_manifest_sigma_band_fields_default_to_none_and_round_trip(
+    tmp_path: Path,
+) -> None:
+    """The three within-run sigma-band fields round-trip, `None` otherwise.
+
+    Mirrors `test_manifest_equilibrium_fields_default_to_none_and_
+    round_trip` -- same pattern, for the three fields `fim.engine._run_
+    one` stamps only when the sigma band was actually requested and the
+    run genuinely converged (`20260907-claude-sonnet-5-within-run-
+    sigma-band-backend-design.md`, decision 4).
+    """
+    manifest = _manifest()
+    assert manifest.sigma_band_multiplier is None
+    assert manifest.sigma_band_window is None
+    assert manifest.sigma_band is None
+
+    stamped = replace(
+        manifest,
+        sigma_band_multiplier=2.0,
+        sigma_band_window=100,
+        sigma_band={"D": {"mean": 0.5, "sigma": 0.01, "lower": 0.48, "upper": 0.52}},
+    )
+    path = tmp_path / "manifest.json"
+    write_manifest(path, stamped)
+    restored = read_manifest(path)
+
+    assert restored == stamped
+    assert restored.sigma_band_multiplier == 2.0
+    assert restored.sigma_band_window == 100
+    assert restored.sigma_band == {
+        "D": {"mean": 0.5, "sigma": 0.01, "lower": 0.48, "upper": 0.52}
+    }
+
+
+def test_manifest_from_dict_tolerates_missing_sigma_band_fields() -> None:
+    """A manifest written before these fields existed (schema_version < 3) still parses.
+
+    Backward compatibility, checked directly, mirroring `test_manifest_
+    from_dict_tolerates_missing_equilibrium_fields`.
+    """
+    value = dict(_manifest().to_dict())
+    del value["sigma_band_multiplier"]
+    del value["sigma_band_window"]
+    del value["sigma_band"]
+
+    restored = RunManifest.from_dict(value)
+
+    assert restored.sigma_band_multiplier is None
+    assert restored.sigma_band_window is None
+    assert restored.sigma_band is None
+
+
+def test_manifest_sigma_band_multiplier_rejects_non_finite() -> None:
+    with pytest.raises(ValueError, match="sigma_band_multiplier must be finite"):
+        replace(_manifest(), sigma_band_multiplier=float("nan"))
+
+
+def test_manifest_sigma_band_window_rejects_negative() -> None:
+    with pytest.raises(ValueError, match="sigma_band_window must be non-negative"):
+        replace(_manifest(), sigma_band_window=-1)
+
+
+@pytest.mark.parametrize(
+    ("sigma_band", "message"),
+    [
+        ("not-an-object", "must be an object or null"),
+        ({"D": "not-an-object"}, "must be an object"),
+        ({"D": {"mean": "0.5"}}, "must be a number"),
+        ({"D": {"mean": float("nan")}}, "must be finite"),
+        ({"D": {"mean": True}}, "must be a number"),
+    ],
+)
+def test_manifest_sigma_band_shape_is_validated(
+    sigma_band: object, message: str
+) -> None:
+    """A malformed `sigma_band` mapping is rejected with a specific message."""
+    value = _manifest().to_dict()
+    with pytest.raises(ValueError, match=re.escape(message)):
+        RunManifest.from_dict({**value, "sigma_band": sigma_band})
+
+
 @pytest.mark.parametrize(
     ("digest", "message"),
     [

@@ -1878,6 +1878,33 @@ def fim(
             f"no effect under engine_backend={engine_backend!r}"
         )
     run_clock = clock if clock is not None else _utc_now
+    # The *resolved* backend choice — never the literal string "auto" —
+    # computed once, up front, both for the non-"lineal" sigma-band
+    # rejection immediately below and for stamping every result's own
+    # manifest afterward (`RunManifest.engine_backend`'s own docstring;
+    # design doc §7.4), rather than recomputed a second time after
+    # `backend.run` already returned.
+    resolved_engine_backend = (
+        _resolve_auto_engine_backend(
+            params, auto_vector_min_d, auto_vector_max_capacity
+        )
+        if engine_backend == "auto"
+        else engine_backend
+    )
+    # The within-run sigma band (`20260907-claude-sonnet-5-within-run-
+    # sigma-band-backend-design.md` decision 5, v1): only `"lineal"`
+    # (`_run_one`) computes one so far — `"generational"`/
+    # `"generational-vector"` drive generations through `run_batch`
+    # instead and do not yet extend a converged lane. Checked here,
+    # once the resolved choice is known (`"auto"` included), rather
+    # than silently ignoring the request the way running the batch
+    # anyway and never populating `sigma_band` would.
+    if params.sigma_band_multiplier is not None and resolved_engine_backend != "lineal":
+        raise ValueError(
+            "sigma_band_multiplier/sigma_band_window are only supported "
+            f"under engine_backend='lineal' (resolved to "
+            f"{resolved_engine_backend!r})"
+        )
     # `fim()` itself only validates its own public signature and picks a
     # backend (`build_engine_backend`); every actual dispatch decision
     # (scalar vs. sequential batch vs. process-parallel batch, or the
@@ -1892,18 +1919,9 @@ def fim(
         auto_vector_max_capacity=auto_vector_max_capacity,
     )
     output = backend.run(params, store, run_id, run_clock)
-    # Stamp every result's own manifest with which engine actually ran
-    # it — the *resolved* choice, never the literal string "auto", so a
-    # runtime-data-dependent decision is not lost to the persisted
-    # record (`RunManifest.engine_backend`'s own docstring; design doc
-    # §7.4).
-    resolved_engine_backend = (
-        _resolve_auto_engine_backend(
-            params, auto_vector_min_d, auto_vector_max_capacity
-        )
-        if engine_backend == "auto"
-        else engine_backend
-    )
+    # Stamp every result's own manifest with the resolved backend
+    # choice computed above, so a runtime-data-dependent "auto" decision
+    # is not lost to the persisted record.
     if isinstance(output, tuple):
         return tuple(
             replace(
@@ -2826,6 +2844,42 @@ def _run_one(
         converged=outcome.converged,
         reason=outcome.reason.value,
     )
+    # The within-run sigma band (`20260907-claude-sonnet-5-within-run-
+    # sigma-band-backend-design.md`): once the main run has genuinely
+    # converged (never after merely hitting the hard cap — decision 3's
+    # own "extending an unconverged run would misrepresent stability
+    # that was never reached"), continue for `sigma_band_window` further
+    # generations, buffering each watched statistic's own value, then
+    # reduce that buffer to a mean/sigma/bounds summary. `report`/
+    # `RunResult.final_state` above are already built from the converged
+    # `state` itself; the extension advances its own separate
+    # `extension_state` variable instead of reassigning `state`, so
+    # neither one is affected by whether an extension runs at all — the
+    # single invariant this design most depends on (decision 4's own
+    # "the extension is strictly additive, never a revision of the
+    # primary answer"). `registry`/`rng`/`finite_alleles` are the same
+    # mutable bookkeeping objects the main loop already advanced, and
+    # the extension legitimately continues updating them (a mutation
+    # minted during the extension still needs a real, non-colliding
+    # id) — no new seeded stream, unlike the equilibrium-split ancestral
+    # phase's own decorrelated one.
+    sigma_band: dict[str, dict[str, float]] | None = None
+    if (
+        params.sigma_band_multiplier is not None
+        and params.sigma_band_window is not None
+        and outcome.converged
+    ):
+        band_values: dict[str, list[float]] = {
+            name: [] for name in params.convergence_statistics
+        }
+        extension_state = state
+        for _ in range(params.sigma_band_window):
+            extension_state = step(
+                extension_state, params, registry, rng, finite_alleles=finite_alleles
+            )
+            for name, value in _convergence_values(extension_state, params).items():
+                band_values[name].append(value)
+        sigma_band = _sigma_band_summary(band_values, params.sigma_band_multiplier)
     ended_at = _format_timestamp(clock())
     logger.info(
         "replicate %s finished: %s at generation %d (converged=%s)",
@@ -2868,6 +2922,13 @@ def _run_one(
             if equilibration_outcome is not None
             else None
         ),
+        sigma_band_multiplier=(
+            params.sigma_band_multiplier if sigma_band is not None else None
+        ),
+        sigma_band_window=(
+            params.sigma_band_window if sigma_band is not None else None
+        ),
+        sigma_band=sigma_band,
     )
     return RunResult(
         run_id=run_id,
@@ -3179,6 +3240,60 @@ def _mean(values: Sequence[float]) -> float:
     if not values:
         raise ValueError("cannot average no values")
     return math.fsum(values) / len(values)
+
+
+def _sigma_band_summary(
+    values: Mapping[str, Sequence[float]], multiplier: float
+) -> dict[str, dict[str, float]]:
+    """Reduce the within-run sigma band's own buffered values to mean/sigma/bounds.
+
+    Called once, after `_run_one`'s own extension loop finishes buffering
+    every watched statistic's per-generation value over the configured
+    trailing window (`20260907-claude-sonnet-5-within-run-sigma-band-
+    backend-design.md` decision 3) — never per generation, since the
+    band is a property of the whole window, not any one point in it.
+
+    Args:
+        values: One list per watched statistic, each entry that
+            statistic's own value for one generation of the extension
+            (`fim.engine._convergence_values`'s own per-generation
+            output, accumulated across the whole window) — possibly
+            shorter than the window itself, or altogether empty, for a
+            statistic undefined on some or all of those generations
+            (only `G_ST`, at a currently-monomorphic locus; the same
+            "omitted, not substituted" convention `ConvergenceMonitor`
+            itself already uses).
+        multiplier: The configured sigma multiplier (`SimulationParams.
+            sigma_band_multiplier`, always `2.0` or `3.0`).
+
+    Returns:
+        One entry per statistic that had at least one defined value,
+        each `{"mean", "sigma", "lower", "upper"}` — `sigma` is the
+        *population* standard deviation of the window that actually ran
+        (dividing by the window size itself, not `window - 1`), since
+        this describes the observed spread of that specific window, not
+        an estimate extrapolated from a smaller sample of some larger
+        population; `lower`/`upper` are `mean -/+ multiplier * sigma`,
+        precomputed so a reader never has to also know the multiplier
+        convention to interpret the band. A statistic with no defined
+        values at all (every generation of the extension left it
+        undefined) is omitted entirely, matching `_convergence_values`'s
+        own convention for the identical situation.
+    """
+    summary: dict[str, dict[str, float]] = {}
+    for name, series in values.items():
+        if not series:
+            continue
+        mean = _mean(series)
+        variance = math.fsum((value - mean) ** 2 for value in series) / len(series)
+        sigma = math.sqrt(variance)
+        summary[name] = {
+            "mean": mean,
+            "sigma": sigma,
+            "lower": mean - multiplier * sigma,
+            "upper": mean + multiplier * sigma,
+        }
+    return summary
 
 
 def _mean_g_st_across_loci(

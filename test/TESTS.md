@@ -2470,6 +2470,125 @@ test_post_init_validation_covers_all_scalar_contracts`);
 match exactly, which a real drifting `D` trajectory essentially never
 does in two generations.
 
+<a id="engine.test_engine.test_sigma_band_summary_matches_a_hand_computed_mean_and_sigma"></a>
+
+#### test\_sigma\_band\_summary\_matches\_a\_hand\_computed\_mean\_and\_sigma
+
+```python
+def test_sigma_band_summary_matches_a_hand_computed_mean_and_sigma() -> None
+```
+
+`_sigma_band_summary` computes a population mean/sigma, not a sample one.
+
+Hand-computed against `[0.1, 0.2, 0.3]`: mean `0.2`, population
+variance `((0.1)**2 + 0**2 + (0.1)**2) / 3`, sigma the square root
+of that — dividing by the window size itself (`3`), not `3 - 1`
+(design doc decision 3's own "describes the observed spread of the
+window that ran, not an estimate extrapolated from a sample").
+
+<a id="engine.test_engine.test_sigma_band_summary_omits_a_statistic_with_no_defined_values"></a>
+
+#### test\_sigma\_band\_summary\_omits\_a\_statistic\_with\_no\_defined\_values
+
+```python
+def test_sigma_band_summary_omits_a_statistic_with_no_defined_values() -> None
+```
+
+A statistic undefined for the whole window is dropped, not fabricated.
+
+<a id="engine.test_engine.test_sigma_band_extension_leaves_the_primary_report_and_final_state_unchanged"></a>
+
+#### test\_sigma\_band\_extension\_leaves\_the\_primary\_report\_and\_final\_state\_unchanged
+
+```python
+def test_sigma_band_extension_leaves_the_primary_report_and_final_state_unchanged(
+        tiny_params: SimulationParams) -> None
+```
+
+The extension is strictly additive — decision 4's own core invariant.
+
+An otherwise-identical run with the sigma band enabled reports the
+identical `report`/`final_state`/`generation` a plain run without it
+would — the extension's own further generations never surface there
+at all, only in `manifest.sigma_band`.
+
+<a id="engine.test_engine.test_sigma_band_is_none_when_the_run_only_hits_the_cap"></a>
+
+#### test\_sigma\_band\_is\_none\_when\_the\_run\_only\_hits\_the\_cap
+
+```python
+def test_sigma_band_is_none_when_the_run_only_hits_the_cap() -> None
+```
+
+An unconverged (capped) run is never extended, even with the band configured.
+
+Mirrors `test_cap_is_a_valid_nonconverged_result`'s own capped
+configuration, with a sigma band also requested — decision 3's own
+"extending an unconverged run would misrepresent stability that was
+never reached."
+
+<a id="engine.test_engine.test_sigma_band_window_length_changes_the_computed_band"></a>
+
+#### test\_sigma\_band\_window\_length\_changes\_the\_computed\_band
+
+```python
+def test_sigma_band_window_length_changes_the_computed_band(
+        tiny_params: SimulationParams) -> None
+```
+
+A longer extension window genuinely runs further generations.
+
+Externally observable proof the extension loop actually iterates
+`sigma_band_window` times, not a fixed or ignored count: two window
+lengths, same seed otherwise, produce different bands (a different
+number of real, seeded-random generations were stepped through).
+
+<a id="engine.test_engine.test_sigma_band_is_reproducible_for_the_same_seed"></a>
+
+#### test\_sigma\_band\_is\_reproducible\_for\_the\_same\_seed
+
+```python
+def test_sigma_band_is_reproducible_for_the_same_seed(
+        tiny_params: SimulationParams) -> None
+```
+
+The same seed and configuration reproduce a byte-identical band.
+
+<a id="engine.test_engine.test_sigma_band_rejects_every_non_lineal_backend"></a>
+
+#### test\_sigma\_band\_rejects\_every\_non\_lineal\_backend
+
+```python
+@pytest.mark.parametrize(
+    "backend_changes",
+    [
+        {
+            "engine_backend": "generational"
+        },
+        {
+            "engine_backend": "generational-vector",
+            "mutation_model": "finite_alleles",
+            "migrant_sampling": "continuous",
+        },
+        # `"auto"`, with the default `mutation_model="infinite_alleles"`,
+        # always resolves to `"generational"`
+        # (`_resolve_auto_engine_backend`) — never `"lineal"`.
+        {
+            "engine_backend": "auto"
+        },
+    ],
+)
+def test_sigma_band_rejects_every_non_lineal_backend(
+        tiny_params: SimulationParams, backend_changes: dict[str,
+                                                             object]) -> None
+```
+
+v1 only supports `"lineal"` — every other resolved backend is rejected outright.
+
+Never a silent no-op: `sigma_band_multiplier` being set but ignored
+would be exactly the kind of "the request was quietly dropped"
+failure this design's own decision 5 rejects.
+
 <a id="engine.test_engine.test_replicates_are_independently_reproducible"></a>
 
 #### test\_replicates\_are\_independently\_reproducible
@@ -12421,6 +12540,85 @@ def test_equilibrium_convergence_window_cannot_exceed_max_generations_plus_one(
 The same structural-impossibility rule `convergence_window`/`max_generations`
 already enforce for the main run, applied to the ancestral phase's own pair.
 
+<a id="model.test_params.test_sigma_band_fields_default_to_none_and_round_trip"></a>
+
+#### test\_sigma\_band\_fields\_default\_to\_none\_and\_round\_trip
+
+```python
+def test_sigma_band_fields_default_to_none_and_round_trip() -> None
+```
+
+Both fields are `None` by default, omitted from `to_dict()`.
+
+Matches `equilibrium_*`'s own round-trip contract
+(`test_equilibrium_split_fields_default_to_none_and_round_trip`): an
+absent key and an explicit `None` mean the same thing here, so
+omitting them keeps `from_mapping(to_dict())` lossless.
+
+<a id="model.test_params.test_sigma_band_fields_must_be_set_together"></a>
+
+#### test\_sigma\_band\_fields\_must\_be\_set\_together
+
+```python
+@pytest.mark.parametrize("omit",
+                         ["sigma_band_multiplier", "sigma_band_window"])
+def test_sigma_band_fields_must_be_set_together(omit: str) -> None
+```
+
+Setting only one of the two fields is rejected, not guessed at.
+
+<a id="model.test_params.test_sigma_band_multiplier_rejects_anything_but_two_or_three"></a>
+
+#### test\_sigma\_band\_multiplier\_rejects\_anything\_but\_two\_or\_three
+
+```python
+@pytest.mark.parametrize("multiplier", [1.0, 2.5, 4.0, 0.0, -2.0])
+def test_sigma_band_multiplier_rejects_anything_but_two_or_three(
+        multiplier: float) -> None
+```
+
+The multiplier is a closed set, not merely a suggestion.
+
+<a id="model.test_params.test_sigma_band_multiplier_accepts_three"></a>
+
+#### test\_sigma\_band\_multiplier\_accepts\_three
+
+```python
+def test_sigma_band_multiplier_accepts_three() -> None
+```
+
+3.0 is the other half of the closed set, not merely 2.0 alone.
+
+<a id="model.test_params.test_sigma_band_window_rejects_below_two"></a>
+
+#### test\_sigma\_band\_window\_rejects\_below\_two
+
+```python
+def test_sigma_band_window_rejects_below_two() -> None
+```
+
+`sigma_band_window` shares `convergence_window`'s own minimum.
+
+<a id="model.test_params.test_sigma_band_fields_do_not_conflict_with_equilibrium_split"></a>
+
+#### test\_sigma\_band\_fields\_do\_not\_conflict\_with\_equilibrium\_split
+
+```python
+def test_sigma_band_fields_do_not_conflict_with_equilibrium_split() -> None
+```
+
+Unlike equilibrium_*, the sigma band is never mutually exclusive.
+
+<a id="model.test_params.test_sigma_band_fields_do_not_conflict_with_explicit_p_0"></a>
+
+#### test\_sigma\_band\_fields\_do\_not\_conflict\_with\_explicit\_p\_0
+
+```python
+def test_sigma_band_fields_do_not_conflict_with_explicit_p_0() -> None
+```
+
+The sigma band is also never mutually exclusive with an explicit p_0.
+
 <a id="model.test_state"></a>
 
 # model.test\_state
@@ -13933,6 +14131,71 @@ def test_manifest_equilibrium_final_heterozygosity_rejects_out_of_range(
 ```
 
 `equilibrium_final_heterozygosity` shares `heterozygosity`'s `[0, 1)` domain.
+
+<a id="persistence.test_validation.test_manifest_sigma_band_fields_default_to_none_and_round_trip"></a>
+
+#### test\_manifest\_sigma\_band\_fields\_default\_to\_none\_and\_round\_trip
+
+```python
+def test_manifest_sigma_band_fields_default_to_none_and_round_trip(
+        tmp_path: Path) -> None
+```
+
+The three within-run sigma-band fields round-trip, `None` otherwise.
+
+Mirrors `test_manifest_equilibrium_fields_default_to_none_and_
+round_trip` -- same pattern, for the three fields `fim.engine._run_
+one` stamps only when the sigma band was actually requested and the
+run genuinely converged (`20260907-claude-sonnet-5-within-run-
+sigma-band-backend-design.md`, decision 4).
+
+<a id="persistence.test_validation.test_manifest_from_dict_tolerates_missing_sigma_band_fields"></a>
+
+#### test\_manifest\_from\_dict\_tolerates\_missing\_sigma\_band\_fields
+
+```python
+def test_manifest_from_dict_tolerates_missing_sigma_band_fields() -> None
+```
+
+A manifest written before these fields existed (schema_version < 3) still parses.
+
+Backward compatibility, checked directly, mirroring `test_manifest_
+from_dict_tolerates_missing_equilibrium_fields`.
+
+<a id="persistence.test_validation.test_manifest_sigma_band_shape_is_validated"></a>
+
+#### test\_manifest\_sigma\_band\_shape\_is\_validated
+
+```python
+@pytest.mark.parametrize(
+    ("sigma_band", "message"),
+    [
+        ("not-an-object", "must be an object or null"),
+        ({
+            "D": "not-an-object"
+        }, "must be an object"),
+        ({
+            "D": {
+                "mean": "0.5"
+            }
+        }, "must be a number"),
+        ({
+            "D": {
+                "mean": float("nan")
+            }
+        }, "must be finite"),
+        ({
+            "D": {
+                "mean": True
+            }
+        }, "must be a number"),
+    ],
+)
+def test_manifest_sigma_band_shape_is_validated(sigma_band: object,
+                                                message: str) -> None
+```
+
+A malformed `sigma_band` mapping is rejected with a specific message.
 
 <a id="persistence.test_validation.test_manifest_artifact_digests_are_validated"></a>
 

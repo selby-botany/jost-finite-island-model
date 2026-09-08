@@ -141,6 +141,167 @@ def test_cap_is_a_valid_nonconverged_result(
     assert result.report["generation"] == 2
 
 
+def _sigma_band_params(
+    tiny_params: SimulationParams, **changes: object
+) -> SimulationParams:
+    """`tiny_params`, with a sigma band requested (design doc §"1")."""
+    return SimulationParams.from_mapping(
+        {
+            **tiny_params.to_dict(),
+            "sigma_band_multiplier": 2.0,
+            "sigma_band_window": 5,
+            **changes,
+        }
+    )
+
+
+def test_sigma_band_summary_matches_a_hand_computed_mean_and_sigma() -> None:
+    """`_sigma_band_summary` computes a population mean/sigma, not a sample one.
+
+    Hand-computed against `[0.1, 0.2, 0.3]`: mean `0.2`, population
+    variance `((0.1)**2 + 0**2 + (0.1)**2) / 3`, sigma the square root
+    of that — dividing by the window size itself (`3`), not `3 - 1`
+    (design doc decision 3's own "describes the observed spread of the
+    window that ran, not an estimate extrapolated from a sample").
+    """
+    summary = engine._sigma_band_summary({"D": [0.1, 0.2, 0.3]}, 2.0)
+
+    expected_sigma = statistics.pstdev([0.1, 0.2, 0.3])
+    assert summary["D"]["mean"] == pytest.approx(0.2)
+    assert summary["D"]["sigma"] == pytest.approx(expected_sigma)
+    assert summary["D"]["lower"] == pytest.approx(0.2 - 2.0 * expected_sigma)
+    assert summary["D"]["upper"] == pytest.approx(0.2 + 2.0 * expected_sigma)
+
+
+def test_sigma_band_summary_omits_a_statistic_with_no_defined_values() -> None:
+    """A statistic undefined for the whole window is dropped, not fabricated."""
+    summary = engine._sigma_band_summary({"D": [0.5], "G_ST": []}, 3.0)
+
+    assert set(summary) == {"D"}
+
+
+def test_sigma_band_extension_leaves_the_primary_report_and_final_state_unchanged(
+    tiny_params: SimulationParams,
+) -> None:
+    """The extension is strictly additive — decision 4's own core invariant.
+
+    An otherwise-identical run with the sigma band enabled reports the
+    identical `report`/`final_state`/`generation` a plain run without it
+    would — the extension's own further generations never surface there
+    at all, only in `manifest.sigma_band`.
+    """
+    plain = _run(tiny_params)
+    extended = _run(_sigma_band_params(tiny_params))
+
+    # `run_id` itself deliberately differs: `deterministic_run_id`
+    # derives it from the full configuration
+    # (`sigma_band_multiplier`/`sigma_band_window` included), so a
+    # sigma-band-enabled run is correctly a distinct configuration, not
+    # a bug in this comparison.
+    assert {k: v for k, v in extended.report.items() if k != "run_id"} == {
+        k: v for k, v in plain.report.items() if k != "run_id"
+    }
+    assert extended.final_state == plain.final_state
+    assert extended.manifest.generation == plain.manifest.generation
+    assert extended.manifest.generation_count == plain.manifest.generation_count
+    assert plain.manifest.sigma_band is None
+    assert extended.manifest.sigma_band is not None
+    assert extended.manifest.sigma_band_multiplier == 2.0
+    assert extended.manifest.sigma_band_window == 5
+
+
+def test_sigma_band_is_none_when_the_run_only_hits_the_cap() -> None:
+    """An unconverged (capped) run is never extended, even with the band configured.
+
+    Mirrors `test_cap_is_a_valid_nonconverged_result`'s own capped
+    configuration, with a sigma band also requested — decision 3's own
+    "extending an unconverged run would misrepresent stability that was
+    never reached."
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "convergence_window": 2,
+            "convergence_tolerance": 0.0,
+            "max_generations": 2,
+            "sigma_band_multiplier": 2.0,
+            "sigma_band_window": 5,
+        }
+    )
+
+    result = _run(params)
+
+    assert not result.report["converged"]
+    assert result.manifest.sigma_band is None
+    assert result.manifest.sigma_band_multiplier is None
+    assert result.manifest.sigma_band_window is None
+
+
+def test_sigma_band_window_length_changes_the_computed_band(
+    tiny_params: SimulationParams,
+) -> None:
+    """A longer extension window genuinely runs further generations.
+
+    Externally observable proof the extension loop actually iterates
+    `sigma_band_window` times, not a fixed or ignored count: two window
+    lengths, same seed otherwise, produce different bands (a different
+    number of real, seeded-random generations were stepped through).
+    """
+    short = _run(_sigma_band_params(tiny_params, sigma_band_window=2))
+    long = _run(_sigma_band_params(tiny_params, sigma_band_window=50))
+
+    assert short.manifest.sigma_band != long.manifest.sigma_band
+
+
+def test_sigma_band_is_reproducible_for_the_same_seed(
+    tiny_params: SimulationParams,
+) -> None:
+    """The same seed and configuration reproduce a byte-identical band."""
+    params = _sigma_band_params(tiny_params)
+
+    first = _run(params)
+    second = _run(params)
+
+    assert first.manifest.sigma_band == second.manifest.sigma_band
+
+
+@pytest.mark.parametrize(
+    "backend_changes",
+    [
+        {"engine_backend": "generational"},
+        {
+            "engine_backend": "generational-vector",
+            "mutation_model": "finite_alleles",
+            "migrant_sampling": "continuous",
+        },
+        # `"auto"`, with the default `mutation_model="infinite_alleles"`,
+        # always resolves to `"generational"`
+        # (`_resolve_auto_engine_backend`) — never `"lineal"`.
+        {"engine_backend": "auto"},
+    ],
+)
+def test_sigma_band_rejects_every_non_lineal_backend(
+    tiny_params: SimulationParams, backend_changes: dict[str, object]
+) -> None:
+    """v1 only supports `"lineal"` — every other resolved backend is rejected outright.
+
+    Never a silent no-op: `sigma_band_multiplier` being set but ignored
+    would be exactly the kind of "the request was quietly dropped"
+    failure this design's own decision 5 rejects.
+    """
+    params = _sigma_band_params(tiny_params, **backend_changes)
+
+    with pytest.raises(ValueError, match="sigma_band_multiplier/sigma_band_window"):
+        fim(
+            params.N,
+            params.m,
+            params.mu,
+            params.d,
+            params=params,
+            clock=_clock,
+        )
+
+
 def test_replicates_are_independently_reproducible(
     tiny_params: SimulationParams,
 ) -> None:

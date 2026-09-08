@@ -188,6 +188,15 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "src/fim/engine.py" = ["N803"]
 "dev/bin/benchmark-engines" = ["N803"]
+# `SimulationParams.__post_init__` validates every field, one at a
+# time, in one flat function by design (its own docstring: "validate
+# it... for every field") — a genuinely large function, not a sloppy
+# one, that grows by roughly one statement per field this dataclass
+# ever gains. Ignored here rather than refactored around, since
+# splitting it into several sub-50-statement pieces would only hide
+# the same total validation behind an arbitrary boundary with no real
+# behavioral benefit.
+"src/fim/model/params.py" = ["PLR0915"]
 "test/**/*.py" = ["ARG001", "PLR2004", "S101"]
 
 [tool.mypy]

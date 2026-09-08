@@ -1025,3 +1025,89 @@ def test_equilibrium_convergence_window_cannot_exceed_max_generations_plus_one()
         ValueError, match="equilibrium_convergence_window cannot exceed"
     ):
         SimulationParams.from_mapping(config)
+
+
+def _sigma_band_config(**changes: object) -> dict[str, object]:
+    """Return a valid config with both sigma_band_* fields set."""
+    return {
+        **_valid_config(),
+        "sigma_band_multiplier": 2.0,
+        "sigma_band_window": 100,
+        **changes,
+    }
+
+
+def test_sigma_band_fields_default_to_none_and_round_trip() -> None:
+    """Both fields are `None` by default, omitted from `to_dict()`.
+
+    Matches `equilibrium_*`'s own round-trip contract
+    (`test_equilibrium_split_fields_default_to_none_and_round_trip`): an
+    absent key and an explicit `None` mean the same thing here, so
+    omitting them keeps `from_mapping(to_dict())` lossless.
+    """
+    default_params = SimulationParams.from_mapping(_valid_config())
+    assert default_params.sigma_band_multiplier is None
+    assert default_params.sigma_band_window is None
+    assert "sigma_band_multiplier" not in default_params.to_dict()
+    assert SimulationParams.from_mapping(default_params.to_dict()) == default_params
+
+    configured = SimulationParams.from_mapping(_sigma_band_config())
+    assert configured.sigma_band_multiplier == 2.0
+    assert configured.sigma_band_window == 100
+    assert configured.to_dict()["sigma_band_multiplier"] == 2.0
+    assert SimulationParams.from_mapping(configured.to_dict()) == configured
+
+
+@pytest.mark.parametrize("omit", ["sigma_band_multiplier", "sigma_band_window"])
+def test_sigma_band_fields_must_be_set_together(omit: str) -> None:
+    """Setting only one of the two fields is rejected, not guessed at."""
+    config = _sigma_band_config()
+    del config[omit]
+    with pytest.raises(ValueError, match="must be set together, or not at all"):
+        SimulationParams.from_mapping(config)
+
+
+@pytest.mark.parametrize("multiplier", [1.0, 2.5, 4.0, 0.0, -2.0])
+def test_sigma_band_multiplier_rejects_anything_but_two_or_three(
+    multiplier: float,
+) -> None:
+    """The multiplier is a closed set, not merely a suggestion."""
+    config = _sigma_band_config(sigma_band_multiplier=multiplier)
+    with pytest.raises(ValueError, match="sigma_band_multiplier must be"):
+        SimulationParams.from_mapping(config)
+
+
+def test_sigma_band_multiplier_accepts_three() -> None:
+    """3.0 is the other half of the closed set, not merely 2.0 alone."""
+    params = SimulationParams.from_mapping(
+        _sigma_band_config(sigma_band_multiplier=3.0)
+    )
+    assert params.sigma_band_multiplier == 3.0
+
+
+def test_sigma_band_window_rejects_below_two() -> None:
+    """`sigma_band_window` shares `convergence_window`'s own minimum."""
+    config = _sigma_band_config(sigma_band_window=1)
+    with pytest.raises(ValueError, match="sigma_band_window must be at least 2"):
+        SimulationParams.from_mapping(config)
+
+
+def test_sigma_band_fields_do_not_conflict_with_equilibrium_split() -> None:
+    """Unlike equilibrium_*, the sigma band is never mutually exclusive."""
+    config = {
+        **_sigma_band_config(),
+        "equilibrium_convergence_window": 2,
+        "equilibrium_convergence_tolerance": 0.01,
+        "equilibrium_max_generations": 100,
+    }
+    params = SimulationParams.from_mapping(config)
+    assert params.sigma_band_multiplier == 2.0
+    assert params.equilibrium_convergence_window == 2
+
+
+def test_sigma_band_fields_do_not_conflict_with_explicit_p_0() -> None:
+    """The sigma band is also never mutually exclusive with an explicit p_0."""
+    config = _sigma_band_config(p_0=[[{"0": 1.0}], [{"0": 1.0}]])
+    params = SimulationParams.from_mapping(config)
+    assert params.sigma_band_multiplier == 2.0
+    assert params.initial_frequencies is not None
