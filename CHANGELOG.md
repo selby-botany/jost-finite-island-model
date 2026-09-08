@@ -92,6 +92,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `fim init`'s starter configuration now pins `n_replicates: 1`
+  explicitly. It never set the field at all, relying on the default —
+  which changed from `1` to `200` in the `n_replicates`/
+  `replicate_tolerance` default change above, silently turning a
+  first-time user's very first `fim run` from one quick scalar run into
+  an unannounced 200-replicate batch (a different output directory
+  layout entirely: `manifest.json`/`summary.json`/`replicate-*/`
+  instead of the flat four-artifact scalar layout). Found via the
+  "Beta builds" packaging pipeline's own smoke test, which hardcodes
+  and expects that flat layout from exactly this config.
 - A `replicate_minimum` left above `n_replicates` (the GUI's own "new
   run" form pre-populates both from the shipped defaults, so simply
   changing `n_replicates` without separately touching `replicate_

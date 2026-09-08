@@ -91,6 +91,14 @@ convergence_statistic: D
 convergence_window: 50
 convergence_tolerance: 0.01
 max_generations: 10000
+# Explicit, not merely `DEFAULT_N_REPLICATES`'s own value: a first-time
+# user's very first `fim run` should be one quick, single run they can
+# read the result of immediately, not an unannounced 200-replicate batch
+# (`SimulationParams.__post_init__`'s own docstring on why an *absent*
+# `n_replicates` now means 200, not 1). Leaving this field out here once
+# meant the same thing that leaving it out in any other config file
+# means, until that default changed out from under it.
+n_replicates: 1
 """
 
 

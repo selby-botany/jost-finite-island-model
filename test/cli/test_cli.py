@@ -444,6 +444,33 @@ def test_init_writes_parseable_starter_config(tmp_path: Path) -> None:
     assert params.N == 450
 
 
+def test_init_writes_a_config_that_runs_as_a_single_scalar_run(
+    tmp_path: Path,
+) -> None:
+    """`fim init`'s starter config must pin `n_replicates: 1` explicitly.
+
+    Regression test for a real bug: `DEFAULT_N_REPLICATES` changed from
+    `1` to `200` in `021f514`, and `STARTER_CONFIG` never set
+    `n_replicates` at all, relying on that default — so an un-pinned
+    starter config silently switched from "one quick scalar run" to "a
+    200-replicate batch" the moment the default changed, producing the
+    batch directory layout (`manifest.json`/`summary.json`/
+    `replicate-*/`) instead of the flat four-artifact scalar layout every
+    packaging smoke test (`.github/workflows/beta.yml`,
+    `.github/workflows/ci.yml`) hardcodes and expects from `fim init`'s
+    own example. No test caught this until the first "Beta builds" run
+    after that default changed, because `ci.yml`'s own equivalent
+    packaging jobs only run on a release tag push, not on an ordinary
+    branch push.
+    """
+    output = tmp_path / "example-run.yaml"
+
+    assert cli.main(["init", "--output", str(output)]) == 0
+
+    params = cli.load_config(output)
+    assert params.n_replicates == 1
+
+
 def test_default_paths_use_project_results(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
