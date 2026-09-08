@@ -675,6 +675,53 @@ fieldset.composite > label {
     font-weight: 600;
 }
 
+/* The custom-locus-ID grid editor (`loci-custom-fields`) -- a scrollable
+ * table of `(locus ID, length)` rows, styled to match the migration-
+ * matrix grid's own numeric-table conventions (`.matrix-grid` above).
+ */
+.loci-grid {
+    max-height: 16rem;
+    max-width: 100%;
+    overflow: auto;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.loci-grid table {
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+    width: 100%;
+}
+
+.loci-grid th,
+.loci-grid td {
+    padding: 0.15rem 0.3rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.loci-grid th {
+    color: var(--fim-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    position: sticky;
+    top: 0;
+    background: var(--fim-background);
+}
+
+.loci-id-cell,
+.loci-length-cell {
+    width: 5rem;
+    font: inherit;
+    color: inherit;
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.2rem 0.35rem;
+    text-align: right;
+}
+
 #explore-canvas {
     border: 1px solid var(--fim-border);
     border-radius: 4px;

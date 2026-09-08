@@ -45,7 +45,6 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "max_generations",
         "migrant_sampling",
         "mutation_model",
-        "locus_lengths",
         "initial_allele_count",
         "initial_concentration",
         "convergence_combinator",
@@ -56,9 +55,11 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "replicate_minimum",
         "replicate_confidence",
     }
-    # `m`, `mu`/`mu_b`, `convergence_statistic`, and `p_0` are composite
-    # (mode selectors or read-only summaries) — never plain `FormField`s.
+    # `m`, `mu`/`mu_b`, `loci`/`locus_lengths`, `convergence_statistic`,
+    # and `p_0` are composite (mode selectors or read-only summaries) —
+    # never plain `FormField`s.
     assert "m" not in names
+    assert "locus_lengths" not in names
     assert "mu" not in names
     assert "convergence_statistic" not in names
     assert "p_0" not in names
@@ -555,19 +556,81 @@ def test_p0_summary_from_params_describes_a_loaded_p0() -> None:
     assert "loaded from file" in summary
 
 
-def test_params_to_form_values_rejects_custom_locus_ids() -> None:
-    """A `loci` list with non-default-position IDs has no form representation."""
+def test_loci_from_params_sequential_ids_render_lengths_mode() -> None:
+    """Default, sequential locus IDs render the simple comma-list mode."""
+    params = _params(loci=(LocusSpec(1, 50), LocusSpec(2, 8000)))
+
+    values = config_form.loci_from_params(params)
+
+    assert values == {
+        "loci_mode": "lengths",
+        "locus_lengths": "50,8000",
+        "loci_json": "",
+    }
+
+
+def test_loci_from_params_custom_ids_render_a_real_editable_grid() -> None:
+    """Custom, non-default-position locus IDs render a real grid, not a rejection.
+
+    `loci_to_payload` submitting that grid's own values back reproduces
+    the identical `loci` list — the same "loaded badge to real editor"
+    upgrade `m_from_params`'s own `"matrix"` mode already made for a
+    loaded migration matrix.
+    """
     params = _params(loci=(LocusSpec(locus_id=5, length=200),))
 
-    with pytest.raises(ValueError, match="custom locus IDs"):
-        config_form.params_to_form_values(params)
+    values = config_form.loci_from_params(params)
+
+    assert values["loci_mode"] == "custom"
+    assert json.loads(values["loci_json"]) == [{"locus_id": 5, "length": 200}]
+
+    payload = config_form.loci_to_payload(values)
+
+    assert payload == {"loci": [{"locus_id": 5, "length": 200}]}
+
+
+def test_loci_to_payload_lengths_mode_derives_n_loci() -> None:
+    """Lengths mode's payload is `n_loci`/`locus_lengths`, matching the O(loci) rule."""
+    payload = config_form.loci_to_payload(
+        {"loci_mode": "lengths", "locus_lengths": "50, 8000, 3", "loci_json": ""}
+    )
+
+    assert payload == {"n_loci": 3, "locus_lengths": [50, 8000, 3]}
+
+
+def test_loci_to_payload_rejects_malformed_json() -> None:
+    """A syntactically invalid `loci_json` is a clear error, not a crash."""
+    with pytest.raises(ValueError, match="valid JSON"):
+        config_form.loci_to_payload(
+            {"loci_mode": "custom", "locus_lengths": "", "loci_json": "{not valid"}
+        )
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    ["[]", '[{"locus_id": 1}]', '[{"locus_id": "x", "length": 1}]', '"not-a-list"'],
+)
+def test_loci_to_payload_rejects_the_wrong_shape(malformed: str) -> None:
+    """Valid JSON that is not a list of `{locus_id, length}` rows is still rejected."""
+    with pytest.raises(ValueError, match="nonempty"):
+        config_form.loci_to_payload(
+            {"loci_mode": "custom", "locus_lengths": "", "loci_json": malformed}
+        )
+
+
+def test_loci_to_payload_rejects_an_unknown_mode() -> None:
+    """An unrecognized mode is a clear programming error, not a silent default."""
+    with pytest.raises(ValueError, match="unknown loci selector mode"):
+        config_form.loci_to_payload(
+            {"loci_mode": "bogus", "locus_lengths": "", "loci_json": ""}
+        )
 
 
 def test_params_to_form_values_includes_every_composite_fields_keys() -> None:
     """A round-tripped params object populates every composite's own keys too."""
     values = config_form.params_to_form_values(_params())
 
-    for key in ("m_mode", "mu_mode", "p0_summary"):
+    for key in ("m_mode", "mu_mode", "p0_summary", "loci_mode", "loci_json"):
         assert key in values
     for name in config_form.CONVERGENCE_STATISTIC_NAMES:
         assert f"cs_{name}" in values

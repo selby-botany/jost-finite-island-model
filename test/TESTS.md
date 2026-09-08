@@ -39,6 +39,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_explore_screen`](#gui.test_explore_screen)
   - [`test_help_screen`](#gui.test_help_screen)
   - [`test_input_screen`](#gui.test_input_screen)
+  - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
   - [`test_migration_matrix_screen`](#gui.test_migration_matrix_screen)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
   - [`test_preferences`](#gui.test_preferences)
@@ -7533,6 +7534,70 @@ test, not the batch-execution timing that triggers it. No explicit
 reset call needed first: every test gets a fresh page load of its
 own, so the module-scoped high-water mark this proves already
 starts at its own initial `0` regardless.
+
+<a id="gui.test_loci_grid_screen"></a>
+
+# gui.test\_loci\_grid\_screen
+
+Headless functional tests for the custom-locus-ID grid editor
+(botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+§4.4).
+
+Real DOM-driven proof that `webui/screens/loci-grid.js` actually builds,
+grows, shrinks, and reads back a real grid of `(locus ID, length)` rows —
+`test/gui/test_config_form.py`'s own `test_loci_to_payload_*`/
+`test_loci_from_params_*` tests already prove `loci_to_payload`/
+`loci_from_params` correct as plain Python calls; these tests prove the
+page's own JavaScript builds the grid those functions actually read from
+and write to, which no Python-only test can check. Mirrors
+`test_migration_matrix_screen.py`'s own shape exactly.
+
+<a id="gui.test_loci_grid_screen.test_selecting_custom_mode_builds_a_single_default_row"></a>
+
+#### test\_selecting\_custom\_mode\_builds\_a\_single\_default\_row
+
+```python
+def test_selecting_custom_mode_builds_a_single_default_row(
+        window: webview.Window) -> None
+```
+
+Switching to custom mode with no prior `loci` builds one default row.
+
+<a id="gui.test_loci_grid_screen.test_add_row_button_appends_the_next_sequential_locus_id"></a>
+
+#### test\_add\_row\_button\_appends\_the\_next\_sequential\_locus\_id
+
+```python
+def test_add_row_button_appends_the_next_sequential_locus_id(
+        window: webview.Window) -> None
+```
+
+"Add locus" appends a row one past the highest already present.
+
+<a id="gui.test_loci_grid_screen.test_remove_row_leaves_at_least_one_row"></a>
+
+#### test\_remove\_row\_leaves\_at\_least\_one\_row
+
+```python
+def test_remove_row_leaves_at_least_one_row(window: webview.Window) -> None
+```
+
+Removing rows stops at one -- a `loci` list can never submit empty.
+
+<a id="gui.test_loci_grid_screen.test_a_real_run_with_custom_nonsequential_locus_ids_completes"></a>
+
+#### test\_a\_real\_run\_with\_custom\_nonsequential\_locus\_ids\_completes
+
+```python
+def test_a_real_run_with_custom_nonsequential_locus_ids_completes() -> None
+```
+
+A run submitted with custom, non-sequential locus IDs actually completes.
+
+Same event-driven "wait on a real `threading.Event`, never poll a
+live background run" shape `test_running_screen.py`'s own real-run
+tests already use, for the identical reason those tests' own
+docstrings record.
 
 <a id="gui.test_migration_matrix_screen"></a>
 

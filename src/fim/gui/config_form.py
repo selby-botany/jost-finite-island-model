@@ -124,12 +124,12 @@ MIGRATION_FIELDS: Final[tuple[FormField, ...]] = (
     ),
 )
 
-# `mu`/`mu_b` (§4.0 #4) and `p_0`'s read-only summary (§3.6, §4.0 #3)
-# are composite, not plain `FormField`s — see the `mu_*`/`p0_*`
-# functions below — so this tab's only plain fields are
-# `mutation_model` and the locus-lengths comma list, whose item count
-# *is* `n_loci` (§3.6: one length per locus, the same O(loci)
-# cardinality-rule shape `N` already uses for O(d)).
+# `mu`/`mu_b` (§4.0 #4), `p_0`'s read-only summary (§3.6, §4.0 #3), and
+# `loci` (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+# redesign.md` §4.4 -- a mode selector between the simple comma-list
+# shorthand and a real per-locus grid for custom IDs, `loci_to_payload`/
+# `loci_from_params` below) are all composite, not plain `FormField`s —
+# so this tab's only plain field is `mutation_model` itself.
 MUTATION_FIELDS: Final[tuple[FormField, ...]] = (
     FormField(
         "mutation_model",
@@ -137,7 +137,6 @@ MUTATION_FIELDS: Final[tuple[FormField, ...]] = (
         "choice",
         choices=("infinite_alleles", "finite_alleles"),
     ),
-    FormField("locus_lengths", "locus length(s)", "int_list"),
 )
 
 INITIAL_CONDITIONS_FIELDS: Final[tuple[FormField, ...]] = (
@@ -213,6 +212,9 @@ _COMPOSITE_FIELD_TABS: Final[Mapping[str, str]] = {
     "equilibrium_convergence_window": "initial_conditions",
     "equilibrium_convergence_tolerance": "initial_conditions",
     "equilibrium_max_generations": "initial_conditions",
+    "loci": "mutation",
+    "locus": "mutation",
+    "locus_lengths": "mutation",
 }
 
 
@@ -268,6 +270,8 @@ def tab_for_error(message: str) -> str | None:
         "m",
         "convergence_statistic",
         "equilibrium",
+        "loci",
+        "locus",
     ):
         if message.startswith(name):
             return tab_for_field(name)
@@ -317,6 +321,15 @@ def field_for_error(message: str) -> str | None:
     ):
         if message.startswith(f"{name} "):
             return name
+    # `locus_lengths` (loci_mode "lengths"): excluded from `all_fields()`
+    # for the identical reason the three equilibrium fields above are —
+    # its presence in the payload is conditional on `loci_mode`
+    # (`loci_to_payload`) — but it is still one real, single-widget
+    # field, so its own `int_list`-shaped errors (`_parse_int_list_
+    # named`'s own bare-scalar and per-item forms) are still routed
+    # directly to it, the same as any `all_fields()` entry of that kind.
+    if message.startswith(("locus_lengths ", "locus_lengths[")):
+        return "locus_lengths"
     return None
 
 
@@ -350,16 +363,13 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
                 None if not text else _parse_float_named(field.name, text)
             )
         elif field.kind == "int_list":
-            n_loci_field = field.name == "locus_lengths"
-            parsed = _parse_int_list_named(field.name, text)
-            payload[field.name] = parsed
-            if n_loci_field:
-                payload["n_loci"] = 1 if isinstance(parsed, int) else len(parsed)
+            payload[field.name] = _parse_int_list_named(field.name, text)
         else:
             payload[field.name] = text
     payload["m"] = m_to_payload(values)
     payload.update(mu_to_payload(values))
     payload.update(initial_conditions_to_payload(values))
+    payload.update(loci_to_payload(values))
     payload["convergence_statistic"] = convergence_statistic_to_payload(values)
     return payload
 
@@ -631,6 +641,122 @@ def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]:
     }
 
 
+# The two loci modes (botanist GUI design doc §4.4): `"lengths"` (the
+# library default — a comma-separated `locus_lengths` list, sequential
+# 1-based IDs implied) and `"custom"` (a real per-locus grid, editable
+# `locus_id` and `length` cell by cell — `configuration.md`'s own
+# explicit `loci: [{locus_id, length}, ...]` list, submitted directly
+# rather than through the `n_loci`/`locus_lengths` shorthand). Replaces
+# `params_to_form_values`'s earlier flat rejection of any non-default
+# `locus_id` ordering with a real, editable representation — the same
+# "loaded badge to real editor" upgrade `m_from_params`'s own `"matrix"`
+# mode already made for a loaded migration matrix.
+LociMode = Literal["lengths", "custom"]
+
+
+def loci_to_payload(values: Mapping[str, str]) -> dict[str, object]:
+    """Build `loci`'s (or `n_loci`/`locus_lengths`'s) payload from the selector's mode.
+
+    Args:
+        values: The full form-values mapping; only `loci_mode`,
+            `locus_lengths`, and `loci_json` are read.
+
+    Returns:
+        `{"n_loci": ..., "locus_lengths": ...}` (`loci_mode ==
+        "lengths"`, mirroring the `int_list` cardinality rule `N`
+        already uses) or `{"loci": [...]}` (`loci_mode == "custom"`) —
+        `fim.model.params.SimulationParams.from_mapping` accepts either
+        shape verbatim, and the two are mutually exclusive in the
+        payload, exactly like a hand-authored YAML file only ever uses
+        one or the other.
+
+    Raises:
+        ValueError: If the active sub-field's text does not parse (a
+            malformed `locus_lengths` list, or `loci_json` that is not
+            valid JSON shaped as a list of `{locus_id, length}`
+            mappings), or `loci_mode` is neither of the two.
+    """
+    mode = values["loci_mode"]
+    if mode == "lengths":
+        parsed = _parse_int_list_named("locus_lengths", values["locus_lengths"].strip())
+        return {
+            "n_loci": 1 if isinstance(parsed, int) else len(parsed),
+            "locus_lengths": parsed,
+        }
+    if mode == "custom":
+        return {"loci": _parse_loci_json(values["loci_json"])}
+    raise ValueError(f"unknown loci selector mode: {mode!r}")
+
+
+def _parse_loci_json(text: str) -> list[dict[str, int]]:
+    """Parse the per-locus grid editor's own serialized JSON value.
+
+    Args:
+        text: `loci_json`'s own current value — a JSON array of
+            `{"locus_id": <int>, "length": <int>}` objects, written by
+            `webui/screens/loci-grid.js` from the grid's own live rows.
+
+    Raises:
+        ValueError: If `text` is not valid JSON, or is not a nonempty
+            list of mappings each carrying exactly `locus_id` and
+            `length` integer keys — checked here only well enough to
+            give a clear error for a malformed *shape* (this function's
+            own concern); duplicate locus IDs, a non-positive length, or
+            any other semantic rule stays `from_mapping`'s own concern
+            to reject, exactly like a hand-authored YAML `loci` list.
+    """
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"loci must be valid JSON: {error}") from error
+    if not isinstance(parsed, list) or not parsed:
+        raise ValueError("loci must be a nonempty list of rows")
+    loci: list[dict[str, int]] = []
+    for row in parsed:
+        if (
+            not isinstance(row, dict)
+            or set(row) != {"locus_id", "length"}
+            or not all(isinstance(value, int) for value in row.values())
+        ):
+            raise ValueError(
+                "loci must be a nonempty list of {locus_id, length} integer rows"
+            )
+        loci.append({"locus_id": row["locus_id"], "length": row["length"]})
+    return loci
+
+
+def loci_from_params(params: SimulationParams) -> dict[str, str]:
+    """Render `params.loci` back into the selector's form-value keys.
+
+    Args:
+        params: A validated configuration.
+
+    Returns:
+        `loci_mode`/`locus_lengths`/`loci_json`. Sequential, 1-based
+        default `locus_id`s (`1, 2, 3, ...`, in position order) render
+        as `"lengths"` mode with the existing comma-list; any other
+        ordering — custom IDs, non-sequential IDs, or IDs not starting
+        at 1 — renders as `"custom"` mode with every locus's own real
+        `(locus_id, length)` pair.
+    """
+    if all(locus.locus_id == index + 1 for index, locus in enumerate(params.loci)):
+        return {
+            "loci_mode": "lengths",
+            "locus_lengths": ",".join(str(locus.length) for locus in params.loci),
+            "loci_json": "",
+        }
+    return {
+        "loci_mode": "custom",
+        "locus_lengths": "",
+        "loci_json": json.dumps(
+            [
+                {"locus_id": locus.locus_id, "length": locus.length}
+                for locus in params.loci
+            ]
+        ),
+    }
+
+
 def convergence_statistic_to_payload(values: Mapping[str, str]) -> str | list[str]:
     """Build `convergence_statistic`'s payload from the multi-select checkboxes.
 
@@ -693,16 +819,11 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
 
     Raises:
         ValueError: If `params` uses a construct this form cannot
-            represent at all — a per-locus `mu` (`mu_from_params`), or
-            a `loci` list with custom, non-default-position
-            `locus_id`s (`doc/fim-gui-design.md` §6.2: this form's one
-            `locus_lengths` field cannot express a custom ID at all).
+            represent at all — a genuinely per-locus `mu`
+            (`mu_from_params`'s own docstring; custom locus IDs alone no
+            longer trigger this, `loci_from_params` below now renders
+            those as a real, editable grid instead).
     """
-    if any(locus.locus_id != index + 1 for index, locus in enumerate(params.loci)):
-        raise ValueError(
-            "this configuration uses custom locus IDs; edit the YAML file "
-            "directly — the form only edits locus lengths, in position order"
-        )
     n_text = (
         str(params.N)
         if isinstance(params.N, int)
@@ -716,7 +837,6 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         "max_generations": str(params.max_generations),
         "migrant_sampling": params.migrant_sampling,
         "mutation_model": params.mutation_model,
-        "locus_lengths": ",".join(str(locus.length) for locus in params.loci),
         "initial_allele_count": str(params.initial_allele_count),
         "initial_concentration": str(params.initial_concentration),
         "p0_summary": p0_summary_from_params(params),
@@ -735,6 +855,7 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
     values.update(m_from_params(params))
     values.update(mu_from_params(params))
     values.update(initial_conditions_from_params(params))
+    values.update(loci_from_params(params))
     values.update(convergence_statistic_from_params(params))
     return values
 
@@ -767,6 +888,7 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "seed",
     "n_loci",
     "locus_lengths",
+    "loci",
     "mutation_model",
     "initial_allele_count",
     "initial_concentration",

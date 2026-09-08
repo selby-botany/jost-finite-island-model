@@ -57,11 +57,13 @@ function applyFormValues(values) {
     const p0Summary = document.getElementById("p0-summary");
     p0Summary.textContent = values.p0_summary || "";
     p0Summary.hidden = !values.p0_summary;
-    // `field-m_matrix_json`'s own value is now set (by the loop above,
-    // like any other field), but the *visible* grid it drives is a
-    // separate set of cells `migration-matrix.js` owns -- rebuilding it
-    // from that value is that file's own concern, not this function's.
+    // `field-m_matrix_json`/`field-loci_json`'s own values are now set
+    // (by the loop above, like any other field), but the *visible*
+    // grids they drive are separate DOM rows `migration-matrix.js`/
+    // `loci-grid.js` each own -- rebuilding them from those values is
+    // each file's own concern, not this function's.
     window.fim.rebuildMigrationMatrixGrid();
+    window.fim.rebuildLociGrid();
     syncConditionalVisibility();
 }
 
@@ -100,6 +102,10 @@ function syncConditionalVisibility() {
         initialConditionsMode !== "dirichlet";
     document.getElementById("initial-conditions-equilibrium-fields").hidden =
         initialConditionsMode !== "equilibrium_split";
+
+    const lociMode = form.elements.namedItem("loci_mode").value;
+    document.getElementById("loci-lengths-fields").hidden = lociMode !== "lengths";
+    document.getElementById("loci-custom-fields").hidden = lociMode !== "custom";
 
     document.getElementById("combinator-field").hidden = checkedStatisticCount() < 2;
 

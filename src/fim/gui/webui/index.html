@@ -451,10 +451,34 @@
         <option value="finite_alleles">finite_alleles</option>
       </select>
     </div>
-    <div class="field">
-      <label for="field-locus_lengths">locus length(s)</label>
-      <input type="text" id="field-locus_lengths" name="locus_lengths" form="input-form">
-    </div>
+    <fieldset class="composite" id="loci-selector">
+      <legend>loci</legend>
+      <label><input type="radio" name="loci_mode" value="lengths" checked form="input-form"> length(s) only</label>
+      <label><input type="radio" name="loci_mode" value="custom" form="input-form"> custom locus IDs</label>
+      <div class="field" id="loci-lengths-fields">
+        <label for="field-locus_lengths">locus length(s)</label>
+        <input type="text" id="field-locus_lengths" name="locus_lengths" form="input-form">
+      </div>
+      <!-- The per-locus grid editor (botanist GUI design doc
+           `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4):
+           `webui/screens/loci-grid.js` builds one (locus_id, length)
+           row per locus into `loci-grid`, with add/remove-row controls,
+           and keeps the hidden `loci_json` field (the one `config_form.
+           loci_to_payload`/`loci_from_params` actually read/write) in
+           sync on every edit. A loaded `loci` list with custom,
+           non-default-position IDs renders here too, real values in
+           real editable rows, not a rejected load. -->
+      <div class="field" id="loci-custom-fields" hidden>
+        <table id="loci-grid" class="loci-grid">
+          <thead>
+            <tr><th>locus ID</th><th>length</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button type="button" id="loci-add-row-button">Add locus</button>
+        <input type="hidden" id="field-loci_json" name="loci_json" form="input-form">
+      </div>
+    </fieldset>
 
     <fieldset class="composite" id="mu-selector">
       <legend>μ (mutation rate)</legend>
@@ -629,6 +653,7 @@
 <script src="scrubber.js"></script>
 <script src="screens/config-modals.js"></script>
 <script src="screens/migration-matrix.js"></script>
+<script src="screens/loci-grid.js"></script>
 <script src="screens/run-view-controls.js"></script>
 <script src="screens/run-view-initial.js"></script>
 <script src="screens/run-view-running.js"></script>
