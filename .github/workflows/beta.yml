@@ -377,8 +377,24 @@ jobs:
     container: python:3.12-slim-bullseye
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      # `deb.debian.org/debian-security`'s own `bullseye-security`
+      # `InRelease` carries a `Valid-Until` that lapsed without being
+      # refreshed (confirmed live: still served, HTTP 200, just past its
+      # own stamped expiry -- Debian 11's security-update cadence has
+      # stopped, not the mirror itself), so a plain `apt-get update`
+      # fails outright with "Release file ... is expired", exit code
+      # 100 (run 34187301462). `bullseye`/`bullseye-updates` carry no
+      # `Valid-Until` at all and are unaffected; `archive.debian.org` is
+      # not a fix here -- confirmed live, it 404s for
+      # `debian-security/dists/bullseye-security` entirely, it only
+      # mirrors the plain `debian` suite. Disabling apt's own
+      # freshness check is the correct, targeted fix: the packages
+      # themselves are still being served correctly, only the
+      # `Release` file's own self-reported expiry is stale. Matches
+      # `ci.yml`'s own mirrored `linux-x64` job, fixed there in the
+      # same commit.
       - run: |
-          apt-get update -qq
+          apt-get -o Acquire::Check-Valid-Until=false update -qq
           apt-get install -qq -y --no-install-recommends \
               binutils gcc pkg-config \
               libgirepository1.0-dev libcairo2-dev \
