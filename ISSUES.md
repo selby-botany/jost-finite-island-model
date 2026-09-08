@@ -126,13 +126,91 @@ hook is unreachable on exactly this failure. An implementation built that
 way passed every unit test and was silent on the real hang; only an
 end-to-end test against a genuinely wedged interpreter revealed it.
 
+### Linux build image is pinned to an end-of-life Debian release
+
+**Status:** stopgap applied; durable fix not started
+**Affects:** the Linux packaging pipeline (`.github/workflows/ci.yml`'s
+`linux-x64`, `.github/workflows/beta.yml`'s `linux-beta-x64`) — not any
+released `fim` build, and not `fim` as installed or run by anyone
+**First observed:** 2026-09-08, in continuous integration (run 34187301462)
+
+This is a build-infrastructure issue, not an application defect — nothing
+about how `fim` behaves for a user is affected. It is recorded here because
+the stopgap trades away a real security property of the build pipeline,
+and that trade needs to be revisited rather than forgotten once it stops
+being the thing that is actively broken.
+
+#### What happens today
+
+Both Linux packaging jobs build inside `python:3.12-slim-bullseye`
+(Debian 11), chosen deliberately for `glibc` 2.31's older-baseline
+portability and for the `webkit2gtk-4.0`/`libsoup-2.4` package pair
+`pywebview`'s own GTK backend falls back to (see the comments at each
+job's `container:` line). Debian 11 has reached end-of-life: its
+security-update feed (`deb.debian.org/debian-security`, suite
+`bullseye-security`) stopped being refreshed, and the signed `Release`
+file's own `Valid-Until` timestamp lapsed as a result. `apt-get update`
+enforces that timestamp by default, so the build failed outright with
+"Release file ... is expired" (exit code 100) the first time either
+pipeline ran after the lapse.
+
+The stopgap (commit `345263f`) passes `-o
+Acquire::Check-Valid-Until=false` to `apt-get update` in both jobs,
+which waives that freshness check for the whole invocation rather than
+for just the one expired source.
+
+#### Why this needs to be revisited
+
+`Acquire::Check-Valid-Until` exists to defend against a repository
+replay/freeze attack: `deb.debian.org` is plain `http://`, not `https://`,
+so package integrity there rests entirely on the `Release` file's GPG
+signature plus this freshness bound, not transport security. A
+validly-signed but stale `Release`+`Packages` set — served by a
+compromised or malicious mirror, or replayed by an on-path attacker —
+would otherwise be trusted forever once this check is off, silently
+hiding any fix published after the snapshot an attacker chose to replay.
+
+Confirmed live before applying the stopgap: `deb.debian.org` itself is not
+compromised or unreachable — `bullseye-security`'s `InRelease` is still
+served correctly, simply past its own stamped expiry (Debian's security
+feed for this release has genuinely stopped, not the mirror). `bullseye`/
+`bullseye-updates` carry no `Valid-Until` at all and are unaffected.
+`archive.debian.org` — Debian's usual durable home for an EOL suite — was
+checked and does not help: it 404s for `debian-security/dists/
+bullseye-security` entirely; it only mirrors the plain `debian` suite.
+
+Because the flag is applied per-invocation on an ephemeral, per-run CI
+container rather than persisted to any config, it does not linger past
+that one build. But it is coarse: it waives the check for every
+configured source in that `apt-get update`, not only the one that is
+actually expired, so a future source added to either job's own
+`apt-get install` list would silently lose this same protection with no
+new decision made.
+
+The durable fix is moving the Linux build image off Debian 11 entirely —
+the underlying reason both jobs are pinned to it (documented in-line at
+each `container:` line) will need to be re-verified against a current
+Debian release's own `webkit2gtk`/`libsoup` package names and `glibc`
+baseline before that move can happen safely. Until then, an interim,
+better-scoped alternative — a deb822 source stanza with
+`Check-Valid-Until: no` on just the `bullseye-security` entry, leaving
+the check active for `bullseye`/`bullseye-updates` and anything added
+later — has not yet been implemented either.
+
+Relevant code:
+
+- `linux-x64`'s `container:`/`apt-get` step in
+  `.github/workflows/ci.yml`
+- `linux-beta-x64`'s `container:`/`apt-get` step in
+  `.github/workflows/beta.yml`
+
 ## Metadata
 
 ```text
-generator-name: Copilot CLI
-generator-version: Claude Opus 4.5
-generator-model-token: claude-opus-4-5
+generator-name: Claude Code
+generator-version: Claude Sonnet 5
+generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
-generation-date: 2026-09-07
+generation-date: 2026-09-08
 generator-responsibility: other
 ```
