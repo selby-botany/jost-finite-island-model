@@ -124,7 +124,10 @@ def test_compare_button_disabled_until_two_runs_are_checked(
     monkeypatch.setattr(paths_module, "results_directory", lambda: results_root)
 
     window = create_window(hidden=True)
-    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+    # Unlike this module's other driver functions, `_drive` below always
+    # reaches `outcome.put(...)` with a real dict — no polling wait that
+    # could time out first, so there is no `None` case to type for here.
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
     def _drive() -> None:
         try:
