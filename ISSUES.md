@@ -136,9 +136,10 @@ released `fim` build, and not `fim` as installed or run by anyone
 
 This is a build-infrastructure issue, not an application defect — nothing
 about how `fim` behaves for a user is affected. It is recorded here because
-the stopgap trades away a real security property of the build pipeline,
-and that trade needs to be revisited rather than forgotten once it stops
-being the thing that is actively broken.
+the stopgap trades away real properties of the build pipeline (both a
+security check and package currency), and that trade needs to be revisited
+rather than forgotten once it stops being the thing that is actively
+broken.
 
 #### What happens today
 
@@ -146,56 +147,71 @@ Both Linux packaging jobs build inside `python:3.12-slim-bullseye`
 (Debian 11), chosen deliberately for `glibc` 2.31's older-baseline
 portability and for the `webkit2gtk-4.0`/`libsoup-2.4` package pair
 `pywebview`'s own GTK backend falls back to (see the comments at each
-job's `container:` line). Debian 11 has reached end-of-life: its
-security-update feed (`deb.debian.org/debian-security`, suite
-`bullseye-security`) stopped being refreshed, and the signed `Release`
-file's own `Valid-Until` timestamp lapsed as a result. `apt-get update`
-enforces that timestamp by default, so the build failed outright with
-"Release file ... is expired" (exit code 100) the first time either
-pipeline ran after the lapse.
+job's `container:` line). Debian 11 went fully end-of-life mid-flight
+during this project's own use of this image, in two stages:
 
-The stopgap (commit `345263f`) passes `-o
-Acquire::Check-Valid-Until=false` to `apt-get update` in both jobs,
-which waives that freshness check for the whole invocation rather than
-for just the one expired source.
+1. `deb.debian.org/debian-security`'s own `bullseye-security`
+   `InRelease` stopped being refreshed, so its `Valid-Until` lapsed —
+   `apt-get update` failed outright with "Release file ... is expired"
+   (exit code 100, run 34187301462).
+2. Within a day, `deb.debian.org` stopped serving that suite's actual
+   `.deb` files too — `apt-get update` kept succeeding (the index still
+   resolved), but `apt-get install` 404d on every package apt resolved
+   from `bullseye-security` (`systemd`, `perl`, `glibc`, `dpkg-dev`,
+   `webkit2gtk`, and others — run 34236473262).
+
+The stopgap (commits `345263f`, then superseding it once stage 2
+appeared) repoints `sources.list` at `snapshot.debian.org`'s pinned
+`20250721T000000Z` capture of all three suites — a fallback the image
+itself already ships, commented out — and passes `-o
+Acquire::Check-Valid-Until=false` to `apt-get update`, required
+alongside the repoint since a pinned historical snapshot is permanently
+past its own `Valid-Until` by construction.
 
 #### Why this needs to be revisited
 
 `Acquire::Check-Valid-Until` exists to defend against a repository
-replay/freeze attack: `deb.debian.org` is plain `http://`, not `https://`,
-so package integrity there rests entirely on the `Release` file's GPG
-signature plus this freshness bound, not transport security. A
-validly-signed but stale `Release`+`Packages` set — served by a
-compromised or malicious mirror, or replayed by an on-path attacker —
-would otherwise be trusted forever once this check is off, silently
-hiding any fix published after the snapshot an attacker chose to replay.
-
-Confirmed live before applying the stopgap: `deb.debian.org` itself is not
-compromised or unreachable — `bullseye-security`'s `InRelease` is still
-served correctly, simply past its own stamped expiry (Debian's security
-feed for this release has genuinely stopped, not the mirror). `bullseye`/
-`bullseye-updates` carry no `Valid-Until` at all and are unaffected.
-`archive.debian.org` — Debian's usual durable home for an EOL suite — was
-checked and does not help: it 404s for `debian-security/dists/
-bullseye-security` entirely; it only mirrors the plain `debian` suite.
-
-Because the flag is applied per-invocation on an ephemeral, per-run CI
-container rather than persisted to any config, it does not linger past
-that one build. But it is coarse: it waives the check for every
-configured source in that `apt-get update`, not only the one that is
-actually expired, so a future source added to either job's own
+replay/freeze attack: `deb.debian.org`/`snapshot.debian.org` are plain
+`http://`, not `https://`, so package integrity rests entirely on the
+`Release` file's GPG signature plus this freshness bound, not transport
+security. Disabling the check trusts whatever validly-signed snapshot is
+served, indefinitely. For `snapshot.debian.org` specifically this is a
+smaller step than it sounds — the whole point of that host is serving a
+fixed, permanently-immutable, GPG-signed capture — but it is still a
+global waiver on that one `apt-get update` invocation, not scoped to
+just this one source, so a future source added to either job's own
 `apt-get install` list would silently lose this same protection with no
 new decision made.
+
+Confirmed live before applying each stage of the stopgap:
+`archive.debian.org` — Debian's usual durable home for an EOL suite —
+does not help at either stage: it carries no `bullseye`/
+`bullseye-security` suite at all yet. `snapshot.debian.org`'s pinned
+capture was verified with a real `apt-get install` of the exact package
+list both jobs use, not just `update` — it correctly resolves
+security-patched versions (e.g. `systemd 247.3-7+deb11u6`).
+
+New trade-off introduced by the snapshot repoint, not present in the
+`345263f` stopgap it supersedes: `20250721T000000Z` is over a year
+before this issue was first observed, so the build now uses whatever
+security-patched package versions existed as of that date, not
+whatever was newest on `deb.debian.org` right before it went fully
+EOL (already-confirmed stale even before stage 2: `libsystemd0
+247.3-7+deb11u6` from the snapshot vs. `+deb11u8` briefly visible on
+the live mirror). This is a one-time step backward in currency, not an
+ongoing drift — the snapshot is immutable, so it will not get any
+staler than it already is — but it means this build image now trails
+Debian 11's own last living state by whatever gap existed on
+2025-07-21, permanently, until the durable fix below lands.
 
 The durable fix is moving the Linux build image off Debian 11 entirely —
 the underlying reason both jobs are pinned to it (documented in-line at
 each `container:` line) will need to be re-verified against a current
 Debian release's own `webkit2gtk`/`libsoup` package names and `glibc`
-baseline before that move can happen safely. Until then, an interim,
-better-scoped alternative — a deb822 source stanza with
-`Check-Valid-Until: no` on just the `bullseye-security` entry, leaving
-the check active for `bullseye`/`bullseye-updates` and anything added
-later — has not yet been implemented either.
+baseline before that move can happen safely. Until then, a better-scoped
+interim step — a deb822 source stanza with `Check-Valid-Until: no`
+scoped to just the affected entries, leaving the check active for
+anything added later — has not yet been implemented either.
 
 Relevant code:
 

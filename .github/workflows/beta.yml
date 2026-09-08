@@ -377,23 +377,31 @@ jobs:
     container: python:3.12-slim-bullseye
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      # `deb.debian.org/debian-security`'s own `bullseye-security`
-      # `InRelease` carries a `Valid-Until` that lapsed without being
-      # refreshed (confirmed live: still served, HTTP 200, just past its
-      # own stamped expiry -- Debian 11's security-update cadence has
-      # stopped, not the mirror itself), so a plain `apt-get update`
-      # fails outright with "Release file ... is expired", exit code
-      # 100 (run 34187301462). `bullseye`/`bullseye-updates` carry no
-      # `Valid-Until` at all and are unaffected; `archive.debian.org` is
-      # not a fix here -- confirmed live, it 404s for
-      # `debian-security/dists/bullseye-security` entirely, it only
-      # mirrors the plain `debian` suite. Disabling apt's own
-      # freshness check is the correct, targeted fix: the packages
-      # themselves are still being served correctly, only the
-      # `Release` file's own self-reported expiry is stale. Matches
-      # `ci.yml`'s own mirrored `linux-x64` job, fixed there in the
-      # same commit.
+      # Debian 11 (bullseye) went fully end-of-life mid-flight during
+      # this project's own use of this image. First `bullseye-security`'s
+      # `InRelease` on `deb.debian.org` simply stopped being refreshed
+      # (`Valid-Until` lapsed, run 34187301462); `-o
+      # Acquire::Check-Valid-Until=false` alone fixed that. Within a day,
+      # `deb.debian.org` stopped serving the security suite's actual
+      # `.deb` files too -- confirmed live: `apt-get update` succeeds
+      # (the index still resolves), but `apt-get install` 404s on every
+      # package apt resolves from `bullseye-security` (run 34236473262).
+      # `archive.debian.org` does not help -- confirmed live, it has no
+      # `bullseye`/`bullseye-security` suite at all yet.
+      #
+      # The image itself already ships the fix, commented out:
+      # `snapshot.debian.org`'s pinned `20250721T000000Z` capture of all
+      # three suites, `.deb` files included -- confirmed live with the
+      # exact package list below (a real `apt-get install`, not just
+      # `update`). A pinned historical snapshot is permanently past its
+      # own `Valid-Until` by construction, so the flag is still required
+      # alongside the repoint, not replaced by it. Matches `ci.yml`'s own
+      # mirrored `linux-x64` job, fixed there in the same commit.
       - run: |
+          sed -i \
+              -e 's|^# deb http://snapshot|deb http://snapshot|' \
+              -e 's|^deb http://deb\.debian\.org|# deb http://deb.debian.org|' \
+              /etc/apt/sources.list
           apt-get -o Acquire::Check-Valid-Until=false update -qq
           apt-get install -qq -y --no-install-recommends \
               binutils gcc pkg-config \
