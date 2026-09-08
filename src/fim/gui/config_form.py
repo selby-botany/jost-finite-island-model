@@ -557,18 +557,41 @@ def mu_from_params(params: SimulationParams) -> dict[str, str]:
 # `initial_concentration`, both always present, plain `FormField`s
 # already on `INITIAL_CONDITIONS_FIELDS`), `"equilibrium_split"`
 # (`fim.model.initial.EquilibriumSplitInitialCondition`, triggered by
-# its own three `equilibrium_*` fields' joint presence), and
-# `"explicit_p0"` (a real `p_0` grid, triggered by `initial_frequencies`
-# — see `initial_conditions_to_payload`, below). `SimulationParams`
-# itself rejects combining `initial_frequencies` with any equilibrium
-# field (`_validate_equilibrium_split_config`'s own docstring), so
-# these three are genuinely mutually exclusive at that level too —
-# unlike `initial_allele_count`/`initial_concentration`, which stay set
-# and simply go unused whenever either of the other two modes is
-# active (`generate_initial_state`'s own dispatch order) — only the
-# *payload inclusion* of the equilibrium fields and `p_0` is mode-gated
-# here.
-InitialConditionsMode = Literal["dirichlet", "equilibrium_split", "explicit_p0"]
+# its own three `equilibrium_*` fields' joint presence), `"explicit_p0"`
+# (a real `p_0` grid, triggered by `initial_frequencies` — see
+# `initial_conditions_to_payload`, below), and `"fixed_per_deme"`
+# (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+# redesign.md` §4.3 -- a GUI-only convenience that expands directly to
+# an explicit `p_0` at submit time, never stored or round-tripped as
+# its own construct: `SimulationParams` itself has no concept of "fixed
+# per deme", only the `p_0` it expands to). `SimulationParams` rejects
+# combining `initial_frequencies` with any equilibrium field
+# (`_validate_equilibrium_split_config`'s own docstring), so
+# `"equilibrium_split"` and the two `p_0`-producing modes are genuinely
+# mutually exclusive at that level too — unlike `initial_allele_count`/
+# `initial_concentration`, which stay set and simply go unused whenever
+# another mode is active (`generate_initial_state`'s own dispatch
+# order) — only the *payload inclusion* of the equilibrium fields and
+# `p_0` is mode-gated here.
+InitialConditionsMode = Literal[
+    "dirichlet", "equilibrium_split", "explicit_p0", "fixed_per_deme"
+]
+
+# The three "fixed per deme" sub-choices (§4.3): every deme starts fixed
+# for exactly one allele, differing only in which allele. All three
+# apply identically to every locus (the design gives no per-locus
+# variant of this mode).
+FixedPerDemeChoice = Literal["all_different", "all_same", "all_but_one"]
+
+# `initial_conditions_from_params` always renders some
+# `fixed_per_deme_choice` value, even when the loaded configuration is
+# not in `"fixed_per_deme"` mode at all (so the radio group always has
+# a defined checked option the moment a user switches to that mode) —
+# there is no way to recover "the choice that was last selected" from a
+# `SimulationParams` alone, since the mode never round-trips (its own
+# docstring, above), so this fixed default is used universally. "All
+# the same" is the design's own "no differentiation" starting baseline.
+_DEFAULT_FIXED_PER_DEME_CHOICE: Final[FixedPerDemeChoice] = "all_same"
 
 
 def initial_conditions_to_payload(values: Mapping[str, str]) -> dict[str, object]:
@@ -578,15 +601,19 @@ def initial_conditions_to_payload(values: Mapping[str, str]) -> dict[str, object
         values: The full form-values mapping; only
             `initial_conditions_mode`, `equilibrium_convergence_window`,
             `equilibrium_convergence_tolerance`,
-            `equilibrium_max_generations`, and `p0_json` are read.
+            `equilibrium_max_generations`, `p0_json`,
+            `fixed_per_deme_choice`, `d`, and (via `loci_to_payload`)
+            the loci selector's own keys are read.
 
     Returns:
         An empty mapping in `"dirichlet"` mode (the three equilibrium
         fields and `p_0` are simply absent from the payload, exactly
         like an unset `replicate_tolerance`'s own `None`-by-omission
         convention); the three equilibrium fields, parsed to their
-        declared types, in `"equilibrium_split"` mode; or `{"p_0":
-        ...}` in `"explicit_p0"` mode.
+        declared types, in `"equilibrium_split"` mode; `{"p_0": ...}`
+        in `"explicit_p0"` mode; or `{"p_0": ...}` expanded from `d`,
+        the currently-configured loci count, and
+        `fixed_per_deme_choice` in `"fixed_per_deme"` mode.
 
     Raises:
         ValueError: If `"equilibrium_split"` mode is selected and any
@@ -596,8 +623,10 @@ def initial_conditions_to_payload(values: Mapping[str, str]) -> dict[str, object
             `field_for_error` locates each of the three individually,
             the same as any other plain `FormField`), if
             `"explicit_p0"` mode is selected and `p0_json` is not valid
-            JSON in the expected shape, or `initial_conditions_mode` is
-            none of the three.
+            JSON in the expected shape, if `"fixed_per_deme"` mode is
+            selected and `d` does not parse as an integer or
+            `fixed_per_deme_choice` is none of the three sub-choices,
+            or `initial_conditions_mode` is none of the four.
     """
     mode = values.get("initial_conditions_mode", "dirichlet")
     if mode == "equilibrium_split":
@@ -617,9 +646,63 @@ def initial_conditions_to_payload(values: Mapping[str, str]) -> dict[str, object
         }
     if mode == "explicit_p0":
         return {"p_0": _parse_p0_json(values["p0_json"])}
+    if mode == "fixed_per_deme":
+        d = _parse_int_named("d", values["d"].strip())
+        loci_payload = loci_to_payload(values)
+        loci_count = (
+            len(loci_payload["loci"])  # type: ignore[arg-type]
+            if "loci" in loci_payload
+            else loci_payload["n_loci"]
+        )
+        assert isinstance(loci_count, int)
+        return {
+            "p_0": _fixed_per_deme_p0(d, loci_count, values["fixed_per_deme_choice"])
+        }
     if mode != "dirichlet":
         raise ValueError(f"unknown initial_conditions selector mode: {mode!r}")
     return {}
+
+
+def _fixed_per_deme_p0(
+    d: int, loci_count: int, choice: str
+) -> list[list[dict[str, float]]]:
+    """Expand a "fixed per deme" sub-choice into an explicit `p_0` (§4.3).
+
+    Args:
+        d: The configured deme count.
+        loci_count: The configured locus count — every locus gets the
+            identical per-deme fixation pattern; the design gives no
+            per-locus variant of this mode.
+        choice: One of `"all_different"` (deme *i* fixed for allele
+            *i*), `"all_same"` (every deme fixed for allele 0 — the "no
+            differentiation" starting baseline), or `"all_but_one"`
+            (every deme but the last fixed for allele 0, the last fixed
+            for allele 1).
+
+    Returns:
+        `_parse_p0_json`'s own return shape — a list of `d` demes, each
+        a list of `loci_count` identical `{"<allele_id>": 1.0}`
+        mappings — ready to hand `SimulationParams.from_mapping` as
+        `p_0` verbatim.
+
+    Raises:
+        ValueError: If `choice` is none of the three — a clear
+            programming error (a JS bug sending an unrecognized radio
+            value), not a silent default, matching `m_to_payload`'s/
+            `loci_to_payload`'s own "unknown ... mode" guards.
+    """
+    if choice == "all_different":
+        return [[{str(deme): 1.0} for _ in range(loci_count)] for deme in range(d)]
+    if choice == "all_same":
+        return [[{"0": 1.0} for _ in range(loci_count)] for _ in range(d)]
+    if choice == "all_but_one":
+        return [
+            [{"0": 1.0} for _ in range(loci_count)]
+            if deme < d - 1
+            else [{"1": 1.0} for _ in range(loci_count)]
+            for deme in range(d)
+        ]
+    raise ValueError(f"unknown fixed_per_deme selector choice: {choice!r}")
 
 
 def _parse_p0_json(text: str) -> list[list[dict[str, float]]]:
@@ -680,17 +763,23 @@ def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]:
     Returns:
         `initial_conditions_mode`/`equilibrium_convergence_window`/
         `equilibrium_convergence_tolerance`/`equilibrium_max_generations`/
-        `p0_json`. An explicit `p_0` (`params.initial_frequencies is not
-        None`) renders as `"explicit_p0"` mode with every deme/locus's
-        own real allele-frequency mapping (mutually exclusive with the
-        equilibrium fields at the `SimulationParams` level, so checking
-        it first is unambiguous); otherwise the three equilibrium
-        fields render as empty strings in `"dirichlet"` mode
-        (`params.equilibrium_convergence_window is None`, guaranteed to
-        mean all three are `None` together by `SimulationParams`'s own
+        `p0_json`/`fixed_per_deme_choice`. An explicit `p_0` (`params.
+        initial_frequencies is not None`) renders as `"explicit_p0"`
+        mode with every deme/locus's own real allele-frequency mapping
+        (mutually exclusive with the equilibrium fields at the
+        `SimulationParams` level, so checking it first is unambiguous)
+        — `"fixed_per_deme"` never round-trips back from a `params`
+        object at all (its own module-level docstring, above), so a
+        `p_0` this shape happens to match still renders as
+        `"explicit_p0"`, real values in a real editable grid, not a
+        rejected re-run; otherwise the three equilibrium fields render
+        as empty strings in `"dirichlet"` mode (`params.
+        equilibrium_convergence_window is None`, guaranteed to mean all
+        three are `None` together by `SimulationParams`'s own
         all-or-none validation) rather than `"None"` — an empty field,
         not a placeholder value the user would otherwise have to notice
-        and clear.
+        and clear. `fixed_per_deme_choice` is always
+        `_DEFAULT_FIXED_PER_DEME_CHOICE`, regardless of mode.
     """
     if params.initial_frequencies is not None:
         return {
@@ -701,6 +790,7 @@ def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]:
             "p0_json": json.dumps(
                 [[dict(locus) for locus in deme] for deme in params.initial_frequencies]
             ),
+            "fixed_per_deme_choice": _DEFAULT_FIXED_PER_DEME_CHOICE,
         }
     if params.equilibrium_convergence_window is None:
         return {
@@ -709,6 +799,7 @@ def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]:
             "equilibrium_convergence_tolerance": "",
             "equilibrium_max_generations": "",
             "p0_json": "",
+            "fixed_per_deme_choice": _DEFAULT_FIXED_PER_DEME_CHOICE,
         }
     return {
         "initial_conditions_mode": "equilibrium_split",
@@ -718,6 +809,7 @@ def initial_conditions_from_params(params: SimulationParams) -> dict[str, str]:
         ),
         "equilibrium_max_generations": str(params.equilibrium_max_generations),
         "p0_json": "",
+        "fixed_per_deme_choice": _DEFAULT_FIXED_PER_DEME_CHOICE,
     }
 
 

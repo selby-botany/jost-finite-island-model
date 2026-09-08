@@ -367,6 +367,7 @@ def test_initial_conditions_from_params_dirichlet_is_all_empty() -> None:
         "equilibrium_convergence_tolerance": "",
         "equilibrium_max_generations": "",
         "p0_json": "",
+        "fixed_per_deme_choice": "all_same",
     }
 
 
@@ -386,6 +387,7 @@ def test_initial_conditions_from_params_equilibrium_split_round_trips() -> None:
         "equilibrium_convergence_tolerance": "0.01",
         "equilibrium_max_generations": "10000",
         "p0_json": "",
+        "fixed_per_deme_choice": "all_same",
     }
 
 
@@ -448,6 +450,117 @@ def test_initial_conditions_from_params_explicit_p0_round_trips() -> None:
     payload = config_form.initial_conditions_to_payload(values)
 
     assert payload == {"p_0": [[{"0": 1.0}], [{"0": 0.5, "1": 0.5}]]}
+
+
+def test_initial_conditions_to_payload_fixed_per_deme_all_different() -> None:
+    """ "All different" fixes deme *i* for allele *i*, for every locus."""
+    values = dict(config_form.starter_form_values())
+    values.update(
+        {
+            "initial_conditions_mode": "fixed_per_deme",
+            "fixed_per_deme_choice": "all_different",
+            "d": "3",
+            "loci_mode": "lengths",
+            "locus_lengths": "200",
+        }
+    )
+
+    payload = config_form.initial_conditions_to_payload(values)
+
+    assert payload == {"p_0": [[{"0": 1.0}], [{"1": 1.0}], [{"2": 1.0}]]}
+
+
+def test_initial_conditions_to_payload_fixed_per_deme_all_same() -> None:
+    """ "All same" fixes every deme for allele 0 -- the no-differentiation baseline."""
+    values = dict(config_form.starter_form_values())
+    values.update(
+        {
+            "initial_conditions_mode": "fixed_per_deme",
+            "fixed_per_deme_choice": "all_same",
+            "d": "3",
+            "loci_mode": "lengths",
+            "locus_lengths": "200",
+        }
+    )
+
+    payload = config_form.initial_conditions_to_payload(values)
+
+    assert payload == {"p_0": [[{"0": 1.0}], [{"0": 1.0}], [{"0": 1.0}]]}
+
+
+def test_initial_conditions_to_payload_fixed_per_deme_all_but_one() -> None:
+    """ "All but one": every deme but the last is allele 0; the last is allele 1."""
+    values = dict(config_form.starter_form_values())
+    values.update(
+        {
+            "initial_conditions_mode": "fixed_per_deme",
+            "fixed_per_deme_choice": "all_but_one",
+            "d": "3",
+            "loci_mode": "lengths",
+            "locus_lengths": "200",
+        }
+    )
+
+    payload = config_form.initial_conditions_to_payload(values)
+
+    assert payload == {"p_0": [[{"0": 1.0}], [{"0": 1.0}], [{"1": 1.0}]]}
+
+
+def test_initial_conditions_to_payload_fixed_per_deme_applies_to_every_locus() -> None:
+    """Every locus gets the identical per-deme fixation pattern."""
+    values = dict(config_form.starter_form_values())
+    values.update(
+        {
+            "initial_conditions_mode": "fixed_per_deme",
+            "fixed_per_deme_choice": "all_same",
+            "d": "2",
+            "loci_mode": "lengths",
+            "locus_lengths": "200, 8000, 3",
+        }
+    )
+
+    payload = config_form.initial_conditions_to_payload(values)
+
+    assert payload == {
+        "p_0": [
+            [{"0": 1.0}, {"0": 1.0}, {"0": 1.0}],
+            [{"0": 1.0}, {"0": 1.0}, {"0": 1.0}],
+        ]
+    }
+
+
+def test_initial_conditions_to_payload_fixed_per_deme_rejects_an_unknown_choice() -> (
+    None
+):
+    """An unrecognized sub-choice is a clear programming error, not a silent default."""
+    values = dict(config_form.starter_form_values())
+    values.update(
+        {
+            "initial_conditions_mode": "fixed_per_deme",
+            "fixed_per_deme_choice": "bogus",
+            "d": "2",
+        }
+    )
+
+    with pytest.raises(ValueError, match="unknown fixed_per_deme selector choice"):
+        config_form.initial_conditions_to_payload(values)
+
+
+def test_form_values_to_payload_fixed_per_deme_round_trips() -> None:
+    """A full form submission in fixed-per-deme mode builds a valid configuration."""
+    values = dict(config_form.starter_form_values())
+    values.update(
+        {
+            "initial_conditions_mode": "fixed_per_deme",
+            "fixed_per_deme_choice": "all_different",
+            "d": "3",
+        }
+    )
+
+    payload = config_form.form_values_to_payload(values)
+    params = SimulationParams.from_mapping(payload)
+
+    assert params.initial_frequencies == (({0: 1.0},), ({1: 1.0},), ({2: 1.0},))
 
 
 def test_form_values_to_payload_equilibrium_split_round_trips() -> None:
@@ -710,7 +823,14 @@ def test_params_to_form_values_includes_every_composite_fields_keys() -> None:
     """A round-tripped params object populates every composite's own keys too."""
     values = config_form.params_to_form_values(_params())
 
-    for key in ("m_mode", "mu_mode", "p0_json", "loci_mode", "loci_json"):
+    for key in (
+        "m_mode",
+        "mu_mode",
+        "p0_json",
+        "fixed_per_deme_choice",
+        "loci_mode",
+        "loci_json",
+    ):
         assert key in values
     for name in config_form.CONVERGENCE_STATISTIC_NAMES:
         assert f"cs_{name}" in values

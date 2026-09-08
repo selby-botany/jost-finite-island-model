@@ -503,6 +503,7 @@
       <label><input type="radio" name="initial_conditions_mode" value="dirichlet" checked form="input-form"> Dirichlet draw</label>
       <label><input type="radio" name="initial_conditions_mode" value="equilibrium_split" form="input-form"> equilibrium split</label>
       <label><input type="radio" name="initial_conditions_mode" value="explicit_p0" form="input-form"> explicit p&#8320;</label>
+      <label><input type="radio" name="initial_conditions_mode" value="fixed_per_deme" form="input-form"> fixed per deme</label>
       <div class="field" id="initial-conditions-dirichlet-fields">
         <label for="field-initial_allele_count">initial allele count</label>
         <input type="text" id="field-initial_allele_count" name="initial_allele_count" form="input-form">
@@ -555,6 +556,23 @@
         </p>
         <div id="p0-grid" class="p0-grid"></div>
         <input type="hidden" id="field-p0_json" name="p0_json" form="input-form">
+      </div>
+      <!-- Fixed per deme (botanist GUI design doc §4.3): a GUI-only
+           convenience that expands directly to an explicit `p_0` at
+           submit time (`config_form._fixed_per_deme_p0`) -- there is no
+           `SimulationParams` concept of "fixed per deme" at all, only
+           the `p_0` it produces, so this never round-trips back from a
+           loaded configuration (`initial_conditions_from_params`'s own
+           docstring). The preview text (`webui/screens/fixed-per-
+           deme.js`) is a pure, client-side computation from `d`, the
+           loci selector's own current locus count, and the checked
+           sub-choice -- no bridge round trip needed, unlike the
+           equilibrium-split preview above. -->
+      <div class="field" id="initial-conditions-fixed-fields" hidden>
+        <label><input type="radio" name="fixed_per_deme_choice" value="all_different" form="input-form"> all different (deme <var>i</var> fixed for allele <var>i</var>)</label>
+        <label><input type="radio" name="fixed_per_deme_choice" value="all_same" checked form="input-form"> all the same (every deme fixed for allele 0)</label>
+        <label><input type="radio" name="fixed_per_deme_choice" value="all_but_one" form="input-form"> all but one (last deme fixed for allele 1)</label>
+        <p class="hint" id="fixed-per-deme-preview"></p>
       </div>
     </fieldset>
     <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
@@ -680,6 +698,7 @@
 <script src="screens/migration-matrix.js"></script>
 <script src="screens/loci-grid.js"></script>
 <script src="screens/p0-grid.js"></script>
+<script src="screens/fixed-per-deme.js"></script>
 <script src="screens/run-view-controls.js"></script>
 <script src="screens/run-view-initial.js"></script>
 <script src="screens/run-view-running.js"></script>

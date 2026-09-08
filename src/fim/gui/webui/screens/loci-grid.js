@@ -41,17 +41,21 @@ function readLociGridValues() {
 
 /**
  * Write the grid's own current rows into `field-loci_json` -- called
- * after every cell edit, and after every add/remove-row action. The
- * `p_0` grid's own columns are one per locus (`p0-grid.js`'s own
- * `currentLocusIds`), so every locus-ID change here must also rebuild
- * that grid -- guarded, since `p0-grid.js` may not have run yet the
- * very first time this module's own top-level code builds nothing (no
- * row exists to edit before then).
+ * after every cell edit, and after every add/remove-row action. Both
+ * the `p_0` grid's own columns and the fixed-per-deme preview's own
+ * locus count derive from `currentLocusIds()` (`p0-grid.js`), so every
+ * locus-ID change here must also refresh both -- each guarded, since
+ * neither script may have run yet the very first time this module's
+ * own top-level code builds nothing (no row exists to edit before
+ * then).
  */
 function syncLociJsonField() {
     lociJsonField.value = JSON.stringify(readLociGridValues());
     if (window.fim.rebuildP0Grid) {
         window.fim.rebuildP0Grid();
+    }
+    if (window.fim.updateFixedPerDemePreview) {
+        window.fim.updateFixedPerDemePreview();
     }
 }
 

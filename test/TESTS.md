@@ -37,6 +37,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_config_form`](#gui.test_config_form)
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
   - [`test_explore_screen`](#gui.test_explore_screen)
+  - [`test_fixed_per_deme_screen`](#gui.test_fixed_per_deme_screen)
   - [`test_help_screen`](#gui.test_help_screen)
   - [`test_input_screen`](#gui.test_input_screen)
   - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
@@ -6762,6 +6763,68 @@ params`'s own `"matrix"` mode already made for a loaded migration
 matrix, and `loci_from_params`'s own `"custom"` mode for custom
 locus IDs.
 
+<a id="gui.test_config_form.test_initial_conditions_to_payload_fixed_per_deme_all_different"></a>
+
+#### test\_initial\_conditions\_to\_payload\_fixed\_per\_deme\_all\_different
+
+```python
+def test_initial_conditions_to_payload_fixed_per_deme_all_different() -> None
+```
+
+"All different" fixes deme *i* for allele *i*, for every locus.
+
+<a id="gui.test_config_form.test_initial_conditions_to_payload_fixed_per_deme_all_same"></a>
+
+#### test\_initial\_conditions\_to\_payload\_fixed\_per\_deme\_all\_same
+
+```python
+def test_initial_conditions_to_payload_fixed_per_deme_all_same() -> None
+```
+
+"All same" fixes every deme for allele 0 -- the no-differentiation baseline.
+
+<a id="gui.test_config_form.test_initial_conditions_to_payload_fixed_per_deme_all_but_one"></a>
+
+#### test\_initial\_conditions\_to\_payload\_fixed\_per\_deme\_all\_but\_one
+
+```python
+def test_initial_conditions_to_payload_fixed_per_deme_all_but_one() -> None
+```
+
+"All but one": every deme but the last is allele 0; the last is allele 1.
+
+<a id="gui.test_config_form.test_initial_conditions_to_payload_fixed_per_deme_applies_to_every_locus"></a>
+
+#### test\_initial\_conditions\_to\_payload\_fixed\_per\_deme\_applies\_to\_every\_locus
+
+```python
+def test_initial_conditions_to_payload_fixed_per_deme_applies_to_every_locus(
+) -> None
+```
+
+Every locus gets the identical per-deme fixation pattern.
+
+<a id="gui.test_config_form.test_initial_conditions_to_payload_fixed_per_deme_rejects_an_unknown_choice"></a>
+
+#### test\_initial\_conditions\_to\_payload\_fixed\_per\_deme\_rejects\_an\_unknown\_choice
+
+```python
+def test_initial_conditions_to_payload_fixed_per_deme_rejects_an_unknown_choice(
+) -> (None)
+```
+
+An unrecognized sub-choice is a clear programming error, not a silent default.
+
+<a id="gui.test_config_form.test_form_values_to_payload_fixed_per_deme_round_trips"></a>
+
+#### test\_form\_values\_to\_payload\_fixed\_per\_deme\_round\_trips
+
+```python
+def test_form_values_to_payload_fixed_per_deme_round_trips() -> None
+```
+
+A full form submission in fixed-per-deme mode builds a valid configuration.
+
 <a id="gui.test_config_form.test_form_values_to_payload_equilibrium_split_round_trips"></a>
 
 #### test\_form\_values\_to\_payload\_equilibrium\_split\_round\_trips
@@ -7169,6 +7232,82 @@ values below is not a hand-picked coincidence, it is guaranteed by
 the formula's own monotonicity in `m`, so a real recomputation is
 distinguishable from a stale, unchanged reading by simple inequality,
 with no dependency on either value's own exact digits.
+
+<a id="gui.test_fixed_per_deme_screen"></a>
+
+# gui.test\_fixed\_per\_deme\_screen
+
+Headless functional tests for the "fixed per deme" initial-condition
+preview (botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.3).
+
+Real DOM-driven proof that `webui/screens/fixed-per-deme.js` actually
+computes and shows the right preview text as `d`, the loci
+configuration, and the checked sub-choice change —
+`test/gui/test_config_form.py`'s own
+`test_initial_conditions_to_payload_fixed_per_deme_*` tests already
+prove `initial_conditions_to_payload`/`_fixed_per_deme_p0` correct as
+plain Python calls; these tests prove the page's own JavaScript reaches
+the right mode/choice through the real form and that a submitted run
+actually uses the expanded `p_0`.
+
+<a id="gui.test_fixed_per_deme_screen.test_selecting_fixed_per_deme_mode_shows_the_default_all_same_preview"></a>
+
+#### test\_selecting\_fixed\_per\_deme\_mode\_shows\_the\_default\_all\_same\_preview
+
+```python
+def test_selecting_fixed_per_deme_mode_shows_the_default_all_same_preview(
+        window: webview.Window) -> None
+```
+
+Switching to fixed-per-deme mode previews the default "all same" choice.
+
+<a id="gui.test_fixed_per_deme_screen.test_choosing_all_different_previews_each_demes_own_allele"></a>
+
+#### test\_choosing\_all\_different\_previews\_each\_demes\_own\_allele
+
+```python
+def test_choosing_all_different_previews_each_demes_own_allele(
+        window: webview.Window) -> None
+```
+
+"All different" previews deme *i* fixed for allele *i*, for the current `d`.
+
+<a id="gui.test_fixed_per_deme_screen.test_choosing_all_but_one_previews_the_last_demes_own_distinct_allele"></a>
+
+#### test\_choosing\_all\_but\_one\_previews\_the\_last\_demes\_own\_distinct\_allele
+
+```python
+def test_choosing_all_but_one_previews_the_last_demes_own_distinct_allele(
+        window: webview.Window) -> None
+```
+
+"All but one" previews every deme but the last fixed for allele 0.
+
+<a id="gui.test_fixed_per_deme_screen.test_changing_d_updates_the_preview_live"></a>
+
+#### test\_changing\_d\_updates\_the\_preview\_live
+
+```python
+def test_changing_d_updates_the_preview_live(window: webview.Window) -> None
+```
+
+Growing `d` while fixed-per-deme mode is active recomputes the preview.
+
+<a id="gui.test_fixed_per_deme_screen.test_a_real_run_with_fixed_per_deme_all_different_completes"></a>
+
+#### test\_a\_real\_run\_with\_fixed\_per\_deme\_all\_different\_completes
+
+```python
+def test_a_real_run_with_fixed_per_deme_all_different_completes() -> None
+```
+
+A run submitted in fixed-per-deme "all different" mode actually completes.
+
+Same event-driven "wait on a real `threading.Event`, never poll a
+live background run" shape `test_running_screen.py`'s own real-run
+tests already use, for the identical reason those tests' own
+docstrings record.
 
 <a id="gui.test_help_screen"></a>
 

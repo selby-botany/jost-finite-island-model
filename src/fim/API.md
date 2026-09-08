@@ -4387,7 +4387,9 @@ Build the `equilibrium_*`/`p_0` payload keys from the selector's mode.
 - `values` - The full form-values mapping; only
   `initial_conditions_mode`, `equilibrium_convergence_window`,
   `equilibrium_convergence_tolerance`,
-  `equilibrium_max_generations`, and `p0_json` are read.
+  `equilibrium_max_generations`, `p0_json`,
+  `fixed_per_deme_choice`, `d`, and (via `loci_to_payload`)
+  the loci selector's own keys are read.
 
 
 **Returns**:
@@ -4396,8 +4398,10 @@ Build the `equilibrium_*`/`p_0` payload keys from the selector's mode.
   fields and `p_0` are simply absent from the payload, exactly
   like an unset `replicate_tolerance`'s own `None`-by-omission
   convention); the three equilibrium fields, parsed to their
-  declared types, in `"equilibrium_split"` mode; or `{"p_0":
-  ...}` in `"explicit_p0"` mode.
+  declared types, in `"equilibrium_split"` mode; `{"p_0": ...}`
+  in `"explicit_p0"` mode; or `{"p_0": ...}` expanded from `d`,
+  the currently-configured loci count, and
+  `fixed_per_deme_choice` in `"fixed_per_deme"` mode.
 
 
 **Raises**:
@@ -4409,8 +4413,10 @@ Build the `equilibrium_*`/`p_0` payload keys from the selector's mode.
   `field_for_error` locates each of the three individually,
   the same as any other plain `FormField`), if
   `"explicit_p0"` mode is selected and `p0_json` is not valid
-  JSON in the expected shape, or `initial_conditions_mode` is
-  none of the three.
+  JSON in the expected shape, if `"fixed_per_deme"` mode is
+  selected and `d` does not parse as an integer or
+  `fixed_per_deme_choice` is none of the three sub-choices,
+  or `initial_conditions_mode` is none of the four.
 
 <a id="fim.gui.config_form.initial_conditions_from_params"></a>
 
@@ -4431,17 +4437,23 @@ Render `params`'s starting-frequency fields into the selector's form-value keys.
 
   `initial_conditions_mode`/`equilibrium_convergence_window`/
   `equilibrium_convergence_tolerance`/`equilibrium_max_generations`/
-  `p0_json`. An explicit `p_0` (`params.initial_frequencies is not
-  None`) renders as `"explicit_p0"` mode with every deme/locus's
-  own real allele-frequency mapping (mutually exclusive with the
-  equilibrium fields at the `SimulationParams` level, so checking
-  it first is unambiguous); otherwise the three equilibrium
-  fields render as empty strings in `"dirichlet"` mode
-  (`params.equilibrium_convergence_window is None`, guaranteed to
-  mean all three are `None` together by `SimulationParams`'s own
+  `p0_json`/`fixed_per_deme_choice`. An explicit `p_0` (`params.
+  initial_frequencies is not None`) renders as `"explicit_p0"`
+  mode with every deme/locus's own real allele-frequency mapping
+  (mutually exclusive with the equilibrium fields at the
+  `SimulationParams` level, so checking it first is unambiguous)
+  — `"fixed_per_deme"` never round-trips back from a `params`
+  object at all (its own module-level docstring, above), so a
+  `p_0` this shape happens to match still renders as
+  `"explicit_p0"`, real values in a real editable grid, not a
+  rejected re-run; otherwise the three equilibrium fields render
+  as empty strings in `"dirichlet"` mode (`params.
+  equilibrium_convergence_window is None`, guaranteed to mean all
+  three are `None` together by `SimulationParams`'s own
   all-or-none validation) rather than `"None"` — an empty field,
   not a placeholder value the user would otherwise have to notice
-  and clear.
+  and clear. `fixed_per_deme_choice` is always
+  `_DEFAULT_FIXED_PER_DEME_CHOICE`, regardless of mode.
 
 <a id="fim.gui.config_form.loci_to_payload"></a>
 

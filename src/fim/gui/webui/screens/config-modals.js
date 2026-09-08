@@ -48,10 +48,14 @@ function applyFormValues(values) {
     // `migration-matrix.js`/`loci-grid.js`/`p0-grid.js` each own --
     // rebuilding them from those values is each file's own concern, not
     // this function's. `rebuildP0Grid` runs last since its own grid
-    // shape depends on the loci grid the previous call just rebuilt.
+    // shape depends on the loci grid the previous call just rebuilt;
+    // `updateFixedPerDemePreview` is pure display (no field of its own
+    // to set) but depends on the same `d`/loci state, so it runs last
+    // too.
     window.fim.rebuildMigrationMatrixGrid();
     window.fim.rebuildLociGrid();
     window.fim.rebuildP0Grid();
+    window.fim.updateFixedPerDemePreview();
     syncConditionalVisibility();
 }
 
@@ -92,6 +96,8 @@ function syncConditionalVisibility() {
         initialConditionsMode !== "equilibrium_split";
     document.getElementById("initial-conditions-explicit-fields").hidden =
         initialConditionsMode !== "explicit_p0";
+    document.getElementById("initial-conditions-fixed-fields").hidden =
+        initialConditionsMode !== "fixed_per_deme";
 
     const lociMode = form.elements.namedItem("loci_mode").value;
     document.getElementById("loci-lengths-fields").hidden = lociMode !== "lengths";
