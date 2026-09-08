@@ -138,7 +138,21 @@ def test_save_current_as_preset_then_delete_it(window: webview.Window) -> None:
                 "document.getElementById('modal-save-preset').open",
                 lambda value: value is True,
             )
+            # A real, previously-reproduced regression this reset closes:
+            # `window.__fimPresetsListReady` was already `true` from the
+            # initial `loadExample()` call above, well before this
+            # click -- polling for it to become `true` again *without*
+            # first setting it back to `false` here risks reading that
+            # stale, already-`true` value on the very first poll
+            # attempt, before `savePresetForm`'s own submit handler has
+            # even started its own async `refreshPresetsList()` call
+            # (`presets.js`'s own docstring on the flag has the full
+            # mechanism: the save dialog closes *before* the list
+            # refresh completes, so polling "is the dialog closed"
+            # alone — this test's own original shape — is exactly this
+            # same race, one layer up).
             window.evaluate_js(
+                "window.__fimPresetsListReady = false;"
                 "document.getElementById('save-preset-name').value = "
                 "'My saved scenario';"
                 "document.getElementById('save-preset-accept-button').click();"
@@ -147,13 +161,18 @@ def test_save_current_as_preset_then_delete_it(window: webview.Window) -> None:
                 "({"
                 "saveDialogOpen: "
                 "document.getElementById('modal-save-preset').open, "
+                "listReady: window.__fimPresetsListReady === true, "
                 "titles: Array.from("
                 "document.querySelectorAll('#presets-list li > button:first-child')"
                 ").map((button) => button.textContent), "
                 "deleteButtonCount: "
                 "document.querySelectorAll('.presets-delete-button').length"
                 "})",
-                lambda value: value is not None and value["saveDialogOpen"] is False,
+                lambda value: (
+                    value is not None
+                    and value["saveDialogOpen"] is False
+                    and value["listReady"] is True
+                ),
             )
             window.evaluate_js(
                 "document.querySelector('.presets-delete-button').click();"

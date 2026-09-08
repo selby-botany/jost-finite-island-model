@@ -134,6 +134,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [mu\_from\_params](#fim.gui.config_form.mu_from_params)
   * [initial\_conditions\_to\_payload](#fim.gui.config_form.initial_conditions_to_payload)
   * [initial\_conditions\_from\_params](#fim.gui.config_form.initial_conditions_from_params)
+  * [loci\_to\_payload](#fim.gui.config_form.loci_to_payload)
+  * [loci\_from\_params](#fim.gui.config_form.loci_from_params)
   * [convergence\_statistic\_to\_payload](#fim.gui.config_form.convergence_statistic_to_payload)
   * [convergence\_statistic\_from\_params](#fim.gui.config_form.convergence_statistic_from_params)
   * [p0\_summary\_from\_params](#fim.gui.config_form.p0_summary_from_params)
@@ -4432,6 +4434,64 @@ Render `params`'s `equilibrium_*` fields into the selector's form-value keys.
   `"None"` — an empty field, not a placeholder value the user
   would otherwise have to notice and clear.
 
+<a id="fim.gui.config_form.loci_to_payload"></a>
+
+#### loci\_to\_payload
+
+```python
+def loci_to_payload(values: Mapping[str, str]) -> dict[str, object]
+```
+
+Build `loci`'s (or `n_loci`/`locus_lengths`'s) payload from the selector's mode.
+
+**Arguments**:
+
+- `values` - The full form-values mapping; only `loci_mode`,
+  `locus_lengths`, and `loci_json` are read.
+
+
+**Returns**:
+
+- ``{"n_loci"` - ..., "locus_lengths": ...}` (`loci_mode ==
+  "lengths"`, mirroring the `int_list` cardinality rule `N`
+  already uses) or `{"loci": [...]}` (`loci_mode == "custom"`) —
+  `fim.model.params.SimulationParams.from_mapping` accepts either
+  shape verbatim, and the two are mutually exclusive in the
+  payload, exactly like a hand-authored YAML file only ever uses
+  one or the other.
+
+
+**Raises**:
+
+- `ValueError` - If the active sub-field's text does not parse (a
+  malformed `locus_lengths` list, or `loci_json` that is not
+  valid JSON shaped as a list of `{locus_id, length}`
+  mappings), or `loci_mode` is neither of the two.
+
+<a id="fim.gui.config_form.loci_from_params"></a>
+
+#### loci\_from\_params
+
+```python
+def loci_from_params(params: SimulationParams) -> dict[str, str]
+```
+
+Render `params.loci` back into the selector's form-value keys.
+
+**Arguments**:
+
+- `params` - A validated configuration.
+
+
+**Returns**:
+
+  `loci_mode`/`locus_lengths`/`loci_json`. Sequential, 1-based
+  default `locus_id`s (`1, 2, 3, ...`, in position order) render
+  as `"lengths"` mode with the existing comma-list; any other
+  ordering — custom IDs, non-sequential IDs, or IDs not starting
+  at 1 — renders as `"custom"` mode with every locus's own real
+  `(locus_id, length)` pair.
+
 <a id="fim.gui.config_form.convergence_statistic_to_payload"></a>
 
 #### convergence\_statistic\_to\_payload
@@ -4512,10 +4572,10 @@ Render a validated `SimulationParams` back into the form's fields.
 **Raises**:
 
 - `ValueError` - If `params` uses a construct this form cannot
-  represent at all — a per-locus `mu` (`mu_from_params`), or
-  a `loci` list with custom, non-default-position
-  `locus_id`s (`doc/fim-gui-design.md` §6.2: this form's one
-  `locus_lengths` field cannot express a custom ID at all).
+  represent at all — a genuinely per-locus `mu`
+  (`mu_from_params`'s own docstring; custom locus IDs alone no
+  longer trigger this, `loci_from_params` below now renders
+  those as a real, editable grid instead).
 
 <a id="fim.gui.config_form.starter_form_values"></a>
 

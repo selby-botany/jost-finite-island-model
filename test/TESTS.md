@@ -6855,15 +6855,77 @@ def test_p0_summary_from_params_describes_a_loaded_p0() -> None
 
 A loaded `p_0` renders a non-empty, informative summary.
 
-<a id="gui.test_config_form.test_params_to_form_values_rejects_custom_locus_ids"></a>
+<a id="gui.test_config_form.test_loci_from_params_sequential_ids_render_lengths_mode"></a>
 
-#### test\_params\_to\_form\_values\_rejects\_custom\_locus\_ids
+#### test\_loci\_from\_params\_sequential\_ids\_render\_lengths\_mode
 
 ```python
-def test_params_to_form_values_rejects_custom_locus_ids() -> None
+def test_loci_from_params_sequential_ids_render_lengths_mode() -> None
 ```
 
-A `loci` list with non-default-position IDs has no form representation.
+Default, sequential locus IDs render the simple comma-list mode.
+
+<a id="gui.test_config_form.test_loci_from_params_custom_ids_render_a_real_editable_grid"></a>
+
+#### test\_loci\_from\_params\_custom\_ids\_render\_a\_real\_editable\_grid
+
+```python
+def test_loci_from_params_custom_ids_render_a_real_editable_grid() -> None
+```
+
+Custom, non-default-position locus IDs render a real grid, not a rejection.
+
+`loci_to_payload` submitting that grid's own values back reproduces
+the identical `loci` list — the same "loaded badge to real editor"
+upgrade `m_from_params`'s own `"matrix"` mode already made for a
+loaded migration matrix.
+
+<a id="gui.test_config_form.test_loci_to_payload_lengths_mode_derives_n_loci"></a>
+
+#### test\_loci\_to\_payload\_lengths\_mode\_derives\_n\_loci
+
+```python
+def test_loci_to_payload_lengths_mode_derives_n_loci() -> None
+```
+
+Lengths mode's payload is `n_loci`/`locus_lengths`, matching the O(loci) rule.
+
+<a id="gui.test_config_form.test_loci_to_payload_rejects_malformed_json"></a>
+
+#### test\_loci\_to\_payload\_rejects\_malformed\_json
+
+```python
+def test_loci_to_payload_rejects_malformed_json() -> None
+```
+
+A syntactically invalid `loci_json` is a clear error, not a crash.
+
+<a id="gui.test_config_form.test_loci_to_payload_rejects_the_wrong_shape"></a>
+
+#### test\_loci\_to\_payload\_rejects\_the\_wrong\_shape
+
+```python
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        "[]", '[{"locus_id": 1}]', '[{"locus_id": "x", "length": 1}]',
+        '"not-a-list"'
+    ],
+)
+def test_loci_to_payload_rejects_the_wrong_shape(malformed: str) -> None
+```
+
+Valid JSON that is not a list of `{locus_id, length}` rows is still rejected.
+
+<a id="gui.test_config_form.test_loci_to_payload_rejects_an_unknown_mode"></a>
+
+#### test\_loci\_to\_payload\_rejects\_an\_unknown\_mode
+
+```python
+def test_loci_to_payload_rejects_an_unknown_mode() -> None
+```
+
+An unrecognized mode is a clear programming error, not a silent default.
 
 <a id="gui.test_config_form.test_params_to_form_values_includes_every_composite_fields_keys"></a>
 

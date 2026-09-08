@@ -34,12 +34,28 @@ const savePresetCancelButton = document.getElementById("save-preset-cancel-butto
 
 const USER_PRESET_ID_PREFIX = "user:";
 
+// A real, previously-reproduced regression this flag exists to close:
+// `savePresetForm`'s own submit handler closes `modal-save-preset`
+// (synchronously) *before* the `refreshPresetsList()` call that follows
+// it has actually finished its own async round trip to the bridge --
+// on a slower or more loaded machine, a test (or a fast, real user)
+// polling only "is the save dialog closed" can observe the picker's own
+// list still showing its pre-save contents, in the narrow window
+// between the dialog closing and the list actually being rebuilt. Set
+// `false` at the start of every `refreshPresetsList()` call and `true`
+// only once the list is fully rebuilt, matching this project's own
+// established `window.__fimXReady`-flag precedent
+// (`__fimRunViewReady`, `__fimExploreReady`,
+// `__fimOpenRunRecentRunsLoaded`) for exactly this class of hazard.
+window.__fimPresetsListReady = false;
+
 /**
  * Re-fetch every preset (built-in and user-saved alike) and rebuild the
  * picker's own list. Called on open, and again after a save or delete
  * so the list a user is looking at never goes stale mid-session.
  */
 async function refreshPresetsList() {
+    window.__fimPresetsListReady = false;
     const result = await window.pywebview.api.list_presets();
     presetsList.replaceChildren();
     const found = result.ok ? result.presets : [];
@@ -73,6 +89,7 @@ async function refreshPresetsList() {
         }
         presetsList.appendChild(item);
     }
+    window.__fimPresetsListReady = true;
 }
 
 /**
