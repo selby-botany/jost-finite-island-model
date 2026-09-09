@@ -1365,6 +1365,44 @@ class Api:
         return {"ok": True, "digits": digits}
 
     @_log_bridge_call
+    def get_dark_mode_override(self) -> str | None:
+        """Return the saved dark-mode override, or `None` to follow the OS.
+
+        Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+        redesign.md` §11.2. No in-memory instance attribute the way
+        `_significant_digits` has one: nothing here reads this on a hot
+        per-tick path the way a background run's own thread reads
+        `_significant_digits`-adjacent state, so `self._preferences.
+        dark_mode_override` is already the one place this value lives.
+        """
+        return self._preferences.dark_mode_override
+
+    @_log_bridge_call
+    def set_dark_mode_override(self, value: str | None) -> dict[str, Any]:
+        """Change the saved dark-mode override (Configure's own field).
+
+        Args:
+            value: `"light"`, `"dark"`, or `None` to return to following
+                the OS-level preference.
+
+        Returns:
+            `{"ok": True, "value": value}` on success; `{"ok": False,
+            "message": ...}` if `value` is anything other than those
+            three — a caller-side bug (an unrecognized `<select>`
+            option), not a value a real user could type.
+        """
+        if value is not None and value not in ("light", "dark"):
+            return {
+                "ok": False,
+                "message": (
+                    f"dark mode override must be 'light', 'dark', or null: {value!r}"
+                ),
+            }
+        self._preferences = self._preferences.with_dark_mode_override(value)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "value": value}
+
+    @_log_bridge_call
     def get_startup_warnings(self) -> list[str]:
         """Drain and return any warnings collected while loading saved preferences.
 

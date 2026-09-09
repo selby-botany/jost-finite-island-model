@@ -139,6 +139,52 @@ def test_with_significant_digits_leaves_other_fields_untouched() -> None:
     assert updated.form_values == {"N": "100"}
 
 
+def test_with_dark_mode_override_leaves_other_fields_untouched() -> None:
+    """`with_dark_mode_override` updates only `dark_mode_override`."""
+    original = GuiPreferences(significant_digits=7)
+    updated = original.with_dark_mode_override("dark")
+    assert updated.significant_digits == 7
+    assert updated.dark_mode_override == "dark"
+
+
+def test_with_dark_mode_override_of_none_returns_to_following_the_os() -> None:
+    """`None` is a real choice ("follow the OS"), not merely a no-op default."""
+    original = GuiPreferences(dark_mode_override="light")
+    updated = original.with_dark_mode_override(None)
+    assert updated.dark_mode_override is None
+
+
+def test_dark_mode_override_round_trips_through_save_and_load(tmp_path: Path) -> None:
+    """A saved-and-reloaded `GuiPreferences` preserves `dark_mode_override` exactly."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences(dark_mode_override="dark")
+
+    save_preferences(path, original)
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded == original
+
+
+def test_malformed_dark_mode_override_is_quarantined(tmp_path: Path) -> None:
+    """A `dark_mode_override` outside `{"light", "dark"}` is rejected, not coerced."""
+    path = tmp_path / "preferences.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {"dark_mode_override": "blue"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is not None
+    assert loaded == GuiPreferences()
+
+
 def test_with_named_preset_adds_and_overwrites_by_name() -> None:
     """Saving under an existing name overwrites it; other names are untouched."""
     original = GuiPreferences().with_named_preset("A", {"N": "100"})

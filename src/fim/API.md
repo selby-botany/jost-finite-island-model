@@ -97,6 +97,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
     * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
     * [set\_significant\_digits](#fim.gui.app.Api.set_significant_digits)
+    * [get\_dark\_mode\_override](#fim.gui.app.Api.get_dark_mode_override)
+    * [set\_dark\_mode\_override](#fim.gui.app.Api.set_dark_mode_override)
     * [get\_startup\_warnings](#fim.gui.app.Api.get_startup_warnings)
     * [get\_live\_deme\_pair](#fim.gui.app.Api.get_live_deme_pair)
     * [set\_live\_deme\_pair](#fim.gui.app.Api.set_live_deme_pair)
@@ -150,6 +152,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [with\_named\_preset](#fim.gui.preferences.GuiPreferences.with_named_preset)
     * [without\_named\_preset](#fim.gui.preferences.GuiPreferences.without_named_preset)
     * [with\_significant\_digits](#fim.gui.preferences.GuiPreferences.with_significant_digits)
+    * [with\_dark\_mode\_override](#fim.gui.preferences.GuiPreferences.with_dark_mode_override)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
   * [save\_preferences](#fim.gui.preferences.save_preferences)
@@ -3368,6 +3371,48 @@ ever about a *run's own* output, never this GUI-local setting.
   decimal digits, so anything past that bound would just
   print noise, not real information.
 
+<a id="fim.gui.app.Api.get_dark_mode_override"></a>
+
+#### get\_dark\_mode\_override
+
+```python
+@_log_bridge_call
+def get_dark_mode_override() -> str | None
+```
+
+Return the saved dark-mode override, or `None` to follow the OS.
+
+Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §11.2. No in-memory instance attribute the way
+`_significant_digits` has one: nothing here reads this on a hot
+per-tick path the way a background run's own thread reads
+`_significant_digits`-adjacent state, so `self._preferences.
+dark_mode_override` is already the one place this value lives.
+
+<a id="fim.gui.app.Api.set_dark_mode_override"></a>
+
+#### set\_dark\_mode\_override
+
+```python
+@_log_bridge_call
+def set_dark_mode_override(value: str | None) -> dict[str, Any]
+```
+
+Change the saved dark-mode override (Configure's own field).
+
+**Arguments**:
+
+- `value` - `"light"`, `"dark"`, or `None` to return to following
+  the OS-level preference.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "value": value}` on success; `{"ok": False,
+- `"message"` - ...}` if `value` is anything other than those
+  three — a caller-side bug (an unrecognized `<select>`
+  option), not a value a real user could type.
+
 <a id="fim.gui.app.Api.get_startup_warnings"></a>
 
 #### get\_startup\_warnings
@@ -4731,6 +4776,19 @@ own scientific record either. Purely additive to the on-disk shape
 (schema_version does not change): an older file with no `"presets"` key
 loads exactly as it already did, with `named_presets` simply `None`.
 
+A fourth, optional field — `dark_mode_override` — follows the same §12
+precedent again: "Dark-mode override (§11.2), when the user has
+explicitly chosen one rather than following the OS, is a new, small
+addition to that same preferences file — one more scalar value,
+following the exact precedent... `significant_digits`." `None` means
+"follow the OS," the app's own default (§11.2: "the app follows the
+OS-level light/dark preference by default"), not merely "unset" —
+there is no third stored value for "system" distinct from absence, the
+same way `significant_digits: None` already means "use the hardcoded
+default," not a fourth digit count. Purely additive again: an older
+file with no `"dark_mode_override"` key loads exactly as it already
+did, with the field simply `None`.
+
 Deliberately excludes a "default deme pair for the next run": `Api.
 _start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
 at the start of every run on purpose ("a fresh run never inherits a
@@ -4781,6 +4839,9 @@ One loaded (or default) snapshot of the GUI's own preferences.
   or `None` if none have ever been saved. Re-validated on load
   exactly like `form_values` — see `with_named_preset`'s own
   docstring for how a name is added or overwritten.
+- `dark_mode_override` - `"light"`, `"dark"`, or `None` to follow the
+  OS-level preference (the app's own default) — never a
+  stored `"system"` string, since absence already means that.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
@@ -4870,6 +4931,21 @@ def with_significant_digits(significant_digits: int) -> GuiPreferences
 Return a copy with `significant_digits` replaced.
 
 The `set_significant_digits` bridge method's own update.
+
+<a id="fim.gui.preferences.GuiPreferences.with_dark_mode_override"></a>
+
+#### with\_dark\_mode\_override
+
+```python
+def with_dark_mode_override(dark_mode_override: str | None) -> GuiPreferences
+```
+
+Return a copy with `dark_mode_override` replaced.
+
+The `set_dark_mode_override` bridge method's own update.
+`None` returns to following the OS-level preference — a real,
+first-class choice (design §11.2 does not require an override to
+stay set forever), not merely "clear an error."
 
 <a id="fim.gui.preferences.load_preferences"></a>
 

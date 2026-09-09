@@ -26,6 +26,19 @@ own scientific record either. Purely additive to the on-disk shape
 (schema_version does not change): an older file with no `"presets"` key
 loads exactly as it already did, with `named_presets` simply `None`.
 
+A fourth, optional field — `dark_mode_override` — follows the same §12
+precedent again: "Dark-mode override (§11.2), when the user has
+explicitly chosen one rather than following the OS, is a new, small
+addition to that same preferences file — one more scalar value,
+following the exact precedent... `significant_digits`." `None` means
+"follow the OS," the app's own default (§11.2: "the app follows the
+OS-level light/dark preference by default"), not merely "unset" —
+there is no third stored value for "system" distinct from absence, the
+same way `significant_digits: None` already means "use the hardcoded
+default," not a fourth digit count. Purely additive again: an older
+file with no `"dark_mode_override"` key loads exactly as it already
+did, with the field simply `None`.
+
 Deliberately excludes a "default deme pair for the next run": `Api.
 _start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
 at the start of every run on purpose ("a fresh run never inherits a
@@ -97,17 +110,23 @@ class GuiPreferences:
             or `None` if none have ever been saved. Re-validated on load
             exactly like `form_values` — see `with_named_preset`'s own
             docstring for how a name is added or overwritten.
+        dark_mode_override: `"light"`, `"dark"`, or `None` to follow the
+            OS-level preference (the app's own default) — never a
+            stored `"system"` string, since absence already means that.
     """
 
     significant_digits: int | None = None
     form_values: dict[str, str] | None = None
     named_presets: dict[str, dict[str, str]] | None = None
+    dark_mode_override: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
         gui: dict[str, Any] = {}
         if self.significant_digits is not None:
             gui["significant_digits"] = self.significant_digits
+        if self.dark_mode_override is not None:
+            gui["dark_mode_override"] = self.dark_mode_override
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
         if self.form_values is not None:
             result["form"] = dict(self.form_values)
@@ -137,6 +156,14 @@ class GuiPreferences:
         gui = data.get("gui", {})
         if not isinstance(gui, Mapping):
             raise ValueError("preferences 'gui' section must be an object")
+        dark_mode_override = gui.get("dark_mode_override")
+        if dark_mode_override is not None and dark_mode_override not in (
+            "light",
+            "dark",
+        ):
+            raise ValueError(
+                "preferences 'gui.dark_mode_override' must be 'light' or 'dark'"
+            )
         form_values = data.get("form")
         if form_values is not None:
             if not isinstance(form_values, Mapping) or not all(
@@ -166,6 +193,7 @@ class GuiPreferences:
             significant_digits=gui.get("significant_digits"),
             form_values=form_values,
             named_presets=named_presets,
+            dark_mode_override=dark_mode_override,
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -211,6 +239,16 @@ class GuiPreferences:
         The `set_significant_digits` bridge method's own update.
         """
         return replace(self, significant_digits=significant_digits)
+
+    def with_dark_mode_override(self, dark_mode_override: str | None) -> GuiPreferences:
+        """Return a copy with `dark_mode_override` replaced.
+
+        The `set_dark_mode_override` bridge method's own update.
+        `None` returns to following the OS-level preference — a real,
+        first-class choice (design §11.2 does not require an override to
+        stay set forever), not merely "clear an error."
+        """
+        return replace(self, dark_mode_override=dark_mode_override)
 
 
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:

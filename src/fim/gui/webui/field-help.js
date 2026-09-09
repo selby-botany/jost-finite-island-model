@@ -108,6 +108,9 @@ const FIELD_HELP = {
         "parameter — defaults to this machine's own CPU count.",
     significant_digits: "How many digits every displayed statistic rounds " +
         "to. Cosmetic only — saved files always keep full precision.",
+    dark_mode_override: "Follow system matches your OS's own light/dark " +
+        "setting. Light or Dark overrides it for this app only, applied " +
+        "immediately.",
 };
 
 window.FIM_FIELD_HELP = FIELD_HELP;

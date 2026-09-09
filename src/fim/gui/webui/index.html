@@ -812,6 +812,25 @@
             <option value="8">8</option>
           </select>
         </div>
+
+        <!-- Dark mode (design §11.2, §12): "the app follows the OS-
+             level light/dark preference by default, with an explicit
+             override in Configure's own general settings." Not a
+             `SimulationParams` field either -- same shape as
+             significant digits just above, wired to `Api.get_dark_
+             mode_override`/`set_dark_mode_override`
+             (`screens/config-modals.js`'s own `wireDarkModeOverride
+             Field`), which also applies the choice immediately
+             (`document.documentElement`'s own `data-theme` attribute,
+             `app.css`'s own token blocks), not only on the next launch. -->
+        <div class="field">
+          <label for="field-dark_mode_override">appearance</label>
+          <select id="field-dark_mode_override">
+            <option value="">Follow system</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
       </div>
     </div>
 

@@ -37,6 +37,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_compare_screen`](#gui.test_compare_screen)
   - [`test_config_form`](#gui.test_config_form)
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
+  - [`test_dark_mode_screen`](#gui.test_dark_mode_screen)
   - [`test_explore_screen`](#gui.test_explore_screen)
   - [`test_field_help`](#gui.test_field_help)
   - [`test_field_help_screen`](#gui.test_field_help_screen)
@@ -5625,6 +5626,70 @@ def test_api_seeds_significant_digits_from_a_saved_preference(
 
 A fresh `Api` prefers a saved `significant_digits` over the hardcoded default.
 
+<a id="gui.test_app_api.test_api_starts_with_no_dark_mode_override"></a>
+
+#### test\_api\_starts\_with\_no\_dark\_mode\_override
+
+```python
+def test_api_starts_with_no_dark_mode_override() -> None
+```
+
+A fresh `Api()` follows the OS by default -- `None`, not a stored `"system"`.
+
+<a id="gui.test_app_api.test_set_dark_mode_override_changes_what_get_dark_mode_override_returns"></a>
+
+#### test\_set\_dark\_mode\_override\_changes\_what\_get\_dark\_mode\_override\_returns
+
+```python
+@pytest.mark.parametrize("value", ["light", "dark"])
+def test_set_dark_mode_override_changes_what_get_dark_mode_override_returns(
+        value: str) -> None
+```
+
+A valid override is accepted and immediately reflected back.
+
+<a id="gui.test_app_api.test_set_dark_mode_override_of_none_returns_to_following_the_os"></a>
+
+#### test\_set\_dark\_mode\_override\_of\_none\_returns\_to\_following\_the\_os
+
+```python
+def test_set_dark_mode_override_of_none_returns_to_following_the_os() -> None
+```
+
+Setting `None` after an override clears it back to "follow the OS".
+
+<a id="gui.test_app_api.test_set_dark_mode_override_rejects_an_unrecognized_value"></a>
+
+#### test\_set\_dark\_mode\_override\_rejects\_an\_unrecognized\_value
+
+```python
+def test_set_dark_mode_override_rejects_an_unrecognized_value() -> None
+```
+
+Anything other than "light"/"dark"/`None` is a caller-side bug, not accepted.
+
+<a id="gui.test_app_api.test_set_dark_mode_override_persists_across_a_second_api"></a>
+
+#### test\_set\_dark\_mode\_override\_persists\_across\_a\_second\_api
+
+```python
+def test_set_dark_mode_override_persists_across_a_second_api(
+        tmp_path: Path) -> None
+```
+
+A valid override survives to a second `Api` sharing the same preferences file.
+
+<a id="gui.test_app_api.test_api_seeds_dark_mode_override_from_a_saved_preference"></a>
+
+#### test\_api\_seeds\_dark\_mode\_override\_from\_a\_saved\_preference
+
+```python
+def test_api_seeds_dark_mode_override_from_a_saved_preference(
+        tmp_path: Path) -> None
+```
+
+A fresh `Api` prefers a saved `dark_mode_override` over the default.
+
 <a id="gui.test_app_api.test_get_startup_warnings_is_empty_on_a_clean_or_first_launch"></a>
 
 #### test\_get\_startup\_warnings\_is\_empty\_on\_a\_clean\_or\_first\_launch
@@ -7505,6 +7570,63 @@ Exactly one such button exists today (`modal-presets`'s own
 dialog added later without this same opt-in is caught by this test
 changing count, not only by a missing `tabindex`.
 
+<a id="gui.test_dark_mode_screen"></a>
+
+# gui.test\_dark\_mode\_screen
+
+Headless functional tests for the Configure workspace's dark-mode
+override field (botanist GUI design doc `20260907-claude-sonnet-5-
+botanist-gui-redesign.md` §11.2, §12).
+
+Real DOM-driven proof that `webui/screens/config-modals.js`'s
+`wireDarkModeOverrideField`/`applyDarkModeOverride` actually apply and
+persist a choice -- `test/gui/test_app_api.py` already proves the bridge
+methods themselves are correct as plain Python calls; these tests prove
+the page's own JavaScript calls them at the right moments and updates
+`document.documentElement`'s own `data-theme` attribute, which no
+Python-only test can check.
+
+<a id="gui.test_dark_mode_screen.test_starts_with_no_theme_override_and_the_select_showing_follow_system"></a>
+
+#### test\_starts\_with\_no\_theme\_override\_and\_the\_select\_showing\_follow\_system
+
+```python
+def test_starts_with_no_theme_override_and_the_select_showing_follow_system(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A fresh launch (no saved preference) follows the OS -- no override applied.
+
+<a id="gui.test_dark_mode_screen.test_choosing_dark_applies_the_theme_attribute_immediately"></a>
+
+#### test\_choosing\_dark\_applies\_the\_theme\_attribute\_immediately
+
+```python
+def test_choosing_dark_applies_the_theme_attribute_immediately(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Selecting "Dark" sets `data-theme="dark"` on the page right away.
+
+<a id="gui.test_dark_mode_screen.test_choosing_dark_then_follow_system_clears_the_theme_attribute"></a>
+
+#### test\_choosing\_dark\_then\_follow\_system\_clears\_the\_theme\_attribute
+
+```python
+def test_choosing_dark_then_follow_system_clears_the_theme_attribute(
+        window: webview.Window) -> None
+```
+
+Returning to "Follow system" removes the override entirely, not just visually.
+
+Driven manually (not the `drive` fixture, which destroys its window
+after one round trip): the second `change` must wait for the first
+one's own async `set_dark_mode_override` bridge call to settle
+first, or the two could resolve out of order and leave a stale
+theme applied -- `wireDarkModeOverrideField`'s own handler is
+`async`, so firing both events in one synchronous script (as an
+earlier version of this test did) races exactly that.
+
 <a id="gui.test_explore_screen"></a>
 
 # gui.test\_explore\_screen
@@ -8722,6 +8844,47 @@ def test_with_significant_digits_leaves_other_fields_untouched() -> None
 ```
 
 `with_significant_digits` updates only `significant_digits`.
+
+<a id="gui.test_preferences.test_with_dark_mode_override_leaves_other_fields_untouched"></a>
+
+#### test\_with\_dark\_mode\_override\_leaves\_other\_fields\_untouched
+
+```python
+def test_with_dark_mode_override_leaves_other_fields_untouched() -> None
+```
+
+`with_dark_mode_override` updates only `dark_mode_override`.
+
+<a id="gui.test_preferences.test_with_dark_mode_override_of_none_returns_to_following_the_os"></a>
+
+#### test\_with\_dark\_mode\_override\_of\_none\_returns\_to\_following\_the\_os
+
+```python
+def test_with_dark_mode_override_of_none_returns_to_following_the_os() -> None
+```
+
+`None` is a real choice ("follow the OS"), not merely a no-op default.
+
+<a id="gui.test_preferences.test_dark_mode_override_round_trips_through_save_and_load"></a>
+
+#### test\_dark\_mode\_override\_round\_trips\_through\_save\_and\_load
+
+```python
+def test_dark_mode_override_round_trips_through_save_and_load(
+        tmp_path: Path) -> None
+```
+
+A saved-and-reloaded `GuiPreferences` preserves `dark_mode_override` exactly.
+
+<a id="gui.test_preferences.test_malformed_dark_mode_override_is_quarantined"></a>
+
+#### test\_malformed\_dark\_mode\_override\_is\_quarantined
+
+```python
+def test_malformed_dark_mode_override_is_quarantined(tmp_path: Path) -> None
+```
+
+A `dark_mode_override` outside `{"light", "dark"}` is rejected, not coerced.
 
 <a id="gui.test_preferences.test_with_named_preset_adds_and_overwrites_by_name"></a>
 

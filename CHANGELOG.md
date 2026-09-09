@@ -116,6 +116,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tooltip), so a field added to Configure later without one — or a
   stale tooltip left behind after a field is renamed — fails a fast,
   no-window test rather than going unnoticed.
+- `fim gui` follows the OS-level light/dark preference by default, with
+  a new explicit override (design §11.2) in Configure's own Structure
+  panel — "Follow system" (the default)/"Light"/"Dark", applied
+  immediately, not only on the next launch, and persisted the same way
+  significant digits already is (design §12: "one more scalar value,
+  following the exact precedent"). `None`/absent means "follow the OS,"
+  a real, first-class choice, not merely an unset value.
 
 ### Changed
 

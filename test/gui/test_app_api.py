@@ -541,6 +541,67 @@ def test_api_seeds_significant_digits_from_a_saved_preference(tmp_path: Path) ->
     assert api.get_significant_digits() == 7
 
 
+def test_api_starts_with_no_dark_mode_override() -> None:
+    """A fresh `Api()` follows the OS by default -- `None`, not a stored `"system"`."""
+    assert Api().get_dark_mode_override() is None
+
+
+@pytest.mark.parametrize("value", ["light", "dark"])
+def test_set_dark_mode_override_changes_what_get_dark_mode_override_returns(
+    value: str,
+) -> None:
+    """A valid override is accepted and immediately reflected back."""
+    api = Api()
+
+    result = api.set_dark_mode_override(value)
+
+    assert result == {"ok": True, "value": value}
+    assert api.get_dark_mode_override() == value
+
+
+def test_set_dark_mode_override_of_none_returns_to_following_the_os() -> None:
+    """Setting `None` after an override clears it back to "follow the OS"."""
+    api = Api()
+    api.set_dark_mode_override("dark")
+
+    result = api.set_dark_mode_override(None)
+
+    assert result == {"ok": True, "value": None}
+    assert api.get_dark_mode_override() is None
+
+
+def test_set_dark_mode_override_rejects_an_unrecognized_value() -> None:
+    """Anything other than "light"/"dark"/`None` is a caller-side bug, not accepted."""
+    api = Api()
+
+    result = api.set_dark_mode_override("blue")
+
+    assert result["ok"] is False
+    assert "message" in result
+    assert api.get_dark_mode_override() is None
+
+
+def test_set_dark_mode_override_persists_across_a_second_api(tmp_path: Path) -> None:
+    """A valid override survives to a second `Api` sharing the same preferences file."""
+    preferences_path = tmp_path / "preferences.json"
+    first = Api(preferences_path=preferences_path)
+
+    first.set_dark_mode_override("dark")
+
+    second = Api(preferences_path=preferences_path)
+    assert second.get_dark_mode_override() == "dark"
+
+
+def test_api_seeds_dark_mode_override_from_a_saved_preference(tmp_path: Path) -> None:
+    """A fresh `Api` prefers a saved `dark_mode_override` over the default."""
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(preferences_path, GuiPreferences(dark_mode_override="light"))
+
+    api = Api(preferences_path=preferences_path)
+
+    assert api.get_dark_mode_override() == "light"
+
+
 def test_get_startup_warnings_is_empty_on_a_clean_or_first_launch(
     tmp_path: Path,
 ) -> None:
