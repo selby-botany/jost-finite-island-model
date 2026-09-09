@@ -113,12 +113,20 @@ class GuiPreferences:
         dark_mode_override: `"light"`, `"dark"`, or `None` to follow the
             OS-level preference (the app's own default) — never a
             stored `"system"` string, since absence already means that.
+        welcome_dismissed: Whether the first-launch welcome panel
+            (botanist GUI design doc `20260907-claude-sonnet-5-botanist-
+            gui-redesign.md` §10) has already been shown and dismissed —
+            `False` by default, distinct from `form_values is None`
+            ("no run has ever completed"): a user who dismisses the
+            panel via "Start from scratch" without ever running anything
+            must not see it again on the next launch either.
     """
 
     significant_digits: int | None = None
     form_values: dict[str, str] | None = None
     named_presets: dict[str, dict[str, str]] | None = None
     dark_mode_override: str | None = None
+    welcome_dismissed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
@@ -127,6 +135,8 @@ class GuiPreferences:
             gui["significant_digits"] = self.significant_digits
         if self.dark_mode_override is not None:
             gui["dark_mode_override"] = self.dark_mode_override
+        if self.welcome_dismissed:
+            gui["welcome_dismissed"] = True
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
         if self.form_values is not None:
             result["form"] = dict(self.form_values)
@@ -194,6 +204,7 @@ class GuiPreferences:
             form_values=form_values,
             named_presets=named_presets,
             dark_mode_override=dark_mode_override,
+            welcome_dismissed=bool(gui.get("welcome_dismissed", False)),
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -249,6 +260,17 @@ class GuiPreferences:
         stay set forever), not merely "clear an error."
         """
         return replace(self, dark_mode_override=dark_mode_override)
+
+    def with_welcome_dismissed(self) -> GuiPreferences:
+        """Return a copy with `welcome_dismissed` set.
+
+        One-directional on purpose — nothing ever needs to show the
+        first-launch welcome panel a second time, so there is no
+        `without_welcome_dismissed`/parameterized setter the way
+        `dark_mode_override` needs one to support returning to "follow
+        the OS."
+        """
+        return replace(self, welcome_dismissed=True)
 
 
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:

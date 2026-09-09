@@ -1403,6 +1403,28 @@ class Api:
         return {"ok": True, "value": value}
 
     @_log_bridge_call
+    def get_welcome_dismissed(self) -> bool:
+        """Return whether the first-launch welcome panel has already been shown.
+
+        Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+        redesign.md` §10. `initializeRunView` (`run-view-initial.js`)
+        calls this once, at launch, to decide whether to show the panel
+        at all.
+        """
+        return self._preferences.welcome_dismissed
+
+    @_log_bridge_call
+    def dismiss_welcome(self) -> None:
+        """Record that the first-launch welcome panel has been shown.
+
+        One-directional (`GuiPreferences.with_welcome_dismissed`'s own
+        docstring) — called once, whichever of the panel's own two
+        actions the user picks, never un-called.
+        """
+        self._preferences = self._preferences.with_welcome_dismissed()
+        save_preferences(self._preferences_path, self._preferences)
+
+    @_log_bridge_call
     def get_startup_warnings(self) -> list[str]:
         """Drain and return any warnings collected while loading saved preferences.
 

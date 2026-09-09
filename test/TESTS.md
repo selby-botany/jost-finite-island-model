@@ -60,6 +60,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_store`](#gui.test_store)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
+  - [`test_welcome_screen`](#gui.test_welcome_screen)
 - [`test/model/`](#group-model)
   - [`test_allele`](#model.test_allele)
   - [`test_initial`](#model.test_initial)
@@ -5690,6 +5691,57 @@ def test_api_seeds_dark_mode_override_from_a_saved_preference(
 
 A fresh `Api` prefers a saved `dark_mode_override` over the default.
 
+<a id="gui.test_app_api.test_api_starts_with_the_welcome_panel_not_dismissed"></a>
+
+#### test\_api\_starts\_with\_the\_welcome\_panel\_not\_dismissed
+
+```python
+def test_api_starts_with_the_welcome_panel_not_dismissed(
+        tmp_path: Path) -> None
+```
+
+A genuinely first launch (no preferences file at all) has never shown it.
+
+`test/gui/conftest.py`'s own `_isolate_gui_preferences` autouse fixture
+pre-seeds `welcome_dismissed=True` at the redirected default path (so
+every *other* test in this package is not interrupted by a modal
+dialog it has no reason to expect) -- this test builds its own `Api`
+against a preferences path of its own that genuinely has no file on
+disk, the same way `GuiPreferences`'s own dataclass default proves
+what a real first launch sees, in `test/gui/test_preferences.py`.
+
+<a id="gui.test_app_api.test_dismiss_welcome_changes_what_get_welcome_dismissed_returns"></a>
+
+#### test\_dismiss\_welcome\_changes\_what\_get\_welcome\_dismissed\_returns
+
+```python
+def test_dismiss_welcome_changes_what_get_welcome_dismissed_returns(
+        tmp_path: Path) -> None
+```
+
+Dismissing is reflected back immediately, in the same `Api` instance.
+
+<a id="gui.test_app_api.test_dismiss_welcome_persists_across_a_second_api"></a>
+
+#### test\_dismiss\_welcome\_persists\_across\_a\_second\_api
+
+```python
+def test_dismiss_welcome_persists_across_a_second_api(tmp_path: Path) -> None
+```
+
+Dismissal survives to a second `Api` sharing the same preferences file.
+
+<a id="gui.test_app_api.test_api_seeds_welcome_dismissed_from_a_saved_preference"></a>
+
+#### test\_api\_seeds\_welcome\_dismissed\_from\_a\_saved\_preference
+
+```python
+def test_api_seeds_welcome_dismissed_from_a_saved_preference(
+        tmp_path: Path) -> None
+```
+
+A fresh `Api` prefers a saved `welcome_dismissed` over the default.
+
 <a id="gui.test_app_api.test_get_startup_warnings_is_empty_on_a_clean_or_first_launch"></a>
 
 #### test\_get\_startup\_warnings\_is\_empty\_on\_a\_clean\_or\_first\_launch
@@ -8876,6 +8928,51 @@ def test_dark_mode_override_round_trips_through_save_and_load(
 
 A saved-and-reloaded `GuiPreferences` preserves `dark_mode_override` exactly.
 
+<a id="gui.test_preferences.test_with_welcome_dismissed_leaves_other_fields_untouched"></a>
+
+#### test\_with\_welcome\_dismissed\_leaves\_other\_fields\_untouched
+
+```python
+def test_with_welcome_dismissed_leaves_other_fields_untouched() -> None
+```
+
+`with_welcome_dismissed` updates only `welcome_dismissed`.
+
+<a id="gui.test_preferences.test_welcome_dismissed_round_trips_through_save_and_load"></a>
+
+#### test\_welcome\_dismissed\_round\_trips\_through\_save\_and\_load
+
+```python
+def test_welcome_dismissed_round_trips_through_save_and_load(
+        tmp_path: Path) -> None
+```
+
+A saved-and-reloaded `GuiPreferences` preserves `welcome_dismissed=True`.
+
+A round trip starting from the dataclass default (`False`) would
+pass even if `to_dict`/`from_dict` dropped the field entirely, since
+`False` is also what a missing key loads back as — this test starts
+from the non-default value specifically so a real wiring bug (the
+field never actually being written or read) cannot hide behind that
+coincidence, the same reason `test_dark_mode_override_round_trips_
+through_save_and_load` above picks a non-default value too.
+
+<a id="gui.test_preferences.test_welcome_dismissed_true_is_written_to_disk"></a>
+
+#### test\_welcome\_dismissed\_true\_is\_written\_to\_disk
+
+```python
+def test_welcome_dismissed_true_is_written_to_disk(tmp_path: Path) -> None
+```
+
+`to_dict` actually writes `welcome_dismissed` when it is `True`.
+
+Unlike `dark_mode_override` (three real states: `"light"`, `"dark"`,
+absent), `welcome_dismissed` only ever needs writing on the one
+transition that matters (`False` -> `True`) — `to_dict`'s own `if
+self.welcome_dismissed: gui["welcome_dismissed"] = True` guard
+omits the key entirely rather than ever writing a literal `false`.
+
 <a id="gui.test_preferences.test_malformed_dark_mode_override_is_quarantined"></a>
 
 #### test\_malformed\_dark\_mode\_override\_is\_quarantined
@@ -10368,6 +10465,109 @@ No `const`/`let`/`function` name is declared at column 0 in two files.
 Two files sharing one name is exactly the `SyntaxError` this test
 exists to catch before a real window ever loads the page — see this
 module's own docstring for the real instance that prompted it.
+
+<a id="gui.test_welcome_screen"></a>
+
+# gui.test\_welcome\_screen
+
+Headless functional tests for the first-launch welcome panel (botanist
+GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §10).
+
+Real DOM-driven proof that `webui/screens/welcome.js` actually shows
+`<dialog id="modal-welcome">` on a genuine first launch, leaves it hidden
+once already dismissed, wires both of its own buttons correctly, and
+calls `Api.dismiss_welcome()` through the dialog's native `close` event
+-- `test/gui/test_preferences.py`/`test_app_api.py` already prove the
+`GuiPreferences.welcome_dismissed`/`Api.get_welcome_dismissed`/`Api.
+dismiss_welcome` plumbing itself is correct as plain Python calls; these
+tests prove the page's own JavaScript actually shows and wires the panel
+at the right moments, which no Python-only test can check.
+
+Every test here that needs the panel to actually show builds its own
+window rather than using the `window`/`drive` fixtures as-is:
+`test/gui/conftest.py`'s own `_isolate_gui_preferences` autouse fixture
+pre-seeds `welcome_dismissed=True` at the redirected preferences path
+specifically so the panel stays out of every *other* test's way, so
+showing it here means first overwriting that same file with `welcome_
+dismissed=False` -- the same explicit-override pattern already used for
+`dark_mode_override`/`significant_digits` in `test_app_api.py`. Every
+test that needs this requests `_isolate_gui_preferences` directly, for
+its own return value (the resolved path) -- that fixture's own docstring
+explains why this goes through it rather than `fim.gui.app.preferences_
+file_path` reflectively.
+
+<a id="gui.test_welcome_screen.test_welcome_panel_shows_on_a_genuine_first_launch"></a>
+
+#### test\_welcome\_panel\_shows\_on\_a\_genuine\_first\_launch
+
+```python
+def test_welcome_panel_shows_on_a_genuine_first_launch(
+        _isolate_gui_preferences: Path, drive: Callable[..., Any]) -> None
+```
+
+A launch that has never dismissed the panel shows it once ready.
+
+<a id="gui.test_welcome_screen.test_welcome_panel_does_not_show_once_already_dismissed"></a>
+
+#### test\_welcome\_panel\_does\_not\_show\_once\_already\_dismissed
+
+```python
+def test_welcome_panel_does_not_show_once_already_dismissed(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The ambient, already-dismissed default (every other test's own baseline).
+
+<a id="gui.test_welcome_screen.test_try_a_worked_example_opens_presets_and_dismisses_welcome"></a>
+
+#### test\_try\_a\_worked\_example\_opens\_presets\_and\_dismisses\_welcome
+
+```python
+def test_try_a_worked_example_opens_presets_and_dismisses_welcome(
+        _isolate_gui_preferences: Path, drive: Callable[..., Any]) -> None
+```
+
+"Try a worked example…" hands off to the presets gallery, closing itself.
+
+`welcomeDialog.close()` fires synchronously, from inside the button's
+own click handler, before `fim.menu.loadExample`'s own `await
+refreshPresetsList()` resolves and opens `modal-presets` -- `is_ready`
+below waits for *both* dialogs to reach their settled state, not just
+the welcome panel's own closing half of this handoff, so this cannot
+pass on a lucky read caught between the two.
+
+<a id="gui.test_welcome_screen.test_start_from_scratch_just_closes_the_panel"></a>
+
+#### test\_start\_from\_scratch\_just\_closes\_the\_panel
+
+```python
+def test_start_from_scratch_just_closes_the_panel(
+        _isolate_gui_preferences: Path, drive: Callable[..., Any]) -> None
+```
+
+"Start from scratch" closes the panel and opens nothing else.
+
+<a id="gui.test_welcome_screen.test_dismissing_the_welcome_panel_persists_through_the_bridge"></a>
+
+#### test\_dismissing\_the\_welcome\_panel\_persists\_through\_the\_bridge
+
+```python
+@pytest.mark.parametrize(
+    "button_id",
+    ["welcome-try-example-button", "welcome-start-scratch-button"])
+def test_dismissing_the_welcome_panel_persists_through_the_bridge(
+        button_id: str, _isolate_gui_preferences: Path) -> None
+```
+
+Either button's own `close` event reaches `Api.dismiss_welcome()` for real.
+
+Driven manually, not via the `drive` fixture: `welcomeDialog`'s own
+`close` listener fires `Api.dismiss_welcome()` fire-and-forget (no
+DOM-visible effect of its own to poll for -- the dialog is already
+closed by the time it resolves either way), so this polls the
+bridge's own `get_welcome_dismissed()` back through a second `Api`
+call on the same window, the identical shape `test_input_screen.py`'s
+own significant-digits persistence test uses for the same reason.
 
 
 

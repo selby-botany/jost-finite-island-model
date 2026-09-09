@@ -99,6 +99,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [set\_significant\_digits](#fim.gui.app.Api.set_significant_digits)
     * [get\_dark\_mode\_override](#fim.gui.app.Api.get_dark_mode_override)
     * [set\_dark\_mode\_override](#fim.gui.app.Api.set_dark_mode_override)
+    * [get\_welcome\_dismissed](#fim.gui.app.Api.get_welcome_dismissed)
+    * [dismiss\_welcome](#fim.gui.app.Api.dismiss_welcome)
     * [get\_startup\_warnings](#fim.gui.app.Api.get_startup_warnings)
     * [get\_live\_deme\_pair](#fim.gui.app.Api.get_live_deme_pair)
     * [set\_live\_deme\_pair](#fim.gui.app.Api.set_live_deme_pair)
@@ -153,6 +155,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [without\_named\_preset](#fim.gui.preferences.GuiPreferences.without_named_preset)
     * [with\_significant\_digits](#fim.gui.preferences.GuiPreferences.with_significant_digits)
     * [with\_dark\_mode\_override](#fim.gui.preferences.GuiPreferences.with_dark_mode_override)
+    * [with\_welcome\_dismissed](#fim.gui.preferences.GuiPreferences.with_welcome_dismissed)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
   * [save\_preferences](#fim.gui.preferences.save_preferences)
@@ -3413,6 +3416,37 @@ Change the saved dark-mode override (Configure's own field).
   three — a caller-side bug (an unrecognized `<select>`
   option), not a value a real user could type.
 
+<a id="fim.gui.app.Api.get_welcome_dismissed"></a>
+
+#### get\_welcome\_dismissed
+
+```python
+@_log_bridge_call
+def get_welcome_dismissed() -> bool
+```
+
+Return whether the first-launch welcome panel has already been shown.
+
+Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §10. `initializeRunView` (`run-view-initial.js`)
+calls this once, at launch, to decide whether to show the panel
+at all.
+
+<a id="fim.gui.app.Api.dismiss_welcome"></a>
+
+#### dismiss\_welcome
+
+```python
+@_log_bridge_call
+def dismiss_welcome() -> None
+```
+
+Record that the first-launch welcome panel has been shown.
+
+One-directional (`GuiPreferences.with_welcome_dismissed`'s own
+docstring) — called once, whichever of the panel's own two
+actions the user picks, never un-called.
+
 <a id="fim.gui.app.Api.get_startup_warnings"></a>
 
 #### get\_startup\_warnings
@@ -4842,6 +4876,13 @@ One loaded (or default) snapshot of the GUI's own preferences.
 - `dark_mode_override` - `"light"`, `"dark"`, or `None` to follow the
   OS-level preference (the app's own default) — never a
   stored `"system"` string, since absence already means that.
+- `welcome_dismissed` - Whether the first-launch welcome panel
+  (botanist GUI design doc `20260907-claude-sonnet-5-botanist-
+  gui-redesign.md` §10) has already been shown and dismissed —
+  `False` by default, distinct from `form_values is None`
+  ("no run has ever completed"): a user who dismisses the
+  panel via "Start from scratch" without ever running anything
+  must not see it again on the next launch either.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
@@ -4946,6 +4987,22 @@ The `set_dark_mode_override` bridge method's own update.
 `None` returns to following the OS-level preference — a real,
 first-class choice (design §11.2 does not require an override to
 stay set forever), not merely "clear an error."
+
+<a id="fim.gui.preferences.GuiPreferences.with_welcome_dismissed"></a>
+
+#### with\_welcome\_dismissed
+
+```python
+def with_welcome_dismissed() -> GuiPreferences
+```
+
+Return a copy with `welcome_dismissed` set.
+
+One-directional on purpose — nothing ever needs to show the
+first-launch welcome panel a second time, so there is no
+`without_welcome_dismissed`/parameterized setter the way
+`dark_mode_override` needs one to support returning to "follow
+the OS."
 
 <a id="fim.gui.preferences.load_preferences"></a>
 

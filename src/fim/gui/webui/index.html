@@ -850,6 +850,32 @@
   </div><!-- /#content-area -->
   </div><!-- /#workspace -->
 
+  <!-- First-launch welcome (botanist GUI design doc §10): "a one-time,
+       dismissible panel on first open offers exactly two actions" --
+       shown once, from `run-view-initial.js`'s own `initializeRunView`,
+       when `Api.get_welcome_dismissed()` says it has not been shown
+       yet; `screens/welcome.js` wires both buttons and calls `Api.
+       dismiss_welcome()` so it never reappears, whichever one is
+       clicked. Not a `.config-modal` structurally different from
+       `modal-presets`/`modal-save-preset` below -- same visual
+       language, no fields of its own to edit. -->
+  <dialog class="config-modal" id="modal-welcome">
+    <h2>Welcome to fim</h2>
+    <p>
+      A finite island model simulator for population genetics. Start
+      from a worked example close to your own question, or from a
+      blank configuration.
+    </p>
+    <div class="actions">
+      <button type="button" id="welcome-try-example-button" tabindex="0">
+        Try a worked example…
+      </button>
+      <button type="button" id="welcome-start-scratch-button" tabindex="0">
+        Start from scratch
+      </button>
+    </div>
+  </dialog>
+
   <!-- Presets (botanist GUI design doc §4.5): every `doc/usage.md`
        worked example, one click away, sourced live from `Api.list_
        presets` -- not a `.config-modal` (it edits nothing of its own;
@@ -919,6 +945,7 @@
 <script src="screens/explore.js"></script>
 <script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
+<script src="screens/welcome.js"></script>
 <script src="screens/nav-rail.js"></script>
 <script src="field-help.js"></script>
 </body>

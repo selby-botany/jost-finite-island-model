@@ -602,6 +602,53 @@ def test_api_seeds_dark_mode_override_from_a_saved_preference(tmp_path: Path) ->
     assert api.get_dark_mode_override() == "light"
 
 
+def test_api_starts_with_the_welcome_panel_not_dismissed(tmp_path: Path) -> None:
+    """A genuinely first launch (no preferences file at all) has never shown it.
+
+    `test/gui/conftest.py`'s own `_isolate_gui_preferences` autouse fixture
+    pre-seeds `welcome_dismissed=True` at the redirected default path (so
+    every *other* test in this package is not interrupted by a modal
+    dialog it has no reason to expect) -- this test builds its own `Api`
+    against a preferences path of its own that genuinely has no file on
+    disk, the same way `GuiPreferences`'s own dataclass default proves
+    what a real first launch sees, in `test/gui/test_preferences.py`.
+    """
+    preferences_path = tmp_path / "genuinely-first-launch.json"
+    assert Api(preferences_path=preferences_path).get_welcome_dismissed() is False
+
+
+def test_dismiss_welcome_changes_what_get_welcome_dismissed_returns(
+    tmp_path: Path,
+) -> None:
+    """Dismissing is reflected back immediately, in the same `Api` instance."""
+    api = Api(preferences_path=tmp_path / "preferences.json")
+
+    api.dismiss_welcome()
+
+    assert api.get_welcome_dismissed() is True
+
+
+def test_dismiss_welcome_persists_across_a_second_api(tmp_path: Path) -> None:
+    """Dismissal survives to a second `Api` sharing the same preferences file."""
+    preferences_path = tmp_path / "preferences.json"
+    first = Api(preferences_path=preferences_path)
+
+    first.dismiss_welcome()
+
+    second = Api(preferences_path=preferences_path)
+    assert second.get_welcome_dismissed() is True
+
+
+def test_api_seeds_welcome_dismissed_from_a_saved_preference(tmp_path: Path) -> None:
+    """A fresh `Api` prefers a saved `welcome_dismissed` over the default."""
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(preferences_path, GuiPreferences(welcome_dismissed=True))
+
+    api = Api(preferences_path=preferences_path)
+
+    assert api.get_welcome_dismissed() is True
+
+
 def test_get_startup_warnings_is_empty_on_a_clean_or_first_launch(
     tmp_path: Path,
 ) -> None:

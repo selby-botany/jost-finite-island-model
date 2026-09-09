@@ -208,6 +208,16 @@ async function initializeRunView() {
     enterInitialState(false);
     await loadInitialForm();
     await renderInitialPreview();
+    // Awaited before the ready flag flips, like the two calls above --
+    // not fire-and-forget: an un-awaited bridge call still in flight
+    // when a test's own teardown destroys the window is exactly the
+    // stranded-non-daemon-thread hazard `test/gui/conftest.py`'s own
+    // module docstring records at length (`screens/welcome.js`'s own
+    // `maybeShowWelcome` awaits `Api.get_welcome_dismissed` internally).
+    // The panel itself, once shown, still floats over an already-
+    // correct initial view rather than blocking it from ever rendering
+    // -- this only delays the *ready flag*, not the preview above it.
+    await window.fim.maybeShowWelcome();
     window.__fimRunViewReady = true;
 }
 

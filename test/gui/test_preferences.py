@@ -166,6 +166,52 @@ def test_dark_mode_override_round_trips_through_save_and_load(tmp_path: Path) ->
     assert loaded == original
 
 
+def test_with_welcome_dismissed_leaves_other_fields_untouched() -> None:
+    """`with_welcome_dismissed` updates only `welcome_dismissed`."""
+    original = GuiPreferences(significant_digits=7)
+    updated = original.with_welcome_dismissed()
+    assert updated.significant_digits == 7
+    assert updated.welcome_dismissed is True
+
+
+def test_welcome_dismissed_round_trips_through_save_and_load(tmp_path: Path) -> None:
+    """A saved-and-reloaded `GuiPreferences` preserves `welcome_dismissed=True`.
+
+    A round trip starting from the dataclass default (`False`) would
+    pass even if `to_dict`/`from_dict` dropped the field entirely, since
+    `False` is also what a missing key loads back as — this test starts
+    from the non-default value specifically so a real wiring bug (the
+    field never actually being written or read) cannot hide behind that
+    coincidence, the same reason `test_dark_mode_override_round_trips_
+    through_save_and_load` above picks a non-default value too.
+    """
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences(welcome_dismissed=True)
+
+    save_preferences(path, original)
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded == original
+
+
+def test_welcome_dismissed_true_is_written_to_disk(tmp_path: Path) -> None:
+    """`to_dict` actually writes `welcome_dismissed` when it is `True`.
+
+    Unlike `dark_mode_override` (three real states: `"light"`, `"dark"`,
+    absent), `welcome_dismissed` only ever needs writing on the one
+    transition that matters (`False` -> `True`) — `to_dict`'s own `if
+    self.welcome_dismissed: gui["welcome_dismissed"] = True` guard
+    omits the key entirely rather than ever writing a literal `false`.
+    """
+    path = tmp_path / "preferences.json"
+    save_preferences(path, GuiPreferences(welcome_dismissed=True))
+
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+
+    assert on_disk["gui"]["welcome_dismissed"] is True
+
+
 def test_malformed_dark_mode_override_is_quarantined(tmp_path: Path) -> None:
     """A `dark_mode_override` outside `{"light", "dark"}` is rejected, not coerced."""
     path = tmp_path / "preferences.json"

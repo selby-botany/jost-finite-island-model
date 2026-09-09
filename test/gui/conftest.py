@@ -162,6 +162,7 @@ import webview
 
 from fim.gui import app as app_module
 from fim.gui.app import create_window
+from fim.gui.preferences import GuiPreferences, save_preferences
 
 _POLL_INTERVAL_SECONDS = 0.1
 
@@ -408,7 +409,9 @@ def _isolate_logging(log_isolation: None) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_gui_preferences(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _isolate_gui_preferences(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
     """Never let a bare `Api()`/`create_window()` touch a real preferences file.
 
     `Api.__init__`'s own `preferences_path` parameter — and `create_
@@ -426,7 +429,59 @@ def _isolate_gui_preferences(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     "never touch a real home directory" discipline, applied here at the
     `Api`/`create_window` boundary rather than inside `preferences.py`
     itself.
+
+    Returns the resolved path itself (autouse fixtures may still be
+    requested by name for their return value): a test that wants a
+    starting `GuiPreferences` other than this fixture's own default
+    seed -- `test_welcome_screen.py`'s own `_build_window_with_welcome_
+    not_dismissed`, for instance -- requests this fixture directly and
+    overwrites that same path with `save_preferences`, rather than
+    reaching into `fim.gui.app`'s own `preferences_file_path` attribute
+    by hand (which `mypy --strict`'s `no_implicit_reexport` flags: `app.
+    py` imports that name from `fim.gui.preferences` without explicitly
+    re-exporting it, so accessing it as `app_module.preferences_file_
+    path` from outside `fim.gui.app` is not a type-checked contract).
     """
-    monkeypatch.setattr(
-        app_module, "preferences_file_path", lambda: tmp_path / "preferences.json"
-    )
+    # Deliberately its own `tmp_path_factory`-minted directory, not a
+    # child of this test's own `tmp_path` fixture: a large fraction of
+    # this package's own tests construct `Api(preferences_path=tmp_path
+    # / "preferences.json")` directly, reusing the very same per-test
+    # `tmp_path` this fixture could also receive, to assert something
+    # about a file that has *never* been written yet (`test_app_api.
+    # py`'s own `test_set_significant_digits_rejecting_a_value_does_not_
+    # persist`) or to assert `tmp_path`'s own directory listing holds
+    # exactly one file (`test_preferences.py`'s own `test_save_is_
+    # atomic_no_temp_file_left_behind`) -- both confirmed live to break
+    # the moment an earlier version of this fixture pre-seeded anything
+    # at all inside `tmp_path`, whether directly or in a subdirectory of
+    # it, since the bare directory (or its listing) a test asserted was
+    # untouched already held this fixture's own seed first. A directory
+    # from a wholly separate `tmp_path_factory` mint means the pre-seed
+    # below can never appear inside any test's own `tmp_path`-rooted
+    # path or listing — only the *default* `preferences_file_path()`
+    # (used by every `Api()`/`create_window()` call with no `preferences
+    # _path` of its own) ever resolves here.
+    preferences_path = tmp_path_factory.mktemp("gui-test-defaults") / "preferences.json"
+    monkeypatch.setattr(app_module, "preferences_file_path", lambda: preferences_path)
+    # Also pre-seed `welcome_dismissed=True`: `GuiPreferences`'s own
+    # dataclass default is `False` (a genuine first launch has never
+    # dismissed anything), which is exactly right for production but
+    # would otherwise pop `screens/welcome.js`'s `<dialog id="modal-
+    # welcome">` open, as a native `showModal()`, over every single
+    # test in this package the moment `initializeRunView` settles --
+    # confirmed live before this fixture was changed: a bare `create_
+    # window()` with no preferences file left `document.activeElement`
+    # unable to move onto an underlying field at all (`el.focus()`
+    # silently declining to move focus, the same "inert background"
+    # shape `test_field_help_screen.py`'s own history already
+    # documents for a `hidden` ancestor -- a modal's own light-dismiss
+    # inert-ing of the rest of the page is the identical hazard, not a
+    # new one). The one test file that actually exercises the welcome
+    # panel (`test_welcome_screen.py`) overrides this by writing its
+    # own `GuiPreferences(welcome_dismissed=False)` before building its
+    # window, the same explicit-override pattern `test_app_api.py`
+    # already uses for `dark_mode_override`/`significant_digits` --
+    # every other test in this package never has to know this dialog
+    # exists.
+    save_preferences(preferences_path, GuiPreferences(welcome_dismissed=True))
+    return preferences_path

@@ -123,6 +123,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   significant digits already is (design §12: "one more scalar value,
   following the exact precedent"). `None`/absent means "follow the OS,"
   a real, first-class choice, not merely an unset value.
+- `fim gui` shows a one-time welcome panel on a genuinely first launch
+  (design §10: "a one-time, dismissible panel on first open offers
+  exactly two actions"), offering "Try a worked example…" (opens the
+  same presets gallery the File menu's own "Load example…" already
+  does) or "Start from scratch" (the current, already-showing starter
+  form). Dismissal is tracked by the dialog's own native `close` event,
+  not by either button individually, so every way of leaving it — either
+  button, Escape, backdrop-click — records "seen" exactly once via a new
+  `GuiPreferences.welcome_dismissed` field, persisted the same way
+  `dark_mode_override`/significant digits already are; it never
+  reappears on a later launch once dismissed.
 
 ### Changed
 
