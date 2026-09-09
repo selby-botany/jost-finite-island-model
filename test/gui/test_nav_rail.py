@@ -157,28 +157,38 @@ def test_clicking_configure_shows_the_landing_screen_and_updates_the_rail(
     }
 
 
-def test_configure_landing_button_opens_the_real_section_modal(
+def test_configure_shows_both_panels_with_their_own_fields(
     window: webview.Window,
 ) -> None:
-    """The interim Configure landing page opens the same modal the old menu does."""
+    """Configure's own two panels each show real fields, no modal to open.
+
+    Confirms the two-panel restructuring landed where the rail's own
+    Configure button points: `field-m_rate` (FIM parameters, §4.1) and
+    `field-mutation_model` (Structure, §4.2) are both directly visible
+    the moment Configure is showing, not behind a per-section dialog.
+    """
 
     def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
         window.evaluate_js(
             "document.querySelector('.rail-item[data-destination=\"configure\"]').click()"
         )
-        poll_until(
-            "!document.getElementById('screen-configure').hidden",
-            lambda value: value is True,
-        )
-        window.evaluate_js(
-            "document.querySelector('[data-configure-section=\"migration\"]').click()"
-        )
         return poll_until(
-            "document.getElementById('modal-migration').open",
-            lambda value: value is True,
+            "({"
+            "configureVisible: !document.getElementById('screen-configure').hidden, "
+            "mRateVisible: document.getElementById('field-m_rate')"
+            ".offsetParent !== null, "
+            "mutationModelVisible: document.getElementById('field-mutation_model')"
+            ".offsetParent !== null"
+            "})",
+            lambda value: value["configureVisible"] is True,
         )
 
-    assert _drive(window, steps) is True
+    result = _drive(window, steps)
+    assert result == {
+        "configureVisible": True,
+        "mRateVisible": True,
+        "mutationModelVisible": True,
+    }
 
 
 def test_parameter_strip_click_jumps_to_configure(window: webview.Window) -> None:

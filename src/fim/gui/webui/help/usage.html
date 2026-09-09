@@ -303,31 +303,24 @@ button starts the next run, reusing whatever the form already holds, with
 no separate &quot;New run&quot; step. Cancelling a run, or a run ending in an error,
 freezes the view exactly as it last rendered, with a banner on top,
 rather than switching anywhere else:</p>
-<p>A native File/Configure/Run/View/Help menu bar is available from any screen,
-including mid-run. File covers configuration/run file-system actions
-(New/Open/Save configuration, Open run…, Reveal output folder, Explore
-predictions…, Quit);
-Configure jumps straight to any one of six configuration sections
-(Population/Migration/Mutation/Initial conditions/Convergence/Batch), each
-opening as a small dialog over whatever screen is currently showing,
-without navigating away from it; three fields that are quick, meaningful
-choices on their own get a direct submenu instead — no dialog at all —
-that sets the field immediately: Deme weighting (size/equal), Mutation
-model (infinite_alleles/finite_alleles), and Convergence statistic, which
-<em>adds or removes</em> one statistic from the active set on each click rather
-than replacing the whole selection (checking two or more is exactly what
-turns on the &quot;combinator&quot; choice in the Convergence dialog). Run covers the
-simulation lifecycle (Run simulation, Cancel run); View holds a
-Significant digits submenu (2/3/4/5/6/8, default 3)
-that changes how many digits every displayed statistic rounds to — cosmetic
-only, <code>trajectory.jsonl</code>/<code>report.json</code>/<code>manifest.json</code> always keep full
-precision regardless of this setting; Help covers this guide and the
-<a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> (rendered in-app — see the Help
-screen row below), a link to the full documentation on GitHub, Check for
-updates, and About. Every menu item reuses the exact same action the
-matching button already performs; File/Configure/Run items invoked from a
-screen where they are not immediately actionable navigate to the screen
-where they are first, rather than doing nothing.</p>
+<p>A persistent rail (Home, Configure, Explore, Run, Results, Compare, and —
+set apart at the bottom — Help) is always visible along the window's own
+left edge, current destination highlighted, reachable from any screen
+including mid-run; Run and Results both point at the same run view
+described in the table below (a run in progress shows through either one,
+a finished run's own summary too — splitting them into two genuinely
+distinct layouts is still on this project's own GUI roadmap). A read-only
+parameter strip beneath the title bar always shows the current N/d/m/mu;
+clicking any of the four jumps straight to Configure. A native File/Run/Help
+menu bar duplicates the everyday actions a mouse-and-rail user already has,
+for keyboard-shortcut users: File covers configuration/run file-system
+actions (New/Open/Save configuration, Open run…, Reveal output folder,
+Quit); Run covers the simulation lifecycle (Run simulation, Cancel run);
+Help covers this guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>
+(rendered in-app — see the Help screen row below), a link to the full
+documentation on GitHub, Check for updates, and About. Every menu item
+reuses the exact same action the matching on-screen control already
+performs.</p>
 <table>
 <thead>
 <tr>
@@ -338,8 +331,13 @@ where they are first, rather than doing nothing.</p>
 </thead>
 <tbody>
 <tr>
-<td>Run view — initial</td>
-<td>Build and validate a full configuration from six sections (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section), each opened as its own dialog from the Configure menu (above) rather than an on-screen tab strip; &quot;Load YAML…&quot;/&quot;Save YAML…&quot; read and write the exact file format above; &quot;Open a run…&quot; reaches the Open a run screen</td>
+<td>Home</td>
+<td>A recent-runs list (newest first) — a batch entry is labeled distinctly and opened one replicate at a time from its own completed batch view, not from here — or browse for a <code>trajectory.jsonl</code> directly, then re-render its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-<code>q</code> sweep. Reachable from the rail's own Home button, or the File menu's &quot;Open run…&quot;, from any screen</td>
+<td><a href="#re-analyze-a-trajectory">Re-analyze a trajectory</a></td>
+</tr>
+<tr>
+<td>Configure</td>
+<td>Two always-visible, independently scrollable panels: FIM parameters (N, d, m, mu, seed — the five values that together are &quot;the finite island model&quot;) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, the full convergence group, the full batch/replicate group, and significant digits) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
 <td><a href="#create-a-configuration">Create a configuration</a></td>
 </tr>
 <tr>
@@ -353,18 +351,18 @@ where they are first, rather than doing nothing.</p>
 <td><a href="#output-schemas">Output schemas</a>, <a href="#batch-summaryjson-and-manifestjson">Batch <code>summary.json</code> and <code>manifest.json</code></a></td>
 </tr>
 <tr>
-<td>Open a run</td>
-<td>Pick a previous run from a recent-runs list — a batch entry is labeled distinctly and opened one replicate at a time from its own completed batch view, not from here — or browse for a <code>trajectory.jsonl</code> directly, then re-render its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-<code>q</code> sweep</td>
-<td><a href="#re-analyze-a-trajectory">Re-analyze a trajectory</a></td>
-</tr>
-<tr>
 <td>Explore</td>
-<td>Four fields (N, d, m, mu) and a theoretical-prediction table (D, G<sub>ST</sub>, E<sub>ST</sub>, and Whitlock's identity-recovery half-life) that update the instant a field is committed — no simulation ever runs, so this never takes measurable time regardless of N or d. A sweep curve plots the selected field's predicted D/G<sub>ST</sub> across a fixed range, with the current configuration marked. Reachable from the File menu (&quot;Explore predictions…&quot;) from any screen; &quot;Back&quot; returns to whichever screen was showing, not a fixed default</td>
+<td>Four fields (N, d, m, mu) and a theoretical-prediction table (D, G<sub>ST</sub>, E<sub>ST</sub>, and Whitlock's identity-recovery half-life) that update the instant a field is committed — no simulation ever runs, so this never takes measurable time regardless of N or d. A sweep curve plots the selected field's predicted D/G<sub>ST</sub> across a fixed range, with the current configuration marked. Reachable from the rail's own Explore button, or &quot;🔮 Explore&quot; on Configure, from any screen; &quot;Back&quot; returns to whichever screen was showing, not a fixed default</td>
 <td>No CLI equivalent — a direct <code>fim.statistics</code> call from Python or a script is the closest terminal equivalent</td>
 </tr>
 <tr>
+<td>Compare</td>
+<td>Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection — &quot;how does the conclusion change as I vary this one knob,&quot; on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; &quot;Back&quot; returns to whichever screen was showing</td>
+<td>No CLI equivalent — comparing several <code>trajectory.jsonl</code>/<code>report.json</code> files by hand is the closest terminal equivalent</td>
+</tr>
+<tr>
 <td>Help</td>
-<td>This guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>, rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the Help menu (above) from any screen; &quot;Back&quot; returns to whichever screen was showing, not a fixed default</td>
+<td>This guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>, rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the rail's own Help button, or the Help menu, from any screen; &quot;Back&quot; returns to whichever screen was showing, not a fixed default</td>
 <td>No CLI equivalent — the terminal reads these same two files directly</td>
 </tr>
 </tbody>
@@ -407,7 +405,7 @@ the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
 <pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 </code></pre>
 <h3 id="saved-preferences">Saved preferences</h3>
-<p>The GUI remembers two things between launches: the View menu's Significant
+<p>The GUI remembers two things between launches: Configure's own Significant
 digits setting, and the last configuration you successfully clicked &quot;Run
 simulation&quot; with — a fresh launch's own Run view starts from that
 configuration rather than from the built-in starter values. File menu → &quot;New

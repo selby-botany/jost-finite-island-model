@@ -1541,23 +1541,23 @@ class _FakeMenuWindow:
         return None
 
 
-def test_build_menu_has_file_configure_run_view_and_help() -> None:
-    """The menu bar has exactly the five menus `doc/fim-gui-design.md` §10 specifies.
+def test_build_menu_has_exactly_file_run_and_help() -> None:
+    """The menu bar has exactly the three menus botanist redesign §3.3 specifies.
 
-    Configure is new alongside File/Run/View/Help (the input screen's
-    own six-tab bar moving off-canvas) — this test's own name and
-    assertions were updated alongside it rather than left describing a
-    menu bar that no longer matches `_build_menu`'s real shape.
+    Configure and View are gone entirely (not merely renamed) — every
+    field either used to reach, including the three former quick-toggle
+    leaves ("Deme weighting"/"Mutation model"/"Convergence statistic")
+    and the "Significant digits" submenu, now lives directly on the
+    always-visible Configure screen the rail reaches instead
+    (`webui/index.html`'s own `screen-configure`). This test's own name
+    and assertions were updated alongside that redesign rather than left
+    describing a menu bar that no longer matches `_build_menu`'s real
+    shape — the same discipline its own prior version (five menus,
+    Configure/View included) was written under.
     """
     menus = app_module._build_menu(_FakeMenuWindow())  # type: ignore[arg-type]
 
-    assert [menu.title for menu in menus] == [
-        "File",
-        "Configure",
-        "Run",
-        "View",
-        "Help",
-    ]
+    assert [menu.title for menu in menus] == ["File", "Run", "Help"]
     file_items = [item.title for item in menus[0].items if hasattr(item, "title")]
     assert file_items == [
         "New configuration",
@@ -1566,54 +1566,15 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         "Load example…",
         "Open run…",
         "Reveal output folder",
-        "Explore predictions…",
-        "Compare runs…",
         "Quit fim",
     ]
-    configure_items = [item.title for item in menus[1].items if hasattr(item, "title")]
-    assert configure_items == [
-        "Population",
-        "Migration",
-        "Mutation",
-        "Initial conditions",
-        "Convergence",
-        "Batch",
-        "Deme weighting",
-        "Mutation model",
-        "Convergence statistic",
-    ]
-    deme_weighting_submenu = menus[1].items[7]
-    assert isinstance(deme_weighting_submenu, Menu)
-    assert [
-        item.title for item in deme_weighting_submenu.items if hasattr(item, "title")
-    ] == ["size", "equal"]
-    mutation_model_submenu = menus[1].items[8]
-    assert isinstance(mutation_model_submenu, Menu)
-    assert [
-        item.title for item in mutation_model_submenu.items if hasattr(item, "title")
-    ] == ["infinite_alleles", "finite_alleles"]
-    convergence_statistic_submenu = menus[1].items[9]
-    assert isinstance(convergence_statistic_submenu, Menu)
-    assert [
-        item.title
-        for item in convergence_statistic_submenu.items
-        if hasattr(item, "title")
-    ] == ["D", "Gₛₜ", "Eₛₜ", "Kₛₜ", "Hₛ", "Hₜ"]
-    run_items = [item.title for item in menus[2].items if hasattr(item, "title")]
+    run_items = [item.title for item in menus[1].items if hasattr(item, "title")]
     # No "Animate" item (`doc/fim-gui-design.md` §5.1): the
     # time slider is simply part of `completed`'s own view now, not a
     # second trigger reachable from a menu -- see `_build_menu`'s own
     # comment on the Run menu.
     assert run_items == ["Run simulation", "Cancel run"]
-    view_items = [item.title for item in menus[3].items if hasattr(item, "title")]
-    assert view_items == ["Significant digits"]
-    digits_submenu = menus[3].items[0]
-    assert isinstance(digits_submenu, Menu)
-    digit_items = [
-        item.title for item in digits_submenu.items if hasattr(item, "title")
-    ]
-    assert digit_items == ["2", "3", "4", "5", "6", "8"]
-    help_items = [item.title for item in menus[4].items if hasattr(item, "title")]
+    help_items = [item.title for item in menus[2].items if hasattr(item, "title")]
     assert help_items == [
         "Usage guide",
         "Configuration reference",
@@ -1621,22 +1582,6 @@ def test_build_menu_has_file_configure_run_view_and_help() -> None:
         "Check for updates",
         "About fim",
     ]
-
-
-def test_statistic_menu_label_renders_true_unicode_subscripts() -> None:
-    """`_statistic_menu_label` matches every `CONVERGENCE_STATISTIC_NAMES` entry.
-
-    Direct, focused coverage of the small pure function behind the
-    Convergence statistic submenu's own labels — native
-    menu items are plain text, so this is the closest equivalent to the
-    `<sub>`-tagged labels `index.html`'s own static markup uses.
-    """
-    assert app_module._statistic_menu_label("D") == "D"
-    assert app_module._statistic_menu_label("G_ST") == "Gₛₜ"
-    assert app_module._statistic_menu_label("E_ST") == "Eₛₜ"
-    assert app_module._statistic_menu_label("K_ST") == "Kₛₜ"
-    assert app_module._statistic_menu_label("H_S") == "Hₛ"
-    assert app_module._statistic_menu_label("H_T") == "Hₜ"
 
 
 def _all_menu_titles(nodes: Sequence[Menu | MenuAction | MenuSeparator]) -> list[str]:

@@ -491,325 +491,318 @@
        and the modals themselves is scoped as its own follow-up commit,
        not part of this first rail/shell slice -- `screens/nav-rail.js`'s
        own module docstring has the full sequencing note. -->
+  <!-- Configure (botanist GUI design doc `20260907-claude-sonnet-5-
+       botanist-gui-redesign.md` §4): two always-visible, independently
+       scrollable panels -- FIM parameters (§4.1: N, d, m, mu, seed, "the
+       five values that, together, are 'the finite island model'") and
+       Structure (§4.2: everything that changes how the model is
+       structured or analyzed rather than the four headline numbers
+       themselves) -- replacing both the six per-section modals this
+       screen used to open (`git log` has them, if a field's own prior
+       grouping ever matters) and this screen's own first-phase interim
+       landing page. Every field below is unchanged from either: same
+       id, same `name`, same `form="input-form"` (`collectFormValues`'s
+       own `FormData` scan finds a field by name regardless of DOM
+       location, confirmed live before this move, the same fact that
+       already let those six modals live outside `#content-area`
+       entirely) -- this is a relocation of markup, not a second,
+       parallel copy of any field's own validation or collection logic.
+
+       Not yet built (design §16's own phasing sequences both as later,
+       separate work): the non-scalar editors below (the migration
+       matrix, the loci table, the p_0 grid) still render inline exactly
+       as their six-modal-era selves did, rather than as the shared,
+       reusable grid component design §4.4 describes (phase 3); the
+       "Advanced: execution & performance" disclosure (`engine_backend`,
+       `jit`, `auto_vector_min_d`, `auto_vector_max_capacity`,
+       `max_concurrent_replicates`) is not present at all, since none of
+       those `SimulationParams` fields have ever had a GUI control to
+       relocate -- adding one is new surface, not a reorganization, and
+       is scoped as its own follow-up. -->
   <section id="screen-configure" class="screen" hidden>
-    <p class="hint">
-      Every configuration field lives in one of the six sections below.
-      The always-visible two-panel layout described in the redesign is
-      not built yet -- each section still opens as its own dialog.
-    </p>
-    <div class="configure-landing-sections">
-      <button type="button" class="configure-landing-button" data-configure-section="population">Population</button>
-      <button type="button" class="configure-landing-button" data-configure-section="migration">Migration</button>
-      <button type="button" class="configure-landing-button" data-configure-section="mutation">Mutation</button>
-      <button type="button" class="configure-landing-button" data-configure-section="initial_conditions">Initial conditions</button>
-      <button type="button" class="configure-landing-button" data-configure-section="convergence">Convergence</button>
-      <button type="button" class="configure-landing-button" data-configure-section="batch">Batch</button>
+    <div id="configure-banner" class="banner" hidden></div>
+    <div class="configure-layout">
+      <div class="configure-panel" id="configure-panel-fim-parameters">
+        <h2>FIM parameters</h2>
+        <div class="field">
+          <label for="field-N">N (gene copies/deme)</label>
+          <input type="text" id="field-N" name="N" form="input-form">
+        </div>
+        <div class="field">
+          <label for="field-d">d (demes)</label>
+          <input type="text" id="field-d" name="d" form="input-form">
+        </div>
+        <div class="field">
+          <label for="field-seed">seed</label>
+          <input type="text" id="field-seed" name="seed" form="input-form">
+        </div>
+
+        <fieldset class="composite" id="m-selector">
+          <legend>m (migration)</legend>
+          <label><input type="radio" name="m_mode" value="scalar" checked form="input-form"> scalar rate</label>
+          <label><input type="radio" name="m_mode" value="topology" form="input-form"> named topology</label>
+          <label><input type="radio" name="m_mode" value="matrix" form="input-form"> full matrix</label>
+          <div class="field" id="m-scalar-fields">
+            <label for="field-m_rate">rate</label>
+            <input type="text" id="field-m_rate" name="m_rate" form="input-form">
+          </div>
+          <div class="field" id="m-topology-fields" hidden>
+            <label for="field-m_topology">topology</label>
+            <select id="field-m_topology" name="m_topology" form="input-form">
+              <option value="ring">ring</option>
+              <option value="linear">linear</option>
+            </select>
+            <label for="field-m_topology_rate">rate</label>
+            <input type="text" id="field-m_topology_rate" name="m_topology_rate" form="input-form">
+          </div>
+          <!-- The migration-matrix grid editor: `webui/screens/
+               migration-matrix.js` builds a d-by-d table of cells into
+               `m-matrix-grid` and keeps the hidden `m_matrix_json`
+               field (the one `config_form.m_to_payload`/`m_from_params`
+               actually read/write) in sync with it on every edit. A
+               loaded matrix-shaped `m` (a full matrix, a sparse map, or
+               an expanded stepping-stone topology -- `m_from_params`'s
+               own docstring) renders here too, real values in real
+               editable cells, not a read-only summary. -->
+          <div class="field" id="m-matrix-fields" hidden>
+            <p class="hint">Each row must sum to 1 -- a row that doesn't is highlighted.</p>
+            <div id="m-matrix-grid" class="matrix-grid"></div>
+            <input type="hidden" id="field-m_matrix_json" name="m_matrix_json" form="input-form">
+          </div>
+        </fieldset>
+
+        <fieldset class="composite" id="mu-selector">
+          <legend>μ (mutation rate)</legend>
+          <label><input type="radio" name="mu_mode" value="mu" checked form="input-form"> specify μ directly</label>
+          <label><input type="radio" name="mu_mode" value="mu_b" form="input-form"> derive from μ<sub>b</sub></label>
+          <div class="field" id="mu-mu-field">
+            <label for="field-mu_value">μ</label>
+            <input type="text" id="field-mu_value" name="mu_value" form="input-form">
+          </div>
+          <div class="field" id="mu-mu_b-field" hidden>
+            <label for="field-mu_b_value">μ<sub>b</sub></label>
+            <input type="text" id="field-mu_b_value" name="mu_b_value" form="input-form">
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="configure-panel" id="configure-panel-structure">
+        <h2>Structure</h2>
+        <fieldset class="composite" id="initial-conditions-selector">
+          <legend>initial conditions (starting frequencies)</legend>
+          <label><input type="radio" name="initial_conditions_mode" value="dirichlet" checked form="input-form"> Dirichlet draw</label>
+          <label><input type="radio" name="initial_conditions_mode" value="equilibrium_split" form="input-form"> equilibrium split</label>
+          <label><input type="radio" name="initial_conditions_mode" value="explicit_p0" form="input-form"> explicit p&#8320;</label>
+          <label><input type="radio" name="initial_conditions_mode" value="fixed_per_deme" form="input-form"> fixed per deme</label>
+          <div class="field" id="initial-conditions-dirichlet-fields">
+            <label for="field-initial_allele_count">initial allele count</label>
+            <input type="text" id="field-initial_allele_count" name="initial_allele_count" form="input-form">
+            <label for="field-initial_concentration">concentration</label>
+            <input type="text" id="field-initial_concentration" name="initial_concentration" form="input-form">
+          </div>
+          <!-- Equilibrium split (design §4.3): simulates one ancestral
+               panmictic population forward to its own H_S equilibrium,
+               then splits it into the configured `d` demes --
+               `fim.model.initial.EquilibriumSplitInitialCondition`.
+               Itself a real, possibly-slow simulation (runs until its
+               own trailing-window criterion converges, or its own
+               max_generations cap), so it recomputes on blur/change
+               (`config-modals.js`'s own `renderInitialPreview` call
+               sites), never live per keystroke. -->
+          <div class="field" id="initial-conditions-equilibrium-fields" hidden>
+            <p class="hint">
+              Simulates one ancestral population of size N&times;d forward
+              (no migration) until its own heterozygosity stabilizes, then
+              splits it into d demes. Can take real time for a large N or d.
+            </p>
+            <label for="field-equilibrium_convergence_window">convergence window</label>
+            <input type="text" id="field-equilibrium_convergence_window" name="equilibrium_convergence_window" form="input-form">
+            <label for="field-equilibrium_convergence_tolerance">convergence tolerance</label>
+            <input type="text" id="field-equilibrium_convergence_tolerance" name="equilibrium_convergence_tolerance" form="input-form">
+            <label for="field-equilibrium_max_generations">max generations</label>
+            <input type="text" id="field-equilibrium_max_generations" name="equilibrium_max_generations" form="input-form">
+          </div>
+          <!-- The explicit p_0 grid editor: one row per deme, one
+               column per locus (`webui/screens/p0-grid.js`'s own
+               `currentLocusIds`, read from whichever loci selector mode
+               below is active), each cell a compact `alleleId:
+               frequency[,alleleId:frequency...]` mapping kept in sync
+               with the hidden `p0_json` field (the one `config_form.
+               initial_conditions_to_payload`/`initial_conditions_from_
+               params` actually read/write). Rebuilt automatically
+               whenever `d` or the loci configuration changes. -->
+          <div class="field" id="initial-conditions-explicit-fields" hidden>
+            <p class="hint">
+              Each cell is one deme's starting allele frequencies at one
+              locus, written as <code>alleleId:frequency</code> pairs
+              (e.g. <code>0:0.6,1:0.4</code>); each cell's own frequencies
+              must sum to 1.
+            </p>
+            <div id="p0-grid" class="p0-grid"></div>
+            <input type="hidden" id="field-p0_json" name="p0_json" form="input-form">
+          </div>
+          <!-- Fixed per deme (design §4.3): a GUI-only convenience that
+               expands directly to an explicit `p_0` at submit time
+               (`config_form._fixed_per_deme_p0`) -- there is no
+               `SimulationParams` concept of "fixed per deme" at all,
+               only the `p_0` it produces, so this never round-trips
+               back from a loaded configuration
+               (`initial_conditions_from_params`'s own docstring). -->
+          <div class="field" id="initial-conditions-fixed-fields" hidden>
+            <label><input type="radio" name="fixed_per_deme_choice" value="all_different" form="input-form"> all different (deme <var>i</var> fixed for allele <var>i</var>)</label>
+            <label><input type="radio" name="fixed_per_deme_choice" value="all_same" checked form="input-form"> all the same (every deme fixed for allele 0)</label>
+            <label><input type="radio" name="fixed_per_deme_choice" value="all_but_one" form="input-form"> all but one (last deme fixed for allele 1)</label>
+            <p class="hint" id="fixed-per-deme-preview"></p>
+          </div>
+        </fieldset>
+
+        <div class="field">
+          <label for="field-migrant_sampling">migrant sampling</label>
+          <select id="field-migrant_sampling" name="migrant_sampling" form="input-form">
+            <option value="continuous">continuous</option>
+            <option value="stochastic">stochastic</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="field-mutation_model">mutation model</label>
+          <select id="field-mutation_model" name="mutation_model" form="input-form">
+            <option value="infinite_alleles">infinite_alleles</option>
+            <option value="finite_alleles">finite_alleles</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="field-deme_weighting">deme weighting</label>
+          <select id="field-deme_weighting" name="deme_weighting" form="input-form">
+            <option value="size">size</option>
+            <option value="equal">equal</option>
+          </select>
+        </div>
+
+        <!-- The per-locus grid editor: `webui/screens/loci-grid.js`
+             builds one (locus_id, length) row per locus into
+             `loci-grid`, with add/remove-row controls, and keeps the
+             hidden `loci_json` field (the one `config_form.loci_to_
+             payload`/`loci_from_params` actually read/write) in sync on
+             every edit. -->
+        <fieldset class="composite" id="loci-selector">
+          <legend>loci</legend>
+          <label><input type="radio" name="loci_mode" value="lengths" checked form="input-form"> length(s) only</label>
+          <label><input type="radio" name="loci_mode" value="custom" form="input-form"> custom locus IDs</label>
+          <div class="field" id="loci-lengths-fields">
+            <label for="field-locus_lengths">locus length(s)</label>
+            <input type="text" id="field-locus_lengths" name="locus_lengths" form="input-form">
+          </div>
+          <div class="field" id="loci-custom-fields" hidden>
+            <table id="loci-grid" class="loci-grid">
+              <thead>
+                <tr><th>locus ID</th><th>length</th><th></th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <button type="button" id="loci-add-row-button">Add locus</button>
+            <input type="hidden" id="field-loci_json" name="loci_json" form="input-form">
+          </div>
+        </fieldset>
+
+        <fieldset class="composite" id="cs-selector">
+          <legend>convergence statistic(s)</legend>
+          <label><input type="checkbox" name="cs_D" value="true" checked form="input-form"> D</label>
+          <label><input type="checkbox" name="cs_G_ST" value="true" form="input-form"> G<sub>ST</sub></label>
+          <label><input type="checkbox" name="cs_E_ST" value="true" form="input-form"> E<sub>ST</sub></label>
+          <label><input type="checkbox" name="cs_K_ST" value="true" form="input-form"> K<sub>ST</sub></label>
+          <label><input type="checkbox" name="cs_H_S" value="true" form="input-form"> H<sub>S</sub></label>
+          <label><input type="checkbox" name="cs_H_T" value="true" form="input-form"> H<sub>T</sub></label>
+        </fieldset>
+        <div class="field" id="combinator-field" hidden>
+          <label for="field-convergence_combinator">combinator</label>
+          <select id="field-convergence_combinator" name="convergence_combinator" form="input-form">
+            <option value="any">any</option>
+            <option value="all">all</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="field-convergence_window">convergence window</label>
+          <input type="text" id="field-convergence_window" name="convergence_window" form="input-form">
+        </div>
+        <div class="field">
+          <label for="field-convergence_tolerance">tolerance</label>
+          <input type="text" id="field-convergence_tolerance" name="convergence_tolerance" form="input-form">
+        </div>
+        <div class="field">
+          <label for="field-max_generations">max generations</label>
+          <input type="text" id="field-max_generations" name="max_generations" form="input-form">
+        </div>
+
+        <div class="field">
+          <label for="field-n_replicates">n_replicates</label>
+          <input type="text" id="field-n_replicates" name="n_replicates" form="input-form">
+        </div>
+        <div id="batch-only-fields" hidden>
+          <div class="field">
+            <label for="field-replicate_tolerance">replicate tolerance (blank = unset)</label>
+            <input type="text" id="field-replicate_tolerance" name="replicate_tolerance" form="input-form">
+          </div>
+          <div class="field">
+            <label for="field-replicate_minimum">replicate minimum</label>
+            <input type="text" id="field-replicate_minimum" name="replicate_minimum" form="input-form">
+          </div>
+          <div class="field">
+            <label for="field-replicate_confidence">replicate confidence</label>
+            <select id="field-replicate_confidence" name="replicate_confidence" form="input-form">
+              <option value="0.9">0.9</option>
+              <option value="0.95" selected>0.95</option>
+              <option value="0.99">0.99</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="field-max_workers">parallel workers</label>
+            <input type="text" id="field-max_workers" name="max_workers" form="input-form">
+            <p class="hint">Not a `SimulationParams` field — the batch's own worker-process
+            count (design §0.5, H5). Defaults to this machine's own CPU count.</p>
+          </div>
+        </div>
+
+        <!-- Significant digits (design §4.2: "moves into Configure as
+             an ordinary field, per the gap analysis's own
+             recommendation"), replacing the native View menu's own
+             quick-toggle submenu -- not a `SimulationParams` field, so
+             not `form="input-form"`/collected by `collectFormValues`;
+             wired directly to `Api.set_significant_digits` the same
+             call the old menu items made
+             (`screens/config-modals.js`'s own `wireSignificantDigits
+             Field`). Purely cosmetic and forward-looking, per that
+             method's own docstring: nothing on disk changes, and an
+             already-showing `completed` view is not retroactively
+             reformatted, only the next run's own results. -->
+        <div class="field">
+          <label for="field-significant_digits">significant digits</label>
+          <select id="field-significant_digits">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+          </select>
+        </div>
+      </div>
     </div>
+
+    <!-- Design §4's own mockup footer: Load/Save configuration (the
+         same File-menu actions, `window.fim.openConfiguration`/
+         `saveConfiguration`, `run-view-controls.js`), Run (design §6.1:
+         "present in the parameter strip's own action row on both
+         Configure and Explore"), and a shortcut into Explore. -->
     <div class="actions">
-      <button type="button" id="configure-run-button">Run simulation</button>
-      <button type="button" id="configure-explore-button">Explore predictions…</button>
+      <button type="button" id="configure-load-button">Load configuration…</button>
+      <button type="button" id="configure-save-button">Save configuration…</button>
+      <button type="button" id="configure-run-button">▶ Run</button>
+      <button type="button" id="configure-explore-button">🔮 Explore</button>
     </div>
   </section>
 
   </div><!-- /#content-area -->
   </div><!-- /#workspace -->
-
-  <!-- Configure modals (unified-run-view design §3.1): live outside
-       every .screen section on purpose, confirmed live rather than
-       assumed -- a <dialog> nested inside a `hidden` ancestor still
-       reports `open === true` and `display: block` from showModal(),
-       but its box has zero width/height (a hidden ancestor's own
-       `display: none` suppresses box generation for the whole subtree,
-       top layer or not); a sibling of the .screen sections is
-       unaffected by any of them being hidden. Each field below is
-       `form="input-form"` rather than a DOM descendant of that form --
-       FormData(form) collects it identically either way (confirmed
-       live too), which is what keeps `screens/config-modals.js`'s own
-       validation/collection code completely unchanged by this move.
-       Each dialog's own "Close" button carries an explicit
-       `tabindex="0"` -- confirmed live: this project's own WKWebView
-       host only includes elements in the Tab order that the author
-       explicitly opted in with `tabindex`, unless the OS-level "Full
-       Keyboard Access" setting is on, so a plain (implicitly focusable)
-       `<button>` is reachable by mouse but not by Tab. `wireModal`'s own
-       `keydown` listener (`app.js`) is `Return`'s matching fix: with no
-       submit button inside any of these fields' own form (`input-form`
-       lives elsewhere, empty, per the comment above), the platform has
-       no default button to invoke on `Return` at all -- "Close" being
-       the dialog's only action, `keydown` explicitly makes it the
-       default one, rather than `Return` silently doing nothing. -->
-  <dialog class="config-modal" id="modal-population">
-    <h2>Population</h2>
-    <div class="field">
-      <label for="field-N">N (gene copies/deme)</label>
-      <input type="text" id="field-N" name="N" form="input-form">
-    </div>
-    <div class="field">
-      <label for="field-d">d (demes)</label>
-      <input type="text" id="field-d" name="d" form="input-form">
-    </div>
-    <div class="field">
-      <label for="field-seed">seed</label>
-      <input type="text" id="field-seed" name="seed" form="input-form">
-    </div>
-    <div class="field">
-      <label for="field-deme_weighting">deme weighting</label>
-      <select id="field-deme_weighting" name="deme_weighting" form="input-form">
-        <option value="size">size</option>
-        <option value="equal">equal</option>
-      </select>
-    </div>
-    <div class="field">
-      <label for="field-max_generations">max generations</label>
-      <input type="text" id="field-max_generations" name="max_generations" form="input-form">
-    </div>
-    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
-  </dialog>
-
-  <dialog class="config-modal" id="modal-migration">
-    <h2>Migration</h2>
-    <div class="field">
-      <label for="field-migrant_sampling">migrant sampling</label>
-      <select id="field-migrant_sampling" name="migrant_sampling" form="input-form">
-        <option value="continuous">continuous</option>
-        <option value="stochastic">stochastic</option>
-      </select>
-    </div>
-
-    <fieldset class="composite" id="m-selector">
-      <legend>m (migration)</legend>
-      <label><input type="radio" name="m_mode" value="scalar" checked form="input-form"> scalar rate</label>
-      <label><input type="radio" name="m_mode" value="topology" form="input-form"> named topology</label>
-      <label><input type="radio" name="m_mode" value="matrix" form="input-form"> full matrix</label>
-      <div class="field" id="m-scalar-fields">
-        <label for="field-m_rate">rate</label>
-        <input type="text" id="field-m_rate" name="m_rate" form="input-form">
-      </div>
-      <div class="field" id="m-topology-fields" hidden>
-        <label for="field-m_topology">topology</label>
-        <select id="field-m_topology" name="m_topology" form="input-form">
-          <option value="ring">ring</option>
-          <option value="linear">linear</option>
-        </select>
-        <label for="field-m_topology_rate">rate</label>
-        <input type="text" id="field-m_topology_rate" name="m_topology_rate" form="input-form">
-      </div>
-      <!-- The migration-matrix grid editor (botanist GUI design doc
-           `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4):
-           `webui/screens/migration-matrix.js` builds a d-by-d table of
-           cells into `m-matrix-grid` and keeps the hidden `m_matrix_
-           json` field (the one `config_form.m_to_payload`/`m_from_
-           params` actually read/write) in sync with it on every edit.
-           A loaded matrix-shaped `m` (a full matrix, a sparse map, or
-           an expanded stepping-stone topology -- `m_from_params`'s own
-           docstring) renders here too, real values in real editable
-           cells, not a read-only summary. -->
-      <div class="field" id="m-matrix-fields" hidden>
-        <p class="hint">Each row must sum to 1 -- a row that doesn't is highlighted.</p>
-        <div id="m-matrix-grid" class="matrix-grid"></div>
-        <input type="hidden" id="field-m_matrix_json" name="m_matrix_json" form="input-form">
-      </div>
-    </fieldset>
-    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
-  </dialog>
-
-  <dialog class="config-modal" id="modal-mutation">
-    <h2>Mutation</h2>
-    <div class="field">
-      <label for="field-mutation_model">mutation model</label>
-      <select id="field-mutation_model" name="mutation_model" form="input-form">
-        <option value="infinite_alleles">infinite_alleles</option>
-        <option value="finite_alleles">finite_alleles</option>
-      </select>
-    </div>
-    <fieldset class="composite" id="loci-selector">
-      <legend>loci</legend>
-      <label><input type="radio" name="loci_mode" value="lengths" checked form="input-form"> length(s) only</label>
-      <label><input type="radio" name="loci_mode" value="custom" form="input-form"> custom locus IDs</label>
-      <div class="field" id="loci-lengths-fields">
-        <label for="field-locus_lengths">locus length(s)</label>
-        <input type="text" id="field-locus_lengths" name="locus_lengths" form="input-form">
-      </div>
-      <!-- The per-locus grid editor (botanist GUI design doc
-           `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4):
-           `webui/screens/loci-grid.js` builds one (locus_id, length)
-           row per locus into `loci-grid`, with add/remove-row controls,
-           and keeps the hidden `loci_json` field (the one `config_form.
-           loci_to_payload`/`loci_from_params` actually read/write) in
-           sync on every edit. A loaded `loci` list with custom,
-           non-default-position IDs renders here too, real values in
-           real editable rows, not a rejected load. -->
-      <div class="field" id="loci-custom-fields" hidden>
-        <table id="loci-grid" class="loci-grid">
-          <thead>
-            <tr><th>locus ID</th><th>length</th><th></th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <button type="button" id="loci-add-row-button">Add locus</button>
-        <input type="hidden" id="field-loci_json" name="loci_json" form="input-form">
-      </div>
-    </fieldset>
-
-    <fieldset class="composite" id="mu-selector">
-      <legend>μ (mutation rate)</legend>
-      <label><input type="radio" name="mu_mode" value="mu" checked form="input-form"> specify μ directly</label>
-      <label><input type="radio" name="mu_mode" value="mu_b" form="input-form"> derive from μ<sub>b</sub></label>
-      <div class="field" id="mu-mu-field">
-        <label for="field-mu_value">μ</label>
-        <input type="text" id="field-mu_value" name="mu_value" form="input-form">
-      </div>
-      <div class="field" id="mu-mu_b-field" hidden>
-        <label for="field-mu_b_value">μ<sub>b</sub></label>
-        <input type="text" id="field-mu_b_value" name="mu_b_value" form="input-form">
-      </div>
-    </fieldset>
-    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
-  </dialog>
-
-  <dialog class="config-modal" id="modal-initial_conditions">
-    <h2>Initial conditions</h2>
-    <fieldset class="composite" id="initial-conditions-selector">
-      <legend>starting frequencies</legend>
-      <label><input type="radio" name="initial_conditions_mode" value="dirichlet" checked form="input-form"> Dirichlet draw</label>
-      <label><input type="radio" name="initial_conditions_mode" value="equilibrium_split" form="input-form"> equilibrium split</label>
-      <label><input type="radio" name="initial_conditions_mode" value="explicit_p0" form="input-form"> explicit p&#8320;</label>
-      <label><input type="radio" name="initial_conditions_mode" value="fixed_per_deme" form="input-form"> fixed per deme</label>
-      <div class="field" id="initial-conditions-dirichlet-fields">
-        <label for="field-initial_allele_count">initial allele count</label>
-        <input type="text" id="field-initial_allele_count" name="initial_allele_count" form="input-form">
-        <label for="field-initial_concentration">concentration</label>
-        <input type="text" id="field-initial_concentration" name="initial_concentration" form="input-form">
-      </div>
-      <!-- Equilibrium split (botanist GUI design doc §4.3): simulates
-           one ancestral panmictic population forward to its own H_S
-           equilibrium, then splits it into the configured `d` demes --
-           `fim.model.initial.EquilibriumSplitInitialCondition`. This is
-           itself a real, possibly-slow simulation (it runs until its
-           own trailing-window criterion converges, or its own
-           max_generations cap), so it recomputes only when this modal
-           closes (`config-modals.js`'s own dialog-close-triggered
-           `renderInitialPreview`), never live per keystroke. -->
-      <div class="field" id="initial-conditions-equilibrium-fields" hidden>
-        <p class="hint">
-          Simulates one ancestral population of size N&times;d forward
-          (no migration) until its own heterozygosity stabilizes, then
-          splits it into d demes. Can take real time for a large N or d.
-        </p>
-        <label for="field-equilibrium_convergence_window">convergence window</label>
-        <input type="text" id="field-equilibrium_convergence_window" name="equilibrium_convergence_window" form="input-form">
-        <label for="field-equilibrium_convergence_tolerance">convergence tolerance</label>
-        <input type="text" id="field-equilibrium_convergence_tolerance" name="equilibrium_convergence_tolerance" form="input-form">
-        <label for="field-equilibrium_max_generations">max generations</label>
-        <input type="text" id="field-equilibrium_max_generations" name="equilibrium_max_generations" form="input-form">
-      </div>
-      <!-- The explicit p_0 grid editor (botanist GUI design doc
-           `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.4): one
-           row per deme, one column per locus (`webui/screens/p0-
-           grid.js`'s own `currentLocusIds`, read from whichever loci
-           selector mode is active), each cell a compact
-           `alleleId:frequency[,alleleId:frequency...]` mapping kept in
-           sync with the hidden `p0_json` field (the one `config_form.
-           initial_conditions_to_payload`/`initial_conditions_from_
-           params` actually read/write). Rebuilt automatically whenever
-           `d` or the loci configuration changes -- there is no separate
-           "add deme"/"add locus" control here, since both counts are
-           already governed elsewhere. Replaces the earlier read-only
-           "loaded from file" summary: a loaded explicit `p_0` now
-           renders here too, real values in real editable cells, not a
-           rejected re-run. -->
-      <div class="field" id="initial-conditions-explicit-fields" hidden>
-        <p class="hint">
-          Each cell is one deme's starting allele frequencies at one
-          locus, written as <code>alleleId:frequency</code> pairs
-          (e.g. <code>0:0.6,1:0.4</code>); each cell's own frequencies
-          must sum to 1.
-        </p>
-        <div id="p0-grid" class="p0-grid"></div>
-        <input type="hidden" id="field-p0_json" name="p0_json" form="input-form">
-      </div>
-      <!-- Fixed per deme (botanist GUI design doc §4.3): a GUI-only
-           convenience that expands directly to an explicit `p_0` at
-           submit time (`config_form._fixed_per_deme_p0`) -- there is no
-           `SimulationParams` concept of "fixed per deme" at all, only
-           the `p_0` it produces, so this never round-trips back from a
-           loaded configuration (`initial_conditions_from_params`'s own
-           docstring). The preview text (`webui/screens/fixed-per-
-           deme.js`) is a pure, client-side computation from `d`, the
-           loci selector's own current locus count, and the checked
-           sub-choice -- no bridge round trip needed, unlike the
-           equilibrium-split preview above. -->
-      <div class="field" id="initial-conditions-fixed-fields" hidden>
-        <label><input type="radio" name="fixed_per_deme_choice" value="all_different" form="input-form"> all different (deme <var>i</var> fixed for allele <var>i</var>)</label>
-        <label><input type="radio" name="fixed_per_deme_choice" value="all_same" checked form="input-form"> all the same (every deme fixed for allele 0)</label>
-        <label><input type="radio" name="fixed_per_deme_choice" value="all_but_one" form="input-form"> all but one (last deme fixed for allele 1)</label>
-        <p class="hint" id="fixed-per-deme-preview"></p>
-      </div>
-    </fieldset>
-    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
-  </dialog>
-
-  <dialog class="config-modal" id="modal-convergence">
-    <h2>Convergence</h2>
-    <fieldset class="composite" id="cs-selector">
-      <legend>convergence statistic(s)</legend>
-      <label><input type="checkbox" name="cs_D" value="true" checked form="input-form"> D</label>
-      <label><input type="checkbox" name="cs_G_ST" value="true" form="input-form"> G<sub>ST</sub></label>
-      <label><input type="checkbox" name="cs_E_ST" value="true" form="input-form"> E<sub>ST</sub></label>
-      <label><input type="checkbox" name="cs_K_ST" value="true" form="input-form"> K<sub>ST</sub></label>
-      <label><input type="checkbox" name="cs_H_S" value="true" form="input-form"> H<sub>S</sub></label>
-      <label><input type="checkbox" name="cs_H_T" value="true" form="input-form"> H<sub>T</sub></label>
-    </fieldset>
-    <div class="field" id="combinator-field" hidden>
-      <label for="field-convergence_combinator">combinator</label>
-      <select id="field-convergence_combinator" name="convergence_combinator" form="input-form">
-        <option value="any">any</option>
-        <option value="all">all</option>
-      </select>
-    </div>
-    <div class="field">
-      <label for="field-convergence_window">convergence window</label>
-      <input type="text" id="field-convergence_window" name="convergence_window" form="input-form">
-    </div>
-    <div class="field">
-      <label for="field-convergence_tolerance">tolerance</label>
-      <input type="text" id="field-convergence_tolerance" name="convergence_tolerance" form="input-form">
-    </div>
-    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
-  </dialog>
-
-  <dialog class="config-modal" id="modal-batch">
-    <h2>Batch</h2>
-    <div class="field">
-      <label for="field-n_replicates">n_replicates</label>
-      <input type="text" id="field-n_replicates" name="n_replicates" form="input-form">
-    </div>
-    <div id="batch-only-fields" hidden>
-      <div class="field">
-        <label for="field-replicate_tolerance">replicate tolerance (blank = unset)</label>
-        <input type="text" id="field-replicate_tolerance" name="replicate_tolerance" form="input-form">
-      </div>
-      <div class="field">
-        <label for="field-replicate_minimum">replicate minimum</label>
-        <input type="text" id="field-replicate_minimum" name="replicate_minimum" form="input-form">
-      </div>
-      <div class="field">
-        <label for="field-replicate_confidence">replicate confidence</label>
-        <select id="field-replicate_confidence" name="replicate_confidence" form="input-form">
-          <option value="0.9">0.9</option>
-          <option value="0.95" selected>0.95</option>
-          <option value="0.99">0.99</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="field-max_workers">parallel workers</label>
-        <input type="text" id="field-max_workers" name="max_workers" form="input-form">
-        <p class="hint">Not a `SimulationParams` field — the batch's own worker-process
-        count (design §0.5, H5). Defaults to this machine's own CPU count.</p>
-      </div>
-    </div>
-    <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
-  </dialog>
 
   <!-- Presets (botanist GUI design doc §4.5): every `doc/usage.md`
        worked example, one click away, sourced live from `Api.list_

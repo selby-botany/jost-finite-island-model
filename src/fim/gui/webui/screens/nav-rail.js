@@ -2,19 +2,15 @@
 
 /* The persistent rail and always-visible parameter strip (botanist GUI
  * design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §3.1,
- * §3.2) -- the first slice of design §16's own "Suggested delivery
- * phasing" phase 1 ("Shell and Configure"). Deliberately scoped smaller
- * than that whole phase: this commit adds the rail, the parameter
- * strip, and a minimal interim Configure landing destination (the six
- * existing section modals, listed rather than opened only from the
- * native Configure menu); the real two-panel FIM-parameters/Structure
- * layout (§4.1, §4.2) that replaces both the landing page and the
- * modals themselves, and the native-menu trim (§3.3) that depends on
- * that layout existing first (removing "Configure"/"View" now would be
- * a real functionality regression, not yet a simplification, since
- * nothing else exposes `deme_weighting`/`mutation_model`/
- * `convergence_statistic`/significant-digits outside those two menus
- * today), are both follow-up commits.
+ * §3.2) -- design §16's own "Suggested delivery phasing" phase 1
+ * ("Shell and Configure"), landed across two commits: the rail/strip
+ * shell first, then the two-panel Configure workspace (§4.1, §4.2) and
+ * the native-menu trim (§3.3) that depended on it existing (`index.
+ * html`'s own comment above `screen-configure` has the field-relocation
+ * detail). Still deliberately not the whole design: Run and Results
+ * still share one screen (splitting that is phase 4), and the "Advanced:
+ * execution & performance" disclosure has never had a GUI control to
+ * relocate in the first place (`index.html`'s own comment again).
  *
  * `showScreen` (`app.js`) is still the one function every screen file
  * already calls to change what is visible -- this file does not
@@ -28,7 +24,7 @@
  * call site needing to know the rail exists at all.
  */
 
-// One rail button, one interim Configure landing page. Run and Results
+// One rail button, one Configure destination. Run and Results
 // deliberately both resolve to `screen-run` -- splitting that still-
 // unified view's own content into two genuinely separate layouts is
 // design §16 phase 4 ("Run/Results side-by-side plots"), not this
@@ -203,12 +199,22 @@ function wireNavRail() {
         button.addEventListener("click", () => window.fim.showConfigureScreen());
     }
 
-    for (const button of document.querySelectorAll(".configure-landing-button")) {
-        button.addEventListener("click", () => {
-            window.fim.openConfigModal(button.dataset.configureSection);
-        });
-    }
-
+    // Configure's own footer actions (design §4's own mockup: "[Load
+    // configuration…] [Save configuration…] [▶ Run] [🔮 Explore]").
+    // Load/Save call `window.fim.openConfiguration`/`saveConfiguration`
+    // directly (`run-view-controls.js`), not the File menu's own
+    // `fim.menu.openConfiguration`/`saveConfiguration` wrappers -- those
+    // jump to `screen-run` first, a menu-only behavior from before
+    // Configure was its own destination with the form's own fields
+    // directly visible on it; clicking Load/Save from here should keep
+    // showing the very screen whose fields just changed, not navigate
+    // away from it.
+    document
+        .getElementById("configure-load-button")
+        .addEventListener("click", () => window.fim.openConfiguration());
+    document
+        .getElementById("configure-save-button")
+        .addEventListener("click", () => window.fim.saveConfiguration());
     document
         .getElementById("configure-run-button")
         .addEventListener("click", () => window.fim.menu.runSimulation());

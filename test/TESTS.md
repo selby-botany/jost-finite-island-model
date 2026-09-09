@@ -6124,35 +6124,26 @@ def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None
 
 `first_deme == second_deme` succeeds for the initial-state preview too.
 
-<a id="gui.test_app_api.test_build_menu_has_file_configure_run_view_and_help"></a>
+<a id="gui.test_app_api.test_build_menu_has_exactly_file_run_and_help"></a>
 
-#### test\_build\_menu\_has\_file\_configure\_run\_view\_and\_help
-
-```python
-def test_build_menu_has_file_configure_run_view_and_help() -> None
-```
-
-The menu bar has exactly the five menus `doc/fim-gui-design.md` §10 specifies.
-
-Configure is new alongside File/Run/View/Help (the input screen's
-own six-tab bar moving off-canvas) — this test's own name and
-assertions were updated alongside it rather than left describing a
-menu bar that no longer matches `_build_menu`'s real shape.
-
-<a id="gui.test_app_api.test_statistic_menu_label_renders_true_unicode_subscripts"></a>
-
-#### test\_statistic\_menu\_label\_renders\_true\_unicode\_subscripts
+#### test\_build\_menu\_has\_exactly\_file\_run\_and\_help
 
 ```python
-def test_statistic_menu_label_renders_true_unicode_subscripts() -> None
+def test_build_menu_has_exactly_file_run_and_help() -> None
 ```
 
-`_statistic_menu_label` matches every `CONVERGENCE_STATISTIC_NAMES` entry.
+The menu bar has exactly the three menus botanist redesign §3.3 specifies.
 
-Direct, focused coverage of the small pure function behind the
-Convergence statistic submenu's own labels — native
-menu items are plain text, so this is the closest equivalent to the
-`<sub>`-tagged labels `index.html`'s own static markup uses.
+Configure and View are gone entirely (not merely renamed) — every
+field either used to reach, including the three former quick-toggle
+leaves ("Deme weighting"/"Mutation model"/"Convergence statistic")
+and the "Significant digits" submenu, now lives directly on the
+always-visible Configure screen the rail reaches instead
+(`webui/index.html`'s own `screen-configure`). This test's own name
+and assertions were updated alongside that redesign rather than left
+describing a menu bar that no longer matches `_build_menu`'s real
+shape — the same discipline its own prior version (five menus,
+Configure/View included) was written under.
 
 <a id="gui.test_app_api.test_no_menu_title_contains_a_paren"></a>
 
@@ -7472,19 +7463,25 @@ A message naming no field this form exposes resolves to no tab.
 
 # gui.test\_config\_modal\_dialogs
 
-Static-analysis guard over the Configure menu's own `<dialog>` markup.
+Static-analysis guard over this project's remaining `<dialog>` markup.
 
-`index.html`'s own comment above the six `modal-*` dialogs records why
-each "Close" button needs an explicit `tabindex="0"` (a dialog-fix
-report's own (b): this project's WKWebView host only includes an
-element in the `Tab` order that the author explicitly opted in with
-`tabindex`, unless the OS-level "Full Keyboard Access" setting is on —
-without it, "Close" is reachable by pointer but not by keyboard, exactly
-the gap `Tab`, `Tab`, ..., `Return` is supposed to close). This test
-answers the same question `test_webui_global_scope.py` already asks for
-a different invariant: in milliseconds, with no window and no simulation
-run required, rather than only failing much later inside a real keyboard-
-navigation session.
+The six Configure-section modals this file's own name once described
+are gone (botanist GUI redesign doc `20260907-claude-sonnet-5-botanist-
+gui-redesign.md` §4: every field they held now lives directly on the
+always-visible `screen-configure`); `modal-presets` is what remains
+(`modal-save-preset` uses a real `<form method="dialog">` with its own
+Accept/Cancel buttons instead, design §4.7 — neither is `[data-modal-
+close]`). `index.html`'s own comment above `modal-presets` records why
+its own "Cancel" button still needs an explicit `tabindex="0"` (a
+dialog-fix report's own (b): this project's WKWebView host only
+includes an element in the `Tab` order that the author explicitly
+opted in with `tabindex`, unless the OS-level "Full Keyboard Access"
+setting is on — without it, "Cancel" is reachable by pointer but not by
+keyboard, exactly the gap `Tab`, `Tab`, ..., `Return` is supposed to
+close). This test answers the same question `test_webui_global_scope.py`
+already asks for a different invariant: in milliseconds, with no window
+and no simulation run required, rather than only failing much later
+inside a real keyboard-navigation session.
 
 <a id="gui.test_config_modal_dialogs.test_every_modal_close_button_has_an_explicit_tabindex"></a>
 
@@ -7500,6 +7497,10 @@ A `<button>` is natively focusable, but this project's own WKWebView
 host does not include it in the `Tab` order without this explicit
 opt-in (see this module's own docstring) — a future dialog copied
 from an existing one without it would silently reintroduce the gap.
+Exactly one such button exists today (`modal-presets`'s own
+"Cancel") — asserted precisely, not merely "at least one," so a
+dialog added later without this same opt-in is caught by this test
+changing count, not only by a missing `tabindex`.
 
 <a id="gui.test_explore_screen"></a>
 
@@ -7705,9 +7706,10 @@ screen's own fixed-target "Back" button: recording
 
 # gui.test\_input\_screen
 
-Headless functional tests for the unified run view's own configuration
-side -- the Configure menu's modals/value-selectors and the always-
-present controls (`doc/fim-gui-design.md` §5.2, §6).
+Headless functional tests for the Configure workspace's own fields
+and the always-present controls (botanist GUI redesign doc `20260907-
+claude-sonnet-5-botanist-gui-redesign.md` §4; `doc/fim-gui-design.md`
+§5.2, §6 for the always-present controls, unchanged by that redesign).
 
 Real DOM-driven proof that `webui/screens/config-modals.js`/`run-view-
 controls.js`/`run-view-initial.js` actually wire the page correctly —
@@ -7801,26 +7803,32 @@ def test_input_screen_invalid_value_disables_the_run_button(
 
 An invalid value disables "Run simulation" and explains why.
 
-<a id="gui.test_input_screen.test_input_screen_switches_to_the_tab_with_an_invalid_field"></a>
+<a id="gui.test_input_screen.test_run_simulation_with_an_invalid_field_navigates_to_configure_and_marks_it"></a>
 
-#### test\_input\_screen\_switches\_to\_the\_tab\_with\_an\_invalid\_field
+#### test\_run\_simulation\_with\_an\_invalid\_field\_navigates\_to\_configure\_and\_marks\_it
 
 ```python
-def test_input_screen_switches_to_the_tab_with_an_invalid_field(
+def test_run_simulation_with_an_invalid_field_navigates_to_configure_and_marks_it(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Clicking "Run simulation" with an invalid Migration field opens that modal.
+Clicking "Run simulation" with an invalid field opens Configure and marks it.
 
-Direct regression test: every tab with an
-invalid field shows a small error dot, and the disabled Run button
-always shows a one-line reason — the modal-opening specifically
-(Migration is now a `<dialog>`, not a
-tab-panel), since `test_app_api.py` already proves the bridge's own
-`tab`/`field` values are correct. No `input` event needs dispatching
-first: `onRunClicked` calls `revalidate()` itself, which reads the
-field's *current* value straight off the live DOM via `FormData` —
-it does not depend on an `input` event ever having fired.
+Replaces the six-modal era's own "opens that field's modal" contract
+(`focusInvalidField`, `config-modals.js`) — every field now lives
+directly on the always-visible Configure screen (design §4), so
+there is no modal left to open; navigating there and marking the
+specific invalid field (`markTabError`'s own `.field.invalid` class,
+unchanged) is the new, more precise equivalent — precise enough to
+name the exact field, not only the section it used to live in. `N`,
+not `m_rate`: `config_form.field_for_error`'s own docstring is
+explicit that a composite sub-field like `m_rate` resolves to no
+single `FormField` at all (its own validation error names the
+parent `m`) — `N` is a genuine top-level field, so this is the
+shape `focusInvalidField` actually gets a real field name for. No
+`input` event needs dispatching first: `onRunClicked` calls
+`revalidate()` itself, which reads the field's *current* value
+straight off the live DOM via `FormData`.
 
 <a id="gui.test_input_screen.test_menu_new_configuration_resets_an_edited_field"></a>
 
@@ -7898,145 +7906,63 @@ docstring) -- a hand-edited or stale file that fails it falls all
 the way back to `starter_form_values()`, the same as a first-ever
 launch with nothing saved at all.
 
-<a id="gui.test_input_screen.test_menu_configure_tab_switches_tabs_without_resetting_the_form"></a>
+<a id="gui.test_input_screen.test_significant_digits_field_loads_and_changes_the_real_value"></a>
 
-#### test\_menu\_configure\_tab\_switches\_tabs\_without\_resetting\_the\_form
+#### test\_significant\_digits\_field\_loads\_and\_changes\_the\_real\_value
 
 ```python
-def test_menu_configure_tab_switches_tabs_without_resetting_the_form(
+def test_significant_digits_field_loads_and_changes_the_real_value(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-`fim.menu.configureTab` (the native Configure menu) opens a modal, no reset.
+The Configure field (design §4.2) round-trips through the real bridge.
 
-Every section is now a `<dialog>`, not a tab-panel —
-`test_configure_population_opens_a_modal_without_
-navigating_away` already proves the modal opens without navigating
-away; this test's own remaining job is the one behavioral contract
-that distinguishes `configureTab` from `newConfiguration`: an edited
-field survives the call, unlike a real reset.
+Not a `SimulationParams` field (`field-significant_digits` carries
+no `name`/`form="input-form"`), so its own coverage lives here
+rather than in `config_form`'s tests: `wireSignificantDigitsField`
+(`config-modals.js`) seeds the select from `Api.get_significant_
+digits` on load, and a `change` event calls `fim.menu.
+setSignificantDigits` — the same method the native View menu's own
+now-removed quick-toggle submenu used to call, confirmed by reading
+the value back through a second `Api` call on the very same window.
 
-The trigger wraps the call in `setTimeout(..., 0)`, matching
-`fim.gui.app._build_menu`'s own real dispatcher exactly — the same
-reason `test_menu_new_configuration_resets_an_edited_field` above
-does, and for the identical, confirmed-live deadlock this avoids.
+<a id="gui.test_input_screen.test_checking_a_second_convergence_statistic_reveals_the_combinator"></a>
 
-<a id="gui.test_input_screen.test_every_configure_section_has_its_own_modal"></a>
-
-#### test\_every\_configure\_section\_has\_its\_own\_modal
+#### test\_checking\_a\_second\_convergence\_statistic\_reveals\_the\_combinator
 
 ```python
-def test_every_configure_section_has_its_own_modal(
+def test_checking_a_second_convergence_statistic_reveals_the_combinator(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-All six sections open their own `modal-<name>` dialog.
+Checking a second statistic reveals the combinator field.
 
-Population and Migration each already have their own dedicated test
-above; this one instead sweeps all six in a single `drive()` call
-(native `<dialog>`s stack -- opening one does not close another),
-proving every `configureTab` name resolves to a real, distinct modal
-rather than checking only the two that happen to have other tests.
+The starter form has only `cs_D` checked; `syncConditionalVisibility`
+(`config-modals.js`) reveals `combinator-field` only once two or more
+are checked. Driven as a direct DOM click on the checkbox itself,
+the field's own real interaction now that the native Configure
+menu's own `toggleConvergenceStatistic` quick-toggle no longer
+exists — every field is reachable the same way regardless of how
+quick a toggle it used to be (design §3.3).
 
-<a id="gui.test_input_screen.test_menu_set_deme_weighting_updates_the_field_without_a_modal"></a>
+<a id="gui.test_input_screen.test_navigating_to_configure_does_not_reset_run_view_state"></a>
 
-#### test\_menu\_set\_deme\_weighting\_updates\_the\_field\_without\_a\_modal
+#### test\_navigating\_to\_configure\_does\_not\_reset\_run\_view\_state
 
 ```python
-def test_menu_set_deme_weighting_updates_the_field_without_a_modal(
+def test_navigating_to_configure_does_not_reset_run_view_state(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-`fim.menu.setDemeWeighting` sets the field directly, without opening a modal.
+Configure is reachable mid-run-lifecycle without discarding it (design §3.1).
 
-<a id="gui.test_input_screen.test_menu_set_mutation_model_updates_the_field_without_a_modal"></a>
-
-#### test\_menu\_set\_mutation\_model\_updates\_the\_field\_without\_a\_modal
-
-```python
-def test_menu_set_mutation_model_updates_the_field_without_a_modal(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-`fim.menu.setMutationModel` sets the field directly, without opening a modal.
-
-<a id="gui.test_input_screen.test_menu_toggle_convergence_statistic_adds_to_the_set"></a>
-
-#### test\_menu\_toggle\_convergence\_statistic\_adds\_to\_the\_set
-
-```python
-def test_menu_toggle_convergence_statistic_adds_to_the_set(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-`fim.menu.toggleConvergenceStatistic` adds a statistic, not replaces it.
-
-The starter form has only `cs_D` checked. Toggling `cs_G_ST` on must
-leave `cs_D` checked too — an exclusive pick here would silently
-discard whatever combination was already configured
-(`app.py`'s own `_build_menu` docstring has the full reasoning) — and
-checking two statistics is exactly what makes the combinator field
-appear, proving `syncConditionalVisibility` ran as a side effect too.
-
-<a id="gui.test_input_screen.test_configure_population_opens_a_modal_without_navigating_away"></a>
-
-#### test\_configure\_population\_opens\_a\_modal\_without\_navigating\_away
-
-```python
-def test_configure_population_opens_a_modal_without_navigating_away(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-Configure > Population floats a modal over the run view.
-
-Population is the first of six sections converted to a native
-`<dialog>`. Asserted against `runViewState` staying untouched, not
-just `screen-run` staying visible -- the bug this whole redesign
-responds to was the old `configureTab` calling `showScreen(
-"screen-input")` first, discarding whatever the user was looking at
-(a live run, a completed result); the merged run view
-(`doc/fim-gui-design.md` §5.1) makes "which screen is visible"
-trivially true on its own
-(there is only one to navigate away from), so the state itself is
-the assertion that still has teeth.
-
-<a id="gui.test_input_screen.test_configure_population_modal_close_button_closes_it"></a>
-
-#### test\_configure\_population\_modal\_close\_button\_closes\_it
-
-```python
-def test_configure_population_modal_close_button_closes_it(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-The modal's own close button closes it (`fim.wireModal`'s backdrop/close wiring).
-
-Escape and backdrop-click are the browser's own native `<dialog>`
-behavior (not exercised here — a synthetic, untrusted `keydown` does
-not reliably trigger a real close-watcher in every engine); the
-explicit close button is this app's own code (`fim.wireModal`), and
-is what this test actually proves.
-
-<a id="gui.test_input_screen.test_configure_population_modal_return_key_closes_it"></a>
-
-#### test\_configure\_population\_modal\_return\_key\_closes\_it
-
-```python
-def test_configure_population_modal_return_key_closes_it(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-`Return` closes the modal too -- the dialog fix report's own (a)/(b): a
-keyboard-only user (`Tab`, `Tab`, ..., `Return`) needs a default action, since
-"Close" is the dialog's only real one, unlike Escape/backdrop-click, which are
-the browser's own native `<dialog>` behavior and not exercised here.
-
-Dispatching a synthetic `keydown` proves this specific case, unlike
-`test_configure_population_modal_close_button_closes_it`'s own docstring
-warning about a *native* close-watcher (Escape) -- this handler is this
-app's own plain JS `keydown` listener (`fim.wireModal`), not a browser-
-internal, untrusted-event-immune mechanism, so a synthetic event reaches
-it exactly like a real keypress would.
+Asserted against `runViewState` staying untouched, not merely which
+screen is visible — the invariant this project has kept through
+every navigation redesign so far: the six-modal era's own version of
+this test proved a Configure modal floated over the run view without
+resetting it; the rail-based redesign replaces "floats over" with
+"is its own destination," but "reaching Configure never discards a
+live or completed run" is the same contract either way.
 
 <a id="gui.test_input_screen.test_batch_progress_display_never_regresses"></a>
 
@@ -8251,16 +8177,21 @@ def test_clicking_configure_shows_the_landing_screen_and_updates_the_rail(
 
 Rail navigation both switches the screen and moves the highlight.
 
-<a id="gui.test_nav_rail.test_configure_landing_button_opens_the_real_section_modal"></a>
+<a id="gui.test_nav_rail.test_configure_shows_both_panels_with_their_own_fields"></a>
 
-#### test\_configure\_landing\_button\_opens\_the\_real\_section\_modal
+#### test\_configure\_shows\_both\_panels\_with\_their\_own\_fields
 
 ```python
-def test_configure_landing_button_opens_the_real_section_modal(
+def test_configure_shows_both_panels_with_their_own_fields(
         window: webview.Window) -> None
 ```
 
-The interim Configure landing page opens the same modal the old menu does.
+Configure's own two panels each show real fields, no modal to open.
+
+Confirms the two-panel restructuring landed where the rail's own
+Configure button points: `field-m_rate` (FIM parameters, §4.1) and
+`field-mutation_model` (Structure, §4.2) are both directly visible
+the moment Configure is showing, not behind a per-section dialog.
 
 <a id="gui.test_nav_rail.test_parameter_strip_click_jumps_to_configure"></a>
 

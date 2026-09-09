@@ -1,21 +1,24 @@
 "use strict";
 
-/* The six Configure modals' shared field logic (unified-run-view design
- * §3.1, §3.7, §8 Phase E). Every field maps one-to-one to a
- * src/fim/gui/config_form.py key, in that module's own tab grouping and
- * order -- see its module docstring for the authoritative field list
- * this markup mirrors. Validation, load, and save all route through the
- * bridge to that same module (never reimplemented here); the field-to-
- * section routing an invalid field needs (design §4.0 #2 of the
- * graphical-interface migration design) is computed in Python too
- * (`config_form.tab_for_error`/`field_for_error`, returned directly by
- * `Api.validate_form`) rather than duplicated as a second, hand-
- * maintained JS lookup table.
+/* The Configure workspace's shared field logic (botanist GUI redesign
+ * doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4; this
+ * file's own name predates that redesign -- every field it once opened
+ * inside its own per-section `<dialog>` now lives directly on the
+ * always-visible `screen-configure` two-panel layout instead, but the
+ * collection/validation logic below is unchanged either way). Every
+ * field maps one-to-one to a src/fim/gui/config_form.py key -- see that
+ * module's own docstring for the authoritative field list this markup
+ * mirrors. Validation, load, and save all route through the bridge to
+ * that same module (never reimplemented here); an invalid field's own
+ * routing (`config_form.field_for_error`, returned directly by
+ * `Api.validate_form`) is computed in Python too, rather than
+ * duplicated as a second, hand-maintained JS lookup table.
  *
- * Orthogonal to `runViewState` on purpose (design §3.7): a modal can be
- * opened from any of the three states, so nothing here depends on which
- * one is currently active, and nothing in `run-view-*.js` depends on
- * whether a modal happens to be open.
+ * Orthogonal to `runViewState` on purpose (design §3.1: every rail
+ * destination stays reachable at every point in a run's lifecycle):
+ * Configure can be reached from any of the three run-view states, so
+ * nothing here depends on which one is currently active, and nothing in
+ * `run-view-*.js` depends on whether Configure happens to be showing.
  */
 
 const form = document.getElementById("input-form");
@@ -265,71 +268,59 @@ function wireConfigModalEvents() {
 }
 
 /**
- * Set one field directly to a literal value, without opening its own
- * modal -- the shared plumbing behind every Configure value-selector
- * leaf (design §3.1.3): the same re-sync/re-validate a real edit
- * already triggers (`wireConfigModalEvents`'s own delegated listener),
- * run once here since a menu click never fires a real DOM `input`/
- * `change` event for `document`-level delegation to catch.
- * @param {string} name
- * @param {string} value
+ * Navigate to Configure and scroll the field an invalid "Run
+ * simulation" click named into view (`run-view-controls.js`'s own
+ * `onRunClicked`, `Api.validate_form`'s own `result.field`). Replaces
+ * the six-modal era's own `openConfigModal(result.tab)` -- every field
+ * now lives directly on the always-visible Configure screen (design §4,
+ * §16 phase 1), so there is no modal left to open, and naming the exact
+ * field is more precise than naming its old section ever was. `field`
+ * can be `null` (an unknown-key error `field_for_error` could not
+ * place) -- Configure still opens, just with nothing further to focus.
+ * @param {string|null} field
  */
-function setSingleFieldValue(name, value) {
-    setFieldValue(name, value);
-    syncConditionalVisibility();
-    revalidate();
-}
-
-/**
- * `_build_menu`'s Configure menu -- opens the named section's own modal
- * over whatever the run view currently shows (design §3.1, §8 Phase
- * A/B), no navigation at all: the whole point is that opening a config
- * section no longer discards whatever the user was looking at (a live
- * run, a completed result). Never resets a field, the same distinction
- * `fim.menu.newConfiguration` (`run-view-initial.js`) draws against a
- * genuine reset.
- */
-window.fim.menu.configureTab = async function configureTab(tabName) {
-    window.fim.openConfigModal(tabName);
-};
-
-/**
- * Configure > Deme weighting (design §3.1.3) -- a genuinely categorical
- * field, one `MenuAction` per legal value.
- * @param {string} value
- */
-window.fim.menu.setDemeWeighting = function setDemeWeighting(value) {
-    setSingleFieldValue("deme_weighting", value);
-};
-
-/**
- * Configure > Mutation model (design §3.1.3) -- the same shape as
- * Deme weighting above.
- * @param {string} value
- */
-window.fim.menu.setMutationModel = function setMutationModel(value) {
-    setSingleFieldValue("mutation_model", value);
-};
-
-/**
- * Configure > Convergence statistic (design §3.1.3) -- *toggles* one
- * statistic's own checkbox rather than selecting it exclusively: the
- * field is a set (any combination of the six, `app.py`'s own
- * `_build_menu` docstring has the full reasoning), so an exclusive pick
- * here would silently discard whatever multi-statistic combination the
- * Convergence modal already has configured.
- * @param {string} checkboxName - e.g. `"cs_G_ST"`.
- */
-window.fim.menu.toggleConvergenceStatistic = function toggleConvergenceStatistic(
-    checkboxName
-) {
-    const field = form.elements.namedItem(checkboxName);
-    if (field === null) {
+function focusInvalidField(field) {
+    window.fim.showScreen("screen-configure");
+    if (!field) {
         return;
     }
-    field.checked = !field.checked;
-    syncConditionalVisibility();
-    revalidate();
-};
+    const target = form.elements.namedItem(field);
+    const element = target instanceof RadioNodeList ? target[0] : target;
+    if (element === null || element === undefined) {
+        return;
+    }
+    const container = element.closest(".field") || element.closest("fieldset.composite");
+    (container || element).scrollIntoView({ block: "center", behavior: "smooth" });
+    if (typeof element.focus === "function") {
+        element.focus({ preventScroll: true });
+    }
+}
+
+window.fim.focusInvalidField = focusInvalidField;
+
+/**
+ * Significant digits (design §4.2 -- moved out of the native View
+ * menu's own quick-toggle submenu into an ordinary Configure field).
+ * Not a `SimulationParams` field: no `name`/`form="input-form"`, no
+ * `collectFormValues()`/`revalidate()` involvement, wired directly to
+ * the same `Api.set_significant_digits` bridge call the old menu items
+ * made. `Api.get_significant_digits` seeds the select's own initial
+ * value once, on launch -- this setting is process-local (`Api.__init__`
+ * 's own docstring), never part of a saved/loaded configuration, so
+ * there is nothing to re-sync on `applyFormValues`/`resetInputForm`.
+ */
+async function wireSignificantDigitsField() {
+    const select = document.getElementById("field-significant_digits");
+    select.value = String(await window.pywebview.api.get_significant_digits());
+    // `fim.menu.setSignificantDigits` (`app.js`) already has the
+    // bridge-call-plus-alert-on-failure logic this needs -- the same
+    // method the native View menu's own items used to call, reused
+    // rather than duplicated now that this field is that menu's
+    // replacement.
+    select.addEventListener("change", () => {
+        window.fim.menu.setSignificantDigits(Number(select.value));
+    });
+}
 
 whenApiReady(wireConfigModalEvents);
+whenApiReady(wireSignificantDigitsField);

@@ -36,7 +36,7 @@ function showRunBanner(message) {
 async function onRunClicked() {
     const result = await revalidate();
     if (!result.ok) {
-        window.fim.openConfigModal(result.tab);
+        window.fim.focusInvalidField(result.field);
         return;
     }
     const values = collectFormValues();

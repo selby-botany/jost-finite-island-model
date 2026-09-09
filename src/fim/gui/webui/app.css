@@ -185,27 +185,43 @@ body {
     overflow-y: auto;
 }
 
-/* Configure's interim landing destination (`screens/nav-rail.js`'s own
- * module docstring: the real two-panel layout is a follow-up commit). */
-.configure-landing-sections {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin: 1rem 0;
+/* The Configure workspace's two independently scrollable panels (design
+ * §4: "Configure is two panels side by side (stacked on a narrow
+ * window), not a tab strip -- both are visible and scrollable
+ * independently"). `minmax(0, 1fr)` on each column, not a bare `1fr`,
+ * so a genuinely wide field (the migration-matrix grid, the loci table)
+ * scrolls inside its own panel rather than stretching the column and
+ * breaking the two-column layout -- confirmed against this exact CSS
+ * grid pitfall (a `1fr` track has an implicit `min-width: auto` that a
+ * wide child ignores). */
+.configure-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
 }
 
-.configure-landing-button {
-    font: inherit;
-    color: var(--fim-foreground);
+@media (max-width: 760px) {
+    .configure-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.configure-panel {
+    min-width: 0;
+    max-height: calc(100vh - 12rem);
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.configure-panel h2 {
+    margin: 0 0 1rem;
+    font-size: 1rem;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
     background: var(--fim-background);
-    border: 1px solid var(--fim-border);
-    border-radius: 6px;
-    padding: 0.6rem 1rem;
-    cursor: pointer;
-}
-
-.configure-landing-button:hover {
-    border-color: var(--fim-accent);
+    padding-bottom: 0.5rem;
 }
 
 /* The six Configure-modal error dots (design §3.1) -- `hidden` on their

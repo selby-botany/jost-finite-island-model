@@ -60,6 +60,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   change. The parameter strip is read-only and always current
   (`revalidate()`'s own live form scan, not only a validated submit);
   clicking any of its four values jumps straight to Configure.
+- `fim gui`'s Configure destination is now the real two-panel layout
+  design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.1/
+  §4.2 describes — FIM parameters (N, d, m, mu, seed) and Structure
+  (initial conditions, migrant sampling, mutation model, deme
+  weighting, loci, the full convergence group, the full batch group,
+  and a new significant-digits field), every field always visible and
+  independently scrollable, replacing both the six per-section modals
+  this screen used to open and the prior commit's own interim landing
+  page. The native menu bar shrinks to File/Run/Help (§3.3): Configure
+  and View are gone entirely — every field either used to reach,
+  including the three former quick-toggle leaves ("Deme weighting"/
+  "Mutation model"/"Convergence statistic") and the View menu's own
+  "Significant digits" submenu, now lives directly on the Configure
+  screen, reachable the same way regardless of how quick a toggle it
+  used to be. An invalid field on "Run simulation" (from anywhere) now
+  navigates to Configure and marks the specific field, replacing the
+  six-modal era's own "open that field's modal" behavior with something
+  more precise — naming the exact field, not only the section it used
+  to live in.
 
 ### Changed
 

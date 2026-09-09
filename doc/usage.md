@@ -384,40 +384,34 @@ no separate "New run" step. Cancelling a run, or a run ending in an error,
 freezes the view exactly as it last rendered, with a banner on top,
 rather than switching anywhere else:
 
-A native File/Configure/Run/View/Help menu bar is available from any screen,
-including mid-run. File covers configuration/run file-system actions
-(New/Open/Save configuration, Open run…, Reveal output folder, Explore
-predictions…, Quit);
-Configure jumps straight to any one of six configuration sections
-(Population/Migration/Mutation/Initial conditions/Convergence/Batch), each
-opening as a small dialog over whatever screen is currently showing,
-without navigating away from it; three fields that are quick, meaningful
-choices on their own get a direct submenu instead — no dialog at all —
-that sets the field immediately: Deme weighting (size/equal), Mutation
-model (infinite_alleles/finite_alleles), and Convergence statistic, which
-*adds or removes* one statistic from the active set on each click rather
-than replacing the whole selection (checking two or more is exactly what
-turns on the "combinator" choice in the Convergence dialog). Run covers the
-simulation lifecycle (Run simulation, Cancel run); View holds a
-Significant digits submenu (2/3/4/5/6/8, default 3)
-that changes how many digits every displayed statistic rounds to — cosmetic
-only, `trajectory.jsonl`/`report.json`/`manifest.json` always keep full
-precision regardless of this setting; Help covers this guide and the
-[configuration reference](configuration.md) (rendered in-app — see the Help
-screen row below), a link to the full documentation on GitHub, Check for
-updates, and About. Every menu item reuses the exact same action the
-matching button already performs; File/Configure/Run items invoked from a
-screen where they are not immediately actionable navigate to the screen
-where they are first, rather than doing nothing.
+A persistent rail (Home, Configure, Explore, Run, Results, Compare, and —
+set apart at the bottom — Help) is always visible along the window's own
+left edge, current destination highlighted, reachable from any screen
+including mid-run; Run and Results both point at the same run view
+described in the table below (a run in progress shows through either one,
+a finished run's own summary too — splitting them into two genuinely
+distinct layouts is still on this project's own GUI roadmap). A read-only
+parameter strip beneath the title bar always shows the current N/d/m/mu;
+clicking any of the four jumps straight to Configure. A native File/Run/Help
+menu bar duplicates the everyday actions a mouse-and-rail user already has,
+for keyboard-shortcut users: File covers configuration/run file-system
+actions (New/Open/Save configuration, Open run…, Reveal output folder,
+Quit); Run covers the simulation lifecycle (Run simulation, Cancel run);
+Help covers this guide and the [configuration reference](configuration.md)
+(rendered in-app — see the Help screen row below), a link to the full
+documentation on GitHub, Check for updates, and About. Every menu item
+reuses the exact same action the matching on-screen control already
+performs.
 
 | Screen/state | What it does | Same as |
 |---|---|---|
-| Run view — initial | Build and validate a full configuration from six sections (Population, Migration, Mutation, Initial conditions, Convergence, Batch — one per [configuration reference](configuration.md) section), each opened as its own dialog from the Configure menu (above) rather than an on-screen tab strip; "Load YAML…"/"Save YAML…" read and write the exact file format above; "Open a run…" reaches the Open a run screen | [Create a configuration](#create-a-configuration) |
+| Home | A recent-runs list (newest first) — a batch entry is labeled distinctly and opened one replicate at a time from its own completed batch view, not from here — or browse for a `trajectory.jsonl` directly, then re-render its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-`q` sweep. Reachable from the rail's own Home button, or the File menu's "Open run…", from any screen | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
+| Configure | Two always-visible, independently scrollable panels: FIM parameters (N, d, m, mu, seed — the five values that together are "the finite island model") and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, the full convergence group, the full batch/replicate group, and significant digits) — one per [configuration reference](configuration.md) section, no dialog to open for any of them; "Load configuration…"/"Save configuration…" read and write the exact YAML file format above, and "▶ Run"/"🔮 Explore" jump to those destinations with the configuration exactly as shown. An invalid field on "Run simulation" (from anywhere) navigates here and marks the specific field, not only the section it lives in | [Create a configuration](#create-a-configuration) |
 | Run view — running | A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a "Cancel" button — the window stays responsive throughout; the same axis selectors `completed` (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top | `run`'s own progress/error output, on one screen instead of terminal lines |
 | Run view — completed | A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same `[0, 1]` scale the confidence-interval bars below use) beside the canonical scatter plot, or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered `0.0`-`1.0` probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own "Open" button reaches this same view for that one replicate; "Open output folder" reveals the run's own artifacts (a batch's own `summary.json` and every replicate subdirectory, for a batch) | [Output schemas](#output-schemas), [Batch `summary.json` and `manifest.json`](#batch-summaryjson-and-manifestjson) |
-| Open a run | Pick a previous run from a recent-runs list — a batch entry is labeled distinctly and opened one replicate at a time from its own completed batch view, not from here — or browse for a `trajectory.jsonl` directly, then re-render its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-`q` sweep | [Re-analyze a trajectory](#re-analyze-a-trajectory) |
-| Explore | Four fields (N, d, m, mu) and a theoretical-prediction table (D, G<sub>ST</sub>, E<sub>ST</sub>, and Whitlock's identity-recovery half-life) that update the instant a field is committed — no simulation ever runs, so this never takes measurable time regardless of N or d. A sweep curve plots the selected field's predicted D/G<sub>ST</sub> across a fixed range, with the current configuration marked. Reachable from the File menu ("Explore predictions…") from any screen; "Back" returns to whichever screen was showing, not a fixed default | No CLI equivalent — a direct `fim.statistics` call from Python or a script is the closest terminal equivalent |
-| Help | This guide and the [configuration reference](configuration.md), rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the Help menu (above) from any screen; "Back" returns to whichever screen was showing, not a fixed default | No CLI equivalent — the terminal reads these same two files directly |
+| Explore | Four fields (N, d, m, mu) and a theoretical-prediction table (D, G<sub>ST</sub>, E<sub>ST</sub>, and Whitlock's identity-recovery half-life) that update the instant a field is committed — no simulation ever runs, so this never takes measurable time regardless of N or d. A sweep curve plots the selected field's predicted D/G<sub>ST</sub> across a fixed range, with the current configuration marked. Reachable from the rail's own Explore button, or "🔮 Explore" on Configure, from any screen; "Back" returns to whichever screen was showing, not a fixed default | No CLI equivalent — a direct `fim.statistics` call from Python or a script is the closest terminal equivalent |
+| Compare | Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection — "how does the conclusion change as I vary this one knob," on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; "Back" returns to whichever screen was showing | No CLI equivalent — comparing several `trajectory.jsonl`/`report.json` files by hand is the closest terminal equivalent |
+| Help | This guide and the [configuration reference](configuration.md), rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the rail's own Help button, or the Help menu, from any screen; "Back" returns to whichever screen was showing, not a fixed default | No CLI equivalent — the terminal reads these same two files directly |
 
 A GUI-authored run with the same parameters and seed produces byte-identical
 `trajectory.jsonl`/`report.json` to the same configuration run from the
@@ -471,7 +465,7 @@ FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 
 ### Saved preferences
 
-The GUI remembers two things between launches: the View menu's Significant
+The GUI remembers two things between launches: Configure's own Significant
 digits setting, and the last configuration you successfully clicked "Run
 simulation" with — a fresh launch's own Run view starts from that
 configuration rather than from the built-in starter values. File menu → "New

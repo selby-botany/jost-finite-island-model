@@ -1,6 +1,7 @@
-"""Headless functional tests for the unified run view's own configuration
-side -- the Configure menu's modals/value-selectors and the always-
-present controls (`doc/fim-gui-design.md` §5.2, §6).
+"""Headless functional tests for the Configure workspace's own fields
+and the always-present controls (botanist GUI redesign doc `20260907-
+claude-sonnet-5-botanist-gui-redesign.md` §4; `doc/fim-gui-design.md`
+§5.2, §6 for the always-present controls, unchanged by that redesign).
 
 Real DOM-driven proof that `webui/screens/config-modals.js`/`run-view-
 controls.js`/`run-view-initial.js` actually wire the page correctly —
@@ -201,40 +202,49 @@ def test_input_screen_invalid_value_disables_the_run_button(
     assert settled["disabled"] is True
 
 
-def test_input_screen_switches_to_the_tab_with_an_invalid_field(
+def test_run_simulation_with_an_invalid_field_navigates_to_configure_and_marks_it(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Clicking "Run simulation" with an invalid Migration field opens that modal.
+    """Clicking "Run simulation" with an invalid field opens Configure and marks it.
 
-    Direct regression test: every tab with an
-    invalid field shows a small error dot, and the disabled Run button
-    always shows a one-line reason — the modal-opening specifically
-    (Migration is now a `<dialog>`, not a
-    tab-panel), since `test_app_api.py` already proves the bridge's own
-    `tab`/`field` values are correct. No `input` event needs dispatching
-    first: `onRunClicked` calls `revalidate()` itself, which reads the
-    field's *current* value straight off the live DOM via `FormData` —
-    it does not depend on an `input` event ever having fired.
+    Replaces the six-modal era's own "opens that field's modal" contract
+    (`focusInvalidField`, `config-modals.js`) — every field now lives
+    directly on the always-visible Configure screen (design §4), so
+    there is no modal left to open; navigating there and marking the
+    specific invalid field (`markTabError`'s own `.field.invalid` class,
+    unchanged) is the new, more precise equivalent — precise enough to
+    name the exact field, not only the section it used to live in. `N`,
+    not `m_rate`: `config_form.field_for_error`'s own docstring is
+    explicit that a composite sub-field like `m_rate` resolves to no
+    single `FormField` at all (its own validation error names the
+    parent `m`) — `N` is a genuine top-level field, so this is the
+    shape `focusInvalidField` actually gets a real field name for. No
+    `input` event needs dispatching first: `onRunClicked` calls
+    `revalidate()` itself, which reads the field's *current* value
+    straight off the live DOM via `FormData`.
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
         trigger=(
-            "document.getElementById('field-m_rate').value = 'not-a-number'; "
+            "document.getElementById('field-N').value = 'not-a-number'; "
             "document.getElementById('run-button').click();"
         ),
         read=(
             "({"
-            "modalOpen: document.getElementById('modal-migration').open, "
-            "dotHidden: document.getElementById('dot-migration').hidden"
+            "configureVisible: !document.getElementById('screen-configure').hidden, "
+            "fieldInvalid: document.getElementById('field-N')"
+            ".closest('.field').classList.contains('invalid')"
             "})"
         ),
-        is_ready=lambda value: value is not None and value.get("modalOpen") is True,
+        is_ready=lambda value: (
+            value is not None and value.get("configureVisible") is True
+        ),
         poll_attempts=500,
     )
 
-    assert settled["modalOpen"] is True
-    assert settled["dotHidden"] is False
+    assert settled["configureVisible"] is True
+    assert settled["fieldInvalid"] is True
 
 
 def test_menu_new_configuration_resets_an_edited_field(
@@ -349,125 +359,65 @@ def test_initial_launch_falls_back_to_starter_values_for_an_invalid_saved_form(
     assert field_n == starter_form_values()["N"]
 
 
-def test_menu_configure_tab_switches_tabs_without_resetting_the_form(
+def test_significant_digits_field_loads_and_changes_the_real_value(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """`fim.menu.configureTab` (the native Configure menu) opens a modal, no reset.
+    """The Configure field (design §4.2) round-trips through the real bridge.
 
-    Every section is now a `<dialog>`, not a tab-panel —
-    `test_configure_population_opens_a_modal_without_
-    navigating_away` already proves the modal opens without navigating
-    away; this test's own remaining job is the one behavioral contract
-    that distinguishes `configureTab` from `newConfiguration`: an edited
-    field survives the call, unlike a real reset.
-
-    The trigger wraps the call in `setTimeout(..., 0)`, matching
-    `fim.gui.app._build_menu`'s own real dispatcher exactly — the same
-    reason `test_menu_new_configuration_resets_an_edited_field` above
-    does, and for the identical, confirmed-live deadlock this avoids.
-    """
-    value = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "document.getElementById('field-N').value = '999999'; "
-            "setTimeout(() => { window.fim.menu.configureTab('migration'); }, 0);"
-        ),
-        read=(
-            "({"
-            "fieldN: document.getElementById('field-N').value, "
-            "modalOpen: document.getElementById('modal-migration').open"
-            "})"
-        ),
-        is_ready=lambda value: value is not None and value.get("modalOpen") is True,
-    )
-
-    assert value["fieldN"] == "999999"
-
-
-def test_every_configure_section_has_its_own_modal(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """All six sections open their own `modal-<name>` dialog.
-
-    Population and Migration each already have their own dedicated test
-    above; this one instead sweeps all six in a single `drive()` call
-    (native `<dialog>`s stack -- opening one does not close another),
-    proving every `configureTab` name resolves to a real, distinct modal
-    rather than checking only the two that happen to have other tests.
+    Not a `SimulationParams` field (`field-significant_digits` carries
+    no `name`/`form="input-form"`), so its own coverage lives here
+    rather than in `config_form`'s tests: `wireSignificantDigitsField`
+    (`config-modals.js`) seeds the select from `Api.get_significant_
+    digits` on load, and a `change` event calls `fim.menu.
+    setSignificantDigits` — the same method the native View menu's own
+    now-removed quick-toggle submenu used to call, confirmed by reading
+    the value back through a second `Api` call on the very same window.
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
+        # A plain, synchronous statement that only *starts* the async
+        # IIFE and returns immediately -- `evaluate_js` itself never
+        # awaits anything (`conftest.py`'s own `drive_and_read` docstring
+        # on why an async *trigger* whose own completion `evaluate_js`
+        # would have to wait for deadlocks; this is the safe shape that
+        # docstring also describes: fire-and-forget, then poll a
+        # separate `read`).
         trigger=(
-            "["
-            "'population', 'migration', 'mutation', "
-            "'initial_conditions', 'convergence', 'batch'"
-            "].forEach((name) => window.fim.menu.configureTab(name)); "
-            "window.__fimAllModalsOpened = ["
-            "'population', 'migration', 'mutation', "
-            "'initial_conditions', 'convergence', 'batch'"
-            "].every((name) => document.getElementById(`modal-${name}`).open);"
+            "window.__fimSignificantDigitsResult = null; "
+            "(async () => { "
+            "document.getElementById('field-significant_digits').value = '6'; "
+            "document.getElementById('field-significant_digits')"
+            ".dispatchEvent(new Event('change', {bubbles: true})); "
+            "await new Promise((resolve) => setTimeout(resolve, 50)); "
+            "window.__fimSignificantDigitsResult = "
+            "await window.pywebview.api.get_significant_digits(); "
+            "})();"
         ),
-        read="window.__fimAllModalsOpened",
+        read="window.__fimSignificantDigitsResult",
         is_ready=lambda value: value is not None,
     )
 
-    assert settled is True
+    assert settled == 6
 
 
-def test_menu_set_deme_weighting_updates_the_field_without_a_modal(
+def test_checking_a_second_convergence_statistic_reveals_the_combinator(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """`fim.menu.setDemeWeighting` sets the field directly, without opening a modal."""
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger="window.fim.menu.setDemeWeighting('equal');",
-        read=(
-            "({"
-            "value: document.getElementById('field-deme_weighting').value, "
-            "modalOpen: document.getElementById('modal-population').open"
-            "})"
-        ),
-        is_ready=lambda value: value is not None and value.get("value") == "equal",
-    )
+    """Checking a second statistic reveals the combinator field.
 
-    assert settled["value"] == "equal"
-    assert settled["modalOpen"] is False
-
-
-def test_menu_set_mutation_model_updates_the_field_without_a_modal(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """`fim.menu.setMutationModel` sets the field directly, without opening a modal."""
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger="window.fim.menu.setMutationModel('finite_alleles');",
-        read="document.getElementById('field-mutation_model').value",
-        is_ready=lambda value: value == "finite_alleles",
-    )
-
-    assert settled == "finite_alleles"
-
-
-def test_menu_toggle_convergence_statistic_adds_to_the_set(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """`fim.menu.toggleConvergenceStatistic` adds a statistic, not replaces it.
-
-    The starter form has only `cs_D` checked. Toggling `cs_G_ST` on must
-    leave `cs_D` checked too — an exclusive pick here would silently
-    discard whatever combination was already configured
-    (`app.py`'s own `_build_menu` docstring has the full reasoning) — and
-    checking two statistics is exactly what makes the combinator field
-    appear, proving `syncConditionalVisibility` ran as a side effect too.
+    The starter form has only `cs_D` checked; `syncConditionalVisibility`
+    (`config-modals.js`) reveals `combinator-field` only once two or more
+    are checked. Driven as a direct DOM click on the checkbox itself,
+    the field's own real interaction now that the native Configure
+    menu's own `toggleConvergenceStatistic` quick-toggle no longer
+    exists — every field is reachable the same way regardless of how
+    quick a toggle it used to be (design §3.3).
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
-        trigger="window.fim.menu.toggleConvergenceStatistic('cs_G_ST');",
+        trigger="document.querySelector('input[name=\"cs_G_ST\"]').click();",
         read=(
             "({"
             "d: document.querySelector('input[name=\"cs_D\"]').checked, "
@@ -483,119 +433,35 @@ def test_menu_toggle_convergence_statistic_adds_to_the_set(
     assert settled["combinatorHidden"] is False
 
 
-def test_configure_population_opens_a_modal_without_navigating_away(
+def test_navigating_to_configure_does_not_reset_run_view_state(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Configure > Population floats a modal over the run view.
+    """Configure is reachable mid-run-lifecycle without discarding it (design §3.1).
 
-    Population is the first of six sections converted to a native
-    `<dialog>`. Asserted against `runViewState` staying untouched, not
-    just `screen-run` staying visible -- the bug this whole redesign
-    responds to was the old `configureTab` calling `showScreen(
-    "screen-input")` first, discarding whatever the user was looking at
-    (a live run, a completed result); the merged run view
-    (`doc/fim-gui-design.md` §5.1) makes "which screen is visible"
-    trivially true on its own
-    (there is only one to navigate away from), so the state itself is
-    the assertion that still has teeth.
+    Asserted against `runViewState` staying untouched, not merely which
+    screen is visible — the invariant this project has kept through
+    every navigation redesign so far: the six-modal era's own version of
+    this test proved a Configure modal floated over the run view without
+    resetting it; the rail-based redesign replaces "floats over" with
+    "is its own destination," but "reaching Configure never discards a
+    live or completed run" is the same contract either way.
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "setTimeout(() => { window.fim.menu.configureTab('population'); }, 0);"
-        ),
+        trigger="window.fim.showScreen('screen-configure');",
         read=(
             "({"
-            "modalOpen: document.getElementById('modal-population').open, "
-            "runViewHidden: document.getElementById('screen-run').hidden, "
+            "configureVisible: !document.getElementById('screen-configure').hidden, "
             "runViewState: window.fim.getRunViewState()"
             "})"
         ),
-        is_ready=lambda value: value is not None and value.get("modalOpen") is True,
+        is_ready=lambda value: (
+            value is not None and value.get("configureVisible") is True
+        ),
     )
 
-    assert settled["runViewHidden"] is False
     assert settled["runViewState"] == "initial"
-
-
-def test_configure_population_modal_close_button_closes_it(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """The modal's own close button closes it (`fim.wireModal`'s backdrop/close wiring).
-
-    Escape and backdrop-click are the browser's own native `<dialog>`
-    behavior (not exercised here — a synthetic, untrusted `keydown` does
-    not reliably trigger a real close-watcher in every engine); the
-    explicit close button is this app's own code (`fim.wireModal`), and
-    is what this test actually proves.
-    """
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "window.fim.menu.configureTab('population'); "
-            "window.__fimModalWasOpened = "
-            "document.getElementById('modal-population').open; "
-            "setTimeout(() => { "
-            "document.querySelector('#modal-population [data-modal-close]').click(); "
-            "window.__fimModalCloseClicked = true; "
-            "}, 50);"
-        ),
-        read=(
-            "({"
-            "opened: window.__fimModalWasOpened === true, "
-            "closed: document.getElementById('modal-population').open === false, "
-            "done: window.__fimModalCloseClicked === true"
-            "})"
-        ),
-        is_ready=lambda value: value is not None and value.get("done") is True,
-    )
-
-    assert settled["opened"] is True
-    assert settled["closed"] is True
-
-
-def test_configure_population_modal_return_key_closes_it(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """`Return` closes the modal too -- the dialog fix report's own (a)/(b): a
-    keyboard-only user (`Tab`, `Tab`, ..., `Return`) needs a default action, since
-    "Close" is the dialog's only real one, unlike Escape/backdrop-click, which are
-    the browser's own native `<dialog>` behavior and not exercised here.
-
-    Dispatching a synthetic `keydown` proves this specific case, unlike
-    `test_configure_population_modal_close_button_closes_it`'s own docstring
-    warning about a *native* close-watcher (Escape) -- this handler is this
-    app's own plain JS `keydown` listener (`fim.wireModal`), not a browser-
-    internal, untrusted-event-immune mechanism, so a synthetic event reaches
-    it exactly like a real keypress would.
-    """
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "window.fim.menu.configureTab('population'); "
-            "window.__fimModalWasOpened = "
-            "document.getElementById('modal-population').open; "
-            "setTimeout(() => { "
-            "document.getElementById('modal-population').dispatchEvent("
-            "new KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); "
-            "window.__fimModalReturnPressed = true; "
-            "}, 50);"
-        ),
-        read=(
-            "({"
-            "opened: window.__fimModalWasOpened === true, "
-            "closed: document.getElementById('modal-population').open === false, "
-            "done: window.__fimModalReturnPressed === true"
-            "})"
-        ),
-        is_ready=lambda value: value is not None and value.get("done") is True,
-    )
-
-    assert settled["opened"] is True
-    assert settled["closed"] is True
 
 
 def test_batch_progress_display_never_regresses(

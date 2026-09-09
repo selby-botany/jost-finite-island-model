@@ -168,26 +168,28 @@ const fim = {
     },
 
     /**
-     * Wire one Configure modal's own close affordances (unified-run-view
-     * design §3.1.1) the first time it is opened: a native `<dialog>`
-     * already gives focus-trapping and Escape-to-close for free once
-     * shown via `showModal()`, but backdrop-click-to-close is not
-     * automatic -- a click that lands on the dialog element itself
-     * (rather than on any of its content) is exactly a click on the
-     * `::backdrop`, since the content box is what the content elements
-     * themselves absorb the click on. Idempotent (`dataset.fimWired`)
-     * so a modal reopened many times only gets one set of listeners.
+     * Wire one dialog's own close affordances the first time it is
+     * shown: a native `<dialog>` already gives focus-trapping and
+     * Escape-to-close for free once shown via `showModal()`, but
+     * backdrop-click-to-close is not automatic -- a click that lands on
+     * the dialog element itself (rather than on any of its content) is
+     * exactly a click on the `::backdrop`, since the content box is
+     * what the content elements themselves absorb the click on.
+     * Idempotent (`dataset.fimWired`) so a dialog reopened many times
+     * only gets one set of listeners. Callers: `screens/presets.js`'s
+     * own `modal-presets` (the botanist GUI redesign's Configure
+     * workspace, §4, replaced this project's earlier per-section
+     * Configure modals this function used to wire too -- `modal-save-
+     * preset`'s own real Accept/Cancel buttons need none of this).
      *
-     * Also gives `Return` a default action, matching "Close" being the
-     * dialog's only real action: every field here is `form="input-
-     * form"`, an external, empty `<form>` with no submit button of its
-     * own (`index.html`'s own comment above these dialogs), so the
-     * platform has no default button to invoke on `Return` -- without
-     * this, `Return` does nothing at all, unlike a pointer user's own
-     * "click Close" affordance. `<select>`'s own native `Return`
-     * behavior (committing an open dropdown's highlighted option) fires
-     * and closes its dropdown *before* this bubbles up to `dialog`, so
-     * closing the whole modal on the same keypress does not fight it.
+     * Also gives `Return` a default action for a dialog with no submit
+     * button of its own (like `modal-presets`): the platform has no
+     * default button to invoke on `Return` without this, unlike a
+     * pointer user's own "click Close" affordance. `<select>`'s own
+     * native `Return` behavior (committing an open dropdown's
+     * highlighted option) fires and closes its dropdown *before* this
+     * bubbles up to `dialog`, so closing the whole modal on the same
+     * keypress does not fight it.
      * @param {string} dialogId
      */
     wireModal(dialogId) {
@@ -214,24 +216,6 @@ const fim = {
     },
 
     /**
-     * Open one Configure section's modal by name (`modal-<name>`),
-     * wiring its close behavior on first use. The Configure menu's own
-     * dispatch target for every section §3.1.3 has not promoted to a
-     * direct value-selector leaf, and `screens/run-view-controls.js`'s
-     * own error-routing (an invalid field on "Run simulation") for the
-     * same set.
-     * @param {string} name
-     */
-    openConfigModal(name) {
-        const dialogId = `modal-${name}`;
-        window.fim.wireModal(dialogId);
-        const dialog = document.getElementById(dialogId);
-        if (dialog !== null) {
-            dialog.showModal();
-        }
-    },
-
-    /**
      * The native File/Run/Help menu bar's own dispatch target (in-app
      * help design §4.5) -- every native `MenuAction` callback in
      * `fim.gui.app._build_menu` calls exactly one `fim.menu.*` method
@@ -249,9 +233,6 @@ const fim = {
     menu: {
         newConfiguration() {
             // Overridden by screens/run-view-initial.js.
-        },
-        configureTab() {
-            // Overridden by screens/config-modals.js.
         },
         openConfiguration() {
             window.fim.showScreen("screen-run");
@@ -286,12 +267,14 @@ const fim = {
             window.fim.showHelp(topic);
         },
         async setSignificantDigits(digits) {
-            // Screen-agnostic (design §4.5's own "always clickable"
-            // table), unlike `configureTab`/`newConfiguration`: no
-            // screen owns "how many digits does the GUI display", so
-            // this calls the bridge directly rather than delegating to
-            // whichever screen is currently showing. Purely cosmetic
-            // and forward-looking (`Api.set_significant_digits`'s own
+            // Screen-agnostic: no screen owns "how many digits does the
+            // GUI display", so this calls the bridge directly rather
+            // than delegating to whichever screen is currently showing.
+            // Called both by the on-page Configure field
+            // (`config-modals.js`'s own `wireSignificantDigitsField`)
+            // and, before the botanist redesign, the native View menu's
+            // own quick-toggle submenu -- purely cosmetic and forward-
+            // looking either way (`Api.set_significant_digits`'s own
             // docstring: "no record" — nothing on disk changes, and an
             // already-showing `completed` view is not retroactively
             // reformatted, only the next run's own results).

@@ -67,7 +67,6 @@ from fim.engine import (
 from fim.gui import batch_runner, presets, recent_runs, runner
 from fim.gui.animation import pre_render_frames
 from fim.gui.config_form import (
-    CONVERGENCE_STATISTIC_NAMES,
     field_for_error,
     form_values_to_payload,
     m_from_params,
@@ -2547,48 +2546,29 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     return created
 
 
-_STATISTIC_SUBSCRIPT_LETTERS: Final[dict[str, str]] = {"S": "ₛ", "T": "ₜ"}
-
-
-def _statistic_menu_label(name: str) -> str:
-    """Render one `CONVERGENCE_STATISTIC_NAMES` entry for a native menu item.
-
-    Args:
-        name: A `CONVERGENCE_STATISTIC_NAMES` entry, e.g. `"G_ST"`.
-
-    Returns:
-        The name with its `_`-suffix (if any) rendered as true Unicode
-        subscript characters (`"G_ST"` -> `"Gₛₜ"`) instead of a literal
-        underscore — native menu items are plain text, so the `<sub>`
-        tags `index.html`'s own labels use for the identical purpose
-        are not available here; this is the closest plain-text
-        equivalent. Raises `KeyError` on a suffix letter with no
-        subscript mapping above, deliberately: every current statistic
-        name only ever needs `S`/`T`, so a future addition needing
-        something else should fail loudly here rather than silently
-        rendering a wrong or missing glyph.
-    """
-    base, _, suffix = name.partition("_")
-    if not suffix:
-        return base
-    return base + "".join(_STATISTIC_SUBSCRIPT_LETTERS[letter] for letter in suffix)
-
-
 def _build_menu(window: webview.Window) -> list[Menu]:
-    """Build the native File/Configure/Run/View/Help menu bar.
+    """Build the native File/Run/Help menu bar.
 
-    (`doc/fim-gui-design.md` §10.)
+    (Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+    redesign.md` §3.3, "What deliberately stops being a menu item.")
 
     Edit and Window are deliberately left out: every text field already
     gets native Cut/Copy/Paste from the WebView engine itself, and a
     Window menu has no app-specific value for a single-window tool.
-    Configure exists to declutter the input view's own canvas: the
-    six-tab bar that used
-    to be the only way to reach Population/Migration/Mutation/Initial
-    conditions/Convergence/Batch is now hidden (`app.css`'s own `.tab-
-    bar { display: none; }`), with this menu as the replacement entry
-    point — the tabs, panels, and every field inside them are otherwise
-    completely unchanged; only how you get to one is different.
+    Configure and View — a six-section menu plus a fourth-menu "System
+    digits" submenu, in this project's own pre-redesign shape — are
+    gone entirely, not merely renamed: every field either menu used to
+    reach (including the three former quick-toggle leaves, "Deme
+    weighting"/"Mutation model"/"Convergence statistic") now lives
+    directly on the always-visible Configure screen the rail reaches
+    (`webui/index.html`'s own two-panel `screen-configure`), reachable
+    the same way regardless of how quick a toggle it happens to be —
+    design principle 1's own "one model, one view," applied to the
+    whole menu bar, not only the four headline parameters. Significant
+    digits is the one setting that was never a `SimulationParams` field
+    at all (`Api.set_significant_digits`'s own docstring); it now lives
+    on that same screen as an ordinary, non-form field
+    (`config-modals.js`'s own `wireSignificantDigitsField`).
 
     Every item except Quit is a thin closure calling `window.evaluate_js(
     "fim.menu.X()")` — the identical "no-op stub, overridden by whichever
@@ -2600,17 +2580,6 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     that already exists, not new logic. Quit
     alone needs no JS round trip — `window.destroy()` is a window-level
     call, not app state.
-
-    The View menu's own "Significant digits" submenu, and Configure's
-    own "Deme weighting"/"Mutation model"/"Convergence statistic"
-    submenus, are this menu's exception
-    to "no new Python business logic": each item is a fixed literal
-    value, not a reflection of whatever is currently selected —
-    pywebview's own `MenuAction` has no portable, dynamic checkmark/
-    label-update support to show that back, so none of these four
-    submenus (unlike every other item here) can indicate the current
-    choice; the setting itself is still fully real, only its on-menu
-    display is not.
     """
 
     def dispatch(script: str) -> Callable[[], None]:
@@ -2650,86 +2619,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
                 "Reveal output folder", dispatch("fim.menu.revealOutputFolder()")
             ),
             MenuSeparator(),
-            MenuAction("Explore predictions…", dispatch("fim.menu.explore()")),
-            MenuAction("Compare runs…", dispatch("fim.menu.compareRuns()")),
-            MenuSeparator(),
             MenuAction("Quit fim", window.destroy),
-        ],
-    )
-    # `(tab id, menu label)` pairs, in the exact order `index.html`'s
-    # own (now-hidden) tab bar used — one native `MenuAction` per
-    # section, each just asking `fim.menu.configureTab` (`screens/
-    # input.js`) to open that section's own `modal-<id>` dialog over
-    # whatever the run view currently shows (doc/fim-gui-design.md §5)
-    # — the same modal an invalid field on "Run simulation" opens for
-    # the "jump to the invalid section" case — no second, menu-only
-    # navigation path.
-    configure_tabs = (
-        ("population", "Population"),
-        ("migration", "Migration"),
-        ("mutation", "Mutation"),
-        ("initial_conditions", "Initial conditions"),
-        ("convergence", "Convergence"),
-        ("batch", "Batch"),
-    )
-    # Direct value-selector leaves, the starting set for this menu.
-    # `deme_weighting`/
-    # `mutation_model` are genuinely categorical — one `MenuAction` per
-    # legal value, `View > Significant digits`-shaped, toggling that one
-    # field directly with no modal opened. Convergence statistic is not:
-    # the field is a *set* (any combination of the six, ANDed/ORed via
-    # `convergence_combinator`), not a single choice, so a menu that
-    # instead picked one exclusively would silently discard whatever
-    # multi-statistic combination the Convergence modal already has
-    # configured on a single errant click — a real, easy-to-trigger
-    # data-loss risk, not merely a UX nitpick. Each leaf here toggles one
-    # statistic's own membership in that set instead, correctly matching
-    # the field's actual semantics (as with Significant digits, there is
-    # no dynamic checkmark to show which are currently on — see this
-    # function's own docstring for why).
-    configure_menu = Menu(
-        "Configure",
-        [
-            *(
-                MenuAction(
-                    label, dispatch(f"fim.menu.configureTab({json.dumps(tab_id)})")
-                )
-                for tab_id, label in configure_tabs
-            ),
-            MenuSeparator(),
-            Menu(
-                "Deme weighting",
-                [
-                    MenuAction(
-                        value,
-                        dispatch(f"fim.menu.setDemeWeighting({json.dumps(value)})"),
-                    )
-                    for value in ("size", "equal")
-                ],
-            ),
-            Menu(
-                "Mutation model",
-                [
-                    MenuAction(
-                        value,
-                        dispatch(f"fim.menu.setMutationModel({json.dumps(value)})"),
-                    )
-                    for value in ("infinite_alleles", "finite_alleles")
-                ],
-            ),
-            Menu(
-                "Convergence statistic",
-                [
-                    MenuAction(
-                        _statistic_menu_label(name),
-                        dispatch(
-                            "fim.menu.toggleConvergenceStatistic("
-                            f"{json.dumps(f'cs_{name}')})"
-                        ),
-                    )
-                    for name in CONVERGENCE_STATISTIC_NAMES
-                ],
-            ),
         ],
     )
     # No "Animate" item (`doc/fim-gui-design.md` §5.1): the
@@ -2740,41 +2630,6 @@ def _build_menu(window: webview.Window) -> list[Menu]:
         [
             MenuAction("Run simulation", dispatch("fim.menu.runSimulation()")),
             MenuAction("Cancel run", dispatch("fim.menu.cancelRun()")),
-        ],
-    )
-    # Literal digit counts, not a live reflection of `Api._significant_
-    # digits` — see `_build_menu`'s own docstring for why. `3`
-    # (`_DEFAULT_DISPLAY_SIGNIFICANT_DIGITS`, spelled out rather than
-    # interpolated so this list reads the same as every other menu item
-    # here: a plain literal, not a runtime-computed label) carries no
-    # "(default)" annotation — every title anywhere in this menu tree
-    # must stay free of `(`/`)` (`test_app_api.py`'s own `test_no_menu_
-    # title_contains_a_paren`, added after a real, confirmed crash: the
-    # GTK/Linux pywebview backend derives a native "detailed action
-    # name" straight from a menu item's own label text and hands it to
-    # `g_menu_item_set_detailed_action`, which parses anything after an
-    # opening paren as GVariant target syntax — `"3 (default)"` produced
-    # `g_menu_item_set_detailed_action: ... 'app._View_Significant_
-    # digits_3_(default)' has invalid format: 0-7:unknown keyword`, a
-    # fatal `GLib-GIO-ERROR` that aborted the whole process
-    # (`Trace/breakpoint trap (core dumped)`) — not a Python exception,
-    # not caught by anything, and invisible on macOS/Windows, where
-    # this was written and tested (CI's own `linux-beta-x64` smoke test
-    # is what actually caught it).
-    view_menu = Menu(
-        "View",
-        [
-            Menu(
-                "Significant digits",
-                [
-                    MenuAction("2", dispatch("fim.menu.setSignificantDigits(2)")),
-                    MenuAction("3", dispatch("fim.menu.setSignificantDigits(3)")),
-                    MenuAction("4", dispatch("fim.menu.setSignificantDigits(4)")),
-                    MenuAction("5", dispatch("fim.menu.setSignificantDigits(5)")),
-                    MenuAction("6", dispatch("fim.menu.setSignificantDigits(6)")),
-                    MenuAction("8", dispatch("fim.menu.setSignificantDigits(8)")),
-                ],
-            ),
         ],
     )
     help_menu = Menu(
@@ -2794,7 +2649,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
             MenuAction("About fim", dispatch("fim.menu.about()")),
         ],
     )
-    return [file_menu, configure_menu, run_menu, view_menu, help_menu]
+    return [file_menu, run_menu, help_menu]
 
 
 def shutdown_timeout() -> float:
