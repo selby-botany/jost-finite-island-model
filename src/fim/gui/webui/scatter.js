@@ -2,20 +2,25 @@
 
 /* Dependency-free Canvas 2D scatter renderer (design doc §3.5, §3.10;
  * extended by `20260822-claude-sonnet-5-visualization-and-config-
- * editors-design.md` §3.1-§3.2, and again by the axis-domain fix below).
+ * editors-design.md` §3.1-§3.2, the axis-domain fix below, and the
+ * botanist GUI redesign doc `20260907-claude-sonnet-5-botanist-gui-
+ * redesign.md` §7.4's own ring-marker shape).
  *
  * Draws exactly what `fim.viz.scatter.marker_groups` already computes:
  * one point per unique (x, y) coordinate, sized by how many source rows
  * landed on it (`30 + 18*sqrt(count)`, matching the CLI's own
  * `plot_frequency_scatter` marker-size formula so the GUI's live view
- * and the CLI's saved `scatter.png` read the same way), colored
- * `tab:blue` for the most frequent allele in either displayed deme and
- * `tab:orange` for other alleles, and
- * labeled with its own coincidence count once it exceeds one -- the
- * exact visual encoding the reference visualization
- * (`Dear-NolanMarch17Final.pdf` Figs. 1-2) uses (design §0.5), now
- * including that same reference's own `0.0`-`1.0` probability-scale
- * tick marks on both axes for a genuine deme-frequency panel.
+ * and the CLI's saved `scatter.png` read the same way), and labeled
+ * with its own coincidence count once it exceeds one -- the exact
+ * visual encoding the reference visualization (`Dear-NolanMarch17Final.
+ * pdf` Figs. 1-2) uses (design §0.5), now including that same
+ * reference's own `0.0`-`1.0` probability-scale tick marks on both axes
+ * for a genuine deme-frequency panel. The most frequent allele in
+ * either displayed deme draws as a hollow `tab:blue` ring, not merely a
+ * differently colored disc: color alone distinguishing "most frequent"
+ * from "other" was itself once a reported defect (§11.4's own "color is
+ * never the only channel" principle) -- other alleles stay ordinary
+ * filled `tab:orange` dots.
  *
  * `panel.kind` (`fim.viz.scatter._panel`'s own field) decides the axis
  * domain: `"frequency"` (the default, and the only `kind` the run view
@@ -254,13 +259,25 @@ function drawScatterCell(context, rect, panel, opts) {
             (MARKER_BASE_RADIUS + MARKER_COUNT_SCALE * Math.sqrt(point.count));
         context.beginPath();
         context.arc(cx, cy, radius, 0, 2 * Math.PI);
-        context.fillStyle = point.common ? COLOR_COMMON : COLOR_RARE;
-        context.globalAlpha = 0.75;
-        context.fill();
-        context.globalAlpha = 1;
-        context.strokeStyle = "#000000";
-        context.lineWidth = 0.4;
-        context.stroke();
+        if (point.common) {
+            // A hollow ring, not merely a differently colored disc
+            // (`fim.viz.scatter`'s own `_scatter_on_axis` docstring):
+            // color is never the only channel distinguishing "most
+            // frequent" from "other" here.
+            context.lineWidth = Math.max(2, radius * 0.35);
+            context.strokeStyle = COLOR_COMMON;
+            context.globalAlpha = 0.9;
+            context.stroke();
+            context.globalAlpha = 1;
+        } else {
+            context.fillStyle = COLOR_RARE;
+            context.globalAlpha = 0.75;
+            context.fill();
+            context.globalAlpha = 1;
+            context.strokeStyle = "#000000";
+            context.lineWidth = 0.4;
+            context.stroke();
+        }
         if (point.count > 1 && !compact) {
             context.fillStyle = "#1a1a1a";
             context.font = `${opts.tickFontSize}px -apple-system, sans-serif`;
@@ -303,10 +320,6 @@ function drawScatterCell(context, rect, panel, opts) {
  * @param {number} fontSize Tick font size, reused for legend text.
  */
 function drawMarkerLegend(context, originX, originY, plotSize, fontSize) {
-    const entries = [
-        [COLOR_COMMON, "Most frequent allele in either deme (ties: first)"],
-        [COLOR_RARE, "Other alleles"],
-    ];
     const lineHeight = fontSize + 4;
     // Top-left of the plot area: the `x=y` diagonal runs corner to
     // corner, so the upper-left is the region least likely to sit on top
@@ -317,23 +330,43 @@ function drawMarkerLegend(context, originX, originY, plotSize, fontSize) {
     context.font = `${fontSize}px -apple-system, sans-serif`;
     context.textAlign = "left";
     context.textBaseline = "middle";
-    for (const [color, label] of entries) {
-        const swatchX = originX + 6;
-        const radius = fontSize * 0.35;
-        context.beginPath();
-        context.arc(swatchX + radius, y, radius, 0, 2 * Math.PI);
-        context.fillStyle = color;
-        context.globalAlpha = 0.75;
-        context.fill();
-        context.globalAlpha = 1;
-        context.strokeStyle = "#000000";
-        context.lineWidth = 0.4;
-        context.stroke();
 
-        context.fillStyle = "#1a1a1a";
-        context.fillText(label, swatchX + 2 * radius + 5, y);
-        y += lineHeight;
-    }
+    // Common: a hollow-ring swatch, matching the shape actually drawn
+    // above -- not a filled disc like the "Other alleles" swatch below,
+    // the same reasoning `fim.viz.scatter._add_marker_legend` uses its
+    // own `Line2D` (rather than `Patch`) handle for.
+    const commonRadius = fontSize * 0.35;
+    const commonSwatchX = originX + 6;
+    context.beginPath();
+    context.arc(commonSwatchX + commonRadius, y, commonRadius, 0, 2 * Math.PI);
+    context.lineWidth = Math.max(1.5, commonRadius * 0.5);
+    context.strokeStyle = COLOR_COMMON;
+    context.globalAlpha = 0.9;
+    context.stroke();
+    context.globalAlpha = 1;
+    context.fillStyle = "#1a1a1a";
+    context.fillText(
+        "Most frequent allele in either deme (ring; ties: first)",
+        commonSwatchX + 2 * commonRadius + 5,
+        y
+    );
+    y += lineHeight;
+
+    // Rare: an ordinary filled dot.
+    const rareRadius = fontSize * 0.35;
+    const rareSwatchX = originX + 6;
+    context.beginPath();
+    context.arc(rareSwatchX + rareRadius, y, rareRadius, 0, 2 * Math.PI);
+    context.fillStyle = COLOR_RARE;
+    context.globalAlpha = 0.75;
+    context.fill();
+    context.globalAlpha = 1;
+    context.strokeStyle = "#000000";
+    context.lineWidth = 0.4;
+    context.stroke();
+    context.fillStyle = "#1a1a1a";
+    context.fillText("Other alleles", rareSwatchX + 2 * rareRadius + 5, y);
+
     context.restore();
 }
 

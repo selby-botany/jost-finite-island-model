@@ -147,7 +147,10 @@ def test_deme_pair_selector_permits_a_self_comparison_and_shows_a_note(
     distinct value whenever the two matched. This proves the current
     one leaves a same-deme selection exactly as chosen, and surfaces it
     with a visible note (`run-deme-pair-self-note`) rather than leaving
-    it unlabeled.
+    it unlabeled. The note's own text is design §7.3's own "changes the
+    plot's own caption to name what is being shown" -- naming the
+    specific deme and explaining what a self-comparison plot means, not
+    only that one is showing.
     """
     settled = drive(
         window,
@@ -162,7 +165,8 @@ def test_deme_pair_selector_permits_a_self_comparison_and_shows_a_note(
             "({"
             "xValue: document.getElementById('run-x-deme').value, "
             "yValue: document.getElementById('run-y-deme').value, "
-            "noteHidden: document.getElementById('run-deme-pair-self-note').hidden"
+            "noteHidden: document.getElementById('run-deme-pair-self-note').hidden, "
+            "noteText: document.getElementById('run-deme-pair-self-note').textContent"
             "})"
         ),
         is_ready=lambda value: value is not None and value.get("noteHidden") is False,
@@ -171,6 +175,8 @@ def test_deme_pair_selector_permits_a_self_comparison_and_shows_a_note(
 
     assert settled["xValue"] == settled["yValue"]
     assert settled["noteHidden"] is False
+    assert settled["noteText"].startswith(f"Deme {settled['xValue']} vs. itself")
+    assert "sampling noise" in settled["noteText"]
 
 
 def test_input_screen_invalid_value_disables_the_run_button(

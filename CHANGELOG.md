@@ -126,6 +126,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The scatter plot's "most frequent allele" marker (`scatter.png` and
+  the GUI's own live view alike) now draws as a hollow ring, not merely
+  a differently colored disc — design principle 5/§11.4 (botanist GUI
+  redesign doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`):
+  color alone distinguishing two states is itself the shape the
+  original "two blue dots" defect took, and remains one even after that
+  defect's own root cause (a 5%-threshold flag, replaced by
+  deterministic per-deme selection) was fixed. The self-comparison note
+  on the deme-pair selector (design §7.3) now states what a self-
+  comparison plot actually means — "Deme 3 vs. itself — under no
+  differentiation, every point should fall on the diagonal; spread away
+  from it reflects sampling noise at this population size, not a
+  modeling error" — not merely that one is showing, on its own caption
+  line beneath the plot rather than the axis selectors' own narrow
+  corner cell.
 - `Api.get_initial_form` (`fim gui`'s own fresh-launch form loader) no
   longer crashes silently when a saved `preferences.json` predates a
   form field added since it was written — confirmed live with a real

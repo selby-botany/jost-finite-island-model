@@ -122,7 +122,12 @@ const fim = {
      * open-issues doc): a self-comparison is a deliberate, useful
      * diagonal baseline (`fim.viz.scatter.deme_pair_panel`'s own
      * docstring), not a mistake to silently correct on the user's
-     * behalf the way an earlier version of this function did.
+     * behalf the way an earlier version of this function did. Botanist
+     * GUI redesign doc `20260907-claude-sonnet-5-botanist-gui-redesign.
+     * md` §7.3 goes one step further: `selfComparisonNote` states what
+     * a self-comparison plot actually means, not merely that one is
+     * showing, turning it into the deliberate teaching tool the
+     * botanist described wanting it for.
      *
      * @param {Object} config
      * @param {HTMLSelectElement} config.xSelect
@@ -154,7 +159,15 @@ const fim = {
         ySelect.value = "2";
 
         function updateSelfComparisonNote() {
-            selfComparisonNote.hidden = xSelect.value !== ySelect.value;
+            const isSelfComparison = xSelect.value === ySelect.value;
+            selfComparisonNote.hidden = !isSelfComparison;
+            if (isSelfComparison) {
+                selfComparisonNote.textContent =
+                    `Deme ${xSelect.value} vs. itself — under no differentiation, ` +
+                    "every point should fall on the diagonal; spread away from it " +
+                    "reflects sampling noise at this population size, not a " +
+                    "modeling error.";
+            }
         }
 
         async function applyPairSelection() {

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from matplotlib import colors as mcolors
 from matplotlib import pyplot as plt
 from matplotlib.collections import PathCollection
 from mpl_toolkits.mplot3d import Axes3D
@@ -201,7 +202,17 @@ def test_pca_projection_handles_a_single_point_without_svd() -> None:
 
 
 def test_coincident_common_and_rare_points_are_grouped_and_labeled() -> None:
-    """Repeated coordinates scale markers, show counts, and retain two colors."""
+    """Repeated coordinates scale markers, show counts, and retain two marker styles.
+
+    One common (ring) and one rare (filled) group -- both loci's own
+    allele-0 frequency ties at 0.99 in both demes, so `_highlighted_
+    indices`' `argmax` picks that coordinate as each deme's own top
+    allele; allele-1's own (0.01, 0.01) coordinate is not selected.
+    `_scatter_on_axis` draws the two groups as two separate `axis.
+    scatter` calls (`fim.viz.scatter` module docstring: matplotlib has
+    no per-point marker-*style* argument), so this now checks two
+    collections rather than one collection with two facecolors.
+    """
     loci = (LocusSpec(1, 100), LocusSpec(2, 100))
     state = ModelState(
         loci=loci,
@@ -216,21 +227,29 @@ def test_coincident_common_and_rare_points_are_grouped_and_labeled() -> None:
 
     figure = plot_frequency_scatter(state, _params(2))
     axis = figure.axes[0]
-    markers = axis.collections[0]
     # `Axes.collections` is stub-typed as the base `Collection`; narrowing
     # to `PathCollection` (what `Axes.scatter` actually returns) both
     # satisfies mypy and asserts this really is a scatter layer.
-    assert isinstance(markers, PathCollection)
+    assert len(axis.collections) == 2
+    rare_markers, common_markers = axis.collections
+    assert isinstance(rare_markers, PathCollection)
+    assert isinstance(common_markers, PathCollection)
 
-    assert len(markers.get_sizes()) == 2
-    # `get_facecolors` is a real matplotlib `_api.define_aliases`-generated
-    # alias for `get_facecolor` — identical at runtime, invisible to the
-    # stubs, which declare only the singular name (and with a broader,
-    # single-or-many-colors return type unhelpful for this specific
-    # known-plural case). One targeted ignore, not a suppression of a
-    # genuine issue.
-    facecolors = markers.get_facecolors()  # type: ignore[attr-defined]
-    assert len({tuple(color[:3]) for color in facecolors}) == 2
+    assert len(rare_markers.get_sizes()) == 1
+    assert len(common_markers.get_sizes()) == 1
+    # `get_facecolors`/`get_edgecolors` are real matplotlib `_api.
+    # define_aliases`-generated aliases for the singular names —
+    # identical at runtime, invisible to the stubs, which declare only
+    # the singular name (and with a broader, single-or-many-colors
+    # return type unhelpful for this specific known-plural case). Two
+    # targeted ignores, not a suppression of a genuine issue.
+    rare_facecolors = rare_markers.get_facecolors()  # type: ignore[attr-defined]
+    assert len(rare_facecolors) == 1 and rare_facecolors[0][3] > 0  # filled, not hollow
+    common_facecolors = common_markers.get_facecolors()  # type: ignore[attr-defined]
+    # `facecolors="none"` -- the ring's own hollow center.
+    assert len(common_facecolors) == 0
+    common_edgecolors = common_markers.get_edgecolors()  # type: ignore[attr-defined]
+    assert tuple(common_edgecolors[0][:3]) == mcolors.to_rgb("tab:blue")
     assert {text.get_text() for text in axis.texts} == {"2"}
     plt.close(figure)
 
@@ -393,7 +412,7 @@ def test_marker_legend_states_the_tie_breaking_rule() -> None:
     assert legend is not None
     labels = [text.get_text() for text in legend.get_texts()]
     assert labels == [
-        "Most frequent allele in either deme (ties: first)",
+        "Most frequent allele in either deme (ring; ties: first)",
         "Other alleles",
     ]
     plt.close(figure)

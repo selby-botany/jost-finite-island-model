@@ -7790,7 +7790,10 @@ P1 item 6 of the 2026-09-06 open-issues doc: an earlier version of
 distinct value whenever the two matched. This proves the current
 one leaves a same-deme selection exactly as chosen, and surfaces it
 with a visible note (`run-deme-pair-self-note`) rather than leaving
-it unlabeled.
+it unlabeled. The note's own text is design §7.3's own "changes the
+plot's own caption to name what is being shown" -- naming the
+specific deme and explaining what a self-comparison plot means, not
+only that one is showing.
 
 <a id="gui.test_input_screen.test_input_screen_invalid_value_disables_the_run_button"></a>
 
@@ -18258,7 +18261,16 @@ whole state to exactly one point.
 def test_coincident_common_and_rare_points_are_grouped_and_labeled() -> None
 ```
 
-Repeated coordinates scale markers, show counts, and retain two colors.
+Repeated coordinates scale markers, show counts, and retain two marker styles.
+
+One common (ring) and one rare (filled) group -- both loci's own
+allele-0 frequency ties at 0.99 in both demes, so `_highlighted_
+indices`' `argmax` picks that coordinate as each deme's own top
+allele; allele-1's own (0.01, 0.01) coordinate is not selected.
+`_scatter_on_axis` draws the two groups as two separate `axis.
+scatter` calls (`fim.viz.scatter` module docstring: matplotlib has
+no per-point marker-*style* argument), so this now checks two
+collections rather than one collection with two facecolors.
 
 <a id="viz.test_plots.test_diagnostic_views_have_one_trace_and_one_bar_per_deme"></a>
 

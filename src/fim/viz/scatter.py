@@ -16,6 +16,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from numpy.typing import NDArray
 
@@ -582,11 +583,28 @@ def _plot_three_dimensional(points: FloatArray) -> Figure:
     figure = plt.figure(figsize=(8, 7))
     axis = cast(Any, figure.add_subplot(111, projection="3d"))
     highlighted = _highlighted_indices(points[:, 0], points[:, 1], points[:, 2])
-    colors = [
-        "tab:blue" if index in highlighted else "tab:orange"
-        for index in range(len(points))
-    ]
-    axis.scatter(points[:, 0], points[:, 1], points[:, 2], c=colors, alpha=0.75)
+    rare = [index for index in range(len(points)) if index not in highlighted]
+    common = [index for index in range(len(points)) if index in highlighted]
+    # Two calls, one marker shape each -- matching `_scatter_on_axis`'s
+    # own reasoning (this module's own docstring on why a hollow ring,
+    # not merely a second color, marks the common points).
+    if rare:
+        axis.scatter(
+            points[rare, 0],
+            points[rare, 1],
+            points[rare, 2],
+            c="tab:orange",
+            alpha=0.75,
+        )
+    if common:
+        axis.scatter(
+            points[common, 0],
+            points[common, 1],
+            points[common, 2],
+            facecolors="none",
+            edgecolors="tab:blue",
+            linewidths=2.0,
+        )
     axis.set_xlabel("Deme 1")
     axis.set_ylabel("Deme 2")
     axis.set_zlabel("Deme 3")
@@ -614,7 +632,20 @@ def _scatter_on_axis(
     reference: bool = True,
     highlight: bool = True,
 ) -> None:
-    """Render grouped points, coincidence labels, and optional diagonal."""
+    """Render grouped points, coincidence labels, and optional diagonal.
+
+    Common (most-frequent-per-deme) points render as a hollow ring, not
+    merely a differently colored disc: two separate `axis.scatter` calls
+    -- matplotlib has no per-point marker-*style* argument, only per-
+    point color/size -- since design principle 5.4/§11.4 (botanist GUI
+    redesign doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`)
+    requires color never be the only channel distinguishing two states.
+    `marker_groups`'s own `colors` list is reused to decide which rows
+    go in which call (`"tab:blue"` means common — `grouped_points`'s own
+    literal, checked by value rather than threading a second boolean
+    array through the public `marker_groups` return shape, which several
+    external callers already depend on unchanged).
+    """
     coordinates = tuple(
         (float(x), float(y)) for x, y in zip(horizontal, vertical, strict=True)
     )
@@ -625,15 +656,27 @@ def _scatter_on_axis(
         coordinates,
         highlighted_indices=highlighted,
     )
-    axis.scatter(
-        unique[:, 0],
-        unique[:, 1],
-        s=sizes,
-        c=colors,
-        alpha=0.75,
-        edgecolors="black",
-        linewidths=0.4,
-    )
+    rare = [index for index, color in enumerate(colors) if color != "tab:blue"]
+    common = [index for index, color in enumerate(colors) if color == "tab:blue"]
+    if rare:
+        axis.scatter(
+            unique[rare, 0],
+            unique[rare, 1],
+            s=sizes[rare],
+            c="tab:orange",
+            alpha=0.75,
+            edgecolors="black",
+            linewidths=0.4,
+        )
+    if common:
+        axis.scatter(
+            unique[common, 0],
+            unique[common, 1],
+            s=sizes[common],
+            facecolors="none",
+            edgecolors="tab:blue",
+            linewidths=2.0,
+        )
     for point, label in zip(unique, labels, strict=True):
         if label:
             axis.annotate(
@@ -648,12 +691,20 @@ def _scatter_on_axis(
 
 
 def _add_marker_legend(axis: Axes) -> None:
-    """Add the shared explanation for the scatter-marker colors.
+    """Add the shared explanation for the scatter-marker shapes.
 
     The tie rule is stated in the legend itself rather than only in this
-    module's docstrings: a viewer looking at one blue marker where two
+    module's docstrings: a viewer looking at one ring marker where two
     alleles are equally most frequent can otherwise only guess whether the
     plot is picking one deliberately or has lost the other.
+
+    A `Line2D` handle for the ring entry, not a `Patch` like the plain
+    "Other alleles" swatch below it -- `Patch` has no hollow-marker
+    shape of its own; `Line2D`'s own `marker`/`markerfacecolor`/
+    `markeredgecolor` is the standard matplotlib idiom for a legend
+    swatch that is not simply a filled color block, matching what
+    `_scatter_on_axis`/`_plot_three_dimensional` actually draw for a
+    common point.
 
     Worded identically to `drawMarkerLegend` in `webui/scatter.js`, so the
     saved `scatter.png` and the on-screen plot explain themselves the same
@@ -661,9 +712,16 @@ def _add_marker_legend(axis: Axes) -> None:
     """
     axis.legend(
         handles=[
-            Patch(
-                color="tab:blue",
-                label="Most frequent allele in either deme (ties: first)",
+            Line2D(
+                [],
+                [],
+                marker="o",
+                linestyle="None",
+                markerfacecolor="none",
+                markeredgecolor="tab:blue",
+                markeredgewidth=2,
+                markersize=9,
+                label="Most frequent allele in either deme (ring; ties: first)",
             ),
             Patch(color="tab:orange", label="Other alleles"),
         ],

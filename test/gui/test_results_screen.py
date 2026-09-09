@@ -272,7 +272,7 @@ def test_completed_scatter_draws_the_marker_color_legend(
     )
 
     drawn = settled["drawn"]
-    assert "Most frequent allele in either deme (ties: first)" in drawn
+    assert "Most frequent allele in either deme (ring; ties: first)" in drawn
     assert "Other alleles" in drawn
 
 
