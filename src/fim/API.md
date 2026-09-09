@@ -91,6 +91,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [list\_presets](#fim.gui.app.Api.list_presets)
     * [get\_preset\_form\_values](#fim.gui.app.Api.get_preset_form_values)
+    * [get\_preset\_yaml](#fim.gui.app.Api.get_preset_yaml)
     * [save\_current\_as\_preset](#fim.gui.app.Api.save_current_as_preset)
     * [delete\_user\_preset](#fim.gui.app.Api.delete_user_preset)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
@@ -3235,6 +3236,49 @@ Return one preset's own form values, ready for `applyFormValues`.
   can stop validating later only if a range this project
   itself enforces changed in the meantime, not through any
   fault of the saved file itself.
+
+<a id="fim.gui.app.Api.get_preset_yaml"></a>
+
+#### get\_preset\_yaml
+
+```python
+@_log_bridge_call
+def get_preset_yaml(preset_id: str) -> dict[str, Any]
+```
+
+Return one preset's own configuration as plain-text YAML.
+
+Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §10: "every worked example ... is available in-app
+as a preset (§4.5) *and* as a plain-text YAML view with a Copy
+to clipboard action, so a user who wants the file (to hand-edit,
+to script against, to share with a co-author) never has to leave
+the app to get it." Applies uniformly to a user-saved preset
+too — the same underlying mechanism, `payload_to_yaml_text`,
+already produces a `fim run`-compatible document from any valid
+form values regardless of where they came from (`save_yaml`'s
+own identical call, just against the live form instead of a
+saved preset).
+
+**Arguments**:
+
+- `preset_id` - A `preset_id` from a prior `list_presets` call —
+  either a built-in slug or a `"user:<name>"` id.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "title": ..., "yaml": "..."}` on success — a
+  built-in preset's own `yaml_text` is returned exactly as
+  `doc/usage.md` presents it, unparsed and unreformatted; a
+  user-saved preset's own values are rendered fresh through
+  `payload_to_yaml_text`, in `configuration.md`'s own key
+  order, matching what "Save current as…" would write to a
+  file today. `{"ok": False, "message": ...}` if `preset_id`
+  names no known preset, or (user-saved only) if its
+  configuration no longer validates — the identical failure
+  mode `get_preset_form_values` already reports for the same
+  reason.
 
 <a id="fim.gui.app.Api.save_current_as_preset"></a>
 

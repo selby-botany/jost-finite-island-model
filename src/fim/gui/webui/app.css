@@ -827,7 +827,8 @@ fieldset.composite > label {
     flex: 1;
 }
 
-.presets-list .presets-delete-button {
+.presets-list .presets-delete-button,
+.presets-list .presets-view-yaml-button {
     width: auto;
     flex: none;
     color: var(--fim-muted);
@@ -835,6 +836,32 @@ fieldset.composite > label {
 
 .presets-list button:hover {
     background: var(--fim-border);
+}
+
+/* The examples library's plain-text half (`modal-preset-yaml`, design
+ * doc §10) -- wider than the base `.config-modal` (26rem is too narrow
+ * for a readable line of YAML) and its own monospace font, matching no
+ * other element on this page today (no `--fim-font`-style monospace
+ * token exists yet; local to this one read-only view, not a stand-in
+ * for design principle §11.1's still-unaddressed "monospaced numeral
+ * font for every numeric field" -- a separate, broader change). */
+#modal-preset-yaml {
+    max-width: 40rem;
+}
+
+.preset-yaml-text {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    color: var(--fim-foreground);
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
 }
 
 /* The migration-matrix grid editor (`m-matrix-fields`) -- a scrollable

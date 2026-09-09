@@ -134,6 +134,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `GuiPreferences.welcome_dismissed` field, persisted the same way
   `dark_mode_override`/significant digits already are; it never
   reappears on a later launch once dismissed.
+- `fim gui`'s Presets picker gains a "View YAML" button on every row,
+  built-in and user-saved alike, opening a plain-text YAML view of that
+  preset's own configuration with a "Copy to clipboard" action (design
+  §10's "examples library": "every worked example ... is available
+  in-app as a preset *and* as a plain-text YAML view with a Copy to
+  clipboard action, so a user who wants the file ... never has to leave
+  the app to get it"). A built-in preset shows its own bundled YAML
+  text unmodified; a user-saved preset renders fresh through the same
+  `payload_to_yaml_text` "Save current as…"/"Save YAML…" already use,
+  so what is shown always matches what saving to a file would produce.
 
 ### Changed
 

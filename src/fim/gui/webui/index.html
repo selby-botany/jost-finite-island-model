@@ -894,6 +894,24 @@
     </div>
   </dialog>
 
+  <!-- Examples library, plain-text half (botanist GUI design doc §10:
+       "every worked example ... is available in-app as a preset (§4.5)
+       *and* as a plain-text YAML view with a Copy to clipboard action,
+       so a user who wants the file ... never has to leave the app to
+       get it"). Opened from a "View YAML" button beside each `modal-
+       presets` row (`screens/presets.js`); reused unmodified for a
+       user-saved preset too, since `Api.get_preset_yaml` renders both
+       through the same `payload_to_yaml_text`. -->
+  <dialog class="config-modal" id="modal-preset-yaml">
+    <h2 id="preset-yaml-title">Configuration</h2>
+    <textarea id="preset-yaml-text" class="preset-yaml-text" readonly rows="20"></textarea>
+    <p class="hint" id="preset-yaml-copied-note" hidden>Copied to clipboard.</p>
+    <div class="actions">
+      <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
+      <button type="button" id="preset-yaml-copy-button" tabindex="0">Copy to clipboard</button>
+    </div>
+  </dialog>
+
   <!-- Save current as… (botanist GUI design doc §4.7's own Accept/
        Cancel discipline): a native `<form method="dialog">` closes with
        `dialog.returnValue` set to whichever submit button's own

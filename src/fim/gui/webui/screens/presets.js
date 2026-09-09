@@ -31,6 +31,11 @@ const savePresetForm = document.getElementById("save-preset-form");
 const savePresetNameInput = document.getElementById("save-preset-name");
 const savePresetError = document.getElementById("save-preset-error");
 const savePresetCancelButton = document.getElementById("save-preset-cancel-button");
+const presetYamlDialog = document.getElementById("modal-preset-yaml");
+const presetYamlTitle = document.getElementById("preset-yaml-title");
+const presetYamlText = document.getElementById("preset-yaml-text");
+const presetYamlCopiedNote = document.getElementById("preset-yaml-copied-note");
+const presetYamlCopyButton = document.getElementById("preset-yaml-copy-button");
 
 const USER_PRESET_ID_PREFIX = "user:";
 
@@ -68,6 +73,22 @@ async function refreshPresetsList() {
         openButton.textContent = preset.title;
         openButton.addEventListener("click", () => applyPreset(preset.id));
         item.appendChild(openButton);
+        // Every preset, built-in or user-saved alike, gets a "View
+        // YAML" affordance (design §10's own "examples library" --
+        // built-in and user-saved presets share the identical `Api.
+        // get_preset_yaml` mechanism, so there is no reason to offer
+        // this for one kind and not the other).
+        const viewYamlButton = document.createElement("button");
+        viewYamlButton.type = "button";
+        viewYamlButton.tabIndex = 0;
+        viewYamlButton.className = "presets-view-yaml-button";
+        viewYamlButton.textContent = "View YAML";
+        viewYamlButton.setAttribute("aria-label", `View "${preset.title}" as YAML`);
+        viewYamlButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            showPresetYaml(preset.id);
+        });
+        item.appendChild(viewYamlButton);
         // Only a user-saved preset can be deleted -- a built-in worked
         // example ships with the app and has no delete affordance at
         // all, the same "read-only" distinction `fim.gui.presets`'s own
@@ -113,6 +134,47 @@ async function applyPreset(presetId) {
         window.fim.renderInitialPreview();
     }
 }
+
+// Set once `showPresetYaml`'s own bridge call has settled and the
+// dialog is genuinely showing the requested preset's own text --
+// `window.__fimXReady`-flag precedent (`__fimPresetsListReady`, above)
+// for the same reason: a test polling only "is the dialog open" could
+// otherwise observe it open with the *previous* preset's text still in
+// the textarea, in the narrow window before this async call resolves.
+window.__fimPresetYamlReady = false;
+
+/**
+ * Fetch one preset's own YAML text and show it in `modal-preset-yaml`.
+ * @param {string} presetId
+ */
+async function showPresetYaml(presetId) {
+    window.__fimPresetYamlReady = false;
+    const result = await window.pywebview.api.get_preset_yaml(presetId);
+    if (!result.ok) {
+        window.alert(`Could not load this example: ${result.message}`);
+        return;
+    }
+    presetYamlTitle.textContent = result.title;
+    presetYamlText.value = result.yaml;
+    presetYamlCopiedNote.hidden = true;
+    window.fim.wireModal("modal-preset-yaml");
+    presetYamlDialog.showModal();
+    window.__fimPresetYamlReady = true;
+}
+
+// Set once a "Copy to clipboard" click has actually finished writing --
+// same flag idiom as `__fimPresetYamlReady` above, for the identical
+// reason: `navigator.clipboard.writeText` is itself async, and a test
+// clicking this button needs a real signal to wait on rather than
+// guessing how long a clipboard write takes.
+window.__fimPresetYamlCopyReady = false;
+
+presetYamlCopyButton.addEventListener("click", async () => {
+    window.__fimPresetYamlCopyReady = false;
+    await navigator.clipboard.writeText(presetYamlText.value);
+    presetYamlCopiedNote.hidden = false;
+    window.__fimPresetYamlCopyReady = true;
+});
 
 window.fim.menu.loadExample = async function loadExample() {
     window.fim.wireModal("modal-presets");

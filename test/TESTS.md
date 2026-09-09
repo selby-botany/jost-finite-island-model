@@ -5368,6 +5368,50 @@ limitation ("edit the YAML file directly"), not specific to presets
 — this proves `get_preset_form_values` surfaces that same message
 rather than crashing or silently loading a wrong value.
 
+<a id="gui.test_app_api.test_get_preset_yaml_returns_a_builtin_preset_unmodified"></a>
+
+#### test\_get\_preset\_yaml\_returns\_a\_builtin\_preset\_unmodified
+
+```python
+def test_get_preset_yaml_returns_a_builtin_preset_unmodified() -> None
+```
+
+A built-in preset's own `yaml_text`, exactly as `doc/usage.md` presents it.
+
+<a id="gui.test_app_api.test_get_preset_yaml_rejects_an_unknown_id"></a>
+
+#### test\_get\_preset\_yaml\_rejects\_an\_unknown\_id
+
+```python
+def test_get_preset_yaml_rejects_an_unknown_id() -> None
+```
+
+An unknown built-in preset id is a clear error, not a crash.
+
+<a id="gui.test_app_api.test_get_preset_yaml_renders_a_user_saved_preset"></a>
+
+#### test\_get\_preset\_yaml\_renders\_a\_user\_saved\_preset
+
+```python
+def test_get_preset_yaml_renders_a_user_saved_preset() -> None
+```
+
+A user-saved preset renders fresh through `payload_to_yaml_text`.
+
+Matches what "Save current as…"/`save_yaml` would already write to
+a file for the identical values -- the same underlying function,
+not a second, independent rendering path.
+
+<a id="gui.test_app_api.test_get_preset_yaml_rejects_an_unknown_user_preset"></a>
+
+#### test\_get\_preset\_yaml\_rejects\_an\_unknown\_user\_preset
+
+```python
+def test_get_preset_yaml_rejects_an_unknown_user_preset() -> None
+```
+
+A `user:` id naming no saved preset is a clear error, not a crash.
+
 <a id="gui.test_app_api.test_validate_form_accepts_the_starter_values"></a>
 
 #### test\_validate\_form\_accepts\_the\_starter\_values
@@ -7617,10 +7661,11 @@ A `<button>` is natively focusable, but this project's own WKWebView
 host does not include it in the `Tab` order without this explicit
 opt-in (see this module's own docstring) — a future dialog copied
 from an existing one without it would silently reintroduce the gap.
-Exactly one such button exists today (`modal-presets`'s own
-"Cancel") — asserted precisely, not merely "at least one," so a
-dialog added later without this same opt-in is caught by this test
-changing count, not only by a missing `tabindex`.
+Exactly two such buttons exist today (`modal-presets`'s own "Cancel"
+and `modal-preset-yaml`'s own "Close", design doc §10's examples-
+library YAML view) — asserted precisely, not merely "at least one,"
+so a dialog added later without this same opt-in is caught by this
+test changing count, not only by a missing `tabindex`.
 
 <a id="gui.test_dark_mode_screen"></a>
 
@@ -9265,6 +9310,41 @@ def test_save_current_as_preset_shows_a_validation_error_without_closing(
 ```
 
 An invalid current form's own error shows in the dialog, which stays open.
+
+<a id="gui.test_presets_screen.test_view_yaml_shows_the_chosen_presets_own_text"></a>
+
+#### test\_view\_yaml\_shows\_the\_chosen\_presets\_own\_text
+
+```python
+def test_view_yaml_shows_the_chosen_presets_own_text(
+        window: webview.Window) -> None
+```
+
+"View YAML" opens `modal-preset-yaml` with that preset's own title and text.
+
+Botanist GUI design doc §10: the examples library's plain-text half.
+`test_app_api.py`'s own `test_get_preset_yaml_*` tests already prove
+`Api.get_preset_yaml` itself is correct; this proves the page's own
+JavaScript calls it at the right moment and shows what it returns.
+
+<a id="gui.test_presets_screen.test_copy_to_clipboard_writes_the_shown_yaml_text"></a>
+
+#### test\_copy\_to\_clipboard\_writes\_the\_shown\_yaml\_text
+
+```python
+def test_copy_to_clipboard_writes_the_shown_yaml_text(
+        window: webview.Window) -> None
+```
+
+"Copy to clipboard" writes exactly the text currently shown, once.
+
+Stubs `navigator.clipboard.writeText` with a spy before clicking,
+rather than letting the real button reach the real OS clipboard
+(confirmed live, before this test was written, that a real
+`pywebview` window's own `navigator.clipboard.writeText` genuinely
+writes to and is readable back from the real system pasteboard —
+exactly the side effect on a developer's own machine a test must
+never cause).
 
 <a id="gui.test_recent_runs"></a>
 

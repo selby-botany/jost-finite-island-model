@@ -38,7 +38,11 @@ from fim.gui import recent_runs as recent_runs_module
 from fim.gui import runner as runner_module
 from fim.gui.app import Api, _save_dialog_path, format_statistic
 from fim.gui.batch_runner import default_max_workers
-from fim.gui.config_form import form_values_to_payload, starter_form_values
+from fim.gui.config_form import (
+    form_values_to_payload,
+    payload_to_yaml_text,
+    starter_form_values,
+)
 from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.gui.recent_runs import RecentRun
 from fim.gui.store import LiveProgressStore
@@ -260,6 +264,50 @@ def test_get_preset_form_values_surfaces_the_per_locus_mu_limitation() -> None:
 
     assert result["ok"] is False
     assert "per-locus mu" in result["message"]
+
+
+def test_get_preset_yaml_returns_a_builtin_preset_unmodified() -> None:
+    """A built-in preset's own `yaml_text`, exactly as `doc/usage.md` presents it."""
+    preset = presets_module.get_preset(
+        app_module._webui_directory(), "stepping-stone-spatial-migration"
+    )
+    assert preset is not None
+
+    result = Api().get_preset_yaml("stepping-stone-spatial-migration")
+
+    assert result == {"ok": True, "title": preset.title, "yaml": preset.yaml_text}
+
+
+def test_get_preset_yaml_rejects_an_unknown_id() -> None:
+    """An unknown built-in preset id is a clear error, not a crash."""
+    result = Api().get_preset_yaml("not-a-real-preset")
+
+    assert result["ok"] is False
+    assert "not-a-real-preset" in result["message"]
+
+
+def test_get_preset_yaml_renders_a_user_saved_preset() -> None:
+    """A user-saved preset renders fresh through `payload_to_yaml_text`.
+
+    Matches what "Save current as…"/`save_yaml` would already write to
+    a file for the identical values -- the same underlying function,
+    not a second, independent rendering path.
+    """
+    api = Api()
+    api.save_current_as_preset("My scenario", starter_form_values())
+
+    result = api.get_preset_yaml("user:My scenario")
+
+    expected_yaml = payload_to_yaml_text(form_values_to_payload(starter_form_values()))
+    assert result == {"ok": True, "title": "My scenario", "yaml": expected_yaml}
+
+
+def test_get_preset_yaml_rejects_an_unknown_user_preset() -> None:
+    """A `user:` id naming no saved preset is a clear error, not a crash."""
+    result = Api().get_preset_yaml("user:not-a-real-name")
+
+    assert result["ok"] is False
+    assert "not-a-real-name" in result["message"]
 
 
 def test_validate_form_accepts_the_starter_values() -> None:

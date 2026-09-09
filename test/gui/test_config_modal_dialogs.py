@@ -38,16 +38,17 @@ def test_every_modal_close_button_has_an_explicit_tabindex() -> None:
     host does not include it in the `Tab` order without this explicit
     opt-in (see this module's own docstring) — a future dialog copied
     from an existing one without it would silently reintroduce the gap.
-    Exactly one such button exists today (`modal-presets`'s own
-    "Cancel") — asserted precisely, not merely "at least one," so a
-    dialog added later without this same opt-in is caught by this test
-    changing count, not only by a missing `tabindex`.
+    Exactly two such buttons exist today (`modal-presets`'s own "Cancel"
+    and `modal-preset-yaml`'s own "Close", design doc §10's examples-
+    library YAML view) — asserted precisely, not merely "at least one,"
+    so a dialog added later without this same opt-in is caught by this
+    test changing count, not only by a missing `tabindex`.
     """
     markup = _INDEX_HTML.read_text(encoding="utf-8")
     buttons = _MODAL_CLOSE_BUTTON.findall(markup)
 
-    assert len(buttons) == 1, (
-        f"expected exactly 1 [data-modal-close] button, found {len(buttons)}"
+    assert len(buttons) == 2, (
+        f"expected exactly 2 [data-modal-close] buttons, found {len(buttons)}"
     )
     for button in buttons:
         assert 'tabindex="0"' in button, f'missing tabindex="0": {button}'

@@ -64,9 +64,18 @@ def test_load_example_populates_the_list_and_applies_the_chosen_preset(
             # distinct from the starter form's own default N/d/m, so a
             # changed field afterward is real proof the click did
             # something, not a coincidental match with what was already
-            # there.
+            # there. Each `<li>`'s own first button specifically (not a
+            # flat index into every button on the page): a "View YAML"
+            # button now sits beside each title button too, so a flat
+            # `querySelectorAll('#presets-list button')[1]` no longer
+            # names the second preset's own title at all -- it names the
+            # *first* preset's own "View YAML" button instead (a real
+            # regression this exact fix closes, caught live by this
+            # test itself failing the moment that button was added).
             window.evaluate_js(
-                "document.querySelectorAll('#presets-list button')[1].click();"
+                "document.querySelector("
+                "'#presets-list li:nth-child(2) button:first-child')"
+                ".click();"
             )
             settled = _poll_until(
                 "({"
@@ -252,3 +261,143 @@ def test_save_current_as_preset_shows_a_validation_error_without_closing(
 
     assert settled["errorHidden"] is False
     assert settled["dialogOpen"] is True
+
+
+def test_view_yaml_shows_the_chosen_presets_own_text(window: webview.Window) -> None:
+    """ "View YAML" opens `modal-preset-yaml` with that preset's own title and text.
+
+    Botanist GUI design doc §10: the examples library's plain-text half.
+    `test_app_api.py`'s own `test_get_preset_yaml_*` tests already prove
+    `Api.get_preset_yaml` itself is correct; this proves the page's own
+    JavaScript calls it at the right moment and shows what it returns.
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
+            )
+            _poll_until(
+                "document.getElementById('presets-list').children.length",
+                lambda value: value is not None and value > 0,
+            )
+            first_title = window.evaluate_js(
+                "document.querySelector("
+                "'#presets-list li:first-child button:first-child')"
+                ".textContent"
+            )
+            window.evaluate_js(
+                "document.querySelector("
+                "'#presets-list li:first-child .presets-view-yaml-button')"
+                ".click();"
+            )
+            settled = _poll_until(
+                "({"
+                "presetsDialogOpen: document.getElementById('modal-presets').open, "
+                "yamlDialogOpen: "
+                "document.getElementById('modal-preset-yaml').open, "
+                "yamlTitle: "
+                "document.getElementById('preset-yaml-title').textContent, "
+                "yamlTextLength: "
+                "document.getElementById('preset-yaml-text').value.length"
+                "})",
+                lambda value: value is not None and value["yamlDialogOpen"] is True,
+            )
+            outcome.put({"firstTitle": first_title, "settled": settled})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    # Both dialogs open at once (a stacked native `<dialog>`, not a
+    # replacement) -- "View YAML" is a detail view reachable *from* the
+    # picker, not a navigation away from it.
+    assert result["settled"]["presetsDialogOpen"] is True
+    assert result["settled"]["yamlDialogOpen"] is True
+    assert result["settled"]["yamlTitle"] == result["firstTitle"]
+    assert result["settled"]["yamlTextLength"] > 0
+
+
+def test_copy_to_clipboard_writes_the_shown_yaml_text(window: webview.Window) -> None:
+    """ "Copy to clipboard" writes exactly the text currently shown, once.
+
+    Stubs `navigator.clipboard.writeText` with a spy before clicking,
+    rather than letting the real button reach the real OS clipboard
+    (confirmed live, before this test was written, that a real
+    `pywebview` window's own `navigator.clipboard.writeText` genuinely
+    writes to and is readable back from the real system pasteboard —
+    exactly the side effect on a developer's own machine a test must
+    never cause).
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "window.__fimClipboardCalls = []; "
+                "navigator.clipboard.writeText = (text) => { "
+                "window.__fimClipboardCalls.push(text); "
+                "return Promise.resolve(); "
+                "};"
+            )
+            window.evaluate_js(
+                "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
+            )
+            _poll_until(
+                "document.getElementById('presets-list').children.length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                "document.querySelector("
+                "'#presets-list li:first-child .presets-view-yaml-button')"
+                ".click();"
+            )
+            _poll_until(
+                "window.__fimPresetYamlReady === true", lambda value: value is True
+            )
+            shown_text = window.evaluate_js(
+                "document.getElementById('preset-yaml-text').value"
+            )
+            window.evaluate_js(
+                "document.getElementById('preset-yaml-copy-button').click();"
+            )
+            settled = _poll_until(
+                "({"
+                "copyReady: window.__fimPresetYamlCopyReady === true, "
+                "copiedNoteHidden: "
+                "document.getElementById('preset-yaml-copied-note').hidden, "
+                "calls: window.__fimClipboardCalls"
+                "})",
+                lambda value: value is not None and value["copyReady"] is True,
+            )
+            outcome.put({"shownText": shown_text, "settled": settled})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    assert result["settled"]["calls"] == [result["shownText"]]
+    assert result["settled"]["copiedNoteHidden"] is False
