@@ -338,6 +338,107 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> No
     assert settled["legendText"] == "D"
 
 
+def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
+    """The trajectory panel appears and grows *during* a run, not only once it ends.
+
+    Botanist GUI design doc §6.2's own "updating in lockstep as the run
+    advances" -- the gap the test just above this one does not cover
+    (it only ever observes the panel after `done_event` fires). Proves
+    `run-view-running.js`'s own client-side accumulation
+    (`accumulateLiveTrajectory`/the `liveTrajectoryGenerations`/
+    `liveTrajectoryHistories` this file's own module-level state feeds
+    into `renderTrajectory` on every `onRunProgress` push, not only
+    `onRunDone`.
+
+    Same starter-`d`-plus-`_SET_UNREACHABLE_CONVERGENCE` setup, and the
+    same `progress_count`-driven wait (never a DOM-polling loop racing
+    the live background thread), as `test_live_deme_pair_selector_
+    shows_a_chosen_pair_during_a_real_run` above, for the identical
+    reasons that test's own docstring records — Cancel ends the test
+    once the mid-run state is captured, rather than waiting out the
+    (deliberately unreachable) convergence criterion.
+
+    All six report statistics are expected in the legend, not only the
+    starter form's own single watched `convergence_statistic` (`D`) —
+    `accumulateLiveTrajectory`'s own module docstring names this as
+    design §6.2's own explicit alternative ("...or all six report
+    statistics"), deliberately different from the completed-view
+    legend the test above checks.
+    """
+    started_event = threading.Event()
+    cancelled_event = threading.Event()
+    progress_count = 0
+
+    def on_run_started() -> None:
+        started_event.set()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        nonlocal progress_count
+        if message[0] == "progress":
+            progress_count += 1
+        elif message[0] == "cancelled":
+            cancelled_event.set()
+
+    api = Api(on_run_started=on_run_started, on_message=on_message)
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            frame_hidden_before_start = window.evaluate_js(
+                "document.getElementById('run-trajectory-frame').hidden"
+            )
+            window.evaluate_js(
+                _SET_UNREACHABLE_CONVERGENCE
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    if progress_count >= 2:
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                settled = window.evaluate_js(
+                    "({"
+                    "runViewState: window.fim.getRunViewState(), "
+                    "frameHidden: "
+                    "document.getElementById('run-trajectory-frame').hidden, "
+                    "legendNames: Array.from("
+                    "document.querySelectorAll('#run-trajectory-legend span'))"
+                    ".map((span) => span.textContent).filter((text) => text)"
+                    "})"
+                )
+                settled["frameHiddenBeforeStart"] = frame_hidden_before_start
+                window.evaluate_js(
+                    "document.getElementById('cancel-run-button').click();"
+                )
+                cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
+                _wait_for_cancel_run_settled(window)
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, (
+        "started_event or a second progress push was never observed in time "
+        f"(progress messages seen: {progress_count})"
+    )
+    assert settled["frameHiddenBeforeStart"] is True
+    assert settled["runViewState"] == "running"
+    assert settled["frameHidden"] is False
+    assert sorted(settled["legendNames"]) == [
+        "D",
+        "E_ST",
+        "G_ST",
+        "H_S",
+        "H_T",
+        "K_ST",
+    ]
+
+
 # Selects the "equilibrium split" radio (`config-modals.js`'s own
 # `initial_conditions_mode` selector) and fills its three fields with
 # values chosen to converge almost immediately — a loose tolerance

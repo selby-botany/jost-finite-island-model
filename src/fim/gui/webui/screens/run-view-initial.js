@@ -152,6 +152,15 @@ function enterInitialState(renderPreview = true) {
     if (initialStats) {
         initialStats.hidden = true;
     }
+    // Hides a previous run's own live/completed trajectory panel
+    // (`run-view-completed.js`'s own `renderTrajectory`, guarded the
+    // same "declared in a file that loads after this one" way as
+    // `resultsBackButton` above) -- entering `initial` should never
+    // leave stale trajectory data on screen, the same reason
+    // `clearRunCanvas()` below clears the scatter canvas too.
+    if (typeof renderTrajectory === "function") {
+        renderTrajectory(undefined, undefined);
+    }
     window.fim.resetScrubber();
     clearRunCanvas();
     // Render p_0 preview asynchronously -- do not await here since

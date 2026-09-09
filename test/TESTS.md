@@ -9351,6 +9351,40 @@ actually renders something, not only that `Api`'s own Python-level
 `RunResult` already carries the data (`test_app_api.py`'s own
 coverage of that).
 
+<a id="gui.test_running_screen.test_trajectory_panel_updates_live_while_a_run_is_still_going"></a>
+
+#### test\_trajectory\_panel\_updates\_live\_while\_a\_run\_is\_still\_going
+
+```python
+def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None
+```
+
+The trajectory panel appears and grows *during* a run, not only once it ends.
+
+Botanist GUI design doc §6.2's own "updating in lockstep as the run
+advances" -- the gap the test just above this one does not cover
+(it only ever observes the panel after `done_event` fires). Proves
+`run-view-running.js`'s own client-side accumulation
+(`accumulateLiveTrajectory`/the `liveTrajectoryGenerations`/
+`liveTrajectoryHistories` this file's own module-level state feeds
+into `renderTrajectory` on every `onRunProgress` push, not only
+`onRunDone`.
+
+Same starter-`d`-plus-`_SET_UNREACHABLE_CONVERGENCE` setup, and the
+same `progress_count`-driven wait (never a DOM-polling loop racing
+the live background thread), as `test_live_deme_pair_selector_
+shows_a_chosen_pair_during_a_real_run` above, for the identical
+reasons that test's own docstring records — Cancel ends the test
+once the mid-run state is captured, rather than waiting out the
+(deliberately unreachable) convergence criterion.
+
+All six report statistics are expected in the legend, not only the
+starter form's own single watched `convergence_statistic` (`D`) —
+`accumulateLiveTrajectory`'s own module docstring names this as
+design §6.2's own explicit alternative ("...or all six report
+statistics"), deliberately different from the completed-view
+legend the test above checks.
+
 <a id="gui.test_running_screen.test_run_button_starts_a_real_equilibrium_split_run"></a>
 
 #### test\_run\_button\_starts\_a\_real\_equilibrium\_split\_run

@@ -90,6 +90,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Switching modes never discards already-entered data; loading a
   configuration with a genuine per-deme `N` auto-selects the per-deme
   view rather than showing the raw comma list in the scalar field.
+- The Run destination's statistic-vs-generation trajectory panel
+  (design §6.2) now appears and grows while a run is still going, not
+  only once it finishes — "updating in lockstep as the run advances,"
+  design's own words for the gap this closes. Accumulated entirely
+  client-side from the same per-tick statistic snapshot the live stats
+  table already reads (no new bridge traffic); once the run finishes,
+  it is replaced outright by the real, authoritative trajectory the
+  engine's own convergence monitor recorded, unchanged from before.
+  Plots all six report statistics live, not only whichever
+  `convergence_statistic` is being watched — design's own named
+  alternative to a legend-toggle, and simpler to build first.
 
 ### Changed
 

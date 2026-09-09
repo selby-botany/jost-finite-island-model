@@ -83,6 +83,32 @@ let liveDemeSelectorWired = false;
 // Deme 1/Deme 2 directly requests the same panel `panels` already holds.
 let showingLiveDemePair = false;
 
+// The live trajectory panel (botanist GUI design doc `20260907-claude-
+// sonnet-5-botanist-gui-redesign.md` §6.2: "updating in lockstep as the
+// run advances," not only once the run finishes). Accumulated entirely
+// client-side, one point per progress push, from `payload.statistics`
+// -- the same six-statistic snapshot `renderLiveStatistics` already
+// reads on every tick, not a second bridge round trip. Deliberately all
+// six report statistics, not only whichever `convergence_statistic` is
+// being watched: design §6.2's own text names this as the explicit
+// alternative to a legend-toggle ("...or all six report statistics,
+// user-selectable via a small legend-toggle, each watched or not"),
+// and it reuses `renderTrajectory`/`drawTrajectoryCurve`
+// (`run-view-completed.js`) unchanged, sharing one global scope the
+// same way `drawScatter` already does across files on this page.
+// Replaced outright once the run finishes: `onRunDone` calls `render
+// Trajectory` again with the real, authoritative `convergence_
+// generations`/`convergence_histories` the engine's own convergence
+// monitor recorded, not this client-side approximation -- this state
+// exists only to have something to plot *while* the run is still
+// going, when that authoritative history does not exist yet. Scalar
+// runs only, matching `renderTrajectory`'s own existing scope
+// boundary: a batch's own `completed` view already hides this panel
+// entirely (`run-view-completed.js`'s own module docstring), so there
+// is nothing to accumulate for `onBatchProgress`.
+let liveTrajectoryGenerations = [];
+let liveTrajectoryHistories = {};
+
 /**
  * Enter `running`: reset every per-run tracking variable above, show
  * the progress indicator, hide `completed`'s own content, and enable
@@ -106,6 +132,19 @@ function enterRunningState(isBatch = false) {
     batchProgressHighWaterMark = 0;
     liveDemeSelectorWired = false;
     showingLiveDemePair = false;
+    liveTrajectoryGenerations = [];
+    liveTrajectoryHistories = {};
+    // Hides the panel immediately (`renderTrajectory`'s own empty-
+    // arrays guard) rather than leaving a previous run's own trajectory
+    // visible until the first tick of this one repopulates it -- the
+    // same reason `clearRunCanvas()` below clears the scatter canvas
+    // right away instead of waiting for the first push to overwrite it.
+    // Guarded (`run-view-initial.js`'s own identical comment on why):
+    // `renderTrajectory` is declared in `run-view-completed.js`, which
+    // loads after this file.
+    if (typeof renderTrajectory === "function") {
+        renderTrajectory(liveTrajectoryGenerations, liveTrajectoryHistories);
+    }
     progressBar.value = 0;
     runProgress.hidden = false;
     if (initialStats) {
@@ -205,6 +244,35 @@ function renderLiveStatistics(statistics) {
     }
 }
 
+/**
+ * Append one progress tick to the live trajectory accumulators.
+ *
+ * `statistics[name]` is `format_statistic`'s own ready-to-show string
+ * (`"undefined"` for a `None` value -- `G_ST` at a currently-
+ * monomorphic locus, `renderTrajectory`'s own docstring), not a raw
+ * number -- skipped for that one statistic on that one tick rather
+ * than pushing a `NaN` into its history, the same "leave a statistic's
+ * own history shorter than `generations` rather than plot it
+ * misaligned" choice `renderTrajectory`'s own "plottable" filter
+ * already makes for the completed view.
+ * @param {Record<string, string> | undefined} statistics
+ */
+function accumulateLiveTrajectory(generation, statistics) {
+    if (!statistics) {
+        return;
+    }
+    liveTrajectoryGenerations.push(generation);
+    for (const name of STATISTIC_NAMES) {
+        const value = Number(statistics[name]);
+        if (Number.isFinite(value)) {
+            if (!liveTrajectoryHistories[name]) {
+                liveTrajectoryHistories[name] = [];
+            }
+            liveTrajectoryHistories[name].push(value);
+        }
+    }
+}
+
 window.fim.onRunProgress = function onRunProgress(payload) {
     progressBar.max = payload.maxGenerations;
     progressBar.value = payload.generation;
@@ -214,6 +282,10 @@ window.fim.onRunProgress = function onRunProgress(payload) {
         liveDemeSelectorWired = true;
     }
     renderLiveStatistics(payload.statistics);
+    accumulateLiveTrajectory(payload.generation, payload.statistics);
+    if (typeof renderTrajectory === "function") {
+        renderTrajectory(liveTrajectoryGenerations, liveTrajectoryHistories);
+    }
     drawProgressPanels(payload);
 };
 
