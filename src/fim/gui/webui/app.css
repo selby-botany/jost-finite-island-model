@@ -1071,3 +1071,29 @@ fieldset.composite > label {
     border-radius: 4px;
     background: var(--fim-background);
 }
+
+/* Inline field tooltips (design §4.6, `screens/field-help.js`) -- one
+ * shared floating bubble, positioned per-show against whichever field's
+ * label or group legend triggered it (`showFieldTooltip`'s own
+ * `getBoundingClientRect` call). Appended to `document.body`, not
+ * inside `.configure-panel`, so it is never clipped by that panel's own
+ * `overflow: auto`/`max-height` -- confirmed live: an earlier version
+ * nested inside the panel had its own bottom half cut off for any field
+ * near the panel's own scroll boundary. `position: fixed` (viewport-
+ * relative), matching `getBoundingClientRect`'s own coordinate space --
+ * `position: absolute` here would instead be relative to the nearest
+ * positioned ancestor, silently wrong the moment one exists. */
+.field-tooltip {
+    position: fixed;
+    z-index: 1000;
+    max-width: 22rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--fim-border);
+    background: var(--fim-foreground);
+    color: var(--fim-background);
+    font-size: 0.8rem;
+    line-height: 1.35;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    pointer-events: none;
+}

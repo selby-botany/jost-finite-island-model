@@ -101,6 +101,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Plots all six report statistics live, not only whichever
   `convergence_statistic` is being watched — design's own named
   alternative to a legend-toggle, and simpler to build first.
+- Every Configure field and mode-selector group now carries a hover/
+  focus tooltip (design §4.6), closing an item the redesign's own
+  source material named as scoped but never shipped or tracked. A new
+  `webui/field-help.js` holds the one content source every tooltip
+  draws from, keyed by field name; a field derived from an opt-in
+  shorthand (μ<sub>b</sub> → per-locus `mu`) states that provenance
+  directly in its own tooltip, per design's own example. A `<legend>`
+  is not natively focusable, so each mode-selector group's own legend
+  gains `tabindex="0"` — a keyboard-only user reaches it the same way
+  they already reach every other interactive control. Kept honest
+  against real field names by a static test asserting both directions
+  (every tooltip names a real field/group; every field/group has a
+  tooltip), so a field added to Configure later without one — or a
+  stale tooltip left behind after a field is renamed — fails a fast,
+  no-window test rather than going unnoticed.
 
 ### Changed
 

@@ -38,6 +38,8 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_config_form`](#gui.test_config_form)
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
   - [`test_explore_screen`](#gui.test_explore_screen)
+  - [`test_field_help`](#gui.test_field_help)
+  - [`test_field_help_screen`](#gui.test_field_help_screen)
   - [`test_fixed_per_deme_screen`](#gui.test_fixed_per_deme_screen)
   - [`test_help_screen`](#gui.test_help_screen)
   - [`test_input_screen`](#gui.test_input_screen)
@@ -7558,6 +7560,151 @@ values below is not a hand-picked coincidence, it is guaranteed by
 the formula's own monotonicity in `m`, so a real recomputation is
 distinguishable from a stale, unchanged reading by simple inequality,
 with no dependency on either value's own exact digits.
+
+<a id="gui.test_field_help"></a>
+
+# gui.test\_field\_help
+
+Static-analysis guard over the Configure workspace's inline field
+tooltips (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §4.6).
+
+`webui/field-help.js`'s own `FIELD_HELP` object is the single content
+source every tooltip draws from -- these tests check both directions of
+the one invariant that keeps it honest: every key names a real Configure
+field or mode-selector group this screen actually has, and every such
+field or group this screen actually has is named by a real key. Static,
+not DOM-driven (`test_config_modal_dialogs.py`'s own precedent): both
+`index.html` and `field-help.js` are plain text on disk, so this answers
+"did someone add a field without a tooltip, or leave a stale tooltip for
+a field that no longer exists" in milliseconds, with no window and no
+simulation run required, rather than only failing much later inside a
+real hover/focus session.
+
+<a id="gui.test_field_help.test_screen_configure_exists_exactly_once"></a>
+
+#### test\_screen\_configure\_exists\_exactly\_once
+
+```python
+def test_screen_configure_exists_exactly_once() -> None
+```
+
+`_configure_section_html`'s own slicing assumption holds.
+
+A second `screen-configure` (or a first one removed entirely) would
+make the `str.index` calls above silently return the wrong slice --
+checked directly here rather than trusted implicitly.
+
+<a id="gui.test_field_help.test_every_field_help_key_names_a_real_configure_field_or_group"></a>
+
+#### test\_every\_field\_help\_key\_names\_a\_real\_configure\_field\_or\_group
+
+```python
+def test_every_field_help_key_names_a_real_configure_field_or_group() -> None
+```
+
+No `FIELD_HELP` entry is stale -- every key matches a real field/group.
+
+Catches a field renamed or removed after its own tooltip was
+written, left behind as a key nothing ever looks up.
+
+<a id="gui.test_field_help.test_every_configure_field_and_group_has_a_tooltip"></a>
+
+#### test\_every\_configure\_field\_and\_group\_has\_a\_tooltip
+
+```python
+def test_every_configure_field_and_group_has_a_tooltip() -> None
+```
+
+Every Configure field/group has a `FIELD_HELP` entry -- none forgotten.
+
+Catches a field added to Configure later without a matching tooltip
+-- design §4.6's own "every field carries a hover/focus tooltip,"
+not "most fields."
+
+<a id="gui.test_field_help_screen"></a>
+
+# gui.test\_field\_help\_screen
+
+Headless functional tests for the Configure workspace's inline field
+tooltips (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §4.6).
+
+Real DOM-driven proof that `webui/field-help.js` actually shows and hides
+the tooltip bubble on hover and on keyboard focus alike --
+`test/gui/test_field_help.py`'s own static checks already prove every
+Configure field/group has a real `FIELD_HELP` entry; these tests prove
+the page's own JavaScript actually shows it, which no static-analysis
+test can check.
+
+<a id="gui.test_field_help_screen.test_hovering_a_field_label_shows_its_tooltip_and_leaving_hides_it"></a>
+
+#### test\_hovering\_a\_field\_label\_shows\_its\_tooltip\_and\_leaving\_hides\_it
+
+```python
+def test_hovering_a_field_label_shows_its_tooltip_and_leaving_hides_it(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A field's own `<label>` shows `FIELD_HELP[name]` on `mouseenter`, hides on leave.
+
+`text`/`matchesFieldHelp` are both read inside the one driven
+`read` expression, not via a second `window.evaluate_js` call after
+`drive` returns -- `drive_and_read`'s own teardown destroys the
+window as soon as it settles, so anything read afterward, on the
+already-destroyed window, is a bug in the test, not in the page
+(confirmed live: an earlier version of this file did exactly that
+and read back `None` for `window.FIM_FIELD_HELP.N`).
+
+<a id="gui.test_field_help_screen.test_leaving_a_field_label_hides_its_tooltip"></a>
+
+#### test\_leaving\_a\_field\_label\_hides\_its\_tooltip
+
+```python
+def test_leaving_a_field_label_hides_its_tooltip(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+`mouseleave` hides the bubble the preceding `mouseenter` showed.
+
+<a id="gui.test_field_help_screen.test_focusing_a_field_shows_its_tooltip_for_a_keyboard_only_user"></a>
+
+#### test\_focusing\_a\_field\_shows\_its\_tooltip\_for\_a\_keyboard\_only\_user
+
+```python
+def test_focusing_a_field_shows_its_tooltip_for_a_keyboard_only_user(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The field itself (not only its label) shows the tooltip on `focus`.
+
+Design §4.6: "hover/focus tooltip" -- a keyboard-only user tabs to
+the input, never hovers its label, so the trigger has to live on the
+field too, not only on the label text.
+
+Navigates to Configure first, unlike the `dispatchEvent`-driven
+tests above: `.focus()` is a real DOM API that respects visibility
+(a `hidden`-ancestor element cannot become the focused element at
+all, confirmed live -- an earlier version of this test called it
+with Configure not yet showing and the tooltip never appeared), not
+a synthetic event fired straight at a listener regardless of
+display state the way `dispatchEvent` is.
+
+<a id="gui.test_field_help_screen.test_a_group_legend_is_keyboard_focusable_and_shows_its_own_tooltip"></a>
+
+#### test\_a\_group\_legend\_is\_keyboard\_focusable\_and\_shows\_its\_own\_tooltip
+
+```python
+def test_a_group_legend_is_keyboard_focusable_and_shows_its_own_tooltip(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A mode-selector group's own `<legend>` is a real, focusable tooltip trigger.
+
+`<legend>` is not natively focusable -- `wireGroupTooltip`'s own
+`tabIndex = 0` is what makes this reachable at all for a keyboard-
+only user, checked directly here, not merely assumed from reading
+the source.
 
 <a id="gui.test_fixed_per_deme_screen"></a>
 

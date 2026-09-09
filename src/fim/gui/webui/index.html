@@ -539,7 +539,7 @@
              shape `field-m_matrix_json`/`field-loci_json`/`field-
              p0_json` already established. -->
         <fieldset class="composite" id="n-selector">
-          <legend>N (population size)</legend>
+          <legend data-field-help="n_mode">N (population size)</legend>
           <label><input type="radio" name="n_mode" value="same" checked> same for every deme</label>
           <label><input type="radio" name="n_mode" value="per_deme"> per-deme</label>
           <div class="field" id="n-same-fields">
@@ -565,7 +565,7 @@
         </div>
 
         <fieldset class="composite" id="m-selector">
-          <legend>m (migration)</legend>
+          <legend data-field-help="m_mode">m (migration)</legend>
           <label><input type="radio" name="m_mode" value="scalar" checked form="input-form"> scalar rate</label>
           <label><input type="radio" name="m_mode" value="topology" form="input-form"> named topology</label>
           <label><input type="radio" name="m_mode" value="matrix" form="input-form"> full matrix</label>
@@ -599,7 +599,7 @@
         </fieldset>
 
         <fieldset class="composite" id="mu-selector">
-          <legend>μ (mutation rate)</legend>
+          <legend data-field-help="mu_mode">μ (mutation rate)</legend>
           <label><input type="radio" name="mu_mode" value="mu" checked form="input-form"> specify μ directly</label>
           <label><input type="radio" name="mu_mode" value="mu_b" form="input-form"> derive from μ<sub>b</sub></label>
           <div class="field" id="mu-mu-field">
@@ -616,7 +616,7 @@
       <div class="configure-panel" id="configure-panel-structure">
         <h2>Structure</h2>
         <fieldset class="composite" id="initial-conditions-selector">
-          <legend>initial conditions (starting frequencies)</legend>
+          <legend data-field-help="initial_conditions_mode">initial conditions (starting frequencies)</legend>
           <label><input type="radio" name="initial_conditions_mode" value="dirichlet" checked form="input-form"> Dirichlet draw</label>
           <label><input type="radio" name="initial_conditions_mode" value="equilibrium_split" form="input-form"> equilibrium split</label>
           <label><input type="radio" name="initial_conditions_mode" value="explicit_p0" form="input-form"> explicit p&#8320;</label>
@@ -712,7 +712,7 @@
              payload`/`loci_from_params` actually read/write) in sync on
              every edit. -->
         <fieldset class="composite" id="loci-selector">
-          <legend>loci</legend>
+          <legend data-field-help="loci_mode">loci</legend>
           <label><input type="radio" name="loci_mode" value="lengths" checked form="input-form"> length(s) only</label>
           <label><input type="radio" name="loci_mode" value="custom" form="input-form"> custom locus IDs</label>
           <div class="field" id="loci-lengths-fields">
@@ -732,7 +732,7 @@
         </fieldset>
 
         <fieldset class="composite" id="cs-selector">
-          <legend>convergence statistic(s)</legend>
+          <legend data-field-help="cs_group">convergence statistic(s)</legend>
           <label><input type="checkbox" name="cs_D" value="true" checked form="input-form"> D</label>
           <label><input type="checkbox" name="cs_G_ST" value="true" form="input-form"> G<sub>ST</sub></label>
           <label><input type="checkbox" name="cs_E_ST" value="true" form="input-form"> E<sub>ST</sub></label>
@@ -901,5 +901,6 @@
 <script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
 <script src="screens/nav-rail.js"></script>
+<script src="field-help.js"></script>
 </body>
 </html>
