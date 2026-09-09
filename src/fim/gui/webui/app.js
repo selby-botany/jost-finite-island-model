@@ -44,6 +44,16 @@ const fim = {
         for (const section of document.querySelectorAll(".screen")) {
             section.hidden = section.id !== screenId;
         }
+        // `screens/nav-rail.js` (botanist GUI design doc §3.1) attaches
+        // this once the page loads; every existing caller of
+        // `showScreen` -- `fim.menu.*`, every screen's own "Back"
+        // button -- keeps the rail's own `aria-current` in sync for
+        // free, with no change of its own. Guarded (`typeof`, not a
+        // bare call) only so this function stays usable from a test
+        // that constructs a page without `nav-rail.js` loaded.
+        if (typeof window.fim.updateRailHighlight === "function") {
+            window.fim.updateRailHighlight(screenId);
+        }
     },
 
     /** @returns {"initial"|"running"|"completed"} */

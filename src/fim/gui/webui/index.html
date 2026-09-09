@@ -10,6 +10,89 @@
 <body>
 <div id="app">
 
+  <!-- The persistent rail (botanist GUI design doc `20260907-claude-
+       sonnet-5-botanist-gui-redesign.md` §3.1): six destinations, always
+       visible, current destination highlighted via `aria-current`.
+       `data-destination` names the logical destination each button
+       leads to; `screens/nav-rail.js`'s own `DESTINATION_TO_SCREEN`
+       resolves that to a `.screen` id (or, for "run"/"results", to
+       `screen-run` conditionally on `getRunViewState()` -- both rail
+       entries point at the same still-unified run view for now, design
+       §16 phase 1 vs. phase 4: splitting that view's own content into
+       two genuinely separate layouts is deferred to phase 4's "Run/
+       Results side-by-side plots," not part of this first shell slice).
+       Configure (below) is its own new, minimal landing destination
+       this phase -- the true two-panel FIM-parameters/Structure layout
+       (design §4.1, §4.2) is a follow-up commit; for now it lists the
+       same six section buttons the native Configure menu (still present
+       today, not yet trimmed per §3.3 -- removing it before the
+       Configure workspace actually replaces what it does would be a
+       real functionality regression, not a simplification) already
+       opens. -->
+  <nav id="rail" aria-label="Primary">
+    <div class="rail-group">
+      <button type="button" class="rail-item" data-destination="home">
+        <span class="rail-icon" aria-hidden="true">🏠</span>
+        <span class="rail-label">Home</span>
+      </button>
+      <button type="button" class="rail-item" data-destination="configure">
+        <span class="rail-icon" aria-hidden="true">⚙</span>
+        <span class="rail-label">Configure</span>
+      </button>
+      <button type="button" class="rail-item" data-destination="explore">
+        <span class="rail-icon" aria-hidden="true">🔮</span>
+        <span class="rail-label">Explore</span>
+      </button>
+      <button type="button" class="rail-item" data-destination="run">
+        <span class="rail-icon" aria-hidden="true">▶</span>
+        <span class="rail-label">Run</span>
+      </button>
+      <button type="button" class="rail-item" data-destination="results">
+        <span class="rail-icon" aria-hidden="true">📊</span>
+        <span class="rail-label">Results</span>
+      </button>
+      <button type="button" class="rail-item" data-destination="compare">
+        <span class="rail-icon" aria-hidden="true">⇄</span>
+        <span class="rail-label">Compare</span>
+      </button>
+    </div>
+    <div class="rail-group">
+      <button type="button" class="rail-item" data-destination="help">
+        <span class="rail-icon" aria-hidden="true">❓</span>
+        <span class="rail-label">Help</span>
+      </button>
+    </div>
+  </nav>
+
+  <div id="workspace">
+    <!-- The always-visible N/d/m/mu parameter strip (design §3.2):
+         read-only, always current; clicking any value jumps to
+         Configure (design's own click-through behavior). `screens/
+         nav-rail.js`'s `updateParameterStrip` fills these in from the
+         same `collectFormValues()` every other live-form read already
+         uses, called from `revalidate()` (`config-modals.js`) so it
+         stays current on every field change, not only on navigation. -->
+    <div id="parameter-strip" aria-label="Current configuration">
+      <button type="button" class="parameter-strip-item" data-param="N">
+        <span class="parameter-strip-label">N</span>
+        <span class="parameter-strip-value" id="parameter-strip-N"></span>
+      </button>
+      <button type="button" class="parameter-strip-item" data-param="d">
+        <span class="parameter-strip-label">d</span>
+        <span class="parameter-strip-value" id="parameter-strip-d"></span>
+      </button>
+      <button type="button" class="parameter-strip-item" data-param="m">
+        <span class="parameter-strip-label">m</span>
+        <span class="parameter-strip-value" id="parameter-strip-m"></span>
+      </button>
+      <button type="button" class="parameter-strip-item" data-param="mu">
+        <span class="parameter-strip-label">μ</span>
+        <span class="parameter-strip-value" id="parameter-strip-mu"></span>
+      </button>
+    </div>
+
+  <div id="content-area">
+
   <!-- Startup-time warnings (`Api.get_startup_warnings`,
        `fim.gui.preferences`'s own quarantine-on-corrupt-file recovery
        path) -- deliberately outside every `.screen` section, so
@@ -399,6 +482,38 @@
     </div>
   </section>
 
+  <!-- Configure's rail destination (design §3.1's own rail table: "Build
+       and validate a full configuration"), interim for this phase: the
+       same six section modals the (still-present) native Configure menu
+       already opens, listed here as a landing page instead of only being
+       reachable from that menu. The real two-panel FIM-parameters/
+       Structure layout (§4.1, §4.2) that replaces both this landing page
+       and the modals themselves is scoped as its own follow-up commit,
+       not part of this first rail/shell slice -- `screens/nav-rail.js`'s
+       own module docstring has the full sequencing note. -->
+  <section id="screen-configure" class="screen" hidden>
+    <p class="hint">
+      Every configuration field lives in one of the six sections below.
+      The always-visible two-panel layout described in the redesign is
+      not built yet -- each section still opens as its own dialog.
+    </p>
+    <div class="configure-landing-sections">
+      <button type="button" class="configure-landing-button" data-configure-section="population">Population</button>
+      <button type="button" class="configure-landing-button" data-configure-section="migration">Migration</button>
+      <button type="button" class="configure-landing-button" data-configure-section="mutation">Mutation</button>
+      <button type="button" class="configure-landing-button" data-configure-section="initial_conditions">Initial conditions</button>
+      <button type="button" class="configure-landing-button" data-configure-section="convergence">Convergence</button>
+      <button type="button" class="configure-landing-button" data-configure-section="batch">Batch</button>
+    </div>
+    <div class="actions">
+      <button type="button" id="configure-run-button">Run simulation</button>
+      <button type="button" id="configure-explore-button">Explore predictions…</button>
+    </div>
+  </section>
+
+  </div><!-- /#content-area -->
+  </div><!-- /#workspace -->
+
   <!-- Configure modals (unified-run-view design §3.1): live outside
        every .screen section on purpose, confirmed live rather than
        assumed -- a <dialog> nested inside a `hidden` ancestor still
@@ -764,5 +879,6 @@
 <script src="screens/explore.js"></script>
 <script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
+<script src="screens/nav-rail.js"></script>
 </body>
 </html>

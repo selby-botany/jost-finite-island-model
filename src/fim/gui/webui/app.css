@@ -15,6 +15,7 @@
     --fim-foreground: #1a1a1a;
     --fim-muted: #6b6b6b;
     --fim-accent: #0a66c2;
+    --fim-accent-soft: #e3f0fc;
     --fim-border: #d9d9d9;
 }
 
@@ -24,6 +25,7 @@
         --fim-foreground: #f0f0f0;
         --fim-muted: #a0a0a0;
         --fim-accent: #4da3ff;
+        --fim-accent-soft: #1c3350;
         --fim-border: #3a3a3a;
     }
 }
@@ -68,8 +70,142 @@ body {
     overflow-y: auto;
 }
 
+/* The persistent rail + always-visible parameter strip (botanist GUI
+ * design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §3.1,
+ * §3.2). `#app` is now a two-column flex row (`#rail`, fixed width,
+ * beside `#workspace`, everything else) instead of a single padded
+ * block -- padding moves to `#parameter-strip`/`#content-area`
+ * individually so the rail itself sits flush against the window edge,
+ * matching the design's own mockup.
+ */
 #app {
+    display: flex;
+    align-items: stretch;
+    min-height: 100vh;
+    padding: 0;
+}
+
+#rail {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 4.5rem;
+    padding: 0.75rem 0;
+    border-right: 1px solid var(--fim-border);
+    background: var(--fim-background);
+}
+
+.rail-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.rail-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    font: inherit;
+    font-size: 0.7rem;
+    color: var(--fim-muted);
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 0.5rem 0.25rem;
+    margin: 0 0.4rem;
+}
+
+.rail-item .rail-icon {
+    font-size: 1.15rem;
+}
+
+.rail-item:hover {
+    background: var(--fim-border);
+}
+
+/* The current destination (`screens/nav-rail.js`'s own
+ * `updateRailHighlight`) -- a single accent hue reserved for
+ * interactive/current-state elements (design §11.1), never reused for a
+ * data value. */
+.rail-item[aria-current="true"] {
+    color: var(--fim-accent);
+    background: var(--fim-accent-soft);
+}
+
+#workspace {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Read-only, always-current N/d/m/mu (design §3.2) -- each value is its
+ * own button so clicking it jumps straight to Configure (`nav-rail.js`),
+ * styled to read as text with a click affordance rather than as a form
+ * control, since none of these are editable in place. */
+#parameter-strip {
+    display: flex;
+    gap: 1.25rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--fim-border);
+    flex-wrap: wrap;
+}
+
+.parameter-strip-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    font: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    padding: 0;
+}
+
+.parameter-strip-item:hover .parameter-strip-value {
+    text-decoration: underline;
+}
+
+.parameter-strip-label {
+    color: var(--fim-muted);
+    font-size: 0.8rem;
+}
+
+.parameter-strip-value {
+    font-variant-numeric: tabular-nums;
+}
+
+#content-area {
+    flex: 1 1 auto;
     padding: 1rem;
+    overflow-y: auto;
+}
+
+/* Configure's interim landing destination (`screens/nav-rail.js`'s own
+ * module docstring: the real two-panel layout is a follow-up commit). */
+.configure-landing-sections {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.configure-landing-button {
+    font: inherit;
+    color: var(--fim-foreground);
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+}
+
+.configure-landing-button:hover {
+    border-color: var(--fim-accent);
 }
 
 /* The six Configure-modal error dots (design §3.1) -- `hidden` on their

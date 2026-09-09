@@ -45,6 +45,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   backend and JIT" section for every accepted value, and `doc/
   fim-simulator-design.md`'s own §4.6 for when each one is actually
   worth reaching for.
+- `fim gui` gains a persistent rail (Home, Configure, Explore, Run,
+  Results, Compare, Help) and an always-visible N/d/m/mu parameter
+  strip beneath the title bar, the first slice of the botanist GUI
+  redesign's own §16 delivery phasing ("Shell and Configure," phase 1;
+  design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §3.1,
+  §3.2). Run and Results deliberately both resolve to the existing
+  unified run view for now — splitting its own content into the
+  design's genuinely separate side-by-side layouts is phase 4, not part
+  of this slice — and Configure is a new, minimal landing destination
+  listing the same six section dialogs the (still-present, not yet
+  trimmed) native Configure/View menus already open; the two-panel
+  FIM-parameters/Structure layout that replaces both is a follow-up
+  change. The parameter strip is read-only and always current
+  (`revalidate()`'s own live form scan, not only a validated submit);
+  clicking any of its four values jumps straight to Configure.
 
 ### Changed
 

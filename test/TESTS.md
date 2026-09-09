@@ -43,6 +43,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_input_screen`](#gui.test_input_screen)
   - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
   - [`test_migration_matrix_screen`](#gui.test_migration_matrix_screen)
+  - [`test_nav_rail`](#gui.test_nav_rail)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
   - [`test_p0_grid_screen`](#gui.test_p0_grid_screen)
   - [`test_preferences`](#gui.test_preferences)
@@ -8191,6 +8192,97 @@ Same event-driven "wait on a real `threading.Event`, never poll a
 live background run" shape `test_running_screen.py`'s own real-run
 tests already use, for the identical reason those tests' own
 docstrings record.
+
+<a id="gui.test_nav_rail"></a>
+
+# gui.test\_nav\_rail
+
+Headless functional tests for the persistent rail and parameter strip
+(botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §3.1, §3.2 -- design §16's own delivery-phasing "phase 1"
+first slice).
+
+Real DOM-driven proof that `webui/screens/nav-rail.js` actually wires the
+rail's own click handlers, keeps `app.js`'s `showScreen` in sync via
+`updateRailHighlight`, and keeps the parameter strip current -- none of
+which a Python-only test can check.
+
+<a id="gui.test_nav_rail.test_rail_has_the_six_destinations_plus_help_in_order"></a>
+
+#### test\_rail\_has\_the\_six\_destinations\_plus\_help\_in\_order
+
+```python
+def test_rail_has_the_six_destinations_plus_help_in_order(
+        window: webview.Window) -> None
+```
+
+The rail's own seven buttons match design §3.1's own destination list.
+
+<a id="gui.test_nav_rail.test_run_is_the_default_highlighted_destination"></a>
+
+#### test\_run\_is\_the\_default\_highlighted\_destination
+
+```python
+def test_run_is_the_default_highlighted_destination(
+        window: webview.Window) -> None
+```
+
+`screen-run` is the default-visible screen; the rail agrees on launch.
+
+<a id="gui.test_nav_rail.test_parameter_strip_shows_the_starter_configuration_on_launch"></a>
+
+#### test\_parameter\_strip\_shows\_the\_starter\_configuration\_on\_launch
+
+```python
+def test_parameter_strip_shows_the_starter_configuration_on_launch(
+        window: webview.Window) -> None
+```
+
+The strip is populated before any field is touched, on launch.
+
+<a id="gui.test_nav_rail.test_clicking_configure_shows_the_landing_screen_and_updates_the_rail"></a>
+
+#### test\_clicking\_configure\_shows\_the\_landing\_screen\_and\_updates\_the\_rail
+
+```python
+def test_clicking_configure_shows_the_landing_screen_and_updates_the_rail(
+        window: webview.Window) -> None
+```
+
+Rail navigation both switches the screen and moves the highlight.
+
+<a id="gui.test_nav_rail.test_configure_landing_button_opens_the_real_section_modal"></a>
+
+#### test\_configure\_landing\_button\_opens\_the\_real\_section\_modal
+
+```python
+def test_configure_landing_button_opens_the_real_section_modal(
+        window: webview.Window) -> None
+```
+
+The interim Configure landing page opens the same modal the old menu does.
+
+<a id="gui.test_nav_rail.test_parameter_strip_click_jumps_to_configure"></a>
+
+#### test\_parameter\_strip\_click\_jumps\_to\_configure
+
+```python
+def test_parameter_strip_click_jumps_to_configure(
+        window: webview.Window) -> None
+```
+
+Design §3.2: clicking any strip value jumps straight to Configure.
+
+<a id="gui.test_nav_rail.test_parameter_strip_updates_live_as_a_field_changes"></a>
+
+#### test\_parameter\_strip\_updates\_live\_as\_a\_field\_changes
+
+```python
+def test_parameter_strip_updates_live_as_a_field_changes(
+        window: webview.Window) -> None
+```
+
+The strip reflects an in-progress edit, not only a submitted/valid form.
 
 <a id="gui.test_open_run_screen"></a>
 

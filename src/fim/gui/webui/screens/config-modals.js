@@ -146,6 +146,12 @@ function markTabError(tab, field) {
 async function revalidate() {
     clearTabErrorDots();
     const values = collectFormValues();
+    // The parameter strip (design §3.2) reflects the form's own current
+    // values regardless of whether they validate -- a strip that only
+    // updated on a *valid* form would freeze on the last good value
+    // while a user is mid-edit, exactly the "lost track of what I set"
+    // complaint the strip exists to fix.
+    window.fim.updateParameterStrip(values);
     const result = await window.pywebview.api.validate_form(values);
     if (result.ok) {
         runButton.disabled = false;
