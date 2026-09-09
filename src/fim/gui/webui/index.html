@@ -524,10 +524,37 @@
     <div class="configure-layout">
       <div class="configure-panel" id="configure-panel-fim-parameters">
         <h2>FIM parameters</h2>
-        <div class="field">
-          <label for="field-N">N (gene copies/deme)</label>
-          <input type="text" id="field-N" name="N" form="input-form">
-        </div>
+        <!-- N: a scalar/per-deme toggle (design §4.1: "a numeric field
+             plus a 'same for every deme / per-deme' toggle; per-deme
+             reveals a d-row table"). Both modes share the one real
+             `field-N`: `config_form.form_values_to_payload` already
+             accepts either a bare number or a comma-separated per-deme
+             list in that single field (confirmed by `test_form_values_
+             to_payload_accepts_a_per_deme_n_list`, predating this
+             toggle) -- `n_mode` is purely a client-side display choice,
+             not `form="input-form"`, with no `config_form.py` field of
+             its own to submit. `n-per-deme.js` keeps `field-N` (hidden,
+             not removed, while per-deme mode shows) in sync with the
+             grid, the same "one hidden field, driven by a visible grid"
+             shape `field-m_matrix_json`/`field-loci_json`/`field-
+             p0_json` already established. -->
+        <fieldset class="composite" id="n-selector">
+          <legend>N (population size)</legend>
+          <label><input type="radio" name="n_mode" value="same" checked> same for every deme</label>
+          <label><input type="radio" name="n_mode" value="per_deme"> per-deme</label>
+          <div class="field" id="n-same-fields">
+            <label for="field-N">N (gene copies/deme)</label>
+            <input type="text" id="field-N" name="N" form="input-form">
+          </div>
+          <div class="field" id="n-per-deme-fields" hidden>
+            <table id="n-per-deme-grid" class="n-per-deme-grid">
+              <thead>
+                <tr><th>Deme</th><th>N</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </fieldset>
         <div class="field">
           <label for="field-d">d (demes)</label>
           <input type="text" id="field-d" name="d" form="input-form">
@@ -861,6 +888,7 @@
 <script src="screens/config-modals.js"></script>
 <script src="screens/migration-matrix.js"></script>
 <script src="screens/loci-grid.js"></script>
+<script src="screens/n-per-deme.js"></script>
 <script src="screens/p0-grid.js"></script>
 <script src="screens/fixed-per-deme.js"></script>
 <script src="screens/run-view-controls.js"></script>

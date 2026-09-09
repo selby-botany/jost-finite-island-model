@@ -54,7 +54,10 @@ function applyFormValues(values) {
     // shape depends on the loci grid the previous call just rebuilt;
     // `updateFixedPerDemePreview` is pure display (no field of its own
     // to set) but depends on the same `d`/loci state, so it runs last
-    // too.
+    // too. `syncNModeFromFieldValue` (`n-per-deme.js`) similarly derives
+    // `n_mode` -- itself not a real field the loop above ever sets --
+    // from `field-N`'s own just-loaded shape.
+    window.fim.syncNModeFromFieldValue();
     window.fim.rebuildMigrationMatrixGrid();
     window.fim.rebuildLociGrid();
     window.fim.rebuildP0Grid();

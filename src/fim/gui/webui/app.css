@@ -926,6 +926,52 @@ fieldset.composite > label {
     text-align: right;
 }
 
+/* The per-deme N grid editor (`n-per-deme-fields`) -- a scrollable
+ * table of one `N` value per deme, styled to match the migration-
+ * matrix grid's own numeric-table conventions (`.matrix-grid` above).
+ */
+.n-per-deme-grid {
+    max-height: 16rem;
+    max-width: 100%;
+    overflow: auto;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.n-per-deme-grid table {
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+    width: 100%;
+}
+
+.n-per-deme-grid th,
+.n-per-deme-grid td {
+    padding: 0.15rem 0.3rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.n-per-deme-grid th {
+    color: var(--fim-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    position: sticky;
+    top: 0;
+    background: var(--fim-background);
+}
+
+.n-per-deme-cell {
+    width: 5rem;
+    font: inherit;
+    color: inherit;
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.2rem 0.35rem;
+    text-align: right;
+}
+
 /* The explicit p_0 grid editor (`initial-conditions-explicit-fields`)
  * -- a scrollable table of small per-cell allele-frequency mappings,
  * styled to match the migration-matrix grid's own numeric-table

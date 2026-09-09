@@ -43,6 +43,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_input_screen`](#gui.test_input_screen)
   - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
   - [`test_migration_matrix_screen`](#gui.test_migration_matrix_screen)
+  - [`test_n_per_deme_screen`](#gui.test_n_per_deme_screen)
   - [`test_nav_rail`](#gui.test_nav_rail)
   - [`test_open_run_screen`](#gui.test_open_run_screen)
   - [`test_p0_grid_screen`](#gui.test_p0_grid_screen)
@@ -8121,6 +8122,74 @@ Same event-driven "wait on a real `threading.Event`, never poll a
 live background run" shape `test_running_screen.py`'s own real-run
 tests already use, for the identical reason those tests' own
 docstrings record.
+
+<a id="gui.test_n_per_deme_screen"></a>
+
+# gui.test\_n\_per\_deme\_screen
+
+Headless functional tests for the per-deme population-size grid editor
+(botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+§4.1, §4.4).
+
+Real DOM-driven proof that `webui/screens/n-per-deme.js` actually builds,
+seeds, resizes, and reads back a real grid of per-deme `N` values —
+`test/gui/test_config_form.py`'s own `test_form_values_to_payload_accepts_
+a_per_deme_n_list` already proves the server side accepts the comma-
+separated shape this grid writes into `field-N`; these tests prove the
+page's own JavaScript builds that shape correctly, which no Python-only
+test can check. Mirrors `test_migration_matrix_screen.py`'s/`test_loci_
+grid_screen.py`'s own shape exactly.
+
+<a id="gui.test_n_per_deme_screen.test_switching_to_per_deme_mode_seeds_the_grid_from_the_scalar"></a>
+
+#### test\_switching\_to\_per\_deme\_mode\_seeds\_the\_grid\_from\_the\_scalar
+
+```python
+def test_switching_to_per_deme_mode_seeds_the_grid_from_the_scalar(
+        window: webview.Window) -> None
+```
+
+Switching to per-deme mode replicates the current scalar N across every row.
+
+<a id="gui.test_n_per_deme_screen.test_editing_a_per_deme_row_updates_field_n"></a>
+
+#### test\_editing\_a\_per\_deme\_row\_updates\_field\_n
+
+```python
+def test_editing_a_per_deme_row_updates_field_n(
+        window: webview.Window) -> None
+```
+
+Editing one row's own value updates `field-N`'s comma-separated list.
+
+<a id="gui.test_n_per_deme_screen.test_changing_d_resizes_the_grid_preserving_existing_values_by_position"></a>
+
+#### test\_changing\_d\_resizes\_the\_grid\_preserving\_existing\_values\_by\_position
+
+```python
+def test_changing_d_resizes_the_grid_preserving_existing_values_by_position(
+        window: webview.Window) -> None
+```
+
+Growing/shrinking `d` resizes the grid, keeping already-entered values in place.
+
+The same by-position grow/shrink behavior `buildP0Grid`'s own resize
+already uses -- proven directly here since `n-per-deme.js` implements
+it independently (no shared helper between the two grids).
+
+<a id="gui.test_n_per_deme_screen.test_a_real_run_with_distinct_per_deme_n_values_completes"></a>
+
+#### test\_a\_real\_run\_with\_distinct\_per\_deme\_n\_values\_completes
+
+```python
+def test_a_real_run_with_distinct_per_deme_n_values_completes() -> None
+```
+
+A run submitted with genuinely different per-deme N values actually completes.
+
+Same event-driven "wait on a real `threading.Event`, never poll a
+live background run" shape `test_loci_grid_screen.py`'s own real-run
+test uses, for the identical reason its own docstring records.
 
 <a id="gui.test_nav_rail"></a>
 

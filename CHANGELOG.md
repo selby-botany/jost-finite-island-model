@@ -79,6 +79,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   six-modal era's own "open that field's modal" behavior with something
   more precise — naming the exact field, not only the section it used
   to live in.
+- `fim gui`'s Configure workspace gains a "same for every deme /
+  per-deme" toggle for `N`, revealing a `d`-row table when the latter
+  is selected (design doc `20260907-claude-sonnet-5-botanist-gui-
+  redesign.md` §4.1, §4.4) — `config_form.form_values_to_payload`
+  already accepted a comma-separated per-deme `N` list in the same
+  field; this is the visual editor for that shape design §4.4 already
+  named as one of its four non-scalar-editor field applications
+  (migration matrix, loci, and explicit `p_0` already had theirs).
+  Switching modes never discards already-entered data; loading a
+  configuration with a genuine per-deme `N` auto-selects the per-deme
+  view rather than showing the raw comma list in the scalar field.
 
 ### Changed
 
