@@ -63,6 +63,35 @@ def test_get_starter_form_matches_config_form_directly() -> None:
     assert Api().get_starter_form() == starter_form_values()
 
 
+def test_get_initial_form_falls_back_to_starter_values_for_a_stale_saved_form(
+    tmp_path: Path,
+) -> None:
+    """A saved form predating a field added since is discarded, not fatal.
+
+    Confirmed live against this exact shape: a real `preferences.json`
+    written before `loci_mode` existed made a real, already-packaged
+    `.app` launch to a permanently blank Run-destination canvas, since
+    `form_values_to_payload` used to raise a bare `KeyError` for the
+    missing key -- this method's own `except ValueError` never caught
+    it, and the bridge call never returned, so `webui/screens/
+    run-view-initial.js`'s `initializeRunView` never got past its
+    `await loadInitialForm()` and `window.__fimRunViewReady` never
+    became `true`. `form_values_to_payload` now raises `ValueError` for
+    exactly this case (`test_config_form.py`'s own regression test); this
+    test covers the bridge method that depends on it, the same
+    schema-drift shape already fixed once for `fim init`'s starter
+    config (`n_replicates`, CHANGELOG "Fixed" 2026-09-08).
+    """
+    stale_values = dict(starter_form_values())
+    del stale_values["loci_mode"]
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(preferences_path, GuiPreferences().with_form_values(stale_values))
+
+    result = Api(preferences_path=preferences_path).get_initial_form()
+
+    assert result == starter_form_values()
+
+
 def test_get_default_max_workers_matches_batch_runner_directly() -> None:
     """The Batch tab's default is `batch_runner.default_max_workers`, not invented."""
     assert Api().get_default_max_workers() == default_max_workers()

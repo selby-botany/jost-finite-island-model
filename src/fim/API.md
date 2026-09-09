@@ -4288,11 +4288,27 @@ Coerce the form's string values into a `from_mapping`-ready payload.
 **Raises**:
 
 - `ValueError` - If a field's text does not parse as its declared
-  kind. Every message begins with the field's own `name`
-  (or, for `N`'s list form, `name[index]`), matching
-  `SimulationParams.from_mapping`'s own wording, so
+  kind (every message begins with the field's own `name`, or
+  `name[index]` for `N`'s list form, matching
+  `SimulationParams.from_mapping`'s own wording so
   `field_for_error` and the CLI's error text stay in
-  lockstep.
+  lockstep), or if `values` is simply missing a key this
+  function or one of the mode dispatchers below it
+  (`m_to_payload`, `loci_to_payload`, ...) expects. The
+  second case is deliberate, not merely tolerated: `Api.
+  get_initial_form`'s own re-validation of a *saved* form
+  relies on catching exactly `ValueError` to discard a form
+  that no longer matches the current field set (a field added
+  since it was saved — confirmed live against a real
+  `preferences.json` predating `loci_mode`) and fall back to
+  starter values, the same schema-drift shape already fixed
+  once in `STARTER_CONFIG` (`n_replicates`, CHANGELOG
+  "Fixed" 2026-09-08). A bare `KeyError` would defeat that
+  fallback silently — the caller's `except ValueError` simply
+  never fires, and the whole bridge call surfaces to the user
+  as nothing happening at all (`ISSUES.md` would be the right
+  place for this if it were only mitigated rather than fixed
+  at the source).
 
 <a id="fim.gui.config_form.m_to_payload"></a>
 

@@ -347,32 +347,51 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
 
     Raises:
         ValueError: If a field's text does not parse as its declared
-            kind. Every message begins with the field's own `name`
-            (or, for `N`'s list form, `name[index]`), matching
-            `SimulationParams.from_mapping`'s own wording, so
+            kind (every message begins with the field's own `name`, or
+            `name[index]` for `N`'s list form, matching
+            `SimulationParams.from_mapping`'s own wording so
             `field_for_error` and the CLI's error text stay in
-            lockstep.
+            lockstep), or if `values` is simply missing a key this
+            function or one of the mode dispatchers below it
+            (`m_to_payload`, `loci_to_payload`, ...) expects. The
+            second case is deliberate, not merely tolerated: `Api.
+            get_initial_form`'s own re-validation of a *saved* form
+            relies on catching exactly `ValueError` to discard a form
+            that no longer matches the current field set (a field added
+            since it was saved — confirmed live against a real
+            `preferences.json` predating `loci_mode`) and fall back to
+            starter values, the same schema-drift shape already fixed
+            once in `STARTER_CONFIG` (`n_replicates`, CHANGELOG
+            "Fixed" 2026-09-08). A bare `KeyError` would defeat that
+            fallback silently — the caller's `except ValueError` simply
+            never fires, and the whole bridge call surfaces to the user
+            as nothing happening at all (`ISSUES.md` would be the right
+            place for this if it were only mitigated rather than fixed
+            at the source).
     """
-    payload: dict[str, object] = {}
-    for field in all_fields():
-        text = values[field.name].strip()
-        if field.kind == "int":
-            payload[field.name] = _parse_int_named(field.name, text)
-        elif field.kind in ("float", "float_choice"):
-            payload[field.name] = _parse_float_named(field.name, text)
-        elif field.kind == "optional_float":
-            payload[field.name] = (
-                None if not text else _parse_float_named(field.name, text)
-            )
-        elif field.kind == "int_list":
-            payload[field.name] = _parse_int_list_named(field.name, text)
-        else:
-            payload[field.name] = text
-    payload["m"] = m_to_payload(values)
-    payload.update(mu_to_payload(values))
-    payload.update(initial_conditions_to_payload(values))
-    payload.update(loci_to_payload(values))
-    payload["convergence_statistic"] = convergence_statistic_to_payload(values)
+    try:
+        payload: dict[str, object] = {}
+        for field in all_fields():
+            text = values[field.name].strip()
+            if field.kind == "int":
+                payload[field.name] = _parse_int_named(field.name, text)
+            elif field.kind in ("float", "float_choice"):
+                payload[field.name] = _parse_float_named(field.name, text)
+            elif field.kind == "optional_float":
+                payload[field.name] = (
+                    None if not text else _parse_float_named(field.name, text)
+                )
+            elif field.kind == "int_list":
+                payload[field.name] = _parse_int_list_named(field.name, text)
+            else:
+                payload[field.name] = text
+        payload["m"] = m_to_payload(values)
+        payload.update(mu_to_payload(values))
+        payload.update(initial_conditions_to_payload(values))
+        payload.update(loci_to_payload(values))
+        payload["convergence_statistic"] = convergence_statistic_to_payload(values)
+    except KeyError as error:
+        raise ValueError(f"missing field: {error}") from error
     return payload
 
 

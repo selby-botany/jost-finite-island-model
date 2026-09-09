@@ -5183,6 +5183,31 @@ def test_get_starter_form_matches_config_form_directly() -> None
 
 The bridge method adds no logic of its own beyond `starter_form_values`.
 
+<a id="gui.test_app_api.test_get_initial_form_falls_back_to_starter_values_for_a_stale_saved_form"></a>
+
+#### test\_get\_initial\_form\_falls\_back\_to\_starter\_values\_for\_a\_stale\_saved\_form
+
+```python
+def test_get_initial_form_falls_back_to_starter_values_for_a_stale_saved_form(
+        tmp_path: Path) -> None
+```
+
+A saved form predating a field added since is discarded, not fatal.
+
+Confirmed live against this exact shape: a real `preferences.json`
+written before `loci_mode` existed made a real, already-packaged
+`.app` launch to a permanently blank Run-destination canvas, since
+`form_values_to_payload` used to raise a bare `KeyError` for the
+missing key -- this method's own `except ValueError` never caught
+it, and the bridge call never returned, so `webui/screens/
+run-view-initial.js`'s `initializeRunView` never got past its
+`await loadInitialForm()` and `window.__fimRunViewReady` never
+became `true`. `form_values_to_payload` now raises `ValueError` for
+exactly this case (`test_config_form.py`'s own regression test); this
+test covers the bridge method that depends on it, the same
+schema-drift shape already fixed once for `fim init`'s starter
+config (`n_replicates`, CHANGELOG "Fixed" 2026-09-08).
+
 <a id="gui.test_app_api.test_get_default_max_workers_matches_batch_runner_directly"></a>
 
 #### test\_get\_default\_max\_workers\_matches\_batch\_runner\_directly
@@ -6739,6 +6764,31 @@ def test_form_values_to_payload_rejects_a_non_integer_n_item() -> None
 ```
 
 A bad per-deme N entry names its own index, matching `_parse_population_size`.
+
+<a id="gui.test_config_form.test_form_values_to_payload_raises_value_error_for_a_missing_field"></a>
+
+#### test\_form\_values\_to\_payload\_raises\_value\_error\_for\_a\_missing\_field
+
+```python
+def test_form_values_to_payload_raises_value_error_for_a_missing_field(
+) -> None
+```
+
+A missing key surfaces as `ValueError`, not a bare `KeyError`.
+
+Confirmed live against a real `preferences.json` predating
+`loci_mode`: `Api.get_initial_form` re-validates a saved form and
+relies on catching exactly `ValueError` to discard one that no
+longer matches the current field set, falling back to
+`starter_form_values()` (its own docstring). Before this test, a
+field simply absent from `values` -- the schema-drift shape the CLI
+starter config already hit once with `n_replicates` -- raised
+`KeyError` instead, which that `except ValueError` never catches:
+the bridge call surfaced to a real, already-launched app as a
+permanently blank Run-destination canvas with no error shown
+anywhere a double-clicked `.app` user could see, since pywebview
+only prints an uncaught bridge exception to a terminal nothing
+launched from Finder has.
 
 <a id="gui.test_config_form.test_m_to_payload_scalar_mode_returns_a_bare_float"></a>
 

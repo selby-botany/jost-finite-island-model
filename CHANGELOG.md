@@ -92,6 +92,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `Api.get_initial_form` (`fim gui`'s own fresh-launch form loader) no
+  longer crashes silently when a saved `preferences.json` predates a
+  form field added since it was written — confirmed live with a real
+  `preferences.json` written before `loci_mode` existed: the app
+  launched to a permanently blank Run-destination canvas with no error
+  visible anywhere a double-clicked `.app` user could see, since the
+  missing field surfaced as a bare `KeyError` inside
+  `form_values_to_payload`, not the `ValueError` `get_initial_form`'s
+  own re-validation already knew to catch and discard in favor of the
+  starter form. `form_values_to_payload` now raises `ValueError` for
+  any field `values` is missing, matching its own documented contract
+  (it already raised `ValueError` for a field present but malformed);
+  every existing caller — `get_initial_form`, `validate_form`,
+  `start_run` — already only ever expected that one exception type from
+  it.
 - `fim init`'s starter configuration now pins `n_replicates: 1`
   explicitly. It never set the field at all, relying on the default —
   which changed from `1` to `200` in the `n_replicates`/

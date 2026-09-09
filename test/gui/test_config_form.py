@@ -126,6 +126,30 @@ def test_form_values_to_payload_rejects_a_non_integer_n_item() -> None:
         config_form.form_values_to_payload(values)
 
 
+def test_form_values_to_payload_raises_value_error_for_a_missing_field() -> None:
+    """A missing key surfaces as `ValueError`, not a bare `KeyError`.
+
+    Confirmed live against a real `preferences.json` predating
+    `loci_mode`: `Api.get_initial_form` re-validates a saved form and
+    relies on catching exactly `ValueError` to discard one that no
+    longer matches the current field set, falling back to
+    `starter_form_values()` (its own docstring). Before this test, a
+    field simply absent from `values` -- the schema-drift shape the CLI
+    starter config already hit once with `n_replicates` -- raised
+    `KeyError` instead, which that `except ValueError` never catches:
+    the bridge call surfaced to a real, already-launched app as a
+    permanently blank Run-destination canvas with no error shown
+    anywhere a double-clicked `.app` user could see, since pywebview
+    only prints an uncaught bridge exception to a terminal nothing
+    launched from Finder has.
+    """
+    values = dict(config_form.starter_form_values())
+    del values["loci_mode"]
+
+    with pytest.raises(ValueError, match=r"missing field.*loci_mode"):
+        config_form.form_values_to_payload(values)
+
+
 def test_m_to_payload_scalar_mode_returns_a_bare_float() -> None:
     """Scalar mode's payload is a bare float, `_parse_migration`'s first shape."""
     payload = config_form.m_to_payload(
