@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200"
+     height="680"
+     viewBox="0 0 1200 680">
+
+  <title>Time (s) and Time (L₁ Normalized) by Locus Length</title>
+
+  <style>
+    .title {
+      font: bold 20px sans-serif;
+      fill: #222;
+    }
+
+    .axis-label {
+      font: 16px sans-serif;
+      fill: #222;
+    }
+
+    .tick-label {
+      font: 12px sans-serif;
+      fill: #333;
+    }
+
+    .legend {
+      font: 13px sans-serif;
+      fill: #222;
+    }
+
+    .grid {
+      stroke: #d9d9d9;
+      stroke-width: 1;
+    }
+
+    .axis {
+      stroke: #222;
+      stroke-width: 1.5;
+    }
+
+    .series {
+      fill: none;
+      stroke-width: 2.5;
+    }
+
+    .point {
+      stroke: white;
+      stroke-width: 1;
+    }
+
+    .note {
+      font: 12px sans-serif;
+      fill: #555;
+    }
+  </style>
+
+  <script><![CDATA[
+    window.onload = function () {
+      const NS = "http://www.w3.org/2000/svg";
+      const svg = document.documentElement;
+
+      const length = [2, 4, 5, 6, 7, 8];
+
+      const absolute = [
+        {
+          name: "L₁(s)",
+          color: "#1f77b4",
+          values: [0.831, 1.887, 2.358, 2.326, 2.132, 2.516]
+        },
+        {
+          name: "Lₓ(s)",
+          color: "#ff7f0e",
+          values: [10.963, 29.095, 36.381, 37.168, 36.563, 37.663]
+        },
+        {
+          name: "Goff(s)",
+          color: "#2ca02c",
+          values: [11.089, 30.237, 38.078, 39.189, 38.202, 39.008]
+        },
+        {
+          name: "Gjit(s)",
+          color: "#d62728",
+          values: [10.066, 18.649, 25.927, 29.391, 30.135, 31.319]
+        },
+        {
+          name: "V(s)",
+          color: "#9467bd",
+          values: [3.636, 5.017, 6.184, 9.577, 29.629, 102.112]
+        }
+      ];
+
+      const normalized = [
+        {
+          name: "Lₓ/L₁",
+          color: "#ff7f0e",
+          values: [13.20, 15.42, 15.43, 15.98, 17.15, 14.97]
+        },
+        {
+          name: "Goff/L₁",
+          color: "#2ca02c",
+          values: [13.35, 16.03, 16.15, 16.85, 17.92, 15.50]
+        },
+        {
+          name: "Gjit/L₁",
+          color: "#d62728",
+          values: [12.12, 9.88, 11.00, 12.63, 14.13, 12.45]
+        },
+        {
+          name: "V/L₁",
+          color: "#9467bd",
+          values: [4.38, 2.66, 2.62, 4.12, 13.90, 40.58]
+        }
+      ];
+
+      function el(name, attrs, parent = svg) {
+        const element = document.createElementNS(NS, name);
+
+        for (const [key, value] of Object.entries(attrs || {})) {
+          element.setAttribute(key, value);
+        }
+
+        parent.appendChild(element);
+        return element;
+      }
+
+      function text(
+        content,
+        x,
+        y,
+        className,
+        anchor = "middle",
+        parent = svg
+      ) {
+        const element = el(
+          "text",
+          {
+            x: x,
+            y: y,
+            class: className,
+            "text-anchor": anchor
+          },
+          parent
+        );
+
+        element.textContent = content;
+        return element;
+      }
+
+      function drawPanel(config) {
+        const {
+          x0,
+          y0,
+          width,
+          height,
+          xmin,
+          xmax,
+          ymax,
+          title,
+          ylabel,
+          xticks,
+          yticks,
+          series,
+          legendRight = false,
+          yDecimals = 0
+        } = config;
+
+        const right = x0 + width;
+        const bottom = y0 + height;
+
+        function X(value) {
+          return x0 + ((value - xmin) / (xmax - xmin)) * width;
+        }
+
+        function Y(value) {
+          return bottom - (value / ymax) * height;
+        }
+
+        text(
+          title,
+          x0 + width / 2,
+          35,
+          "title"
+        );
+
+        // Horizontal gridlines and y-axis labels
+        yticks.forEach(value => {
+          const y = Y(value);
+
+          el("line", {
+            x1: x0,
+            y1: y,
+            x2: right,
+            y2: y,
+            class: "grid"
+          });
+
+          text(
+            value.toFixed(yDecimals),
+            x0 - 10,
+            y + 4,
+            "tick-label",
+            "end"
+          );
+        });
+
+        // Vertical gridlines and x-axis labels
+        xticks.forEach(value => {
+          const x = X(value);
+
+          el("line", {
+            x1: x,
+            y1: y0,
+            x2: x,
+            y2: bottom,
+            class: "grid"
+          });
+
+          text(
+            String(value),
+            x,
+            bottom + 20,
+            "tick-label"
+          );
+        });
+
+        // Axes
+        el("line", {
+          x1: x0,
+          y1: bottom,
+          x2: right,
+          y2: bottom,
+          class: "axis"
+        });
+
+        el("line", {
+          x1: x0,
+          y1: y0,
+          x2: x0,
+          y2: bottom,
+          class: "axis"
+        });
+
+        // Axis labels
+        text(
+          "Locus Length",
+          x0 + width / 2,
+          bottom + 48,
+          "axis-label"
+        );
+
+        const yText = text(
+          ylabel,
+          x0 - 58,
+          y0 + height / 2,
+          "axis-label"
+        );
+
+        yText.setAttribute(
+          "transform",
+          `rotate(-90 ${x0 - 58} ${y0 + height / 2})`
+        );
+
+        // Legend background
+        const legendWidth = legendRight ? 145 : 125;
+        const legendX = legendRight
+          ? x0 + width - legendWidth - 7
+          : x0 + 8;
+
+        el("rect", {
+          x: legendX,
+          y: y0 + 8,
+          width: legendWidth,
+          height: series.length * 20 + 15,
+          fill: "white",
+          opacity: "0.88"
+        });
+
+        // Data series and legends
+        series.forEach((s, index) => {
+          const points = length.map((value, i) => {
+            return `${X(value).toFixed(2)},${Y(s.values[i]).toFixed(2)}`;
+          }).join(" ");
+
+          el("polyline", {
+            points: points,
+            class: "series",
+            stroke: s.color
+          });
+
+          length.forEach((value, i) => {
+            el("circle", {
+              cx: X(value),
+              cy: Y(s.values[i]),
+              r: 4,
+              fill: s.color,
+              class: "point"
+            });
+          });
+
+          const lx = legendRight
+            ? x0 + width - legendWidth + 8
+            : x0 + 18;
+
+          const ly = y0 + 20 + index * 20;
+
+          el("line", {
+            x1: lx,
+            y1: ly - 4,
+            x2: lx + 25,
+            y2: ly - 4,
+            stroke: s.color,
+            "stroke-width": 3
+          });
+
+          text(
+            s.name,
+            lx + 32,
+            ly,
+            "legend",
+            "start"
+          );
+        });
+      }
+
+      // Absolute quantities
+      drawPanel({
+        x0: 80,
+        y0: 75,
+        width: 450,
+        height: 390,
+        xmin: 2,
+        xmax: 8,
+        ymax: 110,
+        title: "Time (s) by Locus Length",
+        ylabel: "Time (s)",
+        xticks: [2, 3, 4, 5, 6, 7, 8],
+        yticks: [0, 20, 40, 60, 80, 100],
+        yDecimals: 0,
+        legendRight: false,
+        series: absolute
+      });
+
+      // Normalized quantities
+      drawPanel({
+        x0: 670,
+        y0: 75,
+        width: 450,
+        height: 390,
+        xmin: 2,
+        xmax: 8,
+        ymax: 45,
+        title: "Time (L₁ Normalized) by Locus Length",
+        ylabel: "Time (L₁ Normalized)",
+        xticks: [2, 3, 4, 5, 6, 7, 8],
+        yticks: [0, 10, 20, 30, 40],
+        yDecimals: 0,
+        legendRight: true,
+        series: normalized
+      });
+    };
+  ]]></script>
+</svg>

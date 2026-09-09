@@ -1,0 +1,399 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="980"
+     height="700"
+     viewBox="0 0 980 700">
+
+  <title>Heat Map of V/Gjit Wall-Clock Ratio</title>
+
+  <style>
+    .title {
+      font: bold 21px sans-serif;
+      fill: #222;
+    }
+
+    .axis-label {
+      font: 16px sans-serif;
+      fill: #222;
+    }
+
+    .tick-label {
+      font: 13px sans-serif;
+      fill: #333;
+    }
+
+    .cell-label {
+      font: bold 14px sans-serif;
+      text-anchor: middle;
+      dominant-baseline: middle;
+    }
+
+    .legend-label {
+      font: 13px sans-serif;
+      fill: #333;
+    }
+
+    .axis {
+      stroke: #222;
+      stroke-width: 1.5;
+    }
+
+    .grid {
+      stroke: #777;
+      stroke-width: 1;
+    }
+
+    .cell {
+      stroke: #ffffff;
+      stroke-width: 2;
+    }
+
+    .note {
+      font: 13px sans-serif;
+      fill: #555;
+    }
+  </style>
+
+  <defs>
+    <linearGradient id="heatScale"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="0%">
+      <stop offset="0%"
+            stop-color="#d73027"/>
+      <stop offset="35%"
+            stop-color="#fdae61"/>
+      <stop offset="67.7%"
+            stop-color="#fff7bc"/>
+      <stop offset="67.7%"
+            stop-color="#ffffff"/>
+      <stop offset="100%"
+            stop-color="#4575b4"/>
+    </linearGradient>
+  </defs>
+
+  <script><![CDATA[
+    window.onload = function () {
+      const NS = "http://www.w3.org/2000/svg";
+      const svg = document.documentElement;
+
+      const capacities = [1024, 4096, 16384];
+      const demes = [10, 35, 70, 120, 300];
+
+      const values = [
+        [0.62, 1.16, 2.24],
+        [0.22, 0.63, 2.44],
+        [0.18, 0.25, 1.11],
+        [0.14, 0.34, 0.62],
+        [0.11, 0.20, 0.36]
+      ];
+
+      const plot = {
+        left: 150,
+        top: 90,
+        width: 600,
+        height: 430
+      };
+
+      // Logarithmic axis domains.
+      // Cell boundaries are chosen geometrically around the data points.
+      const xMin = 512;
+      const xMax = 32768;
+      const yMin = 5;
+      const yMax = 500;
+
+      function el(name, attrs, parent = svg) {
+        const element = document.createElementNS(NS, name);
+
+        for (const [key, value] of Object.entries(attrs || {})) {
+          element.setAttribute(key, value);
+        }
+
+        parent.appendChild(element);
+        return element;
+      }
+
+      function text(content, x, y, className, anchor = "middle") {
+        const element = el("text", {
+          x: x,
+          y: y,
+          class: className,
+          "text-anchor": anchor
+        });
+
+        element.textContent = content;
+        return element;
+      }
+
+      function logX(value) {
+        return plot.left +
+          (
+            (Math.log10(value) - Math.log10(xMin)) /
+            (Math.log10(xMax) - Math.log10(xMin))
+          ) * plot.width;
+      }
+
+      function logY(value) {
+        return plot.top + plot.height -
+          (
+            (Math.log10(value) - Math.log10(yMin)) /
+            (Math.log10(yMax) - Math.log10(yMin))
+          ) * plot.height;
+      }
+
+      /*
+       * Color interpolation is performed in log(value) space:
+       *
+       * value < 1  -> warm colors
+       * value = 1  -> neutral white
+       * value > 1  -> cool colors
+       */
+      function interpolateColor(c1, c2, t) {
+        t = Math.max(0, Math.min(1, t));
+
+        const rgb1 = c1.match(/\w\w/g).map(v => parseInt(v, 16));
+        const rgb2 = c2.match(/\w\w/g).map(v => parseInt(v, 16));
+
+        const rgb = rgb1.map((v, i) =>
+          Math.round(v + (rgb2[i] - v) * t)
+        );
+
+        return "#" + rgb
+          .map(v => v.toString(16).padStart(2, "0"))
+          .join("");
+      }
+
+      function colorFor(value) {
+        const neutral = 1;
+        const logValue = Math.log10(value);
+
+        if (value <= neutral) {
+          // 0.1 -> red, 1 -> white
+          const t = (logValue - Math.log10(0.1)) /
+                    (Math.log10(neutral) - Math.log10(0.1));
+
+          return interpolateColor("#d73027", "#ffffff", t);
+        }
+
+        // 1 -> white, 3 -> blue
+        const t = (logValue - Math.log10(neutral)) /
+                  (Math.log10(3) - Math.log10(neutral));
+
+        return interpolateColor("#ffffff", "#4575b4", t);
+      }
+
+      function textColor(value) {
+        const logValue = Math.log10(value);
+
+        if (value < 0.35 || value > 1.8) {
+          return "#ffffff";
+        }
+
+        return "#222222";
+      }
+
+      // Plot border
+      el("rect", {
+        x: plot.left,
+        y: plot.top,
+        width: plot.width,
+        height: plot.height,
+        fill: "#ffffff",
+        class: "axis"
+      });
+
+      // Logarithmic x-axis ticks
+      const xTicks = [512, 1024, 2048, 4096, 8192, 16384, 32768];
+
+      xTicks.forEach(value => {
+        const x = logX(value);
+
+        el("line", {
+          x1: x,
+          y1: plot.top,
+          x2: x,
+          y2: plot.top + plot.height,
+          class: "grid"
+        });
+
+        text(
+          value.toLocaleString(),
+          x,
+          plot.top + plot.height + 24,
+          "tick-label"
+        );
+      });
+
+      // Logarithmic y-axis ticks
+      const yTicks = [5, 10, 20, 50, 100, 200, 500];
+
+      yTicks.forEach(value => {
+        const y = logY(value);
+
+        el("line", {
+          x1: plot.left,
+          y1: y,
+          x2: plot.left + plot.width,
+          y2: y,
+          class: "grid"
+        });
+
+        text(
+          String(value),
+          plot.left - 12,
+          y + 4,
+          "tick-label",
+          "end"
+        );
+      });
+
+      // Draw cells using geometric boundaries.
+      const xBoundaries = [512, 2048, 8192, 32768];
+      const yBoundaries = [
+        5,
+        Math.sqrt(10 * 35),
+        Math.sqrt(35 * 70),
+        Math.sqrt(70 * 120),
+        Math.sqrt(120 * 300),
+        500
+      ];
+
+      for (let row = 0; row < demes.length; row++) {
+        for (let col = 0; col < capacities.length; col++) {
+          const x1 = logX(xBoundaries[col]);
+          const x2 = logX(xBoundaries[col + 1]);
+
+          // SVG y-coordinates increase downward.
+          const yTop = logY(yBoundaries[row + 1]);
+          const yBottom = logY(yBoundaries[row]);
+
+          const value = values[row][col];
+
+          el("rect", {
+            x: x1,
+            y: yTop,
+            width: x2 - x1,
+            height: yBottom - yTop,
+            fill: colorFor(value),
+            class: "cell"
+          });
+
+          text(
+            value.toFixed(2),
+            (x1 + x2) / 2,
+            (yTop + yBottom) / 2,
+            "cell-label"
+          ).setAttribute("fill", textColor(value));
+        }
+      }
+
+      // Axis lines
+      el("line", {
+        x1: plot.left,
+        y1: plot.top + plot.height,
+        x2: plot.left + plot.width,
+        y2: plot.top + plot.height,
+        class: "axis"
+      });
+
+      el("line", {
+        x1: plot.left,
+        y1: plot.top,
+        x2: plot.left,
+        y2: plot.top + plot.height,
+        class: "axis"
+      });
+
+      // Axis labels
+      text(
+        "Capacity (base-10 log)",
+        plot.left + plot.width / 2,
+        plot.top + plot.height + 58,
+        "axis-label"
+      );
+
+      const yLabel = text(
+        "Demes (d) (base-10 log)",
+        plot.left - 95,
+        plot.top + plot.height / 2,
+        "axis-label"
+      );
+
+      yLabel.setAttribute(
+        "transform",
+        `rotate(-90 ${plot.left - 95} ${plot.top + plot.height / 2})`
+      );
+
+      // Title
+      text(
+        "Heat Map of V/Gjit Wall-Clock Ratio",
+        plot.left + plot.width / 2,
+        42,
+        "title"
+      );
+
+      // Color-scale legend
+      const legendX = 150;
+      const legendY = 605;
+      const legendWidth = 600;
+      const legendHeight = 20;
+
+      text(
+        "V > Gjit",
+        legendX - 12,
+        legendY + 15,
+        "legend-label",
+        "end"
+      );
+
+      el("rect", {
+        x: legendX,
+        y: legendY,
+        width: legendWidth,
+        height: legendHeight,
+        fill: "url(#heatScale)",
+        stroke: "#777",
+        "stroke-width": 1
+      });
+
+      text(
+        "V < Gjit",
+        legendX + legendWidth + 12,
+        legendY + 15,
+        "legend-label",
+        "start"
+      );
+
+      // Legend tick labels use the same logarithmic value scale.
+      const legendTicks = [
+        { value: 0.1, position: 0.00 },
+        { value: 0.25, position: 0.269 },
+        { value: 0.5, position: 0.473 },
+        { value: 1.0, position: 0.677 },
+        { value: 2.0, position: 0.880 },
+        { value: 3.0, position: 1.00 }
+      ];
+
+      legendTicks.forEach(tick => {
+        const x = legendX + tick.position * legendWidth;
+
+        el("line", {
+          x1: x,
+          y1: legendY + legendHeight,
+          x2: x,
+          y2: legendY + legendHeight + 6,
+          stroke: "#555",
+          "stroke-width": 1
+        });
+
+        text(
+          String(tick.value),
+          x,
+          legendY + legendHeight + 22,
+          "legend-label"
+        );
+      });
+    };
+  ]]></script>
+</svg>

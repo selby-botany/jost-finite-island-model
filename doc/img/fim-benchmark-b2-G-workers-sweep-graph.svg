@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200"
+     height="680"
+     viewBox="0 0 1200 680">
+
+  <title>Worker scaling graphs</title>
+
+  <style>
+    .title {
+      font: bold 20px sans-serif;
+      fill: #222;
+    }
+
+    .axis-label {
+      font: 16px sans-serif;
+      fill: #222;
+    }
+
+    .tick-label {
+      font: 12px sans-serif;
+      fill: #333;
+    }
+
+    .legend {
+      font: 13px sans-serif;
+      fill: #222;
+    }
+
+    .grid {
+      stroke: #d9d9d9;
+      stroke-width: 1;
+    }
+
+    .axis {
+      stroke: #222;
+      stroke-width: 1.5;
+    }
+
+    .series {
+      fill: none;
+      stroke-width: 2.5;
+    }
+
+    .point {
+      stroke: white;
+      stroke-width: 1;
+    }
+  </style>
+
+  <script><![CDATA[
+    window.onload = function () {
+      const NS = "http://www.w3.org/2000/svg";
+      const svg = document.documentElement;
+
+      const workers = [1, 2, 4, 6, 8, 10];
+
+      const absolute = [
+        {
+          name: "G_jit=off(s)",
+          color: "#1f77b4",
+          values: [250.87, 241.28, 241.28, 298.21, 285.60, 230.21]
+        },
+        {
+          name: "G_jit=numba(s)",
+          color: "#d62728",
+          values: [134.80, 120.45, 128.96, 131.13, 151.20, 123.83]
+        }
+      ];
+
+      const normalized = [
+        {
+          name: "G_jit=off,w / G_jit=off,w=1",
+          color: "#1f77b4",
+          values: [1.00, 1.04, 1.00, 0.84, 0.88, 1.09]
+        },
+        {
+          name: "G_jit=numba,w / G_jit=off,w=1",
+          color: "#d62728",
+          values: [1.86, 2.08, 1.95, 1.91, 1.66, 2.03]
+        }
+      ];
+
+      function el(name, attrs, parent = svg) {
+        const element = document.createElementNS(NS, name);
+
+        for (const [key, value] of Object.entries(attrs || {})) {
+          element.setAttribute(key, value);
+        }
+
+        parent.appendChild(element);
+        return element;
+      }
+
+      function text(
+        content,
+        x,
+        y,
+        className,
+        anchor = "middle",
+        parent = svg
+      ) {
+        const element = el(
+          "text",
+          {
+            x: x,
+            y: y,
+            class: className,
+            "text-anchor": anchor
+          },
+          parent
+        );
+
+        element.textContent = content;
+        return element;
+      }
+
+      function drawPanel(config) {
+        const {
+          x0,
+          y0,
+          width,
+          height,
+          xmin,
+          xmax,
+          ymax,
+          title,
+          ylabel,
+          xticks,
+          yticks,
+          series,
+          legendRight = false,
+          yDecimals = 0
+        } = config;
+
+        const right = x0 + width;
+        const bottom = y0 + height;
+
+        function X(value) {
+          return x0 + ((value - xmin) / (xmax - xmin)) * width;
+        }
+
+        function Y(value) {
+          return bottom - (value / ymax) * height;
+        }
+
+        text(
+          title,
+          x0 + width / 2,
+          35,
+          "title"
+        );
+
+        // Horizontal gridlines and y-axis labels
+        yticks.forEach(value => {
+          const y = Y(value);
+
+          el("line", {
+            x1: x0,
+            y1: y,
+            x2: right,
+            y2: y,
+            class: "grid"
+          });
+
+          text(
+            value.toFixed(yDecimals),
+            x0 - 10,
+            y + 4,
+            "tick-label",
+            "end"
+          );
+        });
+
+        // Vertical gridlines and x-axis labels
+        xticks.forEach(value => {
+          const x = X(value);
+
+          el("line", {
+            x1: x,
+            y1: y0,
+            x2: x,
+            y2: bottom,
+            class: "grid"
+          });
+
+          text(
+            String(value),
+            x,
+            bottom + 20,
+            "tick-label"
+          );
+        });
+
+        // Axes
+        el("line", {
+          x1: x0,
+          y1: bottom,
+          x2: right,
+          y2: bottom,
+          class: "axis"
+        });
+
+        el("line", {
+          x1: x0,
+          y1: y0,
+          x2: x0,
+          y2: bottom,
+          class: "axis"
+        });
+
+        // Axis labels
+        text(
+          "Workers",
+          x0 + width / 2,
+          bottom + 48,
+          "axis-label"
+        );
+
+        const yText = text(
+          ylabel,
+          x0 - 58,
+          y0 + height / 2,
+          "axis-label"
+        );
+
+        yText.setAttribute(
+          "transform",
+          `rotate(-90 ${x0 - 58} ${y0 + height / 2})`
+        );
+
+        // Legend background
+        if (legendRight) {
+          el("rect", {
+            x: x0 + width - 245,
+            y: y0 + 8,
+            width: 238,
+            height: series.length * 20 + 15,
+            fill: "white",
+            opacity: "0.88"
+          });
+        } else {
+          el("rect", {
+            x: x0 + 8,
+            y: y0 + 8,
+            width: 190,
+            height: series.length * 20 + 15,
+            fill: "white",
+            opacity: "0.88"
+          });
+        }
+
+        // Data series and legends
+        series.forEach((s, index) => {
+          const points = workers.map((value, i) => {
+            return `${X(value).toFixed(2)},${Y(s.values[i]).toFixed(2)}`;
+          }).join(" ");
+
+          el("polyline", {
+            points: points,
+            class: "series",
+            stroke: s.color
+          });
+
+          workers.forEach((value, i) => {
+            el("circle", {
+              cx: X(value),
+              cy: Y(s.values[i]),
+              r: 4,
+              fill: s.color,
+              class: "point"
+            });
+          });
+
+          const lx = legendRight
+            ? x0 + width - 225
+            : x0 + 18;
+
+          const ly = y0 + 20 + index * 20;
+
+          el("line", {
+            x1: lx,
+            y1: ly - 4,
+            x2: lx + 25,
+            y2: ly - 4,
+            stroke: s.color,
+            "stroke-width": 3
+          });
+
+          text(
+            s.name,
+            lx + 32,
+            ly,
+            "legend",
+            "start"
+          );
+        });
+      }
+
+      // Absolute values
+      drawPanel({
+        x0: 80,
+        y0: 75,
+        width: 450,
+        height: 390,
+        xmin: 1,
+        xmax: 10,
+        ymax: 320,
+        title: "Time (s) by Number of Workers (w)",
+        ylabel: "Time (s)",
+        xticks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        yticks: [0, 50, 100, 150, 200, 250, 300],
+        yDecimals: 0,
+        legendRight: false,
+        series: absolute
+      });
+
+      // Normalized values
+      drawPanel({
+        x0: 670,
+        y0: 75,
+        width: 450,
+        height: 390,
+        xmin: 1,
+        xmax: 10,
+        ymax: 2.2,
+        title: "Time (L₁ Normalized) by Number of Workers (w)",
+        ylabel: "Time (L₁ Normalized)",
+        xticks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        yticks: [0, 0.5, 1.0, 1.5, 2.0],
+        yDecimals: 1,
+        legendRight: true,
+        series: normalized
+      });
+    };
+  ]]></script>
+</svg>

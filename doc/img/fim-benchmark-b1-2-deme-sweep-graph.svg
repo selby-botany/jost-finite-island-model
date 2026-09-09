@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200"
+     height="680"
+     viewBox="0 0 1200 680">
+
+  <title>Measured and normalized quantities versus d</title>
+
+  <style>
+    .title {
+      font: bold 20px sans-serif;
+      fill: #222;
+    }
+
+    .axis-label {
+      font: 16px sans-serif;
+      fill: #222;
+    }
+
+    .tick-label {
+      font: 12px sans-serif;
+      fill: #333;
+    }
+
+    .legend {
+      font: 13px sans-serif;
+      fill: #222;
+    }
+
+    .grid {
+      stroke: #d9d9d9;
+      stroke-width: 1;
+    }
+
+    .axis {
+      stroke: #222;
+      stroke-width: 1.5;
+    }
+
+    .series {
+      fill: none;
+      stroke-width: 2.5;
+    }
+
+    .point {
+      stroke: white;
+      stroke-width: 1;
+    }
+
+    .note {
+      font: 12px sans-serif;
+      fill: #555;
+    }
+  </style>
+
+  <script><![CDATA[
+    window.onload = function () {
+      const NS = "http://www.w3.org/2000/svg";
+      const svg = document.documentElement;
+
+      const d = [4, 10, 20, 35, 50, 80, 120];
+
+      const absolute = [
+        {
+          name: "L₁(s)",
+          color: "#1f77b4",
+          values: [0.043, 0.138, 0.366, 0.724, 1.349, 2.854, 5.071]
+        },
+        {
+          name: "Lₓ(s)",
+          color: "#ff7f0e",
+          values: [0.754, 2.368, 5.907, 12.894, 22.537, 45.126, 79.941]
+        },
+        {
+          name: "Goff(s)",
+          color: "#2ca02c",
+          values: [0.951, 2.525, 6.018, 13.566, 23.196, 47.602, 85.891]
+        },
+        {
+          name: "Gjit(s)",
+          color: "#d62728",
+          values: [1.062, 2.283, 5.113, 9.645, 14.834, 27.163, 45.650]
+        },
+        {
+          name: "V(s)",
+          color: "#9467bd",
+          values: [0.372, 0.818, 1.581, 2.831, 4.192, 7.062, 11.196]
+        }
+      ];
+
+      const normalized = [
+        {
+          name: "Lₓ/L₁",
+          color: "#ff7f0e",
+          values: [17.65, 17.15, 16.16, 17.81, 16.70, 15.81, 15.77]
+        },
+        {
+          name: "Goff/L₁",
+          color: "#2ca02c",
+          values: [22.24, 18.29, 16.46, 18.74, 17.19, 16.68, 16.94]
+        },
+        {
+          name: "Gjit/L₁",
+          color: "#d62728",
+          values: [24.84, 16.54, 13.99, 13.33, 10.99, 9.52, 9.00]
+        },
+        {
+          name: "V/L₁",
+          color: "#9467bd",
+          values: [8.69, 5.93, 4.32, 3.91, 3.11, 2.47, 2.21]
+        }
+      ];
+
+      function el(name, attrs, parent = svg) {
+        const element = document.createElementNS(NS, name);
+
+        for (const [key, value] of Object.entries(attrs || {})) {
+          element.setAttribute(key, value);
+        }
+
+        parent.appendChild(element);
+        return element;
+      }
+
+      function text(
+        content,
+        x,
+        y,
+        className,
+        anchor = "middle",
+        parent = svg
+      ) {
+        const element = el(
+          "text",
+          {
+            x: x,
+            y: y,
+            class: className,
+            "text-anchor": anchor
+          },
+          parent
+        );
+
+        element.textContent = content;
+        return element;
+      }
+
+      function drawPanel(config) {
+        const {
+          x0,
+          y0,
+          width,
+          height,
+          xmin,
+          xmax,
+          ymax,
+          title,
+          ylabel,
+          xticks,
+          yticks,
+          series,
+          legendRight = false,
+          yDecimals = 0
+        } = config;
+
+        const right = x0 + width;
+        const bottom = y0 + height;
+
+        function X(value) {
+          return x0 +
+            (
+              (Math.log10(value) - Math.log10(xmin)) /
+              (Math.log10(xmax) - Math.log10(xmin))
+            ) * width;
+        }
+
+        function Y(value) {
+          return bottom - (value / ymax) * height;
+        }
+
+        text(
+          title,
+          x0 + width / 2,
+          35,
+          "title"
+        );
+
+        // Horizontal gridlines and y-axis labels
+        yticks.forEach(value => {
+          const y = Y(value);
+
+          el("line", {
+            x1: x0,
+            y1: y,
+            x2: right,
+            y2: y,
+            class: "grid"
+          });
+
+          text(
+            value.toFixed(yDecimals),
+            x0 - 10,
+            y + 4,
+            "tick-label",
+            "end"
+          );
+        });
+
+        // Vertical gridlines and x-axis labels
+        xticks.forEach(value => {
+          const x = X(value);
+
+          el("line", {
+            x1: x,
+            y1: y0,
+            x2: x,
+            y2: bottom,
+            class: "grid"
+          });
+
+          text(
+            String(value),
+            x,
+            bottom + 20,
+            "tick-label"
+          );
+        });
+
+        // Axes
+        el("line", {
+          x1: x0,
+          y1: bottom,
+          x2: right,
+          y2: bottom,
+          class: "axis"
+        });
+
+        el("line", {
+          x1: x0,
+          y1: y0,
+          x2: x0,
+          y2: bottom,
+          class: "axis"
+        });
+
+        // Axis labels
+        text(
+          "Deme Size (d) (base-10 log)",
+          x0 + width / 2,
+          bottom + 48,
+          "axis-label"
+        );
+
+        const yText = text(
+          ylabel,
+          x0 - 58,
+          y0 + height / 2,
+          "axis-label"
+        );
+
+        yText.setAttribute(
+          "transform",
+          `rotate(-90 ${x0 - 58} ${y0 + height / 2})`
+        );
+
+        // Legend background
+        const legendWidth = legendRight ? 150 : 125;
+        const legendX = legendRight
+          ? x0 + width - legendWidth - 7
+          : x0 + 8;
+
+        el("rect", {
+          x: legendX,
+          y: y0 + 8,
+          width: legendWidth,
+          height: series.length * 20 + 15,
+          fill: "white",
+          opacity: "0.88"
+        });
+
+        // Data series and legends
+        series.forEach((s, index) => {
+          const points = d.map((value, i) => {
+            return `${X(value).toFixed(2)},${Y(s.values[i]).toFixed(2)}`;
+          }).join(" ");
+
+          el("polyline", {
+            points: points,
+            class: "series",
+            stroke: s.color
+          });
+
+          d.forEach((value, i) => {
+            el("circle", {
+              cx: X(value),
+              cy: Y(s.values[i]),
+              r: 4,
+              fill: s.color,
+              class: "point"
+            });
+          });
+
+          const lx = legendRight
+            ? x0 + width - legendWidth + 8
+            : x0 + 18;
+
+          const ly = y0 + 20 + index * 20;
+
+          el("line", {
+            x1: lx,
+            y1: ly - 4,
+            x2: lx + 25,
+            y2: ly - 4,
+            stroke: s.color,
+            "stroke-width": 3
+          });
+
+          text(
+            s.name,
+            lx + 32,
+            ly,
+            "legend",
+            "start"
+          );
+        });
+      }
+
+      // Absolute quantities
+      drawPanel({
+        x0: 80,
+        y0: 75,
+        width: 450,
+        height: 390,
+        xmin: 4,
+        xmax: 120,
+        ymax: 90,
+        title: "Time (s) by Deme Size (d)",
+        ylabel: "Time (s)",
+        xticks: [4, 10, 20, 35, 50, 80, 120],
+        yticks: [0, 15, 30, 45, 60, 75, 90],
+        yDecimals: 0,
+        legendRight: false,
+        series: absolute
+      });
+
+      // Normalized quantities
+      drawPanel({
+        x0: 670,
+        y0: 75,
+        width: 450,
+        height: 390,
+        xmin: 4,
+        xmax: 120,
+        ymax: 30,
+        title: "Time (L₁ Normalized) by Deme Size (d)",
+        ylabel: "Time (L₁ Normalized)",
+        xticks: [4, 10, 20, 35, 50, 80, 120],
+        yticks: [0, 5, 10, 15, 20, 25, 30],
+        yDecimals: 0,
+        legendRight: true,
+        series: normalized
+      });
+    };
+  ]]></script>
+</svg>

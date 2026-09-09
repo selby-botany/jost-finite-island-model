@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="680" viewBox="0 0 1200 680">
+
+  <title>Time (s) and Time (L₁ Normalized) by Deme Size (d)</title>
+
+  <style>
+    .title { font: bold 20px sans-serif; fill: #222; }
+    .axis-label { font: 16px sans-serif; fill: #222; }
+    .tick-label { font: 12px sans-serif; fill: #333; }
+    .legend { font: 13px sans-serif; fill: #222; }
+    .grid { stroke: #d9d9d9; stroke-width: 1; }
+    .axis { stroke: #222; stroke-width: 1.5; }
+    .series { fill: none; stroke-width: 2.5; }
+    .point { stroke: white; stroke-width: 1; }
+  </style>
+
+  <script><![CDATA[
+    window.onload = function () {
+      const NS = "http://www.w3.org/2000/svg";
+      const svg = document.documentElement;
+
+      const d = [2, 3, 4, 6, 8, 10, 20, 35, 50, 80, 120];
+
+      const absolute = [
+        {name:"L₁(s)",   color:"#1f77b4", values:[0.026,0.034,0.043,0.078,0.101,0.138,0.366,0.724,1.349,2.854,5.071]},
+        {name:"Lₓ(s)",   color:"#ff7f0e", values:[0.351,0.535,0.754,1.179,1.695,2.368,5.907,12.894,22.537,45.126,79.941]},
+        {name:"Goff(s)", color:"#2ca02c", values:[0.487,0.722,0.951,1.366,2.079,2.525,6.018,13.566,23.196,47.602,85.891]},
+        {name:"Gjit(s)", color:"#d62728", values:[0.683,0.859,1.062,1.424,1.845,2.283,5.113,9.645,14.834,27.163,45.650]},
+        {name:"V(s)",    color:"#9467bd", values:[0.236,0.315,0.372,0.514,0.676,0.818,1.581,2.831,4.192,7.062,11.196]}
+      ];
+
+      const normalized = [
+        {name:"Lₓ/L₁",    color:"#ff7f0e", values:[13.56,15.67,17.65,15.14,16.73,17.15,16.16,17.81,16.70,15.81,15.77]},
+        {name:"Goff/L₁",  color:"#2ca02c", values:[18.80,21.13,22.24,17.53,20.52,18.29,16.46,18.74,17.19,16.68,16.94]},
+        {name:"Gjit/L₁",  color:"#d62728", values:[26.38,25.14,24.84,18.28,18.21,16.54,13.99,13.33,10.99,9.52,9.00]},
+        {name:"V/L₁",     color:"#9467bd", values:[9.11,9.22,8.69,6.60,6.67,5.93,4.32,3.91,3.11,2.47,2.21]}
+      ];
+
+      const logMin = Math.log10(2);
+      const logMax = Math.log10(120);
+      const xTicks = [2, 3, 4, 6, 10, 20, 50, 100];
+
+      function el(name, attrs, parent = svg) {
+        const e = document.createElementNS(NS, name);
+        for (const [key, value] of Object.entries(attrs || {}))
+          e.setAttribute(key, value);
+        parent.appendChild(e);
+        return e;
+      }
+
+      function text(content, x, y, cls, anchor="middle", parent=svg) {
+        const e = el("text", {x, y, class:cls, "text-anchor":anchor}, parent);
+        e.textContent = content;
+        return e;
+      }
+
+      function drawPanel(cfg) {
+        const {x0, y0, width, height, ymax, title, ylabel, series} = cfg;
+        const right = x0 + width;
+        const bottom = y0 + height;
+
+        const X = value =>
+          x0 + (Math.log10(value)-logMin)/(logMax-logMin)*width;
+
+        const Y = value => bottom - value/ymax*height;
+
+        text(title, x0 + width/2, 35, "title");
+
+        // Horizontal gridlines and y-axis labels
+        for (let i = 0; i <= 6; i++) {
+          const value = ymax*i/6;
+          const y = Y(value);
+          el("line", {x1:x0, y1:y, x2:right, y2:y, class:"grid"});
+          text(value.toFixed(ymax === 90 ? 0 : 1), x0-10, y+4, "tick-label", "end");
+        }
+
+        // Vertical gridlines and x-axis labels
+        for (const value of xTicks) {
+          const x = X(value);
+          el("line", {x1:x, y1:y0, x2:x, y2:bottom, class:"grid"});
+          text(String(value), x, bottom+20, "tick-label");
+        }
+
+        // Axes
+        el("line", {x1:x0, y1:bottom, x2:right, y2:bottom, class:"axis"});
+        el("line", {x1:x0, y1:y0, x2:x0, y2:bottom, class:"axis"});
+
+        text("Deme Size (d) (base-10 log)", x0 + width/2, bottom+48, "axis-label");
+        const yText = text(ylabel, x0-58, y0+height/2, "axis-label");
+        yText.setAttribute("transform",
+          `rotate(-90 ${x0-58} ${y0+height/2})`);
+
+        if (cfg.legendRight) {
+          el("rect", {
+            x: x0 + width - 145,
+            y: y0 + 8,
+            width: 138,
+            height: series.length * 20 + 15,
+            fill: "white",
+            opacity: "0.85"
+          });
+        }
+
+        // Series
+        series.forEach((s, index) => {
+          const points = d.map((value, i) =>
+            `${X(value).toFixed(2)},${Y(s.values[i]).toFixed(2)}`
+          ).join(" ");
+
+          el("polyline", {
+            points,
+            class:"series",
+            stroke:s.color
+          });
+
+          d.forEach((value, i) => {
+            el("circle", {
+              cx:X(value),
+              cy:Y(s.values[i]),
+              r:3.5,
+              fill:s.color,
+              class:"point"
+            });
+          });
+
+          // Legend
+          const legendRight = cfg.legendRight || false;
+
+          const lx = legendRight
+            ? x0 + width - 125
+            : x0 + 18;
+
+          const ly = y0 + 20 + index * 20;
+
+          el("line", {
+            x1: lx,
+            y1: ly - 4,
+            x2: lx + 25,
+            y2: ly - 4,
+            stroke: s.color,
+            "stroke-width": 3
+          });
+
+          text(s.name, lx + 32, ly, "legend", "start");
+        });
+      }
+
+      drawPanel({
+        x0:80, y0:75, width:450, height:390,
+        ymax:90,
+        title: "Time (s) by Deme Size (d)",
+        ylabel:"Time (s)",
+        series:absolute
+      });
+
+      drawPanel({
+        x0:670, y0:75, width:450, height:390,
+        ymax:30,
+        title: "Time (L₁ Normalized) by Deme Size (d)",
+        ylabel: "Time (L₁ Normalized)",
+        legendRight:true,
+        series:normalized
+      });
+    };
+  ]]></script>
+</svg>
