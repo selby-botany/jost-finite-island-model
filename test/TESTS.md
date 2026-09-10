@@ -9366,6 +9366,50 @@ writes to and is readable back from the real system pasteboard —
 exactly the side effect on a developer's own machine a test must
 never cause).
 
+<a id="gui.test_presets_screen.test_duplicate_current_configuration_button_starts_disabled"></a>
+
+#### test\_duplicate\_current\_configuration\_button\_starts\_disabled
+
+```python
+def test_duplicate_current_configuration_button_starts_disabled(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+"Duplicate current configuration" has nothing to fork before a preset loads.
+
+<a id="gui.test_presets_screen.test_loading_a_preset_enables_duplicate_and_saving_it_creates_a_new_preset"></a>
+
+#### test\_loading\_a\_preset\_enables\_duplicate\_and\_saving\_it\_creates\_a\_new\_preset
+
+```python
+def test_loading_a_preset_enables_duplicate_and_saving_it_creates_a_new_preset(
+        window: webview.Window) -> None
+```
+
+Loading a preset enables "Duplicate…"; using it saves a prefilled-name copy.
+
+Botanist GUI design doc §4.5: "Duplicate current configuration...
+so sweeping one parameter across several runs starts from
+'everything held fixed' rather than from scratch each time." Driven
+manually (`window.fim.menu.loadExample`/`newConfiguration` are both
+`async` -- `test_input_screen.py`'s own docstring on why a bare
+`evaluate_js` call to an `async` `fim.menu.*` method deadlocks).
+
+<a id="gui.test_presets_screen.test_new_configuration_disables_duplicate_button_again"></a>
+
+#### test\_new\_configuration\_disables\_duplicate\_button\_again
+
+```python
+def test_new_configuration_disables_duplicate_button_again(
+        window: webview.Window) -> None
+```
+
+An explicit reset to starter values has nothing left to fork.
+
+`screens/presets.js`'s own `lastLoadedPresetTitle` docstring: an
+explicit "New configuration" is not "the loaded preset, plus edits"
+any more.
+
 <a id="gui.test_recent_runs"></a>
 
 # gui.test\_recent\_runs

@@ -196,6 +196,12 @@ window.fim.menu.newConfiguration = async function newConfiguration() {
     await resetInputForm();
     // Render after the form genuinely holds starter values.
     await renderInitialPreview();
+    // An explicit reset to `STARTER_CONFIG` values is not "the loaded
+    // preset, plus edits" any more (`screens/presets.js`'s own
+    // `lastLoadedPresetTitle` docstring) -- "Duplicate current
+    // configuration" has nothing left to fork until a preset is loaded
+    // again.
+    window.fim.clearLastLoadedPreset();
     window.__fimRunViewReady = true;
 };
 

@@ -158,6 +158,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   density, `GUI_ANIMATION_MAX_FRAMES`, rather than a new one), so a run
   that was never watched live gets the identical curve a live run's own
   trajectory panel already shows.
+- `fim gui`'s Configure workspace gains a "Duplicate current
+  configuration" action (design §4.5), enabled once a preset has been
+  loaded via "Load example…"/"Start from an example." Reuses the
+  existing "Save current as…" dialog, pre-filled with "`<preset title>`
+  copy" instead of blank — saving whatever the live form currently
+  holds, tweaks included, under a new name — so sweeping one parameter
+  across several runs starts from "everything held fixed" without
+  risking an accidental overwrite of the original preset under "Save
+  current as…" reusing its exact name. Disables again after an
+  explicit "New configuration" reset, since there is nothing left to
+  fork at that point.
 
 ### Changed
 

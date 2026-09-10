@@ -36,8 +36,20 @@ const presetYamlTitle = document.getElementById("preset-yaml-title");
 const presetYamlText = document.getElementById("preset-yaml-text");
 const presetYamlCopiedNote = document.getElementById("preset-yaml-copied-note");
 const presetYamlCopyButton = document.getElementById("preset-yaml-copy-button");
+const configureDuplicatePresetButton = document.getElementById(
+    "configure-duplicate-preset-button"
+);
 
 const USER_PRESET_ID_PREFIX = "user:";
+
+// Design §4.5's own "Duplicate current configuration": the title of
+// whichever preset (built-in or user-saved) was most recently loaded
+// into the live form via the picker, or `null` before the first one
+// ever is -- `applyPreset`, below, is the one place this is set;
+// `configureDuplicatePresetButton`'s own click handler and `window.fim.
+// clearLastLoadedPreset` (called from `fim.menu.newConfiguration`) are
+// the only other places that read or clear it.
+let lastLoadedPresetTitle = null;
 
 // A real, previously-reproduced regression this flag exists to close:
 // `savePresetForm`'s own submit handler closes `modal-save-preset`
@@ -71,7 +83,7 @@ async function refreshPresetsList() {
         openButton.type = "button";
         openButton.tabIndex = 0;
         openButton.textContent = preset.title;
-        openButton.addEventListener("click", () => applyPreset(preset.id));
+        openButton.addEventListener("click", () => applyPreset(preset.id, preset.title));
         item.appendChild(openButton);
         // Every preset, built-in or user-saved alike, gets a "View
         // YAML" affordance (design §10's own "examples library" --
@@ -119,8 +131,9 @@ async function refreshPresetsList() {
  * preset is genuinely indistinguishable from having hand-loaded the
  * same YAML file.
  * @param {string} presetId
+ * @param {string} presetTitle
  */
-async function applyPreset(presetId) {
+async function applyPreset(presetId, presetTitle) {
     const result = await window.pywebview.api.get_preset_form_values(presetId);
     if (!result.ok) {
         presetsDialog.close();
@@ -133,6 +146,15 @@ async function applyPreset(presetId) {
     if (window.fim.getRunViewState() === "initial") {
         window.fim.renderInitialPreview();
     }
+    // Design §4.5's own "Duplicate current configuration": remembered
+    // only from here (a *successful* load), not attempted on the
+    // rejected-values early return above -- there is nothing to fork
+    // from a preset that was never actually applied. Never cleared by
+    // a later form edit: forking "the loaded preset, plus whatever I
+    // have tweaked since" is exactly the point (this function's own
+    // docstring), not only forking it verbatim.
+    lastLoadedPresetTitle = presetTitle;
+    configureDuplicatePresetButton.disabled = false;
 }
 
 // Set once `showPresetYaml`'s own bridge call has settled and the
@@ -200,6 +222,31 @@ saveCurrentAsPresetButton.addEventListener("click", () => {
     savePresetDialog.showModal();
     savePresetNameInput.focus();
 });
+
+// Design §4.5's own "Duplicate current configuration" -- reuses the
+// identical `modal-save-preset` dialog and `savePresetForm` submit
+// handler "Save current as…" already does (below), pre-filled with a
+// suggested name rather than blank, and saving whatever the live form
+// currently holds (not the original preset's own stored values) -- a
+// field already tweaked since loading is duplicated right along with
+// everything else, exactly the "start from everything held fixed"
+// workflow design §4.5 names. The suggested name is only ever a
+// starting point: `savePresetNameInput` stays a plain, editable text
+// field, and `save_current_as_preset` already silently overwrites an
+// existing name (`Api.save_current_as_preset`'s own docstring), the
+// identical risk "Save current as…" already carries for any name.
+configureDuplicatePresetButton.addEventListener("click", () => {
+    savePresetNameInput.value = `${lastLoadedPresetTitle} copy`;
+    savePresetError.hidden = true;
+    savePresetDialog.showModal();
+    savePresetNameInput.focus();
+    savePresetNameInput.select();
+});
+
+window.fim.clearLastLoadedPreset = function clearLastLoadedPreset() {
+    lastLoadedPresetTitle = null;
+    configureDuplicatePresetButton.disabled = true;
+};
 
 // A plain `type="button"`, not `type="submit"` -- clicking it must
 // never trigger the name field's own `required` validation the way any

@@ -401,3 +401,175 @@ def test_copy_to_clipboard_writes_the_shown_yaml_text(window: webview.Window) ->
 
     assert result["settled"]["calls"] == [result["shownText"]]
     assert result["settled"]["copiedNoteHidden"] is False
+
+
+def test_duplicate_current_configuration_button_starts_disabled(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """ "Duplicate current configuration" has nothing to fork before a preset loads."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="null",
+        read="document.getElementById('configure-duplicate-preset-button').disabled",
+        is_ready=lambda value: value is not None,
+    )
+
+    assert settled is True
+
+
+def test_loading_a_preset_enables_duplicate_and_saving_it_creates_a_new_preset(
+    window: webview.Window,
+) -> None:
+    """Loading a preset enables "Duplicate…"; using it saves a prefilled-name copy.
+
+    Botanist GUI design doc §4.5: "Duplicate current configuration...
+    so sweeping one parameter across several runs starts from
+    'everything held fixed' rather than from scratch each time." Driven
+    manually (`window.fim.menu.loadExample`/`newConfiguration` are both
+    `async` -- `test_input_screen.py`'s own docstring on why a bare
+    `evaluate_js` call to an `async` `fim.menu.*` method deadlocks).
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
+            )
+            _poll_until(
+                "document.getElementById('presets-list').children.length",
+                lambda value: value is not None and value > 0,
+            )
+            first_title = window.evaluate_js(
+                "document.querySelector("
+                "'#presets-list li:first-child button:first-child')"
+                ".textContent"
+            )
+            window.evaluate_js(
+                "document.querySelector("
+                "'#presets-list li:first-child button:first-child')"
+                ".click();"
+            )
+            _poll_until(
+                "document.getElementById('configure-duplicate-preset-button')"
+                ".disabled === false",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                "document.getElementById('configure-duplicate-preset-button').click();"
+            )
+            _poll_until(
+                "document.getElementById('modal-save-preset').open",
+                lambda value: value is True,
+            )
+            prefilled_name = window.evaluate_js(
+                "document.getElementById('save-preset-name').value"
+            )
+            window.evaluate_js(
+                "window.__fimPresetsListReady = false;"
+                "document.getElementById('save-preset-accept-button').click();"
+            )
+            _poll_until(
+                "window.__fimPresetsListReady === true"
+                " || !document.getElementById('modal-save-preset').open",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                "window.__fimDuplicateSaveResult = null;"
+                "(async () => { window.__fimDuplicateSaveResult = "
+                "await window.pywebview.api.list_presets(); })();"
+            )
+            list_result = _poll_until(
+                "window.__fimDuplicateSaveResult",
+                lambda value: value is not None,
+            )
+            outcome.put(
+                {
+                    "firstTitle": first_title,
+                    "prefilledName": prefilled_name,
+                    "userPresetTitles": [
+                        preset["title"]
+                        for preset in list_result["presets"]
+                        if not preset["builtin"]
+                    ],
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    assert result["prefilledName"] == f"{result['firstTitle']} copy"
+    assert result["userPresetTitles"] == [f"{result['firstTitle']} copy"]
+
+
+def test_new_configuration_disables_duplicate_button_again(
+    window: webview.Window,
+) -> None:
+    """An explicit reset to starter values has nothing left to fork.
+
+    `screens/presets.js`'s own `lastLoadedPresetTitle` docstring: an
+    explicit "New configuration" is not "the loaded preset, plus edits"
+    any more.
+    """
+    outcome: queue.Queue[bool | None] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "setTimeout(() => { window.fim.menu.loadExample(); }, 0);"
+            )
+            _poll_until(
+                "document.getElementById('presets-list').children.length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                "document.querySelector("
+                "'#presets-list li:first-child button:first-child')"
+                ".click();"
+            )
+            _poll_until(
+                "document.getElementById('configure-duplicate-preset-button')"
+                ".disabled === false",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                "window.__fimRunViewReady = false;"
+                "setTimeout(() => { window.fim.menu.newConfiguration(); }, 0);"
+            )
+            settled = _poll_until(
+                "window.__fimRunViewReady === true ? "
+                "document.getElementById('configure-duplicate-preset-button')"
+                ".disabled : null",
+                lambda value: value is not None,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=10)
+
+    assert settled is True

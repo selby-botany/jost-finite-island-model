@@ -866,10 +866,23 @@
          same File-menu actions, `window.fim.openConfiguration`/
          `saveConfiguration`, `run-view-controls.js`), Run (design §6.1:
          "present in the parameter strip's own action row on both
-         Configure and Explore"), and a shortcut into Explore. -->
+         Configure and Explore"), and a shortcut into Explore.
+         "Duplicate current configuration" (design §4.5) is here too,
+         not inside `modal-presets` -- forking a just-loaded preset is
+         just as often wanted after the picker has already closed and a
+         field or two has already been tweaked, so this stays reachable
+         the whole time Configure is showing, not only while the picker
+         itself is open. Disabled until a preset has actually been
+         loaded via the picker (`screens/presets.js`'s own `lastLoaded
+         PresetTitle`) -- there is nothing to fork before then; "Save
+         current as…" (inside the picker) already covers a genuinely
+         from-scratch save. -->
     <div class="actions">
       <button type="button" id="configure-load-button">Load configuration…</button>
       <button type="button" id="configure-save-button">Save configuration…</button>
+      <button type="button" id="configure-duplicate-preset-button" disabled>
+        Duplicate current configuration
+      </button>
       <button type="button" id="configure-run-button">▶ Run</button>
       <button type="button" id="configure-explore-button">🔮 Explore</button>
     </div>
