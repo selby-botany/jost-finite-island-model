@@ -211,7 +211,9 @@ def test_comparing_two_runs_renders_panels_and_the_differing_field(
                 "panelCount: document.querySelectorAll("
                 "'.compare-panel canvas').length, "
                 "legendText: "
-                "document.getElementById('compare-legend').textContent"
+                "document.getElementById('compare-legend').textContent, "
+                "trajectoryLegendCount: document.getElementById("
+                "'compare-trajectory-legend').children.length"
                 "})",
                 lambda value: value is not None and value["resultsReady"] is True,
             )
@@ -226,6 +228,11 @@ def test_comparing_two_runs_renders_panels_and_the_differing_field(
     assert settled["resultsHidden"] is False
     assert settled["panelCount"] == 2
     assert "seed" in settled["legendText"]
+    # One trajectory-legend entry per compared run (design doc §8's own
+    # "one color per run") -- `test_switching_the_trajectory_statistic_
+    # redraws_without_a_new_bridge_call`, below, is the DOM proof that
+    # the canvas itself actually draws something for each of them.
+    assert settled["trajectoryLegendCount"] == 2
 
 
 def test_comparing_runs_with_identical_configs_shows_no_differences(
@@ -274,3 +281,101 @@ def test_comparing_runs_with_identical_configs_shows_no_differences(
 
     assert settled is not None
     assert "No configuration differences" in settled["legendText"]
+
+
+def _canvas_has_nonblank_pixels_script(canvas_id: str) -> str:
+    """A JS expression checking whether any pixel on `canvas_id` was drawn on.
+
+    Checks the alpha channel only: every `context.stroke()` this project
+    draws with is fully opaque, and a canvas starts fully transparent
+    (alpha `0` everywhere) until something is actually drawn — cheaper
+    than comparing RGB values pixel by pixel, and immune to a background
+    color that happens to already match a drawn line's own color.
+    """
+    return (
+        "(function(){"
+        f"var c = document.getElementById('{canvas_id}');"
+        "var ctx = c.getContext('2d');"
+        "var data = ctx.getImageData(0, 0, c.width, c.height).data;"
+        "for (var i = 3; i < data.length; i += 4) {"
+        "if (data[i] !== 0) { return true; }"
+        "}"
+        "return false;"
+        "})()"
+    )
+
+
+def test_switching_the_trajectory_statistic_redraws_the_overlay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Changing the statistic selector redraws a real, non-blank overlay.
+
+    `Api.compare_runs`'s own response already carries every statistic's
+    full sampled history for every compared run in one call
+    (`test_app_api.py`'s own `test_compare_runs_overlays_two_runs_and_
+    names_the_differing_field` proves that shape directly); this proves
+    the page's own `change` handler on `compareTrajectoryStatistic`
+    actually redraws `#compare-trajectory-canvas` from that same
+    already-fetched data, for a statistic other than the default `D`.
+    """
+    results_root = tmp_path / "results"
+    _write_run(results_root, "run-a", seed=1)
+    _write_run(results_root, "run-b", seed=2)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results_root)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.compareRuns();")
+            _poll_until(
+                window,
+                "window.__fimCompareRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                "for (const checkbox of "
+                "document.querySelectorAll("
+                "'#compare-recent-runs-body input[type=\"checkbox\"]')) "
+                "{ checkbox.click(); }"
+            )
+            window.evaluate_js("document.getElementById('compare-run-button').click();")
+            _poll_until(
+                window,
+                "window.__fimCompareResultsReady === true",
+                lambda value: value is True,
+            )
+            drawn_for_d = window.evaluate_js(
+                _canvas_has_nonblank_pixels_script("compare-trajectory-canvas")
+            )
+            window.evaluate_js(
+                "var select = document.getElementById("
+                "'compare-trajectory-statistic');"
+                "select.value = 'G_ST';"
+                "select.dispatchEvent(new Event('change'));"
+            )
+            drawn_for_g_st = window.evaluate_js(
+                _canvas_has_nonblank_pixels_script("compare-trajectory-canvas")
+            )
+            legend_count_after_switch = window.evaluate_js(
+                "document.getElementById('compare-trajectory-legend').children.length"
+            )
+            outcome.put(
+                {
+                    "drawnForD": drawn_for_d,
+                    "drawnForGSt": drawn_for_g_st,
+                    "legendCountAfterSwitch": legend_count_after_switch,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=30.0)
+
+    assert settled is not None
+    assert settled["drawnForD"] is True
+    assert settled["drawnForGSt"] is True
+    assert settled["legendCountAfterSwitch"] == 2

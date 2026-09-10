@@ -189,6 +189,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_progress\_sidecar](#fim.gui.store.write_progress_sidecar)
   * [read\_progress\_sidecar](#fim.gui.store.read_progress_sidecar)
   * [read\_live\_state](#fim.gui.store.read_live_state)
+* [fim.gui.trajectory\_history](#fim.gui.trajectory_history)
+  * [TrajectoryHistory](#fim.gui.trajectory_history.TrajectoryHistory)
+  * [sampled\_statistic\_history](#fim.gui.trajectory_history.sampled_statistic_history)
 * [fim.launcher](#fim.launcher)
   * [main](#fim.launcher.main)
 * [fim.logging\_setup](#fim.logging_setup)
@@ -3681,19 +3684,18 @@ def compare_runs(trajectory_paths: list[str]) -> dict[str, Any]
 
 Overlay two or more previously completed runs (design doc §8).
 
-This first slice covers the small-multiples scatter half of the
-Compare workspace — one final-state deme-1-vs-2 panel per run,
-plus a legend naming which configuration field(s) actually
-differ across the selection — reusing `reanalyze_trajectory`/
-`scatter_panels` exactly as `open_run` already does, one call
-per selected run; "no new engine computation" (design doc's
-own resolution-ledger entry for this workspace) since every
-number here is already what a plain "open a run" already
-computes. The trajectory-over-generations overlay the design
-doc also describes is not yet built: no such curve exists
-anywhere in this GUI today (only a final-state scatter and
-point-in-time statistic meters), so overlaying it is deferred
-to its own, separate slice rather than folded in here.
+Covers both halves of the Compare workspace: the small-multiples
+scatter (one final-state deme-1-vs-2 panel per run, reusing
+`reanalyze_trajectory`/`scatter_panels` exactly as `open_run`
+already does) and the trajectory-over-generations overlay
+(`fim.gui.trajectory_history.sampled_statistic_history`, one
+run's own evenly-spaced sample of every persisted generation,
+the same sampling density `get_animation_frames` already uses)
+— plus a legend naming which configuration field(s) actually
+differ across the selection. "No new engine computation"
+(design doc's own resolution-ledger entry for this workspace):
+every number here is already what a plain "open a run" or the
+animation screen's own frame sampler already computes.
 
 **Arguments**:
 
@@ -3705,18 +3707,23 @@ to its own, separate slice rather than folded in here.
 **Returns**:
 
 - ``{"ok"` - True, "runs": [{"runId", "trajectoryPath", "panel",
-  "statistics", "configSummary"}, ...], "differingFields":
-  [...]}` — `differingFields` names every `_run_config_
-  summary` key whose value is not identical across every
-  run, in that function's own fixed key order, so the page
-  can render exactly those rows highlighted without
-  recomputing the comparison itself. `{"ok": False,
-- `"message"` - ...}` if fewer than two paths were given, or any
-  one trajectory/manifest cannot be read — the whole compare
-  fails together rather than silently dropping the
-  unreadable run, since a comparison missing a run the user
-  explicitly picked would be misleading, not merely
-  incomplete.
+  "statistics", "configSummary", "generations", "histories"},
+  ...], "differingFields": [...]}` — `histories` is one
+  formatted-string array per statistic (`format_statistic`'s
+  own display shape, matching the live run view's identical
+  `onRunProgress` convention exactly, so the same client-side
+  `Number(...)`/`Number.isFinite` filter handles both),
+  already the same length as `generations`, in the same
+  order. `differingFields` names every `_run_config_summary`
+  key whose value is not identical across every run, in that
+  function's own fixed key order, so the page can render
+  exactly those rows highlighted without recomputing the
+  comparison itself. `{"ok": False, "message": ...}` if fewer
+  than two paths were given, or any one trajectory/manifest
+  cannot be read — the whole compare fails together rather
+  than silently dropping the unreadable run, since a
+  comparison missing a run the user explicitly picked would
+  be misleading, not merely incomplete.
 
 <a id="fim.gui.app.Api.get_animation_frames"></a>
 
@@ -5768,6 +5775,96 @@ generation still being written.
   longer, or not yet fully) present — a transient filesystem-
   visibility race a live poller's own next call simply retries,
   never an error to raise partway through a still-running batch.
+
+<a id="fim.gui.trajectory_history"></a>
+
+# fim.gui.trajectory\_history
+
+Sample a full statistic-vs-generation history from a persisted
+trajectory, for the Compare workspace's own trajectory-overlay panel
+(botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §8: "overlay their trajectory plots on one set of axes,
+one color per run").
+
+`fim.reanalyze.reanalyze_trajectory` already recomputes statistics for
+one chosen generation of a persisted run; this module does the same
+underlying work — verify the trajectory's own integrity, group its rows
+by generation, rebuild a `ModelState` and call `report_for_state` — but
+for a whole, evenly-spaced sample of generations at once, not just one,
+so a full curve can be drawn for a run that was never watched live.
+
+Reuses `fim.gui.animation.select_sample_generations`/`GUI_ANIMATION_
+MAX_FRAMES` exactly as already established for the animation screen's
+own frame sampler, rather than inventing a second, independent sampling
+density: a run that persisted hundreds or thousands of generations
+should not turn into hundreds or thousands of `report_for_state` calls
+here any more than it turns into that many rendered animation frames,
+for the identical reason (`fim.gui.animation`'s own module docstring).
+
+<a id="fim.gui.trajectory_history.TrajectoryHistory"></a>
+
+## TrajectoryHistory Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class TrajectoryHistory()
+```
+
+One run's own sampled statistic-vs-generation history.
+
+**Arguments**:
+
+- `manifest` - The run's manifest, as recorded at completion time.
+- `params` - The run's validated parameters, reconstructed from the
+  manifest.
+- `generations` - The sampled generation numbers, strictly ascending
+  (`select_sample_generations`'s own contract).
+- `histories` - One list per requested statistic name, each the same
+  length as `generations` and in the same order — a `None`
+  entry means that statistic was undefined at that specific
+  sampled generation (`G_ST` at a currently-monomorphic
+  locus, the one named case `fim.engine.report_for_state`
+  itself can produce), not a missing sample; the caller
+  decides how to skip it, the same "leave a statistic's own
+  history shorter than `generations`" choice `webui/screens/
+  run-view-completed.js`'s own `renderTrajectory` already
+  makes for a live run's identical edge case.
+
+<a id="fim.gui.trajectory_history.sampled_statistic_history"></a>
+
+#### sampled\_statistic\_history
+
+```python
+def sampled_statistic_history(
+        trajectory_path: Path,
+        *,
+        manifest_path: Path | None = None,
+        max_samples: int = GUI_ANIMATION_MAX_FRAMES) -> TrajectoryHistory
+```
+
+Sample up to `max_samples` generations' worth of `STATISTIC_NAMES`.
+
+**Arguments**:
+
+- `trajectory_path` - The `trajectory.jsonl` to read.
+- `manifest_path` - Its companion manifest; defaults to
+  `trajectory_path.with_name("manifest.json")`, matching
+  `reanalyze_trajectory`'s own default.
+- `max_samples` - See `select_sample_generations`.
+
+
+**Returns**:
+
+  The run's own manifest/params, the sampled generation numbers,
+  and each requested statistic's own value at every one of them.
+
+
+**Raises**:
+
+- `ValueError` - If the trajectory has been edited, truncated, or
+  replaced since the run completed, or has no rows —
+  identical failure modes to `reanalyze_trajectory`, checked
+  the same way.
 
 <a id="fim.launcher"></a>
 

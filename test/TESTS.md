@@ -59,6 +59,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_running_screen`](#gui.test_running_screen)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_store`](#gui.test_store)
+  - [`test_trajectory_history`](#gui.test_trajectory_history)
   - [`test_webui_global_scope`](#gui.test_webui_global_scope)
   - [`test_welcome_screen`](#gui.test_welcome_screen)
 - [`test/model/`](#group-model)
@@ -6846,6 +6847,25 @@ def test_comparing_runs_with_identical_configs_shows_no_differences(
 
 Two identically-configured runs report no differing field in the legend.
 
+<a id="gui.test_compare_screen.test_switching_the_trajectory_statistic_redraws_the_overlay"></a>
+
+#### test\_switching\_the\_trajectory\_statistic\_redraws\_the\_overlay
+
+```python
+def test_switching_the_trajectory_statistic_redraws_the_overlay(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Changing the statistic selector redraws a real, non-blank overlay.
+
+`Api.compare_runs`'s own response already carries every statistic's
+full sampled history for every compared run in one call
+(`test_app_api.py`'s own `test_compare_runs_overlays_two_runs_and_
+names_the_differing_field` proves that shape directly); this proves
+the page's own `change` handler on `compareTrajectoryStatistic`
+actually redraws ``compare`-trajectory-canvas` from that same
+already-fetched data, for a statistic other than the default `D`.
+
 <a id="gui.test_config_form"></a>
 
 # gui.test\_config\_form
@@ -10501,6 +10521,84 @@ def test_read_live_state_returns_none_for_a_different_run_id(
 ```
 
 Rows from a different run id are never mistaken for this replicate's own.
+
+<a id="gui.test_trajectory_history"></a>
+
+# gui.test\_trajectory\_history
+
+Unit tests for `fim.gui.trajectory_history`.
+
+No display, no `gui` marker: `sampled_statistic_history` returns plain
+data (generation numbers and statistic values), not anything rendered —
+the identical "no window needed" shape `test_animation.py`'s own module
+docstring already establishes for `fim.gui.animation`.
+
+<a id="gui.test_trajectory_history.test_final_sample_matches_the_live_report"></a>
+
+#### test\_final\_sample\_matches\_the\_live\_report
+
+```python
+def test_final_sample_matches_the_live_report(tmp_path: Path) -> None
+```
+
+The last sampled generation's own statistics match the run's own report.json.
+
+Mirrors `test_reanalyze_trajectory_matches_the_live_report`'s own
+proof for `reanalyze_trajectory`, one generation at a time — the
+same underlying mechanism, applied to the run's own final entry.
+
+<a id="gui.test_trajectory_history.test_generations_and_every_history_share_one_length"></a>
+
+#### test\_generations\_and\_every\_history\_share\_one\_length
+
+```python
+def test_generations_and_every_history_share_one_length(
+        tmp_path: Path) -> None
+```
+
+`generations` and each statistic's own history line up one to one.
+
+<a id="gui.test_trajectory_history.test_generation_zero_is_always_the_first_sample"></a>
+
+#### test\_generation\_zero\_is\_always\_the\_first\_sample
+
+```python
+def test_generation_zero_is_always_the_first_sample(tmp_path: Path) -> None
+```
+
+The starting population is always included, not just the final one.
+
+<a id="gui.test_trajectory_history.test_max_samples_bounds_how_many_generations_are_recomputed"></a>
+
+#### test\_max\_samples\_bounds\_how\_many\_generations\_are\_recomputed
+
+```python
+def test_max_samples_bounds_how_many_generations_are_recomputed(
+        tmp_path: Path) -> None
+```
+
+A long run's own sample never exceeds `max_samples`, matching animation.
+
+A tight `convergence_tolerance` (`test_animation.py`'s own `_write_
+run` uses the identical value, for the identical reason) keeps this
+run from settling early, so it persists every generation up to
+`max_generations` — a small `max_samples` here genuinely exercises
+the cap rather than coincidentally sampling every generation anyway
+(this module's own default fixture settings above converge almost
+immediately, exactly the opposite of what this one test needs).
+
+<a id="gui.test_trajectory_history.test_rejects_a_tampered_trajectory"></a>
+
+#### test\_rejects\_a\_tampered\_trajectory
+
+```python
+def test_rejects_a_tampered_trajectory(tmp_path: Path) -> None
+```
+
+A trajectory edited after the run completed fails the digest check.
+
+Identical failure mode to `reanalyze_trajectory`'s own equivalent
+test — the same `verify_trajectory_integrity` call underneath.
 
 <a id="gui.test_webui_global_scope"></a>
 

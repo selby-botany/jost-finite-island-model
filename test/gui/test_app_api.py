@@ -1414,6 +1414,16 @@ def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
         assert set(run["statistics"]) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
         assert run["configSummary"]["N"] == "20"
         assert run["configSummary"]["m"] == "0.1"
+        assert set(run["histories"]) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
+        assert len(run["generations"]) > 0
+        for name, values in run["histories"].items():
+            assert len(values) == len(run["generations"])
+            # The trajectory overlay's own final sample must agree with
+            # the small-multiples scatter's own final-generation
+            # statistic -- both describe the identical last generation,
+            # so a real drift between the two would be a genuine defect,
+            # not two independently acceptable numbers.
+            assert values[-1] == run["statistics"][name]
     assert {run["configSummary"]["seed"] for run in result["runs"]} == {"1", "2"}
 
 

@@ -478,6 +478,34 @@
     </div>
     <div id="compare-results" hidden>
       <table class="stats-table" id="compare-legend"></table>
+      <!-- Trajectory-over-generations overlay (design doc §8: "overlay
+           their trajectory plots on one set of axes, one color per
+           run"). Reuses `run-view-completed.js`'s own `.run-trajectory-
+           frame`/`.run-trajectory-legend`/`.swatch` classes unmodified
+           (identical shape: one canvas plus a swatch-per-series legend
+           beneath it) rather than duplicating that CSS under a new
+           name -- the "run-" prefix now also covers this per-run-
+           colored overlay, not only the single-run, per-statistic-
+           colored one those classes were originally named for. One
+           statistic at a time (unlike the single-run trajectory panel,
+           which plots all six at once): six statistics times two or
+           more runs, all on one set of axes, would be an unreadable
+           tangle of same-hued lines the moment a third run is added. -->
+      <div id="compare-trajectory-frame" class="run-trajectory-frame">
+        <div class="field">
+          <label for="compare-trajectory-statistic">Statistic</label>
+          <select id="compare-trajectory-statistic">
+            <option value="D" selected>D (Jost's D)</option>
+            <option value="G_ST">G_ST</option>
+            <option value="E_ST">E_ST</option>
+            <option value="K_ST">K_ST</option>
+            <option value="H_S">H_S</option>
+            <option value="H_T">H_T</option>
+          </select>
+        </div>
+        <canvas id="compare-trajectory-canvas"></canvas>
+        <div id="compare-trajectory-legend" class="run-trajectory-legend"></div>
+      </div>
       <div id="compare-panels" class="compare-panels"></div>
     </div>
   </section>

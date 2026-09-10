@@ -83,6 +83,7 @@ from fim.gui.preferences import (
     save_preferences,
 )
 from fim.gui.store import read_live_state, read_progress_sidecar
+from fim.gui.trajectory_history import sampled_statistic_history
 from fim.model.initial import generate_initial_state
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
@@ -1692,19 +1693,18 @@ class Api:
     def compare_runs(self, trajectory_paths: list[str]) -> dict[str, Any]:
         """Overlay two or more previously completed runs (design doc §8).
 
-        This first slice covers the small-multiples scatter half of the
-        Compare workspace — one final-state deme-1-vs-2 panel per run,
-        plus a legend naming which configuration field(s) actually
-        differ across the selection — reusing `reanalyze_trajectory`/
-        `scatter_panels` exactly as `open_run` already does, one call
-        per selected run; "no new engine computation" (design doc's
-        own resolution-ledger entry for this workspace) since every
-        number here is already what a plain "open a run" already
-        computes. The trajectory-over-generations overlay the design
-        doc also describes is not yet built: no such curve exists
-        anywhere in this GUI today (only a final-state scatter and
-        point-in-time statistic meters), so overlaying it is deferred
-        to its own, separate slice rather than folded in here.
+        Covers both halves of the Compare workspace: the small-multiples
+        scatter (one final-state deme-1-vs-2 panel per run, reusing
+        `reanalyze_trajectory`/`scatter_panels` exactly as `open_run`
+        already does) and the trajectory-over-generations overlay
+        (`fim.gui.trajectory_history.sampled_statistic_history`, one
+        run's own evenly-spaced sample of every persisted generation,
+        the same sampling density `get_animation_frames` already uses)
+        — plus a legend naming which configuration field(s) actually
+        differ across the selection. "No new engine computation"
+        (design doc's own resolution-ledger entry for this workspace):
+        every number here is already what a plain "open a run" or the
+        animation screen's own frame sampler already computes.
 
         Args:
             trajectory_paths: Two or more `trajectory.jsonl` paths,
@@ -1713,18 +1713,23 @@ class Api:
 
         Returns:
             `{"ok": True, "runs": [{"runId", "trajectoryPath", "panel",
-            "statistics", "configSummary"}, ...], "differingFields":
-            [...]}` — `differingFields` names every `_run_config_
-            summary` key whose value is not identical across every
-            run, in that function's own fixed key order, so the page
-            can render exactly those rows highlighted without
-            recomputing the comparison itself. `{"ok": False,
-            "message": ...}` if fewer than two paths were given, or any
-            one trajectory/manifest cannot be read — the whole compare
-            fails together rather than silently dropping the
-            unreadable run, since a comparison missing a run the user
-            explicitly picked would be misleading, not merely
-            incomplete.
+            "statistics", "configSummary", "generations", "histories"},
+            ...], "differingFields": [...]}` — `histories` is one
+            formatted-string array per statistic (`format_statistic`'s
+            own display shape, matching the live run view's identical
+            `onRunProgress` convention exactly, so the same client-side
+            `Number(...)`/`Number.isFinite` filter handles both),
+            already the same length as `generations`, in the same
+            order. `differingFields` names every `_run_config_summary`
+            key whose value is not identical across every run, in that
+            function's own fixed key order, so the page can render
+            exactly those rows highlighted without recomputing the
+            comparison itself. `{"ok": False, "message": ...}` if fewer
+            than two paths were given, or any one trajectory/manifest
+            cannot be read — the whole compare fails together rather
+            than silently dropping the unreadable run, since a
+            comparison missing a run the user explicitly picked would
+            be misleading, not merely incomplete.
         """
         if len(trajectory_paths) < _COMPARE_MINIMUM_RUNS:
             return {"ok": False, "message": "select at least two runs to compare"}
@@ -1733,6 +1738,7 @@ class Api:
         for path_text in trajectory_paths:
             try:
                 reanalyzed = reanalyze_trajectory(Path(path_text))
+                history = sampled_statistic_history(Path(path_text))
             except (OSError, ValueError) as error:
                 return {"ok": False, "message": f"{path_text}: {error}"}
             summary = _run_config_summary(reanalyzed.params)
@@ -1751,6 +1757,14 @@ class Api:
                         for name in _RESULT_STATISTIC_NAMES
                     },
                     "configSummary": summary,
+                    "generations": history.generations,
+                    "histories": {
+                        name: [
+                            format_statistic(value, self._significant_digits)
+                            for value in history.histories[name]
+                        ]
+                        for name in _RESULT_STATISTIC_NAMES
+                    },
                 }
             )
         differing_fields = [

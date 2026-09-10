@@ -594,7 +594,12 @@ fieldset.composite > label {
     width: min(100%, 480px);
 }
 
-#run-trajectory-canvas {
+/* `#compare-trajectory-canvas` shares this rule -- `screens/compare.js`
+ * draws into it exactly the same way, only colored by run rather than
+ * by statistic (that module's own docstring has the full reasoning for
+ * why it is a separate drawing function despite this shared styling). */
+#run-trajectory-canvas,
+#compare-trajectory-canvas {
     display: block;
     width: 100%;
     aspect-ratio: 4 / 3;

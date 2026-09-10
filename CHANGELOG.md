@@ -144,6 +144,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   text unmodified; a user-saved preset renders fresh through the same
   `payload_to_yaml_text` "Save current as…"/"Save YAML…" already use,
   so what is shown always matches what saving to a file would produce.
+- `fim gui`'s Compare workspace gains the trajectory-over-generations
+  overlay design doc §8 describes ("overlay their trajectory plots on
+  one set of axes, one color per run"), closing the one piece that
+  workspace's own first slice deliberately deferred. A new statistic
+  selector (one of `D`/`G_ST`/`E_ST`/`K_ST`/`H_S`/`H_T` at a time —
+  plotting all six across two or more runs at once would be an
+  unreadable tangle of same-hued lines) redraws instantly, client-side,
+  from data already fetched by the one "Compare ▶" click: a new
+  `fim.gui.trajectory_history.sampled_statistic_history` recomputes an
+  evenly-spaced sample of every persisted generation's own statistics
+  for each compared run (reusing the animation screen's own sampling
+  density, `GUI_ANIMATION_MAX_FRAMES`, rather than a new one), so a run
+  that was never watched live gets the identical curve a live run's own
+  trajectory panel already shows.
 
 ### Changed
 
