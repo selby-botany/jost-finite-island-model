@@ -344,32 +344,48 @@ function drawTrajectoryCurve(canvas, generations, histories, sigmaBand) {
 }
 
 /**
- * Show (or hide) the trajectory panel for the just-completed run.
+ * Show (or hide) the trajectory panel for the just-shown completed run.
  *
- * First slice only (botanist GUI design doc §6.2): a live scalar run's
- * own already-computed `RunResult.convergence_generations`/
- * `convergence_histories` (`_drain_run_messages`'s own `"done"` push),
- * never live-updated during `running` and never available at all for a
- * re-analyzed run (`Api.open_run`'s own payload carries neither field
- * yet) — both real, named scope boundaries this slice leaves for a
- * follow-on, not oversights. `sigmaBand` (design §7.2, sigma-band
- * design doc `20260910-claude-sonnet-5-gui-sigma-band-design.md`'s own
- * approach B1/C1) is that same live run's own `Api._sigma_band_
- * payload` result — `null`/`undefined` for a run that never requested
- * one, and always `undefined` for a batch (no `sigmaBand` key on that
- * payload shape at all).
+ * A live scalar run's own already-computed `RunResult.convergence_
+ * generations`/`convergence_histories` (`_drain_run_messages`'s own
+ * `"done"` push) draw a real curve; a reopened run (`Api.open_run`)
+ * has neither — re-analysis recomputes one chosen generation, never a
+ * full history (`fim.reanalyze`'s own module docstring) — so `generations`/
+ * `histories` are `undefined` for that path, a real, named scope
+ * boundary, not an oversight.
+ *
+ * `sigmaBand` (design §7.2, sigma-band design doc `20260910-claude-
+ * sonnet-5-gui-sigma-band-design.md`'s own approach B1/C1) is `Api.
+ * _sigma_band_payload`'s own result, from either payload shape alike —
+ * `null`/`undefined` for a run that never requested one, and always
+ * `undefined` for a batch (no `sigmaBand` key on that payload shape at
+ * all). When a band exists but there is no real curve to anchor it to
+ * (a reopened run, slice 4 of that design's own commit schedule), the
+ * panel still shows — axes sized to the band's own trailing window
+ * alone (`generationCount - sigmaBand.window` through
+ * `generationCount`), the shaded region and its caption, simply no
+ * line running through it, rather than requiring a curve that does
+ * not exist just to show a band that does.
  * @param {number[]|undefined} generations
  * @param {Object<string, number[]>|undefined} histories
  * @param {{multiplier: number, window: number, band: object}|null|undefined} sigmaBand
+ * @param {number|undefined} generationCount the run's own final
+ *     generation — only read to size the axes for the band-alone case
+ *     above; ignored whenever real `generations`/`histories` exist.
  */
-function renderTrajectory(generations, histories, sigmaBand) {
-    if (!generations || !histories || generations.length === 0) {
+function renderTrajectory(generations, histories, sigmaBand, generationCount) {
+    const hasCurve = generations && histories && generations.length > 0;
+    if (!hasCurve && !sigmaBand) {
         runTrajectoryFrame.hidden = true;
         runTrajectoryLegend.replaceChildren();
         runTrajectorySigmaBandCaption.hidden = true;
         runTrajectorySigmaBandCaption.replaceChildren();
         return;
     }
+    const effectiveGenerations = hasCurve
+        ? generations
+        : [Math.max(0, generationCount - sigmaBand.window), generationCount];
+    const effectiveHistories = hasCurve ? histories : {};
     runTrajectoryFrame.hidden = false;
     const canvas = runTrajectoryCanvas;
     canvas.width = canvas.clientWidth || canvas.width;
@@ -382,11 +398,11 @@ function renderTrajectory(generations, histories, sigmaBand) {
     // can thread each statistic's own generation list through
     // separately to lift this.
     const plottable = Object.fromEntries(
-        Object.entries(histories).filter(
-            ([, values]) => values.length === generations.length
+        Object.entries(effectiveHistories).filter(
+            ([, values]) => values.length === effectiveGenerations.length
         )
     );
-    drawTrajectoryCurve(canvas, generations, plottable, sigmaBand);
+    drawTrajectoryCurve(canvas, effectiveGenerations, plottable, sigmaBand);
     runTrajectorySigmaBandCaption.replaceChildren();
     if (sigmaBand) {
         for (const [name, interval] of Object.entries(sigmaBand.band)) {
@@ -684,7 +700,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         renderTrajectory(
             payload.convergenceGenerations,
             payload.convergenceHistories,
-            payload.sigmaBand
+            payload.sigmaBand,
+            payload.generationCount
         );
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }

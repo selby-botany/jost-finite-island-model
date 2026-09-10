@@ -1852,12 +1852,16 @@ class Api:
 
         Returns:
             `{"ok": True, "runId", "report", "panels", "statistics",
-            "outputDirectory", "generationCount", "demeCount"}` on
-            success; `{"ok": False, "message": ...}` if no trajectory
-            was given, the generation/q-sweep fields do not parse, or `fim.
-            reanalyze.reanalyze_trajectory` itself raises (a
-            trajectory-integrity failure, an edited file, or a
-            generation that does not exist) — `message` is shown
+            "outputDirectory", "generationCount", "demeCount",
+            "sigmaBand"}` on success — `sigmaBand` is `_sigma_band_
+            payload`'s own result (sigma-band GUI design doc
+            `20260910-claude-sonnet-5-gui-sigma-band-design.md`,
+            `selby/restricted`, slice 4), `None` for a run that never
+            requested one; `{"ok": False, "message": ...}` if no
+            trajectory was given, the generation/q-sweep fields do not
+            parse, or `fim.reanalyze.reanalyze_trajectory` itself
+            raises (a trajectory-integrity failure, an edited file, or
+            a generation that does not exist) — `message` is shown
             verbatim, matching `fim stats`'s own wording.
         """
         trajectory_path_text = values.get("trajectoryPath", "")
@@ -1906,6 +1910,22 @@ class Api:
             "outputDirectory": str(trajectory_path.parent),
             "generationCount": reanalyzed.manifest.generation_count,
             "demeCount": reanalyzed.params.d,
+            # Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-
+            # sigma-band-design.md` (`selby/restricted`) slice 4,
+            # approach B1: `_sigma_band_payload` reused unchanged from
+            # the live-run "done" push (`_drain_run_messages`) — a
+            # reopened run's own manifest already carries this, no new
+            # file read. Unlike a live run, a reopened run has no
+            # `convergenceGenerations`/`convergenceHistories` of its
+            # own to draw a curve from at all (this bridge method's own
+            # docstring, above, already names that as a real, separate
+            # scope boundary) — `run-view-completed.js`'s own
+            # `renderTrajectory` shows the band alone, axes sized to
+            # its own trailing window, rather than requiring a curve
+            # that does not exist just to show a band that does.
+            "sigmaBand": _sigma_band_payload(
+                reanalyzed.manifest, self._significant_digits
+            ),
         }
 
     @_log_bridge_call

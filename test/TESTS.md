@@ -6209,6 +6209,32 @@ def test_open_run_reanalyzes_the_final_generation_by_default(
 
 A bare "final" open reproduces the run's own terminal report.
 
+<a id="gui.test_app_api.test_open_run_carries_no_sigma_band_for_an_ordinary_run"></a>
+
+#### test\_open\_run\_carries\_no\_sigma\_band\_for\_an\_ordinary\_run
+
+```python
+def test_open_run_carries_no_sigma_band_for_an_ordinary_run(
+        tmp_path: Path) -> None
+```
+
+A run that never requested a sigma band reopens with `sigmaBand: None`.
+
+<a id="gui.test_app_api.test_open_run_carries_the_real_sigma_band"></a>
+
+#### test\_open\_run\_carries\_the\_real\_sigma\_band
+
+```python
+def test_open_run_carries_the_real_sigma_band(tmp_path: Path) -> None
+```
+
+A reopened run's own `sigmaBand` matches `_sigma_band_payload` directly.
+
+Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+design.md` (`selby/restricted`) slice 4, approach B1: reused
+unchanged from the live-run path — this proves it, rather than
+trusting the two call sites stayed in sync by inspection alone.
+
 <a id="gui.test_app_api.test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis"></a>
 
 #### test\_open\_run\_choose\_reanalyzes\_an\_earlier\_generation\_as\_re\_analysis
@@ -9089,6 +9115,40 @@ def test_home_explore_card_opens_explore(window: webview.Window,
 ```
 
 Home enrichment design doc's own slice 3: "Explore" reaches Explore.
+
+<a id="gui.test_open_run_screen.test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line"></a>
+
+#### test\_opening\_a\_run\_with\_a\_sigma\_band\_shows\_it\_with\_no\_curve\_line
+
+```python
+def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A reopened run's own sigma band renders — the band alone, no curve.
+
+Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+design.md` (`selby/restricted`) slice 4: `Api.open_run` has no
+`convergenceGenerations`/`convergenceHistories` of its own (re-
+analysis recomputes one generation, never a full history) — the
+trajectory panel still shows, axes sized to the band's own trailing
+window alone, with an empty legend (no curve, no per-statistic
+swatch to show) and a real, non-blank shaded region.
+
+<a id="gui.test_open_run_screen.test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel"></a>
+
+#### test\_opening\_a\_run\_without\_a\_sigma\_band\_still\_hides\_the\_trajectory\_panel
+
+```python
+def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An ordinary reopened run (no sigma band, no curve) keeps the panel hidden.
+
+Unchanged behavior — the trajectory panel's own pre-existing
+"nothing to show" case, confirmed still correct now that it shares
+a gate with the new sigma-band-alone case above.
 
 <a id="gui.test_p0_grid_screen"></a>
 

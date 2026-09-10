@@ -228,6 +228,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   requested a band, or one that hit the hard generation cap without
   converging, looks exactly as it always has. A reopened (persisted)
   run's own band is slice 4, not yet shipped.
+- `fim gui`'s trajectory panel now also shows the within-run σ band for
+  a reopened (persisted) run — design §7.2, slice 4 of 4, closing out
+  the sigma-band design doc in full. A reopened run has no full
+  statistic-vs-generation history of its own to draw a curve from
+  (re-analysis recomputes one chosen generation, never every one) — the
+  panel still shows: the shaded band and its caption alone, axes sized
+  to the band's own trailing window, with no line running through it,
+  rather than requiring a curve that does not exist just to show a
+  band that does. A reopened run without a band still shows nothing,
+  unchanged.
 
 ### Changed
 

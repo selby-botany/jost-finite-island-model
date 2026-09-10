@@ -3752,12 +3752,16 @@ reuse, not a second rendering path.
 **Returns**:
 
 - ``{"ok"` - True, "runId", "report", "panels", "statistics",
-  "outputDirectory", "generationCount", "demeCount"}` on
-  success; `{"ok": False, "message": ...}` if no trajectory
-  was given, the generation/q-sweep fields do not parse, or `fim.
-  reanalyze.reanalyze_trajectory` itself raises (a
-  trajectory-integrity failure, an edited file, or a
-  generation that does not exist) — `message` is shown
+  "outputDirectory", "generationCount", "demeCount",
+  "sigmaBand"}` on success — `sigmaBand` is `_sigma_band_
+  payload`'s own result (sigma-band GUI design doc
+  `20260910-claude-sonnet-5-gui-sigma-band-design.md`,
+  `selby/restricted`, slice 4), `None` for a run that never
+  requested one; `{"ok": False, "message": ...}` if no
+  trajectory was given, the generation/q-sweep fields do not
+  parse, or `fim.reanalyze.reanalyze_trajectory` itself
+  raises (a trajectory-integrity failure, an edited file, or
+  a generation that does not exist) — `message` is shown
   verbatim, matching `fim stats`'s own wording.
 
 <a id="fim.gui.app.Api.compare_runs"></a>

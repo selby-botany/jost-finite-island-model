@@ -1474,6 +1474,44 @@ def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> 
     assert isinstance(result["panels"], list)
 
 
+def test_open_run_carries_no_sigma_band_for_an_ordinary_run(tmp_path: Path) -> None:
+    """A run that never requested a sigma band reopens with `sigmaBand: None`."""
+    output = _write_run(tmp_path)
+
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+
+    assert result["ok"] is True
+    assert result["sigmaBand"] is None
+
+
+def test_open_run_carries_the_real_sigma_band(tmp_path: Path) -> None:
+    """A reopened run's own `sigmaBand` matches `_sigma_band_payload` directly.
+
+    Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+    design.md` (`selby/restricted`) slice 4, approach B1: reused
+    unchanged from the live-run path — this proves it, rather than
+    trusting the two call sites stayed in sync by inspection alone.
+    """
+    output = _write_run(
+        tmp_path,
+        convergence_tolerance=1.0,
+        max_generations=30,
+        sigma_band_multiplier=3.0,
+        sigma_band_window=5,
+    )
+    manifest = read_manifest(output / "manifest.json")
+    assert manifest.sigma_band is not None
+    api = Api()
+
+    result = api.open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+
+    assert result["ok"] is True
+    expected = app_module._sigma_band_payload(manifest, api._significant_digits)
+    assert result["sigmaBand"] == expected
+    assert result["sigmaBand"]["multiplier"] == 3.0
+    assert result["sigmaBand"]["window"] == 5
+
+
 def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(
     tmp_path: Path,
 ) -> None:
