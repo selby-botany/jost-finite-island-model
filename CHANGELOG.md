@@ -202,6 +202,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   "Load example…", unchanged. Closes the last item from home
   enrichment design doc `20260909-claude-sonnet-5-home-enrichment-
   design.md` (`selby/restricted`).
+- `fim gui`'s cross-replicate confidence interval is now explicitly
+  labeled "uncertainty across N independent replicates" everywhere it
+  appears (the Results view's own CI meter tooltip, Home's own compact
+  per-row statistics cell), so it is never visually confusable with the
+  within-run σ band design doc `20260910-claude-sonnet-5-gui-sigma-
+  band-design.md` (`selby/restricted`) goes on to add. Slice 1 of that
+  document's own 4-slice commit schedule.
 
 ### Changed
 

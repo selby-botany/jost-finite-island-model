@@ -346,6 +346,50 @@ def test_recent_runs_row_shows_config_summary_and_statistics(
     assert "G_ST=" in settled["statisticsText"]
 
 
+def test_a_batch_rows_statistics_cell_names_its_own_replicate_count(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A batch row's own Statistics cell leads with `ciCaption`'s own text.
+
+    Botanist GUI design doc §7.2: the cross-replicate confidence
+    interval is "explicitly re-labeled everywhere it appears... as
+    'uncertainty across N independent replicates.'" Stated once per
+    row, not once per statistic (`open-run.js`'s own `formatRowStatistics`
+    docstring has the full reasoning) — a scalar row's own cell (the
+    test above) carries no such caption at all, since a point value has
+    no replicate count to name.
+    """
+    _write_batch_run(tmp_path)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            statistics_text = _poll_until(
+                window,
+                "(function(){"
+                "var row = document.querySelector("
+                "'#open-run-recent-runs-body tr'); "
+                "return row ? row.children[4].textContent : null;"
+                "})()",
+                lambda value: value is not None,
+            )
+            outcome.put(statistics_text)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    statistics_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert statistics_text is not None
+    assert statistics_text.startswith("(uncertainty across 3 independent replicates)")
+
+
 def test_expanding_a_batch_row_shows_its_own_replicate_list(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -6517,6 +6517,20 @@ a confidence interval in its hover tooltip (`buildCiMeter`/
 regardless of which, if any, statistics `replicate_summary` actually
 defined for this particular run.
 
+<a id="gui.test_batch_results_screen.test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip"></a>
+
+#### test\_the\_ci\_meter\_names\_the\_replicate\_count\_in\_its\_own\_tooltip
+
+```python
+def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None
+```
+
+`buildCiMeter`'s own tooltip states "uncertainty across N independent
+replicates" (botanist GUI design doc §7.2: re-labeled "everywhere it
+appears... so it is never visually confusable with" the within-run
+sigma band) — `webui/meters.js`'s own `ciCaption`, not a second,
+independently worded phrase.
+
 <a id="gui.test_batch_results_screen.test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back"></a>
 
 #### test\_batch\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back
@@ -8871,6 +8885,25 @@ actually calls it (not the older `list_recent_runs`) and renders
 both new columns, including the full text still being reachable via
 each cell's own `title` attribute once the compact text is
 ellipsized.
+
+<a id="gui.test_open_run_screen.test_a_batch_rows_statistics_cell_names_its_own_replicate_count"></a>
+
+#### test\_a\_batch\_rows\_statistics\_cell\_names\_its\_own\_replicate\_count
+
+```python
+def test_a_batch_rows_statistics_cell_names_its_own_replicate_count(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A batch row's own Statistics cell leads with `ciCaption`'s own text.
+
+Botanist GUI design doc §7.2: the cross-replicate confidence
+interval is "explicitly re-labeled everywhere it appears... as
+'uncertainty across N independent replicates.'" Stated once per
+row, not once per statistic (`open-run.js`'s own `formatRowStatistics`
+docstring has the full reasoning) — a scalar row's own cell (the
+test above) carries no such caption at all, since a point value has
+no replicate count to name.
 
 <a id="gui.test_open_run_screen.test_expanding_a_batch_row_shows_its_own_replicate_list"></a>
 

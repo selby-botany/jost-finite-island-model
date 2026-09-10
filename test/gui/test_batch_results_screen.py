@@ -183,6 +183,51 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     assert settled["trajectoryFrameHidden"] is True
 
 
+def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None:
+    """`buildCiMeter`'s own tooltip states "uncertainty across N independent
+    replicates" (botanist GUI design doc §7.2: re-labeled "everywhere it
+    appears... so it is never visually confusable with" the within-run
+    sigma band) — `webui/meters.js`'s own `ciCaption`, not a second,
+    independently worded phrase.
+    """
+    done_event = threading.Event()
+    messages: list[RunMessage | BatchMessage] = []
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        messages.append(message)
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            tooltip = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                tooltip = window.evaluate_js(
+                    "document.querySelector('#batch-results-summary-body tr').title"
+                )
+            outcome.put(tooltip)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    tooltip = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert tooltip is not None, (
+        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
+        f"(messages received: {messages!r})"
+    )
+    # `_SET_TINY_BATCH_FIELDS` requests 2 replicates.
+    assert "uncertainty across 2 independent replicates" in tooltip
+
+
 def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
     """Selecting a pair, then selecting back to the default, round-trips
     through the real batch bridge (no "Show overview" button any more).

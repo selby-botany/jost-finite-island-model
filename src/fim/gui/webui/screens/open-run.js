@@ -95,21 +95,34 @@ function formatRowConfigSummary(configSummary) {
  * string -- a point value for a scalar run, or `"mean [low, high]"`
  * for a batch's own confidence interval, the identical text `webui/
  * meters.js`'s own `buildCiMeter` already shows in its tooltip (not a
- * second, independently worded CI format).
- * @param {Record<string, string | {mean: string, low: string, high: string}> | null} statistics
+ * second, independently worded CI format). A batch row's own six
+ * statistics share one `sampleCount` (every one was computed from the
+ * same replicate set), so `meters.js`'s own `ciCaption` (design doc
+ * §7.2's "uncertainty across N independent replicates" re-labeling)
+ * is stated once, as a leading note, rather than six times over --
+ * repeating an identical caption after every one of six statistics
+ * would bury the actual numbers this cell exists to show.
+ * @param {Record<string, string | {mean: string, low: string, high: string, sampleCount: number}> | null} statistics
  * @returns {string}
  */
 function formatRowStatistics(statistics) {
     if (!statistics) {
         return "";
     }
-    return Object.entries(statistics)
+    const entries = Object.entries(statistics);
+    const values = entries
         .map(([name, value]) =>
             typeof value === "string"
                 ? `${name}=${value}`
                 : `${name}=${value.mean} [${value.low}, ${value.high}]`
         )
         .join(" ");
+    const firstInterval = entries.map(([, value]) => value).find(
+        (value) => typeof value !== "string"
+    );
+    return firstInterval
+        ? `(${ciCaption(firstInterval.sampleCount)}) ${values}`
+        : values;
 }
 
 /**

@@ -97,10 +97,28 @@ function buildOmittedMeter(name, omittedText) {
 }
 
 /**
+ * The cross-replicate confidence interval's own fixed caption (botanist
+ * GUI design doc §7.2: re-labeled "everywhere it appears... as
+ * 'uncertainty across N independent replicates,' so it is never
+ * visually confusable with" the within-run σ band). One function, one
+ * wording, every call site this meter reaches -- not independently
+ * retyped at each one (`format_statistic`'s own docstring makes the
+ * identical argument for Python-side formatting; this is the same
+ * discipline applied to a JS-side caption).
+ *
+ * @param {number} sampleCount
+ * @returns {string}
+ */
+function ciCaption(sampleCount) {
+    return `uncertainty across ${sampleCount} independent replicates`;
+}
+
+/**
  * Build one table row's cells for a statistic with a confidence
  * interval (a batch summary statistic). The value column shows the
- * mean to two digits; hovering the row shows `"mean [low, high]"` at
- * full `format_statistic` precision.
+ * mean to two digits; hovering the row shows `"mean [low, high] --
+ * uncertainty across N independent replicates"` at full `format_
+ * statistic` precision.
  *
  * `interval.mean`/`.low`/`.high` arrive pre-formatted for display
  * (`format_statistic`, a `%.6g`-style string) -- parsed back into a
@@ -113,7 +131,9 @@ function buildOmittedMeter(name, omittedText) {
  */
 function buildCiMeter(name, interval) {
     const cells = buildStatCells(name, formatToTwoDigits(interval.mean));
-    cells.tooltip = `${interval.mean} [${interval.low}, ${interval.high}]`;
+    cells.tooltip =
+        `${interval.mean} [${interval.low}, ${interval.high}] — ` +
+        ciCaption(interval.sampleCount);
     return cells;
 }
 
