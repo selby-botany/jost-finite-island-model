@@ -87,7 +87,7 @@ from fim.gui.trajectory_history import sampled_statistic_history
 from fim.model.initial import generate_initial_state
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.manifest import read_manifest
+from fim.persistence.manifest import read_batch_manifest, read_manifest
 from fim.reanalyze import reanalyze_trajectory
 from fim.statistics import (
     effective_allele_count,
@@ -1686,6 +1686,67 @@ class Api:
                 }
             )
         return rows
+
+    @_log_bridge_call
+    def get_batch_replicate_summary(self, directory: str) -> dict[str, Any]:
+        """List one persisted batch's own replicates, statistics only.
+
+        Home enrichment design doc `20260909-claude-sonnet-5-home-
+        enrichment-design.md` (`selby/restricted`), approach B1: fetched
+        lazily, only the first time a batch row's own expand control is
+        clicked (`webui/screens/open-run.js`'s own `toggleBatchRow`),
+        not folded into `list_home_runs` itself — a `results/` directory
+        with many old batches would otherwise pay this cost for every
+        batch shown, expanded or not. Each replicate's own directory is
+        `batch_runner.replicate_output_directory`'s own naming
+        convention (`replicate-NNN`, recovered from `replicate_run_id`),
+        the same helper `start_batch_run`'s own live "Open replicate"
+        already uses — no second naming scheme.
+
+        Args:
+            directory: The batch's own output directory (`RecentRun.
+                directory`/`Api.list_home_runs`'s own `"directory"`),
+                the parent of its `manifest.json`.
+
+        Returns:
+            `{"ok": True, "replicates": [{"replicateId", "trajectoryPath",
+            "statistics"}, ...]}`, in `BatchManifest.replicate_run_ids`'s
+            own stored order — `statistics` is `None` for any one
+            replicate whose own `report.json` could not be read (the
+            same graceful-degradation `list_home_runs` already applies,
+            one row deeper: a batch's own manifest and most other
+            replicates are still worth showing even if one replicate's
+            file is missing). `{"ok": False, "message": ...}` if
+            `directory` names no readable batch manifest at all.
+        """
+        try:
+            manifest = read_batch_manifest(Path(directory) / "manifest.json")
+        except (OSError, ValueError) as error:
+            return {"ok": False, "message": str(error)}
+        digits = self._significant_digits
+        replicates: list[dict[str, Any]] = []
+        for replicate_run_id in manifest.replicate_run_ids:
+            replicate_directory = batch_runner.replicate_output_directory(
+                Path(directory), manifest.run_id, replicate_run_id
+            )
+            raw_report = _read_json_object(replicate_directory / "report.json")
+            statistics = (
+                {
+                    name: format_statistic(raw_report.get(name), digits)
+                    for name in _RESULT_STATISTIC_NAMES
+                    if name in raw_report
+                }
+                if raw_report is not None
+                else None
+            )
+            replicates.append(
+                {
+                    "replicateId": replicate_run_id,
+                    "trajectoryPath": str(replicate_directory / "trajectory.jsonl"),
+                    "statistics": statistics,
+                }
+            )
+        return {"ok": True, "replicates": replicates}
 
     @_log_bridge_call
     def browse_for_trajectory(self) -> dict[str, Any]:

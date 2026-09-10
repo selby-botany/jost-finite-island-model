@@ -107,6 +107,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [set\_live\_deme\_pair](#fim.gui.app.Api.set_live_deme_pair)
     * [list\_recent\_runs](#fim.gui.app.Api.list_recent_runs)
     * [list\_home\_runs](#fim.gui.app.Api.list_home_runs)
+    * [get\_batch\_replicate\_summary](#fim.gui.app.Api.get_batch_replicate_summary)
     * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
     * [compare\_runs](#fim.gui.app.Api.compare_runs)
@@ -3645,6 +3646,48 @@ asked for this heavier per-row read, so neither pays for it.
   "sampleCount"}` (`format_statistic`-formatted mean/low/
   high, matching `webui/meters.js`'s own `buildCiMeter`
   input shape exactly) for a batch.
+
+<a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
+
+#### get\_batch\_replicate\_summary
+
+```python
+@_log_bridge_call
+def get_batch_replicate_summary(directory: str) -> dict[str, Any]
+```
+
+List one persisted batch's own replicates, statistics only.
+
+Home enrichment design doc `20260909-claude-sonnet-5-home-
+enrichment-design.md` (`selby/restricted`), approach B1: fetched
+lazily, only the first time a batch row's own expand control is
+clicked (`webui/screens/open-run.js`'s own `toggleBatchRow`),
+not folded into `list_home_runs` itself — a `results/` directory
+with many old batches would otherwise pay this cost for every
+batch shown, expanded or not. Each replicate's own directory is
+`batch_runner.replicate_output_directory`'s own naming
+convention (`replicate-NNN`, recovered from `replicate_run_id`),
+the same helper `start_batch_run`'s own live "Open replicate"
+already uses — no second naming scheme.
+
+**Arguments**:
+
+- `directory` - The batch's own output directory (`RecentRun.
+  directory`/`Api.list_home_runs`'s own `"directory"`),
+  the parent of its `manifest.json`.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "replicates": [{"replicateId", "trajectoryPath",
+  "statistics"}, ...]}`, in `BatchManifest.replicate_run_ids`'s
+  own stored order — `statistics` is `None` for any one
+  replicate whose own `report.json` could not be read (the
+  same graceful-degradation `list_home_runs` already applies,
+  one row deeper: a batch's own manifest and most other
+  replicates are still worth showing even if one replicate's
+  file is missing). `{"ok": False, "message": ...}` if
+  `directory` names no readable batch manifest at all.
 
 <a id="fim.gui.app.Api.browse_for_trajectory"></a>
 

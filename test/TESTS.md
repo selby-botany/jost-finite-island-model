@@ -6328,6 +6328,42 @@ def test_get_batch_deme_pair_panel_permits_a_self_comparison(
 
 `first_deme == second_deme` succeeds for a pooled batch panel too.
 
+<a id="gui.test_app_api.test_get_batch_replicate_summary_lists_every_replicate"></a>
+
+#### test\_get\_batch\_replicate\_summary\_lists\_every\_replicate
+
+```python
+def test_get_batch_replicate_summary_lists_every_replicate(
+        tmp_path: Path) -> None
+```
+
+Every published replicate appears, own trajectory path, own statistics.
+
+Home enrichment design doc `20260909-claude-sonnet-5-home-
+enrichment-design.md` (`selby/restricted`), approach B1.
+
+<a id="gui.test_app_api.test_get_batch_replicate_summary_omits_statistics_for_a_missing_report"></a>
+
+#### test\_get\_batch\_replicate\_summary\_omits\_statistics\_for\_a\_missing\_report
+
+```python
+def test_get_batch_replicate_summary_omits_statistics_for_a_missing_report(
+        tmp_path: Path) -> None
+```
+
+A replicate whose own `report.json` was removed still appears, blank.
+
+<a id="gui.test_app_api.test_get_batch_replicate_summary_rejects_an_unreadable_directory"></a>
+
+#### test\_get\_batch\_replicate\_summary\_rejects\_an\_unreadable\_directory
+
+```python
+def test_get_batch_replicate_summary_rejects_an_unreadable_directory(
+        tmp_path: Path) -> None
+```
+
+A directory with no readable `manifest.json` is a clear error, not a crash.
+
 <a id="gui.test_app_api.test_get_initial_state_deme_pair_panel_names_the_requested_pair"></a>
 
 #### test\_get\_initial\_state\_deme\_pair\_panel\_names\_the\_requested\_pair
@@ -8835,6 +8871,24 @@ actually calls it (not the older `list_recent_runs`) and renders
 both new columns, including the full text still being reachable via
 each cell's own `title` attribute once the compact text is
 ellipsized.
+
+<a id="gui.test_open_run_screen.test_expanding_a_batch_row_shows_its_own_replicate_list"></a>
+
+#### test\_expanding\_a\_batch\_row\_shows\_its\_own\_replicate\_list
+
+```python
+def test_expanding_a_batch_row_shows_its_own_replicate_list(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Home enrichment design doc's own approach B1: expand, then collapse.
+
+Clicking a batch row's own toggle reveals one row per replicate
+(`Api.get_batch_replicate_summary`, already proven correct as a
+plain Python call in `test_app_api.py`); clicking it again removes
+them. Clicking a replicate row selects its own trajectory for
+"Open ▶", the same selection mechanism a scalar row's own click
+already uses.
 
 <a id="gui.test_p0_grid_screen"></a>
 

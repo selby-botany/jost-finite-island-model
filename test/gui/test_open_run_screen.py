@@ -51,6 +51,30 @@ _POLL_ATTEMPTS = 300
 _DRIVE_TIMEOUT_SECONDS = 3 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
 
 
+def _write_batch_run(tmp_path: Path) -> Path:
+    """Write a small, real completed batch (3 replicates) and return its directory."""
+    config = {
+        "N": 20,
+        "d": 2,
+        "m": 0.1,
+        "mu": 0.01,
+        "seed": 1,
+        "loci": [{"locus_id": 1, "length": 200}],
+        "convergence_window": 4,
+        "convergence_tolerance": 1.0,
+        "max_generations": 10,
+        "n_replicates": 3,
+        "replicate_tolerance": None,
+    }
+    config_path = tmp_path / "batch.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    output_directory = tmp_path / "results" / "batch-output"
+    assert (
+        cli.main(["run", str(config_path), "-o", str(output_directory), "--quiet"]) == 0
+    )
+    return output_directory
+
+
 def _write_run(tmp_path: Path) -> Path:
     """Write a small, real completed run under `tmp_path` and return its directory."""
     config = {
@@ -320,3 +344,84 @@ def test_recent_runs_row_shows_config_summary_and_statistics(
     assert settled["configTitle"] == settled["configText"]
     assert "D=" in settled["statisticsText"]
     assert "G_ST=" in settled["statisticsText"]
+
+
+def test_expanding_a_batch_row_shows_its_own_replicate_list(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Home enrichment design doc's own approach B1: expand, then collapse.
+
+    Clicking a batch row's own toggle reveals one row per replicate
+    (`Api.get_batch_replicate_summary`, already proven correct as a
+    plain Python call in `test_app_api.py`); clicking it again removes
+    them. Clicking a replicate row selects its own trajectory for
+    "Open ▶", the same selection mechanism a scalar row's own click
+    already uses.
+    """
+    _write_batch_run(tmp_path)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "document.querySelector('.open-run-replicate-toggle') !== null",
+                lambda value: value is True,
+            )
+            before_count = window.evaluate_js(
+                "document.querySelectorAll('#open-run-recent-runs-body tr').length"
+            )
+            window.evaluate_js(
+                "document.querySelector('.open-run-replicate-toggle').click();"
+            )
+            after_expand_count = _poll_until(
+                window,
+                "document.querySelectorAll('#open-run-recent-runs-body tr').length",
+                lambda value: value is not None and value > 1,
+            )
+            replicate_texts = window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                "'.open-run-replicate-row td:nth-child(3)'))"
+                ".map((cell) => cell.textContent)"
+            )
+            window.evaluate_js(
+                "document.querySelector('.open-run-replicate-row').click();"
+            )
+            open_button_disabled = window.evaluate_js(
+                "document.getElementById('open-run-open-button').disabled"
+            )
+            window.evaluate_js(
+                "document.querySelector('.open-run-replicate-toggle').click();"
+            )
+            after_collapse_count = _poll_until(
+                window,
+                "document.querySelectorAll('#open-run-recent-runs-body tr').length",
+                lambda value: value == before_count,
+            )
+            outcome.put(
+                {
+                    "beforeCount": before_count,
+                    "afterExpandCount": after_expand_count,
+                    "replicateTexts": replicate_texts,
+                    "openButtonDisabled": open_button_disabled,
+                    "afterCollapseCount": after_collapse_count,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["beforeCount"] == 1
+    assert settled["afterExpandCount"] == 4
+    assert settled["replicateTexts"] == ["#1", "#2", "#3"]
+    assert settled["openButtonDisabled"] is False
+    assert settled["afterCollapseCount"] == 1

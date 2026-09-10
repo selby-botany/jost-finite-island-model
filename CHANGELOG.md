@@ -181,6 +181,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   appears, with that one column simply blank, matching this screen's
   own existing "skip rather than fail the whole scan" behavior for a
   malformed manifest, one file deeper.
+- A batch row on Home/"Open a run…" is now expandable to its own
+  replicate list (design §9), via a small toggle beside its outcome
+  text. Fetched lazily, only the first time a given row is actually
+  expanded, and cached for the rest of that visit — a `results/`
+  directory with many old batches never pays for a replicate list
+  nobody looks at (home enrichment design doc `20260909-claude-
+  sonnet-5-home-enrichment-design.md`, `selby/restricted`, approach
+  B1). Clicking one replicate row selects that replicate's own
+  trajectory for "Open ▶", the identical selection mechanism a scalar
+  row's own click already uses — no more separately hunting down a
+  specific replicate from its own batch results screen just to open
+  it directly.
 
 ### Changed
 

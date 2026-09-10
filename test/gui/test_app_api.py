@@ -1760,6 +1760,70 @@ def test_get_batch_deme_pair_panel_rejects_an_out_of_range_deme(
     assert "message" in result
 
 
+def test_get_batch_replicate_summary_lists_every_replicate(tmp_path: Path) -> None:
+    """Every published replicate appears, own trajectory path, own statistics.
+
+    Home enrichment design doc `20260909-claude-sonnet-5-home-
+    enrichment-design.md` (`selby/restricted`), approach B1.
+    """
+    output = _write_run(tmp_path, n_replicates=3)
+
+    result = Api().get_batch_replicate_summary(str(output))
+
+    assert result["ok"] is True
+    assert len(result["replicates"]) == 3
+    for replicate in result["replicates"]:
+        assert replicate["replicateId"].endswith(("-r001", "-r002", "-r003"))
+        assert Path(replicate["trajectoryPath"]).name == "trajectory.jsonl"
+        assert Path(replicate["trajectoryPath"]).exists()
+        assert replicate["statistics"] is not None
+        assert set(replicate["statistics"]) == {
+            "D",
+            "G_ST",
+            "E_ST",
+            "K_ST",
+            "H_S",
+            "H_T",
+        }
+
+
+def test_get_batch_replicate_summary_omits_statistics_for_a_missing_report(
+    tmp_path: Path,
+) -> None:
+    """A replicate whose own `report.json` was removed still appears, blank."""
+    output = _write_run(tmp_path, n_replicates=3)
+    (output / "replicate-002" / "report.json").unlink()
+
+    result = Api().get_batch_replicate_summary(str(output))
+
+    assert result["ok"] is True
+    assert len(result["replicates"]) == 3
+    by_id = {replicate["replicateId"]: replicate for replicate in result["replicates"]}
+    blank = [
+        replicate
+        for replicate in by_id.values()
+        if replicate["replicateId"].endswith("-r002")
+    ]
+    assert len(blank) == 1
+    assert blank[0]["statistics"] is None
+    others = [
+        replicate
+        for replicate in result["replicates"]
+        if not replicate["replicateId"].endswith("-r002")
+    ]
+    assert all(replicate["statistics"] is not None for replicate in others)
+
+
+def test_get_batch_replicate_summary_rejects_an_unreadable_directory(
+    tmp_path: Path,
+) -> None:
+    """A directory with no readable `manifest.json` is a clear error, not a crash."""
+    result = Api().get_batch_replicate_summary(str(tmp_path / "does-not-exist"))
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
 def test_get_initial_state_deme_pair_panel_names_the_requested_pair() -> None:
     """The Initial-state preview's on-demand pair view names its own axes."""
     result = Api().get_initial_state_deme_pair_panel(

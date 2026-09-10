@@ -95,6 +95,92 @@ function formatRowStatistics(statistics) {
         .join(" ");
 }
 
+/**
+ * Build one replicate's own `<tr>` for an expanded batch row -- home
+ * enrichment design doc `20260909-claude-sonnet-5-home-enrichment-
+ * design.md`'s (`selby/restricted`) approach B1: clicking it selects
+ * that one replicate's own trajectory for "Open ▶", the identical
+ * selection mechanism a scalar row's own row-click already uses, so a
+ * replicate never has to be re-found from its own separate batch
+ * results screen just to open it directly.
+ * @param {{replicateId: string, trajectoryPath: string, statistics: object | null}} replicate
+ * @returns {HTMLTableRowElement}
+ */
+function buildReplicateRow(replicate) {
+    const row = document.createElement("tr");
+    row.className = "open-run-replicate-row";
+    const cells = [
+        "",
+        "",
+        replicateLabel(replicate.replicateId),
+        "",
+        formatRowStatistics(replicate.statistics),
+    ];
+    cells.forEach((value, index) => {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        if (index === 4) {
+            cell.className = "open-run-summary-cell";
+            cell.title = value;
+        }
+        row.appendChild(cell);
+    });
+    row.addEventListener("click", (event) => {
+        event.stopPropagation();
+        for (const sibling of recentRunsBody.querySelectorAll("tr")) {
+            sibling.classList.remove("selected");
+        }
+        row.classList.add("selected");
+        showOpenRunBanner("");
+        setSelectedTrajectory(replicate.trajectoryPath);
+    });
+    return row;
+}
+
+/**
+ * Expand or collapse one batch row's own replicate list, in place --
+ * fetched at most once per row (`window.__fimBatchReplicateCache`,
+ * keyed by directory), lazily, only the first time this actually runs
+ * (approach B1's own reasoning: a `results/` directory with many old
+ * batches should not pay for every one's own replicate list, expanded
+ * or not).
+ * @param {HTMLTableRowElement} batchRow
+ * @param {HTMLButtonElement} toggleButton
+ * @param {string} directory
+ */
+async function toggleBatchRow(batchRow, toggleButton, directory) {
+    const expandedRows = batchRow._fimExpandedRows;
+    if (expandedRows) {
+        for (const row of expandedRows) {
+            row.remove();
+        }
+        batchRow._fimExpandedRows = null;
+        toggleButton.textContent = "▸";
+        toggleButton.setAttribute("aria-expanded", "false");
+        return;
+    }
+    if (!window.__fimBatchReplicateCache) {
+        window.__fimBatchReplicateCache = {};
+    }
+    let replicates = window.__fimBatchReplicateCache[directory];
+    if (!replicates) {
+        const result = await window.pywebview.api.get_batch_replicate_summary(
+            directory
+        );
+        replicates = result.ok ? result.replicates : [];
+        window.__fimBatchReplicateCache[directory] = replicates;
+    }
+    const rows = replicates.map(buildReplicateRow);
+    let anchor = batchRow;
+    for (const row of rows) {
+        anchor.after(row);
+        anchor = row;
+    }
+    batchRow._fimExpandedRows = rows;
+    toggleButton.textContent = "▾";
+    toggleButton.setAttribute("aria-expanded", "true");
+}
+
 async function refreshRecentRuns() {
     // `showOpenRunScreen` fires this without awaiting it (a real
     // filesystem scan should not block the screen transition), so
@@ -111,21 +197,48 @@ async function refreshRecentRuns() {
     // an occasional, very slow interpreter-shutdown stall while that
     // thread outlived the window it was about to call back into.
     window.__fimOpenRunRecentRunsLoaded = false;
+    // A fresh visit never shows a stale replicate list fetched for a
+    // *previous* visit's own now-discarded rows -- `toggleBatchRow`'s
+    // own cache is keyed by directory, not by row, so it would
+    // otherwise survive the `replaceChildren()` below untouched.
+    window.__fimBatchReplicateCache = {};
     recentRunsBody.replaceChildren();
     const runs = await window.pywebview.api.list_home_runs();
     for (const run of runs) {
         const row = document.createElement("tr");
         const configText = formatRowConfigSummary(run.configSummary);
         const statisticsText = formatRowStatistics(run.statistics);
-        for (const [value, className] of [
-            [run.runId, null],
-            [run.endedAt, null],
-            [run.label, null],
-            [configText, "open-run-summary-cell"],
-            [statisticsText, "open-run-summary-cell"],
+        for (const [value, className, isLabelCell] of [
+            [run.runId, null, false],
+            [run.endedAt, null, false],
+            [run.label, null, true],
+            [configText, "open-run-summary-cell", false],
+            [statisticsText, "open-run-summary-cell", false],
         ]) {
             const cell = document.createElement("td");
-            cell.textContent = value;
+            // A batch row's own label cell gets an expand/collapse
+            // toggle beside its text (design §9: "expandable to its
+            // own replicate list") -- a scalar row's own label cell is
+            // plain text, unchanged.
+            if (isLabelCell && run.isBatch) {
+                const toggleButton = document.createElement("button");
+                toggleButton.type = "button";
+                toggleButton.className = "open-run-replicate-toggle";
+                toggleButton.textContent = "▸";
+                toggleButton.setAttribute("aria-expanded", "false");
+                toggleButton.setAttribute(
+                    "aria-label",
+                    `Show replicates for ${run.runId}`
+                );
+                toggleButton.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    toggleBatchRow(row, toggleButton, run.directory);
+                });
+                cell.appendChild(toggleButton);
+                cell.appendChild(document.createTextNode(` ${value}`));
+            } else {
+                cell.textContent = value;
+            }
             // `configText`/`statisticsText` can run long (six fields,
             // six statistics) -- capped and ellipsized in CSS, with the
             // full text still reachable on hover via `title` rather

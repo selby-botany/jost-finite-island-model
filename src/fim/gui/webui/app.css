@@ -779,6 +779,25 @@ fieldset.composite > label {
     white-space: nowrap;
 }
 
+/* A batch row's own expand/collapse toggle (design §9, `screens/
+ * open-run.js`'s own `toggleBatchRow`) and the replicate rows it
+ * reveals -- indented and muted so they read as subordinate to the
+ * batch row they belong to, not as their own independent entries in
+ * the same list. */
+.open-run-replicate-toggle {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 0.3rem 0 0;
+}
+
+.open-run-replicate-row td:nth-child(3) {
+    padding-left: 1.5rem;
+    color: var(--fim-muted);
+}
+
 /* Explore (design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
  * §5) -- the four headline fields laid out in one row (narrower than
  * `.field`'s own 22rem default, which assumes a single vertical stack of
