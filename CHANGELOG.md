@@ -193,6 +193,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   row's own click already uses — no more separately hunting down a
   specific replicate from its own batch results screen just to open
   it directly.
+- Home gains two shortcut cards, "New run" and "Explore" (design §9),
+  above its own recent-runs table — pure navigation to destinations
+  the rail already reaches from anywhere (`showConfigureScreen`/
+  `menu.explore`), no new bridge call. "New run" opens
+  Configure showing whatever is already loaded (the last-used
+  configuration); a worked example remains one click away there via
+  "Load example…", unchanged. Closes the last item from home
+  enrichment design doc `20260909-claude-sonnet-5-home-enrichment-
+  design.md` (`selby/restricted`).
 
 ### Changed
 

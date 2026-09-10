@@ -425,3 +425,52 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
     assert settled["replicateTexts"] == ["#1", "#2", "#3"]
     assert settled["openButtonDisabled"] is False
     assert settled["afterCollapseCount"] == 1
+
+
+def test_home_new_run_card_opens_configure(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Home enrichment design doc's own slice 3: "New run" reaches Configure.
+
+    Pure navigation, no new bridge call — `Api.list_home_runs`'s own
+    empty-`results/` case is enough here, no real run needs writing.
+    `is_ready` checks for `False` specifically, not merely "not `None`"
+    — a real race an earlier version of this test hit live: `hidden`'s
+    own *starting* value (`True`, before the click has even fired) is
+    already non-`None`, so a looser check accepted it on the very first
+    poll, before the `setTimeout` callback had a chance to run at all.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.showOpenRunScreen(); "
+            "setTimeout(() => { "
+            "document.getElementById('home-new-run-button').click(); "
+            "}, 0);"
+        ),
+        read="document.getElementById('screen-configure').hidden",
+        is_ready=lambda value: value is False,
+    )
+
+    assert settled is False
+
+
+def test_home_explore_card_opens_explore(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Home enrichment design doc's own slice 3: "Explore" reaches Explore."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.showOpenRunScreen(); "
+            "setTimeout(() => { "
+            "document.getElementById('home-explore-button').click(); "
+            "}, 0);"
+        ),
+        read="document.getElementById('screen-explore').hidden",
+        is_ready=lambda value: value is False,
+    )
+
+    assert settled is False

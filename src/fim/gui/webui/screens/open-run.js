@@ -29,8 +29,25 @@ const differentiationOrdersInput = document.getElementById(
 );
 const openButton = document.getElementById("open-run-open-button");
 const openRunBackButton = document.getElementById("open-run-back-button");
+const homeNewRunButton = document.getElementById("home-new-run-button");
+const homeExploreButton = document.getElementById("home-explore-button");
 
 let selectedTrajectoryPath = null;
+
+// Home's own shortcut cards (design §9, slice 3): both delegate to an
+// already-existing entry point exactly the rail's own buttons use
+// (`screens/nav-rail.js`'s own `wireNavRail`) -- pure navigation, no
+// bridge call of its own. "New run" shows Configure with whatever is
+// already loaded (`loadInitialForm`'s own "prefer the last submitted
+// form" behavior); a worked example is still one click away there via
+// "Load example…", unchanged.
+homeNewRunButton.addEventListener("click", () => {
+    window.fim.showConfigureScreen();
+});
+
+homeExploreButton.addEventListener("click", () => {
+    window.fim.menu.explore();
+});
 
 function showOpenRunBanner(message) {
     if (!message) {

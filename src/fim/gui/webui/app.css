@@ -738,6 +738,39 @@ fieldset.composite > label {
     font-size: 0.85rem;
 }
 
+/* Home's own shortcut cards (design §9; home enrichment design doc
+ * `20260909-claude-sonnet-5-home-enrichment-design.md`, `selby/
+ * restricted`, slice 3) -- deliberately plain, bordered boxes, not
+ * `.config-modal`'s own dialog styling (these sit inline on the page,
+ * never in a `<dialog>`). */
+.home-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.home-card {
+    flex: 1 1 16rem;
+    min-width: 14rem;
+    border: 1px solid var(--fim-border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    background: var(--fim-background);
+}
+
+.home-card h3 {
+    margin: 0 0 0.35rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.home-card p {
+    margin: 0 0 0.75rem;
+    font-size: 0.85rem;
+    color: var(--fim-muted);
+}
+
 /* Screen 6: open an existing run (design §4.6). */
 .open-run-table {
     width: 100%;

@@ -336,6 +336,34 @@
 
   <section id="screen-open-run" class="screen" hidden>
     <div id="open-run-banner" class="banner" hidden></div>
+    <!-- Slice 3 of home enrichment design doc `20260909-claude-sonnet-
+         5-home-enrichment-design.md`'s (`selby/restricted`) own commit
+         schedule: pure navigation shortcuts, no new bridge calls --
+         "New run" opens Configure showing whatever is already loaded
+         (the last-used configuration, `loadInitialForm`'s own existing
+         behavior; a worked example is still one click away there, via
+         "Load example…", once showing), and Explore opens the
+         predictive workspace directly -- both destinations the rail
+         already reaches from anywhere, drawn larger here since a
+         returning user landing on Home is often deciding between
+         exactly these two next steps (design §9's own reasoning for
+         the Explore card). -->
+    <div class="home-cards">
+      <div class="home-card">
+        <h3>New run</h3>
+        <p>Start from your last configuration, or a worked example.</p>
+        <div class="actions">
+          <button type="button" id="home-new-run-button">Configure a new run</button>
+        </div>
+      </div>
+      <div class="home-card">
+        <h3>Explore</h3>
+        <p>See predicted differentiation for a configuration, without running it.</p>
+        <div class="actions">
+          <button type="button" id="home-explore-button">🔮 Explore</button>
+        </div>
+      </div>
+    </div>
     <p>Recent runs (results/*/manifest.json):</p>
     <table class="open-run-table">
       <thead>

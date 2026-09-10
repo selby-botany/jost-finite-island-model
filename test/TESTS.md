@@ -8890,6 +8890,36 @@ them. Clicking a replicate row selects its own trajectory for
 "Open ▶", the same selection mechanism a scalar row's own click
 already uses.
 
+<a id="gui.test_open_run_screen.test_home_new_run_card_opens_configure"></a>
+
+#### test\_home\_new\_run\_card\_opens\_configure
+
+```python
+def test_home_new_run_card_opens_configure(window: webview.Window,
+                                           drive: Callable[..., Any]) -> None
+```
+
+Home enrichment design doc's own slice 3: "New run" reaches Configure.
+
+Pure navigation, no new bridge call — `Api.list_home_runs`'s own
+empty-`results/` case is enough here, no real run needs writing.
+`is_ready` checks for `False` specifically, not merely "not `None`"
+— a real race an earlier version of this test hit live: `hidden`'s
+own *starting* value (`True`, before the click has even fired) is
+already non-`None`, so a looser check accepted it on the very first
+poll, before the `setTimeout` callback had a chance to run at all.
+
+<a id="gui.test_open_run_screen.test_home_explore_card_opens_explore"></a>
+
+#### test\_home\_explore\_card\_opens\_explore
+
+```python
+def test_home_explore_card_opens_explore(window: webview.Window,
+                                         drive: Callable[..., Any]) -> None
+```
+
+Home enrichment design doc's own slice 3: "Explore" reaches Explore.
+
 <a id="gui.test_p0_grid_screen"></a>
 
 # gui.test\_p0\_grid\_screen
