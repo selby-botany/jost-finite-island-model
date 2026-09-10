@@ -2813,6 +2813,59 @@ def _worker_ping() -> str:
     return "pong from worker"
 
 
+def _configure_macos_native_about_panel() -> None:
+    """Populate the version/copyright/icon the native About FIM panel shows.
+
+    macOS's app menu always carries its own "About FIM" item, wired by
+    `pywebview`'s Cocoa backend straight to the standard Cocoa selector
+    `orderFrontStandardAboutPanel:` (`webview.platforms.cocoa._add_app_
+    menu`) -- a completely separate, OS-native dialog from `fim`'s own
+    Help > "About fim" `MenuAction`, which instead opens the branded
+    HTML `modal-about` dialog (`screens/config-modals.js`'s
+    `showAboutModal`). The two are never the same code path: a user
+    who opens the native one by way of the "FIM" app menu (its
+    standard, expected macOS position) sees whatever this function last
+    set on `NSBundle.mainBundle()`'s info dictionary and `NSApplication.
+    sharedApplication().applicationIconImage`, regardless of the HTML
+    dialog's own content.
+
+    Before this ran, that native panel showed only the bare app name
+    over a generic folder icon: `_set_macos_application_name` sets
+    `CFBundleName` alone, and an unbundled `python3` process supplies
+    none of `CFBundleShortVersionString`, `CFBundleVersion`, or
+    `NSHumanReadableCopyright` for the standard panel to read, nor any
+    icon for `NSApplication.applicationIconImage` to fall back to. This
+    fills in the same facts `get_about_info` already gives the HTML
+    dialog -- version and Marie Selby Botanical Gardens attribution --
+    plus the shipped orchid mark as the app icon, so both About
+    surfaces agree rather than one being blank.
+
+    A no-op everywhere except macOS, and tolerant of `AppKit`/icon-file
+    absence for the same reason `_set_macos_application_name` is: a
+    cosmetic About panel is never worth failing application startup
+    over.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSApplication, NSBundle, NSImage  # noqa: PLC0415
+    except ImportError:
+        return
+    bundle = NSBundle.mainBundle()
+    info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+    if info is not None:
+        info["CFBundleShortVersionString"] = fim_version
+        info["CFBundleVersion"] = fim_version
+        info["NSHumanReadableCopyright"] = (
+            "Marie Selby Botanical Gardens (https://selby.org/botany/)"
+        )
+    logo_path = _webui_directory() / "branding" / "selby-orchid-logo.jpeg"
+    if logo_path.is_file():
+        image = NSImage.alloc().initWithContentsOfFile_(str(logo_path))
+        if image is not None:
+            NSApplication.sharedApplication().setApplicationIconImage_(image)
+
+
 def _set_macos_application_name(name: str) -> None:
     """Rename this process's own app identity for the macOS menu bar.
 
@@ -2909,6 +2962,7 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     # interpreter shutdown in `wait_for_thread_shutdown`.
     ThreadingMixIn.daemon_threads = True
     _set_macos_application_name(_MACOS_APPLICATION_NAME)
+    _configure_macos_native_about_panel()
     created = webview.create_window(
         _WINDOW_TITLE,
         url=str(_webui_directory() / "index.html"),
