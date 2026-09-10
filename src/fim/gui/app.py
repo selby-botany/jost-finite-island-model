@@ -2290,8 +2290,9 @@ class Api:
         toml`'s `[project.urls]` and `fim --version` already report.
         `organization`/`organization_url` credit Marie Selby Botanical
         Gardens, the institution this simulator was built for — shown
-        alongside the orchid mark (`webui/branding/selby-orchid-logo.
-        jpeg`) that `screens/config-modals.js`'s own `modal-about`
+        alongside the reserved orchid mark (`branding/selby-orchid-logo.
+        jpeg`, exposed to the web UI through its `assets/` link) that
+        `screens/config-modals.js`'s own `modal-about`
         renders, not text-only attribution.
         """
         return {
@@ -2859,7 +2860,7 @@ def _configure_macos_native_about_panel() -> None:
         info["NSHumanReadableCopyright"] = (
             "Marie Selby Botanical Gardens (https://selby.org/botany/)"
         )
-    logo_path = _webui_directory() / "branding" / "selby-orchid-logo.jpeg"
+    logo_path = _branding_directory() / "selby-orchid-logo.jpeg"
     if logo_path.is_file():
         image = NSImage.alloc().initWithContentsOfFile_(str(logo_path))
         if image is not None:
@@ -3286,6 +3287,24 @@ def main() -> int:
     # legitimately leave the application open.
     _start_shutdown_deadman(shutdown_timeout())
     return 0
+
+
+def _branding_directory() -> Path:
+    """Return the reserved top-level branding directory.
+
+    Source checkouts keep branding outside `src/` so the repository's
+    AGPL-covered application source and its reserved identity assets are
+    unambiguous. Distribution builds materialize the web UI's asset links,
+    so an installed or frozen application reads the packaged copy there.
+    """
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if bundle_root is not None:
+        return _webui_directory() / "assets"
+
+    project_branding = Path(__file__).resolve().parents[3] / "branding"
+    if project_branding.is_dir():
+        return project_branding
+    return _webui_directory() / "assets"
 
 
 def _webui_directory() -> Path:

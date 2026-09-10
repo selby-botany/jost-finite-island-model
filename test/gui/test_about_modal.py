@@ -84,4 +84,4 @@ def test_about_menu_shows_name_version_and_selby_attribution(
     assert settled["organizationText"] == "Marie Selby Botanical Gardens"
     assert settled["organizationUrl"] == "https://selby.org/botany/"
     assert "selby-botany/jost-finite-island-model" in settled["repositoryUrl"]
-    assert settled["logoSrc"] == "branding/selby-orchid-logo.jpeg"
+    assert settled["logoSrc"] == "assets/selby-orchid-logo.jpeg"

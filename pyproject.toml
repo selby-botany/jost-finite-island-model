@@ -126,6 +126,7 @@ Repository = "https://github.com/selby-botany/jost-finite-island-model"
 [tool.hatch.build.targets.sdist]
 include = [
     "/CHANGELOG.md",
+    "/branding",
     "/CONTRIBUTING.md",
     "/LICENSE.md",
     "/README.md",

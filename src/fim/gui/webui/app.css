@@ -1,13 +1,39 @@
-/* Base styles for every fim screen (design doc §3.10, H1).
- *
- * System font stack and light/dark awareness are the whole of H1's
- * "reads as native" bar for this milestone — no custom widget skin, no
- * toolkit-specific visual signature. Each real screen (§4, from
- * Milestone W2 onward) adds its own rules in webui/screens/*.js-adjacent
- * sections here, or a small screen-scoped stylesheet if one screen's
- * rules grow large enough to warrant it — not decided yet, since only
- * the walking skeleton exists so far.
- */
+/* Selby scientific identity: local Lato is reserved for application
+ * identity and headings; dense controls and numerical content retain the
+ * platform UI stack. The files ship with the application under the SIL
+ * Open Font License (`fonts/OFL.txt`), so the desktop UI never depends on
+ * a network font service. */
+@font-face {
+    font-family: "Lato";
+    font-style: normal;
+    font-weight: 300;
+    font-display: swap;
+    src: url("fonts/Lato-Light.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Lato";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("fonts/Lato-Regular.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Lato";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("fonts/Lato-Bold.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Lato";
+    font-style: normal;
+    font-weight: 900;
+    font-display: swap;
+    src: url("fonts/Lato-Black.ttf") format("truetype");
+}
 
 /* Light is the bare `:root` default; dark applies either by following
  * the OS (`@media`, guarded so an explicit override below still wins)
@@ -21,33 +47,58 @@
  * `@media` block alone could never be overridden back to light on a
  * dark-OS machine — each has to be able to win independently. */
 :root {
+    color-scheme: light;
     --fim-font: -apple-system, "Segoe UI", "Cantarell", system-ui, sans-serif;
+    --fim-display-font: "Lato", var(--fim-font);
+    --fim-canvas: #faf9f6;
     --fim-background: #ffffff;
-    --fim-foreground: #1a1a1a;
-    --fim-muted: #6b6b6b;
-    --fim-accent: #0a66c2;
-    --fim-accent-soft: #e3f0fc;
-    --fim-border: #d9d9d9;
+    --fim-foreground: #242824;
+    --fim-muted: #5d6863;
+    --fim-accent: #63475b;
+    --fim-accent-hover: #513849;
+    --fim-accent-soft: #f4e9f0;
+    --fim-action: #386a45;
+    --fim-action-hover: #2d5838;
+    --fim-action-foreground: #ffffff;
+    --fim-surface-soft: #e3ece3;
+    --fim-border: #cdd5d0;
+    --fim-shadow: rgba(36, 40, 36, 0.16);
 }
 
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-        --fim-background: #1e1e1e;
-        --fim-foreground: #f0f0f0;
-        --fim-muted: #a0a0a0;
-        --fim-accent: #4da3ff;
-        --fim-accent-soft: #1c3350;
-        --fim-border: #3a3a3a;
+        color-scheme: dark;
+        --fim-canvas: #1d211f;
+        --fim-background: #262b28;
+        --fim-foreground: #f1f3f1;
+        --fim-muted: #aeb9b3;
+        --fim-accent: #d6a8c4;
+        --fim-accent-hover: #e3bcd3;
+        --fim-accent-soft: #4c3546;
+        --fim-action: #81b58c;
+        --fim-action-hover: #96c59f;
+        --fim-action-foreground: #102315;
+        --fim-surface-soft: #2f3a33;
+        --fim-border: #465049;
+        --fim-shadow: rgba(0, 0, 0, 0.35);
     }
 }
 
 :root[data-theme="dark"] {
-    --fim-background: #1e1e1e;
-    --fim-foreground: #f0f0f0;
-    --fim-muted: #a0a0a0;
-    --fim-accent: #4da3ff;
-    --fim-accent-soft: #1c3350;
-    --fim-border: #3a3a3a;
+    color-scheme: dark;
+    --fim-canvas: #1d211f;
+    --fim-background: #262b28;
+    --fim-foreground: #f1f3f1;
+    --fim-muted: #aeb9b3;
+    --fim-accent: #d6a8c4;
+    --fim-accent-hover: #e3bcd3;
+    --fim-accent-soft: #4c3546;
+    --fim-action: #81b58c;
+    --fim-action-hover: #96c59f;
+    --fim-action-foreground: #102315;
+    --fim-surface-soft: #2f3a33;
+    --fim-border: #465049;
+    --fim-shadow: rgba(0, 0, 0, 0.35);
 }
 
 * {
@@ -84,10 +135,46 @@ html {
 body {
     margin: 0;
     font-family: var(--fim-font);
-    background: var(--fim-background);
+    background: var(--fim-canvas);
     color: var(--fim-foreground);
     font-size: 14px;
     overflow-y: auto;
+}
+
+h1,
+h2,
+h3 {
+    font-family: var(--fim-display-font);
+}
+
+a {
+    color: var(--fim-accent);
+}
+
+a:hover {
+    color: var(--fim-accent-hover);
+}
+
+:focus-visible {
+    outline: 2px solid var(--fim-action);
+    outline-offset: 2px;
+}
+
+input[type="text"],
+select,
+textarea {
+    font: inherit;
+    color: var(--fim-foreground);
+    background: var(--fim-background);
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+}
+
+input[type="text"]::placeholder,
+textarea::placeholder {
+    color: var(--fim-muted);
+    opacity: 0.8;
 }
 
 /* The persistent rail + always-visible parameter strip (botanist GUI
@@ -116,6 +203,32 @@ body {
     background: var(--fim-background);
 }
 
+.rail-primary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.rail-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0 0.35rem 0.6rem;
+    color: var(--fim-accent);
+    font-family: var(--fim-display-font);
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+}
+
+.rail-brand-mark {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
 .rail-group {
     display: flex;
     flex-direction: column;
@@ -139,11 +252,18 @@ body {
 }
 
 .rail-item .rail-icon {
-    font-size: 1.15rem;
+    width: 1.3rem;
+    height: 1.3rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
 }
 
 .rail-item:hover {
-    background: var(--fim-border);
+    color: var(--fim-accent);
+    background: var(--fim-accent-soft);
 }
 
 /* The current destination (`screens/nav-rail.js`'s own
@@ -160,6 +280,7 @@ body {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    background: var(--fim-canvas);
 }
 
 /* Read-only, always-current N/d/m/mu (design §3.2) -- each value is its
@@ -171,6 +292,7 @@ body {
     gap: 1.25rem;
     padding: 0.5rem 1rem;
     border-bottom: 1px solid var(--fim-border);
+    background: var(--fim-background);
     flex-wrap: wrap;
 }
 
@@ -187,6 +309,7 @@ body {
 }
 
 .parameter-strip-item:hover .parameter-strip-value {
+    color: var(--fim-accent);
     text-decoration: underline;
 }
 
@@ -274,7 +397,7 @@ body {
     border-radius: 8px;
     background: var(--fim-background);
     color: var(--fim-foreground);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 12px 32px var(--fim-shadow);
 }
 
 .config-modal::backdrop {
@@ -284,7 +407,8 @@ body {
 .config-modal h2 {
     margin: 0 0 1rem;
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: 900;
+    color: var(--fim-accent);
 }
 
 .config-modal .modal-close {
@@ -309,14 +433,28 @@ body {
     margin-bottom: 1rem;
 }
 
+.brand-eyebrow {
+    margin: 0 0 0.35rem;
+    color: var(--fim-muted);
+    font-family: var(--fim-display-font);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
 .about-logo {
     width: 3.5rem;
     height: 3.5rem;
     object-fit: contain;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px var(--fim-border);
 }
 
 .about-header h2 {
     margin: 0;
+    font-size: 1.5rem;
+    letter-spacing: 0.04em;
 }
 
 .field {
@@ -461,22 +599,52 @@ fieldset.composite > label {
 .actions button {
     font: inherit;
     padding: 0.45rem 0.9rem;
-    border-radius: 4px;
+    border-radius: 6px;
     border: 1px solid var(--fim-border);
     background: var(--fim-background);
     color: var(--fim-foreground);
     cursor: pointer;
 }
 
-.actions button#run-button {
-    background: var(--fim-accent);
-    color: #ffffff;
-    border-color: var(--fim-accent);
+.actions button:hover:not(:disabled) {
+    border-color: var(--fim-action);
+    background: var(--fim-surface-soft);
+}
+
+.actions button#run-button,
+.actions button.primary-action {
+    background: var(--fim-action);
+    color: var(--fim-action-foreground);
+    border-color: var(--fim-action);
+    font-weight: 600;
+}
+
+.actions button#run-button:hover:not(:disabled),
+.actions button.primary-action:hover:not(:disabled) {
+    background: var(--fim-action-hover);
+    border-color: var(--fim-action-hover);
 }
 
 .actions button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.button-icon {
+    width: 1rem;
+    height: 1rem;
+    margin-right: 0.25rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+    vertical-align: -0.15rem;
+}
+
+.button-icon-trailing {
+    margin-right: 0;
+    margin-left: 0.25rem;
 }
 
 /* The unified run view (design §3.2, §8 Phase E) -- one shared canvas
@@ -769,6 +937,45 @@ fieldset.composite > label {
     font-size: 0.85rem;
 }
 
+/* Home identity and shortcut cards use Selby's orchid/plum/green language
+ * only on this low-interaction surface; forms and data views remain neutral.
+ * The gradient is token-based and contains no photographic dependency. */
+.home-identity {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    margin: 0 0 1.25rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--fim-border);
+    border-radius: 10px;
+    background:
+        linear-gradient(120deg, var(--fim-surface-soft), var(--fim-accent-soft));
+}
+
+.home-identity-mark {
+    flex: 0 0 auto;
+    width: 5rem;
+    height: 5rem;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 4px 14px var(--fim-shadow);
+}
+
+.home-identity h1 {
+    margin: 0;
+    color: var(--fim-accent);
+    font-size: clamp(1.7rem, 4vw, 2.35rem);
+    font-weight: 900;
+    line-height: 1.05;
+}
+
+.home-identity-summary {
+    max-width: 42rem;
+    margin: 0.45rem 0 0;
+    color: var(--fim-muted);
+    font-size: 0.95rem;
+}
+
 /* Home's own shortcut cards (design §9; home enrichment design doc
  * `20260909-claude-sonnet-5-home-enrichment-design.md`, `selby/
  * restricted`, slice 3) -- deliberately plain, bordered boxes, not
@@ -788,12 +995,14 @@ fieldset.composite > label {
     border-radius: 8px;
     padding: 1rem 1.25rem;
     background: var(--fim-background);
+    box-shadow: 0 2px 8px var(--fim-shadow);
 }
 
 .home-card h3 {
     margin: 0 0 0.35rem;
     font-size: 0.95rem;
-    font-weight: 600;
+    font-weight: 900;
+    color: var(--fim-accent);
 }
 
 .home-card p {

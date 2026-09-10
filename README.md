@@ -276,4 +276,6 @@ dev/bin/validate-repository
 
 Copyright 2026 Marie Selby Botanical Gardens.
 
-AGPL-3.0-or-later; see [LICENSE.md](LICENSE.md).
+Except for the reserved assets identified in
+[`branding/`](branding/README.md), the project is licensed under
+AGPL-3.0-or-later. See [LICENSE.md](LICENSE.md).

@@ -40,6 +40,7 @@ def test_sdist_includes_docs_tests_and_release_metadata() -> None:
 
     assert {
         "/CHANGELOG.md",
+        "/branding",
         "/CONTRIBUTING.md",
         "/SECURITY.md",
         "/dev",

@@ -30,35 +30,59 @@
        real functionality regression, not a simplification) already
        opens. -->
   <nav id="rail" aria-label="Primary">
-    <div class="rail-group">
-      <button type="button" class="rail-item" data-destination="home">
-        <span class="rail-icon" aria-hidden="true">🏠</span>
-        <span class="rail-label">Home</span>
-      </button>
-      <button type="button" class="rail-item" data-destination="configure">
-        <span class="rail-icon" aria-hidden="true">⚙</span>
-        <span class="rail-label">Configure</span>
-      </button>
-      <button type="button" class="rail-item" data-destination="explore">
-        <span class="rail-icon" aria-hidden="true">🔮</span>
-        <span class="rail-label">Explore</span>
-      </button>
-      <button type="button" class="rail-item" data-destination="run">
-        <span class="rail-icon" aria-hidden="true">▶</span>
-        <span class="rail-label">Run</span>
-      </button>
-      <button type="button" class="rail-item" data-destination="results">
-        <span class="rail-icon" aria-hidden="true">📊</span>
-        <span class="rail-label">Results</span>
-      </button>
-      <button type="button" class="rail-item" data-destination="compare">
-        <span class="rail-icon" aria-hidden="true">⇄</span>
-        <span class="rail-label">Compare</span>
-      </button>
+    <div class="rail-primary">
+      <div class="rail-brand" aria-label="Finite Island Model">
+        <img
+          src="assets/selby-orchid-logo.jpeg"
+          alt=""
+          class="rail-brand-mark"
+        >
+        <span>FIM</span>
+      </div>
+      <div class="rail-group">
+        <button type="button" class="rail-item" data-destination="home">
+          <svg class="rail-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-home"></use>
+          </svg>
+          <span class="rail-label">Home</span>
+        </button>
+        <button type="button" class="rail-item" data-destination="configure">
+          <svg class="rail-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-configure"></use>
+          </svg>
+          <span class="rail-label">Configure</span>
+        </button>
+        <button type="button" class="rail-item" data-destination="explore">
+          <svg class="rail-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-explore"></use>
+          </svg>
+          <span class="rail-label">Explore</span>
+        </button>
+        <button type="button" class="rail-item" data-destination="run">
+          <svg class="rail-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-run"></use>
+          </svg>
+          <span class="rail-label">Run</span>
+        </button>
+        <button type="button" class="rail-item" data-destination="results">
+          <svg class="rail-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-results"></use>
+          </svg>
+          <span class="rail-label">Results</span>
+        </button>
+        <button type="button" class="rail-item" data-destination="compare">
+          <svg class="rail-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-compare"></use>
+          </svg>
+          <span class="rail-label">Compare</span>
+        </button>
+      </div>
     </div>
     <div class="rail-group">
       <button type="button" class="rail-item" data-destination="help">
-        <span class="rail-icon" aria-hidden="true">❓</span>
+        <svg class="rail-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-help"></use>
+        </svg>
         <span class="rail-label">Help</span>
       </button>
     </div>
@@ -345,6 +369,21 @@
 
   <section id="screen-open-run" class="screen" hidden>
     <div id="open-run-banner" class="banner" hidden></div>
+    <header class="home-identity">
+      <img
+        src="assets/selby-orchid-logo.jpeg"
+        alt=""
+        class="home-identity-mark"
+      >
+      <div>
+        <p class="brand-eyebrow">Marie Selby Botanical Gardens</p>
+        <h1>Finite Island Model</h1>
+        <p class="home-identity-summary">
+          Explore population differentiation, run reproducible simulations,
+          and compare results.
+        </p>
+      </div>
+    </header>
     <!-- Slice 3 of home enrichment design doc `20260909-claude-sonnet-
          5-home-enrichment-design.md`'s (`selby/restricted`) own commit
          schedule: pure navigation shortcuts, no new bridge calls --
@@ -362,14 +401,21 @@
         <h3>New run</h3>
         <p>Start from your last configuration, or a worked example.</p>
         <div class="actions">
-          <button type="button" id="home-new-run-button">Configure a new run</button>
+          <button type="button" id="home-new-run-button" class="primary-action">
+            Configure a new run
+          </button>
         </div>
       </div>
       <div class="home-card">
         <h3>Explore</h3>
         <p>See predicted differentiation for a configuration, without running it.</p>
         <div class="actions">
-          <button type="button" id="home-explore-button">🔮 Explore</button>
+          <button type="button" id="home-explore-button">
+            <svg class="button-icon" aria-hidden="true">
+              <use href="icons/fim-icons.svg#icon-explore"></use>
+            </svg>
+            Explore
+          </button>
         </div>
       </div>
     </div>
@@ -416,7 +462,12 @@
     </div>
     <div class="actions">
       <button type="button" id="open-run-back-button">Back</button>
-      <button type="button" id="open-run-open-button" disabled>Open ▶</button>
+      <button type="button" id="open-run-open-button" disabled>
+        Open
+        <svg class="button-icon button-icon-trailing" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-run"></use>
+        </svg>
+      </button>
     </div>
   </section>
 
@@ -513,7 +564,12 @@
     </table>
     <div class="actions">
       <button type="button" id="compare-back-button">Back</button>
-      <button type="button" id="compare-run-button" disabled>Compare ▶</button>
+      <button type="button" id="compare-run-button" disabled>
+        Compare
+        <svg class="button-icon button-icon-trailing" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-run"></use>
+        </svg>
+      </button>
     </div>
     <div id="compare-results" hidden>
       <table class="stats-table" id="compare-legend"></table>
@@ -953,8 +1009,18 @@
       <button type="button" id="configure-duplicate-preset-button" disabled>
         Duplicate current configuration
       </button>
-      <button type="button" id="configure-run-button">▶ Run</button>
-      <button type="button" id="configure-explore-button">🔮 Explore</button>
+      <button type="button" id="configure-run-button">
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-run"></use>
+        </svg>
+        Run
+      </button>
+      <button type="button" id="configure-explore-button">
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-explore"></use>
+        </svg>
+        Explore
+      </button>
     </div>
   </section>
 
@@ -978,7 +1044,12 @@
       blank configuration.
     </p>
     <div class="actions">
-      <button type="button" id="welcome-try-example-button" tabindex="0">
+      <button
+        type="button"
+        id="welcome-try-example-button"
+        class="primary-action"
+        tabindex="0"
+      >
         Try a worked example…
       </button>
       <button type="button" id="welcome-start-scratch-button" tabindex="0">
@@ -1041,7 +1112,13 @@
       <p class="hint" id="save-preset-error" hidden></p>
       <div class="actions">
         <button type="button" id="save-preset-cancel-button" tabindex="0">Cancel</button>
-        <button type="submit" value="save" id="save-preset-accept-button" tabindex="0">Save</button>
+        <button
+          type="submit"
+          value="save"
+          id="save-preset-accept-button"
+          class="primary-action"
+          tabindex="0"
+        >Save</button>
       </div>
     </form>
   </dialog>
@@ -1057,9 +1134,10 @@
        form pattern `modal-save-preset` uses: nothing here is submitted,
        only dismissed. -->
   <dialog class="config-modal" id="modal-about">
+    <p class="brand-eyebrow">Marie Selby Botanical Gardens</p>
     <div class="about-header">
       <img
-        src="branding/selby-orchid-logo.jpeg"
+        src="assets/selby-orchid-logo.jpeg"
         alt="Marie Selby Botanical Gardens orchid mark"
         class="about-logo"
       >

@@ -1,5 +1,39 @@
 Copyright (C) 2026 Marie Selby Botanical Gardens
 
+## Branding exclusion
+
+For purposes of this license, "Branding Materials" means the project
+names, organization names, trademarks, service marks, logos, icons,
+trade dress, and other branding assets identified in `branding/` and
+`branding/README.md`.
+
+The Branding Materials are not part of the "Program" or a "covered work"
+licensed under the GNU Affero General Public License. No rights in the
+Branding Materials are granted under the AGPL. All rights in the
+Branding Materials are reserved.
+
+Without prior written permission from Marie Selby Botanical Gardens, you
+may not use, reproduce, modify, distribute, or display the Branding
+Materials in connection with any fork, modified version, derivative
+work, redistribution, or other product based on this project.
+
+Any fork, modified version, derivative work, or redistribution must:
+
+1. remove the Branding Materials;
+2. use a name and visual identity that are clearly distinguishable from
+   those of this project and Marie Selby Botanical Gardens; and
+3. not state or imply endorsement, sponsorship, affiliation, or approval
+   by Marie Selby Botanical Gardens.
+
+This restriction does not prohibit truthful, nominative references to
+the original project or Marie Selby Botanical Gardens when permitted by
+applicable law, provided those references do not imply endorsement,
+sponsorship, affiliation, or approval.
+
+Nothing in this branding exclusion limits the rights granted under the
+AGPL for files other than the Branding Materials or restricts uses that
+applicable law permits without authorization.
+
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the

@@ -35,6 +35,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_batch_results_screen`](#gui.test_batch_results_screen)
   - [`test_batch_runner`](#gui.test_batch_runner)
   - [`test_batch_running`](#gui.test_batch_running)
+  - [`test_branding`](#gui.test_branding)
   - [`test_compare_screen`](#gui.test_compare_screen)
   - [`test_config_form`](#gui.test_config_form)
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
@@ -6970,6 +6971,62 @@ message, so `done_event` firing is itself proof that call
 *succeeded* — a `JavascriptException` from a missing page-side
 handler would raise inside `_drain_batch_messages` first, and
 `on_message` (hence `done_event`) would never fire at all.
+
+<a id="gui.test_branding"></a>
+
+# gui.test\_branding
+
+Static guards for the locally bundled Selby scientific visual identity.
+
+<a id="gui.test_branding.test_lato_identity_font_is_local_and_licensed"></a>
+
+#### test\_lato\_identity\_font\_is\_local\_and\_licensed
+
+```python
+def test_lato_identity_font_is_local_and_licensed() -> None
+```
+
+Every declared Lato face and its license ship inside the web UI.
+
+<a id="gui.test_branding.test_navigation_uses_one_svg_icon_language_instead_of_emoji"></a>
+
+#### test\_navigation\_uses\_one\_svg\_icon\_language\_instead\_of\_emoji
+
+```python
+def test_navigation_uses_one_svg_icon_language_instead_of_emoji() -> None
+```
+
+All seven destinations use the bundled monochrome SVG symbols.
+
+<a id="gui.test_branding.test_home_and_about_carry_restrained_selby_identity"></a>
+
+#### test\_home\_and\_about\_carry\_restrained\_selby\_identity
+
+```python
+def test_home_and_about_carry_restrained_selby_identity() -> None
+```
+
+Identity surfaces use the orchid mark without entering data views.
+
+<a id="gui.test_branding.test_reserved_branding_is_canonical_at_the_repository_root"></a>
+
+#### test\_reserved\_branding\_is\_canonical\_at\_the\_repository\_root
+
+```python
+def test_reserved_branding_is_canonical_at_the_repository_root() -> None
+```
+
+The web UI links to, rather than duplicates, the reserved orchid mark.
+
+<a id="gui.test_branding.test_license_excludes_the_identified_branding_assets_from_agpl"></a>
+
+#### test\_license\_excludes\_the\_identified\_branding\_assets\_from\_agpl
+
+```python
+def test_license_excludes_the_identified_branding_assets_from_agpl() -> None
+```
+
+The repository license and branding policy state the asset boundary.
 
 <a id="gui.test_compare_screen"></a>
 
