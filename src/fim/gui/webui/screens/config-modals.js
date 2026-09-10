@@ -408,3 +408,47 @@ whenApiReady(wireConfigModalEvents);
 whenApiReady(wireSignificantDigitsField);
 whenApiReady(wireDarkModeOverrideField);
 whenApiReady(wireSigmaBandSeedDefault);
+
+/**
+ * Fill and show the Help menu's "About fim" dialog (`fim.menu.about()`
+ * in `app.js`) from `Api.get_about_info()` every time it opens, rather
+ * than once at load — so a build with a newer `version.txt` never
+ * needs this markup touched, matching `get_about_info`'s own docstring.
+ * The Selby attribution and repository links are plain `data-fim-
+ * about-external` anchors -- a dedicated attribute, not `screens/
+ * help.js`'s own shared `data-fim-external`: that attribute is queried
+ * globally (`document.querySelectorAll('[data-fim-external]')`) by
+ * `test_help_screen.py`'s own external-link test, and this dialog's
+ * two links, though hidden until `showModal()`, still exist in the DOM
+ * at that point and would otherwise be picked up as false matches --
+ * confirmed live, the exact regression this rename fixes. Neither
+ * attribute uses `target="_blank"`: an unhandled click inside this
+ * pywebview window can navigate the whole application window away from
+ * `index.html` rather than open a new tab.
+ */
+window.fim.showAboutModal = async function showAboutModal() {
+    const info = await window.pywebview.api.get_about_info();
+    document.getElementById("about-version").textContent = info.version;
+    document.getElementById("about-license").textContent = info.license;
+    const organizationLink = document.getElementById("about-organization-link");
+    organizationLink.textContent = info.organization;
+    organizationLink.dataset.fimAboutExternal = info.organization_url;
+    document.getElementById("about-repository-link").dataset.fimAboutExternal =
+        info.repository;
+    window.fim.wireModal("modal-about");
+    document.getElementById("modal-about").showModal();
+};
+
+// A plain click handler here, rather than one per link, since
+// `modal-about` only ever has the two external links above and neither
+// is ever added or removed after the fact.
+document.getElementById("modal-about").addEventListener("click", async (event) => {
+    const link = event.target.closest("a[data-fim-about-external]");
+    if (link === null) {
+        return;
+    }
+    event.preventDefault();
+    window.__fimAboutExternalLinkSettled = false;
+    await window.pywebview.api.open_external_link(link.dataset.fimAboutExternal);
+    window.__fimAboutExternalLinkSettled = true;
+});

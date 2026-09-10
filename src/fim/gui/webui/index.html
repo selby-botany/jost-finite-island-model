@@ -1046,6 +1046,44 @@
     </form>
   </dialog>
 
+  <!-- "About fim" (Help menu, `fim.menu.about()`): the application
+       name/expansion, installed version, license, and attribution to
+       Marie Selby Botanical Gardens -- the institution this simulator
+       was built for -- alongside its orchid mark. `screens/config-
+       modals.js`'s own `showAboutModal` fills every `about-*` element
+       from `Api.get_about_info()` each time it opens, so a rebuilt
+       `fim` with a new `version.txt` never needs this markup touched.
+       Uses `wireModal` (app.js) like `modal-presets`, not the native-
+       form pattern `modal-save-preset` uses: nothing here is submitted,
+       only dismissed. -->
+  <dialog class="config-modal" id="modal-about">
+    <div class="about-header">
+      <img
+        src="branding/selby-orchid-logo.jpeg"
+        alt="Marie Selby Botanical Gardens orchid mark"
+        class="about-logo"
+      >
+      <div>
+        <h2 id="about-name">FIM</h2>
+        <p class="hint">Finite Island Model</p>
+      </div>
+    </div>
+    <p>Version <span id="about-version"></span></p>
+    <p id="about-license"></p>
+    <p>
+      Built for
+      <a href="#" id="about-organization-link" data-fim-about-external=""></a>.
+    </p>
+    <p>
+      <a href="#" id="about-repository-link" data-fim-about-external="">
+        Source code on GitHub
+      </a>
+    </p>
+    <div class="actions">
+      <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
+    </div>
+  </dialog>
+
   <!-- Not user-facing: `app.js`'s own automatic bootstrap still writes
        the bridge's real connect/error status here for a test to read
        (`test/gui/test_app.py`'s own proof that the bridge auto-connects

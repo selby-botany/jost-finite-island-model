@@ -298,6 +298,27 @@ body {
     margin-top: 0.25rem;
 }
 
+/* "About fim" dialog (`modal-about`, `screens/config-modals.js`'s own
+ * `showAboutModal`): the orchid mark sits beside the name/expansion
+ * rather than above it, matching the header's own already-established
+ * left-icon/right-text layout instead of introducing a new one. */
+.about-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.about-logo {
+    width: 3.5rem;
+    height: 3.5rem;
+    object-fit: contain;
+}
+
+.about-header h2 {
+    margin: 0;
+}
+
 .field {
     display: flex;
     flex-direction: column;

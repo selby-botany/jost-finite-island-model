@@ -4079,6 +4079,11 @@ Return the static "About fim" facts the Help menu shows.
 No bridge state, no network call — `fim.__version__` and the
 project's own already-declared URLs, the same values `pyproject.
 toml`'s `[project.urls]` and `fim --version` already report.
+`organization`/`organization_url` credit Marie Selby Botanical
+Gardens, the institution this simulator was built for — shown
+alongside the orchid mark (`webui/branding/selby-orchid-logo.
+jpeg`) that `screens/config-modals.js`'s own `modal-about`
+renders, not text-only attribution.
 
 <a id="fim.gui.app.create_window"></a>
 

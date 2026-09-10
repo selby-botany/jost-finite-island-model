@@ -27,6 +27,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_engine`](#engine.test_engine)
 - [`test/gui/`](#group-gui)
   - [`conftest`](#gui.conftest)
+  - [`test_about_modal`](#gui.test_about_modal)
   - [`test_animation`](#gui.test_animation)
   - [`test_animation_screen`](#gui.test_animation_screen)
   - [`test_app`](#gui.test_app)
@@ -4819,6 +4820,37 @@ def drive() -> Callable[..., Any]
 ```
 
 Bind `drive_and_read` as a fixture, for tests that prefer the fixture style.
+
+<a id="gui.test_about_modal"></a>
+
+# gui.test\_about\_modal
+
+Headless functional tests for the "About fim" dialog (Help menu).
+
+Real DOM-driven proof that `webui/screens/config-modals.js`'s own
+`showAboutModal` actually wires the page correctly —
+`test/gui/test_app_api.py`'s own `test_get_about_info_names_the_installed_
+version` already proves the bridge method itself is correct as a plain
+Python call; this test proves the page's own JavaScript calls it and
+fills the dialog's fields, which no Python-only test can check.
+
+<a id="gui.test_about_modal.test_about_menu_shows_name_version_and_selby_attribution"></a>
+
+#### test\_about\_menu\_shows\_name\_version\_and\_selby\_attribution
+
+```python
+def test_about_menu_shows_name_version_and_selby_attribution(
+        window: webview.Window) -> None
+```
+
+`fim.menu.about()` opens `modal-about`, filled from `Api.get_about_info`.
+
+The trigger wraps `fim.menu.about()` in `setTimeout(..., 0)`, matching
+`fim.gui.app._build_menu`'s own real dispatcher exactly — calling an
+`async` `fim.menu.*` method directly as a bare `evaluate_js` expression
+deadlocks (`test_input_screen.py`'s own
+`test_menu_new_configuration_resets_an_edited_field` docstring has the
+full mechanism).
 
 <a id="gui.test_animation"></a>
 

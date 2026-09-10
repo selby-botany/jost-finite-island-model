@@ -323,8 +323,7 @@ const fim = {
             }
         },
         async about() {
-            const info = await window.pywebview.api.get_about_info();
-            window.alert(`fim ${info.version}\n${info.license}\n${info.repository}`);
+            await window.fim.showAboutModal();
         },
     },
 };

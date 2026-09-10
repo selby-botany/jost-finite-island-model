@@ -2126,6 +2126,8 @@ def test_get_about_info_names_the_installed_version() -> None:
     assert info["version"] == fim_version
     assert "selby-botany/jost-finite-island-model" in info["repository"]
     assert "AGPL" in info["license"]
+    assert info["organization"] == "Marie Selby Botanical Gardens"
+    assert info["organization_url"] == "https://selby.org/botany/"
 
 
 # --- _save_dialog_path ---
