@@ -94,6 +94,15 @@ const FIELD_HELP = {
         "trailing window's two half-means differ by at most this much.",
     max_generations: "Hard cap on generations. Reaching it without " +
         "converging is still reported as a valid, non-converged outcome.",
+    sigma_band_group: "Once converged, continue for a further window and " +
+        "report each watched statistic's own mean ± (multiplier × sigma) " +
+        "over that trailing window — a within-run stability check, " +
+        "distinct from the cross-replicate confidence interval below.",
+    sigma_band_multiplier: "How many standard deviations the shaded band " +
+        "extends on either side of the trailing window's own mean.",
+    sigma_band_window: "How many further generations to run, after " +
+        "convergence, before computing the band — independent of the " +
+        "convergence window above.",
     n_replicates: "Number of independently seeded replicate runs. 1 means " +
         "a single ordinary run with no batching.",
     replicate_tolerance: "Stop the batch early once every watched " +

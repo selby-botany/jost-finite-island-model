@@ -146,6 +146,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [loci\_from\_params](#fim.gui.config_form.loci_from_params)
   * [convergence\_statistic\_to\_payload](#fim.gui.config_form.convergence_statistic_to_payload)
   * [convergence\_statistic\_from\_params](#fim.gui.config_form.convergence_statistic_from_params)
+  * [sigma\_band\_to\_payload](#fim.gui.config_form.sigma_band_to_payload)
+  * [sigma\_band\_from\_params](#fim.gui.config_form.sigma_band_from_params)
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
@@ -4841,6 +4843,78 @@ def convergence_statistic_from_params(
 ```
 
 Render `params.convergence_statistic` back into the checkbox keys.
+
+<a id="fim.gui.config_form.sigma_band_to_payload"></a>
+
+#### sigma\_band\_to\_payload
+
+```python
+def sigma_band_to_payload(values: Mapping[str, str]) -> dict[str, object]
+```
+
+Build the `sigma_band_*` payload keys from the toggle's own checked state.
+
+**Arguments**:
+
+- `values` - The full form-values mapping; only `sigma_band_enabled`,
+  `sigma_band_multiplier`, and `sigma_band_window` are read.
+
+
+**Returns**:
+
+  An empty mapping when the toggle is unchecked — both real
+  fields simply absent from the payload, the identical "set
+  together or not at all" shape `SimulationParams` itself already
+  enforces for this exact pair, and the same by-omission
+  convention `replicate_tolerance`'s own `"optional_float"` kind
+  already uses for a single optional field. `{"sigma_band_
+- `multiplier"` - ..., "sigma_band_window": ...}`, parsed to their
+  declared types, when checked.
+
+
+**Raises**:
+
+- `ValueError` - If the toggle is checked and either field's text
+  does not parse as its declared type (`field_for_error`
+  locates each of the two individually, the identical
+  treatment the three equilibrium-split fields already get
+  for the same "conditionally present" reason). This only
+  coerces text into the right Python type — `SimulationParams.
+  __post_init__` still enforces the closed multiplier set
+  (`{2.0, 3.0}`) and the minimum window size (`>= 2`), the
+  same "GUI coerces, the model validates" division every
+  other field here already follows.
+
+<a id="fim.gui.config_form.sigma_band_from_params"></a>
+
+#### sigma\_band\_from\_params
+
+```python
+def sigma_band_from_params(params: SimulationParams) -> dict[str, str]
+```
+
+Render `params`'s own sigma-band fields into the toggle's form-value keys.
+
+**Arguments**:
+
+- `params` - A validated configuration.
+
+
+**Returns**:
+
+  `sigma_band_enabled`/`sigma_band_multiplier`/`sigma_band_window`.
+  `sigma_band_enabled` is `"true"` exactly when `params.sigma_
+  band_multiplier is not None` (`SimulationParams`'s own
+  all-or-none validation guarantees `sigma_band_window` agrees
+  whenever it does) — the real fields then render `params`'s own
+  values; otherwise both render this module's own suggested
+  starting values (`_DEFAULT_SIGMA_BAND_MULTIPLIER`/`_WINDOW`)
+  rather than an empty string, so the toggle's own revealed
+  fields already hold a sensible starting point the first time a
+  user checks it, mirroring `initial_conditions_from_params`'s
+  own `fixed_per_deme_choice` precedent (a field that never
+  round-trips a "the user's own last choice" value, so it always
+  renders one fixed default instead).
 
 <a id="fim.gui.config_form.params_to_form_values"></a>
 

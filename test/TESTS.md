@@ -7594,6 +7594,82 @@ def test_convergence_statistic_from_params_checks_only_the_watched_names(
 
 `convergence_statistic_from_params` checks exactly the watched statistics.
 
+<a id="gui.test_config_form.test_sigma_band_to_payload_omits_both_fields_when_disabled"></a>
+
+#### test\_sigma\_band\_to\_payload\_omits\_both\_fields\_when\_disabled
+
+```python
+def test_sigma_band_to_payload_omits_both_fields_when_disabled() -> None
+```
+
+Unchecked toggle: neither field reaches the payload at all.
+
+`20260910-claude-sonnet-5-gui-sigma-band-design.md` (`selby/
+restricted`) approach A1 -- the identical "set together or not at
+all" contract `SimulationParams` itself already enforces for this
+pair.
+
+<a id="gui.test_config_form.test_sigma_band_to_payload_parses_both_fields_when_enabled"></a>
+
+#### test\_sigma\_band\_to\_payload\_parses\_both\_fields\_when\_enabled
+
+```python
+def test_sigma_band_to_payload_parses_both_fields_when_enabled() -> None
+```
+
+Checked toggle: both fields parse to their declared types.
+
+<a id="gui.test_config_form.test_sigma_band_to_payload_rejects_a_non_integer_window"></a>
+
+#### test\_sigma\_band\_to\_payload\_rejects\_a\_non\_integer\_window
+
+```python
+def test_sigma_band_to_payload_rejects_a_non_integer_window() -> None
+```
+
+A malformed window is a clear, field-named error, not a silent coercion.
+
+<a id="gui.test_config_form.test_sigma_band_from_params_disabled_seeds_suggested_defaults"></a>
+
+#### test\_sigma\_band\_from\_params\_disabled\_seeds\_suggested\_defaults
+
+```python
+def test_sigma_band_from_params_disabled_seeds_suggested_defaults() -> None
+```
+
+`sigma_band_multiplier is None` renders the toggle off, GUI defaults seeded.
+
+<a id="gui.test_config_form.test_sigma_band_from_params_enabled_round_trips_the_real_values"></a>
+
+#### test\_sigma\_band\_from\_params\_enabled\_round\_trips\_the\_real\_values
+
+```python
+def test_sigma_band_from_params_enabled_round_trips_the_real_values() -> None
+```
+
+A real sigma-band configuration renders back enabled, with its own values.
+
+<a id="gui.test_config_form.test_sigma_band_round_trips_through_form_values_to_payload_and_back"></a>
+
+#### test\_sigma\_band\_round\_trips\_through\_form\_values\_to\_payload\_and\_back
+
+```python
+def test_sigma_band_round_trips_through_form_values_to_payload_and_back(
+) -> None
+```
+
+`sigma_band_to_payload`/`from_params` agree, all the way around the loop.
+
+<a id="gui.test_config_form.test_field_for_error_locates_a_sigma_band_error"></a>
+
+#### test\_field\_for\_error\_locates\_a\_sigma\_band\_error
+
+```python
+def test_field_for_error_locates_a_sigma_band_error() -> None
+```
+
+A sigma-band validation error routes to the field, then the convergence tab.
+
 <a id="gui.test_config_form.test_loci_from_params_sequential_ids_render_lengths_mode"></a>
 
 #### test\_loci\_from\_params\_sequential\_ids\_render\_lengths\_mode
@@ -8443,6 +8519,40 @@ the field's own real interaction now that the native Configure
 menu's own `toggleConvergenceStatistic` quick-toggle no longer
 exists — every field is reachable the same way regardless of how
 quick a toggle it used to be (design §3.3).
+
+<a id="gui.test_input_screen.test_checking_the_sigma_band_toggle_reveals_and_seeds_its_own_fields"></a>
+
+#### test\_checking\_the\_sigma\_band\_toggle\_reveals\_and\_seeds\_its\_own\_fields
+
+```python
+def test_checking_the_sigma_band_toggle_reveals_and_seeds_its_own_fields(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Checking "within-run sigma band" reveals its two fields, window pre-filled `100`.
+
+`20260910-claude-sonnet-5-gui-sigma-band-design.md` (`selby/
+restricted`) approach A1: "off by default and one toggle away," the
+multiplier defaulting to the `<select>`'s own first `<option>`
+(`2.0`, no JS needed for that half) and the window seeded by
+`config-modals.js`'s own `wireSigmaBandSeedDefault`.
+
+<a id="gui.test_input_screen.test_unchecking_and_rechecking_the_sigma_band_toggle_keeps_a_typed_window_value"></a>
+
+#### test\_unchecking\_and\_rechecking\_the\_sigma\_band\_toggle\_keeps\_a\_typed\_window\_value
+
+```python
+def test_unchecking_and_rechecking_the_sigma_band_toggle_keeps_a_typed_window_value(
+        window: webview.Window) -> None
+```
+
+A window value already typed survives an uncheck/recheck, never reset to `100`.
+
+Driven manually (`window.fim.showScreen`/`whenApiReady` already
+settled by the time `_INPUT_SCREEN_READY` is true, so a plain
+sequence of synchronous `evaluate_js` calls against one window is
+enough — no background thread involved, matching `test_open_run_
+screen.py`'s own "plain, synchronous request/response" precedent).
 
 <a id="gui.test_input_screen.test_navigating_to_configure_does_not_reset_run_view_state"></a>
 

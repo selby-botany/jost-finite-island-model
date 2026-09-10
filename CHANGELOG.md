@@ -209,6 +209,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   within-run σ band design doc `20260910-claude-sonnet-5-gui-sigma-
   band-design.md` (`selby/restricted`) goes on to add. Slice 1 of that
   document's own 4-slice commit schedule.
+- `fim gui`'s Configure workspace gains a "within-run σ band" toggle in
+  its convergence group (design §7.2), off by default and one toggle
+  away — checking it reveals a multiplier (2σ/3σ) and a trailing-window
+  size (pre-filled `100`, the design's own suggested starting value,
+  never overwritten by unchecking and rechecking). Slice 2 of the
+  sigma-band design doc's own 4-slice commit schedule: the toggle
+  itself, and a real, already-working round trip through the engine's
+  already-shipped backend (a run started with it on already produces a
+  real `sigma_band` in its own manifest) — nothing shows the resulting
+  band on screen yet, that is slices 3 and 4.
 
 ### Changed
 

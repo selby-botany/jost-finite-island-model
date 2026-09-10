@@ -216,6 +216,8 @@ _COMPOSITE_FIELD_TABS: Final[Mapping[str, str]] = {
     "loci": "mutation",
     "locus": "mutation",
     "locus_lengths": "mutation",
+    "sigma_band_multiplier": "convergence",
+    "sigma_band_window": "convergence",
 }
 
 
@@ -323,6 +325,14 @@ def field_for_error(message: str) -> str | None:
     ):
         if message.startswith(f"{name} "):
             return name
+    # `sigma_band_multiplier`/`sigma_band_window`: the identical
+    # "excluded from `all_fields()` because its own presence in the
+    # payload is conditional" shape the three equilibrium fields above
+    # already have (`sigma_band_to_payload`'s own toggle), not a new
+    # pattern.
+    for name in ("sigma_band_multiplier", "sigma_band_window"):
+        if message.startswith(f"{name} "):
+            return name
     # `locus_lengths` (loci_mode "lengths"): excluded from `all_fields()`
     # for the identical reason the three equilibrium fields above are —
     # its presence in the payload is conditional on `loci_mode`
@@ -390,6 +400,7 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
         payload.update(initial_conditions_to_payload(values))
         payload.update(loci_to_payload(values))
         payload["convergence_statistic"] = convergence_statistic_to_payload(values)
+        payload.update(sigma_band_to_payload(values))
     except KeyError as error:
         raise ValueError(f"missing field: {error}") from error
     return payload
@@ -977,6 +988,95 @@ def convergence_statistic_from_params(params: SimulationParams) -> dict[str, str
     }
 
 
+# GUI-layer starting values for the sigma-band toggle's own two fields,
+# offered the first time it is ever checked (`sigma-band-selector`'s own
+# JS-side seed listener) — never a `SimulationParams`-level default
+# (neither field has one: `sigma_band_multiplier`/`.sigma_band_window`
+# are `None` unless a caller states both explicitly, the same
+# `equilibrium_*` precedent `sigma_band_from_params`'s own docstring,
+# below, names). `"2.0"` matches botanist GUI design doc `20260907-
+# claude-sonnet-5-botanist-gui-redesign.md` §7.2's own "A configurable
+# sigma multiplier (2-sigma or 3-sigma)" ordering; `"100"` is that
+# section's own literal suggested window size.
+_DEFAULT_SIGMA_BAND_MULTIPLIER: Final = "2.0"
+_DEFAULT_SIGMA_BAND_WINDOW: Final = "100"
+
+
+def sigma_band_to_payload(values: Mapping[str, str]) -> dict[str, object]:
+    """Build the `sigma_band_*` payload keys from the toggle's own checked state.
+
+    Args:
+        values: The full form-values mapping; only `sigma_band_enabled`,
+            `sigma_band_multiplier`, and `sigma_band_window` are read.
+
+    Returns:
+        An empty mapping when the toggle is unchecked — both real
+        fields simply absent from the payload, the identical "set
+        together or not at all" shape `SimulationParams` itself already
+        enforces for this exact pair, and the same by-omission
+        convention `replicate_tolerance`'s own `"optional_float"` kind
+        already uses for a single optional field. `{"sigma_band_
+        multiplier": ..., "sigma_band_window": ...}`, parsed to their
+        declared types, when checked.
+
+    Raises:
+        ValueError: If the toggle is checked and either field's text
+            does not parse as its declared type (`field_for_error`
+            locates each of the two individually, the identical
+            treatment the three equilibrium-split fields already get
+            for the same "conditionally present" reason). This only
+            coerces text into the right Python type — `SimulationParams.
+            __post_init__` still enforces the closed multiplier set
+            (`{2.0, 3.0}`) and the minimum window size (`>= 2`), the
+            same "GUI coerces, the model validates" division every
+            other field here already follows.
+    """
+    if values.get("sigma_band_enabled") != "true":
+        return {}
+    return {
+        "sigma_band_multiplier": _parse_float_named(
+            "sigma_band_multiplier", values["sigma_band_multiplier"].strip()
+        ),
+        "sigma_band_window": _parse_int_named(
+            "sigma_band_window", values["sigma_band_window"].strip()
+        ),
+    }
+
+
+def sigma_band_from_params(params: SimulationParams) -> dict[str, str]:
+    """Render `params`'s own sigma-band fields into the toggle's form-value keys.
+
+    Args:
+        params: A validated configuration.
+
+    Returns:
+        `sigma_band_enabled`/`sigma_band_multiplier`/`sigma_band_window`.
+        `sigma_band_enabled` is `"true"` exactly when `params.sigma_
+        band_multiplier is not None` (`SimulationParams`'s own
+        all-or-none validation guarantees `sigma_band_window` agrees
+        whenever it does) — the real fields then render `params`'s own
+        values; otherwise both render this module's own suggested
+        starting values (`_DEFAULT_SIGMA_BAND_MULTIPLIER`/`_WINDOW`)
+        rather than an empty string, so the toggle's own revealed
+        fields already hold a sensible starting point the first time a
+        user checks it, mirroring `initial_conditions_from_params`'s
+        own `fixed_per_deme_choice` precedent (a field that never
+        round-trips a "the user's own last choice" value, so it always
+        renders one fixed default instead).
+    """
+    if params.sigma_band_multiplier is None:
+        return {
+            "sigma_band_enabled": "false",
+            "sigma_band_multiplier": _DEFAULT_SIGMA_BAND_MULTIPLIER,
+            "sigma_band_window": _DEFAULT_SIGMA_BAND_WINDOW,
+        }
+    return {
+        "sigma_band_enabled": "true",
+        "sigma_band_multiplier": str(params.sigma_band_multiplier),
+        "sigma_band_window": str(params.sigma_band_window),
+    }
+
+
 def params_to_form_values(params: SimulationParams) -> dict[str, str]:
     """Render a validated `SimulationParams` back into the form's fields.
 
@@ -1028,6 +1128,7 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
     values.update(initial_conditions_from_params(params))
     values.update(loci_from_params(params))
     values.update(convergence_statistic_from_params(params))
+    values.update(sigma_band_from_params(params))
     return values
 
 

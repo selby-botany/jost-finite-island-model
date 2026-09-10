@@ -74,6 +74,12 @@ function collectFormValues() {
     for (const name of ["cs_D", "cs_G_ST", "cs_E_ST", "cs_K_ST", "cs_H_S", "cs_H_T"]) {
         values[name] = data.has(name) ? "true" : "false";
     }
+    // An unchecked checkbox is simply absent from `FormData`, the same
+    // reason the six `cs_*` checkboxes just above need this too --
+    // `sigma_band_to_payload` (`config_form.py`) reads this key
+    // unconditionally, so it must always be present as an explicit
+    // "true"/"false" string, never missing.
+    values.sigma_band_enabled = data.has("sigma_band_enabled") ? "true" : "false";
     return values;
 }
 
@@ -110,6 +116,10 @@ function syncConditionalVisibility() {
     document.getElementById("loci-custom-fields").hidden = lociMode !== "custom";
 
     document.getElementById("combinator-field").hidden = checkedStatisticCount() < 2;
+
+    document.getElementById("sigma-band-fields").hidden = !form.elements.namedItem(
+        "sigma_band_enabled"
+    ).checked;
 
     const nReplicatesField = form.elements.namedItem("n_replicates");
     const isBatch = parseInt(nReplicatesField.value, 10) > 1;
@@ -369,6 +379,32 @@ async function wireDarkModeOverrideField() {
     });
 }
 
+/**
+ * Seed the within-run σ band's own window field with a sensible
+ * starting value the first time the toggle is ever checked -- design
+ * doc §7.2, `20260910-claude-sonnet-5-gui-sigma-band-design.md`'s own
+ * approach A1: "pre-filled `100` the first time it is ever checked...
+ * but otherwise never overwritten." `syncConditionalVisibility`
+ * (wired separately, on every "input"/"change" inside the form)
+ * already reveals/hides the two real fields; this listener only ever
+ * writes a value, and only when the field is still genuinely empty --
+ * unchecking and rechecking never clobbers a value already typed.
+ */
+function wireSigmaBandSeedDefault() {
+    document
+        .getElementById("field-sigma_band_enabled")
+        .addEventListener("change", (event) => {
+            if (!event.target.checked) {
+                return;
+            }
+            const windowField = document.getElementById("field-sigma_band_window");
+            if (windowField.value.trim() === "") {
+                windowField.value = "100";
+            }
+        });
+}
+
 whenApiReady(wireConfigModalEvents);
 whenApiReady(wireSignificantDigitsField);
 whenApiReady(wireDarkModeOverrideField);
+whenApiReady(wireSigmaBandSeedDefault);

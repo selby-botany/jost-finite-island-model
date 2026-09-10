@@ -818,6 +818,37 @@
           <input type="text" id="field-max_generations" name="max_generations" form="input-form">
         </div>
 
+        <!-- Within-run σ band (design doc §7.2, `20260910-claude-
+             sonnet-5-gui-sigma-band-design.md`'s own approach A1):
+             "off by default and one toggle away." The checkbox itself
+             is a plain wrapping `<label>` with no `for` attribute
+             (`cs-selector`'s own checkboxes just above use the
+             identical shape) -- `field-help.js`'s own `wireAllField
+             Tooltips` only auto-wires a `<label for="field-...">`, so
+             this group's tooltip is the fieldset's own `<legend
+             data-field-help="sigma_band_group">` instead, the same
+             opt-in `cs-selector`'s legend already uses. -->
+        <fieldset class="composite" id="sigma-band-selector">
+          <legend data-field-help="sigma_band_group">within-run σ band</legend>
+          <label>
+            <input type="checkbox" id="field-sigma_band_enabled" name="sigma_band_enabled" form="input-form">
+            enable
+          </label>
+          <div id="sigma-band-fields" hidden>
+            <div class="field">
+              <label for="field-sigma_band_multiplier">multiplier</label>
+              <select id="field-sigma_band_multiplier" name="sigma_band_multiplier" form="input-form">
+                <option value="2.0">2σ</option>
+                <option value="3.0">3σ</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="field-sigma_band_window">window (generations)</label>
+              <input type="text" id="field-sigma_band_window" name="sigma_band_window" form="input-form">
+            </div>
+          </div>
+        </fieldset>
+
         <div class="field">
           <label for="field-n_replicates">n_replicates</label>
           <input type="text" id="field-n_replicates" name="n_replicates" form="input-form">

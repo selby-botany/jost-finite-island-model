@@ -773,6 +773,90 @@ def test_convergence_statistic_from_params_checks_only_the_watched_names() -> No
     assert values["cs_H_T"] == "false"
 
 
+def test_sigma_band_to_payload_omits_both_fields_when_disabled() -> None:
+    """Unchecked toggle: neither field reaches the payload at all.
+
+    `20260910-claude-sonnet-5-gui-sigma-band-design.md` (`selby/
+    restricted`) approach A1 -- the identical "set together or not at
+    all" contract `SimulationParams` itself already enforces for this
+    pair.
+    """
+    values = {"sigma_band_enabled": "false"}
+
+    assert config_form.sigma_band_to_payload(values) == {}
+
+
+def test_sigma_band_to_payload_parses_both_fields_when_enabled() -> None:
+    """Checked toggle: both fields parse to their declared types."""
+    values = {
+        "sigma_band_enabled": "true",
+        "sigma_band_multiplier": "3.0",
+        "sigma_band_window": "150",
+    }
+
+    assert config_form.sigma_band_to_payload(values) == {
+        "sigma_band_multiplier": 3.0,
+        "sigma_band_window": 150,
+    }
+
+
+def test_sigma_band_to_payload_rejects_a_non_integer_window() -> None:
+    """A malformed window is a clear, field-named error, not a silent coercion."""
+    values = {
+        "sigma_band_enabled": "true",
+        "sigma_band_multiplier": "2.0",
+        "sigma_band_window": "not-a-number",
+    }
+
+    with pytest.raises(ValueError, match="sigma_band_window"):
+        config_form.sigma_band_to_payload(values)
+
+
+def test_sigma_band_from_params_disabled_seeds_suggested_defaults() -> None:
+    """`sigma_band_multiplier is None` renders the toggle off, GUI defaults seeded."""
+    values = config_form.sigma_band_from_params(_params())
+
+    assert values["sigma_band_enabled"] == "false"
+    assert values["sigma_band_multiplier"] == "2.0"
+    assert values["sigma_band_window"] == "100"
+
+
+def test_sigma_band_from_params_enabled_round_trips_the_real_values() -> None:
+    """A real sigma-band configuration renders back enabled, with its own values."""
+    values = config_form.sigma_band_from_params(
+        _params(sigma_band_multiplier=3.0, sigma_band_window=250)
+    )
+
+    assert values["sigma_band_enabled"] == "true"
+    assert values["sigma_band_multiplier"] == "3.0"
+    assert values["sigma_band_window"] == "250"
+
+
+def test_sigma_band_round_trips_through_form_values_to_payload_and_back() -> None:
+    """`sigma_band_to_payload`/`from_params` agree, all the way around the loop."""
+    payload = config_form.sigma_band_to_payload(
+        {
+            "sigma_band_enabled": "true",
+            "sigma_band_multiplier": "2.0",
+            "sigma_band_window": "75",
+        }
+    )
+    params = _params(**payload)
+
+    form_values = config_form.sigma_band_from_params(params)
+    round_tripped = config_form.sigma_band_to_payload(form_values)
+
+    assert round_tripped == payload
+
+
+def test_field_for_error_locates_a_sigma_band_error() -> None:
+    """A sigma-band validation error routes to the field, then the convergence tab."""
+    field = config_form.field_for_error("sigma_band_window must be an integer")
+
+    assert field == "sigma_band_window"
+    assert config_form.tab_for_field(field) == "convergence"
+
+
 def test_loci_from_params_sequential_ids_render_lengths_mode() -> None:
     """Default, sequential locus IDs render the simple comma-list mode."""
     params = _params(loci=(LocusSpec(1, 50), LocusSpec(2, 8000)))
