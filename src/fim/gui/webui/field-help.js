@@ -145,7 +145,12 @@ function ensureTooltipElement() {
 }
 
 /**
- * Show the tooltip bubble anchored just below `anchor`.
+ * Show the tooltip bubble anchored just above `anchor`. Field titles
+ * (labels/legends) sit above their data-entry widgets, so anchoring below
+ * `anchor` -- as an earlier version did -- placed the bubble directly over
+ * the input it was meant to explain. Anchoring above the title instead
+ * keeps the input clear; `tooltip.offsetHeight` requires the element to
+ * already be unhidden, hence the `hidden = false` before measuring.
  * @param {HTMLElement} anchor
  * @param {string} text
  */
@@ -155,7 +160,7 @@ function showFieldTooltip(anchor, text) {
     tooltip.hidden = false;
     const rect = anchor.getBoundingClientRect();
     tooltip.style.left = `${Math.max(4, rect.left)}px`;
-    tooltip.style.top = `${rect.bottom + 4}px`;
+    tooltip.style.top = `${Math.max(4, rect.top - tooltip.offsetHeight - 4)}px`;
 }
 
 function hideFieldTooltip() {

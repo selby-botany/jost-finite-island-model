@@ -1203,7 +1203,9 @@ fieldset.composite > label {
 /* Inline field tooltips (design §4.6, `screens/field-help.js`) -- one
  * shared floating bubble, positioned per-show against whichever field's
  * label or group legend triggered it (`showFieldTooltip`'s own
- * `getBoundingClientRect` call). Appended to `document.body`, not
+ * `getBoundingClientRect` call), placed above that label/legend so the
+ * bubble never covers the data-entry widget beneath it. Appended to
+ * `document.body`, not
  * inside `.configure-panel`, so it is never clipped by that panel's own
  * `overflow: auto`/`max-height` -- confirmed live: an earlier version
  * nested inside the panel had its own bottom half cut off for any field
