@@ -53,8 +53,11 @@ function updateMatrixRowSums() {
         );
         const sumCell = row.querySelector(".matrix-row-sum");
         sumCell.textContent = sum.toFixed(3);
-        sumCell.classList.toggle(
-            "matrix-row-sum-invalid",
+        // Toggled on the whole `tr`, not just the sum cell, so the row
+        // label and every input in an invalid row "pop" in the same
+        // saturated, bold red as the sum itself, not just the sum alone.
+        row.classList.toggle(
+            "matrix-row-invalid",
             Math.abs(sum - 1) > ROW_SUM_TOLERANCE
         );
     }

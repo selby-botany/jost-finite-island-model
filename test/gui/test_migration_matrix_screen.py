@@ -127,8 +127,8 @@ def test_editing_a_cell_updates_the_row_sum_and_flags_an_invalid_row(
                 "rowSumText: document.querySelector("
                 "'#m-matrix-grid .matrix-row-sum').textContent, "
                 "rowSumInvalid: document.querySelector("
-                "'#m-matrix-grid .matrix-row-sum').classList.contains("
-                "'matrix-row-sum-invalid'), "
+                "'#m-matrix-grid tbody tr').classList.contains("
+                "'matrix-row-invalid'), "
                 "matrixJson: document.getElementById('field-m_matrix_json').value"
                 "})",
                 lambda value: value is not None and value["rowSumText"] != "1.000",

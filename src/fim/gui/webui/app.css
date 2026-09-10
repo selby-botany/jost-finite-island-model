@@ -1002,9 +1002,30 @@ fieldset.composite > label {
     font-size: 0.85rem;
 }
 
-.matrix-row-sum-invalid {
-    color: #d64545;
-    font-weight: 600;
+/* Applied to the whole `tr`, not just the sum cell, so a row that fails
+ * `updateMatrixRowSums`'s check "pops" as a unit -- row label, every
+ * input's text, and the sum -- rather than leaving the sum as the only
+ * visible cue. `color` alone would not reach the `<input>` text, since
+ * `.matrix-cell` sets its own `color: inherit`; declaring `color` here
+ * anyway documents the inherited path, while `!important` on the input
+ * override below beats that same `inherit` specificity tie. */
+.matrix-row-invalid {
+    color: #b3001b;
+    font-weight: 700;
+}
+
+.matrix-row-invalid .matrix-cell {
+    color: #b3001b !important;
+    font-weight: 700;
+}
+
+/* `.matrix-row-sum` and the row-header `th` ("Deme N") each set their own
+ * explicit (muted) color, which would otherwise win over the inherited
+ * red from `.matrix-row-invalid`. */
+.matrix-row-invalid .matrix-row-sum,
+.matrix-row-invalid th {
+    color: #b3001b;
+    font-weight: 700;
 }
 
 /* The custom-locus-ID grid editor (`loci-custom-fields`) -- a scrollable
