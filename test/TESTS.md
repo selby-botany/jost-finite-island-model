@@ -6112,6 +6112,65 @@ silently mix path separators on Windows).
 Injected via monkeypatch, not a real `results/` scan — `fim.gui.
 recent_runs`'s own test suite already covers the real scan directly.
 
+<a id="gui.test_app_api.test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run"></a>
+
+#### test\_list\_home\_runs\_attaches\_config\_summary\_and\_statistics\_for\_a\_scalar\_run
+
+```python
+def test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A scalar row's own config summary and point-value statistics.
+
+Home enrichment design doc `20260909-claude-sonnet-5-home-
+enrichment-design.md` (`selby/restricted`), approach A1: reads the
+real `report.json` `_write_run`'s own real `cli.main(["run", ...])`
+call wrote, formatted the identical way `format_statistic` already
+formats every other statistic this project shows.
+
+<a id="gui.test_app_api.test_list_home_runs_attaches_a_confidence_interval_per_statistic_for_a_batch_run"></a>
+
+#### test\_list\_home\_runs\_attaches\_a\_confidence\_interval\_per\_statistic\_for\_a\_batch\_run
+
+```python
+def test_list_home_runs_attaches_a_confidence_interval_per_statistic_for_a_batch_run(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A batch row's own statistics arrive `buildCiMeter`-shaped, not a point value.
+
+<a id="gui.test_app_api.test_list_home_runs_omits_statistics_when_report_json_is_missing"></a>
+
+#### test\_list\_home\_runs\_omits\_statistics\_when\_report\_json\_is\_missing
+
+```python
+def test_list_home_runs_omits_statistics_when_report_json_is_missing(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A row whose own `report.json` cannot be read still appears, statistics blank.
+
+`fim.gui.recent_runs._recent_run_from_file`'s own "skip rather than
+fail the whole scan" precedent, one file deeper — the row itself
+(and its config summary, which only needs `manifest.json`) is
+unaffected.
+
+<a id="gui.test_app_api.test_list_home_runs_omits_config_summary_when_manifest_is_unavailable"></a>
+
+#### test\_list\_home\_runs\_omits\_config\_summary\_when\_manifest\_is\_unavailable
+
+```python
+def test_list_home_runs_omits_config_summary_when_manifest_is_unavailable(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A hand-built `RecentRun` with no `manifest` gets a `None` config summary.
+
+Mirrors `test_list_recent_runs_reshapes_every_recent_run_into_a_
+json_dict`'s own canned-row style — `RecentRun.manifest` defaults to
+`None` for exactly this case.
+
 <a id="gui.test_app_api.test_open_run_reanalyzes_the_final_generation_by_default"></a>
 
 #### test\_open\_run\_reanalyzes\_the\_final\_generation\_by\_default
@@ -8758,6 +8817,25 @@ also the first real proof that `run-view-completed.js`'s own
 claude-sonnet-5-botanist-gui-redesign.md` §7.7) actually draws
 something, not only that the per-order text lines still render.
 
+<a id="gui.test_open_run_screen.test_recent_runs_row_shows_config_summary_and_statistics"></a>
+
+#### test\_recent\_runs\_row\_shows\_config\_summary\_and\_statistics
+
+```python
+def test_recent_runs_row_shows_config_summary_and_statistics(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Home enrichment design doc's own per-row columns actually render.
+
+`test/gui/test_app_api.py`'s own `test_list_home_runs_*` tests
+already prove `Api.list_home_runs` itself is correct as a plain
+Python call; this proves `open-run.js`'s own `refreshRecentRuns`
+actually calls it (not the older `list_recent_runs`) and renders
+both new columns, including the full text still being reachable via
+each cell's own `title` attribute once the compact text is
+ellipsized.
+
 <a id="gui.test_p0_grid_screen"></a>
 
 # gui.test\_p0\_grid\_screen
@@ -9446,6 +9524,22 @@ A batch manifest is listed, labeled distinctly, not offered for direct opening.
 Not offered to Screen 3 directly (`doc/fim-gui-design.md` §9) —
 `is_batch` is the flag Screen 6 uses to refuse opening it the same
 way a scalar run is opened.
+
+<a id="gui.test_recent_runs.test_recent_runs_carries_the_full_manifest_for_reuse"></a>
+
+#### test\_recent\_runs\_carries\_the\_full\_manifest\_for\_reuse
+
+```python
+def test_recent_runs_carries_the_full_manifest_for_reuse(
+        tmp_path: Path) -> None
+```
+
+`RecentRun.manifest` is the real, already-parsed manifest, not `None`.
+
+Home enrichment design doc `20260909-claude-sonnet-5-home-
+enrichment-design.md` (`selby/restricted`): `Api.list_home_runs`
+reuses this rather than re-reading `manifest.json` a second time,
+so a real scan must actually populate it.
 
 <a id="gui.test_recent_runs.test_recent_runs_skips_an_unparseable_manifest"></a>
 

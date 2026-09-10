@@ -359,6 +359,29 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
     }
 
 
+def _read_json_object(path: Path) -> dict[str, Any] | None:
+    """Read one small JSON file already known to hold a plain object, or `None`.
+
+    `Api.list_home_runs`'s own `report.json`/`summary.json` reads (home
+    enrichment design doc `20260909-claude-sonnet-5-home-enrichment-
+    design.md`, `selby/restricted`): both are already-computed,
+    already-written artifacts a completed run writes once and never
+    touches again (`fim.persistence.report.write_report`) — this never
+    recomputes anything, only reads a file back. `None` for anything
+    that stops this from working (missing, unreadable, malformed JSON,
+    or JSON that does not even parse to an object) — `Api.list_home_
+    runs`'s own row for that run still appears, with its statistics
+    simply omitted, the identical "skip rather than fail the whole
+    scan" precedent `fim.gui.recent_runs._recent_run_from_file` already
+    sets for a malformed `manifest.json`, one file deeper.
+    """
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 # The Explore workspace (design doc `20260907-claude-sonnet-5-botanist-
 # gui-redesign.md` §5): fixed *display* domains for `get_equilibrium_
 # sweep`'s own curve, one per sweepable axis -- chosen to show a
@@ -1579,6 +1602,90 @@ class Api:
             }
             for run in recent_runs.list_recent_runs()
         ]
+
+    @_log_bridge_call
+    def list_home_runs(self) -> list[dict[str, Any]]:
+        """List every run, enriched with its own config summary and final statistics.
+
+        Home enrichment design doc `20260909-claude-sonnet-5-home-
+        enrichment-design.md` (`selby/restricted`), approach A1: the
+        identical row set/order `list_recent_runs` already returns
+        (`RecentRun.manifest` is what makes reusing it possible without
+        a second `manifest.json` read per row), plus one more small,
+        already-computed file read per row — `report.json` for a
+        scalar run, `summary.json` for a batch — never a `trajectory.
+        jsonl` read or any new engine computation. `list_recent_runs`
+        itself stays unchanged: Compare's own recent-runs table and
+        "Open a run…"'s own generation/differentiation-q controls never
+        asked for this heavier per-row read, so neither pays for it.
+
+        Returns:
+            One dict per run/batch, newest first: `{"runId",
+            "directory", "trajectoryPath", "endedAt", "label",
+            "isBatch", "configSummary", "statistics"}` — the first six
+            keys identical to `list_recent_runs`'s own shape.
+            `configSummary` is `_run_config_summary`'s own `{"N", "d",
+            "seed", "m", "mu", "mutation_model"}`, or `None` if
+            `RecentRun.manifest` was unavailable (a hand-built row in a
+            test) or its own parameters no longer validate. `statistics`
+            is `None` if the row's own `report.json`/`summary.json`
+            could not be read; otherwise one entry per `_RESULT_
+            STATISTIC_NAMES` name — a `format_statistic`-formatted
+            string for a scalar run, or `{"mean", "low", "high",
+            "sampleCount"}` (`format_statistic`-formatted mean/low/
+            high, matching `webui/meters.js`'s own `buildCiMeter`
+            input shape exactly) for a batch.
+        """
+        digits = self._significant_digits
+        rows: list[dict[str, Any]] = []
+        for run in recent_runs.list_recent_runs():
+            config_summary: dict[str, str] | None = None
+            if run.manifest is not None:
+                try:
+                    config_summary = _run_config_summary(run.manifest.params())
+                except ValueError:
+                    config_summary = None
+            statistics: dict[str, Any] | None = None
+            if run.is_batch:
+                raw_summary = _read_json_object(run.directory / "summary.json")
+                if raw_summary is not None:
+                    statistics = {
+                        name: {
+                            "mean": format_statistic(interval["mean"], digits),
+                            "low": format_statistic(interval["low"], digits),
+                            "high": format_statistic(interval["high"], digits),
+                            "sampleCount": interval["sample_count"],
+                        }
+                        for name, interval in raw_summary.items()
+                        if name in _RESULT_STATISTIC_NAMES
+                    }
+            else:
+                raw_report = _read_json_object(run.directory / "report.json")
+                if raw_report is not None:
+                    statistics = {
+                        name: format_statistic(
+                            cast("float | None", raw_report.get(name)), digits
+                        )
+                        for name in _RESULT_STATISTIC_NAMES
+                        if name in raw_report
+                    }
+            rows.append(
+                {
+                    "runId": run.run_id,
+                    "directory": str(run.directory),
+                    "trajectoryPath": (
+                        None
+                        if run.is_batch
+                        else str(run.directory / "trajectory.jsonl")
+                    ),
+                    "endedAt": run.ended_at,
+                    "label": run.label,
+                    "isBatch": run.is_batch,
+                    "configSummary": config_summary,
+                    "statistics": statistics,
+                }
+            )
+        return rows
 
     @_log_bridge_call
     def browse_for_trajectory(self) -> dict[str, Any]:

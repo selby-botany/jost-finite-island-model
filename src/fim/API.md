@@ -106,6 +106,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_live\_deme\_pair](#fim.gui.app.Api.get_live_deme_pair)
     * [set\_live\_deme\_pair](#fim.gui.app.Api.set_live_deme_pair)
     * [list\_recent\_runs](#fim.gui.app.Api.list_recent_runs)
+    * [list\_home\_runs](#fim.gui.app.Api.list_home_runs)
     * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
     * [compare\_runs](#fim.gui.app.Api.compare_runs)
@@ -3604,6 +3605,47 @@ string-joining a path client-side would silently produce a
 mixed-separator path on Windows. `None` for a batch row: it has
 no single trajectory of its own to open.
 
+<a id="fim.gui.app.Api.list_home_runs"></a>
+
+#### list\_home\_runs
+
+```python
+@_log_bridge_call
+def list_home_runs() -> list[dict[str, Any]]
+```
+
+List every run, enriched with its own config summary and final statistics.
+
+Home enrichment design doc `20260909-claude-sonnet-5-home-
+enrichment-design.md` (`selby/restricted`), approach A1: the
+identical row set/order `list_recent_runs` already returns
+(`RecentRun.manifest` is what makes reusing it possible without
+a second `manifest.json` read per row), plus one more small,
+already-computed file read per row — `report.json` for a
+scalar run, `summary.json` for a batch — never a `trajectory.
+jsonl` read or any new engine computation. `list_recent_runs`
+itself stays unchanged: Compare's own recent-runs table and
+"Open a run…"'s own generation/differentiation-q controls never
+asked for this heavier per-row read, so neither pays for it.
+
+**Returns**:
+
+  One dict per run/batch, newest first: `{"runId",
+  "directory", "trajectoryPath", "endedAt", "label",
+  "isBatch", "configSummary", "statistics"}` — the first six
+  keys identical to `list_recent_runs`'s own shape.
+  `configSummary` is `_run_config_summary`'s own `{"N", "d",
+  "seed", "m", "mu", "mutation_model"}`, or `None` if
+  `RecentRun.manifest` was unavailable (a hand-built row in a
+  test) or its own parameters no longer validate. `statistics`
+  is `None` if the row's own `report.json`/`summary.json`
+  could not be read; otherwise one entry per `_RESULT_
+  STATISTIC_NAMES` name — a `format_statistic`-formatted
+  string for a scalar run, or `{"mean", "low", "high",
+  "sampleCount"}` (`format_statistic`-formatted mean/low/
+  high, matching `webui/meters.js`'s own `buildCiMeter`
+  input shape exactly) for a batch.
+
 <a id="fim.gui.app.Api.browse_for_trajectory"></a>
 
 #### browse\_for\_trajectory
@@ -5274,6 +5316,15 @@ One run — scalar or batch — found under `results/`, ready to list.
 - `is_batch` - Distinguishes a `BatchManifest` entry from a
   `RunManifest` one — Screen 6 uses this to route "Open" to
   re-analysis for a scalar run, or refuse it for a batch.
+- `manifest` - The full parsed manifest this row was built from
+  (`RunManifest` or `BatchManifest`, matching `is_batch`) —
+  carried along so a caller wanting more than this row's own
+  summary fields (`Api.list_home_runs`'s own config summary
+  and, for a batch, `replicate_run_ids`) never has to re-read
+  and re-parse the same `manifest.json` a second time.
+  `None` only for a hand-built `RecentRun` a test constructs
+  directly without going through a real scan (`_recent_run_
+  from_file`, below, always populates it).
 
 <a id="fim.gui.recent_runs.list_recent_runs"></a>
 

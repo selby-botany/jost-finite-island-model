@@ -264,3 +264,59 @@ def test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve(
     assert settled["qHidden"] is False
     assert settled["lineCount"] == 3
     assert settled["canvasWidth"] > 0
+
+
+def test_recent_runs_row_shows_config_summary_and_statistics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Home enrichment design doc's own per-row columns actually render.
+
+    `test/gui/test_app_api.py`'s own `test_list_home_runs_*` tests
+    already prove `Api.list_home_runs` itself is correct as a plain
+    Python call; this proves `open-run.js`'s own `refreshRecentRuns`
+    actually calls it (not the older `list_recent_runs`) and renders
+    both new columns, including the full text still being reachable via
+    each cell's own `title` attribute once the compact text is
+    ellipsized.
+    """
+    _write_run(tmp_path)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            settled = _poll_until(
+                window,
+                "(function(){"
+                "var row = document.querySelector("
+                "'#open-run-recent-runs-body tr'); "
+                "if (!row) { return null; } "
+                "var cells = row.children; "
+                "return {"
+                "cellCount: cells.length, "
+                "configText: cells[3].textContent, "
+                "configTitle: cells[3].title, "
+                "statisticsText: cells[4].textContent"
+                "};"
+                "})()",
+                lambda value: value is not None,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["cellCount"] == 5
+    assert "N=20" in settled["configText"]
+    assert "mu=0.01" in settled["configText"]
+    assert settled["configTitle"] == settled["configText"]
+    assert "D=" in settled["statisticsText"]
+    assert "G_ST=" in settled["statisticsText"]

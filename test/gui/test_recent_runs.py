@@ -86,6 +86,30 @@ def test_recent_runs_labels_batch_manifests_as_batch(tmp_path: Path) -> None:
     assert runs[1].label == "statistic converged"
 
 
+def test_recent_runs_carries_the_full_manifest_for_reuse(tmp_path: Path) -> None:
+    """`RecentRun.manifest` is the real, already-parsed manifest, not `None`.
+
+    Home enrichment design doc `20260909-claude-sonnet-5-home-
+    enrichment-design.md` (`selby/restricted`): `Api.list_home_runs`
+    reuses this rather than re-reading `manifest.json` a second time,
+    so a real scan must actually populate it.
+    """
+    scalar = _write_run(tmp_path, "scalar", seed=1)
+    batch = _write_run(tmp_path, "batch", seed=2, n_replicates=3)
+
+    runs = recent_runs.list_recent_runs(tmp_path / "results")
+
+    by_directory = {run.directory: run for run in runs}
+    scalar_run = by_directory[scalar]
+    batch_run = by_directory[batch]
+    assert scalar_run.manifest is not None
+    assert scalar_run.manifest.run_id == scalar_run.run_id
+    assert scalar_run.manifest.params().seed == 1
+    assert batch_run.manifest is not None
+    assert batch_run.manifest.run_id == batch_run.run_id
+    assert batch_run.manifest.params().seed == 2
+
+
 def test_recent_runs_skips_an_unparseable_manifest(tmp_path: Path) -> None:
     """A malformed manifest.json is skipped, not fatal to the whole scan."""
     valid = _write_run(tmp_path, "valid")

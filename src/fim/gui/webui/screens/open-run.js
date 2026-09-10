@@ -2,6 +2,15 @@
 
 /* Screen 6: open an existing run (design doc §4.6) -- pick a persisted
  * trajectory and generation, then re-analyze it, matching `fim stats`.
+ * This is also the Home rail destination (`screens/nav-rail.js`'s own
+ * `resolveDestination` map: `"home": "screen-open-run"`) -- one shared
+ * screen, not two, so home enrichment design doc `20260909-claude-
+ * sonnet-5-home-enrichment-design.md`'s (`selby/restricted`) per-row
+ * config summary and final statistics/outcome columns (`Api.list_home_
+ * runs`, approach A1: reads each row's own already-computed `report.
+ * json`/`summary.json`, never `trajectory.jsonl`, never re-derived)
+ * show up identically whether this screen was reached via the rail or
+ * via the File menu's own "Open run…" action.
  *
  * Reached from the File menu's own "Open run…" action (`app.js`'s
  * `fim.menu.openRun`). Opening succeeds by handing `Api.open_run`'s
@@ -45,6 +54,47 @@ function generationMode() {
     return checked ? checked.value : "final";
 }
 
+/**
+ * Render one row's own config summary as a compact, single-line string
+ * (home enrichment design doc `20260909-claude-sonnet-5-home-
+ * enrichment-design.md`, `selby/restricted`). `Object.entries` walks
+ * `configSummary` in `Api.list_home_runs`'s own fixed key order (`N`,
+ * `d`, `seed`, `m`, `mu`, `mutation_model`) — JSON preserves object key
+ * order, so nothing here needs to know that order itself.
+ * @param {Record<string, string> | null} configSummary
+ * @returns {string}
+ */
+function formatRowConfigSummary(configSummary) {
+    if (!configSummary) {
+        return "";
+    }
+    return Object.entries(configSummary)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(" ");
+}
+
+/**
+ * Render one row's own final statistics as a compact, single-line
+ * string -- a point value for a scalar run, or `"mean [low, high]"`
+ * for a batch's own confidence interval, the identical text `webui/
+ * meters.js`'s own `buildCiMeter` already shows in its tooltip (not a
+ * second, independently worded CI format).
+ * @param {Record<string, string | {mean: string, low: string, high: string}> | null} statistics
+ * @returns {string}
+ */
+function formatRowStatistics(statistics) {
+    if (!statistics) {
+        return "";
+    }
+    return Object.entries(statistics)
+        .map(([name, value]) =>
+            typeof value === "string"
+                ? `${name}=${value}`
+                : `${name}=${value.mean} [${value.low}, ${value.high}]`
+        )
+        .join(" ");
+}
+
 async function refreshRecentRuns() {
     // `showOpenRunScreen` fires this without awaiting it (a real
     // filesystem scan should not block the screen transition), so
@@ -62,12 +112,28 @@ async function refreshRecentRuns() {
     // thread outlived the window it was about to call back into.
     window.__fimOpenRunRecentRunsLoaded = false;
     recentRunsBody.replaceChildren();
-    const runs = await window.pywebview.api.list_recent_runs();
+    const runs = await window.pywebview.api.list_home_runs();
     for (const run of runs) {
         const row = document.createElement("tr");
-        for (const value of [run.runId, run.endedAt, run.label]) {
+        const configText = formatRowConfigSummary(run.configSummary);
+        const statisticsText = formatRowStatistics(run.statistics);
+        for (const [value, className] of [
+            [run.runId, null],
+            [run.endedAt, null],
+            [run.label, null],
+            [configText, "open-run-summary-cell"],
+            [statisticsText, "open-run-summary-cell"],
+        ]) {
             const cell = document.createElement("td");
             cell.textContent = value;
+            // `configText`/`statisticsText` can run long (six fields,
+            // six statistics) -- capped and ellipsized in CSS, with the
+            // full text still reachable on hover via `title` rather
+            // than silently truncated with no way to see the rest.
+            if (className !== null) {
+                cell.className = className;
+                cell.title = value;
+            }
             row.appendChild(cell);
         }
         row.addEventListener("click", () => {

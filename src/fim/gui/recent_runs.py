@@ -47,6 +47,15 @@ class RecentRun:
         is_batch: Distinguishes a `BatchManifest` entry from a
             `RunManifest` one — Screen 6 uses this to route "Open" to
             re-analysis for a scalar run, or refuse it for a batch.
+        manifest: The full parsed manifest this row was built from
+            (`RunManifest` or `BatchManifest`, matching `is_batch`) —
+            carried along so a caller wanting more than this row's own
+            summary fields (`Api.list_home_runs`'s own config summary
+            and, for a batch, `replicate_run_ids`) never has to re-read
+            and re-parse the same `manifest.json` a second time.
+            `None` only for a hand-built `RecentRun` a test constructs
+            directly without going through a real scan (`_recent_run_
+            from_file`, below, always populates it).
     """
 
     run_id: str
@@ -54,6 +63,7 @@ class RecentRun:
     ended_at: str
     label: str
     is_batch: bool
+    manifest: RunManifest | BatchManifest | None = None
 
 
 def list_recent_runs(results_directory: Path | None = None) -> list[RecentRun]:
@@ -101,6 +111,7 @@ def _recent_run_from_batch_manifest(
         ended_at=manifest.ended_at,
         label=f"batch ({manifest.replicate_count}/{n_replicates})",
         is_batch=True,
+        manifest=manifest,
     )
 
 
@@ -135,4 +146,5 @@ def _recent_run_from_manifest(manifest: RunManifest, directory: Path) -> RecentR
         ended_at=manifest.ended_at,
         label=manifest.stop_reason,
         is_batch=False,
+        manifest=manifest,
     )

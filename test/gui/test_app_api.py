@@ -1297,6 +1297,123 @@ def test_list_recent_runs_reshapes_every_recent_run_into_a_json_dict(
     ]
 
 
+def test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A scalar row's own config summary and point-value statistics.
+
+    Home enrichment design doc `20260909-claude-sonnet-5-home-
+    enrichment-design.md` (`selby/restricted`), approach A1: reads the
+    real `report.json` `_write_run`'s own real `cli.main(["run", ...])`
+    call wrote, formatted the identical way `format_statistic` already
+    formats every other statistic this project shows.
+    """
+    output = _write_run(tmp_path)
+    live_report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    real_list_recent_runs = recent_runs_module.list_recent_runs
+    monkeypatch.setattr(
+        recent_runs_module,
+        "list_recent_runs",
+        lambda: real_list_recent_runs(tmp_path),
+    )
+    api = Api()
+
+    result = api.list_home_runs()
+
+    assert len(result) == 1
+    row = result[0]
+    assert row["configSummary"] == {
+        "N": "20",
+        "d": "2",
+        "seed": "1",
+        "m": "0.1",
+        "mu": "0.01",
+        "mutation_model": "infinite_alleles",
+    }
+    assert row["statistics"] is not None
+    for name in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"):
+        assert row["statistics"][name] == format_statistic(
+            live_report[name], api._significant_digits
+        )
+
+
+def test_list_home_runs_attaches_a_confidence_interval_per_statistic_for_a_batch_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A batch row's own statistics arrive `buildCiMeter`-shaped, not a point value."""
+    _write_run(tmp_path, n_replicates=3)
+    real_list_recent_runs = recent_runs_module.list_recent_runs
+    monkeypatch.setattr(
+        recent_runs_module,
+        "list_recent_runs",
+        lambda: real_list_recent_runs(tmp_path),
+    )
+
+    result = Api().list_home_runs()
+
+    assert len(result) == 1
+    row = result[0]
+    assert row["isBatch"] is True
+    assert row["statistics"] is not None
+    for name in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"):
+        interval = row["statistics"][name]
+        assert set(interval) == {"mean", "low", "high", "sampleCount"}
+        assert interval["sampleCount"] == 3
+
+
+def test_list_home_runs_omits_statistics_when_report_json_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row whose own `report.json` cannot be read still appears, statistics blank.
+
+    `fim.gui.recent_runs._recent_run_from_file`'s own "skip rather than
+    fail the whole scan" precedent, one file deeper — the row itself
+    (and its config summary, which only needs `manifest.json`) is
+    unaffected.
+    """
+    output = _write_run(tmp_path)
+    (output / "report.json").unlink()
+    real_list_recent_runs = recent_runs_module.list_recent_runs
+    monkeypatch.setattr(
+        recent_runs_module,
+        "list_recent_runs",
+        lambda: real_list_recent_runs(tmp_path),
+    )
+
+    result = Api().list_home_runs()
+
+    assert len(result) == 1
+    assert result[0]["statistics"] is None
+    assert result[0]["configSummary"] is not None
+
+
+def test_list_home_runs_omits_config_summary_when_manifest_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hand-built `RecentRun` with no `manifest` gets a `None` config summary.
+
+    Mirrors `test_list_recent_runs_reshapes_every_recent_run_into_a_
+    json_dict`'s own canned-row style — `RecentRun.manifest` defaults to
+    `None` for exactly this case.
+    """
+    canned = [
+        RecentRun(
+            run_id="run-1",
+            directory=tmp_path / "run-1",
+            ended_at="2026-08-22T00:00:00Z",
+            label="statistic converged",
+            is_batch=False,
+        )
+    ]
+    monkeypatch.setattr(recent_runs_module, "list_recent_runs", lambda: canned)
+
+    result = Api().list_home_runs()
+
+    assert len(result) == 1
+    assert result[0]["configSummary"] is None
+    assert result[0]["statistics"] is None
+
+
 def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> None:
     """A bare "final" open reproduces the run's own terminal report."""
     output = _write_run(tmp_path)

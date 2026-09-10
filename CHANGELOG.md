@@ -169,6 +169,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   current as…" reusing its exact name. Disables again after an
   explicit "New configuration" reset, since there is nothing left to
   fork at that point.
+- `fim gui`'s Home/"Open a run…" recent-runs table (one shared screen,
+  design §9) gains a config-summary column and a final-statistics/
+  outcome column per row — a scalar run shows a point value per
+  statistic, a batch shows its own confidence interval, both read from
+  the small `report.json`/`summary.json` file a completed run already
+  writes once at completion time (no `trajectory.jsonl` read, no new
+  engine computation; home enrichment design doc `20260909-claude-
+  sonnet-5-home-enrichment-design.md`, `selby/restricted`, approach
+  A1). A row whose own report file is missing or unreadable still
+  appears, with that one column simply blank, matching this screen's
+  own existing "skip rather than fail the whole scan" behavior for a
+  malformed manifest, one file deeper.
 
 ### Changed
 

@@ -765,6 +765,20 @@ fieldset.composite > label {
     color: #ffffff;
 }
 
+/* Home enrichment (design doc `20260909-claude-sonnet-5-home-
+ * enrichment-design.md`, `selby/restricted`): the config-summary/
+ * statistics cells can run long (six fields, six statistics, all on
+ * one line) -- capped and ellipsized rather than forcing the whole
+ * table wider or wrapping to several lines per row; the full text is
+ * still reachable via the cell's own `title` attribute (`open-run.js`'s
+ * own `refreshRecentRuns`), a native hover tooltip, not lost. */
+.open-run-summary-cell {
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Explore (design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
  * §5) -- the four headline fields laid out in one row (narrower than
  * `.field`'s own 22rem default, which assumes a single vertical stack of
