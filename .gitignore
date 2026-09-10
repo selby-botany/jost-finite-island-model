@@ -14,6 +14,9 @@
 *.tmp
 *.bak
 *.log
+.attic/
+.wip/
+.ignore*/
 
 # direnv config
 .envrc
