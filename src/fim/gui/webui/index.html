@@ -214,6 +214,15 @@
         <div id="run-trajectory-frame" class="run-trajectory-frame" hidden>
           <canvas id="run-trajectory-canvas"></canvas>
           <div id="run-trajectory-legend" class="run-trajectory-legend"></div>
+          <!-- Within-run sigma band (design §7.2, `20260910-claude-
+               sonnet-5-gui-sigma-band-design.md`'s own approach C1):
+               the shaded region itself is drawn directly on the canvas
+               above, behind the tail of whichever statistic's own
+               curve it belongs to; this is the supplementary caption
+               with the exact numbers, one line per statistic that has
+               a band -- empty and hidden whenever the run requested
+               none, or hit the hard generation cap without converging. -->
+          <ul id="run-trajectory-sigma-band-caption" class="hint" hidden></ul>
         </div>
 
         <!-- `initial`-only: p_0 statistics shown before any run starts

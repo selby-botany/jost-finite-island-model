@@ -87,7 +87,7 @@ from fim.gui.trajectory_history import sampled_statistic_history
 from fim.model.initial import generate_initial_state
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
-from fim.persistence.manifest import read_batch_manifest, read_manifest
+from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
 from fim.reanalyze import reanalyze_trajectory
 from fim.statistics import (
     effective_allele_count,
@@ -301,6 +301,57 @@ def _effective_allele_summary(
         "H_T": format_statistic(total, digits),
         "gStCaution": cast("float", report["H_S"])
         > _EFFECTIVE_ALLELE_CAUTION_THRESHOLD,
+    }
+
+
+def _sigma_band_payload(manifest: RunManifest, digits: int) -> dict[str, Any] | None:
+    """Build the trajectory panel's own client-ready within-run sigma-band payload.
+
+    Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+    design.md` (`selby/restricted`), approach B1: reused unchanged by
+    both a live run's own `"done"` push (`_drain_run_messages`, this
+    function's own first caller) and a reopened run's own bridge
+    methods (that design's own slice 4) — one shared shape, not two
+    independently maintained ones.
+
+    Args:
+        manifest: A run's own manifest — `sigma_band`/`sigma_band_
+            multiplier`/`sigma_band_window` are `None` together
+            whenever the run never requested a band, or requested one
+            but only ever hit the hard generation cap without
+            converging (`RunManifest`'s own docstring, and the sigma-
+            band backend design doc's own decision 3).
+        digits: `Api._significant_digits`, the same display precision
+            every other statistic this bridge sends already uses.
+
+    Returns:
+        `None` when the run has no sigma band at all — the page's own
+        drawing code treats this identically to `convergenceGenerations`
+        being absent (`run-view-completed.js`'s own `renderTrajectory`:
+        no explicit "not available" flag needed, the field's own
+        absence already says so). Otherwise `{"multiplier": ...,
+        "window": ..., "band": {name: {"mean", "sigma", "lower",
+        "upper"}, ...}}` — `multiplier`/`window` are the small, already-
+        exact numbers `SimulationParams` itself validated (no formatting
+        benefit); every value inside `band` is `format_statistic`-
+        formatted, the identical convention every other statistic this
+        bridge sends already follows — the page parses a formatted
+        string back to a number only where it needs to do arithmetic
+        with it (`webui/screens/run-view-running.js`'s own
+        `accumulateLiveTrajectory` already establishes this shape for
+        the ordinary trajectory panel).
+    """
+    if manifest.sigma_band is None:
+        return None
+    return {
+        "multiplier": manifest.sigma_band_multiplier,
+        "window": manifest.sigma_band_window,
+        "band": {
+            name: {
+                key: format_statistic(value, digits) for key, value in interval.items()
+            }
+            for name, interval in manifest.sigma_band.items()
+        },
     }
 
 
@@ -2350,6 +2401,13 @@ def _drain_run_messages(
                 # rather than needing an explicit "not available" flag.
                 "convergenceGenerations": result.convergence_generations,
                 "convergenceHistories": result.convergence_histories,
+                # Sigma-band GUI design doc `20260910-claude-sonnet-5-
+                # gui-sigma-band-design.md` (`selby/restricted`) slice
+                # 3, approach B1: already in memory on `result.manifest`
+                # (the engine's own already-shipped extension-run logic,
+                # `8615614`/`8c8da68`) — no new computation, no extra
+                # file read.
+                "sigmaBand": _sigma_band_payload(result.manifest, digits),
             }
             logger.info("run done: %s", output_directory)
             window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")

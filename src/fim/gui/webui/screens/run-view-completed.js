@@ -62,6 +62,9 @@ const resultsStats = document.getElementById("results-stats");
 const runTrajectoryFrame = document.getElementById("run-trajectory-frame");
 const runTrajectoryCanvas = document.getElementById("run-trajectory-canvas");
 const runTrajectoryLegend = document.getElementById("run-trajectory-legend");
+const runTrajectorySigmaBandCaption = document.getElementById(
+    "run-trajectory-sigma-band-caption"
+);
 const resultsDifferentiationQ = document.getElementById("results-differentiation-q");
 const resultsDifferentiationQCanvas = document.getElementById(
     "results-differentiation-q-canvas"
@@ -224,8 +227,14 @@ function drawDifferentiationQCurve(canvas, points) {
  * @param {Object<string, number[]>} histories one array per statistic,
  *     each already the same length as `generations` (`renderTrajectory`,
  *     below, filters out any that is not before this ever runs).
+ * @param {{multiplier: number, window: number, band: Object<string,
+ *     {mean: string, sigma: string, lower: string, upper: string}>}|null|undefined} sigmaBand
+ *     design doc §7.2's own within-run sigma band (`20260910-claude-
+ *     sonnet-5-gui-sigma-band-design.md`'s own approach C1) — `null`/
+ *     `undefined` (a run that never requested one, or a screen with no
+ *     band data of its own to show at all) draws nothing extra.
  */
-function drawTrajectoryCurve(canvas, generations, histories) {
+function drawTrajectoryCurve(canvas, generations, histories, sigmaBand) {
     const context = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
@@ -242,13 +251,21 @@ function drawTrajectoryCurve(canvas, generations, histories) {
     const minGeneration = generations[0];
     const maxGeneration = generations[generations.length - 1];
     const allValues = Object.values(histories).flat();
+    if (sigmaBand) {
+        for (const interval of Object.values(sigmaBand.band)) {
+            allValues.push(Number(interval.lower), Number(interval.upper));
+        }
+    }
     // The domain always includes [0, 1] even if every plotted value
     // happens to sit inside it already — every named statistic's own
     // natural range starts there, so a run that never leaves, say,
     // [0.1, 0.3] still reads against the same fixed floor/ceiling a
     // reader of any other statistic meter on this page already expects,
     // rather than an auto-scaled domain that would make a small,
-    // ordinary wobble look dramatic.
+    // ordinary wobble look dramatic. The sigma band's own `lower`/
+    // `upper` are folded into this same domain calculation (just
+    // above) so a wide band is never clipped by axes sized only for
+    // the curve itself.
     const minValue = Math.min(0, ...allValues);
     const maxValue = Math.max(1, ...allValues);
 
@@ -288,6 +305,27 @@ function drawTrajectoryCurve(canvas, generations, histories) {
     context.textAlign = "left";
     context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + 4);
 
+    // The sigma band itself: a translucent rect from `lower` to
+    // `upper`, spanning the trailing window the extension actually
+    // covered (`maxGeneration - window` through `maxGeneration`,
+    // clamped to the plotted range — a window longer than what is
+    // actually shown here still draws, just starting at the plot's own
+    // left edge rather than off-canvas). Drawn behind every curve
+    // (before the stroke loop below), the same "shaded region behind a
+    // solid line reads as uncertainty around it" grammar the sigma-
+    // band design doc's own approach C1 names.
+    if (sigmaBand) {
+        const bandLeft = xToPixel(Math.max(minGeneration, maxGeneration - sigmaBand.window));
+        for (const [name, interval] of Object.entries(sigmaBand.band)) {
+            context.fillStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
+            context.globalAlpha = 0.2;
+            const top = yToPixel(Number(interval.upper));
+            const bottom = yToPixel(Number(interval.lower));
+            context.fillRect(bandLeft, top, plotRight - bandLeft, bottom - top);
+            context.globalAlpha = 1;
+        }
+    }
+
     for (const [name, values] of Object.entries(histories)) {
         context.strokeStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
         context.lineWidth = 2;
@@ -314,14 +352,22 @@ function drawTrajectoryCurve(canvas, generations, histories) {
  * never live-updated during `running` and never available at all for a
  * re-analyzed run (`Api.open_run`'s own payload carries neither field
  * yet) — both real, named scope boundaries this slice leaves for a
- * follow-on, not oversights.
+ * follow-on, not oversights. `sigmaBand` (design §7.2, sigma-band
+ * design doc `20260910-claude-sonnet-5-gui-sigma-band-design.md`'s own
+ * approach B1/C1) is that same live run's own `Api._sigma_band_
+ * payload` result — `null`/`undefined` for a run that never requested
+ * one, and always `undefined` for a batch (no `sigmaBand` key on that
+ * payload shape at all).
  * @param {number[]|undefined} generations
  * @param {Object<string, number[]>|undefined} histories
+ * @param {{multiplier: number, window: number, band: object}|null|undefined} sigmaBand
  */
-function renderTrajectory(generations, histories) {
+function renderTrajectory(generations, histories, sigmaBand) {
     if (!generations || !histories || generations.length === 0) {
         runTrajectoryFrame.hidden = true;
         runTrajectoryLegend.replaceChildren();
+        runTrajectorySigmaBandCaption.hidden = true;
+        runTrajectorySigmaBandCaption.replaceChildren();
         return;
     }
     runTrajectoryFrame.hidden = false;
@@ -340,7 +386,19 @@ function renderTrajectory(generations, histories) {
             ([, values]) => values.length === generations.length
         )
     );
-    drawTrajectoryCurve(canvas, generations, plottable);
+    drawTrajectoryCurve(canvas, generations, plottable, sigmaBand);
+    runTrajectorySigmaBandCaption.replaceChildren();
+    if (sigmaBand) {
+        for (const [name, interval] of Object.entries(sigmaBand.band)) {
+            const item = document.createElement("li");
+            item.textContent =
+                `${name}: ${interval.mean} [${interval.lower}, ${interval.upper}] ` +
+                `(${sigmaBand.multiplier}σ, last ${sigmaBand.window} generations)`;
+            runTrajectorySigmaBandCaption.appendChild(item);
+        }
+    }
+    runTrajectorySigmaBandCaption.hidden =
+        runTrajectorySigmaBandCaption.children.length === 0;
     runTrajectoryLegend.replaceChildren();
     for (const name of Object.keys(plottable)) {
         const item = document.createElement("span");
@@ -623,7 +681,11 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         }
         renderEffectiveAlleles(payload.effectiveAlleles);
         renderDifferentiationQ(report);
-        renderTrajectory(payload.convergenceGenerations, payload.convergenceHistories);
+        renderTrajectory(
+            payload.convergenceGenerations,
+            payload.convergenceHistories,
+            payload.sigmaBand
+        );
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }
 

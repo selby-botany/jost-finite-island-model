@@ -536,3 +536,68 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
 
     assert settled is True
     assert len(opened) == 1
+
+
+def test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A run started with the sigma-band toggle on draws a real band and caption.
+
+    Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+    design.md` (`selby/restricted`) slice 3, approach C1 — checked via
+    the canvas's own alpha channel (every stroke/fill this page draws
+    is fully opaque; a canvas starts fully transparent), the identical
+    check `test_compare_screen.py`'s own `_canvas_has_nonblank_pixels_
+    script` already established for an unrelated canvas, not
+    independently reinvented here.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "var cb = document.getElementById('field-sigma_band_enabled'); "
+            "cb.checked = true; "
+            "cb.dispatchEvent(new Event('change', {bubbles: true})); "
+            "document.getElementById('field-sigma_band_window').value = '3'; "
+            "document.getElementById('run-button').click();"
+        ),
+        read=(
+            "({"
+            "runViewState: window.fim.getRunViewState(), "
+            "captionHidden: document.getElementById("
+            "'run-trajectory-sigma-band-caption').hidden, "
+            "captionText: document.getElementById("
+            "'run-trajectory-sigma-band-caption').textContent, "
+            "canvasNonBlankPixelCount: (() => {"
+            "var c = document.getElementById('run-trajectory-canvas');"
+            "var ctx = c.getContext('2d');"
+            "var data = ctx.getImageData(0, 0, c.width, c.height).data;"
+            "var count = 0;"
+            "for (var i = 3; i < data.length; i += 4) {"
+            "if (data[i] !== 0) { count += 1; }"
+            "}"
+            "return count;"
+            "})()"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None and value.get("runViewState") == "completed"
+        ),
+        poll_attempts=600,
+    )
+
+    assert settled["runViewState"] == "completed"
+    assert settled["captionHidden"] is False
+    # The Greek sigma character trips ruff's own RUF001/RUF003
+    # (ambiguous Unicode) inside a plain string or a comment alike --
+    # the identical check `config_form.py`'s own RUF002 hit, from a
+    # docstring, while this slice was being written; every other Python
+    # source file this design has touched spells it out as ASCII
+    # "sigma" instead. This one assertion needs the real character to
+    # match `renderTrajectory`'s own actual rendered caption text, so
+    # it is written using a Unicode escape sequence rather than typed literally --
+    # satisfies the linter without changing what the string contains.
+    assert "2\u03c3" in settled["captionText"]
+    assert "3 generations" in settled["captionText"]
+    assert settled["canvasNonBlankPixelCount"] > 0

@@ -332,6 +332,16 @@ body {
     margin: 0;
 }
 
+/* The within-run sigma band's own supplementary caption (design §7.2,
+ * `run-view-completed.js`'s own `renderTrajectory`) -- a plain `<ul>`
+ * for `.hint`'s own font/color, with the bullets themselves removed:
+ * one short line per statistic reads more like a compact caption than
+ * a real list here. */
+#run-trajectory-sigma-band-caption {
+    list-style: none;
+    padding: 0;
+}
+
 fieldset.composite {
     border: 1px solid var(--fim-border);
     border-radius: 4px;

@@ -219,6 +219,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   already-shipped backend (a run started with it on already produces a
   real `sigma_band` in its own manifest) — nothing shows the resulting
   band on screen yet, that is slices 3 and 4.
+- `fim gui`'s trajectory panel now shows the within-run σ band on a
+  just-completed live run (design §7.2, slice 3 of 4): a translucent,
+  statistic-colored shaded region behind the tail of the curve,
+  spanning the trailing window the extension actually covered, plus a
+  caption line with the exact `mean [lower, upper]` numbers per
+  statistic. Nothing to show, nothing draws — a run that never
+  requested a band, or one that hit the hard generation cap without
+  converging, looks exactly as it always has. A reopened (persisted)
+  run's own band is slice 4, not yet shipped.
 
 ### Changed
 

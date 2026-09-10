@@ -5594,6 +5594,33 @@ def test_effective_allele_summary_caution_flag_only_above_the_threshold(
 
 `gStCaution` fires only once H_S exceeds the documented cutover.
 
+<a id="gui.test_app_api.test_sigma_band_payload_returns_none_when_the_run_requested_no_band"></a>
+
+#### test\_sigma\_band\_payload\_returns\_none\_when\_the\_run\_requested\_no\_band
+
+```python
+def test_sigma_band_payload_returns_none_when_the_run_requested_no_band(
+        tmp_path: Path) -> None
+```
+
+No sigma band requested: `_sigma_band_payload` returns `None`, not an empty dict.
+
+Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+design.md` (`selby/restricted`), approach B1 — the identical
+"absent means not applicable" shape `convergenceGenerations`/
+`convergenceHistories` already use for a re-analyzed run.
+
+<a id="gui.test_app_api.test_sigma_band_payload_formats_every_value_for_a_real_band"></a>
+
+#### test\_sigma\_band\_payload\_formats\_every\_value\_for\_a\_real\_band
+
+```python
+def test_sigma_band_payload_formats_every_value_for_a_real_band(
+        tmp_path: Path) -> None
+```
+
+A real sigma band renders `multiplier`/`window` verbatim, `band` formatted.
+
 <a id="gui.test_app_api.test_api_starts_with_the_default_significant_digits"></a>
 
 #### test\_api\_starts\_with\_the\_default\_significant\_digits
@@ -9979,6 +10006,25 @@ there via `sample <pid>` on a `git push`'s own hung pre-push
 `pytest` run. Polling this flag before letting `window.destroy()`
 run is the actual regression proof; the injected opener's own
 recorded path is the icing.
+
+<a id="gui.test_results_screen.test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption"></a>
+
+#### test\_a\_completed\_run\_with\_a\_sigma\_band\_draws\_it\_and\_shows\_the\_caption
+
+```python
+def test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A run started with the sigma-band toggle on draws a real band and caption.
+
+Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+design.md` (`selby/restricted`) slice 3, approach C1 — checked via
+the canvas's own alpha channel (every stroke/fill this page draws
+is fully opaque; a canvas starts fully transparent), the identical
+check `test_compare_screen.py`'s own `_canvas_has_nonblank_pixels_
+script` already established for an unrelated canvas, not
+independently reinvented here.
 
 <a id="gui.test_runner"></a>
 

@@ -507,6 +507,49 @@ def test_effective_allele_summary_caution_flag_only_above_the_threshold() -> Non
     assert above["gStCaution"] is True
 
 
+def test_sigma_band_payload_returns_none_when_the_run_requested_no_band(
+    tmp_path: Path,
+) -> None:
+    """No sigma band requested: `_sigma_band_payload` returns `None`, not an empty dict.
+
+    Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+    design.md` (`selby/restricted`), approach B1 — the identical
+    "absent means not applicable" shape `convergenceGenerations`/
+    `convergenceHistories` already use for a re-analyzed run.
+    """
+    output = _write_run(tmp_path)
+    manifest = read_manifest(output / "manifest.json")
+
+    assert app_module._sigma_band_payload(manifest, digits=3) is None
+
+
+def test_sigma_band_payload_formats_every_value_for_a_real_band(
+    tmp_path: Path,
+) -> None:
+    """A real sigma band renders `multiplier`/`window` verbatim, `band` formatted."""
+    output = _write_run(
+        tmp_path,
+        convergence_tolerance=1.0,
+        max_generations=30,
+        sigma_band_multiplier=2.0,
+        sigma_band_window=5,
+    )
+    manifest = read_manifest(output / "manifest.json")
+    assert manifest.sigma_band is not None
+
+    payload = app_module._sigma_band_payload(manifest, digits=3)
+
+    assert payload is not None
+    assert payload["multiplier"] == 2.0
+    assert payload["window"] == 5
+    assert set(payload["band"]) == set(manifest.sigma_band)
+    for name, interval in manifest.sigma_band.items():
+        rendered = payload["band"][name]
+        assert set(rendered) == {"mean", "sigma", "lower", "upper"}
+        for key, value in interval.items():
+            assert rendered[key] == format_statistic(value, 3)
+
+
 def test_api_starts_with_the_default_significant_digits() -> None:
     """A fresh `Api()` starts at the GUI's own default, not the CLI's own six."""
     api = Api()
