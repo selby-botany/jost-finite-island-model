@@ -199,6 +199,14 @@ function wireNavRail() {
         button.addEventListener("click", () => window.fim.showConfigureScreen());
     }
 
+    // The rail's own identity mark doubles as the "About fim" shortcut
+    // (design's own "brand mark opens About" convention) -- the same
+    // `showAboutModal` the Help menu's "About fim" action and the
+    // native macOS About panel handler (`app.py`) both already reach.
+    document
+        .getElementById("rail-brand-about")
+        .addEventListener("click", () => window.fim.showAboutModal());
+
     // Configure's own footer actions (design §4's own mockup: "[Load
     // configuration…] [Save configuration…] [▶ Run] [🔮 Explore]").
     // Load/Save call `window.fim.openConfiguration`/`saveConfiguration`

@@ -31,14 +31,19 @@
        opens. -->
   <nav id="rail" aria-label="Primary">
     <div class="rail-primary">
-      <div class="rail-brand" aria-label="Finite Island Model">
+      <button
+        type="button"
+        id="rail-brand-about"
+        class="rail-brand"
+        aria-label="About Finite Island Model"
+      >
         <img
           src="assets/selby-orchid-logo.jpeg"
           alt=""
           class="rail-brand-mark"
         >
         <span>FIM</span>
-      </div>
+      </button>
       <div class="rail-group">
         <button type="button" class="rail-item" data-destination="home">
           <svg class="rail-icon" aria-hidden="true">
@@ -76,15 +81,20 @@
           </svg>
           <span class="rail-label">Compare</span>
         </button>
+        <!-- Help sits directly beneath Compare, in the same in-flow
+             group as every other destination, rather than in a second
+             `.rail-group` pushed to the rail's bottom edge via
+             `justify-content: space-between` -- that placement let Help
+             end up visually detached from (and, on a short window,
+             scrolled below) the rest of the destinations it belongs
+             beside. -->
+        <button type="button" class="rail-item" data-destination="help">
+          <svg class="rail-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-help"></use>
+          </svg>
+          <span class="rail-label">Help</span>
+        </button>
       </div>
-    </div>
-    <div class="rail-group">
-      <button type="button" class="rail-item" data-destination="help">
-        <svg class="rail-icon" aria-hidden="true">
-          <use href="icons/fim-icons.svg#icon-help"></use>
-        </svg>
-        <span class="rail-label">Help</span>
-      </button>
     </div>
   </nav>
 

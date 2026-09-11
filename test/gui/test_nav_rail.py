@@ -225,3 +225,22 @@ def test_parameter_strip_updates_live_as_a_field_changes(
         )
 
     assert _drive(window, steps) == "999"
+
+
+def test_clicking_the_brand_mark_opens_the_about_dialog(
+    window: webview.Window,
+) -> None:
+    """The rail's own logo/"FIM" mark is a second, always-visible route to
+    the same "About fim" dialog the Help menu already opens
+    (`screens/nav-rail.js`'s `wireNavRail`, `screens/config-modals.js`'s
+    `showAboutModal`) -- proof the click handler is actually wired, not
+    only that the button exists (`test_branding.py`'s own static check)."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("document.getElementById('rail-brand-about').click()")
+        return poll_until(
+            "document.getElementById('modal-about').open",
+            lambda value: value is True,
+        )
+
+    assert _drive(window, steps) is True

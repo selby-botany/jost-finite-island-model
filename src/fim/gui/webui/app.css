@@ -192,11 +192,14 @@ textarea::placeholder {
     padding: 0;
 }
 
+/* Help now lives in-flow with every other destination (`index.html`'s
+ * own comment beside it), so the rail no longer needs to reserve a
+ * second, bottom-pinned group -- `justify-content` stays at its
+ * `flex-start` default and `.rail-primary` is the rail's only child. */
 #rail {
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
     width: 4.5rem;
     padding: 0.75rem 0;
     border-right: 1px solid var(--fim-border);
@@ -209,6 +212,10 @@ textarea::placeholder {
     gap: 0.65rem;
 }
 
+/* `.rail-brand` is a `<button>` (opens the About dialog -- `nav-rail.js`'s
+ * `wireNavRail`) styled to read as the identity mark it always was, not
+ * as an interactive control; the reset properties below undo the
+ * browser's own default button chrome. */
 .rail-brand {
     display: flex;
     flex-direction: column;
@@ -216,10 +223,20 @@ textarea::placeholder {
     gap: 0.15rem;
     padding: 0 0.35rem 0.6rem;
     color: var(--fim-accent);
+    font: inherit;
     font-family: var(--fim-display-font);
     font-size: 0.68rem;
     font-weight: 900;
     letter-spacing: 0.12em;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.rail-brand:hover,
+.rail-brand:focus-visible {
+    color: var(--fim-accent);
+    opacity: 0.8;
 }
 
 .rail-brand-mark {

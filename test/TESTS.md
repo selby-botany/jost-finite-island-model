@@ -9035,6 +9035,21 @@ def test_parameter_strip_updates_live_as_a_field_changes(
 
 The strip reflects an in-progress edit, not only a submitted/valid form.
 
+<a id="gui.test_nav_rail.test_clicking_the_brand_mark_opens_the_about_dialog"></a>
+
+#### test\_clicking\_the\_brand\_mark\_opens\_the\_about\_dialog
+
+```python
+def test_clicking_the_brand_mark_opens_the_about_dialog(
+        window: webview.Window) -> None
+```
+
+The rail's own logo/"FIM" mark is a second, always-visible route to
+the same "About fim" dialog the Help menu already opens
+(`screens/nav-rail.js`'s `wireNavRail`, `screens/config-modals.js`'s
+`showAboutModal`) -- proof the click handler is actually wired, not
+only that the button exists (`test_branding.py`'s own static check).
+
 <a id="gui.test_open_run_screen"></a>
 
 # gui.test\_open\_run\_screen
