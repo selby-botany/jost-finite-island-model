@@ -73,12 +73,22 @@ def test_reserved_branding_is_canonical_at_the_repository_root() -> None:
 
 def test_license_excludes_the_identified_branding_assets_from_agpl() -> None:
     """The repository license and branding policy state the asset boundary."""
-    license_text = (_PROJECT_ROOT / "LICENSE.md").read_text(encoding="utf-8")
-    policy_text = (_PROJECT_ROOT / "branding" / "README.md").read_text(encoding="utf-8")
+    license_text = " ".join(
+        (_PROJECT_ROOT / "LICENSE.md").read_text(encoding="utf-8").split()
+    )
+    policy_text = " ".join(
+        (_PROJECT_ROOT / "branding" / "README.md").read_text(encoding="utf-8").split()
+    )
 
-    assert "Except for the files and assets expressly identified as branding" in (
+    assert "## Branding exclusion" in license_text
+    assert "other branding assets identified in `branding/` and" in license_text
+    assert 'The Branding Materials are not part of the "Program"' in license_text
+    assert "No rights in the Branding Materials are granted under the AGPL" in (
         license_text
     )
-    assert "`branding/` are not licensed under the AGPL" in license_text
+    assert "Any fork, modified version, derivative work, or redistribution must:" in (
+        license_text
+    )
+    assert "1. remove the Branding Materials;" in license_text
     assert "All rights reserved" in policy_text
     assert "`selby-orchid-logo.jpeg`" in policy_text
