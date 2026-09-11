@@ -2846,25 +2846,24 @@ def _configure_macos_native_about_panel() -> None:
     cosmetic About panel is never worth failing application startup
     over.
     """
-    if sys.platform != "darwin":
-        return
-    try:
-        from AppKit import NSApplication, NSBundle, NSImage  # noqa: PLC0415
-    except ImportError:
-        return
-    bundle = NSBundle.mainBundle()
-    info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
-    if info is not None:
-        info["CFBundleShortVersionString"] = fim_version
-        info["CFBundleVersion"] = fim_version
-        info["NSHumanReadableCopyright"] = (
-            "Marie Selby Botanical Gardens (https://selby.org/botany/)"
-        )
-    logo_path = _branding_directory() / "selby-orchid-logo.jpeg"
-    if logo_path.is_file():
-        image = NSImage.alloc().initWithContentsOfFile_(str(logo_path))
-        if image is not None:
-            NSApplication.sharedApplication().setApplicationIconImage_(image)
+    if sys.platform == "darwin":
+        try:
+            from AppKit import NSApplication, NSBundle, NSImage  # noqa: PLC0415
+        except ImportError:
+            return
+        bundle = NSBundle.mainBundle()
+        info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+        if info is not None:
+            info["CFBundleShortVersionString"] = fim_version
+            info["CFBundleVersion"] = fim_version
+            info["NSHumanReadableCopyright"] = (
+                "Marie Selby Botanical Gardens (https://selby.org/botany/)"
+            )
+        logo_path = _branding_directory() / "selby-orchid-logo.jpeg"
+        if logo_path.is_file():
+            image = NSImage.alloc().initWithContentsOfFile_(str(logo_path))
+            if image is not None:
+                NSApplication.sharedApplication().setApplicationIconImage_(image)
 
 
 def _set_macos_application_name(name: str) -> None:
