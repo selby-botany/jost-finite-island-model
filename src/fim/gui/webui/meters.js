@@ -131,9 +131,9 @@ function ciCaption(sampleCount) {
  */
 function buildCiMeter(name, interval) {
     const cells = buildStatCells(name, formatToTwoDigits(interval.mean));
+    const caption = ciCaption(interval.sampleCount);
     cells.tooltip =
-        `${interval.mean} [${interval.low}, ${interval.high}] — ` +
-        ciCaption(interval.sampleCount);
+        `${interval.mean} [${interval.low}, ${interval.high}] — ${caption}`;
     return cells;
 }
 

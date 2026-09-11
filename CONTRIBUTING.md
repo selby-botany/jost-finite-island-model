@@ -44,11 +44,12 @@ mypy
 
 `./build --ci` runs the authoritative local equivalent of continuous
 integration, including branch coverage, deterministic statistical tests,
-documentation freshness, link checking, and package smoke tests.
+documentation freshness, link checking, desktop-GUI asset checking, and
+package smoke tests.
 
-Repository-level shell, YAML, Markdown, and secret checks use pinned
-Docker-backed wrappers stored in `bin/`; they do not depend on another
-checkout:
+Repository-level shell, YAML, Markdown, JavaScript, CSS, HTML, and secret
+checks use pinned Docker-backed wrappers stored in `bin/`; they do not depend
+on another checkout:
 
 ```console
 . include/dot-bashrc

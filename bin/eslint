@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# ESLint for the desktop GUI's browser JavaScript, pinned to one exact
+# tool version inside one exact Node image so the result never depends on
+# what happens to be installed on the machine running it. There is no
+# first-party ESLint container image, so the pin is two-part: the Node
+# image is pinned by digest and the ESLint release is pinned by version.
+# The npm cache lives in a named volume so only the first run downloads.
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+image=${ESLINT_IMAGE:-node}
+default_digest=sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81
+digest=${ESLINT_IMAGE_DIGEST:-${default_digest}}
+version=${ESLINT_VERSION:-10.10.0}
+cache=${WEBUI_LINT_CACHE_VOLUME:-fim-webui-lint-npm-cache}
+
+exec docker run --rm \
+    --volume "${root}:/workspace" \
+    --volume "${cache}:/npm-cache" \
+    --env npm_config_cache=/npm-cache \
+    --env npm_config_update_notifier=false \
+    --workdir /workspace \
+    "${image}@${digest}" \
+    npx --yes --prefer-offline --quiet "eslint@${version}" "$@"

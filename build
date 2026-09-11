@@ -145,10 +145,12 @@ fi
 
 if "${run_lint}"; then
     run "${python}" -m ruff check src test dev/lib \
-        dev/bin/check-doc-links dev/bin/extract-release-notes \
+        dev/bin/check-doc-links dev/bin/check-webui-assets \
+        dev/bin/extract-release-notes \
         dev/bin/calibrate-statistical-bands dev/bin/generate-help-html
     run "${python}" -m ruff format --check src test dev/lib \
-        dev/bin/check-doc-links dev/bin/extract-release-notes \
+        dev/bin/check-doc-links dev/bin/check-webui-assets \
+        dev/bin/extract-release-notes \
         dev/bin/calibrate-statistical-bands dev/bin/generate-help-html
 fi
 
@@ -256,6 +258,12 @@ if "${run_docs}"; then
     else
         run dev/bin/generate-help-html
     fi
+
+    # Runs after the Help pages are regenerated above, because it reads
+    # them: the generated `webui/help/*.html` are part of the tree it
+    # checks, and checking a stale copy would report anchors that a
+    # renamed heading had already moved.
+    run dev/bin/check-webui-assets
 fi
 
 if "${run_package}"; then

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+# Stylelint for the desktop GUI's stylesheets, pinned the same two-part
+# way `bin/eslint` is: the Node image by digest, the Stylelint release by
+# exact version. `.stylelintrc.json` names its rules outright instead of
+# extending a shared-config package, so this stays a single download --
+# see the comment at the top of that file for why.
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+image=${STYLELINT_IMAGE:-node}
+default_digest=sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81
+digest=${STYLELINT_IMAGE_DIGEST:-${default_digest}}
+version=${STYLELINT_VERSION:-17.15.0}
+cache=${WEBUI_LINT_CACHE_VOLUME:-fim-webui-lint-npm-cache}
+
+exec docker run --rm \
+    --volume "${root}:/workspace" \
+    --volume "${cache}:/npm-cache" \
+    --env npm_config_cache=/npm-cache \
+    --env npm_config_update_notifier=false \
+    --workdir /workspace \
+    "${image}@${digest}" \
+    npx --yes --prefer-offline --quiet "stylelint@${version}" "$@"

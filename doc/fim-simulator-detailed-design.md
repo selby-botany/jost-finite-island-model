@@ -176,8 +176,11 @@ jost-finite-island-model/
 │       │                           # runs build exe + wheel/sdist → GitHub Release
 │       └── gitleaks-ci.yml        # secret scan
 ├── .gitignore
+├── .htmlhintrc                    # HTML lint config (whole documents)
+├── .htmlhintrc-fragment           # HTML lint config (generated help partials)
 ├── .markdownlint.json             # markdown lint config
 ├── .markdownlintignore
+├── .stylelintrc.json              # CSS lint config
 ├── .yamllint.yml                  # workflow YAML lint config
 ├── build                          # local CI equivalent (lint+type+test+package)
 ├── CHANGELOG.md                   # Keep a Changelog format
@@ -269,7 +272,7 @@ jost-finite-island-model/
 └── bin/
     ├── fim                        # thin POSIX wrapper invoking the CLI from a clone
     ├── mypy, pytest, python3, ...  # wrappers selecting the .venv toolchain (§4)
-    └── gitleaks, markdownlint, ...  # digest-pinned Docker-image wrappers (§4)
+    └── gitleaks, markdownlint, eslint, ...  # digest-pinned Docker-image wrappers (§4)
 ```
 
 The `src/fim/` subtree follows the design document's module layout
@@ -310,7 +313,8 @@ wrappers in `bin/` pin an image digest apiece.
 | Coverage | coverage.py | `coverage==7.*` | Branch coverage; gate at the threshold in §5.2. |
 | API reference docs | pydoc-markdown | `pydoc-markdown==4.*` | Regenerates `src/fim/API.md` from module docstrings; dev-only, never a runtime dependency, so it never enters the PyInstaller bundle (§2.1/§8.1). |
 | Secret scan | gitleaks | `gitleaks/gitleaks-action@v2` | No credentials in history (§5.3). |
-| Repository-file checks | ShellCheck, yamllint, markdownlint-cli2, gitleaks, Homebrew | image digest per `bin/` wrapper | Shell scripts, workflow YAML, Markdown, committed secrets, and the Homebrew formula, all through `dev/bin/validate-repository`. |
+| Repository-file checks | ShellCheck, yamllint, markdownlint-cli2, ESLint, Stylelint, HTMLHint, gitleaks, Homebrew | image digest per `bin/` wrapper | Shell scripts, workflow YAML, Markdown, GUI JavaScript/CSS/HTML, committed secrets, and the Homebrew formula, all through `dev/bin/validate-repository`. |
+| GUI asset integrity | `dev/bin/check-webui-assets` | interpreter-only, no Docker | No orphaned CSS rule, no unstyled/unread class, no broken local link or SVG sprite reference; runs in `./build`. |
 
 The two gate families differ in where they run, deliberately.
 `./build --ci` and `ci.yml` (§5.2) cover everything the Python package is

@@ -71,8 +71,9 @@ FIM<sub>PYTHON</sub>=/path/to/python overrides the local command wrappers. Sourc
 `include/dot-bashrc` to make those wrappers available as direct commands.
 
 Docker Engine is required for the complete repository-file checks. It runs the
-pinned ShellCheck, yamllint, markdownlint, gitleaks, and Homebrew validation
-images. Source the local environment file before invoking those wrappers:
+pinned ShellCheck, yamllint, markdownlint, ESLint, Stylelint, HTMLHint,
+gitleaks, and Homebrew validation images. Source the local environment file
+before invoking those wrappers:
 
 ```console
 . include/dot-bashrc

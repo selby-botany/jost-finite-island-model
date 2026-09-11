@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+"""Validate the desktop GUI's stylesheets, markup, and asset references.
+
+Everything under `src/fim/gui/webui/` is checked four ways:
+
+1. Every class a stylesheet defines a rule for must be referenced by
+   some HTML file or script. A rule nothing can ever match is dead
+   weight: it survives renames, gets copied around, and quietly misleads
+   the next person who greps for it expecting to find live styling.
+2. Every class the HTML or a script puts on an element must either have
+   a rule in a stylesheet or be read back by a script (a selector passed
+   to `querySelector`/`closest`/`matches`, or a `classList.contains`
+   test). A class that is neither styled nor read does nothing at all --
+   it is usually the residue of a rule that was deleted, or a typo that
+   silently switched off the styling somebody thought they were getting.
+3. Every local `href`/`src` must resolve to a file that exists, and an
+   SVG sprite reference (`icons/fim-icons.svg#icon-run`) must name a
+   symbol that exists inside that sprite. A missing icon is invisible in
+   the worst way: the button still renders, just blank.
+4. Every same-page `#fragment` link must name an `id` that exists in the
+   same file. The generated Help pages are full of these, and a renamed
+   heading breaks them without breaking anything a Markdown check sees.
+
+Why this exists: `bin/stylelint`, `bin/eslint`, and `bin/htmlhint`
+between them check that each *file* is well-formed, but none of them
+looks across files, because none of them knows that these particular
+scripts, stylesheets, and pages are one application. Whether a class in
+`index.html` has any styling behind it, or whether `<use href="...">`
+points at a symbol that is really in the sprite, is a question about the
+relationship *between* those files, and it is exactly the sort of thing
+that decays silently as screens are added and removed. This is the
+counterpart to `dev/bin/check-doc-links`, which asks the same question
+of the documentation set; like that script it runs in `./build --ci`,
+needs no Docker, and can be run directly at any time.
+
+Deliberate exceptions are listed in `ALLOWED_UNSTYLED_CLASSES` and
+`ALLOWED_UNUSED_CLASS_PREFIXES` below, each with the reason it is there.
+
+Usage:
+    dev/bin/check-webui-assets
+
+Takes no arguments -- it always scans the whole `src/fim/gui/webui/`
+tree starting from this script's own location. Exit status is 0 if every
+class is accounted for and every reference resolves, or 1 (with one line
+per problem printed to stderr) otherwise.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+WEBUI = ROOT / "src" / "fim" / "gui" / "webui"
+
+# Classes that are emitted by a generator rather than written by hand,
+# so the file that "uses" them is a program and not something this scan
+# can see. Each entry names the generator responsible for it.
+ALLOWED_UNSTYLED_CLASSES = {
+    # dev/bin/generate-help-html wraps inline math in
+    # `<code class="math-expr">`. It only appears in the generated Help
+    # pages when the source Markdown actually contains a math span, so
+    # the committed HTML may legitimately have none on any given day.
+    "math-expr",
+}
+
+# Class *prefixes* with the same justification, for families of names
+# that a generator produces one member of at a time.
+ALLOWED_UNUSED_CLASS_PREFIXES = (
+    # Markdown fenced code blocks become `<code class="language-json">`
+    # and friends. The GUI ships no syntax-highlighting theme, so these
+    # are carried for correctness of the markup rather than for styling.
+    "language-",
+)
+
+COMMENT_PATTERN = re.compile(r"/\*.*?\*/", re.DOTALL)
+CSS_STRING_PATTERN = re.compile(r"""(['"]).*?\1""", re.DOTALL)
+CSS_SELECTOR_PATTERN = re.compile(r"([^{}]+)\{")
+CLASS_TOKEN_PATTERN = re.compile(r"\.(-?[A-Za-z_][\w-]*)")
+CLASS_ATTRIBUTE_PATTERN = re.compile(r'\bclass\s*=\s*"([^"]*)"')
+ID_ATTRIBUTE_PATTERN = re.compile(r'\bid\s*=\s*"([^"]*)"')
+REFERENCE_PATTERN = re.compile(r'\b(?:href|src|xlink:href)\s*=\s*"([^"]*)"')
+JS_STRING_PATTERN = re.compile(r"""(['"`])((?:\\.|(?!\1).)*)\1""", re.DOTALL)
+JS_APPLY_PATTERN = re.compile(
+    r"""classList\s*\.\s*(?:add|remove|toggle|replace)\s*\(([^)]*)\)"""
+)
+JS_CLASSNAME_PATTERN = re.compile(r"""className\s*=\s*(['"`])([^'"`]*)\1""")
+JS_READ_PATTERN = re.compile(
+    r"""(?:querySelector|querySelectorAll|closest|matches)\s*\(\s*"""
+    r"""(['"`])([^'"`]*)\1"""
+)
+JS_CONTAINS_PATTERN = re.compile(
+    r"""classList\s*\.\s*contains\s*\(\s*(['"`])([^'"`]*)\1"""
+)
+NON_FILE_SCHEMES = ("http://", "https://", "mailto:", "data:", "javascript:")
+
+
+def webui_files(suffix: str) -> tuple[Path, ...]:
+    """Return every file under the webui tree with the given suffix.
+
+    Args:
+        suffix: Extension to match, including the leading dot.
+
+    Returns:
+        The matching paths, sorted for stable output.
+    """
+    return tuple(sorted(WEBUI.rglob(f"*{suffix}")))
+
+
+def css_classes() -> dict[str, Path]:
+    """Return each class a stylesheet has a rule for, and where.
+
+    Comments and quoted strings are removed first so that a font file
+    named `Lato.ttf` inside a `url()` is not mistaken for a `.ttf`
+    class, and only the selector text ahead of each `{` is scanned so
+    that declarations cannot contribute either.
+
+    Args:
+        None
+
+    Returns:
+        A mapping of class name to the first stylesheet that defines it.
+    """
+    defined: dict[str, Path] = {}
+    for path in webui_files(".css"):
+        source = COMMENT_PATTERN.sub(" ", path.read_text(encoding="utf-8"))
+        source = CSS_STRING_PATTERN.sub('""', source)
+        for selector in CSS_SELECTOR_PATTERN.findall(source):
+            for name in CLASS_TOKEN_PATTERN.findall(selector):
+                defined.setdefault(name, path)
+    return defined
+
+
+def html_classes() -> dict[str, Path]:
+    """Return each class named in a `class="..."` attribute, and where.
+
+    Args:
+        None
+
+    Returns:
+        A mapping of class name to the first HTML file that applies it.
+    """
+    applied: dict[str, Path] = {}
+    for path in webui_files(".html"):
+        text = path.read_text(encoding="utf-8")
+        for attribute in CLASS_ATTRIBUTE_PATTERN.findall(text):
+            for name in attribute.split():
+                applied.setdefault(name, path)
+    return applied
+
+
+def script_classes() -> tuple[dict[str, Path], set[str], set[str]]:
+    """Return the classes scripts apply, read back, and merely mention.
+
+    The three are deliberately different questions. A class a script
+    *applies* has to be justified by styling or by a read, exactly like
+    one written into the HTML. A class a script *reads* is doing real
+    work as a behavioral hook even with no styling behind it. And a
+    class merely *mentioned* anywhere in any string is enough to keep a
+    stylesheet rule from counting as dead, which is the looser test the
+    orphan check wants -- class names get assembled at run time, and a
+    rule should not be reported as unreachable just because its name
+    only ever appears as a fragment of some larger expression.
+
+    Args:
+        None
+
+    Returns:
+        A tuple of (applied class -> defining script, classes read back,
+        every identifier-shaped token appearing in any string literal).
+    """
+    applied: dict[str, Path] = {}
+    read: set[str] = set()
+    mentioned: set[str] = set()
+
+    for path in webui_files(".js"):
+        text = path.read_text(encoding="utf-8")
+
+        for argument in JS_APPLY_PATTERN.findall(text):
+            for _, literal in JS_STRING_PATTERN.findall(argument):
+                for name in literal.split():
+                    applied.setdefault(name, path)
+        for _, literal in JS_CLASSNAME_PATTERN.findall(text):
+            for name in literal.split():
+                applied.setdefault(name, path)
+
+        for _, selector in JS_READ_PATTERN.findall(text):
+            read.update(CLASS_TOKEN_PATTERN.findall(selector))
+        for _, literal in JS_CONTAINS_PATTERN.findall(text):
+            read.update(literal.split())
+
+        for _, literal in JS_STRING_PATTERN.findall(text):
+            for token in re.split(r"[^\w-]+", literal):
+                if token:
+                    mentioned.add(token.lstrip("."))
+
+    return applied, read, mentioned
+
+
+def svg_symbol_ids(path: Path) -> set[str]:
+    """Return every `id` declared inside an SVG sprite.
+
+    Args:
+        path: The sprite file to read.
+
+    Returns:
+        The set of declared id values, empty if the file is unreadable.
+    """
+    if not path.is_file():
+        return set()
+    return set(ID_ATTRIBUTE_PATTERN.findall(path.read_text(encoding="utf-8")))
+
+
+def allowed_unstyled(name: str) -> bool:
+    """Report whether a class is a documented, deliberate exception.
+
+    Args:
+        name: The class name to test.
+
+    Returns:
+        True if the class is allowlisted by name or by prefix.
+    """
+    return name in ALLOWED_UNSTYLED_CLASSES or name.startswith(
+        ALLOWED_UNUSED_CLASS_PREFIXES
+    )
+
+
+def check_classes() -> list[str]:
+    """Return every orphaned stylesheet rule and unstyled class error.
+
+    Args:
+        None
+
+    Returns:
+        One message per problem, empty if every class is accounted for.
+    """
+    defined = css_classes()
+    from_html = html_classes()
+    from_script, read_back, mentioned = script_classes()
+    errors: list[str] = []
+
+    # An orphaned rule: styling that nothing anywhere can select.
+    referenced = set(from_html) | set(from_script) | read_back | mentioned
+    for name, path in sorted(defined.items()):
+        if name not in referenced and not allowed_unstyled(name):
+            errors.append(
+                f"{path.relative_to(ROOT)}: orphaned style .{name} "
+                "(no HTML or script references it)"
+            )
+
+    # An unstyled class: markup or script effort that has no effect.
+    applied = {**from_html, **from_script}
+    for name, path in sorted(applied.items()):
+        if name in defined or name in read_back or allowed_unstyled(name):
+            continue
+        errors.append(
+            f"{path.relative_to(ROOT)}: undefined style {name} "
+            "(no stylesheet rule and no script reads it)"
+        )
+    return errors
+
+
+def check_references() -> list[str]:
+    """Return every broken file, sprite-symbol, and fragment reference.
+
+    Args:
+        None
+
+    Returns:
+        One message per problem, empty if every reference resolves.
+    """
+    errors: list[str] = []
+    for path in webui_files(".html"):
+        text = path.read_text(encoding="utf-8")
+        local_ids = set(ID_ATTRIBUTE_PATTERN.findall(text))
+        relative = path.relative_to(ROOT)
+
+        for reference in REFERENCE_PATTERN.findall(text):
+            target = reference.strip()
+            # A bare "#" is the conventional placeholder for an anchor
+            # whose behavior comes from a click handler, not navigation.
+            if not target or target == "#" or target.startswith(NON_FILE_SCHEMES):
+                continue
+
+            file_part, separator, fragment = target.partition("#")
+
+            if not file_part:
+                if fragment not in local_ids:
+                    errors.append(f"{relative}: missing anchor #{fragment}")
+                continue
+
+            destination = (path.parent / file_part).resolve()
+            if not destination.is_file():
+                errors.append(f"{relative}: missing target {target}")
+                continue
+
+            if (
+                separator
+                and destination.suffix.lower() == ".svg"
+                and fragment not in svg_symbol_ids(destination)
+            ):
+                errors.append(f"{relative}: missing sprite symbol {target}")
+    return errors
+
+
+def validate() -> list[str]:
+    """Return every class and reference error across the webui tree.
+
+    Args:
+        None
+
+    Returns:
+        One message per problem, empty when the tree is consistent.
+    """
+    return check_classes() + check_references()
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Parse arguments (there are none besides `-h`/`--help`), then validate.
+
+    Args:
+        argv: Command-line arguments, excluding the program name. `None`
+            (the default, used when run as a script) tells `argparse` to
+            read `sys.argv[1:]` itself; a real list is used by tests that
+            want to drive `main` in-process instead of via a subprocess.
+
+    Returns:
+        0 if every class and reference is accounted for; 1 otherwise.
+    """
+    # This script takes no real options -- `ArgumentParser` is used only
+    # so `-h`/`--help` prints the full module docstring above (`argparse`
+    # shows `description=` verbatim) instead of the argparse-default
+    # bare usage line, and so passing any unexpected argument fails with
+    # a clear "unrecognized arguments" error instead of being silently
+    # ignored.
+    parser = argparse.ArgumentParser(
+        prog="check-webui-assets",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.parse_args(argv)
+
+    errors = validate()
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    print("All desktop GUI styles, links, and icon references are connected")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

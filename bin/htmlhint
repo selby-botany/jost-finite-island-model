@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# HTMLHint for the desktop GUI's HTML, pinned the same two-part way
+# `bin/eslint` is: the Node image by digest, the HTMLHint release by
+# exact version. HTMLHint covers the structural mistakes a browser will
+# quietly paper over -- duplicate `id` attributes, unclosed tags, stray
+# attributes. It deliberately does not check that links point at real
+# files; `dev/bin/check-webui-assets` does that.
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+image=${HTMLHINT_IMAGE:-node}
+default_digest=sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81
+digest=${HTMLHINT_IMAGE_DIGEST:-${default_digest}}
+version=${HTMLHINT_VERSION:-1.9.2}
+cache=${WEBUI_LINT_CACHE_VOLUME:-fim-webui-lint-npm-cache}
+
+exec docker run --rm \
+    --volume "${root}:/workspace" \
+    --volume "${cache}:/npm-cache" \
+    --env npm_config_cache=/npm-cache \
+    --env npm_config_update_notifier=false \
+    --workdir /workspace \
+    "${image}@${digest}" \
+    npx --yes --prefer-offline --quiet "htmlhint@${version}" "$@"

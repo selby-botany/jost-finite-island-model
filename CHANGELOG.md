@@ -8,6 +8,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- JavaScript, CSS, and HTML linting for the desktop GUI, closing the
+  last gap in the repository's lint coverage: `bin/eslint`,
+  `bin/stylelint`, and `bin/htmlhint` join the existing Docker-backed
+  wrappers in `bin/` and are run by `dev/bin/validate-repository`. Each
+  is pinned two ways — the Node image by digest and the tool release by
+  exact version — because no first-party container image exists for any
+  of the three. Their configurations (`eslint.config.mjs`,
+  `.stylelintrc.json`, `.htmlhintrc`, and `.htmlhintrc-fragment` for the
+  generated Help partials) are checked in. `eslint.config.mjs` derives
+  the GUI's shared cross-file globals by reading the scripts, since they
+  are classic `<script>` tags sharing one global scope rather than
+  modules; hand-maintaining that list would have silently rotted.
+- `dev/bin/check-webui-assets`, the desktop GUI's counterpart to
+  `dev/bin/check-doc-links`, answering the questions no single-file
+  linter can: that no stylesheet rule is unreachable, that no class is
+  applied without either styling or a script that reads it, that every
+  local `href`/`src` resolves, and that every `<use href="...#icon">`
+  names a symbol really present in the icon sprite. It needs no Docker
+  and runs in `./build`, after the Help pages are regenerated.
 - `fim()` gains an `engine_backend` keyword selecting which of three
   engine implementations actually runs a batch, all behind the same
   public API and producing the same `RunResult`/`FinalReport` shape:
@@ -285,6 +304,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Four dead references in the desktop GUI, all found by the new checks
+  on their first run: an orphaned `.loaded-summary` stylesheet rule, a
+  `rail-label` class on seven nav-rail labels with no rule behind it, an
+  `error-dots` wrapper class nothing styled or read, and a `p0-row`
+  class a script applied to the batch baseline row but nothing ever
+  used.
+- A misplaced pair of backticks in `doc/usage.md` that emitted an
+  unbalanced `</sub>` into the generated in-app Help page.
+- Two wrappers, `bin/fim-gui` and `bin/poppler`, were absent from
+  `dev/bin/validate-repository`'s hand-maintained ShellCheck list and so
+  had never been checked. A new test now derives that list from `bin/`
+  itself, so the omission cannot recur.
+- `dev/bin/README.md` no longer claims `dev/bin/validate-repository`
+  runs as part of `./build --ci`; it never has, and cannot, since every
+  tool it runs requires Docker and `./build` deliberately does not.
 - The scatter plot's "most frequent allele" marker (`scatter.png` and
   the GUI's own live view alike) now draws as a hollow ring, not merely
   a differently colored disc — design principle 5/§11.4 (botanist GUI

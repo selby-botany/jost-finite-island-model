@@ -505,7 +505,6 @@ function renderBatchTable(replicates, p0Statistics) {
     // Column order: Generation | Replicate | Outcome | ...stats | Open
     if (p0Statistics) {
         const baseRow = document.createElement("tr");
-        baseRow.classList.add("p0-row");
         const baseCells = [
             0,
             // Placeholder for Replicate column — shared by the whole batch.
@@ -527,7 +526,9 @@ function renderBatchTable(replicates, p0Statistics) {
     // predictable, stable order rather than insertion/completion order.
     const sorted = [...replicates].sort((a, b) => {
         const genDiff = a.generation - b.generation;
-        if (genDiff !== 0) return genDiff;
+        if (genDiff !== 0) {
+            return genDiff;
+        }
         // Extract the numeric suffix from the replicateId ("-r001" etc.)
         // for a numeric, not lexicographic, secondary sort.
         const numA = Number(/-r(\d+)$/.exec(a.replicateId || "")?.[1] ?? 0);

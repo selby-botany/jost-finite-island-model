@@ -98,6 +98,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_sdist_contents`](#validation.test_sdist_contents)
   - [`test_simulator_equilibrium`](#validation.test_simulator_equilibrium)
   - [`test_test_docs`](#validation.test_test_docs)
+  - [`test_webui_assets`](#validation.test_webui_assets)
   - [`test_workflow_pins`](#validation.test_workflow_pins)
 - [`test/viz/`](#group-viz)
   - [`test_plots`](#viz.test_plots)
@@ -19456,6 +19457,144 @@ def test_every_test_directory_is_a_documented_group() -> None
 `_GROUPS` here (and the generator's own) covers every real
 subdirectory of `test/` that actually holds `.py` files, other than
 `test/data/` (fixture JSON, not code).
+
+<a id="validation.test_webui_assets"></a>
+
+# validation.test\_webui\_assets
+
+Tests for the desktop GUI style, link, and icon-reference checker.
+
+<a id="validation.test_webui_assets.test_checker_accepts_a_consistent_tree"></a>
+
+#### test\_checker\_accepts\_a\_consistent\_tree
+
+```python
+def test_checker_accepts_a_consistent_tree(tmp_path: Path) -> None
+```
+
+Styled classes, resolving links, and a real sprite symbol pass.
+
+<a id="validation.test_webui_assets.test_checker_rejects_a_stylesheet_rule_nothing_references"></a>
+
+#### test\_checker\_rejects\_a\_stylesheet\_rule\_nothing\_references
+
+```python
+def test_checker_rejects_a_stylesheet_rule_nothing_references(
+        tmp_path: Path) -> None
+```
+
+A class with styling but no user anywhere is dead weight.
+
+<a id="validation.test_webui_assets.test_checker_rejects_a_class_with_neither_styling_nor_a_reader"></a>
+
+#### test\_checker\_rejects\_a\_class\_with\_neither\_styling\_nor\_a\_reader
+
+```python
+def test_checker_rejects_a_class_with_neither_styling_nor_a_reader(
+        tmp_path: Path) -> None
+```
+
+Markup that applies a class nothing acts on does nothing at all.
+
+<a id="validation.test_webui_assets.test_checker_accepts_an_unstyled_class_a_script_reads_back"></a>
+
+#### test\_checker\_accepts\_an\_unstyled\_class\_a\_script\_reads\_back
+
+```python
+def test_checker_accepts_an_unstyled_class_a_script_reads_back(
+        tmp_path: Path) -> None
+```
+
+A class used purely as a behavioral hook is doing real work.
+
+`showScreen` in the real GUI selects `.screen` without styling it;
+such a class is justified by the script that queries it, so it must
+not be reported for having no rule behind it.
+
+<a id="validation.test_webui_assets.test_checker_rejects_a_class_a_script_applies_but_never_reads"></a>
+
+#### test\_checker\_rejects\_a\_class\_a\_script\_applies\_but\_never\_reads
+
+```python
+def test_checker_rejects_a_class_a_script_applies_but_never_reads(
+        tmp_path: Path) -> None
+```
+
+A write-only class is as inert as an unused one in the markup.
+
+<a id="validation.test_webui_assets.test_checker_accepts_the_allowlisted_generator_classes"></a>
+
+#### test\_checker\_accepts\_the\_allowlisted\_generator\_classes
+
+```python
+def test_checker_accepts_the_allowlisted_generator_classes(
+        tmp_path: Path) -> None
+```
+
+Classes emitted by `generate-help-html` have a program as their user.
+
+<a id="validation.test_webui_assets.test_checker_rejects_a_link_to_a_file_that_is_not_there"></a>
+
+#### test\_checker\_rejects\_a\_link\_to\_a\_file\_that\_is\_not\_there
+
+```python
+def test_checker_rejects_a_link_to_a_file_that_is_not_there(
+        tmp_path: Path) -> None
+```
+
+A stylesheet or script that was renamed away is caught.
+
+<a id="validation.test_webui_assets.test_checker_rejects_a_sprite_symbol_that_is_not_in_the_sprite"></a>
+
+#### test\_checker\_rejects\_a\_sprite\_symbol\_that\_is\_not\_in\_the\_sprite
+
+```python
+def test_checker_rejects_a_sprite_symbol_that_is_not_in_the_sprite(
+        tmp_path: Path) -> None
+```
+
+A missing icon renders as nothing rather than as an error.
+
+<a id="validation.test_webui_assets.test_checker_rejects_a_same_page_anchor_with_no_matching_id"></a>
+
+#### test\_checker\_rejects\_a\_same\_page\_anchor\_with\_no\_matching\_id
+
+```python
+def test_checker_rejects_a_same_page_anchor_with_no_matching_id(
+        tmp_path: Path) -> None
+```
+
+A renamed heading breaks in-page Help navigation silently.
+
+<a id="validation.test_webui_assets.test_checker_does_not_mistake_a_font_file_suffix_for_a_class"></a>
+
+#### test\_checker\_does\_not\_mistake\_a\_font\_file\_suffix\_for\_a\_class
+
+```python
+def test_checker_does_not_mistake_a_font_file_suffix_for_a_class(
+        tmp_path: Path) -> None
+```
+
+`url("Lato.ttf")` inside a rule must not read as a `.ttf` class.
+
+The class scan strips comments and quoted strings before looking for
+selectors precisely so that a file extension inside `url()` cannot
+be reported as a stylesheet rule nobody uses.
+
+<a id="validation.test_webui_assets.test_validate_repository_shellchecks_every_wrapper_in_bin"></a>
+
+#### test\_validate\_repository\_shellchecks\_every\_wrapper\_in\_bin
+
+```python
+def test_validate_repository_shellchecks_every_wrapper_in_bin() -> None
+```
+
+The hand-maintained `shellcheck` path list must not fall behind.
+
+`dev/bin/validate-repository` names each script it checks by hand,
+on purpose -- see the comment above that list. The cost of that
+choice is that a newly added wrapper is silently left unchecked, so
+this test is what makes the list self-correcting.
 
 <a id="validation.test_workflow_pins"></a>
 

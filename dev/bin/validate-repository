@@ -26,24 +26,44 @@ checkout:
   - markdownlint  every Markdown file in the repository, for consistent,
                   correctly structured formatting (heading levels that
                   skip a level, an unclosed code fence, and so on).
+  - eslint        the desktop GUI's browser JavaScript, for mistakes the
+                  browser would not report at all -- a misspelled DOM
+                  call, a variable that is never used because the code
+                  that used it moved, a comparison against the wrong
+                  thing.
+  - stylelint     the desktop GUI's stylesheets, for the same kind of
+                  silent fault in CSS: an unknown property, a selector
+                  written twice, a calc() with a missing space that a
+                  browser simply ignores.
+  - htmlhint      the desktop GUI's HTML, for structural mistakes a
+                  browser papers over rather than reports -- two
+                  elements sharing one id, a tag left unclosed, an
+                  image with no alt text.
   - gitleaks      a scan of the entire repository for text that looks
                   like a credential, API key, or password -- something
                   that must never be committed, checked here rather
                   than trusted to memory.
 
+Not run here, because it needs no Docker and so belongs on the everyday
+path instead: dev/bin/check-webui-assets, which checks that the GUI's
+styles, links, and icon references still line up with each other. It
+runs as part of ./build.
+
 Why this exists:
   These checks catch a different class of mistake than the test suite --
   a broken shell script, a malformed YAML workflow file, an inconsistent
-  Markdown heading, or a leaked API key or password -- before it reaches
-  a reviewer or a released package. This matters even for a researcher
-  who never expects to touch a shell script directly: a broken CI
-  workflow or a leaked secret affects the safety and reliability of the
-  whole project, not just whichever file happened to change.
+  Markdown heading, a dead stylesheet rule, or a leaked API key or
+  password -- before it reaches a reviewer or a released package. This
+  matters even for a researcher who never expects to touch a shell
+  script directly: a broken CI workflow or a leaked secret affects the
+  safety and reliability of the whole project, not just whichever file
+  happened to change.
 
-  None of the four tools above need to be installed on your machine
+  None of the tools above need to be installed on your machine
   directly. Each one is a pinned, Docker-backed wrapper script living in
   this project's own bin/ directory (bin/shellcheck, bin/yamllint,
-  bin/markdownlint, bin/gitleaks) -- running the tool actually means
+  bin/markdownlint, bin/eslint, bin/stylelint, bin/htmlhint,
+  bin/gitleaks) -- running the tool actually means
   running a specific, version-locked container image, the same one every
   time, on every machine and in CI alike. That way a result never
   depends on which version of a linter someone happened to have
@@ -77,10 +97,14 @@ export PATH
 # see every shell script this project actually ships.
 shellcheck \
     build \
+    bin/eslint \
     bin/fim \
+    bin/fim-gui \
     bin/gitleaks \
+    bin/htmlhint \
     bin/markdownlint \
     bin/mypy \
+    bin/poppler \
     bin/pydoc-markdown \
     bin/pyinstaller \
     bin/pytest \
@@ -88,6 +112,7 @@ shellcheck \
     bin/python3 \
     bin/ruff \
     bin/shellcheck \
+    bin/stylelint \
     bin/yamllint \
     dev/bin/validate-repository \
     dev/bin/generate-api-docs \
@@ -127,6 +152,19 @@ markdownlint \
     "#site/**" \
     "#src/fim/API.md" \
     "#test/TESTS.md"
+# The desktop GUI's own browser sources. Each tool is pointed at a glob
+# rather than a directory because that is the form all three accept, and
+# the globs are quoted so the tool expands them inside the container
+# rather than the shell expanding them out here.
+eslint "src/fim/gui/webui/**/*.js"
+stylelint "src/fim/gui/webui/**/*.css"
+# `index.html` is a whole document; the files under `help/` are
+# generated body fragments with no doctype, no <html>, and no <title>,
+# so they are checked against a config that drops those three
+# document-level rules and keeps everything else. See the comment at the
+# top of `.htmlhintrc-fragment`.
+htmlhint src/fim/gui/webui/index.html
+htmlhint --config .htmlhintrc-fragment "src/fim/gui/webui/help/*.html"
 # The whole repository, including its full commit history (`gitleaks
 # dir` scans the working tree; the separate `.github/workflows/gitleaks-
 # ci.yml` job scans history on push) -- `--redact` prints only enough of

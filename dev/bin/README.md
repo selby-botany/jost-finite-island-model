@@ -8,6 +8,7 @@
   - [`calibrate-auto-threshold`](#calibrate-auto-threshold)
   - [`calibrate-statistical-bands`](#calibrate-statistical-bands)
   - [`check-doc-links`](#check-doc-links)
+  - [`check-webui-assets`](#check-webui-assets)
   - [`compare-against-hierfstat`](#compare-against-hierfstat)
   - [`extract-release-notes`](#extract-release-notes)
   - [`generate-api-docs`](#generate-api-docs)
@@ -17,7 +18,7 @@
   - [`validate-repository`](#validate-repository)
   - [Related documents](#related-documents)
 
-These twelve commands keep the project trustworthy: they make sure the
+These thirteen commands keep the project trustworthy: they make sure the
 documentation you read matches the code that actually runs, that a
 release's own history is recorded accurately, and that no credential or
 badly formed file ever gets committed. None of them run a simulation --
@@ -68,13 +69,14 @@ run by hand.
 | [`calibrate-auto-threshold`](#calibrate-auto-threshold) | Measures, on your own machine, the deme count above which `engine_backend: auto` should switch engines — the shipped default was measured on a different machine and this project's own history has already found it can go stale |
 | [`calibrate-statistical-bands`](#calibrate-statistical-bands) | Re-measures how much random variation is normal for the three published-science validation scenarios, so the tests that check the simulator against them use an honest, evidence-based tolerance |
 | [`check-doc-links`](#check-doc-links) | Confirms every link between documentation pages actually goes somewhere, and that no page is orphaned with nothing linking to it |
+| [`check-webui-assets`](#check-webui-assets) | Confirms the desktop app's styles, links, and icons still line up with each other -- no styling rule nothing uses, no class nothing styles, no link or icon pointing at something that is not there |
 | [`compare-against-hierfstat`](#compare-against-hierfstat) | Runs an independently-written simulator (hierfstat, an R package, inside Docker) alongside this project's own, and prints how closely the two agree |
 | [`extract-release-notes`](#extract-release-notes) | Pulls one version's own section out of `CHANGELOG.md`, for GitHub's release page |
 | [`generate-api-docs`](#generate-api-docs) | Rebuilds the generated API reference (`src/fim/API.md`) from the code's own docstrings |
 | [`generate-heatmap-queue`](#generate-heatmap-queue) | Writes a `benchmark-queue` file that measures every combination of deme count and locus length at once, to check whether the engines' own speed crossover is really a simple rectangle in that two-setting space |
 | [`generate-help-html`](#generate-help-html) | Rebuilds the desktop app's in-app Help screen content from `doc/usage.md`/`doc/configuration.md` |
 | [`render-heatmap`](#render-heatmap) | Turns `generate-heatmap-queue`'s own results into two readable grids: which engine won at each combination, and by how much |
-| [`validate-repository`](#validate-repository) | Runs every repository-hygiene checker (shell scripts, YAML, Markdown, leaked secrets) over the whole checkout |
+| [`validate-repository`](#validate-repository) | Runs every repository-hygiene checker (shell scripts, YAML, Markdown, JavaScript, CSS, HTML, leaked secrets) over the whole checkout |
 
 Every command supports `-h`/`--help` for the same explanation you are
 reading now, plus its exact command-line syntax.
@@ -417,6 +419,55 @@ from wherever it is run. Prints one line per problem found (if any) and
 exits with a non-zero status; prints a single confirmation line and
 exits successfully if everything checks out.
 
+## `check-webui-assets`
+
+**What it does:** Reads the desktop app's own browser files -- its
+HTML pages, its stylesheets, and its scripts -- and checks four things
+about how they fit together: that every styling rule is one some page or
+script can actually reach, that every class name written onto an element
+either has styling behind it or is used by a script for something, that
+every link and every file reference points at a file that is really
+there, and that every icon reference names an icon that really exists in
+the app's icon file.
+
+**Why it matters:** The desktop app is not one file; it is dozens of
+small ones that only become a working screen together. The tools that
+check each file on its own -- `eslint`, `stylelint`, `htmlhint`, run by
+[`validate-repository`](#validate-repository) -- deliberately never look
+across that boundary, so none of them can tell you that a button's
+styling was deleted last month and the button has been plain ever since,
+or that an icon reference was misspelled and one toolbar button has been
+quietly blank. Those faults are invisible in exactly the wrong way: the
+app still starts, the screen still appears, and nothing reports an
+error. Only something that reads all the files together can notice, and
+this is that something. It is the desktop app's counterpart to
+[`check-doc-links`](#check-doc-links), which asks the same question of
+the documentation.
+
+A small number of class names are emitted by
+[`generate-help-html`](#generate-help-html) rather than written by hand,
+and so have a program rather than a file as their user. Those are listed
+as named exceptions at the top of the script, each with the reason it is
+there.
+
+**When to run it:** Any time you change the desktop app's HTML,
+stylesheets, or screen scripts -- particularly when deleting something,
+which is when a reference is most likely to be left behind pointing at
+nothing. It also runs automatically as part of `./build`, after the
+in-app Help pages are regenerated, so a stale reference is caught before
+it is committed. It needs no Docker.
+
+**Usage:**
+
+```console
+dev/bin/check-webui-assets
+```
+
+Takes no arguments. It always checks the whole desktop app, starting
+from wherever it is run. Prints one line per problem found (if any) and
+exits with a non-zero status; prints a single confirmation line and
+exits successfully if everything checks out.
+
 ## `compare-against-hierfstat`
 
 **What it does:** Builds a small Docker image containing
@@ -690,25 +741,29 @@ else needs to be told which files to read.
 
 ## `validate-repository`
 
-**What it does:** Runs four separate checking tools over the whole
+**What it does:** Runs seven separate checking tools over the whole
 repository in one command: `shellcheck` (checks every shell script for
 real bugs), `yamllint` (checks the GitHub Actions/Dependabot
 configuration files for structural mistakes), `markdownlint` (checks
-every Markdown file for consistent formatting), and `gitleaks` (scans
-everything for text that looks like an accidentally-committed password,
-API key, or other credential).
+every Markdown file for consistent formatting), `eslint`, `stylelint`,
+and `htmlhint` (check the desktop app's JavaScript, stylesheets, and
+HTML for the faults a web browser would never report -- a misspelled
+call, an unknown style property, two elements sharing one name), and
+`gitleaks` (scans everything for text that looks like an
+accidentally-committed password, API key, or other credential).
 
-**Why it matters:** These four checks catch a different kind of mistake
+**Why it matters:** These checks catch a different kind of mistake
 than the test suite does -- not "does the simulator compute the right
 answer," but "is the surrounding project itself sound": a shell script
 with a bug that only shows up on someone else's machine, a broken
 continuous-integration configuration file, an inconsistently formatted
-guide, or -- most seriously -- a real credential accidentally left in a
+guide, a stylesheet a browser silently ignores half of, or -- most
+seriously -- a real credential accidentally left in a
 file that gets committed and pushed to a public repository, where it
 would then need to be treated as compromised and rotated immediately.
 This matters for the project's overall trustworthiness even if you never
 personally touch a shell script or a CI configuration file yourself. You
-do not need any of the four tools installed on your own computer to run
+do not need any of the seven tools installed on your own computer to run
 this: each one is a specific, version-pinned tool that runs inside
 Docker (see the [maintainer runbook](../../CONTRIBUTING.md)'s own note
 on the Docker-backed wrappers in `bin/`), the same exact version every
@@ -718,7 +773,10 @@ have lying around.
 
 **When to run it:** Before a release, or any time you want reassurance
 that the whole repository -- not just the specific files you changed --
-is in good shape. It also runs as part of `./build --ci`.
+is in good shape. It is not part of `./build`, because every tool it
+runs needs Docker and `./build` deliberately does not; run it by hand.
+Its companion check that needs no Docker,
+[`check-webui-assets`](#check-webui-assets), does run in `./build`.
 
 **Usage:**
 

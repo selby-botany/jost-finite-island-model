@@ -638,7 +638,7 @@ Written only for n<sub>replicates</sub> greater than one, alongside the
 files above.
 
 `summary.json` maps each reported statistic name (`D`, G<sub>ST</sub>, E<sub>ST</sub>,
-K<sub>ST</sub>, H<sub>S</sub>, `H<sub>T`</sub>, H<sub>ST</sub>) to its across-replicate confidence interval:
+K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>) to its across-replicate confidence interval:
 
 ```json
 {
