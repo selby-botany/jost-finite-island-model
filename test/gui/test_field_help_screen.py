@@ -1,13 +1,14 @@
-"""Headless functional tests for the Configure workspace's inline field
-tooltips (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
-redesign.md` §4.6).
+"""Headless functional tests for the inline field tooltips (botanist GUI
+design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
+Configure, plus the Home/open-run screen's own two re-analysis controls
+that share the same mechanism.
 
 Real DOM-driven proof that `webui/field-help.js` actually shows and hides
 the tooltip bubble on hover and on keyboard focus alike --
 `test/gui/test_field_help.py`'s own static checks already prove every
-Configure field/group has a real `FIELD_HELP` entry; these tests prove
-the page's own JavaScript actually shows it, which no static-analysis
-test can check.
+field/group on either screen has a real `FIELD_HELP` entry; these tests
+prove the page's own JavaScript actually shows it, which no static-
+analysis test can check.
 """
 
 from __future__ import annotations
@@ -140,6 +141,73 @@ def test_a_group_legend_is_keyboard_focusable_and_shows_its_own_tooltip(
             "hidden: document.querySelector('.field-tooltip').hidden, "
             "matchesFieldHelp: document.querySelector('.field-tooltip')"
             ".textContent === window.FIM_FIELD_HELP.m_mode"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("hidden") is False,
+    )
+
+    assert settled["tabIndex"] == 0
+    assert settled["hidden"] is False
+    assert settled["matchesFieldHelp"] is True
+
+
+def test_the_open_run_screens_differentiation_orders_label_shows_its_tooltip(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The open-run screen's own `data-field-help` label -- not the
+    `field-<key>` id convention `wireFieldTooltip`'s callers elsewhere all
+    use -- still resolves to the right `FIELD_HELP` entry.
+
+    Exercises the code path `wireAllFieldTooltips` added for this screen:
+    the key comes from `label.dataset.fieldHelp` directly, not from
+    slicing a `field-` prefix off `label.htmlFor` (this label's own `for`
+    is `open-run-differentiation-orders`, which has no such prefix).
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "document.querySelector("
+            "'label[for=\"open-run-differentiation-orders\"]')"
+            ".dispatchEvent(new Event('mouseenter'));"
+        ),
+        read=(
+            "({"
+            "hidden: document.querySelector('.field-tooltip').hidden, "
+            "matchesFieldHelp: document.querySelector('.field-tooltip')"
+            ".textContent === window.FIM_FIELD_HELP"
+            ".open_run_differentiation_orders"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("hidden") is False,
+    )
+
+    assert settled["hidden"] is False
+    assert settled["matchesFieldHelp"] is True
+
+
+def test_the_open_run_screens_generation_legend_shows_its_own_tooltip(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The open-run screen's own "Generation" mode-selector group works
+    the same way `m_mode`'s Configure-side legend already does, confirming
+    the widened `wireAllFieldTooltips` selector actually reaches it."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "document.querySelector("
+            "'legend[data-field-help=\"open_run_generation_mode\"]')"
+            ".dispatchEvent(new Event('mouseenter'));"
+        ),
+        read=(
+            "({"
+            "tabIndex: document.querySelector("
+            "'legend[data-field-help=\"open_run_generation_mode\"]')"
+            ".tabIndex, "
+            "hidden: document.querySelector('.field-tooltip').hidden, "
+            "matchesFieldHelp: document.querySelector('.field-tooltip')"
+            ".textContent === window.FIM_FIELD_HELP.open_run_generation_mode"
             "})"
         ),
         is_ready=lambda value: value is not None and value.get("hidden") is False,

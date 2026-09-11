@@ -8133,15 +8133,17 @@ with no dependency on either value's own exact digits.
 
 # gui.test\_field\_help
 
-Static-analysis guard over the Configure workspace's inline field
-tooltips (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
-redesign.md` §4.6).
+Static-analysis guard over the inline field tooltips (botanist GUI
+design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
+Configure, plus the Home/open-run screen's own two re-analysis controls
+that share the same mechanism outside that section's own Configure-only
+scope.
 
 `webui/field-help.js`'s own `FIELD_HELP` object is the single content
 source every tooltip draws from -- these tests check both directions of
-the one invariant that keeps it honest: every key names a real Configure
-field or mode-selector group this screen actually has, and every such
-field or group this screen actually has is named by a real key. Static,
+the one invariant that keeps it honest: every key names a real field or
+mode-selector group one of these two screens actually has, and every such
+field or group either screen actually has is named by a real key. Static,
 not DOM-driven (`test_config_modal_dialogs.py`'s own precedent): both
 `index.html` and `field-help.js` are plain text on disk, so this answers
 "did someone add a field without a tooltip, or leave a stale tooltip for
@@ -8157,18 +8159,28 @@ real hover/focus session.
 def test_screen_configure_exists_exactly_once() -> None
 ```
 
-`_configure_section_html`'s own slicing assumption holds.
+`_section_html`'s own slicing assumption holds for Configure.
 
 A second `screen-configure` (or a first one removed entirely) would
 make the `str.index` calls above silently return the wrong slice --
 checked directly here rather than trusted implicitly.
 
-<a id="gui.test_field_help.test_every_field_help_key_names_a_real_configure_field_or_group"></a>
+<a id="gui.test_field_help.test_screen_open_run_exists_exactly_once"></a>
 
-#### test\_every\_field\_help\_key\_names\_a\_real\_configure\_field\_or\_group
+#### test\_screen\_open\_run\_exists\_exactly\_once
 
 ```python
-def test_every_field_help_key_names_a_real_configure_field_or_group() -> None
+def test_screen_open_run_exists_exactly_once() -> None
+```
+
+`_section_html`'s own slicing assumption holds for open-run.
+
+<a id="gui.test_field_help.test_every_field_help_key_names_a_real_field_or_group"></a>
+
+#### test\_every\_field\_help\_key\_names\_a\_real\_field\_or\_group
+
+```python
+def test_every_field_help_key_names_a_real_field_or_group() -> None
 ```
 
 No `FIELD_HELP` entry is stale -- every key matches a real field/group.
@@ -8190,20 +8202,31 @@ Catches a field added to Configure later without a matching tooltip
 -- design §4.6's own "every field carries a hover/focus tooltip,"
 not "most fields."
 
+<a id="gui.test_field_help.test_every_open_run_field_and_group_has_a_tooltip"></a>
+
+#### test\_every\_open\_run\_field\_and\_group\_has\_a\_tooltip
+
+```python
+def test_every_open_run_field_and_group_has_a_tooltip() -> None
+```
+
+Every open-run field/group has a `FIELD_HELP` entry -- none forgotten.
+
 <a id="gui.test_field_help_screen"></a>
 
 # gui.test\_field\_help\_screen
 
-Headless functional tests for the Configure workspace's inline field
-tooltips (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
-redesign.md` §4.6).
+Headless functional tests for the inline field tooltips (botanist GUI
+design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
+Configure, plus the Home/open-run screen's own two re-analysis controls
+that share the same mechanism.
 
 Real DOM-driven proof that `webui/field-help.js` actually shows and hides
 the tooltip bubble on hover and on keyboard focus alike --
 `test/gui/test_field_help.py`'s own static checks already prove every
-Configure field/group has a real `FIELD_HELP` entry; these tests prove
-the page's own JavaScript actually shows it, which no static-analysis
-test can check.
+field/group on either screen has a real `FIELD_HELP` entry; these tests
+prove the page's own JavaScript actually shows it, which no static-
+analysis test can check.
 
 <a id="gui.test_field_help_screen.test_hovering_a_field_label_shows_its_tooltip_and_leaving_hides_it"></a>
 
@@ -8273,6 +8296,37 @@ A mode-selector group's own `<legend>` is a real, focusable tooltip trigger.
 `tabIndex = 0` is what makes this reachable at all for a keyboard-
 only user, checked directly here, not merely assumed from reading
 the source.
+
+<a id="gui.test_field_help_screen.test_the_open_run_screens_differentiation_orders_label_shows_its_tooltip"></a>
+
+#### test\_the\_open\_run\_screens\_differentiation\_orders\_label\_shows\_its\_tooltip
+
+```python
+def test_the_open_run_screens_differentiation_orders_label_shows_its_tooltip(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The open-run screen's own `data-field-help` label -- not the
+`field-<key>` id convention `wireFieldTooltip`'s callers elsewhere all
+use -- still resolves to the right `FIELD_HELP` entry.
+
+Exercises the code path `wireAllFieldTooltips` added for this screen:
+the key comes from `label.dataset.fieldHelp` directly, not from
+slicing a `field-` prefix off `label.htmlFor` (this label's own `for`
+is `open-run-differentiation-orders`, which has no such prefix).
+
+<a id="gui.test_field_help_screen.test_the_open_run_screens_generation_legend_shows_its_own_tooltip"></a>
+
+#### test\_the\_open\_run\_screens\_generation\_legend\_shows\_its\_own\_tooltip
+
+```python
+def test_the_open_run_screens_generation_legend_shows_its_own_tooltip(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The open-run screen's own "Generation" mode-selector group works
+the same way `m_mode`'s Configure-side legend already does, confirming
+the widened `wireAllFieldTooltips` selector actually reaches it.
 
 <a id="gui.test_fixed_per_deme_screen"></a>
 

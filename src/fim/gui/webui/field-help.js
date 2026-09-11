@@ -4,7 +4,9 @@
  * sonnet-5-botanist-gui-redesign.md` §4.6): every Configure field and
  * mode-selector group carries a hover/focus tooltip, closing open-
  * issues-rollup item 37 ("tooltips fully scoped, never shipped, never
- * tracked as deferred").
+ * tracked as deferred"). The Home/open-run screen's own two re-analysis
+ * controls (generation mode, differentiation-q sweep) carry the same
+ * tooltip mechanism, outside §4.6's own Configure-only scope.
  *
  * `FIELD_HELP` is the "single field-help content source" §4.6 itself
  * calls for -- a plain object, one entry per `config_form.py` field
@@ -120,6 +122,13 @@ const FIELD_HELP = {
     dark_mode_override: "Follow system matches your OS's own light/dark " +
         "setting. Light or Dark overrides it for this app only, applied " +
         "immediately.",
+    open_run_generation_mode: "Which persisted generation to re-analyze: " +
+        "final (the trajectory's last persisted generation), or choose " +
+        "any other generation that was actually persisted.",
+    open_run_differentiation_orders: "Hill-number differentiation orders " +
+        "to compute at the chosen generation, comma- or space-separated " +
+        "(e.g. 0, 1, 2) — q=0 and q=2 match the report's own K_ST and D; " +
+        "q=1 matches E_ST. Blank re-analyzes with no sweep.",
 };
 
 window.FIM_FIELD_HELP = FIELD_HELP;
@@ -218,11 +227,20 @@ function wireGroupTooltip(legendElement, key) {
 }
 
 /**
- * Wire every field label and `[data-field-help]` legend inside
- * Configure. Called once, at parse time -- unlike almost everything
- * else this page wires, Configure's own field markup is static HTML
- * present from first load, not built by a later bridge call, so there
- * is nothing to wait for.
+ * Wire every field label and `[data-field-help]` legend inside Configure,
+ * plus the Home/open-run screen's own two re-analysis controls (generation
+ * mode, differentiation-q sweep). Called once, at parse time -- unlike
+ * almost everything else this page wires, this markup is static HTML
+ * present from first load, not built by a later bridge call, so there is
+ * nothing to wait for.
+ *
+ * Configure's own labels use the `field-<key>` id convention, so their
+ * `FIELD_HELP` key is derived by slicing that prefix off; the two open-run
+ * controls don't share that id convention (`open-run-generation-value`,
+ * `open-run-differentiation-orders` -- borrowed from the Tk-era screen's
+ * own ids), so they carry an explicit `data-field-help="<key>"` on the
+ * `<label>` itself instead, the same opt-in mechanism a composite
+ * `<fieldset>`'s own `<legend>` already used for its group-level tooltip.
  */
 function wireAllFieldTooltips() {
     document
@@ -231,9 +249,17 @@ function wireAllFieldTooltips() {
             wireFieldTooltip(label, label.htmlFor.slice("field-".length));
         });
     document
-        .querySelectorAll("#screen-configure legend[data-field-help]")
+        .querySelectorAll(
+            "#screen-configure legend[data-field-help], " +
+                "#screen-open-run legend[data-field-help]"
+        )
         .forEach((legend) => {
             wireGroupTooltip(legend, legend.dataset.fieldHelp);
+        });
+    document
+        .querySelectorAll("#screen-open-run label[data-field-help]")
+        .forEach((label) => {
+            wireFieldTooltip(label, label.dataset.fieldHelp);
         });
 }
 

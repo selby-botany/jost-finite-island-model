@@ -270,6 +270,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than requiring a curve that does not exist just to show a
   band that does. A reopened run without a band still shows nothing,
   unchanged.
+- Home's own "Generation" and "Differentiation-q sweep" controls (the
+  browse-for-a-`trajectory.jsonl` re-analysis form) now carry the same
+  hover/focus tooltips Configure's fields already have, explaining
+  what each does and, for the q sweep, which order matches the
+  report's own `K_ST`/`D`/`E_ST` — these two controls were the only
+  fields in the GUI without one.
 
 ### Changed
 
