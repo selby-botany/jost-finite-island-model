@@ -151,7 +151,7 @@ drawn from the actual, finite, currently-drifting collection of all the
 **This is the single most important idea to take away**: the finite island
 model is a tool for generating data with a known, exact history — exactly
 how much migration, drift, and diversity went into producing it — so that a
-candidate summary statistic (F<sub>ST</sub>, G<sub>ST</sub>, `D`, G'_{ST}, and
+candidate summary statistic (F<sub>ST</sub>, G<sub>ST</sub>, `D`, G'<sub>ST</sub>, and
 so on) can be checked against that known history rather than against
 another guess.
 
@@ -383,12 +383,12 @@ journal, year, and DOI.
     differentiation based on **G<sub>ST</sub>** and **`D`**: forget G<sub>ST</sub> but not
     all of statistics!" *Molecular Ecology* 19(18):3845–52, 2010. DOI:
     [10.1111/j.1365-294X.2010.04784.x](https://doi.org/10.1111/j.1365-294X.2010.04784.x).
-  - Whitlock MC, "G'_{ST} and `D` do not replace F<sub>ST</sub>."
+  - Whitlock MC, "G'<sub>ST</sub> and `D` do not replace F<sub>ST</sub>."
     *Molecular Ecology* 20(6):1083–91, 2011. DOI:
     [10.1111/j.1365-294X.2010.04996.x](https://doi.org/10.1111/j.1365-294X.2010.04996.x).
-    This paper proposes the standardized G'_{ST} as a partial fix to
-    the classic G<sub>ST</sub> ceiling problem, while arguing that `D`and
-    G'_{ST} answer a different question from F<sub>ST</sub> and should not
+    This paper proposes the standardized G'<sub>ST</sub> as a partial fix to
+    the classic G<sub>ST</sub> ceiling problem, while arguing that `D` and
+    G'<sub>ST</sub> answer a different question from F<sub>ST</sub> and should not
     fully replace it. Read together, this whole exchange is the applied
     debate over what a differentiation statistic should mean, and all
     sides generally argue by simulating some version of a finite island
@@ -397,7 +397,7 @@ journal, year, and DOI.
 - **Jost L, Archer F, Flanagan S, Gaggiotti O, Hoban S, Latch E,
   "Differentiation measures for conservation genetics."** *Evolutionary
   Applications* 11(7):1139–48, 2018. PMID: 30026802. A synthesis, useful as
-  a map of the whole statistic family (F<sub>ST</sub>, G<sub>ST</sub>, G'_{ST},
+  a map of the whole statistic family (F<sub>ST</sub>, G<sub>ST</sub>, G'<sub>ST</sub>,
   `D`, and others) and when each is — and is not — an appropriate choice.
   It is written for a conservation-genetics audience deciding which number
   to report, which makes it the best single paper to hand a newcomer. See

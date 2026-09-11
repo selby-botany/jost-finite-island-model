@@ -16,7 +16,14 @@ import re
 
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 CODE_SPAN_PATTERN = re.compile(r"`([^`]*)`")
-INLINE_MARKUP_PATTERN = re.compile(r"[`*_~]")
+# `*`, `` ` `` and `~` are always markup here, but an underscore is only
+# markup when it could actually open or close emphasis. CommonMark
+# forbids *intraword* `_` emphasis precisely so identifiers survive
+# unmangled, so `mutation_model` is one literal word and its anchor keeps
+# the underscore -- matching GitHub, whose slugger strips punctuation but
+# preserves `_` and `-`. Only an underscore that is not flanked by word
+# characters on both sides is stripped as emphasis markup.
+INLINE_MARKUP_PATTERN = re.compile(r"[`*~]|(?<!\w)_|_(?!\w)")
 NON_SLUG_PATTERN = re.compile(r"[^\w\- ]", re.UNICODE)
 
 

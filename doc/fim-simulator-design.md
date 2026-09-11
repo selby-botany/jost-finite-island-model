@@ -1415,17 +1415,19 @@ parameters are stated with it, below.
 ### B.1 `d` (deme count) sweep
 
 #### Setup
- - Commit: `8a07a97`
- - System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
- - OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
- - Run Date: 2026-09-03/04
- - Fixed Parameters:
-     - `N=500`
-     - `m=0.05`
-     - `mu=0.001`
-     - locus length 4 (capacity 256).
+
+- Commit: `8a07a97`
+- System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
+- OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
+- Run Date: 2026-09-03/04
+- Fixed Parameters:
+  - `N=500`
+  - `m=0.05`
+  - `mu=0.001`
+  - locus length 4 (capacity 256).
 
 #### Command
+
 ```console
 dev/bin/benchmark-engines --sweep d --values 2,3,4,6,8 \
     --replicates 16 --generations 100 --trials 3
@@ -1464,7 +1466,8 @@ dev/bin/benchmark-engines --sweep d --values 4,10,20,35,50,80,120 \
 
 `V` (`"generational-vector"`) is the fastest column at every point in both
 tables — the full measured range is `d=2` through `d=120`, with no lower
-crossover found yet. <code>G<sub>off</sub>(s)</code>'s own <code>G<sub>off</sub>/L<sub>1</sub></code> ratio stays roughly flat (16-22x)
+crossover found yet. <code>G<sub>off</sub>(s)</code>'s own
+<code>G<sub>off</sub>/L<sub>1</sub></code> ratio stays roughly flat (16-22x)
 across the whole range; <code>G<sub>jit</sub>(s)</code>'s own ratio falls as `d` grows (26x at `d=2`
 down to 9x at `d=120`).
 
@@ -1473,20 +1476,21 @@ down to 9x at `d=120`).
 ### B.2 G thread-count sweep
 
 #### Setup
- - Commit: `883c41e`
- - System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
- - OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
- - Run Date: 2026-09-03
- - Fixed Parameters:
-     - `d=60`
-     - `N=200`
-     - `m=0.1`
-     - `mu=0.02`
-     - `replicates=8`
-     - `convergence_window=150`
-     - `workers ∈ {1,2,4,6,8,10}`
-     - `jit ∈ {"off", "numba"}`
-     - `trials=3`
+
+- Commit: `883c41e`
+- System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
+- OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
+- Run Date: 2026-09-03
+- Fixed Parameters:
+  - `d=60`
+  - `N=200`
+  - `m=0.1`
+  - `mu=0.02`
+  - `replicates=8`
+  - `convergence_window=150`
+  - `workers ∈ {1,2,4,6,8,10}`
+  - `jit ∈ {"off", "numba"}`
+  - `trials=3`
 
 Scheduled against a real core budget rather than run either fully
 serial or fully concurrent (concurrent same-worker-count trials
@@ -1518,20 +1522,21 @@ and does not grow with more workers.
 ### B.3 Locus length (capacity) sweep
 
 #### Setup
- - Commit: `883c41e`
- - System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
- - OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
- - Run Date: 2026-09-04
- - Fixed Parameters:
-     - `d=60`
-     - `N=500`
-     - `m=0.05`
-     - `mu=0.001`
-     - `replicates=16`
-     - `generations=100`
-     - `lengths ∈ {2,4,5,6,7,8}` (Capacity is `4 ** length`; §3.2's own
+
+- Commit: `883c41e`
+- System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
+- OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
+- Run Date: 2026-09-04
+- Fixed Parameters:
+  - `d=60`
+  - `N=500`
+  - `m=0.05`
+  - `mu=0.001`
+  - `replicates=16`
+  - `generations=100`
+  - `lengths ∈ {2,4,5,6,7,8}` (Capacity is `4 ** length`; §3.2's own
 finite-alleles state space)
-     - `trials=3`
+  - `trials=3`
 
 #### Command
 
@@ -1566,18 +1571,22 @@ likely explanation for the difference.
 ### B.4 `d` sweep extended to `d=500`
 
 #### Setup
- - Commit: `d354608`/`7862dd7` (the boundary between the two is dev-tooling-only — `0179bd9`/`a18ba58`/`a8f001d`/`ea966da`/`7862dd7` touch only `dev/bin/`, none of `src/fim/model/`or `src/fim/engine.py` — so both runs below share functionally identical simulation code),
- - System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
- - OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
- - Run Date: 2026-09-04
- - Fixed Parameters:
-     - `N=500`
-     - `m=0.05`
-     - `mu=0.001`
-     - locus length 4 (capacity 256).
-     - `replicates=16`
-     - `generations=100`
-     - `trials=3`
+
+- Commit: `d354608`/`7862dd7` (the boundary between the two is
+  dev-tooling-only — `0179bd9`/`a18ba58`/`a8f001d`/`ea966da`/`7862dd7`
+  touch only `dev/bin/`, none of `src/fim/model/` or `src/fim/engine.py`
+  — so both runs below share functionally identical simulation code),
+- System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
+- OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
+- Run Date: 2026-09-04
+- Fixed Parameters:
+  - `N=500`
+  - `m=0.05`
+  - `mu=0.001`
+  - locus length 4 (capacity 256).
+  - `replicates=16`
+  - `generations=100`
+  - `trials=3`
 
 `dev/bin/benchmark-engines`'s own default fixed baseline, identical to B.1's;
 run with no `--config` override, so the exact values are the tool's own
@@ -1603,7 +1612,9 @@ First run, isolated (no other benchmark work sharing the host at the time):
 
 ![Time and L₁ normalized time by Deme Size (d)](img/fim-benchmark-b4-1-deme-sweep-graph.png)
 
-Second run, the same sweep repeated a few hours later, **overlapping the first ~5 minutes of the B.5 heatmap queue's own 4-concurrent-job start** (§B.5, below) for roughly the last 40 of its own ~47-minute run:
+Second run, the same sweep repeated a few hours later, **overlapping the
+first ~5 minutes of the B.5 heatmap queue's own 4-concurrent-job start**
+(§B.5, below) for roughly the last 40 of its own ~47-minute run:
 
 | `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
@@ -1613,6 +1624,7 @@ Second run, the same sweep repeated a few hours later, **overlapping the first ~
 | 500 | 27.444 | 426.877 | 15.55 | 769.457 | 28.04 | 266.820 | 9.72 | 38.979 | 1.42 | V |
 
 ![Time and L₁ normalized time by Deme Size (d)](img/fim-benchmark-b4-2-deme-sweep-graph.png)
+
 #### Summary
 
 `V` still wins at every `d`, in both runs, extending B.1's own finding to
@@ -1622,7 +1634,10 @@ identical code** — recorded honestly as an open, unexplained-by-code-change
 discrepancy rather than folded into one table as if the two agreed: initially
 read as evidence that this session's persistence/statistics validation-skip
 fixes (`53afe81`/`d354608`) narrowed `V`'s advantage more than `G`'s, that
-reading does not survive checking `git reflog` on the benchmark host — both runs already had both fixes applied, so no code change separates them at all. The second run's own timing sits inside a window that started shortly before, and
+reading does not survive checking `git reflog` on the benchmark host —
+both runs already had both fixes applied, so no code change separates
+them at all. The second run's own timing sits inside a window that
+started shortly before, and
 mostly overlapped, four other concurrent `benchmark-engines` jobs on the same
 22-thread host (§B.5's own heatmap queue) — real host contention, not a code
 effect, is the far more likely explanation, and this pair of runs should not be
@@ -1637,14 +1652,15 @@ Combining all deme size timing runs:
 ### B.5 Joint `d` × locus-length sweep (heatmap)
 
 #### Setup
- - Commit: `7862dd7`
- - System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
- - OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
- - Run Date: 2026-09-04
- - Fixed Parameters:
-     - `N=500`
-     - `m=0.05`
-     - `mu=0.001`
+
+- Commit: `7862dd7`
+- System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
+- OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
+- Run Date: 2026-09-04
+- Fixed Parameters:
+  - `N=500`
+  - `m=0.05`
+  - `mu=0.001`
 
 This sweeps `d` and locus length together, to check whether the
 two axes' own crossovers move independently of each other or interact. Run via
@@ -1665,7 +1681,7 @@ dev/bin/render-heatmap /tmp/fim-heatmap
 
 #### Results
 
-* Length 5 (capacity 1024):
+- Length 5 (capacity 1024):
 
 | `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
@@ -1677,7 +1693,7 @@ dev/bin/render-heatmap /tmp/fim-heatmap
 
 ![Time and L₁ normalized time by Deme Size (d) for Locus Length 5](img/fim-benchmark-b5-l5-deme-by-locus-length-sweep-graph.png)
 
-* Length 6 (capacity 4096):
+- Length 6 (capacity 4096):
 
 | `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
@@ -1689,7 +1705,7 @@ dev/bin/render-heatmap /tmp/fim-heatmap
 
 ![Time and L₁ normalized time by Deme Size (d) for Locus Length 6](img/fim-benchmark-b5-l6-deme-by-locus-length-sweep-graph.png)
 
-* Length 7 (capacity 16384):
+- Length 7 (capacity 16384):
 
 | `d` | <code>L<sub>1</sub>(s)</code> | <code>L<sub>x</sub>(s)</code> | <code>L<sub>x</sub>/L<sub>1</sub></code> | <code>G<sub>off</sub>(s)</code> | <code>G<sub>off</sub>/L<sub>1</sub></code> | <code>G<sub>jit</sub>(s)</code> | <code>G<sub>jit</sub>/L<sub>1</sub></code> | `V` | <code>V/L<sub>1</sub></code> | `fastest` |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|:---|
@@ -1701,7 +1717,9 @@ dev/bin/render-heatmap /tmp/fim-heatmap
 
 ![Time and L₁ normalized time by Deme Size (d) for Locus Length 7](img/fim-benchmark-b5-l7-deme-by-locus-length-sweep-graph.png)
 
-Fastest backend, and the `V`/<code>G<sub>jit</sub>(s)</code> wall-clock ratio (below 1.0 means `V` is still ahead), across all three completed lengths:
+Fastest backend, and the `V`/<code>G<sub>jit</sub>(s)</code> wall-clock
+ratio (below 1.0 means `V` is still ahead), across all three completed
+lengths:
 
 ##### Fastest backend
 
@@ -1735,14 +1753,15 @@ real design question, not a parameter tweak.
 ### B.6 Joint `d` × locus-length sweep, post-Phase-7 (2026-09-05)
 
 #### Setup
- - Commit: `49ab7ca`
- - System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
- - OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
- - Run Date: 2026-09-05/06
- - Fixed Parameters:
-     - `N=500`
-     - `m=0.05`
-     - `mu=0.001`
+
+- Commit: `49ab7ca`
+- System: Intel Core Ultra 9 185H, 22 threads, 93GB RAM
+- OS: Ubuntu 24.04.4 LTS, kernel 6.8.0-139-generic, idle)
+- Run Date: 2026-09-05/06
+- Fixed Parameters:
+  - `N=500`
+  - `m=0.05`
+  - `mu=0.001`
 
 Re-runs B.5's own joint grid — wider and denser this time (13 `d`
 values from `2` through `500`, all 8 locus lengths, `capacity 4` through
@@ -1810,8 +1829,7 @@ length 1 finished in 2412s, length 8 in 39350s).
 | **350** | 0.43 | 0.35 | 0.19 | 0.13 | 0.09 | 0.19 | 0.32 | 0.88 |
 | **500** | 0.39 | 0.35 | 0.23 | 0.14 | 0.14 | 0.15 | 0.24 | 0.67 |
 
-Note: _Below 1.0 means V is still ahead._
-
+Note: *Below 1.0 means V is still ahead.*
 
 ![G-jit/V wall-clock ratio](img/fim-benchmark-b6-deme-by-locus-length-heatmap.png)
 

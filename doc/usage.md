@@ -68,7 +68,7 @@ affects only how long the batch takes.
 With replicate_tolerance unset in the config, exactly n<sub>replicates</sub>
 replicates run. With it set, the batch can stop earlier, once every watched
 statistic's across-replicate confidence interval has tightened enough (see
-[configuration.md](configuration.md#replicatetolerance)) — the number of
+[configuration.md](configuration.md#replicate_tolerance)) — the number of
 `replicate-NNN/` subdirectories written can then be less than n<sub>replicates</sub>.
 
 ## Worked examples
@@ -212,7 +212,7 @@ fim run finite-alleles.yaml --output results/finite-alleles --quiet
 ```
 
 Converges at generation 12 with D \sim 0.207. See
-[configuration.md](configuration.md#mutationmodel) for how this differs
+[configuration.md](configuration.md#mutation_model) for how this differs
 from a distance-based (stepwise) mutation model, which `fim` does not
 implement.
 
@@ -283,7 +283,7 @@ stabilize first.
 
 Rather than guessing how many replicate runs a confidence interval needs,
 set n<sub>replicates</sub> well above the plausible requirement and let
-[replicate_tolerance](configuration.md#replicatetolerance) decide when
+[replicate_tolerance](configuration.md#replicate_tolerance) decide when
 enough have run:
 
 ```yaml

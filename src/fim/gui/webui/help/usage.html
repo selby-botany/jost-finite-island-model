@@ -55,7 +55,7 @@ affects only how long the batch takes.</p>
 <p>With replicate_tolerance unset in the config, exactly n<sub>replicates</sub>
 replicates run. With it set, the batch can stop earlier, once every watched
 statistic's across-replicate confidence interval has tightened enough (see
-<a href="#" data-fim-help="configuration" data-fim-anchor="replicatetolerance">configuration.md</a>) — the number of
+<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">configuration.md</a>) — the number of
 <code>replicate-NNN/</code> subdirectories written can then be less than n<sub>replicates</sub>.</p>
 <h2 id="worked-examples">Worked examples</h2>
 <p>Each example below is a complete config and the command that runs it: save
@@ -169,7 +169,7 @@ max_generations: 500
 <pre><code class="language-console">fim run finite-alleles.yaml --output results/finite-alleles --quiet
 </code></pre>
 <p>Converges at generation 12 with D \sim 0.207. See
-<a href="#" data-fim-help="configuration" data-fim-anchor="mutationmodel">configuration.md</a> for how this differs
+<a href="#" data-fim-help="configuration" data-fim-anchor="mutation_model">configuration.md</a> for how this differs
 from a distance-based (stepwise) mutation model, which <code>fim</code> does not
 implement.</p>
 <h3 id="per-base-mutation-rate-across-unequal-locus-lengths">Per-base mutation rate across unequal locus lengths</h3>
@@ -224,7 +224,7 @@ stabilize first.</p>
 <h3 id="an-adaptive-replicate-batch-with-a-confidence-interval">An adaptive replicate batch with a confidence interval</h3>
 <p>Rather than guessing how many replicate runs a confidence interval needs,
 set n<sub>replicates</sub> well above the plausible requirement and let
-<a href="#" data-fim-help="configuration" data-fim-anchor="replicatetolerance">replicate_tolerance</a> decide when
+<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">replicate_tolerance</a> decide when
 enough have run:</p>
 <pre><code class="language-yaml">N: 100
 d: 5

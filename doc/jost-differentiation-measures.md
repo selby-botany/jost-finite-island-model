@@ -1361,7 +1361,7 @@ hierarchical levels.
 | "98% of diversity is within demes, so protect one." | **False.** Artifact of the `H` scale; on effective alleles the demes are nearly disjoint. | Part IV, V |
 | "`Nm` determines allelic differentiation when μ is low." | **False.** `Nm` determines nearness to fixation; m/(μ(d-1)) determines differentiation. | Part VI |
 | "`D` varies across loci, so it is unreliable." | **False.** That variation is a real biological effect of differing μ. | Part VI |
-| "Hedrick's G'_{ST} fixes G<sub>ST</sub>." | **Partial at best.** Addresses only the high-heterozygosity end, not the low. | Part IV |
+| "Hedrick's G'<sub>ST</sub> fixes G<sub>ST</sub>." | **Partial at best.** Addresses only the high-heterozygosity end, not the low. | Part IV |
 | "G<sub>ST</sub> and `D` can be used to estimate current migration." | **False.** Both integrate historical demography. | Part VI |
 | "These disagreements are estimation artifacts." | **False.** They hold for exact population values, with no sampling involved. | Part III |
 
@@ -1802,13 +1802,13 @@ listed with full citation details for lookup.
 - Hedrick PW (2005). A standardized genetic differentiation measure.
   *Evolution* 59(8):1633–1638.
 - Heller R, Siegismund HR (2009). Relationship between three measures of genetic
-  differentiation G<sub>ST</sub>, D<sub>EST</sub> and G'_{ST}: how wrong have we been?
+  differentiation G<sub>ST</sub>, D<sub>EST</sub> and G'<sub>ST</sub>: how wrong have we been?
   *Molecular Ecology* 18(10):2080–2083.
 - Meirmans PG, Hedrick PW (2011). Assessing population structure: F<sub>ST</sub> and
   related measures. *Molecular Ecology Resources* 11(1):5–18.
 - Wang J (2012). On the measurements of genetic differentiation among
   populations. *Genetics Research* 94:275–289.
-- Whitlock MC (2011). G'_{ST} and `D` do not replace F<sub>ST</sub>. *Molecular
+- Whitlock MC (2011). G'<sub>ST</sub> and `D` do not replace F<sub>ST</sub>. *Molecular
   Ecology* 20(6):1083–1091.
 - Whitlock MC, McCauley DE (1999). Indirect measures of gene flow and migration:
   F<sub>ST</sub> ≠ 1/(4Nm+1). *Heredity* 82:117–125.

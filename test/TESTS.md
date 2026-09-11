@@ -17220,6 +17220,39 @@ GitHub's own slugger does not treat an underscore inside `` `code` ``
 as emphasis syntax; a heading like `` ### `convergence_statistic` ``
 anchors at ```convergence_statistic```, underscore intact.
 
+<a id="validation.test_doc_links.test_checker_accepts_a_bare_heading_with_an_intraword_underscore"></a>
+
+#### test\_checker\_accepts\_a\_bare\_heading\_with\_an\_intraword\_underscore
+
+```python
+def test_checker_accepts_a_bare_heading_with_an_intraword_underscore(
+        tmp_path: Path) -> None
+```
+
+A bare identifier heading keeps its underscore, exactly as GitHub does.
+
+CommonMark forbids *intraword* ``_`` emphasis specifically so that
+identifiers survive unmangled, so ``### mutation_model`` is one
+literal word and anchors at ```mutation_model```. Treating that
+underscore as emphasis markup instead yields ```mutationmodel```, an
+anchor that does not exist on GitHub -- a link this checker would
+then wave through while every real reader got a broken jump.
+
+<a id="validation.test_doc_links.test_checker_still_strips_real_emphasis_markup_from_a_heading"></a>
+
+#### test\_checker\_still\_strips\_real\_emphasis\_markup\_from\_a\_heading
+
+```python
+def test_checker_still_strips_real_emphasis_markup_from_a_heading(
+        tmp_path: Path) -> None
+```
+
+Underscores that genuinely delimit emphasis are still markup.
+
+The intraword exemption must not become a blanket "keep every
+underscore" rule: ``### _Notes_`` is emphasis, renders as *Notes*,
+and anchors at ```notes```.
+
 <a id="validation.test_doc_links.test_checker_rejects_missing_file"></a>
 
 #### test\_checker\_rejects\_missing\_file

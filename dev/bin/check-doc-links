@@ -90,6 +90,7 @@ def markdown_files() -> tuple[Path, ...]:
         ".pytest_cache",
         ".ruff_cache",
         ".tox",
+        ".wip",
         "build",
         "dist",
         "htmlcov",

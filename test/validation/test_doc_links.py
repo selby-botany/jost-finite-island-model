@@ -97,6 +97,57 @@ def test_checker_accepts_a_code_span_heading_with_an_underscore(
     assert result.returncode == 0, result.stderr
 
 
+def test_checker_accepts_a_bare_heading_with_an_intraword_underscore(
+    tmp_path: Path,
+) -> None:
+    """A bare identifier heading keeps its underscore, exactly as GitHub does.
+
+    CommonMark forbids *intraword* ``_`` emphasis specifically so that
+    identifiers survive unmangled, so ``### mutation_model`` is one
+    literal word and anchors at ``#mutation_model``. Treating that
+    underscore as emphasis markup instead yields ``#mutationmodel``, an
+    anchor that does not exist on GitHub -- a link this checker would
+    then wave through while every real reader got a broken jump.
+    """
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "README.md").write_text(
+        "# Project\n\n[Key](doc/reference.md#mutation_model)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "reference.md").write_text(
+        "# Reference\n\n### mutation_model\n",
+        encoding="utf-8",
+    )
+
+    result = _run_checker(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_checker_still_strips_real_emphasis_markup_from_a_heading(
+    tmp_path: Path,
+) -> None:
+    """Underscores that genuinely delimit emphasis are still markup.
+
+    The intraword exemption must not become a blanket "keep every
+    underscore" rule: ``### _Notes_`` is emphasis, renders as *Notes*,
+    and anchors at ``#notes``.
+    """
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "README.md").write_text(
+        "# Project\n\n[Key](doc/reference.md#notes)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "reference.md").write_text(
+        "# Reference\n\n### _Notes_\n",
+        encoding="utf-8",
+    )
+
+    result = _run_checker(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_checker_rejects_missing_file(tmp_path: Path) -> None:
     """A local link to an absent file fails with the source path."""
     (tmp_path / "README.md").write_text(

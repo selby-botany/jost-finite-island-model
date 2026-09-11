@@ -304,6 +304,35 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Heading anchors containing an underscore were computed incorrectly by
+  `dev/lib/docslug.py`, which stripped every `_` as emphasis markup.
+  CommonMark forbids *intraword* `_` emphasis precisely so identifiers
+  survive unmangled, so `### mutation_model` anchors at
+  `#mutation_model` on GitHub, not `#mutationmodel`. Twenty-four
+  configuration-key headings were affected, and because the same wrong
+  algorithm both generated and validated them, `dev/bin/check-doc-links`
+  accepted four links that were in fact broken for every real reader:
+  one in `README.md` and three in `doc/usage.md`. The slugger now keeps
+  an underscore that is flanked by word characters and still strips
+  underscores that genuinely delimit emphasis; both behaviors are
+  pinned by tests.
+- `G'_{ST}` appeared as raw LaTeX in the prose of
+  `doc/finite-island-model-introduction.md` and
+  `doc/jost-differentiation-measures.md`. Because the apostrophe is
+  punctuation, `'_{` is a valid emphasis opener, so the underscore
+  paired with a later one and italicized the intervening text instead
+  of subscripting `ST`. These now use the `G'<sub>ST</sub>` form already
+  used for `F<sub>ST</sub>` and `G<sub>ST</sub>` throughout; the `_{ST}`
+  form remains, correctly, inside the LaTeX math blocks.
+- Markdown lint violations throughout `doc/fim-simulator-design.md`,
+  `doc/configuration.md`, and `doc/finite-island-model-introduction.md`
+  — list indentation, list and heading spacing, list-marker style,
+  emphasis style, over-long lines, and one invalid link fragment — so
+  `dev/bin/validate-repository` now reaches its later linters instead of
+  stopping at `markdownlint`. Two prose typos were fixed alongside them.
+- `.wip/`, which is git-ignored scratch space like the already-excluded
+  `.attic/`, is no longer scanned by `markdownlint` or
+  `dev/bin/check-doc-links`.
 - Four dead references in the desktop GUI, all found by the new checks
   on their first run: an orphaned `.loaded-summary` stylesheet rule, a
   `rail-label` class on seven nav-rail labels with no rule behind it, an
