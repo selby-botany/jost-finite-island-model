@@ -22,6 +22,8 @@
 
 const openRunBanner = document.getElementById("open-run-banner");
 const recentRunsBody = document.getElementById("open-run-recent-runs-body");
+const recentRunsFilterInput = document.getElementById("open-run-filter");
+const recentRunsCountLabel = document.getElementById("open-run-count");
 const browseButton = document.getElementById("browse-trajectory-button");
 const generationValueInput = document.getElementById("open-run-generation-value");
 const differentiationOrdersInput = document.getElementById(
@@ -33,6 +35,95 @@ const homeNewRunButton = document.getElementById("home-new-run-button");
 const homeExploreButton = document.getElementById("home-explore-button");
 
 let selectedTrajectoryPath = null;
+
+// Every run fetched for this visit (`refreshRecentRuns`), unfiltered and
+// ungrouped -- `renderRecentRuns` derives the actual displayed rows from
+// this on every filter/group-toggle, so filtering and collapsing never
+// re-hit the filesystem.
+let allRecentRuns = [];
+// Group ids the user has explicitly collapsed this visit -- reset on
+// every fresh `refreshRecentRuns` (a stale collapse from a previous
+// visit's own now-discarded groups should not silently hide a group
+// that visit never had).
+let collapsedGroupIds = new Set();
+
+const _ONE_DAY_MS = 24 * 60 * 60 * 1000;
+// Priority order for rendering -- runs are already newest-first
+// (`Api.list_home_runs`), but this makes bucket ordering an explicit,
+// tested invariant rather than an accident of that sort order.
+const _DATE_BUCKET_ORDER = ["Today", "This week", "Earlier", "Unknown date"];
+
+/**
+ * Bucket one run's own `endedAt` into a coarse "Today"/"This week"/
+ * "Earlier" label -- the only grouping signal `RecentRun` exposes today
+ * (large-sweep architecture roadmap doc `20260907-claude-sonnet-5-
+ * large-sweep-architecture-roadmap.md`, `selby/restricted`, describes a
+ * future `SweepManifest` one level above today's `BatchManifest`; once
+ * that exists, a sweep-id group key can be added as a second, preferred
+ * bucketing source here without touching `renderRecentRuns` itself).
+ * @param {string} endedAt
+ * @returns {string}
+ */
+function dateBucketFor(endedAt) {
+    const parsed = new Date(endedAt);
+    if (Number.isNaN(parsed.getTime())) {
+        return "Unknown date";
+    }
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfParsedDay = new Date(
+        parsed.getFullYear(),
+        parsed.getMonth(),
+        parsed.getDate()
+    );
+    const ageMs = startOfToday.getTime() - startOfParsedDay.getTime();
+    if (ageMs < _ONE_DAY_MS) {
+        return "Today";
+    }
+    if (ageMs < 7 * _ONE_DAY_MS) {
+        return "This week";
+    }
+    return "Earlier";
+}
+
+/**
+ * Whether `run` matches a free-text filter -- run ID, label, and ended
+ * date, the same fields the table itself shows, so "what you can read
+ * is what you can search for."
+ * @param {{runId: string, label: string, endedAt: string}} run
+ * @param {string} filterText
+ * @returns {boolean}
+ */
+function matchesRecentRunsFilter(run, filterText) {
+    if (!filterText) {
+        return true;
+    }
+    const haystack = `${run.runId} ${run.label} ${run.endedAt}`.toLowerCase();
+    return haystack.includes(filterText.toLowerCase());
+}
+
+/**
+ * Split `runs` into date-bucket groups, in `_DATE_BUCKET_ORDER`.
+ * @param {Array<object>} runs
+ * @returns {Array<{id: string, label: string, runs: Array<object>}>}
+ */
+function groupRecentRuns(runs) {
+    const buckets = new Map();
+    for (const run of runs) {
+        const bucketId = dateBucketFor(run.endedAt);
+        if (!buckets.has(bucketId)) {
+            buckets.set(bucketId, []);
+        }
+        buckets.get(bucketId).push(run);
+    }
+    return _DATE_BUCKET_ORDER.filter((bucketId) => buckets.has(bucketId)).map(
+        (bucketId) => ({
+            id: bucketId,
+            label: bucketId,
+            runs: buckets.get(bucketId),
+        })
+    );
+}
 
 // Home's own shortcut cards (design §9, slice 3): both delegate to an
 // already-existing entry point exactly the rail's own buttons use
@@ -211,6 +302,141 @@ async function toggleBatchRow(batchRow, toggleButton, directory) {
     toggleButton.setAttribute("aria-expanded", "true");
 }
 
+/**
+ * Build one run's own `<tr>` -- unchanged rendering, factored out of
+ * `refreshRecentRuns` so `renderRecentRuns` can call it once per group
+ * member on every filter/collapse re-render, not only on a fresh fetch.
+ * @param {object} run
+ * @returns {HTMLTableRowElement}
+ */
+function buildRunRow(run) {
+    const row = document.createElement("tr");
+    const configText = formatRowConfigSummary(run.configSummary);
+    const statisticsText = formatRowStatistics(run.statistics);
+    for (const [value, className, isLabelCell] of [
+        [run.runId, null, false],
+        [run.endedAt, null, false],
+        [run.label, null, true],
+        [configText, "open-run-summary-cell", false],
+        [statisticsText, "open-run-summary-cell", false],
+    ]) {
+        const cell = document.createElement("td");
+        // A batch row's own label cell gets an expand/collapse
+        // toggle beside its text (design §9: "expandable to its
+        // own replicate list") -- a scalar row's own label cell is
+        // plain text, unchanged.
+        if (isLabelCell && run.isBatch) {
+            const toggleButton = document.createElement("button");
+            toggleButton.type = "button";
+            toggleButton.className = "open-run-replicate-toggle";
+            toggleButton.textContent = "▸";
+            toggleButton.setAttribute("aria-expanded", "false");
+            toggleButton.setAttribute(
+                "aria-label",
+                `Show replicates for ${run.runId}`
+            );
+            toggleButton.addEventListener("click", (event) => {
+                event.stopPropagation();
+                toggleBatchRow(row, toggleButton, run.directory);
+            });
+            cell.appendChild(toggleButton);
+            cell.appendChild(document.createTextNode(` ${value}`));
+        } else {
+            cell.textContent = value;
+        }
+        // `configText`/`statisticsText` can run long (six fields,
+        // six statistics) -- capped and ellipsized in CSS, with the
+        // full text still reachable on hover via `title` rather
+        // than silently truncated with no way to see the rest.
+        if (className !== null) {
+            cell.className = className;
+            cell.title = value;
+        }
+        row.appendChild(cell);
+    }
+    row.addEventListener("click", () => {
+        for (const sibling of recentRunsBody.querySelectorAll("tr")) {
+            sibling.classList.remove("selected");
+        }
+        row.classList.add("selected");
+        if (run.isBatch) {
+            // Design §0, §4.0 #9: a batch manifest has no single
+            // trajectory of its own to verify or re-analyze here --
+            // named explicitly rather than silently doing nothing
+            // or attempting (and failing) to re-analyze it anyway.
+            setSelectedTrajectory(null);
+            showOpenRunBanner(
+                "batch runs have no single trajectory — open a replicate " +
+                    "from its own batch results screen instead"
+            );
+            return;
+        }
+        showOpenRunBanner("");
+        setSelectedTrajectory(run.trajectoryPath);
+    });
+    return row;
+}
+
+/**
+ * Build one date-bucket group's own header row -- a full-width toggle
+ * button naming the bucket and its member count (design's own answer to
+ * "a fantastically long results scroll": collapsing a bucket removes
+ * its rows from the DOM entirely, not merely hiding them, so a large
+ * `results/` directory never pays for rendering rows nobody asked to
+ * see). Collapsed state persists only for this visit (`collapsedGroupIds`,
+ * reset by `refreshRecentRuns`), not across screen visits.
+ * @param {{id: string, label: string, runs: Array<object>}} group
+ * @returns {HTMLTableRowElement}
+ */
+function buildGroupHeaderRow(group) {
+    const row = document.createElement("tr");
+    row.className = "open-run-group-header";
+    const cell = document.createElement("td");
+    cell.colSpan = 5;
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "open-run-group-toggle";
+    const collapsed = collapsedGroupIds.has(group.id);
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggle.textContent = `${collapsed ? "▸" : "▾"} ${group.label} (${group.runs.length})`;
+    toggle.addEventListener("click", () => {
+        if (collapsedGroupIds.has(group.id)) {
+            collapsedGroupIds.delete(group.id);
+        } else {
+            collapsedGroupIds.add(group.id);
+        }
+        renderRecentRuns();
+    });
+    cell.appendChild(toggle);
+    row.appendChild(cell);
+    return row;
+}
+
+/**
+ * Re-render the recent-runs table from `allRecentRuns` -- applies the
+ * current filter text and group-collapse state, but never re-fetches
+ * (`refreshRecentRuns` owns the one filesystem read per visit).
+ */
+function renderRecentRuns() {
+    recentRunsBody.replaceChildren();
+    const filterText = recentRunsFilterInput.value.trim();
+    const filtered = allRecentRuns.filter((run) =>
+        matchesRecentRunsFilter(run, filterText)
+    );
+    for (const group of groupRecentRuns(filtered)) {
+        recentRunsBody.appendChild(buildGroupHeaderRow(group));
+        if (!collapsedGroupIds.has(group.id)) {
+            for (const run of group.runs) {
+                recentRunsBody.appendChild(buildRunRow(run));
+            }
+        }
+    }
+    recentRunsCountLabel.textContent =
+        filtered.length === allRecentRuns.length
+            ? `${allRecentRuns.length} run${allRecentRuns.length === 1 ? "" : "s"}`
+            : `${filtered.length} of ${allRecentRuns.length} runs`;
+}
+
 async function refreshRecentRuns() {
     // `showOpenRunScreen` fires this without awaiting it (a real
     // filesystem scan should not block the screen transition), so
@@ -230,79 +456,18 @@ async function refreshRecentRuns() {
     // A fresh visit never shows a stale replicate list fetched for a
     // *previous* visit's own now-discarded rows -- `toggleBatchRow`'s
     // own cache is keyed by directory, not by row, so it would
-    // otherwise survive the `replaceChildren()` below untouched.
+    // otherwise survive the next `renderRecentRuns()` untouched.
     window.__fimBatchReplicateCache = {};
-    recentRunsBody.replaceChildren();
-    const runs = await window.pywebview.api.list_home_runs();
-    for (const run of runs) {
-        const row = document.createElement("tr");
-        const configText = formatRowConfigSummary(run.configSummary);
-        const statisticsText = formatRowStatistics(run.statistics);
-        for (const [value, className, isLabelCell] of [
-            [run.runId, null, false],
-            [run.endedAt, null, false],
-            [run.label, null, true],
-            [configText, "open-run-summary-cell", false],
-            [statisticsText, "open-run-summary-cell", false],
-        ]) {
-            const cell = document.createElement("td");
-            // A batch row's own label cell gets an expand/collapse
-            // toggle beside its text (design §9: "expandable to its
-            // own replicate list") -- a scalar row's own label cell is
-            // plain text, unchanged.
-            if (isLabelCell && run.isBatch) {
-                const toggleButton = document.createElement("button");
-                toggleButton.type = "button";
-                toggleButton.className = "open-run-replicate-toggle";
-                toggleButton.textContent = "▸";
-                toggleButton.setAttribute("aria-expanded", "false");
-                toggleButton.setAttribute(
-                    "aria-label",
-                    `Show replicates for ${run.runId}`
-                );
-                toggleButton.addEventListener("click", (event) => {
-                    event.stopPropagation();
-                    toggleBatchRow(row, toggleButton, run.directory);
-                });
-                cell.appendChild(toggleButton);
-                cell.appendChild(document.createTextNode(` ${value}`));
-            } else {
-                cell.textContent = value;
-            }
-            // `configText`/`statisticsText` can run long (six fields,
-            // six statistics) -- capped and ellipsized in CSS, with the
-            // full text still reachable on hover via `title` rather
-            // than silently truncated with no way to see the rest.
-            if (className !== null) {
-                cell.className = className;
-                cell.title = value;
-            }
-            row.appendChild(cell);
-        }
-        row.addEventListener("click", () => {
-            for (const sibling of recentRunsBody.querySelectorAll("tr")) {
-                sibling.classList.remove("selected");
-            }
-            row.classList.add("selected");
-            if (run.isBatch) {
-                // Design §0, §4.0 #9: a batch manifest has no single
-                // trajectory of its own to verify or re-analyze here --
-                // named explicitly rather than silently doing nothing
-                // or attempting (and failing) to re-analyze it anyway.
-                setSelectedTrajectory(null);
-                showOpenRunBanner(
-                    "batch runs have no single trajectory — open a replicate " +
-                        "from its own batch results screen instead"
-                );
-                return;
-            }
-            showOpenRunBanner("");
-            setSelectedTrajectory(run.trajectoryPath);
-        });
-        recentRunsBody.appendChild(row);
-    }
+    collapsedGroupIds = new Set();
+    recentRunsFilterInput.value = "";
+    allRecentRuns = await window.pywebview.api.list_home_runs();
+    renderRecentRuns();
     window.__fimOpenRunRecentRunsLoaded = true;
 }
+
+recentRunsFilterInput.addEventListener("input", () => {
+    renderRecentRuns();
+});
 
 browseButton.addEventListener("click", async () => {
     const result = await window.pywebview.api.browse_for_trajectory();

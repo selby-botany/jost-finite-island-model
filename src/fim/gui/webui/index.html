@@ -430,6 +430,24 @@
       </div>
     </div>
     <p>Recent runs (results/*/manifest.json):</p>
+    <!-- Grouped by date bucket (Today / This week / Earlier -- the only
+         grouping signal a `RecentRun` carries today) so a `results/`
+         directory with many old runs doesn't render as one, ever-
+         growing scroll (`screens/open-run.js`'s own `dateBucketFor`/
+         `renderRecentRuns`). Once a `SweepManifest` exists (design docs
+         `20260907-claude-sonnet-5-{large-sweep-architecture-roadmap,
+         sweep-first-class-cluster-scaling-rebuttal}.md`, `selby/
+         restricted`), a sweep-id group key can be added as a second,
+         preferred grouping source without changing this markup. -->
+    <div class="open-run-list-controls">
+      <input
+        type="search"
+        id="open-run-filter"
+        placeholder="Filter by run ID, label, or date…"
+        aria-label="Filter recent runs"
+      >
+      <span id="open-run-count" class="open-run-count"></span>
+    </div>
     <table class="open-run-table">
       <thead>
         <tr>

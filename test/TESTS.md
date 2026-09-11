@@ -9255,6 +9255,36 @@ Unchanged behavior — the trajectory panel's own pre-existing
 "nothing to show" case, confirmed still correct now that it shares
 a gate with the new sigma-band-alone case above.
 
+<a id="gui.test_open_run_screen.test_recent_runs_group_by_date_bucket_and_can_be_collapsed"></a>
+
+#### test\_recent\_runs\_group\_by\_date\_bucket\_and\_can\_be\_collapsed
+
+```python
+def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Design proposal for "a fantastically long results scroll": runs
+render grouped into date-bucket sections, each with its own
+collapsible header naming its member count -- collapsing one
+removes its rows from the DOM outright (`open-run.js`'s own
+`renderRecentRuns`/`buildGroupHeaderRow`), the other bucket's own
+rows unaffected.
+
+<a id="gui.test_open_run_screen.test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count"></a>
+
+#### test\_recent\_runs\_filter\_narrows\_the\_visible\_rows\_and\_updates\_the\_count
+
+```python
+def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The filter bar narrows the same rows the table draws from, live
+(`open-run.js`'s own `renderRecentRuns`) -- not a second, separate
+search index that could drift from what actually renders, and the
+count label states how much of the full list is currently visible.
+
 <a id="gui.test_p0_grid_screen"></a>
 
 # gui.test\_p0\_grid\_screen

@@ -27,9 +27,11 @@ indefinitely.
 
 from __future__ import annotations
 
+import json
 import queue
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +51,11 @@ _POLL_ATTEMPTS = 300
 # Generous margin over the raw-driven test's own three sequential poll
 # stages, each individually bounded by `_POLL_ATTEMPTS`.
 _DRIVE_TIMEOUT_SECONDS = 3 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
+# A real, selectable run row, excluding a date-bucket group's own header
+# row (`open-run.js`'s own `buildGroupHeaderRow`) -- shared so every
+# "count/select an actual run row" query below stays under this
+# project's own 88-column line limit.
+_REAL_ROW_SELECTOR = "'#open-run-recent-runs-body tr:not(.open-run-group-header)'"
 
 
 def _write_batch_run(tmp_path: Path) -> Path:
@@ -209,13 +216,13 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
             window.evaluate_js("window.fim.menu.openRun();")
             row_count = _poll_until(
                 window,
-                "document.getElementById('open-run-recent-runs-body').children.length",
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
             )
             settled = None
             if row_count == 1:
                 window.evaluate_js(
-                    "document.querySelector('#open-run-recent-runs-body tr').click();"
+                    f"document.querySelector({_REAL_ROW_SELECTOR}).click();"
                 )
                 window.evaluate_js(
                     "document.getElementById('open-run-open-button').click();"
@@ -278,13 +285,13 @@ def test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve(
             window.evaluate_js("window.fim.menu.openRun();")
             row_count = _poll_until(
                 window,
-                "document.getElementById('open-run-recent-runs-body').children.length",
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
             )
             settled = None
             if row_count == 1:
                 window.evaluate_js(
-                    "document.querySelector('#open-run-recent-runs-body tr').click();"
+                    f"document.querySelector({_REAL_ROW_SELECTOR}).click();"
                 )
                 window.evaluate_js(
                     "document.getElementById('open-run-differentiation-orders')"
@@ -351,7 +358,7 @@ def test_recent_runs_row_shows_config_summary_and_statistics(
                 window,
                 "(function(){"
                 "var row = document.querySelector("
-                "'#open-run-recent-runs-body tr'); "
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)'); "
                 "if (!row) { return null; } "
                 "var cells = row.children; "
                 "return {"
@@ -407,7 +414,7 @@ def test_a_batch_rows_statistics_cell_names_its_own_replicate_count(
                 window,
                 "(function(){"
                 "var row = document.querySelector("
-                "'#open-run-recent-runs-body tr'); "
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)'); "
                 "return row ? row.children[4].textContent : null;"
                 "})()",
                 lambda value: value is not None,
@@ -452,14 +459,14 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
                 lambda value: value is True,
             )
             before_count = window.evaluate_js(
-                "document.querySelectorAll('#open-run-recent-runs-body tr').length"
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length"
             )
             window.evaluate_js(
                 "document.querySelector('.open-run-replicate-toggle').click();"
             )
             after_expand_count = _poll_until(
                 window,
-                "document.querySelectorAll('#open-run-recent-runs-body tr').length",
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 1,
             )
             replicate_texts = window.evaluate_js(
@@ -478,7 +485,7 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
             )
             after_collapse_count = _poll_until(
                 window,
-                "document.querySelectorAll('#open-run-recent-runs-body tr').length",
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value == before_count,
             )
             outcome.put(
@@ -579,12 +586,10 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
             window.evaluate_js("window.fim.menu.openRun();")
             _poll_until(
                 window,
-                "document.getElementById('open-run-recent-runs-body').children.length",
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
             )
-            window.evaluate_js(
-                "document.querySelector('#open-run-recent-runs-body tr').click();"
-            )
+            window.evaluate_js(f"document.querySelector({_REAL_ROW_SELECTOR}).click();")
             window.evaluate_js(
                 "document.getElementById('open-run-open-button').click();"
             )
@@ -657,12 +662,10 @@ def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
             window.evaluate_js("window.fim.menu.openRun();")
             _poll_until(
                 window,
-                "document.getElementById('open-run-recent-runs-body').children.length",
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
                 lambda value: value is not None and value > 0,
             )
-            window.evaluate_js(
-                "document.querySelector('#open-run-recent-runs-body tr').click();"
-            )
+            window.evaluate_js(f"document.querySelector({_REAL_ROW_SELECTOR}).click();")
             window.evaluate_js(
                 "document.getElementById('open-run-open-button').click();"
             )
@@ -686,3 +689,124 @@ def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
 
     assert settled is not None
     assert settled["frameHidden"] is True
+
+
+def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Design proposal for "a fantastically long results scroll": runs
+    render grouped into date-bucket sections, each with its own
+    collapsible header naming its member count -- collapsing one
+    removes its rows from the DOM outright (`open-run.js`'s own
+    `renderRecentRuns`/`buildGroupHeaderRow`), the other bucket's own
+    rows unaffected.
+    """
+    _write_run(tmp_path)
+    batch_directory = _write_batch_run(tmp_path)
+    manifest_path = batch_directory / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["ended_at"] = (datetime.now(UTC) - timedelta(days=10)).isoformat()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            before = _poll_until(
+                window,
+                "(function(){"
+                "var headers = Array.from(document.querySelectorAll("
+                "'.open-run-group-header .open-run-group-toggle'))"
+                ".map((b) => b.textContent);"
+                "var rows = document.querySelectorAll("
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)')"
+                ".length;"
+                "return {headers: headers, rowCount: rows};"
+                "})()",
+                lambda value: value is not None and value.get("rowCount") == 2,
+            )
+            window.evaluate_js(
+                "document.querySelector('.open-run-group-toggle').click();"
+            )
+            after_collapse = _poll_until(
+                window,
+                "document.querySelectorAll("
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
+                lambda value: value is not None and value == 1,
+            )
+            outcome.put({"before": before, "afterCollapse": after_collapse})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["before"]["rowCount"] == 2
+    assert any("Today" in header for header in settled["before"]["headers"])
+    assert any("Earlier" in header for header in settled["before"]["headers"])
+    # Collapsing the first ("Today") group's header removes only its own
+    # one row, leaving the "Earlier" batch row still rendered.
+    assert settled["afterCollapse"] == 1
+
+
+def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The filter bar narrows the same rows the table draws from, live
+    (`open-run.js`'s own `renderRecentRuns`) -- not a second, separate
+    search index that could drift from what actually renders, and the
+    count label states how much of the full list is currently visible.
+    """
+    run_directory = _write_run(tmp_path)
+    _write_batch_run(tmp_path)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    run_id = json.loads((run_directory / "manifest.json").read_text(encoding="utf-8"))[
+        "run_id"
+    ]
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "document.querySelectorAll("
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
+                lambda value: value is not None and value == 2,
+            )
+            window.evaluate_js(
+                "(function(){"
+                "var input = document.getElementById('open-run-filter');"
+                f"input.value = {run_id!r};"
+                "input.dispatchEvent(new Event('input', {bubbles: true}));"
+                "})();"
+            )
+            settled = _poll_until(
+                window,
+                "({"
+                "rowCount: document.querySelectorAll("
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length, "
+                "countText: document.getElementById('open-run-count').textContent"
+                "})",
+                lambda value: value is not None and value.get("rowCount") == 1,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["rowCount"] == 1
+    assert settled["countText"] == "1 of 2 runs"

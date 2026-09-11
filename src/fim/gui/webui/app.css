@@ -1035,6 +1035,27 @@ fieldset.composite > label {
     margin-bottom: 1rem;
 }
 
+/* The filter input and result count sit directly above the table (design
+ * proposal for "a fantastically long results scroll": grouping alone
+ * doesn't help someone looking for one specific run by name/date). */
+.open-run-list-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.4rem;
+}
+
+.open-run-list-controls input[type="search"] {
+    flex: 1 1 auto;
+    max-width: 24rem;
+}
+
+.open-run-count {
+    color: var(--fim-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
 .open-run-table th,
 .open-run-table td {
     text-align: left;
@@ -1053,6 +1074,30 @@ fieldset.composite > label {
 .open-run-table tbody tr.selected {
     background: var(--fim-accent);
     color: #ffffff;
+}
+
+/* A date-bucket group's own header row (`open-run.js`'s own
+ * `buildGroupHeaderRow`) -- a full-width, plain-looking toggle rather
+ * than a selectable data row, so it never gets confused with an actual
+ * run despite sharing the same `<tbody>`. */
+.open-run-table tbody tr.open-run-group-header {
+    cursor: default;
+}
+
+.open-run-table tbody tr.open-run-group-header:hover {
+    background: none;
+}
+
+.open-run-group-toggle {
+    font: inherit;
+    font-weight: 700;
+    color: var(--fim-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.2rem 0;
+    width: 100%;
+    text-align: left;
 }
 
 /* Home enrichment (design doc `20260909-claude-sonnet-5-home-
