@@ -420,6 +420,107 @@ def test_get_equilibrium_predictions_honors_significant_digits() -> None:
     )
 
 
+def test_equilibrium_reference_matches_the_statistics_functions_directly() -> None:
+    """The trajectory panel's own `D`/`G_ST`/`E_ST` core matches Explore's formula.
+
+    Botanist GUI design doc §6.2's own predicted-equilibrium overlay:
+    `_equilibrium_reference` is the exact same core `Api.get_equilibrium_
+    predictions` calls (factored out so the two never independently
+    drift) — this proves that directly, the same way `test_get_
+    equilibrium_predictions_matches_the_statistics_functions_directly`
+    proves it for Explore's own three fields.
+    """
+    result = app_module._equilibrium_reference(450, 0.001, 0.00003, 20, digits=3)
+
+    assert result == {
+        "D": format_statistic(equilibrium_d(0.001, 0.00003, 20), 3),
+        "G_ST": format_statistic(equilibrium_g_st(450, 0.001, 0.00003, 20), 3),
+        "E_ST": format_statistic(
+            equilibrium_shannon_differentiation(450, 0.001, 0.00003, 20), 3
+        ),
+    }
+
+
+def test_equilibrium_reference_reports_d_and_e_st_as_undefined_at_mu_zero() -> None:
+    """`equilibrium_d`/`equilibrium_shannon_differentiation` both require `mu > 0`.
+
+    `equilibrium_g_st` alone stays defined at `mu == 0` — confirmed
+    directly against each function's own docstring, not assumed.
+    """
+    result = app_module._equilibrium_reference(450, 0.001, 0.0, 20, digits=3)
+
+    assert result["D"] == "undefined"
+    assert result["G_ST"] != "undefined"
+    assert result["E_ST"] == "undefined"
+
+
+def test_equilibrium_reference_payload_matches_equilibrium_reference_for_scalar_params(
+    tiny_params: SimulationParams,
+) -> None:
+    """A scalar `N`/`m`/`mu` config's payload is `_equilibrium_reference` verbatim.
+
+    `tiny_params` (`test/conftest.py`) is the project's own shared
+    small/fast scalar fixture — `N`, `m`, and `mu` are all plain
+    scalars there, the ordinary case this overlay exists for.
+    """
+    assert isinstance(tiny_params.N, int)
+    assert isinstance(tiny_params.m, float)
+    assert isinstance(tiny_params.mu, float)
+
+    result = app_module._equilibrium_reference_payload(tiny_params, digits=4)
+
+    assert result == app_module._equilibrium_reference(
+        tiny_params.N, tiny_params.m, tiny_params.mu, tiny_params.d, digits=4
+    )
+
+
+def test_equilibrium_reference_payload_is_none_for_a_per_deme_population_size(
+    tiny_params: SimulationParams,
+) -> None:
+    """A per-deme `N` has no single scalar this family of functions accepts.
+
+    Botanist GUI design doc §6.2's own predicted-equilibrium overlay is
+    scoped to a scalar configuration, matching Explore's own scalar-only
+    fields (`_equilibrium_reference_payload`'s own docstring) — this
+    "nothing to show, don't draw anything" case, not a computed value
+    reduced from a non-scalar shape.
+    """
+    params = replace(tiny_params, N=(10, 20))
+
+    assert app_module._equilibrium_reference_payload(params, digits=4) is None
+
+
+def test_equilibrium_reference_payload_is_none_for_a_migration_matrix(
+    tiny_params: SimulationParams,
+) -> None:
+    """A migration matrix has no single scalar `m` this family of functions accepts."""
+    params = replace(tiny_params, m=((0.9, 0.1), (0.1, 0.9)))
+
+    assert app_module._equilibrium_reference_payload(params, digits=4) is None
+
+
+def test_equilibrium_reference_payload_is_none_for_a_per_locus_mutation_rate(
+    tiny_params: SimulationParams,
+) -> None:
+    """A per-locus `mu` also has no single scalar rate this family accepts.
+
+    `SimulationParams.__post_init__` collapses a per-locus `mu` back to
+    a plain scalar whenever every locus ends up sharing the same rate
+    (including, trivially, a single-locus configuration) — a *second*
+    locus with a genuinely different rate is needed to actually keep
+    `mu` a tuple, unlike the `N`/`m` cases just above, which stay
+    non-scalar with `tiny_params`'s own single deme pair already.
+    """
+    params = replace(
+        tiny_params,
+        loci=(LocusSpec(1, 200), LocusSpec(2, 200)),
+        mu=(0.01, 0.02),
+    )
+    assert isinstance(params.mu, tuple)
+
+    assert app_module._equilibrium_reference_payload(params, digits=4) is None
+
+
 def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None:
     """Sweeping `m` recomputes `D`/`G_ST` at each point using the same N/d/mu."""
     result = Api().get_equilibrium_sweep(
@@ -1510,6 +1611,33 @@ def test_open_run_carries_the_real_sigma_band(tmp_path: Path) -> None:
     assert result["sigmaBand"] == expected
     assert result["sigmaBand"]["multiplier"] == 3.0
     assert result["sigmaBand"]["window"] == 5
+
+
+def test_open_run_carries_the_real_equilibrium_prediction(tmp_path: Path) -> None:
+    """A reopened run's own `equilibrium` matches `_equilibrium_reference_payload`.
+
+    Botanist GUI design doc §6.2's own predicted-equilibrium overlay,
+    computed fresh from the reopened run's own manifest params
+    (`_equilibrium_reference_payload`'s own docstring) — `_write_run`'s
+    own defaults (`N=20, d=2, m=0.1, mu=0.01`) are all plain scalars, so
+    a real prediction is expected here, not `None`.
+    """
+    output = _write_run(tmp_path)
+    api = Api()
+
+    result = api.open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+
+    assert result["ok"] is True
+    assert result["equilibrium"] == {
+        "D": format_statistic(equilibrium_d(0.1, 0.01, 2), api._significant_digits),
+        "G_ST": format_statistic(
+            equilibrium_g_st(20, 0.1, 0.01, 2), api._significant_digits
+        ),
+        "E_ST": format_statistic(
+            equilibrium_shannon_differentiation(20, 0.1, 0.01, 2),
+            api._significant_digits,
+        ),
+    }
 
 
 def test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis(

@@ -2898,10 +2898,21 @@ driver thread, before this method was written; see
 
 **Returns**:
 
-- ``{"ok"` - True}` once the run has *started* — not once it
-  finishes; the real outcome arrives via the pushed calls
-  above. `{"ok": False, "message": ...}` if the form does not
-  validate or the output directory cannot be allocated.
+- ``{"ok"` - True, "equilibrium": ...}` once the run has *started*
+  — not once it finishes; the real outcome arrives via the
+  pushed calls above. `equilibrium` is `_equilibrium_reference_
+  payload`'s own result (design doc §6.2's predicted-
+  equilibrium trajectory overlay) — `None` for a batch (never
+  computed there — batch has no trajectory panel of its own to
+  overlay onto) or for a scalar run whose `N`/`m`/`mu` are not
+  all plain scalars; the page caches it client-side for the
+  live trajectory panel to draw against on every subsequent
+  progress tick (`webui/screens/run-view-running.js`'s own
+  `setLiveEquilibriumReference`), and the same value is reused,
+  not recomputed, in the eventual `"done"` push
+  (`_drain_run_messages`). `{"ok": False, "message": ...}` if
+  the form does not validate or the output directory cannot be
+  allocated.
 
 <a id="fim.gui.app.Api.cancel_run"></a>
 
@@ -3753,16 +3764,21 @@ reuse, not a second rendering path.
 
 - ``{"ok"` - True, "runId", "report", "panels", "statistics",
   "outputDirectory", "generationCount", "demeCount",
-  "sigmaBand"}` on success — `sigmaBand` is `_sigma_band_
-  payload`'s own result (sigma-band GUI design doc
-  `20260910-claude-sonnet-5-gui-sigma-band-design.md`,
+  "sigmaBand", "equilibrium"}` on success — `sigmaBand` is
+  `_sigma_band_payload`'s own result (sigma-band GUI design
+  doc `20260910-claude-sonnet-5-gui-sigma-band-design.md`,
   `selby/restricted`, slice 4), `None` for a run that never
-  requested one; `{"ok": False, "message": ...}` if no
-  trajectory was given, the generation/q-sweep fields do not
-  parse, or `fim.reanalyze.reanalyze_trajectory` itself
-  raises (a trajectory-integrity failure, an edited file, or
-  a generation that does not exist) — `message` is shown
-  verbatim, matching `fim stats`'s own wording.
+  requested one; `equilibrium` is `_equilibrium_reference_
+  payload`'s own result (botanist GUI design doc §6.2's
+  predicted-equilibrium trajectory overlay), computed fresh
+  from this reopened run's own manifest params, `None` when
+  those params are not all plain scalars. `{"ok": False,
+- `"message"` - ...}` if no trajectory was given, the
+  generation/q-sweep fields do not parse, or `fim.reanalyze.
+  reanalyze_trajectory` itself raises (a trajectory-integrity
+  failure, an edited file, or a generation that does not
+  exist) — `message` is shown verbatim, matching `fim
+  stats`'s own wording.
 
 <a id="fim.gui.app.Api.compare_runs"></a>
 

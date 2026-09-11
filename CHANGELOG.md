@@ -270,6 +270,42 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than requiring a curve that does not exist just to show a
   band that does. A reopened run without a band still shows nothing,
   unchanged.
+- `fim gui`'s trajectory panel now also draws the predicted equilibrium
+  as a light dashed reference line, closing out botanist GUI design doc
+  §6.2's own final paragraph — the one piece of the side-by-side
+  scatter/trajectory design that shipped without it. Drawn for whichever
+  of `D`/`G_ST`/`E_ST` the panel is already plotting a curve for (the
+  only three of the six report statistics with a closed-form
+  equilibrium at all — `K_ST`/`H_S`/`H_T` have none), in that
+  statistic's own color but dashed rather than solid, with its own
+  legend entry ("D (predicted equilibrium)") distinct from the
+  simulated curve's own ("D (simulated)"); a statistic with no defined
+  prediction at the current configuration (`D` at `mu == 0`, say) simply
+  skips its own line rather than the whole overlay. Deliberately
+  recomputed directly from the run's own `(N, m, mu, d)` every time
+  (`fim.statistics`'s `equilibrium_d`/`equilibrium_g_st`/
+  `equilibrium_shannon_differentiation`, the identical, free, no-
+  simulation functions Explore already uses) rather than reused from a
+  prior Explore visit as the design text's own wording frames it —
+  strictly more correct, since it can never go stale against a since-
+  edited Explore visit or a configuration Explore was never opened for
+  at all, and costs nothing extra to compute fresh. Scoped to a scalar
+  `N`/`m`/`mu` configuration (matching Explore's own scalar-only fields,
+  and this panel's own pre-existing scalar-run scope) and to a scalar
+  run (`n_replicates == 1`; a batch's own pooled-final-state view has no
+  trajectory panel to draw onto at all). Wired into all three places the
+  panel can appear: live, updating from the very first progress tick of
+  a still-running scalar run (not only in retrospect once it finishes,
+  per the design text's own explicit point); the "done" push a live run
+  ends with, reusing the identical value already computed at run-start
+  rather than a second computation; and a reopened persisted run, computed
+  fresh from its own manifest params — including, there, the one case the
+  design text does not directly name: no live curve at all to sit beside
+  (re-analysis recomputes one generation, never a full history), where
+  the line still draws against whatever trailing window the run's own σ
+  band already established, on the same "nothing plotted, nothing to
+  annotate" reasoning a σ-band-less, curve-less reopened run already
+  applied to hide the whole panel.
 - Home's own "Generation" and "Differentiation-q sweep" controls (the
   browse-for-a-`trajectory.jsonl` re-analysis form) now carry the same
   hover/focus tooltips Configure's fields already have, explaining

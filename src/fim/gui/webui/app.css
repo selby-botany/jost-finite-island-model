@@ -840,6 +840,18 @@ fieldset.composite > label {
     border-radius: 2px;
 }
 
+/* The predicted-equilibrium overlay's own legend swatch (design §6.2) --
+ * a dashed horizontal rule rather than a filled square, so "predicted"
+ * and "simulated" entries are distinguishable at a glance, not only by
+ * their text (design principle 5: "a plot's legend is a contract"). */
+.run-trajectory-legend .swatch-dashed {
+    width: 0.9rem;
+    height: 0;
+    border-top: 2px dashed;
+    border-radius: 0;
+    background: none;
+}
+
 .results-run-id {
     font-weight: 600;
 }

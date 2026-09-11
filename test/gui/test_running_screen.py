@@ -314,8 +314,9 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> No
                     "document.getElementById('run-trajectory-frame').hidden, "
                     "canvasWidth: "
                     "document.getElementById('run-trajectory-canvas').width, "
-                    "legendText: "
-                    "document.getElementById('run-trajectory-legend').textContent"
+                    "legendNames: Array.from("
+                    "document.querySelectorAll('#run-trajectory-legend span'))"
+                    ".map((span) => span.textContent).filter((text) => text)"
                     "})"
                 )
             outcome.put(settled)
@@ -334,8 +335,12 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> No
     assert settled["canvasWidth"] > 0
     # The starter form's own default `convergence_statistic` is `D`
     # alone (`config_form.starter_form_values`) — `_SET_TINY_FIELDS`
-    # never overrides it, so exactly one name is expected here.
-    assert settled["legendText"] == "D"
+    # never overrides it, so exactly one simulated-curve entry is
+    # expected here. `_SET_TINY_FIELDS`'s own `N`/`m_rate`/`mu_value`
+    # are all plain scalars, so `D`'s own predicted-equilibrium overlay
+    # (design §6.2) draws too, as a second, distinctly-labeled entry —
+    # `_equilibrium_reference_payload`'s own docstring.
+    assert settled["legendNames"] == ["D (simulated)", "D (predicted equilibrium)"]
 
 
 def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
@@ -363,7 +368,11 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
     `accumulateLiveTrajectory`'s own module docstring names this as
     design §6.2's own explicit alternative ("...or all six report
     statistics"), deliberately different from the completed-view
-    legend the test above checks.
+    legend the test above checks. The starter form's own `N`/`m`/`mu`
+    (`450`/`0.001`/`0.00003`) are all plain scalars, so the three
+    predictable statistics (`D`/`G_ST`/`E_ST`) each also draw a second,
+    distinctly-labeled predicted-equilibrium entry (design §6.2's own
+    closing paragraph) — nine legend entries total, not six.
     """
     started_event = threading.Event()
     cancelled_event = threading.Event()
@@ -430,12 +439,15 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
     assert settled["runViewState"] == "running"
     assert settled["frameHidden"] is False
     assert sorted(settled["legendNames"]) == [
-        "D",
-        "E_ST",
-        "G_ST",
-        "H_S",
-        "H_T",
-        "K_ST",
+        "D (predicted equilibrium)",
+        "D (simulated)",
+        "E_ST (predicted equilibrium)",
+        "E_ST (simulated)",
+        "G_ST (predicted equilibrium)",
+        "G_ST (simulated)",
+        "H_S (simulated)",
+        "H_T (simulated)",
+        "K_ST (simulated)",
     ]
 
 

@@ -355,6 +355,102 @@ def _sigma_band_payload(manifest: RunManifest, digits: int) -> dict[str, Any] | 
     }
 
 
+# The three report statistics with a closed-form equilibrium prediction at
+# all (`K_ST`/`H_S`/`H_T` have no `fim.statistics.equilibrium_*` function) —
+# shared by `_equilibrium_reference`/`_equilibrium_reference_payload` below
+# and `Api.get_equilibrium_predictions`, so a future fourth prediction added
+# to one is not silently missing from the other.
+_EQUILIBRIUM_STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST")
+
+
+def _equilibrium_reference(
+    n: int, m: float, mu: float, d: int, digits: int
+) -> dict[str, str]:
+    """Predict `D`/`G_ST`/`E_ST` at equilibrium for one scalar `(N, m, mu, d)`.
+
+    Factored out of `Api.get_equilibrium_predictions` so the trajectory
+    panel's own predicted-equilibrium overlay (`_equilibrium_reference_
+    payload`, below) computes these three exactly the same way Explore
+    does — one formula, not two independently maintained ones.
+
+    Args:
+        n: Population size (gene copies per deme).
+        m: Migration rate.
+        mu: Mutation rate.
+        d: Deme count.
+        digits: The GUI's own configured display precision.
+
+    Returns:
+        `{"D": ..., "G_ST": ..., "E_ST": ...}`, each `format_statistic`-
+        formatted — including its own `"undefined"` convention where a
+        prediction has no defined value for these inputs (`D` when `mu`
+        is exactly `0`, for instance).
+    """
+
+    def predict(function: Callable[..., float], *args: float | int) -> str:
+        try:
+            return format_statistic(function(*args), digits)
+        except ValueError:
+            return format_statistic(None, digits)
+
+    return {
+        "D": predict(equilibrium_d, m, mu, d),
+        "G_ST": predict(equilibrium_g_st, n, m, mu, d),
+        "E_ST": predict(equilibrium_shannon_differentiation, n, m, mu, d),
+    }
+
+
+def _equilibrium_reference_payload(
+    params: SimulationParams, digits: int
+) -> dict[str, str] | None:
+    """Build the trajectory panel's own predicted-equilibrium overlay payload.
+
+    Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+    redesign.md` §6.2's own closing paragraph: "the trajectory panel
+    also draws the predicted equilibrium as a light dashed reference
+    line... visible while [the run] is still happening, not only in
+    retrospect on Results."
+
+    The design text frames this as reusing a value from a prior Explore
+    visit (§5) once the current configuration has been explored there.
+    This instead recomputes it directly from the run's own configuration
+    every time, deliberately deviating from that literal wording:
+    `equilibrium_d`/`equilibrium_g_st`/`equilibrium_shannon_
+    differentiation` are pure, free functions of `(N, m, mu, d)` with no
+    simulation involved (`Api.get_equilibrium_predictions`'s own
+    docstring) — recomputing directly from the configuration that is
+    actually running is strictly more correct than reusing a possibly-
+    stale value from a past, possibly-different Explore visit (or no
+    visit at all — most runs never touch Explore first), and costs
+    nothing extra. See this function's own commit message for the same
+    reasoning recorded against the design doc.
+
+    Args:
+        params: A validated configuration — `SimulationParams.from_
+            mapping`'s own result at run-start, or a reopened run's own
+            `ReanalyzedGeneration.params`.
+        digits: The GUI's own configured display precision.
+
+    Returns:
+        `None` when `N`/`m`/`mu` are not all plain scalars — a per-deme
+        `N`, a migration matrix, or a per-locus `mu` has no single
+        `(N, m, mu)` triple this family of functions accepts, and this
+        feature does not attempt to reduce one to a representative
+        scalar (matching `renderTrajectory`'s own existing scalar-run
+        scope boundary, and Explore's own `_parse_equilibrium_inputs`
+        scalar-only fields). Otherwise `{"D": ..., "G_ST": ...,
+        "E_ST": ...}`, each `format_statistic`-formatted exactly like
+        `get_equilibrium_predictions`'s own identically-named fields.
+    """
+    if (
+        not isinstance(params.N, int)
+        or not isinstance(params.m, float)
+        or not isinstance(params.mu, float)
+    ):
+        return None
+    return _equilibrium_reference(params.N, params.m, params.mu, params.d, digits)
+
+
 def _run_config_summary(params: SimulationParams) -> dict[str, str]:
     """Summarize one run's configuration into a fixed set of commonly-swept fields.
 
@@ -734,10 +830,21 @@ class Api:
                 `SimulationParams` field at all, parsed here directly.
 
         Returns:
-            `{"ok": True}` once the run has *started* — not once it
-            finishes; the real outcome arrives via the pushed calls
-            above. `{"ok": False, "message": ...}` if the form does not
-            validate or the output directory cannot be allocated.
+            `{"ok": True, "equilibrium": ...}` once the run has *started*
+            — not once it finishes; the real outcome arrives via the
+            pushed calls above. `equilibrium` is `_equilibrium_reference_
+            payload`'s own result (design doc §6.2's predicted-
+            equilibrium trajectory overlay) — `None` for a batch (never
+            computed there — batch has no trajectory panel of its own to
+            overlay onto) or for a scalar run whose `N`/`m`/`mu` are not
+            all plain scalars; the page caches it client-side for the
+            live trajectory panel to draw against on every subsequent
+            progress tick (`webui/screens/run-view-running.js`'s own
+            `setLiveEquilibriumReference`), and the same value is reused,
+            not recomputed, in the eventual `"done"` push
+            (`_drain_run_messages`). `{"ok": False, "message": ...}` if
+            the form does not validate or the output directory cannot be
+            allocated.
         """
         try:
             payload = form_values_to_payload(values)
@@ -788,6 +895,15 @@ class Api:
         self._live_deme_pair = None
         if self._on_run_started is not None:
             self._on_run_started()
+        # The trajectory panel's own predicted-equilibrium overlay (design
+        # doc §6.2, `_equilibrium_reference_payload`'s own docstring):
+        # computed once, here, before the run's own background thread even
+        # starts, and handed to both that thread (for the "done" push,
+        # below) and this method's own immediate return (for the live page
+        # to cache and draw on every progress tick while the run is still
+        # going) — one shared computation, not a second one for each of
+        # the two places it is needed.
+        equilibrium = _equilibrium_reference_payload(params, self._significant_digits)
         threading.Thread(
             target=_drain_run_messages,
             args=(
@@ -799,10 +915,11 @@ class Api:
                 self._significant_digits,
                 self.get_live_deme_pair,
                 self._on_message,
+                equilibrium,
             ),
             daemon=True,
         ).start()
-        return {"ok": True}
+        return {"ok": True, "equilibrium": equilibrium}
 
     def _start_batch_run(
         self,
@@ -1082,21 +1199,15 @@ class Api:
                 return format_statistic(None, digits)
 
         # `_parse_equilibrium_inputs` already rejected every out-of-range
-        # input above; the only `ValueError` any one `predict` call below
-        # can still raise is `equilibrium_d`'s own `mu == 0` case (a
-        # legitimately in-range input that leaves *that one* prediction
-        # undefined), which `predict`'s own inner try/except already
-        # turns into `"undefined"` rather than failing the whole call.
+        # input above; the only `ValueError` `_equilibrium_reference`'s own
+        # `predict` calls (for "D"/"G_ST"/"E_ST") or the `predict` call just
+        # below (for "identity_recovery_half_life") can still raise is
+        # `equilibrium_d`'s own `mu == 0` case (a legitimately in-range
+        # input that leaves *that one* prediction undefined), which each
+        # function's own inner try/except already turns into `"undefined"`
+        # rather than failing the whole call.
         predictions = {
-            "D": predict(equilibrium_d, m_value, mu_value, d_value),
-            "G_ST": predict(equilibrium_g_st, n_value, m_value, mu_value, d_value),
-            "E_ST": predict(
-                equilibrium_shannon_differentiation,
-                n_value,
-                m_value,
-                mu_value,
-                d_value,
-            ),
+            **_equilibrium_reference(n_value, m_value, mu_value, d_value, digits),
             "identity_recovery_half_life": predict(
                 identity_recovery_half_life, n_value, m_value
             ),
@@ -1853,16 +1964,21 @@ class Api:
         Returns:
             `{"ok": True, "runId", "report", "panels", "statistics",
             "outputDirectory", "generationCount", "demeCount",
-            "sigmaBand"}` on success — `sigmaBand` is `_sigma_band_
-            payload`'s own result (sigma-band GUI design doc
-            `20260910-claude-sonnet-5-gui-sigma-band-design.md`,
+            "sigmaBand", "equilibrium"}` on success — `sigmaBand` is
+            `_sigma_band_payload`'s own result (sigma-band GUI design
+            doc `20260910-claude-sonnet-5-gui-sigma-band-design.md`,
             `selby/restricted`, slice 4), `None` for a run that never
-            requested one; `{"ok": False, "message": ...}` if no
-            trajectory was given, the generation/q-sweep fields do not
-            parse, or `fim.reanalyze.reanalyze_trajectory` itself
-            raises (a trajectory-integrity failure, an edited file, or
-            a generation that does not exist) — `message` is shown
-            verbatim, matching `fim stats`'s own wording.
+            requested one; `equilibrium` is `_equilibrium_reference_
+            payload`'s own result (botanist GUI design doc §6.2's
+            predicted-equilibrium trajectory overlay), computed fresh
+            from this reopened run's own manifest params, `None` when
+            those params are not all plain scalars. `{"ok": False,
+            "message": ...}` if no trajectory was given, the
+            generation/q-sweep fields do not parse, or `fim.reanalyze.
+            reanalyze_trajectory` itself raises (a trajectory-integrity
+            failure, an edited file, or a generation that does not
+            exist) — `message` is shown verbatim, matching `fim
+            stats`'s own wording.
         """
         trajectory_path_text = values.get("trajectoryPath", "")
         if not trajectory_path_text:
@@ -1925,6 +2041,17 @@ class Api:
             # that does not exist just to show a band that does.
             "sigmaBand": _sigma_band_payload(
                 reanalyzed.manifest, self._significant_digits
+            ),
+            # The trajectory panel's own predicted-equilibrium overlay
+            # (design doc §6.2, `_equilibrium_reference_payload`'s own
+            # docstring) — computed fresh from this reopened run's own
+            # manifest params (`_run_config_summary`'s own established
+            # pattern of reading a manifest's params for a derived display
+            # value), the same reasoning as a live run's own recompute at
+            # `start_run` time: a pure function of `(N, m, mu, d)`, never
+            # stale, and cheap enough to not bother caching.
+            "equilibrium": _equilibrium_reference_payload(
+                reanalyzed.params, self._significant_digits
             ),
         }
 
@@ -2313,6 +2440,7 @@ def _drain_run_messages(
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
     live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
     on_message: Callable[[runner.RunMessage], None] | None = None,
+    equilibrium: dict[str, str] | None = None,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
 
@@ -2355,6 +2483,13 @@ def _drain_run_messages(
     message`) — nothing calls this function directly today (always via
     `_start_scalar_run`'s own thread), but a future direct call needs
     no new argument to keep working.
+
+    `equilibrium` is `_start_scalar_run`'s own already-computed
+    `_equilibrium_reference_payload` result (design doc §6.2's
+    predicted-equilibrium trajectory overlay) — carried through to the
+    eventual `"done"` push unchanged, the identical value the page
+    already cached at run-start (`Api.start_run`'s own return), not a
+    second, independent computation.
     """
     logger.debug("run message-drain thread started: %s", output_directory)
     while True:
@@ -2436,6 +2571,12 @@ def _drain_run_messages(
                 # `8615614`/`8c8da68`) — no new computation, no extra
                 # file read.
                 "sigmaBand": _sigma_band_payload(result.manifest, digits),
+                # The trajectory panel's own predicted-equilibrium overlay
+                # (design doc §6.2, `_equilibrium_reference_payload`'s own
+                # docstring) — `_start_scalar_run`'s own already-computed
+                # value, threaded through unchanged rather than recomputed
+                # a second time here.
+                "equilibrium": equilibrium,
             }
             logger.info("run done: %s", output_directory)
             window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")

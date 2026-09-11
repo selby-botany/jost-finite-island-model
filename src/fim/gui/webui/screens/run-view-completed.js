@@ -233,8 +233,15 @@ function drawDifferentiationQCurve(canvas, points) {
  *     sonnet-5-gui-sigma-band-design.md`'s own approach C1) — `null`/
  *     `undefined` (a run that never requested one, or a screen with no
  *     band data of its own to show at all) draws nothing extra.
+ * @param {Object<string, number>} [equilibrium] design §6.2's own
+ *     predicted-equilibrium reference line — one already-`Number`-
+ *     parsed, already-in-scope value per statistic (`renderTrajectory`,
+ *     below, both parses `Api.get_equilibrium_predictions`'s own
+ *     formatted-string values and restricts this to statistics the
+ *     panel is actually plotting before this ever runs); omitted or
+ *     empty draws nothing extra.
  */
-function drawTrajectoryCurve(canvas, generations, histories, sigmaBand) {
+function drawTrajectoryCurve(canvas, generations, histories, sigmaBand, equilibrium) {
     const context = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
@@ -255,6 +262,9 @@ function drawTrajectoryCurve(canvas, generations, histories, sigmaBand) {
         for (const interval of Object.values(sigmaBand.band)) {
             allValues.push(Number(interval.lower), Number(interval.upper));
         }
+    }
+    if (equilibrium) {
+        allValues.push(...Object.values(equilibrium));
     }
     // The domain always includes [0, 1] even if every plotted value
     // happens to sit inside it already — every named statistic's own
@@ -341,6 +351,28 @@ function drawTrajectoryCurve(canvas, generations, histories, sigmaBand) {
         });
         context.stroke();
     }
+
+    // The predicted-equilibrium reference line (design §6.2's own closing
+    // paragraph) -- a light dashed horizontal line at the predicted value,
+    // in the same statistic's own color as its simulated curve, so the
+    // two read as "this statistic, two ways" rather than as unrelated
+    // marks. Drawn last (on top of the solid curves, unlike the sigma
+    // band's own translucent fill, which draws *behind* them) since a
+    // thin dashed line is never wide enough to obscure the data it is
+    // annotating.
+    if (equilibrium) {
+        context.lineWidth = 1.5;
+        context.setLineDash([4, 3]);
+        for (const [name, value] of Object.entries(equilibrium)) {
+            context.strokeStyle = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
+            const y = yToPixel(value);
+            context.beginPath();
+            context.moveTo(plotLeft, y);
+            context.lineTo(plotRight, y);
+            context.stroke();
+        }
+        context.setLineDash([]);
+    }
 }
 
 /**
@@ -372,8 +404,19 @@ function drawTrajectoryCurve(canvas, generations, histories, sigmaBand) {
  * @param {number|undefined} generationCount the run's own final
  *     generation — only read to size the axes for the band-alone case
  *     above; ignored whenever real `generations`/`histories` exist.
+ * @param {Object<string, string>|null|undefined} equilibrium design
+ *     §6.2's own closing paragraph: "the trajectory panel also draws
+ *     the predicted equilibrium as a light dashed reference line."
+ *     `Api.start_run`'s own `equilibrium` field (a live run, cached
+ *     client-side and replayed on every tick — `run-view-running.js`'s
+ *     own `setLiveEquilibriumReference`) or `Api.open_run`'s identical
+ *     field (a reopened run) — `_equilibrium_reference_payload`'s own
+ *     `{"D", "G_ST", "E_ST"}` shape, each `format_statistic`-formatted
+ *     exactly like every other statistic this page draws; `null`/
+ *     `undefined` for a batch (never computed) or a configuration whose
+ *     `N`/`m`/`mu` are not all plain scalars.
  */
-function renderTrajectory(generations, histories, sigmaBand, generationCount) {
+function renderTrajectory(generations, histories, sigmaBand, generationCount, equilibrium) {
     const hasCurve = generations && histories && generations.length > 0;
     if (!hasCurve && !sigmaBand) {
         runTrajectoryFrame.hidden = true;
@@ -402,7 +445,34 @@ function renderTrajectory(generations, histories, sigmaBand, generationCount) {
             ([, values]) => values.length === effectiveGenerations.length
         )
     );
-    drawTrajectoryCurve(canvas, effectiveGenerations, plottable, sigmaBand);
+    // The predicted-equilibrium overlay draws a reference line only for
+    // a statistic the panel is already plotting *something* for — a
+    // real simulated curve (`plottable`, the ordinary case), or, when
+    // there is no curve at all (a reopened run with no live monitor of
+    // its own, `hasCurve` false), whichever statistics the sigma band
+    // is already showing a trailing window for. `equilibrium` on its
+    // own never reveals a panel that would otherwise stay hidden (the
+    // guard above is unchanged) — it only ever adds to a panel already
+    // shown for another reason, the same "nothing to show, don't draw
+    // anything" discipline the sigma band itself established, applied
+    // here to the one case (reopened, no sigma band requested) design
+    // §6.2's own text does not directly address: recomputing a
+    // prediction with nothing plotted alongside it to compare against
+    // would be a number with no context, not a finding.
+    const equilibriumScopeNames = hasCurve
+        ? Object.keys(plottable)
+        : sigmaBand
+          ? Object.keys(sigmaBand.band)
+          : [];
+    const plottableEquilibrium = equilibrium
+        ? Object.fromEntries(
+              Object.entries(equilibrium)
+                  .filter(([name]) => equilibriumScopeNames.includes(name))
+                  .map(([name, formatted]) => [name, Number(formatted)])
+                  .filter(([, value]) => Number.isFinite(value))
+          )
+        : {};
+    drawTrajectoryCurve(canvas, effectiveGenerations, plottable, sigmaBand, plottableEquilibrium);
     runTrajectorySigmaBandCaption.replaceChildren();
     if (sigmaBand) {
         for (const [name, interval] of Object.entries(sigmaBand.band)) {
@@ -423,7 +493,23 @@ function renderTrajectory(generations, histories, sigmaBand, generationCount) {
         swatch.style.backgroundColor =
             STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
         item.appendChild(swatch);
-        item.appendChild(document.createTextNode(name));
+        item.appendChild(document.createTextNode(`${name} (simulated)`));
+        runTrajectoryLegend.appendChild(item);
+    }
+    // A second, dashed-swatch legend entry per statistic actually drawn
+    // as a predicted-equilibrium line (design §6.2's own mockup text:
+    // "┈┈┈┈ predicted equilibrium" vs. "— D (simulated)") -- distinct
+    // enough from the solid-swatch entries above that "predicted" and
+    // "simulated" are never visually confusable, per design principle 5
+    // ("a plot's legend is a contract").
+    for (const name of Object.keys(plottableEquilibrium)) {
+        const item = document.createElement("span");
+        const swatch = document.createElement("span");
+        swatch.className = "swatch swatch-dashed";
+        swatch.style.borderColor =
+            STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
+        item.appendChild(swatch);
+        item.appendChild(document.createTextNode(`${name} (predicted equilibrium)`));
         runTrajectoryLegend.appendChild(item);
     }
 }
@@ -702,7 +788,8 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             payload.convergenceGenerations,
             payload.convergenceHistories,
             payload.sigmaBand,
-            payload.generationCount
+            payload.generationCount,
+            payload.equilibrium
         );
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }

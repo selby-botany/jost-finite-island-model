@@ -70,7 +70,16 @@ async function onRunClicked() {
         // never leaving the input screen on a failed start.
         window.fim.enterInitialState();
         showRunBanner(started.message);
+        return;
     }
+    // The live trajectory panel's own predicted-equilibrium reference
+    // line (design §6.2) -- `started.equilibrium` is `undefined` for a
+    // batch (`_start_batch_run` sends no such field at all) and `null`
+    // for a scalar run whose `N`/`m`/`mu` are not all plain scalars;
+    // `setLiveEquilibriumReference` treats both the same as "nothing to
+    // overlay," matching `renderTrajectory`'s own "nothing to show,
+    // don't draw anything" discipline.
+    window.fim.setLiveEquilibriumReference(started.equilibrium);
 }
 
 async function onLoadYamlClicked() {

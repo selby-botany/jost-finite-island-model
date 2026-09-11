@@ -571,8 +571,19 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
     `convergenceGenerations`/`convergenceHistories` of its own (re-
     analysis recomputes one generation, never a full history) — the
     trajectory panel still shows, axes sized to the band's own trailing
-    window alone, with an empty legend (no curve, no per-statistic
-    swatch to show) and a real, non-blank shaded region.
+    window alone, with no simulated-curve legend entry (no curve, no
+    per-statistic swatch to show for one) and a real, non-blank shaded
+    region.
+
+    `_write_run_with_sigma_band`'s own `N`/`m`/`mu` (`20`/`0.1`/`0.01`)
+    are all plain scalars, and its sigma band covers `D` (the config's
+    own unset-so-default `convergence_statistic`) — botanist GUI design
+    doc §6.2's own predicted-equilibrium overlay draws against that same
+    trailing window even with no curve of its own to sit beside
+    (`run-view-completed.js`'s own `renderTrajectory`: an equilibrium
+    reference line is scoped to whatever the panel is already showing
+    something for — a real curve, or, lacking one, the sigma band), so
+    the legend is not fully empty either: one dashed entry, not zero.
     """
     _write_run_with_sigma_band(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
@@ -603,8 +614,9 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
                 "'run-trajectory-sigma-band-caption').hidden, "
                 "captionText: document.getElementById("
                 "'run-trajectory-sigma-band-caption').textContent, "
-                "legendChildCount: "
-                "document.getElementById('run-trajectory-legend').children.length, "
+                "legendNames: Array.from("
+                "document.querySelectorAll('#run-trajectory-legend span'))"
+                ".map((span) => span.textContent).filter((text) => text), "
                 "canvasNonBlankPixelCount: (() => {"
                 "var c = document.getElementById('run-trajectory-canvas');"
                 "var ctx = c.getContext('2d');"
@@ -634,9 +646,11 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
     assert "3\u03c3" in settled["captionText"]
     assert "5 generations" in settled["captionText"]
     # No curve was ever drawn (`Api.open_run` carries no `convergence*`
-    # history at all) — the legend, which only ever gets one entry per
-    # plotted statistic, stays empty.
-    assert settled["legendChildCount"] == 0
+    # history at all), so there is no "D (simulated)" entry — but `D`'s
+    # own predicted-equilibrium overlay still draws against the sigma
+    # band's own trailing window (this test's own docstring), so the
+    # legend is not empty either.
+    assert settled["legendNames"] == ["D (predicted equilibrium)"]
     assert settled["canvasNonBlankPixelCount"] > 0
 
 

@@ -5542,6 +5542,99 @@ def test_get_equilibrium_predictions_honors_significant_digits() -> None
 
 Explore reads the same display precision every other screen does.
 
+<a id="gui.test_app_api.test_equilibrium_reference_matches_the_statistics_functions_directly"></a>
+
+#### test\_equilibrium\_reference\_matches\_the\_statistics\_functions\_directly
+
+```python
+def test_equilibrium_reference_matches_the_statistics_functions_directly(
+) -> None
+```
+
+The trajectory panel's own `D`/`G_ST`/`E_ST` core matches Explore's formula.
+
+Botanist GUI design doc §6.2's own predicted-equilibrium overlay:
+`_equilibrium_reference` is the exact same core `Api.get_equilibrium_
+predictions` calls (factored out so the two never independently
+drift) — this proves that directly, the same way `test_get_
+equilibrium_predictions_matches_the_statistics_functions_directly`
+proves it for Explore's own three fields.
+
+<a id="gui.test_app_api.test_equilibrium_reference_reports_d_and_e_st_as_undefined_at_mu_zero"></a>
+
+#### test\_equilibrium\_reference\_reports\_d\_and\_e\_st\_as\_undefined\_at\_mu\_zero
+
+```python
+def test_equilibrium_reference_reports_d_and_e_st_as_undefined_at_mu_zero(
+) -> None
+```
+
+`equilibrium_d`/`equilibrium_shannon_differentiation` both require `mu > 0`.
+
+`equilibrium_g_st` alone stays defined at `mu == 0` — confirmed
+directly against each function's own docstring, not assumed.
+
+<a id="gui.test_app_api.test_equilibrium_reference_payload_matches_equilibrium_reference_for_scalar_params"></a>
+
+#### test\_equilibrium\_reference\_payload\_matches\_equilibrium\_reference\_for\_scalar\_params
+
+```python
+def test_equilibrium_reference_payload_matches_equilibrium_reference_for_scalar_params(
+        tiny_params: SimulationParams) -> None
+```
+
+A scalar `N`/`m`/`mu` config's payload is `_equilibrium_reference` verbatim.
+
+`tiny_params` (`test/conftest.py`) is the project's own shared
+small/fast scalar fixture — `N`, `m`, and `mu` are all plain
+scalars there, the ordinary case this overlay exists for.
+
+<a id="gui.test_app_api.test_equilibrium_reference_payload_is_none_for_a_per_deme_population_size"></a>
+
+#### test\_equilibrium\_reference\_payload\_is\_none\_for\_a\_per\_deme\_population\_size
+
+```python
+def test_equilibrium_reference_payload_is_none_for_a_per_deme_population_size(
+        tiny_params: SimulationParams) -> None
+```
+
+A per-deme `N` has no single scalar this family of functions accepts.
+
+Botanist GUI design doc §6.2's own predicted-equilibrium overlay is
+scoped to a scalar configuration, matching Explore's own scalar-only
+fields (`_equilibrium_reference_payload`'s own docstring) — this
+"nothing to show, don't draw anything" case, not a computed value
+reduced from a non-scalar shape.
+
+<a id="gui.test_app_api.test_equilibrium_reference_payload_is_none_for_a_migration_matrix"></a>
+
+#### test\_equilibrium\_reference\_payload\_is\_none\_for\_a\_migration\_matrix
+
+```python
+def test_equilibrium_reference_payload_is_none_for_a_migration_matrix(
+        tiny_params: SimulationParams) -> None
+```
+
+A migration matrix has no single scalar `m` this family of functions accepts.
+
+<a id="gui.test_app_api.test_equilibrium_reference_payload_is_none_for_a_per_locus_mutation_rate"></a>
+
+#### test\_equilibrium\_reference\_payload\_is\_none\_for\_a\_per\_locus\_mutation\_rate
+
+```python
+def test_equilibrium_reference_payload_is_none_for_a_per_locus_mutation_rate(
+        tiny_params: SimulationParams) -> None
+```
+
+A per-locus `mu` also has no single scalar rate this family accepts.
+
+`SimulationParams.__post_init__` collapses a per-locus `mu` back to
+a plain scalar whenever every locus ends up sharing the same rate
+(including, trivially, a single-locus configuration) — a *second*
+locus with a genuinely different rate is needed to actually keep
+`mu` a tuple, unlike the `N`/`m` cases just above, which stay
+non-scalar with `tiny_params`'s own single deme pair already.
+
 <a id="gui.test_app_api.test_get_equilibrium_sweep_holds_the_other_three_fields_fixed"></a>
 
 #### test\_get\_equilibrium\_sweep\_holds\_the\_other\_three\_fields\_fixed
@@ -6268,6 +6361,23 @@ Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
 design.md` (`selby/restricted`) slice 4, approach B1: reused
 unchanged from the live-run path — this proves it, rather than
 trusting the two call sites stayed in sync by inspection alone.
+
+<a id="gui.test_app_api.test_open_run_carries_the_real_equilibrium_prediction"></a>
+
+#### test\_open\_run\_carries\_the\_real\_equilibrium\_prediction
+
+```python
+def test_open_run_carries_the_real_equilibrium_prediction(
+        tmp_path: Path) -> None
+```
+
+A reopened run's own `equilibrium` matches `_equilibrium_reference_payload`.
+
+Botanist GUI design doc §6.2's own predicted-equilibrium overlay,
+computed fresh from the reopened run's own manifest params
+(`_equilibrium_reference_payload`'s own docstring) — `_write_run`'s
+own defaults (`N=20, d=2, m=0.1, mu=0.01`) are all plain scalars, so
+a real prediction is expected here, not `None`.
 
 <a id="gui.test_app_api.test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis"></a>
 
@@ -9292,8 +9402,19 @@ design.md` (`selby/restricted`) slice 4: `Api.open_run` has no
 `convergenceGenerations`/`convergenceHistories` of its own (re-
 analysis recomputes one generation, never a full history) — the
 trajectory panel still shows, axes sized to the band's own trailing
-window alone, with an empty legend (no curve, no per-statistic
-swatch to show) and a real, non-blank shaded region.
+window alone, with no simulated-curve legend entry (no curve, no
+per-statistic swatch to show for one) and a real, non-blank shaded
+region.
+
+`_write_run_with_sigma_band`'s own `N`/`m`/`mu` (`20`/`0.1`/`0.01`)
+are all plain scalars, and its sigma band covers `D` (the config's
+own unset-so-default `convergence_statistic`) — botanist GUI design
+doc §6.2's own predicted-equilibrium overlay draws against that same
+trailing window even with no curve of its own to sit beside
+(`run-view-completed.js`'s own `renderTrajectory`: an equilibrium
+reference line is scoped to whatever the panel is already showing
+something for — a real curve, or, lacking one, the sigma band), so
+the legend is not fully empty either: one dashed entry, not zero.
 
 <a id="gui.test_open_run_screen.test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel"></a>
 
@@ -10551,7 +10672,11 @@ starter form's own single watched `convergence_statistic` (`D`) —
 `accumulateLiveTrajectory`'s own module docstring names this as
 design §6.2's own explicit alternative ("...or all six report
 statistics"), deliberately different from the completed-view
-legend the test above checks.
+legend the test above checks. The starter form's own `N`/`m`/`mu`
+(`450`/`0.001`/`0.00003`) are all plain scalars, so the three
+predictable statistics (`D`/`G_ST`/`E_ST`) each also draw a second,
+distinctly-labeled predicted-equilibrium entry (design §6.2's own
+closing paragraph) — nine legend entries total, not six.
 
 <a id="gui.test_running_screen.test_run_button_starts_a_real_equilibrium_split_run"></a>
 

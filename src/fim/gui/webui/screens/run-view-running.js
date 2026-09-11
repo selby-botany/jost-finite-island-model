@@ -109,6 +109,23 @@ let showingLiveDemePair = false;
 let liveTrajectoryGenerations = [];
 let liveTrajectoryHistories = {};
 
+// The live trajectory's own predicted-equilibrium reference line (design
+// §6.2's own closing paragraph: "the run's own progress toward... that
+// prediction is visible while it is still happening, not only in
+// retrospect on Results"). `Api.start_run`'s own `equilibrium` field
+// (`_equilibrium_reference_payload`, `fim/gui/app.py`) is computed once,
+// server-side, before the run's own background thread even starts, and
+// handed to this page in `start_run`'s own return value -- cached here
+// (`setLiveEquilibriumReference`, called from `run-view-controls.js`'s
+// own `onRunClicked` once that bridge call resolves) and replayed on
+// every subsequent `renderTrajectory` call for this run, rather than
+// re-sent on every progress tick. `null` until that bridge call resolves
+// (a run just entering `running` has not received it yet) and reset to
+// `null` for every fresh run, the same per-run-reset shape
+// `liveTrajectoryGenerations`/`liveTrajectoryHistories` above already
+// establish.
+let liveEquilibriumReference = null;
+
 /**
  * Enter `running`: reset every per-run tracking variable above, show
  * the progress indicator, hide `completed`'s own content, and enable
@@ -134,6 +151,11 @@ function enterRunningState(isBatch = false) {
     showingLiveDemePair = false;
     liveTrajectoryGenerations = [];
     liveTrajectoryHistories = {};
+    // `Api.start_run` has not resolved yet at this point (called
+    // synchronously, before `run-view-controls.js`'s own `onRunClicked`
+    // awaits that bridge call) -- reset now, set for real once it
+    // resolves (`setLiveEquilibriumReference`, below).
+    liveEquilibriumReference = null;
     // Hides the panel immediately (`renderTrajectory`'s own empty-
     // arrays guard) rather than leaving a previous run's own trajectory
     // visible until the first tick of this one repopulates it -- the
@@ -167,6 +189,23 @@ function enterRunningState(isBatch = false) {
 }
 
 window.fim.enterRunningState = enterRunningState;
+
+/**
+ * Cache the live trajectory's own predicted-equilibrium reference line
+ * for the run that just started -- called once, from `run-view-
+ * controls.js`'s own `onRunClicked`, as soon as `Api.start_run`'s own
+ * bridge call resolves (its `equilibrium` field, `_equilibrium_
+ * reference_payload`, `fim/gui/app.py`). Every subsequent `onRunProgress`
+ * tick replays this same cached value rather than re-sending or
+ * recomputing it.
+ *
+ * @param {Object<string, string>|null|undefined} equilibrium
+ */
+window.fim.setLiveEquilibriumReference = function setLiveEquilibriumReference(
+    equilibrium
+) {
+    liveEquilibriumReference = equilibrium ?? null;
+};
 
 function drawProgressPanels(payload) {
     // `pairPanel` is only ever present once a live pair has been
@@ -284,7 +323,13 @@ window.fim.onRunProgress = function onRunProgress(payload) {
     renderLiveStatistics(payload.statistics);
     accumulateLiveTrajectory(payload.generation, payload.statistics);
     if (typeof renderTrajectory === "function") {
-        renderTrajectory(liveTrajectoryGenerations, liveTrajectoryHistories);
+        renderTrajectory(
+            liveTrajectoryGenerations,
+            liveTrajectoryHistories,
+            undefined,
+            undefined,
+            liveEquilibriumReference
+        );
     }
     drawProgressPanels(payload);
 };
