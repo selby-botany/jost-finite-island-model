@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [dev, main]
+    branches: [dev, staging, main]
     tags: ["v*"]
   pull_request:
-    branches: [dev, main]
+    branches: [dev, staging, main]
   # Drives the `slow-tests` job alone (see its own `if:` below) --
   # every other job in this file only ever runs for `push`/`pull_
   # request`/a tag push, never for these two triggers, so a scheduled
@@ -142,6 +142,49 @@ jobs:
           full test suite incl. statistical/gui scenarios, excl. slow)
         run: xvfb-run --auto-servernum ./build --ci
         timeout-minutes: 20
+
+  # The Docker-backed linters `./build` deliberately does not run:
+  # `markdownlint`, `yamllint`, `shellcheck`, the desktop GUI's own
+  # `eslint`/`stylelint`/`htmlhint`, and the `gitleaks` history scan
+  # (`dev/bin/validate-repository` owns the full list). `./build` stays
+  # Docker-free on purpose -- it is the path a contributor can run with
+  # nothing but a Python interpreter -- so these cannot simply be folded
+  # into the `build` job's own gate.
+  #
+  # Deliberately not run on `dev`. `dev/git-hooks/pre-push` runs this
+  # exact script locally before any push, where the pinned images are
+  # already pulled and a failure costs seconds instead of a CI round
+  # trip; the local hook is the real gate. Re-running it on every `dev`
+  # push would spend runner minutes re-proving what the developer's own
+  # machine just proved, and slow the branch where turnaround matters
+  # most. It runs on `staging` and `main` -- the branches a release
+  # actually flows through -- as a backstop against the one case the
+  # hook cannot cover: a push made with the hooks uninstalled, with
+  # `PRE_PUSH_SKIP_VALIDATE=true`, or with no Docker daemon running.
+  # Passing here should be a formality; if it is ever not, the hook was
+  # bypassed.
+  #
+  # Secret scanning is the exception, and stays on `dev`: the separate
+  # `.github/workflows/gitleaks-ci.yml` job runs for every branch,
+  # because a leaked credential is the one failure that is already
+  # irreversible by the time it reaches `staging`.
+  lint-assets:
+    if: >-
+      github.ref == 'refs/heads/staging'
+      || github.ref == 'refs/heads/main'
+      || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # `fetch-depth: 0` because `validate-repository` runs `gitleaks
+      # git`, which scans commit history -- the default shallow clone
+      # would leave all but the tip commit unscanned while still
+      # reporting success.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 0
+      - name: Run the Docker-backed repository validation
+        run: ./dev/bin/validate-repository
 
   # The `slow`-marked engine scenario suite (`test/validation/test_
   # simulator_equilibrium.py`'s five published/theoretical literature

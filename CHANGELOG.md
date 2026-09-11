@@ -8,6 +8,19 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `dev/bin/validate-repository` now runs automatically in two places
+  rather than only by hand. The `pre-push` hook runs it before every
+  push, where the pinned Docker images are already warm and a failure
+  costs seconds instead of a CI round trip; set
+  `PRE_PUSH_SKIP_VALIDATE=true` to skip it, and it skips itself, with a
+  message, when no Docker daemon is running. A new `lint-assets` CI job
+  re-runs it for `staging`, `main`, and release tags as a backstop
+  against a push made with the hook bypassed. It deliberately does not
+  run on `dev`, where the hook is the gate and CI turnaround matters;
+  secret scanning is the exception and keeps running on every branch in
+  its own workflow, since a leaked credential is already irreversible by
+  the time it reaches `staging`. CI now also triggers on `staging`.
+
 - JavaScript, CSS, and HTML linting for the desktop GUI, closing the
   last gap in the repository's lint coverage: `bin/eslint`,
   `bin/stylelint`, and `bin/htmlhint` join the existing Docker-backed
@@ -304,6 +317,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The secret scan in `dev/bin/validate-repository` now scans the
+  project's commit history (`gitleaks git`) rather than the working
+  tree (`gitleaks dir`). Scanning files on disk meant reading three
+  classes of file git will never carry, and which therefore cannot
+  leak: git-ignored local configuration such as `.envrc`, which
+  legitimately holds live tokens on a developer's own machine;
+  untracked scratch (`.wip/`, `.attic/`); and installed dependencies
+  (`.venv*/`). On this repository that was ~148 MB scanned and four
+  unactionable findings, against ~7.7 MB and none — and a check that
+  fails on every developer's machine for reasons nobody can fix is a
+  check that gets skipped. No coverage is lost: a secret leaks by being
+  committed, and history is exactly what is now scanned. Verified
+  against a scratch repository holding both a committed token and a
+  git-ignored one: history mode reported the committed token alone,
+  working-tree mode reported both.
 - Heading anchors containing an underscore were computed incorrectly by
   `dev/lib/docslug.py`, which stripped every `_` as emphasis markup.
   CommonMark forbids *intraword* `_` emphasis precisely so identifiers

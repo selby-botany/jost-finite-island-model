@@ -317,6 +317,38 @@ def test_pre_push_skips_unavailable_python_tools(tmp_path: Path) -> None:
     assert "mypy absent; types skipped" in result.stdout
     assert "pytest absent; tests skipped" in result.stdout
     assert "API generator unavailable; docs skipped" in result.stdout
+    assert "Docker unavailable; repository validation skipped" in result.stdout
+
+
+def test_pre_push_runs_the_docker_backed_repository_validation() -> None:
+    """The push gate runs `validate-repository`, skippably and guarded.
+
+    Local is where the Docker-backed linters belong: the images are
+    already pulled on a developer's machine, so the marginal cost is
+    seconds, while a lint failure caught after the push has already
+    cost a CI round trip. `.github/workflows/ci.yml` only re-runs this
+    script on `staging`/`main`, precisely because this hook is the real
+    gate -- if that CI job is ever the thing that fails, this hook was
+    bypassed.
+    """
+    hook = (HOOKS / "pre-push").read_text(encoding="utf-8")
+
+    assert "dev/bin/validate-repository" in hook, (
+        "pre-push no longer runs dev/bin/validate-repository; the "
+        "Docker-backed linters would then run only on staging/main CI"
+    )
+    assert "PRE_PUSH_SKIP_VALIDATE:-false" in hook, (
+        "the validation gate needs the same PRE_PUSH_SKIP_* escape "
+        "hatch as every other gate in this hook"
+    )
+    # Guarded on the daemon, not merely on the client binary: `docker`
+    # is frequently installed while the daemon is not running, and an
+    # unguarded run would then fail the push with a connection error
+    # rather than skipping cleanly the way every other gate does.
+    assert "docker info" in hook, (
+        "the validation gate must probe the Docker daemon, not just the "
+        "docker binary, so a stopped daemon skips rather than fails"
+    )
 
 
 def test_pre_push_detects_stale_generated_api(tmp_path: Path) -> None:

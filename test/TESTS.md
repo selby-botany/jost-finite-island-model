@@ -17747,6 +17747,24 @@ def test_pre_push_skips_unavailable_python_tools(tmp_path: Path) -> None
 
 Missing local gates are reported without blocking a push.
 
+<a id="validation.test_git_hooks.test_pre_push_runs_the_docker_backed_repository_validation"></a>
+
+#### test\_pre\_push\_runs\_the\_docker\_backed\_repository\_validation
+
+```python
+def test_pre_push_runs_the_docker_backed_repository_validation() -> None
+```
+
+The push gate runs `validate-repository`, skippably and guarded.
+
+Local is where the Docker-backed linters belong: the images are
+already pulled on a developer's machine, so the marginal cost is
+seconds, while a lint failure caught after the push has already
+cost a CI round trip. `.github/workflows/ci.yml` only re-runs this
+script on `staging`/`main`, precisely because this hook is the real
+gate -- if that CI job is ever the thing that fails, this hook was
+bypassed.
+
 <a id="validation.test_git_hooks.test_pre_push_detects_stale_generated_api"></a>
 
 #### test\_pre\_push\_detects\_stale\_generated\_api
@@ -19629,6 +19647,33 @@ on purpose -- see the comment above that list. The cost of that
 choice is that a newly added wrapper is silently left unchecked, so
 this test is what makes the list self-correcting.
 
+<a id="validation.test_webui_assets.test_secret_scan_targets_committed_history_not_the_working_tree"></a>
+
+#### test\_secret\_scan\_targets\_committed\_history\_not\_the\_working\_tree
+
+```python
+def test_secret_scan_targets_committed_history_not_the_working_tree() -> None
+```
+
+`validate-repository` scans git history, not files on disk.
+
+`gitleaks dir` walks the working tree, which on any real developer
+machine includes three classes of file git will never carry and
+that therefore cannot leak: git-ignored local configuration
+(`.envrc`, which legitimately holds live tokens), untracked scratch
+(`.wip/`, `.attic/`), and installed dependencies (`.venv*/`).
+Measured directly on this repository, that was ~148MB scanned and
+four unactionable findings, against ~7.7MB and none for `gitleaks
+git` -- and a check that fails on every developer's machine for
+reasons nobody can fix is a check that gets skipped, which is worse
+than one that is merely narrower.
+
+The narrowing costs no real coverage: a secret leaks by being
+committed and pushed, and history is exactly what `gitleaks git`
+reads. Verified empirically against a scratch repository holding
+both a committed token and a git-ignored one -- `git` mode reported
+the committed token alone, `dir` mode reported both.
+
 <a id="validation.test_workflow_pins"></a>
 
 # validation.test\_workflow\_pins
@@ -19688,6 +19733,41 @@ Regression test: SHA-pinned actions and version-ranged pip
 dependencies both still need a mechanism to move forward on their
 own schedule — a pin with nothing ever refreshing it just becomes a
 silently stale one instead of a silently floating one.
+
+<a id="validation.test_workflow_pins.test_lint_assets_runs_the_docker_linters_off_the_dev_branch"></a>
+
+#### test\_lint\_assets\_runs\_the\_docker\_linters\_off\_the\_dev\_branch
+
+```python
+def test_lint_assets_runs_the_docker_linters_off_the_dev_branch() -> None
+```
+
+The Docker-backed validation job is gated to `staging` and `main`.
+
+`./build` is deliberately Docker-free, so the Markdown/YAML/shell
+and desktop-GUI linters cannot ride along in the `build` job; they
+need a job of their own. That job deliberately does not run on
+`dev`: `dev/git-hooks/pre-push` already runs the identical script
+locally, where the pinned images are warm, so re-running it per
+`dev` push would spend runner minutes re-proving what the
+developer's machine just proved. It runs on the branches a release
+flows through as a backstop for a push made with the hook bypassed.
+
+<a id="validation.test_workflow_pins.test_secret_scanning_covers_every_long_lived_branch"></a>
+
+#### test\_secret\_scanning\_covers\_every\_long\_lived\_branch
+
+```python
+def test_secret_scanning_covers_every_long_lived_branch() -> None
+```
+
+Gitleaks runs on `dev` too, unlike the rest of the validation.
+
+A leaked credential is the one failure that is already irreversible
+by the time it reaches `staging`: rotating it is the only remedy,
+and every hour it sits in a pushed branch is exposure. So secret
+scanning keeps its own always-on workflow even though the rest of
+`validate-repository` is deferred to `staging`/`main`.
 
 
 

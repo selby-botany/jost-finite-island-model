@@ -126,6 +126,31 @@ if [[ "${PRE_PUSH_SKIP_DOCS:-false}" != true ]]; then
     fi
 fi
 
+# Docker-backed repository validation: the Markdown/YAML/shell linters
+# and the desktop GUI's own JavaScript/CSS/HTML linters, plus the
+# secret scan (`dev/bin/validate-repository`, which owns the full list).
+#
+# Local is the right place for these. Every tool runs from a pinned
+# image that a developer working in this repository already has pulled,
+# so the marginal cost here is seconds, while the same work on a CI
+# runner starts cold every time -- and a lint failure caught after a
+# push has already cost a round trip. CI on `staging`/`main` re-runs
+# this same script as a backstop, where it should be a formality.
+#
+# Skipped rather than failed when Docker is unavailable, matching every
+# other gate in this hook: a developer without a running Docker daemon
+# still gets the Python gates above, and CI still enforces the rest.
+if [[ "${PRE_PUSH_SKIP_VALIDATE:-false}" != true ]]; then
+    if [[ -x dev/bin/validate-repository ]] \
+        && command -v docker >/dev/null 2>&1 \
+        && docker info >/dev/null 2>&1
+    then
+        dev/bin/validate-repository
+    else
+        printf 'pre-push: Docker unavailable; repository validation skipped\n'
+    fi
+fi
+
 if [[ "${PRE_PUSH_SKIP_TEST:-false}" != true ]]; then
     if command -v pytest >/dev/null 2>&1; then
         # No explicit `-m` here: `[tool.pytest.ini_options].addopts` in

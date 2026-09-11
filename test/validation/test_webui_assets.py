@@ -291,3 +291,38 @@ def test_validate_repository_shellchecks_every_wrapper_in_bin() -> None:
     assert present - listed == set(), (
         "wrappers missing from the validate-repository shellcheck list"
     )
+
+
+def test_secret_scan_targets_committed_history_not_the_working_tree() -> None:
+    """`validate-repository` scans git history, not files on disk.
+
+    `gitleaks dir` walks the working tree, which on any real developer
+    machine includes three classes of file git will never carry and
+    that therefore cannot leak: git-ignored local configuration
+    (`.envrc`, which legitimately holds live tokens), untracked scratch
+    (`.wip/`, `.attic/`), and installed dependencies (`.venv*/`).
+    Measured directly on this repository, that was ~148MB scanned and
+    four unactionable findings, against ~7.7MB and none for `gitleaks
+    git` -- and a check that fails on every developer's machine for
+    reasons nobody can fix is a check that gets skipped, which is worse
+    than one that is merely narrower.
+
+    The narrowing costs no real coverage: a secret leaks by being
+    committed and pushed, and history is exactly what `gitleaks git`
+    reads. Verified empirically against a scratch repository holding
+    both a committed token and a git-ignored one -- `git` mode reported
+    the committed token alone, `dir` mode reported both.
+    """
+    source = VALIDATE_REPOSITORY.read_text("utf-8")
+
+    assert re.search(r"^gitleaks git \.", source, re.MULTILINE), (
+        "validate-repository no longer runs `gitleaks git`"
+    )
+    assert not re.search(r"^gitleaks dir\b", source, re.MULTILINE), (
+        "`gitleaks dir` scans git-ignored and vendored files, producing "
+        "findings that cannot be acted on; scan history instead"
+    )
+    assert "--redact" in source, (
+        "the secret scan must redact matches so a finding in CI output "
+        "does not become a second disclosure of the same secret"
+    )

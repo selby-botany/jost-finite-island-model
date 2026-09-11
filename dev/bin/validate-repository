@@ -167,10 +167,24 @@ stylelint "src/fim/gui/webui/**/*.css"
 # top of `.htmlhintrc-fragment`.
 htmlhint src/fim/gui/webui/index.html
 htmlhint --config .htmlhintrc-fragment "src/fim/gui/webui/help/*.html"
-# The whole repository, including its full commit history (`gitleaks
-# dir` scans the working tree; the separate `.github/workflows/gitleaks-
-# ci.yml` job scans history on push) -- `--redact` prints only enough of
-# any match to identify it, never the full secret value itself, so a
-# false positive shown in this command's own output never becomes a
-# second place the same secret is now exposed.
-gitleaks dir . --no-banner --redact
+# Every commit in the repository's own history (`gitleaks git`), which
+# is exactly the content that can actually leak: a secret becomes a
+# disclosure by being committed and pushed, so committed history is the
+# thing worth gating on. The separate `.github/workflows/gitleaks-ci.yml`
+# job scans the same way on push.
+#
+# Deliberately not `gitleaks dir .`, which scans the working tree as
+# files on disk and so reads three categories of file that can never
+# leak because git will never carry them: git-ignored local
+# configuration (`.envrc`, which legitimately holds real tokens on a
+# developer's own machine), untracked scratch (`.wip/`, `.attic/`), and
+# installed third-party code (`.venv*/`). That made the check both
+# noisy and slow -- it reported findings nobody can act on, in files
+# that are not part of the project, while scanning ~148MB instead of
+# this repository's own ~7.7MB. A check that cries wolf on every
+# developer machine is a check that gets skipped.
+#
+# `--redact` prints only enough of any match to identify it, never the
+# full secret value, so a finding shown in this command's own output
+# never becomes a second place the same secret is exposed.
+gitleaks git . --no-banner --redact

@@ -749,8 +749,9 @@ every Markdown file for consistent formatting), `eslint`, `stylelint`,
 and `htmlhint` (check the desktop app's JavaScript, stylesheets, and
 HTML for the faults a web browser would never report -- a misspelled
 call, an unknown style property, two elements sharing one name), and
-`gitleaks` (scans everything for text that looks like an
-accidentally-committed password, API key, or other credential).
+`gitleaks` (scans the project's entire commit history for text that
+looks like an accidentally-committed password, API key, or other
+credential).
 
 **Why it matters:** These checks catch a different kind of mistake
 than the test suite does -- not "does the simulator compute the right
@@ -771,12 +772,38 @@ time, on every machine and in the automated CI checks alike -- so a
 result never depends on which version of a tool someone happened to
 have lying around.
 
-**When to run it:** Before a release, or any time you want reassurance
-that the whole repository -- not just the specific files you changed --
-is in good shape. It is not part of `./build`, because every tool it
-runs needs Docker and `./build` deliberately does not; run it by hand.
-Its companion check that needs no Docker,
-[`check-webui-assets`](#check-webui-assets), does run in `./build`.
+**When to run it:** Usually you will not have to run it by hand at all:
+the `pre-push` hook runs it automatically before every push, so the
+normal experience is that problems surface locally, seconds after you
+introduce them. Run it directly when you want reassurance about the
+whole repository rather than the files you changed -- before a release,
+say -- or after installing the hooks for the first time.
+
+It is not part of `./build`, because every tool it runs needs Docker and
+`./build` deliberately does not. Its companion check that needs no
+Docker, [`check-webui-assets`](#check-webui-assets), does run in
+`./build`.
+
+**Where it runs automatically:**
+
+| Place | When |
+|---|---|
+| `pre-push` hook | Every push, unless Docker is unavailable or `PRE_PUSH_SKIP_VALIDATE=true` |
+| CI (`lint-assets`) | Pushes and pull requests to `staging` and `main`, and release tags |
+
+CI deliberately does not run it on `dev`. The pinned images are already
+warm on a machine that has pushed before, so the hook costs seconds
+while a CI runner starts cold every time -- and a failure reported after
+the push has already cost a round trip. The `staging`/`main` job is a
+backstop for the cases the hook cannot cover: a push made with the hooks
+never installed, with `PRE_PUSH_SKIP_VALIDATE=true`, or with no Docker
+daemon running. If that job ever fails, the hook was bypassed.
+
+Secret scanning is the exception and runs on every branch, in its own
+`.github/workflows/gitleaks-ci.yml` workflow, because a leaked
+credential is the one failure already irreversible by the time it
+reaches `staging` -- rotation is the only remedy, and every hour it sits
+in a pushed branch is exposure.
 
 **Usage:**
 

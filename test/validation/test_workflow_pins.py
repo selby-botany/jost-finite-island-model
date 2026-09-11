@@ -101,3 +101,63 @@ def test_dependabot_tracks_pip_and_github_actions() -> None:
 
     assert config["version"] == 2
     assert {"pip", "github-actions"} <= ecosystems
+
+
+def test_lint_assets_runs_the_docker_linters_off_the_dev_branch() -> None:
+    """The Docker-backed validation job is gated to `staging` and `main`.
+
+    `./build` is deliberately Docker-free, so the Markdown/YAML/shell
+    and desktop-GUI linters cannot ride along in the `build` job; they
+    need a job of their own. That job deliberately does not run on
+    `dev`: `dev/git-hooks/pre-push` already runs the identical script
+    locally, where the pinned images are warm, so re-running it per
+    `dev` push would spend runner minutes re-proving what the
+    developer's machine just proved. It runs on the branches a release
+    flows through as a backstop for a push made with the hook bypassed.
+    """
+    workflow = yaml.safe_load(
+        (WORKFLOWS_DIRECTORY / "ci.yml").read_text(encoding="utf-8")
+    )
+    job = workflow["jobs"]["lint-assets"]
+    condition = " ".join(job["if"].split())
+
+    assert "refs/heads/staging" in condition
+    assert "refs/heads/main" in condition
+    assert "refs/heads/dev" not in condition, (
+        "lint-assets must not run on dev; the pre-push hook is the gate "
+        "there and CI turnaround on dev is the point of the split"
+    )
+    assert any(
+        "dev/bin/validate-repository" in str(step.get("run", ""))
+        for step in job["steps"]
+    ), "lint-assets no longer runs dev/bin/validate-repository"
+    # `gitleaks git` walks commit history, so the default shallow clone
+    # would leave all but the tip commit unscanned -- and still report
+    # success, which is the dangerous half.
+    assert any(
+        step.get("with", {}).get("fetch-depth") == 0
+        for step in job["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    ), "lint-assets needs fetch-depth: 0 for the gitleaks history scan"
+
+
+def test_secret_scanning_covers_every_long_lived_branch() -> None:
+    """Gitleaks runs on `dev` too, unlike the rest of the validation.
+
+    A leaked credential is the one failure that is already irreversible
+    by the time it reaches `staging`: rotating it is the only remedy,
+    and every hour it sits in a pushed branch is exposure. So secret
+    scanning keeps its own always-on workflow even though the rest of
+    `validate-repository` is deferred to `staging`/`main`.
+    """
+    workflow = yaml.safe_load(
+        (WORKFLOWS_DIRECTORY / "gitleaks-ci.yml").read_text(encoding="utf-8")
+    )
+    # `on` is the YAML 1.1 boolean `True` once parsed, not the string.
+    triggers = workflow[True]
+
+    for event in ("push", "pull_request"):
+        branches = set(triggers[event]["branches"])
+        assert {"dev", "staging", "main"} <= branches, (
+            f"gitleaks-ci.yml {event} skips a long-lived branch: {branches}"
+        )
