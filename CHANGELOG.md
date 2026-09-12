@@ -28,6 +28,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   than stating a symmetric summary that interval's own construction
   disclaims. A `summary.json` written by an earlier version needs no
   conversion: a missing `sample_std` reads as `null`.
+- `doc/configuration.md` entries for `equilibrium_convergence_window`,
+  `equilibrium_convergence_tolerance`, and `equilibrium_max_generations`
+  — the equilibrium-split starting condition's three configuration keys,
+  which shipped accepted by `SimulationParams.from_mapping` and settable
+  from a config file but documented nowhere user-facing. One shared
+  section (they must be set together, or not at all) covering what the
+  two ancestral-population phases do, what each key controls, why the
+  generation cap is fatal here unlike `max_generations`, and the mutual
+  exclusivity with an explicit p<sub>0</sub>, plus seven new validation-summary
+  rows. Found by comparing `_CONFIG_KEYS` against the document
+  programmatically rather than by eye; see the 2026-09-12
+  API-compatibility-policy design, Approach E.
 - A trajectory panel for a batch run, both while it is still running
   and once it finishes (batch trajectory panel design `20260912-
   claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/
@@ -531,6 +543,24 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `fim.statistics.differentiation`'s `FrequencyTable` type alias narrowed
+  from `Sequence[Mapping[Any, Any]]` to `Sequence[Mapping[Any, float]]`,
+  and `DemeWeights` from `Sequence[Any] | None` to
+  `Sequence[float] | None`. A type-annotation change only — a `TypeAlias`
+  has no runtime representation here, so every input accepted before is
+  still accepted, and no validation, coercion, or arithmetic path
+  changes. A `str`, `None`, or `Decimal` frequency, all of which already
+  raised `TypeError` at runtime, is now also caught by the type checker;
+  a `fractions.Fraction` or `numpy.float32` frequency stays legal at
+  runtime but becomes a static type error, a freedom nothing in `src/` or
+  `test/` exercises (both production callers already coerce with
+  `float(...)`). The *key* half stays `Any` deliberately and is now
+  commented as such: `Mapping`'s key parameter is invariant, so
+  `Mapping[AlleleId, float]` — what `ModelState.frequency_map` returns
+  and `fim.model.initial` passes straight through — is not a
+  `Mapping[int, float]`, and no concrete key type admits every legal
+  caller. See the 2026-09-12 API-compatibility-policy design, Approach D,
+  for the measurements behind both halves.
 - Documentation review: `README.md`, `doc/usage.md`, `doc/configuration.md`,
   `doc/fim-simulator-design.md`, and `doc/examples/*/config.yaml` corrected
   against the current codebase. `n_replicates`'s default changing from `1`

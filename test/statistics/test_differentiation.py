@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import math
 import unittest
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import cast
+from typing import Any, cast, get_args
 from unittest.mock import patch
 
 from fim.statistics import (
@@ -893,3 +893,36 @@ class DifferentiationStatisticsTests(unittest.TestCase):
             identity_recovery_trajectory(0.5, 100, 0.05, -1)
         with self.assertRaisesRegex(ValueError, "generations must"):
             identity_recovery_trajectory(0.5, 100, 0.05, math.inf)
+
+    def test_frequency_table_value_annotation_stays_a_number(self) -> None:
+        """`FrequencyTable`/`DemeWeights` never widen their value half back
+        to `Any`.
+
+        An invariant check in the same spirit as
+        `test/test_mypy_scope.py`, guarding the one half of these two
+        aliases the type gate itself cannot protect. Tightening the *key*
+        half can never land silently: `Mapping`'s key parameter is
+        invariant, so any concrete key type makes `mypy` fail outright on
+        `fim.model.initial`'s own `Mapping[AlleleId, float]` call site.
+        Widening the *value* half back to `Any`, by contrast, is strictly
+        looser, so `mypy` would stay clean and the regression would pass
+        every gate unnoticed.
+
+        Asserted against the aliases as runtime objects rather than
+        against source text: a `TypeAlias`'s right-hand side is an
+        ordinary expression, evaluated at import even under `from
+        __future__ import annotations` (only the `: TypeAlias` part
+        becomes a string), so `typing.get_args` sees the real
+        parameterization and a harmless reformat cannot break this test.
+        """
+        (deme_mapping,) = get_args(differentiation.FrequencyTable)
+        key_type, value_type = get_args(deme_mapping)
+        self.assertIs(value_type, float)
+        # Documented, not incidental -- see `FrequencyTable`'s own comment
+        # for why no concrete key type admits every legal caller.
+        self.assertIs(key_type, Any)
+
+        self.assertEqual(
+            get_args(differentiation.DemeWeights),
+            (Sequence[float], type(None)),
+        )

@@ -1,9 +1,11 @@
 """Tests for validated and replayable simulation parameters."""
 
+from pathlib import Path
+
 import pytest
 
 from fim.model.locus import LocusSpec
-from fim.model.params import PARAMETER_DEFAULTS, SimulationParams
+from fim.model.params import _CONFIG_KEYS, PARAMETER_DEFAULTS, SimulationParams
 
 
 def _valid_config() -> dict[str, object]:
@@ -1111,3 +1113,40 @@ def test_sigma_band_fields_do_not_conflict_with_explicit_p_0() -> None:
     params = SimulationParams.from_mapping(config)
     assert params.sigma_band_multiplier == 2.0
     assert params.initial_frequencies is not None
+
+
+def test_every_accepted_config_key_appears_in_configuration_md() -> None:
+    """Every key `from_mapping` accepts is documented for a user.
+
+    A static-analysis check in the same spirit as `test/test_mypy_
+    scope.py`: it reads `doc/configuration.md` off disk and starts no
+    simulation, so it runs in milliseconds. `_CONFIG_KEYS` is the
+    authority on what a config file may contain — an unrecognized key is
+    rejected by name (`from_mapping`'s own strictness) — and
+    `doc/configuration.md` is the only place a user finds out which keys
+    those are. A key the parser accepts but the reference never mentions
+    is, from outside, indistinguishable from one that does not exist.
+
+    Regression test. `equilibrium_convergence_window`,
+    `equilibrium_convergence_tolerance`, and
+    `equilibrium_max_generations` shipped accepted, defaulted, and
+    documented in `SimulationParams`'s own docstring, but appeared
+    nowhere in `doc/configuration.md` at all, and nothing caught it for
+    an entire release cycle (2026-09-12 API-compatibility-policy design,
+    Approach E). Presence anywhere in the document is all this asserts,
+    deliberately: a key does not need a heading of its own to be
+    properly covered — `mu_b`, `n_loci`, and `locus_lengths` are each
+    documented inside their parent key's own section, and the three
+    `equilibrium_*` keys share one section because they must be set
+    together.
+    """
+    documentation = (
+        Path(__file__).resolve().parents[2] / "doc" / "configuration.md"
+    ).read_text(encoding="utf-8")
+
+    undocumented = sorted(key for key in _CONFIG_KEYS if key not in documentation)
+
+    assert not undocumented, (
+        f"configuration keys accepted by SimulationParams.from_mapping but "
+        f"absent from doc/configuration.md: {', '.join(undocumented)}"
+    )

@@ -219,6 +219,7 @@ every front end resolves a project-relative path):
 def log_directory(root: Path | None = None) -> Path:
     return (root if root is not None else project_root()) / "logs"
 
+
 def default_log_file(root: Path | None = None) -> Path:
     return log_directory(root) / "fim.log"
 ```

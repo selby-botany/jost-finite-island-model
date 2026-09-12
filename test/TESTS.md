@@ -15680,6 +15680,38 @@ def test_sigma_band_fields_do_not_conflict_with_explicit_p_0() -> None
 
 The sigma band is also never mutually exclusive with an explicit p_0.
 
+<a id="model.test_params.test_every_accepted_config_key_appears_in_configuration_md"></a>
+
+#### test\_every\_accepted\_config\_key\_appears\_in\_configuration\_md
+
+```python
+def test_every_accepted_config_key_appears_in_configuration_md() -> None
+```
+
+Every key `from_mapping` accepts is documented for a user.
+
+A static-analysis check in the same spirit as `test/test_mypy_
+scope.py`: it reads `doc/configuration.md` off disk and starts no
+simulation, so it runs in milliseconds. `_CONFIG_KEYS` is the
+authority on what a config file may contain — an unrecognized key is
+rejected by name (`from_mapping`'s own strictness) — and
+`doc/configuration.md` is the only place a user finds out which keys
+those are. A key the parser accepts but the reference never mentions
+is, from outside, indistinguishable from one that does not exist.
+
+Regression test. `equilibrium_convergence_window`,
+`equilibrium_convergence_tolerance`, and
+`equilibrium_max_generations` shipped accepted, defaulted, and
+documented in `SimulationParams`'s own docstring, but appeared
+nowhere in `doc/configuration.md` at all, and nothing caught it for
+an entire release cycle (2026-09-12 API-compatibility-policy design,
+Approach E). Presence anywhere in the document is all this asserts,
+deliberately: a key does not need a heading of its own to be
+properly covered — `mu_b`, `n_loci`, and `locus_lengths` are each
+documented inside their parent key's own section, and the three
+`equilibrium_*` keys share one section because they must be set
+together.
+
 <a id="model.test_state"></a>
 
 # model.test\_state
@@ -18087,6 +18119,34 @@ def test_identity_recovery_functions_validate_their_inputs() -> None
 
 The identity-recovery family rejects the same malformed inputs
 as the rest of this module's equilibrium-formula family.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_frequency_table_value_annotation_stays_a_number"></a>
+
+#### test\_frequency\_table\_value\_annotation\_stays\_a\_number
+
+```python
+def test_frequency_table_value_annotation_stays_a_number() -> None
+```
+
+`FrequencyTable`/`DemeWeights` never widen their value half back
+to `Any`.
+
+An invariant check in the same spirit as
+`test/test_mypy_scope.py`, guarding the one half of these two
+aliases the type gate itself cannot protect. Tightening the *key*
+half can never land silently: `Mapping`'s key parameter is
+invariant, so any concrete key type makes `mypy` fail outright on
+`fim.model.initial`'s own `Mapping[AlleleId, float]` call site.
+Widening the *value* half back to `Any`, by contrast, is strictly
+looser, so `mypy` would stay clean and the regression would pass
+every gate unnoticed.
+
+Asserted against the aliases as runtime objects rather than
+against source text: a `TypeAlias`'s right-hand side is an
+ordinary expression, evaluated at import even under `from
+__future__ import annotations` (only the `: TypeAlias` part
+becomes a string), so `typing.get_args` sees the real
+parameterization and a harmless reformat cannot break this test.
 
 <a id="statistics.test_interval"></a>
 

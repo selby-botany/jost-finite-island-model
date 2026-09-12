@@ -4003,7 +4003,7 @@ def _statistics_for_locus(
     `statistics_report`'s own `statistics` parameter for the full
     contract).
     """
-    table: list[Mapping[Any, Any]] = [
+    table: list[Mapping[Any, float]] = [
         {
             int(allele_id): frequency
             for allele_id, frequency in state.frequency_map(
@@ -4038,7 +4038,7 @@ def _statistics_for_locus_vectorized(
     — identical contract, forwarded the same way.
     """
     frequencies = locus_state.frequencies
-    table: list[Mapping[Any, Any]] = [
+    table: list[Mapping[Any, float]] = [
         {
             int(allele_id): float(frequencies[deme_index, allele_id])
             for allele_id in np.flatnonzero(frequencies[deme_index])
