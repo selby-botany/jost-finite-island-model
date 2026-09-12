@@ -11006,7 +11006,11 @@ itself a mapping from an allele's identity to its frequency in that
 deme; allele identifiers must be integer-like (whole numbers, or
 values that behave like them) purely as a bookkeeping convention — the
 actual identity of an allele is never mathematically meaningful here,
-only whether two entries share the same identity or not.
+only whether two entries share the same identity or not. A frequency
+itself must be an ordinary number — a `float`, or an `int` where that
+reads more naturally (`{0: 1}` for a deme fixed on one allele); see
+`FrequencyTable`'s own comment, below, for exactly what the type
+annotation does and does not promise about either half.
 
 <a id="fim.statistics.differentiation.DifferentiationReport"></a>
 

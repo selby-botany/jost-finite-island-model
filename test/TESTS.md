@@ -17767,6 +17767,34 @@ def test_identity_recovery_functions_validate_their_inputs() -> None
 The identity-recovery family rejects the same malformed inputs
 as the rest of this module's equilibrium-formula family.
 
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_frequency_table_value_annotation_stays_a_number"></a>
+
+#### test\_frequency\_table\_value\_annotation\_stays\_a\_number
+
+```python
+def test_frequency_table_value_annotation_stays_a_number() -> None
+```
+
+`FrequencyTable`/`DemeWeights` never widen their value half back
+to `Any`.
+
+An invariant check in the same spirit as
+`test/test_mypy_scope.py`, guarding the one half of these two
+aliases the type gate itself cannot protect. Tightening the *key*
+half can never land silently: `Mapping`'s key parameter is
+invariant, so any concrete key type makes `mypy` fail outright on
+`fim.model.initial`'s own `Mapping[AlleleId, float]` call site.
+Widening the *value* half back to `Any`, by contrast, is strictly
+looser, so `mypy` would stay clean and the regression would pass
+every gate unnoticed.
+
+Asserted against the aliases as runtime objects rather than
+against source text: a `TypeAlias`'s right-hand side is an
+ordinary expression, evaluated at import even under `from
+__future__ import annotations` (only the `: TypeAlias` part
+becomes a string), so `typing.get_args` sees the real
+parameterization and a harmless reformat cannot break this test.
+
 <a id="statistics.test_interval"></a>
 
 # statistics.test\_interval

@@ -511,6 +511,24 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `fim.statistics.differentiation`'s `FrequencyTable` type alias narrowed
+  from `Sequence[Mapping[Any, Any]]` to `Sequence[Mapping[Any, float]]`,
+  and `DemeWeights` from `Sequence[Any] | None` to
+  `Sequence[float] | None`. A type-annotation change only — a `TypeAlias`
+  has no runtime representation here, so every input accepted before is
+  still accepted, and no validation, coercion, or arithmetic path
+  changes. A `str`, `None`, or `Decimal` frequency, all of which already
+  raised `TypeError` at runtime, is now also caught by the type checker;
+  a `fractions.Fraction` or `numpy.float32` frequency stays legal at
+  runtime but becomes a static type error, a freedom nothing in `src/` or
+  `test/` exercises (both production callers already coerce with
+  `float(...)`). The *key* half stays `Any` deliberately and is now
+  commented as such: `Mapping`'s key parameter is invariant, so
+  `Mapping[AlleleId, float]` — what `ModelState.frequency_map` returns
+  and `fim.model.initial` passes straight through — is not a
+  `Mapping[int, float]`, and no concrete key type admits every legal
+  caller. See the 2026-09-12 API-compatibility-policy design, Approach D,
+  for the measurements behind both halves.
 - Documentation review: `README.md`, `doc/usage.md`, `doc/configuration.md`,
   `doc/fim-simulator-design.md`, and `doc/examples/*/config.yaml` corrected
   against the current codebase. `n_replicates`'s default changing from `1`

@@ -39,7 +39,11 @@ itself a mapping from an allele's identity to its frequency in that
 deme; allele identifiers must be integer-like (whole numbers, or
 values that behave like them) purely as a bookkeeping convention — the
 actual identity of an allele is never mathematically meaningful here,
-only whether two entries share the same identity or not.
+only whether two entries share the same identity or not. A frequency
+itself must be an ordinary number — a `float`, or an `int` where that
+reads more naturally (`{0: 1}` for a deme fixed on one allele); see
+`FrequencyTable`'s own comment, below, for exactly what the type
+annotation does and does not promise about either half.
 """
 
 from __future__ import annotations
@@ -50,8 +54,30 @@ from numbers import Real
 from operator import index as integer_index
 from typing import Any, TypeAlias, TypedDict, cast
 
-FrequencyTable: TypeAlias = Sequence[Mapping[Any, Any]]
-DemeWeights: TypeAlias = Sequence[Any] | None
+# The *value* half of both aliases is `float`, not `Any`: a frequency or
+# a deme weight is a number, and saying so lets a type checker reject a
+# `str`/`None` frequency at the call site instead of at `_coerce_
+# frequency`'s own runtime `TypeError`. `int` frequencies stay legal
+# (mypy promotes `int` to `float`, so a deme fixed for one allele can
+# still be written `{0: 1}`), and so does `numpy.float64`, which
+# subclasses `float` — the two forms this project's own callers actually
+# produce (`fim.engine._statistics_for_locus`, `_statistics_for_locus_
+# vectorized`). The narrowing this costs is real but unexercised: a
+# `fractions.Fraction` or `numpy.float32` frequency is accepted at
+# runtime (both are `numbers.Real`) and is now a type error, and nothing
+# in `src/` or `test/` passes either.
+#
+# The *key* half must stay `Any`, and that is a measured constraint
+# rather than an unfinished job: `Mapping`'s key parameter is invariant,
+# so `Mapping[AlleleId, float]` — exactly what `fim.model.state.
+# ModelState.frequency_map` returns, and what `fim.model.initial` passes
+# straight through to `h_s` — is not a `Mapping[int, float]`, nor a
+# `Mapping[SupportsIndex, float]`. No concrete key type admits every
+# legal caller, and the real contract (anything `operator.index`
+# accepts, per `_validate_deme` below) cannot be spelled as an invariant
+# key at all.
+FrequencyTable: TypeAlias = Sequence[Mapping[Any, float]]
+DemeWeights: TypeAlias = Sequence[float] | None
 
 _MINIMUM_DEMES = 2
 _TOLERANCE = 1e-12
