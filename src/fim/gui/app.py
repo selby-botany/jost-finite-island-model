@@ -94,7 +94,9 @@ from fim.statistics import (
     equilibrium_d,
     equilibrium_g_st,
     equilibrium_shannon_differentiation,
+    identity_recovery_equilibrium,
     identity_recovery_half_life,
+    identity_recovery_rate,
 )
 from fim.viz.scatter import (
     deme_pair_panel,
@@ -449,6 +451,79 @@ def _equilibrium_reference_payload(
     ):
         return None
     return _equilibrium_reference(params.N, params.m, params.mu, params.d, digits)
+
+
+def _identity_recovery_reference_payload(
+    params: SimulationParams,
+) -> dict[str, float] | None:
+    """Build the trajectory panel's own identity-recovery curve overlay payload.
+
+    A second, genuinely different closed-form reference from `_
+    equilibrium_reference_payload`'s own flat asymptote line — Whitlock
+    (1992)'s `identity_recovery_trajectory` predicts probability of
+    identity by descent, `f_0`, *as a function of generation*, not just
+    where it eventually settles. Already surfaced once in this GUI as a
+    single number, `identity_recovery_half_life` (`Api.get_equilibrium_
+    predictions`) — this is the same closed form, drawn as a full curve
+    instead of collapsed to one derived generation count.
+
+    Sent as `{"rate": L, "equilibrium": f_hat_0}` — two plain floats,
+    not a pre-sampled array of points — because `identity_recovery_
+    trajectory`'s own formula (`f_hat_0 * (1 - L**generations)`, at the
+    `f0_initial = 0.0` starting point this function always assumes, see
+    below) is cheap, exact, closed-form arithmetic in `generations`
+    alone; the page can evaluate it at any generation it is already
+    plotting (whatever sampling the simulated curve itself uses) with no
+    second, independently-sampled series to keep in sync, mirroring how
+    little `_equilibrium_reference_payload`'s own flat line sends.
+
+    `f0_initial` is fixed at `0.0` — Whitlock's own primary scenario, a
+    deme founded from a single common ancestor (maximal identity by
+    descent) recovering variation via migration — rather than derived
+    from this particular run's own initial condition (a Dirichlet draw,
+    an ancestral split, explicit frequencies, or fixed alleles, `initial_
+    conditions_mode`): those starting states are not, in general,
+    disturbances *from* identity-by-descent equilibrium in the sense
+    Whitlock's own model assumes, and `identity_recovery_trajectory`
+    itself takes no position on which one produced a real run's actual
+    `f_0[0]`. Drawn unconditionally, regardless of the run's own chosen
+    initial-conditions mode — matching `identity_recovery_half_life`'s
+    own existing, identically unconditional presentation on Explore.
+    This is a real, load-bearing scope choice, not an oversight: fitting
+    this curve to a specific run's own actual starting identity is a
+    separate, larger design question, tracked in its own design note
+    rather than guessed at here (`20260911-claude-sonnet-5-derived-
+    differentiation-trajectory-design.md`, `selby/restricted`).
+
+    Whitlock (1992)'s own model also assumes zero mutation, unlike this
+    project's typical runs (`mu > 0`) — this curve is therefore a
+    genuine theoretical approximation, not a prediction consistent with
+    a run's own configured mutation rate; the GUI labels it plainly as
+    such rather than implying it is a mutation-aware D/G_ST-style
+    equilibrium the way `_equilibrium_reference_payload`'s own line is.
+
+    Args:
+        params: A validated configuration — `SimulationParams.from_
+            mapping`'s own result at run-start, or a reopened run's own
+            `ReanalyzedGeneration.params`.
+
+    Returns:
+        `None` when `N`/`m` are not both plain scalars (a per-deme `N`
+        or a migration matrix has no single `(N, m)` pair this closed
+        form accepts) — matching `_equilibrium_reference_payload`'s own
+        scalar-only scope boundary. Otherwise `{"rate": L, "equilibrium":
+        f_hat_0}`, both raw floats (not `format_statistic`-formatted —
+        the page computes and rounds displayed values itself from these
+        two, the same "send the ingredients, not a rendered result"
+        shape the rest of this payload already uses for the curve data
+        itself).
+    """
+    if not isinstance(params.N, int) or not isinstance(params.m, float):
+        return None
+    return {
+        "rate": identity_recovery_rate(params.N, params.m),
+        "equilibrium": identity_recovery_equilibrium(params.N, params.m),
+    }
 
 
 def _run_config_summary(params: SimulationParams) -> dict[str, str]:
@@ -830,18 +905,23 @@ class Api:
                 `SimulationParams` field at all, parsed here directly.
 
         Returns:
-            `{"ok": True, "equilibrium": ...}` once the run has *started*
-            — not once it finishes; the real outcome arrives via the
-            pushed calls above. `equilibrium` is `_equilibrium_reference_
-            payload`'s own result (design doc §6.2's predicted-
-            equilibrium trajectory overlay) — `None` for a batch (never
-            computed there — batch has no trajectory panel of its own to
-            overlay onto) or for a scalar run whose `N`/`m`/`mu` are not
-            all plain scalars; the page caches it client-side for the
-            live trajectory panel to draw against on every subsequent
-            progress tick (`webui/screens/run-view-running.js`'s own
-            `setLiveEquilibriumReference`), and the same value is reused,
-            not recomputed, in the eventual `"done"` push
+            `{"ok": True, "equilibrium": ..., "identityRecovery": ...}`
+            once the run has *started* — not once it finishes; the real
+            outcome arrives via the pushed calls above. `equilibrium` is
+            `_equilibrium_reference_payload`'s own result (design doc
+            §6.2's predicted-equilibrium trajectory overlay);
+            `identityRecovery` is `_identity_recovery_reference_
+            payload`'s own result (that same section's closed-form
+            recovery *curve*, a second and different reference overlay —
+            see that function's own docstring). Both `None` for a batch
+            (never computed there — batch has no trajectory panel of its
+            own to overlay onto) or for a scalar run whose `N`/`m`(/`mu`,
+            for `equilibrium` only) are not all plain scalars; the page
+            caches both client-side for the live trajectory panel to
+            draw against on every subsequent progress tick (`webui/
+            screens/run-view-running.js`'s own `setLiveEquilibriumReference`/
+            `setLiveIdentityRecoveryReference`), and the same values are
+            reused, not recomputed, in the eventual `"done"` push
             (`_drain_run_messages`). `{"ok": False, "message": ...}` if
             the form does not validate or the output directory cannot be
             allocated.
@@ -896,14 +976,17 @@ class Api:
         if self._on_run_started is not None:
             self._on_run_started()
         # The trajectory panel's own predicted-equilibrium overlay (design
-        # doc §6.2, `_equilibrium_reference_payload`'s own docstring):
-        # computed once, here, before the run's own background thread even
-        # starts, and handed to both that thread (for the "done" push,
-        # below) and this method's own immediate return (for the live page
-        # to cache and draw on every progress tick while the run is still
-        # going) — one shared computation, not a second one for each of
-        # the two places it is needed.
+        # doc §6.2, `_equilibrium_reference_payload`'s own docstring), and
+        # its own separate identity-recovery curve overlay (`_identity_
+        # recovery_reference_payload`'s own docstring): both computed
+        # once, here, before the run's own background thread even starts,
+        # and handed to both that thread (for the "done" push, below) and
+        # this method's own immediate return (for the live page to cache
+        # and draw on every progress tick while the run is still going) —
+        # one shared computation each, not a second one for each of the
+        # two places either is needed.
         equilibrium = _equilibrium_reference_payload(params, self._significant_digits)
+        identity_recovery = _identity_recovery_reference_payload(params)
         threading.Thread(
             target=_drain_run_messages,
             args=(
@@ -916,10 +999,15 @@ class Api:
                 self.get_live_deme_pair,
                 self._on_message,
                 equilibrium,
+                identity_recovery,
             ),
             daemon=True,
         ).start()
-        return {"ok": True, "equilibrium": equilibrium}
+        return {
+            "ok": True,
+            "equilibrium": equilibrium,
+            "identityRecovery": identity_recovery,
+        }
 
     def _start_batch_run(
         self,
@@ -1990,13 +2078,14 @@ class Api:
         Returns:
             `{"ok": True, "runId", "report", "panels", "statistics",
             "outputDirectory", "generationCount", "demeCount",
-            "sigmaBand", "equilibrium"}` on success — `sigmaBand` is
-            `_sigma_band_payload`'s own result (sigma-band GUI design
-            doc `20260910-claude-sonnet-5-gui-sigma-band-design.md`,
-            `selby/restricted`, slice 4), `None` for a run that never
-            requested one; `equilibrium` is `_equilibrium_reference_
-            payload`'s own result (botanist GUI design doc §6.2's
-            predicted-equilibrium trajectory overlay), computed fresh
+            "sigmaBand", "equilibrium", "identityRecovery"}` on success
+            — `sigmaBand` is `_sigma_band_payload`'s own result (sigma-band
+            GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+            design.md`, `selby/restricted`, slice 4), `None` for a run
+            that never requested one; `equilibrium`/`identityRecovery`
+            are `_equilibrium_reference_payload`'s/`_identity_recovery_
+            reference_payload`'s own results (botanist GUI design doc
+            §6.2's two predicted-trajectory overlays), computed fresh
             from this reopened run's own manifest params, `None` when
             those params are not all plain scalars. `{"ok": False,
             "message": ...}` if no trajectory was given, the
@@ -2079,6 +2168,12 @@ class Api:
             "equilibrium": _equilibrium_reference_payload(
                 reanalyzed.params, self._significant_digits
             ),
+            # The trajectory panel's own identity-recovery curve overlay
+            # (design doc §6.2, `_identity_recovery_reference_payload`'s
+            # own docstring) — same reasoning as `equilibrium` immediately
+            # above: computed fresh from this reopened run's own manifest
+            # params, a pure function of `(N, m)`.
+            "identityRecovery": _identity_recovery_reference_payload(reanalyzed.params),
         }
 
     @_log_bridge_call
@@ -2467,6 +2562,7 @@ def _drain_run_messages(
     live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
     on_message: Callable[[runner.RunMessage], None] | None = None,
     equilibrium: dict[str, str] | None = None,
+    identity_recovery: dict[str, float] | None = None,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
 
@@ -2510,12 +2606,14 @@ def _drain_run_messages(
     `_start_scalar_run`'s own thread), but a future direct call needs
     no new argument to keep working.
 
-    `equilibrium` is `_start_scalar_run`'s own already-computed
-    `_equilibrium_reference_payload` result (design doc §6.2's
-    predicted-equilibrium trajectory overlay) — carried through to the
-    eventual `"done"` push unchanged, the identical value the page
-    already cached at run-start (`Api.start_run`'s own return), not a
-    second, independent computation.
+    `equilibrium`/`identity_recovery` are `_start_scalar_run`'s own
+    already-computed `_equilibrium_reference_payload`/`_identity_
+    recovery_reference_payload` results (design doc §6.2's two
+    predicted-trajectory overlays — see each function's own docstring
+    for what they mean and why they are two separate things) — carried
+    through to the eventual `"done"` push unchanged, the identical
+    values the page already cached at run-start (`Api.start_run`'s own
+    return), not a second, independent computation.
     """
     logger.debug("run message-drain thread started: %s", output_directory)
     while True:
@@ -2603,6 +2701,10 @@ def _drain_run_messages(
                 # value, threaded through unchanged rather than recomputed
                 # a second time here.
                 "equilibrium": equilibrium,
+                # The trajectory panel's own identity-recovery curve
+                # overlay (design doc §6.2, `_identity_recovery_reference_
+                # payload`'s own docstring) — same reuse, not recomputed.
+                "identityRecovery": identity_recovery,
             }
             logger.info("run done: %s", output_directory)
             window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")

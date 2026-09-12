@@ -56,6 +56,47 @@ const STATISTIC_TRAJECTORY_COLORS = {
 // `get_animation_frames` calls. Zero means settled.
 window.__fimScrubberPending = 0;
 
+// The trajectory legend's own display-only visibility toggle (design
+// §6.2: "user-selectable via a small legend-toggle, each watched or
+// not"). Clicking a legend entry hides that one statistic's own curve
+// (and its predicted-equilibrium companion, if drawn) from the canvas
+// -- a pure client-side filter over `histories`, which already holds
+// every tracked statistic's real value regardless of this set
+// (`fim.engine._watched_statistic_values`); nothing here ever stops
+// recording, or re-requests, any statistic's own data. Scoped to the
+// six report statistics only -- the identity-recovery curve overlay
+// (its own, separate legend entry, built after this loop) is not one
+// of them and is never toggled by this mechanism. Reset only when a
+// genuinely new run starts (`run-view-running.js`'s own
+// `enterRunningState`) or a different persisted run is opened
+// (`open-run.js`'s own call into `Api.open_run`) -- deliberately not on
+// the ordinary running->completed transition of the *same* run, so a
+// mid-run choice to hide a noisy curve survives into that run's own
+// completed view rather than silently reverting the instant the run
+// finishes. Module-scope, page-session-only state, matching this
+// file's own `showingLiveDemePair`-style precedent (`run-view-
+// running.js`) for "a user-driven, page-local display toggle" -- no
+// need to survive a reload.
+let hiddenTrajectoryStatistics = new Set();
+
+// The most recent `renderTrajectory` call's own arguments, so a legend
+// click can re-render the panel with the same underlying data (whatever
+// scrub position, if any, was last shown), only a different visibility
+// set, without its caller needing to re-invoke this file with a live
+// history it may no longer have close at hand.
+let lastTrajectoryRenderArgs = null;
+
+/**
+ * Reset the trajectory legend's own hidden-statistic set to "everything
+ * visible" -- called whenever a genuinely new run starts or a different
+ * persisted run is opened (see `hiddenTrajectoryStatistics`'s own
+ * comment for why this is not reset on every `enterCompletedState`
+ * call).
+ */
+window.fim.resetTrajectoryLegendVisibility = function resetTrajectoryLegendVisibility() {
+    hiddenTrajectoryStatistics = new Set();
+};
+
 const resultsRunId = document.getElementById("results-run-id");
 const resultsOutcome = document.getElementById("results-outcome");
 const resultsStats = document.getElementById("results-stats");
@@ -90,6 +131,49 @@ const resultsBackButton = document.getElementById("results-back-button");
 // documented "omitted entirely rather than raising, since a single
 // point has no interval."
 const OMITTED_SUMMARY_TEXT = "omitted (fewer than two defined replicates)";
+
+// Design §6.3's own "a scrubber... letting a user drag back through
+// already-computed history," extended to the completed-state scrubber
+// replaying a finished run (this file's own scrubber, not the live one
+// `run-view-running.js` already handles): only the watched statistic(s)
+// have any per-generation value at all (`ConvergenceMonitor.record`
+// only ever records the statistics actually being watched), so the
+// other five are shown as not known at that generation, rather than a
+// possibly-misleading final value, whenever scrubbing away from the
+// final frame -- reusing `buildOmittedMeter`'s established "a statistic
+// with nothing to show" rendering (`renderBatchSummary`'s own use of it,
+// just above) rather than inventing new wording/markup for this second
+// case of the same underlying idea.
+const OMITTED_SCRUB_TEXT = "not known at this generation";
+
+// Retained per-completed-entry state answering the scrubber's own
+// per-tick statistics/trajectory-marker update (`updateScrubbedTrajectory`,
+// below) -- `payload.convergenceGenerations`/`convergenceHistories`/
+// `sigmaBand`/`equilibrium`/`generationCount`/`statistics` were
+// previously read once by `enterCompletedState` and hedge straight into
+// `renderTrajectory`, with nothing kept anywhere a later scrub tick
+// could read them back from. `null` specifically means "no scalar run's
+// own scrub-replay state is currently loaded" (a batch entry, which
+// never wires a scrubber at all, or before any scalar run has
+// completed) -- reset on every `enterCompletedState` call, the same
+// per-run-reset shape `run-view-running.js`'s own
+// `liveTrajectoryGenerations`/`liveTrajectoryHistories` already
+// establish. A reopened run (`Api.open_run`) has no `convergenceGenerations`/
+// `convergenceHistories` of its own (`renderTrajectory`'s own docstring)
+// -- `completedTrajectoryGenerations` stays `null` for that case even
+// though its own scrubber can still wire (`generationCount` alone
+// decides that), so `updateScrubbedTrajectory` deliberately leaves the
+// table/marker exactly as they were for that one narrow case (a real,
+// named scope boundary, not an oversight): there is no per-generation
+// history of any kind to answer a scrub tick with there, only the one
+// single reanalyzed generation the whole payload already describes.
+let completedTrajectoryGenerations = null;
+let completedTrajectoryHistories = null;
+let completedSigmaBand = null;
+let completedEquilibrium = null;
+let completedIdentityRecovery = null;
+let completedGenerationCount = null;
+let completedFinalStatistics = null;
 
 /**
  * Render the two effective-allele-count rows (botanist GUI design doc
@@ -240,8 +324,37 @@ function drawDifferentiationQCurve(canvas, points) {
  *     formatted-string values and restricts this to statistics the
  *     panel is actually plotting before this ever runs); omitted or
  *     empty draws nothing extra.
+ * @param {{rate: number, equilibrium: number}|null|undefined} identityRecovery
+ *     `Api._identity_recovery_reference_payload`'s own result — a
+ *     second, different closed-form reference from `equilibrium` above:
+ *     a full curve, `f0(generation) = equilibrium * (1 - rate **
+ *     generation)`, not a single asymptote value, drawn in its own
+ *     fixed color (`--fim-accent`, not one of `STATISTIC_TRAJECTORY_
+ *     COLORS` — it is not any one of the six report statistics) and its
+ *     own dotted style, evaluated at every one of `generations` so it
+ *     shares this curve's own x-axis exactly, with no second sampling
+ *     grid to keep in sync. `null`/`undefined` (a batch, a non-scalar
+ *     `N`/`m`, or a panel not otherwise showing anything to plot this
+ *     against) draws nothing extra.
+ * @param {number|null} [scrubGeneration] the completed-state scrubber's
+ *     own currently-scrubbed generation (`updateScrubbedTrajectory`,
+ *     below, already resolves this to the nearest generation this
+ *     panel's own `generations` actually contains) — drawn as one more
+ *     vertical dashed marker, the same `setLineDash`/color convention
+ *     `explore.js`'s own `drawSweepCurve` already established for "the
+ *     configuration's own current value" there; `null`/`undefined`
+ *     (not currently scrubbing, or no scrubber at all) draws nothing
+ *     extra.
  */
-function drawTrajectoryCurve(canvas, generations, histories, sigmaBand, equilibrium) {
+function drawTrajectoryCurve(
+    canvas,
+    generations,
+    histories,
+    sigmaBand,
+    equilibrium,
+    identityRecovery,
+    scrubGeneration
+) {
     const context = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
@@ -265,6 +378,15 @@ function drawTrajectoryCurve(canvas, generations, histories, sigmaBand, equilibr
     }
     if (equilibrium) {
         allValues.push(...Object.values(equilibrium));
+    }
+    if (identityRecovery) {
+        allValues.push(
+            ...generations.map(
+                (generation) =>
+                    identityRecovery.equilibrium *
+                    (1 - identityRecovery.rate ** generation)
+            )
+        );
     }
     // The domain always includes [0, 1] even if every plotted value
     // happens to sit inside it already — every named statistic's own
@@ -295,6 +417,7 @@ function drawTrajectoryCurve(canvas, generations, histories, sigmaBand, equilibr
     const style = getComputedStyle(document.documentElement);
     const borderColor = style.getPropertyValue("--fim-border").trim();
     const mutedColor = style.getPropertyValue("--fim-muted").trim();
+    const accentColor = style.getPropertyValue("--fim-accent").trim();
 
     context.strokeStyle = borderColor;
     context.lineWidth = 1;
@@ -373,6 +496,62 @@ function drawTrajectoryCurve(canvas, generations, histories, sigmaBand, equilibr
         }
         context.setLineDash([]);
     }
+
+    // The identity-recovery closed-form curve (a second, different
+    // theoretical reference from the equilibrium line just above — see
+    // this function's own `identityRecovery` parameter doc): drawn in a
+    // fixed, non-statistic color (this is not `D`/`G_ST`/any of the six
+    // report statistics) and a dotted, not dashed, style, so the three
+    // dashed-vertical/dashed-horizontal conventions already on this
+    // canvas (equilibrium, sigma band caption marker, scrub marker) are
+    // never confusable with this fourth, genuinely different kind of
+    // line. Evaluated at every one of `generations` directly (`f0(t) =
+    // equilibrium * (1 - rate**t)`), not a second, independently sampled
+    // series.
+    if (identityRecovery) {
+        context.strokeStyle = accentColor;
+        context.lineWidth = 1.5;
+        context.setLineDash([1, 3]);
+        context.beginPath();
+        generations.forEach((generation, index) => {
+            const value =
+                identityRecovery.equilibrium *
+                (1 - identityRecovery.rate ** generation);
+            const x = xToPixel(generation);
+            const y = yToPixel(value);
+            if (index === 0) {
+                context.moveTo(x, y);
+            } else {
+                context.lineTo(x, y);
+            }
+        });
+        context.stroke();
+        context.setLineDash([]);
+    }
+
+    // The completed-state scrubber's own current-position marker (this
+    // feature's own design note, read alongside design §6.2/§6.3): a
+    // vertical dashed line at the scrubbed generation, drawn last (on
+    // top of the curves, the sigma band, and the equilibrium overlay
+    // alike) so it always reads clearly regardless of what it crosses —
+    // the same "current value" grammar `explore.js`'s own `drawSweepCurve`
+    // already established (`setLineDash([4, 3])`, muted color, one
+    // pixel wide, full plot height), reused verbatim rather than
+    // inventing a third dashed-vertical-line convention on this page.
+    // The curve itself is never redrawn/truncated for this — the design
+    // note's own explicit choice is a moving marker over the whole,
+    // unchanged curve, not a progressive reveal that hides its ending.
+    if (scrubGeneration !== null && scrubGeneration !== undefined) {
+        context.setLineDash([4, 3]);
+        context.strokeStyle = mutedColor;
+        context.lineWidth = 1;
+        const x = xToPixel(scrubGeneration);
+        context.beginPath();
+        context.moveTo(x, plotTop);
+        context.lineTo(x, plotBottom);
+        context.stroke();
+        context.setLineDash([]);
+    }
 }
 
 /**
@@ -415,8 +594,40 @@ function drawTrajectoryCurve(canvas, generations, histories, sigmaBand, equilibr
  *     exactly like every other statistic this page draws; `null`/
  *     `undefined` for a batch (never computed) or a configuration whose
  *     `N`/`m`/`mu` are not all plain scalars.
+ * @param {{rate: number, equilibrium: number}|null|undefined} identityRecovery
+ *     see `drawTrajectoryCurve`'s own parameter of the same name —
+ *     `Api.start_run`'s own `identityRecovery` field (a live run, cached
+ *     client-side — `run-view-running.js`'s own `setLiveIdentityRecoveryReference`)
+ *     or `Api.open_run`'s identical field (a reopened run); `null`/
+ *     `undefined` for a batch or a non-scalar `N`/`m`.
+ * @param {number|null} [scrubGeneration] see `drawTrajectoryCurve`'s own
+ *     parameter of the same name — threaded straight through unchanged;
+ *     `undefined` for every existing caller (a live tick, a fresh
+ *     completed entry) draws no marker at all, exactly as before this
+ *     parameter existed.
  */
-function renderTrajectory(generations, histories, sigmaBand, generationCount, equilibrium) {
+function renderTrajectory(
+    generations,
+    histories,
+    sigmaBand,
+    generationCount,
+    equilibrium,
+    identityRecovery,
+    scrubGeneration
+) {
+    // Cached so a legend click (`buildTrajectoryLegendItem`, below) can
+    // re-render with the identical underlying data and scrub position,
+    // only a different `hiddenTrajectoryStatistics` set, without
+    // needing this data handed to it again from outside.
+    lastTrajectoryRenderArgs = [
+        generations,
+        histories,
+        sigmaBand,
+        generationCount,
+        equilibrium,
+        identityRecovery,
+        scrubGeneration,
+    ];
     const hasCurve = generations && histories && generations.length > 0;
     if (!hasCurve && !sigmaBand) {
         runTrajectoryFrame.hidden = true;
@@ -472,7 +683,32 @@ function renderTrajectory(generations, histories, sigmaBand, generationCount, eq
                   .filter(([, value]) => Number.isFinite(value))
           )
         : {};
-    drawTrajectoryCurve(canvas, effectiveGenerations, plottable, sigmaBand, plottableEquilibrium);
+    // The legend-toggle feature (design §6.2): `hiddenTrajectoryStatistics`
+    // filters only what actually reaches the canvas -- `plottable`/
+    // `plottableEquilibrium` themselves stay unfiltered, since the legend
+    // built below still needs an entry for *every* trackable statistic,
+    // hidden or not, so a hidden one's own legend item remains there to
+    // click again and bring it back. Display-only: `sigmaBand` and
+    // `identityRecovery` (two separate overlays on the same canvas) are
+    // deliberately never filtered by this set, matching this feature's
+    // own "never affects anything else drawn on the same canvas" scope.
+    const visiblePlottable = Object.fromEntries(
+        Object.entries(plottable).filter(([name]) => !hiddenTrajectoryStatistics.has(name))
+    );
+    const visiblePlottableEquilibrium = Object.fromEntries(
+        Object.entries(plottableEquilibrium).filter(
+            ([name]) => !hiddenTrajectoryStatistics.has(name)
+        )
+    );
+    drawTrajectoryCurve(
+        canvas,
+        effectiveGenerations,
+        visiblePlottable,
+        sigmaBand,
+        visiblePlottableEquilibrium,
+        identityRecovery,
+        scrubGeneration
+    );
     runTrajectorySigmaBandCaption.replaceChildren();
     if (sigmaBand) {
         for (const [name, interval] of Object.entries(sigmaBand.band)) {
@@ -487,31 +723,102 @@ function renderTrajectory(generations, histories, sigmaBand, generationCount, eq
         runTrajectorySigmaBandCaption.children.length === 0;
     runTrajectoryLegend.replaceChildren();
     for (const name of Object.keys(plottable)) {
-        const item = document.createElement("span");
-        const swatch = document.createElement("span");
-        swatch.className = "swatch";
-        swatch.style.backgroundColor =
-            STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
-        item.appendChild(swatch);
-        item.appendChild(document.createTextNode(`${name} (simulated)`));
-        runTrajectoryLegend.appendChild(item);
+        runTrajectoryLegend.appendChild(
+            buildTrajectoryLegendItem(name, `${name} (simulated)`, "swatch")
+        );
     }
     // A second, dashed-swatch legend entry per statistic actually drawn
     // as a predicted-equilibrium line (design §6.2's own mockup text:
     // "┈┈┈┈ predicted equilibrium" vs. "— D (simulated)") -- distinct
     // enough from the solid-swatch entries above that "predicted" and
     // "simulated" are never visually confusable, per design principle 5
-    // ("a plot's legend is a contract").
+    // ("a plot's legend is a contract"). Toggled by the identical name's
+    // own legend entry above, not a second, independent toggle -- hiding
+    // "D (simulated)" hides its own "D (predicted equilibrium)" companion
+    // too (`buildTrajectoryLegendItem`'s own shared `hiddenTrajectory
+    // Statistics` set).
     for (const name of Object.keys(plottableEquilibrium)) {
+        runTrajectoryLegend.appendChild(
+            buildTrajectoryLegendItem(
+                name,
+                `${name} (predicted equilibrium)`,
+                "swatch swatch-dashed"
+            )
+        );
+    }
+    // The identity-recovery closed-form curve's own legend entry (see
+    // `drawTrajectoryCurve`'s own `identityRecovery` parameter doc for
+    // the full "what this is and why it is not called D" explanation) —
+    // drawn whenever the panel is showing anything at all to plot it
+    // against (`effectiveGenerations` always exists at this point, the
+    // early-return above already guaranteed that), not scoped to any one
+    // statistic the way the equilibrium entries above are, since this
+    // curve is not any one of the six report statistics.
+    if (identityRecovery) {
         const item = document.createElement("span");
         const swatch = document.createElement("span");
-        swatch.className = "swatch swatch-dashed";
-        swatch.style.borderColor =
-            STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
+        swatch.className = "swatch swatch-dotted";
+        swatch.style.borderColor = "var(--fim-accent)";
         item.appendChild(swatch);
-        item.appendChild(document.createTextNode(`${name} (predicted equilibrium)`));
+        item.appendChild(
+            document.createTextNode(
+                "f₀ (identity recovery, theoretical founder event)"
+            )
+        );
         runTrajectoryLegend.appendChild(item);
     }
+}
+
+/**
+ * Build one clickable/keyboard-focusable trajectory-legend entry, wired
+ * to toggle `name`'s own visibility in `hiddenTrajectoryStatistics` and
+ * re-render the panel in place (design §6.2's own legend-toggle: display
+ * only, never touching what is recorded or requested). Shared by both
+ * the "(simulated)" and "(predicted equilibrium)" legend loops in
+ * `renderTrajectory` above -- the same statistic name drives both, so
+ * one click hides both entries for that name together, not two
+ * independent toggles a user could get out of sync.
+ *
+ * @param {string} name a tracked statistic name (`STATISTIC_NAMES`).
+ * @param {string} label the full text shown beside the swatch.
+ * @param {string} swatchClassName `"swatch"` (solid) or `"swatch
+ *     swatch-dashed"` (the predicted-equilibrium overlay's own style).
+ * @returns {HTMLSpanElement}
+ */
+function buildTrajectoryLegendItem(name, label, swatchClassName) {
+    const hidden = hiddenTrajectoryStatistics.has(name);
+    const item = document.createElement("span");
+    item.className = hidden ? "legend-item legend-item-hidden" : "legend-item";
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
+    item.setAttribute("aria-pressed", String(!hidden));
+    const swatch = document.createElement("span");
+    swatch.className = swatchClassName;
+    if (swatchClassName === "swatch") {
+        swatch.style.backgroundColor = STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
+    } else {
+        swatch.style.borderColor = STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
+    }
+    item.appendChild(swatch);
+    item.appendChild(document.createTextNode(label));
+    const toggle = () => {
+        if (hiddenTrajectoryStatistics.has(name)) {
+            hiddenTrajectoryStatistics.delete(name);
+        } else {
+            hiddenTrajectoryStatistics.add(name);
+        }
+        if (lastTrajectoryRenderArgs) {
+            renderTrajectory(...lastTrajectoryRenderArgs);
+        }
+    };
+    item.addEventListener("click", toggle);
+    item.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggle();
+        }
+    });
+    return item;
 }
 
 function renderDifferentiationQ(report) {
@@ -657,6 +964,11 @@ function renderBatchTable(replicates, p0Statistics) {
                 trajectoryPath: replicate.trajectoryPath,
             });
             if (result.ok) {
+                // A different persisted run being opened is one of the
+                // two points the trajectory legend's own visibility
+                // toggle resets (`resetTrajectoryLegendVisibility`'s own
+                // doc comment, above, names both).
+                window.fim.resetTrajectoryLegendVisibility();
                 window.fim.enterCompletedState(result, false);
             }
         });
@@ -671,6 +983,132 @@ function drawCompletedOverview(panels) {
         return;
     }
     drawScatter(runCanvas, panels[0]);
+}
+
+/**
+ * Return whichever entry of `generations` (ascending, no duplicates --
+ * `ConvergenceMonitor.generations`'s own invariant) sits closest to
+ * `target` -- the nearest-match lookup `updateScrubbedTrajectory` needs
+ * because an animation frame's own `generation` (sampled from every
+ * *persisted* generation, `fim.gui.animation.select_sample_generations`)
+ * is not guaranteed to coincide with an entry the convergence monitor
+ * recorded (its own, separately sampled, generation list) -- confirmed
+ * during this feature's own live verification that the two arrays are,
+ * in fact, sampled identically for an ordinary run (the monitor records
+ * every generation; persistence, and so the frame sampler, draws from
+ * that exact same complete set), so an exact match is the overwhelmingly
+ * common case in practice, but this still resolves correctly the day
+ * the two diverge. Ties -- `target` sitting exactly midway between two
+ * recorded generations -- resolve to the earlier (smaller) one, simply
+ * because this scans `generations` ascending and only replaces its
+ * current best on a strictly *smaller* distance; no run in this
+ * codebase's own examples produces an exact tie to argue for the other
+ * direction, so "whichever the simplest possible loop naturally prefers"
+ * stood in for a real tie-breaking rule.
+ *
+ * @param {number[]} generations
+ * @param {number} target
+ * @returns {number}
+ */
+function nearestGeneration(generations, target) {
+    let best = generations[0];
+    let bestDistance = Math.abs(best - target);
+    for (const generation of generations) {
+        const distance = Math.abs(generation - target);
+        if (distance < bestDistance) {
+            best = generation;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+/**
+ * Answer one completed-state scrubber tick: update the six-row stats
+ * table and the trajectory panel's own scrub-position marker to match
+ * `frameGeneration` (botanist GUI design doc §6.3's "a scrubber...
+ * letting a user drag back through already-computed history," applied
+ * here to the completed-state scrubber replaying a finished run, not
+ * only a live one). A no-op when this completed entry has no retained
+ * per-generation history at all (`completedTrajectoryGenerations` still
+ * `null` -- a reopened run, or a batch, which never wires a scrubber to
+ * call this in the first place) -- see that variable's own comment for
+ * why that one case is a deliberate, named scope boundary rather than
+ * something this function tries to answer too.
+ *
+ * @param {number} frameGeneration - `frame.generation` for the
+ *     currently-scrubbed animation frame.
+ * @param {boolean} isFinalFrame - whether this is the scrubber's last
+ *     frame (`index === frameCount - 1`) -- `pre_render_frames` always
+ *     samples the final persisted generation as its own last frame, so
+ *     this index comparison is a simpler, equally correct final-frame
+ *     test than comparing generation numbers, and it sidesteps the
+ *     nearest-match rounding above entirely for the one case (the run's
+ *     own real, final, authoritative statistics) where exactness matters
+ *     most.
+ */
+function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
+    if (!completedTrajectoryGenerations || completedTrajectoryGenerations.length === 0) {
+        return;
+    }
+    if (isFinalFrame) {
+        // Back at the run's own final state -- restore the real,
+        // authoritative statistics exactly as `enterCompletedState`
+        // first rendered them, and drop the scrub marker (the curve's
+        // own end already sits at this same generation, so a marker
+        // there would only ever redraw on top of it).
+        for (const name of STATISTIC_NAMES) {
+            const element = document.getElementById(`stat-${name}`);
+            applyStatRow(element, buildPointMeter(name, completedFinalStatistics[name]));
+        }
+        renderTrajectory(
+            completedTrajectoryGenerations,
+            completedTrajectoryHistories,
+            completedSigmaBand,
+            completedGenerationCount,
+            completedEquilibrium,
+            completedIdentityRecovery,
+            null
+        );
+        return;
+    }
+    const scrubGeneration = nearestGeneration(completedTrajectoryGenerations, frameGeneration);
+    const scrubIndex = completedTrajectoryGenerations.indexOf(scrubGeneration);
+    for (const name of STATISTIC_NAMES) {
+        const element = document.getElementById(`stat-${name}`);
+        const history = completedTrajectoryHistories[name];
+        // Only the watched statistic(s) have a history at all
+        // (`completedTrajectoryHistories`'s own comment); and even a
+        // watched one can be undefined on some particular recorded tick
+        // (`G_ST` at a currently-monomorphic locus, `renderTrajectory`'s
+        // own docstring) -- both cases render exactly the same way here
+        // as "not known at this generation," never a stale or padded
+        // value.
+        const value = history && scrubIndex >= 0 ? history[scrubIndex] : undefined;
+        if (Number.isFinite(value)) {
+            applyStatRow(
+                element,
+                // `value` is a raw float here, not yet `format_statistic`-
+                // formatted (`ConvergenceMonitor.histories`'s own type) --
+                // `toPrecision(6)` mirrors that same `%.6g`-style rounding
+                // client-side, the identical established precedent
+                // `renderDifferentiationQ`'s own comment already uses for
+                // this exact situation (a not-yet-server-formatted field).
+                buildPointMeter(name, Number(value).toPrecision(6))
+            );
+        } else {
+            applyStatRow(element, buildOmittedMeter(name, OMITTED_SCRUB_TEXT));
+        }
+    }
+    renderTrajectory(
+        completedTrajectoryGenerations,
+        completedTrajectoryHistories,
+        completedSigmaBand,
+        completedGenerationCount,
+        completedEquilibrium,
+        completedIdentityRecovery,
+        scrubGeneration
+    );
 }
 
 /**
@@ -713,8 +1151,9 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
             return;
         }
         scrubberControls.hidden = false;
-        window.fim.setScrubberFrames(result.frames, (frame) => {
+        window.fim.setScrubberFrames(result.frames, (frame, index) => {
             drawCompletedOverview(frame.panels);
+            updateScrubbedTrajectory(frame.generation, index === result.frames.length - 1);
         });
     } finally {
         window.__fimScrubberPending -= 1;
@@ -771,7 +1210,16 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         window.fim.resetScrubber();
         // A batch's own `completed` view is a pooled final-state
         // scatter across replicates (this file's own module docstring)
-        // — no one trajectory of its own to plot either.
+        // — no one trajectory of its own to plot either, and so nothing
+        // for a scrub tick to ever answer (there is no scrubber to wire
+        // for a batch in the first place).
+        completedTrajectoryGenerations = null;
+        completedTrajectoryHistories = null;
+        completedSigmaBand = null;
+        completedEquilibrium = null;
+        completedIdentityRecovery = null;
+        completedGenerationCount = null;
+        completedFinalStatistics = null;
         renderTrajectory(undefined, undefined);
     } else {
         const report = payload.report;
@@ -784,12 +1232,30 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         }
         renderEffectiveAlleles(payload.effectiveAlleles);
         renderDifferentiationQ(report);
+        // Retained so a later scrub tick (`updateScrubbedTrajectory`,
+        // via `wireCompletedScrubber`'s own `setScrubberFrames` callback,
+        // below) can answer "what did the stats table/trajectory marker
+        // look like at this other generation" without a second bridge
+        // round trip -- `payload.convergenceGenerations`/
+        // `convergenceHistories` are `undefined` for a reopened run
+        // (`Api.open_run`), which normalizes to `null` here exactly like
+        // `enterCompletedState`'s own batch branch above, the signal
+        // `updateScrubbedTrajectory` reads as "nothing to answer a scrub
+        // tick with."
+        completedTrajectoryGenerations = payload.convergenceGenerations || null;
+        completedTrajectoryHistories = payload.convergenceHistories || null;
+        completedSigmaBand = payload.sigmaBand || null;
+        completedEquilibrium = payload.equilibrium || null;
+        completedIdentityRecovery = payload.identityRecovery || null;
+        completedGenerationCount = payload.generationCount;
+        completedFinalStatistics = payload.statistics;
         renderTrajectory(
             payload.convergenceGenerations,
             payload.convergenceHistories,
             payload.sigmaBand,
             payload.generationCount,
-            payload.equilibrium
+            payload.equilibrium,
+            payload.identityRecovery
         );
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }

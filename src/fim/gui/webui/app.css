@@ -852,6 +852,30 @@ fieldset.composite > label {
     gap: 0.3rem;
 }
 
+/* The legend-toggle feature (design §6.2's own "user-selectable via a
+ * small legend-toggle, each watched or not"): every legend entry is
+ * clickable/keyboard-focusable, toggling that one statistic's own curve
+ * (and its predicted-equilibrium companion, if drawn) on and off --
+ * display-only, never touching what is recorded. `.legend-item-hidden`
+ * marks a statistic currently hidden from the plot -- dimmed and struck
+ * through so its own "off" state reads at a glance, distinct from the
+ * swatch-dashed/swatch-solid distinction the predicted/simulated pair
+ * already uses. */
+.run-trajectory-legend .legend-item {
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.run-trajectory-legend .legend-item:focus-visible {
+    outline: 2px solid var(--fim-accent);
+    outline-offset: 2px;
+}
+
+.run-trajectory-legend .legend-item-hidden {
+    opacity: 0.45;
+    text-decoration: line-through;
+}
+
 .run-trajectory-legend .swatch {
     display: inline-block;
     width: 0.7rem;
@@ -867,6 +891,18 @@ fieldset.composite > label {
     width: 0.9rem;
     height: 0;
     border-top: 2px dashed;
+    border-radius: 0;
+    background: none;
+}
+
+/* The identity-recovery closed-form curve's own legend swatch — a
+ * dotted rule, not dashed, so this genuinely different kind of overlay
+ * (a full theoretical curve, not a per-statistic prediction) never
+ * reads as a third variant of the equilibrium line above. */
+.run-trajectory-legend .swatch-dotted {
+    width: 0.9rem;
+    height: 0;
+    border-top: 2px dotted;
     border-radius: 0;
     background: none;
 }

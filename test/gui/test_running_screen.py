@@ -335,12 +335,160 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> No
     assert settled["canvasWidth"] > 0
     # The starter form's own default `convergence_statistic` is `D`
     # alone (`config_form.starter_form_values`) — `_SET_TINY_FIELDS`
-    # never overrides it, so exactly one simulated-curve entry is
-    # expected here. `_SET_TINY_FIELDS`'s own `N`/`m_rate`/`mu_value`
-    # are all plain scalars, so `D`'s own predicted-equilibrium overlay
-    # (design §6.2) draws too, as a second, distinctly-labeled entry —
-    # `_equilibrium_reference_payload`'s own docstring.
-    assert settled["legendNames"] == ["D (simulated)", "D (predicted equilibrium)"]
+    # never overrides it. `D`/`G_ST`/`H_S`/`H_T` still all show a real
+    # "(simulated)" entry regardless of what is actually watched
+    # (`fim.engine._ALWAYS_TRACKED_STATISTICS`) — only `E_ST`/`K_ST`
+    # would need either being watched or `track_expensive_statistics`
+    # opted in, neither true here. `_SET_TINY_FIELDS`'s own `N`/`m_rate`/
+    # `mu_value` are all plain scalars, so `D`'s and `G_ST`'s own
+    # predicted-equilibrium overlays (design §6.2) draw too, each a
+    # second, distinctly-labeled entry — `_equilibrium_reference_
+    # payload`'s own docstring; `E_ST`'s own equilibrium prediction
+    # exists too but is not drawn, since `E_ST` itself is not one of the
+    # panel's own plotted statistics here (`renderTrajectory`'s own
+    # `equilibriumScopeNames`) — and the identity-recovery curve overlay
+    # (`_identity_recovery_reference_payload`'s own docstring), a final,
+    # unconditional entry not scoped to any one statistic, draws whenever
+    # `N`/`m` alone are plain scalars, which they are here too.
+    assert settled["legendNames"] == [
+        "D (simulated)",
+        "G_ST (simulated)",
+        "H_S (simulated)",
+        "H_T (simulated)",
+        "D (predicted equilibrium)",
+        "G_ST (predicted equilibrium)",
+        "f₀ (identity recovery, theoretical founder event)",
+    ]
+
+
+def test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels() -> None:
+    """Clicking a legend entry actually hides that statistic's own drawn pixels.
+
+    Botanist GUI design doc §6.2's own legend-toggle: display-only, so
+    this proves the *canvas* changes (`run-view-completed.js`'s own
+    `buildTrajectoryLegendItem`/`hiddenTrajectoryStatistics`), not just
+    that a CSS class toggled — the same "count non-blank pixels" idiom
+    `test_open_run_screen.py`'s own sigma-band test already established.
+    Clicking "G_ST (simulated)" must also hide its own "G_ST (predicted
+    equilibrium)" companion (this feature's own scope), while every
+    other statistic's own entry (including the identity-recovery curve,
+    which this feature does not toggle at all — it is not one of the six
+    report statistics the legend-toggle scopes to) stays untouched;
+    clicking it again must restore the exact original pixel count,
+    proving the toggle is purely a display filter, never a re-request or
+    a loss of the underlying data.
+    """
+    started_event = threading.Event()
+    done_event = threading.Event()
+
+    def on_run_started() -> None:
+        started_event.set()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(
+        api=Api(on_run_started=on_run_started, on_message=on_message), hidden=True
+    )
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    non_blank_pixel_count_script = (
+        "(() => {"
+        "var c = document.getElementById('run-trajectory-canvas');"
+        "var ctx = c.getContext('2d');"
+        "var data = ctx.getImageData(0, 0, c.width, c.height).data;"
+        "var count = 0;"
+        "for (var i = 3; i < data.length; i += 4) {"
+        "if (data[i] !== 0) { count += 1; }"
+        "}"
+        "return count;"
+        "})()"
+    )
+    legend_state_script = (
+        "Array.from(document.querySelectorAll('#run-trajectory-legend .legend-item'))"
+        ".map((el) => ({"
+        "text: el.textContent, "
+        "hiddenClass: el.classList.contains('legend-item-hidden'), "
+        "ariaPressed: el.getAttribute('aria-pressed')"
+        "}))"
+    )
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            )
+            if not done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                outcome.put(None)
+                return
+            before_pixels = window.evaluate_js(non_blank_pixel_count_script)
+            legend_before = window.evaluate_js(legend_state_script)
+            window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                "'#run-trajectory-legend .legend-item'))"
+                ".find((el) => el.textContent === 'G_ST (simulated)').click();"
+            )
+            after_hide_pixels = window.evaluate_js(non_blank_pixel_count_script)
+            legend_after_hide = window.evaluate_js(legend_state_script)
+            window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                "'#run-trajectory-legend .legend-item'))"
+                ".find((el) => el.textContent === 'G_ST (simulated)').click();"
+            )
+            after_restore_pixels = window.evaluate_js(non_blank_pixel_count_script)
+            outcome.put(
+                {
+                    "before_pixels": before_pixels,
+                    "after_hide_pixels": after_hide_pixels,
+                    "after_restore_pixels": after_restore_pixels,
+                    "legend_before": legend_before,
+                    "legend_after_hide": legend_after_hide,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["before_pixels"] > 0
+    # Hiding a real, actually-drawn curve (plus its dashed equilibrium
+    # companion) must draw strictly fewer non-blank pixels than before.
+    assert settled["after_hide_pixels"] < settled["before_pixels"]
+    # Clicking the identical entry again restores the exact original
+    # pixel count -- a pure, reversible display filter.
+    assert settled["after_restore_pixels"] == settled["before_pixels"]
+
+    def _entry(entries: list[dict[str, Any]], text: str) -> dict[str, Any]:
+        return next(entry for entry in entries if entry["text"] == text)
+
+    before_g_st = _entry(settled["legend_before"], "G_ST (simulated)")
+    assert before_g_st["hiddenClass"] is False
+    assert before_g_st["ariaPressed"] == "true"
+
+    after_g_st = _entry(settled["legend_after_hide"], "G_ST (simulated)")
+    assert after_g_st["hiddenClass"] is True
+    assert after_g_st["ariaPressed"] == "false"
+    # The "G_ST (predicted equilibrium)" companion entry is hidden too,
+    # by the same click -- one toggle for both entries sharing a name.
+    after_g_st_equilibrium = _entry(
+        settled["legend_after_hide"], "G_ST (predicted equilibrium)"
+    )
+    assert after_g_st_equilibrium["hiddenClass"] is True
+    assert after_g_st_equilibrium["ariaPressed"] == "false"
+    # Every other statistic's own entry is untouched by this one click.
+    for text in (
+        "D (simulated)",
+        "H_S (simulated)",
+        "H_T (simulated)",
+        "D (predicted equilibrium)",
+    ):
+        entry = _entry(settled["legend_after_hide"], text)
+        assert entry["hiddenClass"] is False
+        assert entry["ariaPressed"] == "true"
 
 
 def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
@@ -438,17 +586,20 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
     assert settled["frameHiddenBeforeStart"] is True
     assert settled["runViewState"] == "running"
     assert settled["frameHidden"] is False
-    assert sorted(settled["legendNames"]) == [
-        "D (predicted equilibrium)",
-        "D (simulated)",
-        "E_ST (predicted equilibrium)",
-        "E_ST (simulated)",
-        "G_ST (predicted equilibrium)",
-        "G_ST (simulated)",
-        "H_S (simulated)",
-        "H_T (simulated)",
-        "K_ST (simulated)",
-    ]
+    assert sorted(settled["legendNames"]) == sorted(
+        [
+            "D (predicted equilibrium)",
+            "D (simulated)",
+            "E_ST (predicted equilibrium)",
+            "E_ST (simulated)",
+            "G_ST (predicted equilibrium)",
+            "G_ST (simulated)",
+            "H_S (simulated)",
+            "H_T (simulated)",
+            "K_ST (simulated)",
+            "f₀ (identity recovery, theoretical founder event)",
+        ]
+    )
 
 
 # Selects the "equilibrium split" radio (`config-modals.js`'s own

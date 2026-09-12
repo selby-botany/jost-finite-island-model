@@ -126,6 +126,14 @@ let liveTrajectoryHistories = {};
 // establish.
 let liveEquilibriumReference = null;
 
+// The live trajectory's own identity-recovery closed-form curve overlay —
+// a second, different reference from `liveEquilibriumReference` above
+// (see `_identity_recovery_reference_payload`, `fim/gui/app.py`, for what
+// it is and why it is not the same thing). Cached and reset the same way
+// and at the same two points as `liveEquilibriumReference`, immediately
+// above.
+let liveIdentityRecoveryReference = null;
+
 /**
  * Enter `running`: reset every per-run tracking variable above, show
  * the progress indicator, hide `completed`'s own content, and enable
@@ -156,6 +164,16 @@ function enterRunningState(isBatch = false) {
     // awaits that bridge call) -- reset now, set for real once it
     // resolves (`setLiveEquilibriumReference`, below).
     liveEquilibriumReference = null;
+    liveIdentityRecoveryReference = null;
+    // A genuinely new run starting is one of the two points the
+    // trajectory legend's own display-only visibility toggle resets
+    // (design §6.2's legend-toggle; `run-view-completed.js`'s own
+    // `resetTrajectoryLegendVisibility` doc comment names both) --
+    // guarded the same way `renderTrajectory` itself is, just below:
+    // that file loads after this one.
+    if (typeof window.fim.resetTrajectoryLegendVisibility === "function") {
+        window.fim.resetTrajectoryLegendVisibility();
+    }
     // Hides the panel immediately (`renderTrajectory`'s own empty-
     // arrays guard) rather than leaving a previous run's own trajectory
     // visible until the first tick of this one repopulates it -- the
@@ -205,6 +223,20 @@ window.fim.setLiveEquilibriumReference = function setLiveEquilibriumReference(
     equilibrium
 ) {
     liveEquilibriumReference = equilibrium ?? null;
+};
+
+/**
+ * Cache the live trajectory's own identity-recovery curve overlay for the
+ * run that just started — same calling convention as `setLiveEquilibriumReference`
+ * immediately above (`run-view-controls.js`'s own `onRunClicked`, once
+ * `Api.start_run` resolves, its `identityRecovery` field).
+ *
+ * @param {{rate: number, equilibrium: number}|null|undefined} identityRecovery
+ */
+window.fim.setLiveIdentityRecoveryReference = function setLiveIdentityRecoveryReference(
+    identityRecovery
+) {
+    liveIdentityRecoveryReference = identityRecovery ?? null;
 };
 
 function drawProgressPanels(payload) {
@@ -328,7 +360,8 @@ window.fim.onRunProgress = function onRunProgress(payload) {
             liveTrajectoryHistories,
             undefined,
             undefined,
-            liveEquilibriumReference
+            liveEquilibriumReference,
+            liveIdentityRecoveryReference
         );
     }
     drawProgressPanels(payload);

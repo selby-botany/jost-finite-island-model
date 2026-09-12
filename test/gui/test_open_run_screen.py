@@ -804,8 +804,15 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
     # history at all), so there is no "D (simulated)" entry — but `D`'s
     # own predicted-equilibrium overlay still draws against the sigma
     # band's own trailing window (this test's own docstring), so the
-    # legend is not empty either.
-    assert settled["legendNames"] == ["D (predicted equilibrium)"]
+    # legend is not empty either. The identity-recovery curve overlay
+    # (`_identity_recovery_reference_payload`) draws unconditionally
+    # whenever `N`/`m` alone are plain scalars (they are here too, and it
+    # is not scoped to the sigma band's own statistics the way the
+    # equilibrium entry is), so it appears as a third entry.
+    assert settled["legendNames"] == [
+        "D (predicted equilibrium)",
+        "f₀ (identity recovery, theoretical founder event)",
+    ]
     assert settled["canvasNonBlankPixelCount"] > 0
 
 

@@ -559,6 +559,11 @@ openButton.addEventListener("click", async () => {
         return;
     }
     showOpenRunBanner("");
+    // A different persisted run being opened is the other of the two
+    // points the trajectory legend's own display-only visibility toggle
+    // resets (design §6.2's legend-toggle; `run-view-completed.js`'s own
+    // `resetTrajectoryLegendVisibility` doc comment names both).
+    window.fim.resetTrajectoryLegendVisibility();
     window.fim.enterCompletedState(result, false);
 });
 

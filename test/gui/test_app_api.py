@@ -57,7 +57,9 @@ from fim.statistics import (
     equilibrium_d,
     equilibrium_g_st,
     equilibrium_shannon_differentiation,
+    identity_recovery_equilibrium,
     identity_recovery_half_life,
+    identity_recovery_rate,
 )
 from fim.viz.scatter import frequency_points, pooled_scatter_panels
 
@@ -521,8 +523,55 @@ def test_equilibrium_reference_payload_is_none_for_a_per_locus_mutation_rate(
     assert app_module._equilibrium_reference_payload(params, digits=4) is None
 
 
+def test_identity_recovery_reference_payload_matches_the_statistics_functions_directly(
+    tiny_params: SimulationParams,
+) -> None:
+    """`_identity_recovery_reference_payload` is Whitlock's `rate`/`equilibrium`.
+
+    A second, different closed-form reference from `_equilibrium_
+    reference_payload`'s own asymptote line (design doc §6.2) — a full
+    curve, `f0(t) = equilibrium * (1 - rate**t)`, not a single value —
+    so this test checks the two raw ingredients the page evaluates that
+    formula from client-side, not a pre-sampled series.
+    """
+    assert isinstance(tiny_params.N, int)
+    assert isinstance(tiny_params.m, float)
+
+    result = app_module._identity_recovery_reference_payload(tiny_params)
+
+    assert result == {
+        "rate": identity_recovery_rate(tiny_params.N, tiny_params.m),
+        "equilibrium": identity_recovery_equilibrium(tiny_params.N, tiny_params.m),
+    }
+
+
+def test_identity_recovery_reference_payload_is_none_for_a_per_deme_population_size(
+    tiny_params: SimulationParams,
+) -> None:
+    """A per-deme `N` has no single scalar these identity-recovery functions accept.
+
+    Matches `_equilibrium_reference_payload`'s own identical scalar-only
+    scope boundary, applied here to the two arguments (`N`, `m`) this
+    family of functions actually needs — no `mu`/`d` at all, unlike the
+    equilibrium family, since Whitlock (1992)'s own model is deme-count-
+    and mutation-independent by construction.
+    """
+    params = replace(tiny_params, N=(10, 20))
+
+    assert app_module._identity_recovery_reference_payload(params) is None
+
+
+def test_identity_recovery_reference_payload_is_none_for_a_migration_matrix(
+    tiny_params: SimulationParams,
+) -> None:
+    """A migration matrix has no single scalar `m` this family of functions accepts."""
+    params = replace(tiny_params, m=((0.9, 0.1), (0.1, 0.9)))
+
+    assert app_module._identity_recovery_reference_payload(params) is None
+
+
 def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None:
-    """Sweeping `m` recomputes `D`/`G_ST` at each point using the same N/d/mu."""
+    """Sweeping `m` recomputes `D`/`G_ST`/`E_ST` at each point using the same N/d/mu."""
     result = Api().get_equilibrium_sweep(
         axis="m", n="450", m="0.001", mu="0.00003", d="20"
     )
@@ -1659,6 +1708,24 @@ def test_open_run_carries_the_real_equilibrium_prediction(tmp_path: Path) -> Non
             equilibrium_shannon_differentiation(20, 0.1, 0.01, 2),
             api._significant_digits,
         ),
+    }
+
+
+def test_open_run_carries_the_real_identity_recovery_reference(tmp_path: Path) -> None:
+    """A reopened run's own `identityRecovery` matches Whitlock's formulas directly.
+
+    A second, different overlay from `equilibrium` immediately above
+    (design doc §6.2) — computed fresh from the same reopened run's own
+    manifest params.
+    """
+    output = _write_run(tmp_path)
+
+    result = Api().open_run({"trajectoryPath": str(output / "trajectory.jsonl")})
+
+    assert result["ok"] is True
+    assert result["identityRecovery"] == {
+        "rate": identity_recovery_rate(20, 0.1),
+        "equilibrium": identity_recovery_equilibrium(20, 0.1),
     }
 
 

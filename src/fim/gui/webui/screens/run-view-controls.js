@@ -80,6 +80,11 @@ async function onRunClicked() {
     // overlay," matching `renderTrajectory`'s own "nothing to show,
     // don't draw anything" discipline.
     window.fim.setLiveEquilibriumReference(started.equilibrium);
+    // The live trajectory panel's own identity-recovery curve overlay
+    // (design §6.2) -- same reasoning and the same `undefined`-for-a-
+    // batch/`null`-for-a-non-scalar-configuration shape as `started.
+    // equilibrium` immediately above.
+    window.fim.setLiveIdentityRecoveryReference(started.identityRecovery);
 }
 
 async function onLoadYamlClicked() {

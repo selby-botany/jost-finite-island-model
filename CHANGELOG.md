@@ -387,6 +387,45 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are merely along for the ride. The within-run sigma band (§7.2) stays
   scoped to exactly the watched statistics, its own documented contract,
   unaffected by either change.
+- The trajectory panel (design §6.2) now also draws Whitlock (1992)'s
+  identity-recovery closed-form curve, `f0(generation) = f_hat_0 * (1 -
+  L**generation)` — a second, different theoretical overlay from the
+  predicted-equilibrium reference line: a full curve over generations,
+  not a single asymptote, and a genuinely different quantity (identity
+  by descent, not `D`/`G_ST`/`E_ST`) under different modeling
+  assumptions (an infinite-island, zero-mutation model, unlike the
+  finite-island, nonzero-mutation formulas the equilibrium line already
+  uses). Drawn in its own fixed color (`--fim-accent`) and dotted style
+  (a new `.swatch-dotted` legend swatch), so it is never confusable with
+  the dashed equilibrium/scrub-marker conventions already on this
+  canvas, with its own legend entry, "f₀ (identity recovery, theoretical
+  founder event)." `f0_initial` is fixed at `0.0` — Whitlock's own
+  primary scenario, a deme founded from a single common ancestor — not
+  derived from a run's own actual initial condition; fitting this curve
+  to a run's own real starting state is tracked as its own, larger
+  design question (`20260911-claude-sonnet-5-derived-differentiation-
+  trajectory-design.md`, `selby/restricted`), not attempted here. Drawn
+  unconditionally whenever `N`/`m` alone are plain scalars (matching
+  `identity_recovery_half_life`'s own existing, identically
+  unconditional presentation on Explore), regardless of the run's own
+  chosen initial-conditions mode. Wired into the same three places the
+  equilibrium line already reaches: live (from the first progress tick),
+  the "done" push a live run ends with, and a reopened persisted run.
+- The trajectory panel's own `D`/`G_ST`/`H_S`/`H_T` curves now always
+- The trajectory panel's own legend is now a display-only toggle
+  (design §6.2's own "user-selectable via a small legend-toggle, each
+  watched or not"): clicking (or focusing and pressing Enter/Space on)
+  a legend entry hides that one statistic's own curve — and its
+  predicted-equilibrium companion, if drawn — from the canvas, without
+  touching what is recorded, requested, or shown for any other
+  statistic on the same plot (the sigma band, the identity-recovery
+  curve, and the scrub marker are all unaffected). Purely a client-side
+  filter over data already on the page; toggling a curve off never
+  stops recording its own history. Resets to "everything visible" only
+  when a genuinely new run starts or a different persisted run is
+  opened — not on the ordinary running-to-completed transition of the
+  same run, so a mid-run choice to hide a noisy curve survives into
+  that run's own completed view.
 
 ### Changed
 
@@ -431,7 +470,6 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   document is for" section); pinned against this project's own
   validation-harness oracle by `test_report_for_state_ratio_of_means_
   matches_the_pooled_oracle`.
-
 - `fim.reanalyze.reanalyze_trajectory` no longer materializes an
   entire persisted trajectory into one list before selecting the one
   requested generation's rows out of it (`doc/20260906-gpt-5.6-open-
@@ -487,6 +525,28 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The unified run view's `completed` state scrubber (`screens/run-view-
+  completed.js`) now updates the six-row stats table and the trajectory
+  panel while scrubbing a just-finished (or reopened) scalar run's own
+  persisted history, not only the scatter plot — botanist GUI redesign
+  doc §6.2/§6.3's own "a scrubber... letting a user drag back through
+  already-computed history" had only ever been implemented for a *live*
+  run (`run-view-running.js`), never extended to `completed`'s own
+  scrubber replaying history after the fact. Confirmed live with a real
+  run (`doc/examples/golden-part-vi/config.yaml`, one replicate,
+  converged at generation 177): before this fix, scrubbing from frame
+  1/100 to frame 100/100 left every displayed statistic and the
+  trajectory canvas unchanged. Scrubbing to a non-final frame now shows
+  the watched convergence statistic's own real value recorded at the
+  nearest generation (`ConvergenceMonitor.record` only ever records the
+  statistic(s) actually being watched); the other five statistics show
+  "not known at this generation" — reusing `buildOmittedMeter`'s
+  existing "nothing to show" rendering rather than a possibly-misleading
+  final value — and the trajectory panel draws a moving vertical marker
+  at the scrubbed generation over the unchanged curve, following the
+  same dashed-line convention `explore.js`'s own current-value marker
+  already established. Scrubbing back to the scrubber's own last frame
+  restores the exact original statistics and removes the marker.
 - `dev/bin/generate-test-docs` and `dev/bin/generate-help-html` no
   longer depend on the invoking shell having already activated a
   project virtualenv. Both scripts previously assumed a bare
