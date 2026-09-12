@@ -8,6 +8,26 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Each across-replicate confidence interval now reports the equivalent
+  sample standard deviation alongside its half-width, completing
+  botanist GUI design doc §7.2's own requirement that "the meter's
+  tooltip states both the confidence-interval half-width and the
+  equivalent sample standard deviation" (sample-standard-deviation
+  tooltip design `20260912-claude-sonnet-5-sample-std-dev-tooltip-
+  design.md`, `selby/restricted`). A batch summary row's hover tooltip
+  states both numbers, spelled out rather than as a sigma glyph, which
+  this GUI reserves for the separate within-run sigma band; and a batch
+  `summary.json` gains a `sample_std` field per statistic. The two
+  numbers answer different questions — the half-width is how precisely
+  the *average* is known and shrinks as replicates are added, while the
+  sample standard deviation is how much the *replicates* differ from one
+  another and does not. `sample_std` is `null` for an interval built by
+  resampling rather than by the Student's-t formula
+  (`fim.engine.bootstrap_replicate_summary`), whose two sides are not
+  generally the same width; the tooltip then omits both numbers rather
+  than stating a symmetric summary that interval's own construction
+  disclaims. A `summary.json` written by an earlier version needs no
+  conversion: a missing `sample_std` reads as `null`.
 - A trajectory panel for a batch run, both while it is still running
   and once it finishes (batch trajectory panel design `20260912-
   claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/

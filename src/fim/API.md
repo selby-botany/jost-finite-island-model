@@ -2464,7 +2464,11 @@ docstring for why it does not raise this same case itself).
 **Returns**:
 
   One `ConfidenceInterval` per statistic name in `FinalReport`
-  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``).
+  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
+  ``Gs``, ``Gd`` — the same nine `reports_summary` itself lists,
+  restated here rather than abbreviated, since this list had
+  silently kept naming only the first seven after ``Gs``/``Gd``
+  were added).
   ``G_ST`` is undefined for a replicate whose locus is monomorphic
   across every deme (``H_T == 0``); such replicates are dropped
   from ``G_ST``'s own sample rather than papered over with a
