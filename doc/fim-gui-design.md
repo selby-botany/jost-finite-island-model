@@ -14,7 +14,7 @@
     - [5.1 From six screens to one view](#51-from-six-screens-to-one-view)
     - [5.2 States: initial, running, completed](#52-states-initial-running-completed)
   - [6. The configuration form](#6-the-configuration-form)
-    - [6.1 Tabs and the cardinality rule](#61-tabs-and-the-cardinality-rule)
+    - [6.1 Two panels and the cardinality rule](#61-two-panels-and-the-cardinality-rule)
     - [6.2 Load-only badges and unrepresentable constructs](#62-load-only-badges-and-unrepresentable-constructs)
   - [7. Run orchestration](#7-run-orchestration)
     - [7.1 Scalar runs](#71-scalar-runs)
@@ -22,7 +22,7 @@
     - [7.3 Shared output-directory semantics with the CLI](#73-shared-output-directory-semantics-with-the-cli)
   - [8. Animation](#8-animation)
   - [9. Recent runs and opening a persisted run](#9-recent-runs-and-opening-a-persisted-run)
-  - [10. Native menus](#10-native-menus)
+  - [10. Navigation: the persistent rail and native menus](#10-navigation-the-persistent-rail-and-native-menus)
   - [11. In-app help](#11-in-app-help)
   - [12. Shared logic with the CLI](#12-shared-logic-with-the-cli)
   - [13. Milestone glossary](#13-milestone-glossary)
@@ -190,12 +190,15 @@ keeps existing across scalar and batch results, rather than requiring
 a dedicated screen and button to reach it.
 
 Configuration input and the open/recent-runs picker remain their own
-areas (the Configure menu's modals and value-selectors, and the File
-menu's "Open run…" action, respectively) — only the run-in-progress and
-run-completed states were unified, since those four screens shared
-almost all of their own rendering logic (the same scatter canvas, the
-same six named statistics, the same deme-pair selector) and differed
-mainly in which state a given run happened to be in.
+areas — the rail's own Configure and Home destinations (§10) — only the
+run-in-progress and run-completed states were unified, since those four
+screens shared almost all of their own rendering logic (the same scatter
+canvas, the same six named statistics, the same deme-pair selector) and
+differed mainly in which state a given run happened to be in. (At the
+time this consolidation happened, Configure was still reached through a
+native menu's modals rather than the rail's own always-visible screen —
+see §10's own historical note; the unification described here predates
+that later navigation change and is unaffected by it.)
 
 ### 5.2 States: initial, running, completed
 
@@ -227,22 +230,29 @@ every element reference the other two also need.
 
 ## 6. The configuration form
 
-### 6.1 Tabs and the cardinality rule
+### 6.1 Two panels and the cardinality rule
 
 `fim.gui.config_form` is a pure, pywebview-free set of functions
-marshaling `SimulationParams` to and from the tabbed model-input
-screen's own `dict[str, str]` of one string per field, and from there
-to a `dict[str, object]` payload ready for
-`SimulationParams.from_mapping` — the identical validator `fim.cli`
-already uses. Nothing in this module duplicates a validation rule
-`from_mapping` already enforces: a malformed string is coerced to the
-right Python type before being handed to that one validator, never
-re-checked against a second, GUI-local copy of a rule.
+marshaling `SimulationParams` to and from the model-input screen's own
+`dict[str, str]` of one string per field, and from there to a
+`dict[str, object]` payload ready for `SimulationParams.from_mapping`
+— the identical validator `fim.cli` already uses. Nothing in this
+module duplicates a validation rule `from_mapping` already enforces: a
+malformed string is coerced to the right Python type before being
+handed to that one validator, never re-checked against a second,
+GUI-local copy of a rule.
 
-Six tabs, grouped the same way
-[`doc/configuration.md`](configuration.md)'s own section headings do:
-**Population**, **Migration**, **Mutation**, **Initial conditions**,
-**Convergence**, and **Batch**.
+**Historical note.** Earlier releases grouped these same fields into
+six per-section modal dialogs (Population, Migration, Mutation,
+Initial conditions, Convergence, Batch), reached from a "Configure"
+native menu. The botanist GUI redesign (design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md`) replaced every
+modal with the always-visible, two-panel Configure *screen* described
+in §10 below — FIM parameters (N, d, m, mu, seed) and Structure
+(everything else) — reached from the persistent rail, not a menu.
+`config_form`'s own marshaling functions are unchanged by that move;
+only what renders them (modal dialogs versus one scrollable screen)
+did.
 
 The cardinality rule decides what earns a live widget at all: `O(1)`
 and `O(d)`/`O(loci)`-sized fields do (a comma-separated text field
@@ -368,21 +378,41 @@ directly: opening one specific replicate's own trajectory is the path
 to any single replicate, since a batch-level manifest has no single
 trajectory of its own to verify or re-analyze.
 
-## 10. Native menus
+## 10. Navigation: the persistent rail and native menus
 
-Five native menus, built once in `fim.gui.app._build_menu` and stable
-across the whole window's lifetime:
+A persistent rail (`webui/screens/nav-rail.js`) is always visible along
+the window's own left edge: **Home**, **Configure**, **Explore**, **Run**,
+**Results**, **Compare**, and — set apart at the bottom — **Help**, current
+destination highlighted, reachable from any screen including mid-run. Run
+and Results both point at the same unified run view §5 describes; Configure
+is the two-panel screen §6.1 describes (FIM parameters, Structure); Explore
+and Compare are their own destinations (theoretical-prediction lookup and
+multi-run overlay, respectively — see [`doc/usage.md`'s own GUI
+table](usage.md#desktop-gui-fim-gui) for what each shows). A read-only
+parameter strip beneath the title bar always shows the current N/d/m/mu;
+clicking any of the four jumps straight to Configure.
+
+Three native menus, built once in `fim.gui.app._build_menu` and stable
+across the whole window's lifetime, duplicate the everyday rail/mouse
+actions for a keyboard-shortcut user — every item reuses the exact same
+action the matching on-screen control already performs, none of it new
+business logic:
 
 - **File** — New/Open/Save configuration, Load example…, Open run…,
-  Reveal output folder, Explore predictions…, Compare runs…, Quit.
-- **Configure** — the modals and value-selectors the unified run view's
-  `initial`/`running` states use to change model-input values without
-  leaving the current run's own view.
+  Reveal output folder, Quit.
 - **Run** — Run simulation, Cancel run.
-- **View** — the significant-digits setting (2-8) every formatted
-  statistic on the page uses.
 - **Help** — the in-app help screen (§11), "Documentation on GitHub,"
-  and About.
+  Check for updates, and About.
+
+**Configure and View — a six-section menu plus a "Significant digits"
+submenu, in this project's pre-redesign shape — are gone entirely, not
+merely renamed** (botanist GUI redesign doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §3.3): every field
+either menu used to reach, including the three former quick-toggle leaves
+("Deme weighting"/"Mutation model"/"Convergence statistic") and
+significant digits itself, now lives directly on the always-visible
+Configure screen the rail reaches, reachable the same way regardless of
+how quick a toggle it used to be.
 
 ## 11. In-app help
 
@@ -472,4 +502,30 @@ generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
 generation-date: 2026-08-30
 generator-responsibility: primary
+```
+
+### Revisions
+
+Documentation drift audit: corrected §6.1 (the six-tab modal system was
+replaced by the two-panel Configure screen), §10 (the native menu bar
+shrank from five menus to three — File/Run/Help — with Configure and
+View removed entirely once every field they reached moved onto the
+rail's own always-visible Configure screen), and §5.1 (the
+open/recent-runs picker and configuration input are now the rail's own
+Home and Configure destinations, not menu actions). This document still
+does not fully describe the persistent rail's own remaining
+destinations (Explore, Compare, Home's recent-runs enrichment), the
+Configure screen's own field-level tooltips, the light/dark preference,
+the first-launch welcome panel, the Presets "View YAML" action, or the
+trajectory panel's σ-band/predicted-equilibrium overlays — all shipped
+since this document's own last full pass (see `CHANGELOG.md`'s own
+`[Unreleased]` section) — a fuller pass covering those is still needed.
+
+```text
+generator-name: Claude Code
+generator-version: Claude Sonnet 5
+generator-model-token: claude-sonnet-5
+generator-provider: Anthropic
+generation-date: 2026-09-11
+generator-responsibility: revision
 ```

@@ -1,4 +1,4 @@
-<h1 id="using-fim">Using <code>fim</code></h1>
+<div class="help-gui-note"><p><strong>Reading this in fim-gui?</strong> This guide describes every action from a terminal. fim-gui performs the exact same operations through its own screens (Home, Configure, Run/Results, Explore, Compare) -- a command line like <code>fim run CONFIG</code> below names the equivalent terminal invocation, not something you need to type.</p></div><h1 id="using-fim">Using <code>fim</code></h1>
 <p>This guide covers every <code>fim</code> command and output, not what the simulator
 models or why — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md#what-this-simulates">what this simulates</a>
 for that first. For parameter types and defaults, use the
@@ -40,13 +40,23 @@ non-converged result.</p>
 <p>A config's n<sub>replicates</sub> (see <a href="#" data-fim-help="configuration" data-fim-anchor="nreplicates">configuration.md</a>)
 controls whether one run or a whole batch executes:</p>
 <ul>
-<li><strong>n<sub>replicates</sub>: 1</strong> (the default): the four-file scalar-run contract
-below, directly in the output directory.</li>
-<li><strong>n<sub>replicates</sub> greater than one</strong>: each replicate gets its own
-<code>replicate-NNN/</code> subdirectory, keeping that same four-file contract, plus
-a batch-level <code>manifest.json</code> and <code>summary.json</code> — see
+<li><strong>n<sub>replicates</sub>: 1</strong>: the four-file scalar-run contract below,
+directly in the output directory. Set this explicitly for a single,
+ordinary run with no batching at all.</li>
+<li><strong>n<sub>replicates</sub> greater than one (the default: <code>200</code>, with
+<a href="#" data-fim-help="configuration" data-fim-anchor="replicate_tolerance">replicate_tolerance</a>'s own default
+of <code>0.01</code> usually stopping well short of it)</strong>: each replicate gets its
+own <code>replicate-NNN/</code> subdirectory, keeping that same four-file contract,
+plus a batch-level <code>manifest.json</code> and <code>summary.json</code> — see
 <a href="#output-schemas">Output schemas</a>.</li>
 </ul>
+<p>An unconfigured run — no <code>n_replicates</code> key at all — is therefore a batch,
+not a single scalar run: this is a deliberate default (an unattended run
+reports a real confidence interval instead of a single, uncertainty-free
+point estimate) but it means every config below that wants the plain
+scalar behavior this guide describes states <code>n_replicates: 1</code> explicitly,
+the same way <a href="#create-a-configuration"><code>fim init</code></a>'s own starter
+configuration does.</p>
 <p>Batch replicates run in parallel by default, one worker per processor.
 <code>--workers N</code> sets an explicit worker count; <code>--sequential</code> runs replicates
 one at a time. Every replicate's trajectory, report, and statistics are
@@ -87,6 +97,7 @@ convergence_statistic: D
 convergence_window: 10
 convergence_tolerance: 0.02
 max_generations: 300
+n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run hub-island.yaml --output results/hub-island --quiet
 </code></pre>
@@ -112,6 +123,7 @@ convergence_statistic: D
 convergence_window: 10
 convergence_tolerance: 0.02
 max_generations: 500
+n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stepping-stone.yaml --output results/stepping-stone --quiet
 </code></pre>
@@ -136,6 +148,7 @@ convergence_statistic: D
 convergence_window: 10
 convergence_tolerance: 0.02
 max_generations: 500
+n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 </code></pre>
@@ -165,6 +178,7 @@ convergence_statistic: D
 convergence_window: 10
 convergence_tolerance: 0.02
 max_generations: 500
+n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run finite-alleles.yaml --output results/finite-alleles --quiet
 </code></pre>
@@ -191,6 +205,7 @@ convergence_statistic: D
 convergence_window: 10
 convergence_tolerance: 0.02
 max_generations: 500
+n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run mu-b.yaml --output results/mu-b --quiet
 </code></pre>
@@ -215,6 +230,7 @@ convergence_combinator: any
 convergence_window: 10
 convergence_tolerance: 0.02
 max_generations: 500
+n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run multi-statistic.yaml --output results/multi-statistic --quiet
 </code></pre>
@@ -332,22 +348,22 @@ performs.</p>
 <tbody>
 <tr>
 <td>Home</td>
-<td>A recent-runs list (newest first) — a batch entry is labeled distinctly and opened one replicate at a time from its own completed batch view, not from here — or browse for a <code>trajectory.jsonl</code> directly, then re-render its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-<code>q</code> sweep. Reachable from the rail's own Home button, or the File menu's &quot;Open run…&quot;, from any screen</td>
+<td>A recent-runs list (newest first), each row carrying a config-summary and a final-statistics/outcome column read from that run's own <code>report.json</code>/<code>summary.json</code> — a batch row's outcome is its own confidence interval, and is expandable to its individual replicates, each independently reachable for re-analysis. Two shortcut cards, &quot;New run&quot; and &quot;Explore,&quot; sit above the list. A recent-runs row, or browsing for a <code>trajectory.jsonl</code> directly, re-renders its summary and scatter (and, for a multi-generation run, its own scrubber) at any persisted generation, with the same optional differentiation-<code>q</code> sweep. Reachable from the rail's own Home button, or the File menu's &quot;Open run…&quot;, from any screen</td>
 <td><a href="#re-analyze-a-trajectory">Re-analyze a trajectory</a></td>
 </tr>
 <tr>
 <td>Configure</td>
-<td>Two always-visible, independently scrollable panels: FIM parameters (N, d, m, mu, seed — the five values that together are &quot;the finite island model&quot;) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, the full convergence group, the full batch/replicate group, and significant digits) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
+<td>Two always-visible, independently scrollable panels: FIM parameters (N — scalar or a per-deme table, d, m, mu, seed — the five values that together are &quot;the finite island model&quot;) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, the full convergence group, the full batch/replicate group, a light/dark override, and significant digits) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, &quot;Load example…&quot; opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
 <td><a href="#create-a-configuration">Create a configuration</a></td>
 </tr>
 <tr>
 <td>Run view — running</td>
-<td>A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a &quot;Cancel&quot; button — the window stays responsive throughout; the same axis selectors <code>completed</code> (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top</td>
+<td>A live scatter plot of the run's own current-generation frequencies (or, for a batch, every replicate's frequencies pooled onto one plot, filling in as replicates advance), with a generation progress indicator and a &quot;Cancel&quot; button — the window stays responsive throughout; the same axis selectors <code>completed</code> (below) has, live — picking a pair affects every subsequent push for the rest of the run, not just a one-time snapshot. For a scalar run, a statistic-vs-generation trajectory panel grows alongside the scatter as the run advances, plotting all six report statistics, each beside its own predicted-equilibrium reference line (D, G<sub>ST</sub>, E<sub>ST</sub> only — the three with a closed-form prediction). Cancelling, or the run ending in an error, leaves this same view showing exactly as it last rendered, with a banner on top</td>
 <td><code>run</code>'s own progress/error output, on one screen instead of terminal lines</td>
 </tr>
 <tr>
 <td>Run view — completed</td>
-<td>A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same <code>[0, 1]</code> scale the confidence-interval bars below use) beside the canonical scatter plot, or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered <code>0.0</code>-<code>1.0</code> probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own &quot;Open&quot; button reaches this same view for that one replicate; &quot;Open output folder&quot; reveals the run's own artifacts (a batch's own <code>summary.json</code> and every replicate subdirectory, for a batch)</td>
+<td>A scalar run's summary (all six named statistics, convergence outcome, each shown as a meter against the same <code>[0, 1]</code> scale the confidence-interval bars below use) beside the canonical scatter plot and the same trajectory panel described above — replaced, once the run finishes, by the real persisted trajectory, and showing the within-run σ band (a shaded region plus its own <code>mean [lower, upper]</code> caption) whenever <a href="#" data-fim-help="configuration" data-fim-anchor="sigma_band_multiplier">sigma_band_multiplier</a> was set — or — for a batch — a pooled scatter across every replicate's final state beside a replicate table (status, final generation, every named statistic) and each statistic's across-replicate confidence interval as a meter, explicitly labeled &quot;uncertainty across N independent replicates&quot; so it is never confused with the within-run σ band; either way, one panel (Deme 1 vs. Deme 2 by default) with a labeled, numbered <code>0.0</code>-<code>1.0</code> probability scale on both axes; axis selectors on the plot choose which two demes to compare directly, and selecting Deme 1 vs. Deme 2 again returns to the default panel; a scalar run with more than one persisted generation auto-populates a play/pause-and-scrub time slider over the persisted trajectory in the background, with no separate button to reach it; each batch replicate row's own &quot;Open&quot; button reaches this same view for that one replicate; &quot;Open output folder&quot; reveals the run's own artifacts (a batch's own <code>summary.json</code> and every replicate subdirectory, for a batch)</td>
 <td><a href="#output-schemas">Output schemas</a>, <a href="#batch-summaryjson-and-manifestjson">Batch <code>summary.json</code> and <code>manifest.json</code></a></td>
 </tr>
 <tr>
@@ -357,7 +373,7 @@ performs.</p>
 </tr>
 <tr>
 <td>Compare</td>
-<td>Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection — &quot;how does the conclusion change as I vary this one knob,&quot; on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; &quot;Back&quot; returns to whichever screen was showing</td>
+<td>Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection, plus a trajectory-over-generations overlay (one statistic at a time, one color per run, selectable from the same six named statistics) — &quot;how does the conclusion change as I vary this one knob,&quot; on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; &quot;Back&quot; returns to whichever screen was showing</td>
 <td>No CLI equivalent — comparing several <code>trajectory.jsonl</code>/<code>report.json</code> files by hand is the closest terminal equivalent</td>
 </tr>
 <tr>
@@ -405,16 +421,21 @@ the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
 <pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 </code></pre>
 <h3 id="saved-preferences">Saved preferences</h3>
-<p>The GUI remembers two things between launches: Configure's own Significant
-digits setting, and the last configuration you successfully clicked &quot;Run
+<p>The GUI remembers four things between launches: Configure's own Significant
+digits setting, the light/dark override (absent/<code>null</code> means &quot;follow the
+OS,&quot; the default), whether the first-launch welcome panel has already been
+dismissed, and the last configuration you successfully clicked &quot;Run
 simulation&quot; with — a fresh launch's own Run view starts from that
-configuration rather than from the built-in starter values. File menu → &quot;New
+configuration rather than from the built-in starter values, and a genuinely
+first launch (welcome not yet dismissed) shows the welcome panel offering
+&quot;Try a worked example…&quot; or &quot;Start from scratch.&quot; File menu → &quot;New
 configuration&quot; always resets to the built-in starter values regardless of
-what is saved; it is the one action that ignores this file on purpose.</p>
+what is saved; it is the one action that ignores the saved configuration on
+purpose.</p>
 <p>Nothing scientific is stored here: a run's own configuration, seed, and
 results always live in that run's own <code>manifest.json</code>/<code>trajectory.jsonl</code>
 under <code>results/</code>, exactly as described throughout this guide. This file
-holds only the two GUI conveniences above.</p>
+holds only the GUI conveniences above.</p>
 <p>It lives in the platform's normal per-user settings location — you do not
 need to find or edit it for ordinary use:</p>
 <table>
@@ -562,9 +583,14 @@ genuinely polymorphic loci are averaged);</li>
 <li>Jost's <code>D</code>, entropy differentiation E<sub>ST</sub>, and allele-number
 differentiation K<sub>ST</sub>.</li>
 </ul>
-<p>Multiple loci are independent repeats; report scalars are their arithmetic
-means (G<sub>ST</sub> as just described). <code>D</code> and K<sub>ST</sub> always use equal deme
-weighting. deme_weighting affects E<sub>ST</sub>.</p>
+<p>Multiple loci are independent repeats. H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>,
+and K<sub>ST</sub> are always each locus's own arithmetic mean. <code>D</code> and G<sub>ST</sub>
+instead follow <a href="#" data-fim-help="configuration" data-fim-anchor="locus_aggregation">locus_aggregation</a>:
+by default (<code>ratio_of_means</code>), H<sub>S</sub>/H<sub>T</sub> are pooled across loci
+first and one <code>D</code>/G<sub>ST</sub> is computed from those pooled values, not
+averaged per-locus ratios; the opt-in <code>mean_of_ratios</code> restores the
+per-locus-ratio-then-average behavior. <code>D</code> and K<sub>ST</sub> always use equal
+deme weighting. deme_weighting affects E<sub>ST</sub>.</p>
 <h3 id="scatterpng"><code>scatter.png</code></h3>
 <ul>
 <li><code>d = 2</code>: direct Deme 1 versus Deme 2 scatter with a diagonal reference.</li>

@@ -72,7 +72,7 @@ _DEFAULT_REPLICATES = 16
 _DEFAULT_GENERATIONS = 100
 _DEFAULT_TRIALS = 3
 # Straddles the known length-7/length-8 crossover
-# (`doc/fim-simulator-design.md` Appendix B.3) from both sides, and the
+# (`doc/fim-engine-backend-benchmarks.md` B.3) from both sides, and the
 # `auto_vector_min_d=35` threshold similarly -- a starting point informed
 # by every 1D sweep already run, not an arbitrary range.
 _DEFAULT_D_VALUES = (10, 35, 70, 120, 300)

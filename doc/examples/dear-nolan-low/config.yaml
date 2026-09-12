@@ -13,3 +13,4 @@ convergence_statistic: G_ST
 convergence_window: 500
 convergence_tolerance: 0.005
 max_generations: 100000
+n_replicates: 1

@@ -90,6 +90,25 @@
     border: 1px solid var(--fim-border);
 }
 
+/* The GUI-only reframing note `dev/bin/generate-help-html` prepends to
+ * each fragment (2026-09-11 documentation drift audit) -- exists only
+ * in the generated HTML, never in `doc/usage.md`/`doc/configuration.md`
+ * themselves, so it needs its own visual treatment distinct from the
+ * embedded doc's own prose: a subtle, accent-bordered callout, not
+ * another plain paragraph a reader could mistake for doc content.
+ */
+.help-gui-note {
+    border-left: 3px solid var(--fim-accent);
+    background: var(--fim-border);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.help-gui-note p {
+    margin: 0;
+}
+
 .help-content th {
     background: var(--fim-border);
 }

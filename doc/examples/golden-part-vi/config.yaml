@@ -13,3 +13,4 @@ convergence_statistic: D
 convergence_window: 100
 convergence_tolerance: 0.005
 max_generations: 10000
+n_replicates: 1
