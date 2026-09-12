@@ -43,7 +43,7 @@ from fim.cli import STARTER_CONFIG
 from fim.model.params import SimulationParams
 
 FieldKind = Literal[
-    "int", "float", "int_list", "choice", "optional_float", "float_choice"
+    "int", "float", "int_list", "choice", "optional_float", "float_choice", "bool"
 ]
 
 # The two `m` selector modes (a radio between a scalar rate
@@ -74,6 +74,15 @@ class FormField:
             is "choice" restricted to a fixed set of numbers rather
             than tokens (`replicate_confidence`) — `from_mapping`
             requires an actual `float`, not its string spelling.
+            "bool" is a plain, always-present checkbox (unlike the
+            sigma-band toggle's own `sigma_band_enabled`, which gates a
+            *second*, conditionally-present field pair and so is not a
+            plain `FormField` at all) — its text is the literal
+            `"true"`/`"false"` `collectFormValues` (`config-modals.js`)
+            always writes for a checkbox field, coerced to a real
+            Python `bool` here, matching a `SimulationParams` field
+            whose own default is already a plain boolean
+            (`track_expensive_statistics`).
         choices: The fixed option list for a "choice"/"float_choice"
             field; empty otherwise.
     """
@@ -149,10 +158,20 @@ INITIAL_CONDITIONS_FIELDS: Final[tuple[FormField, ...]] = (
 # is a plain field (its marshaling is trivial, just a "choice"); only
 # its *visibility* is conditional (shown once two or more statistics
 # are checked, §4.1) — the screen's own concern, not this module's.
+# `track_expensive_statistics` (design doc §6.2/§6.3's trajectory-panel
+# "all six report statistics" display, `20260904-claude-sonnet-5-fim-
+# engine-review-remediations.md` Phase 7 item 4/`b12679b`'s own
+# performance split): `D`/`G_ST`/`H_S`/`H_T` are always tracked for free
+# regardless of this field (`fim.engine._ALWAYS_TRACKED_STATISTICS`) —
+# this one plain checkbox is only the opt-in for the two genuinely
+# expensive statistics, `E_ST`/`K_ST`, needing no reveal-additional-
+# fields behavior the way `sigma_band_enabled` does, so it is a plain
+# "bool" `FormField` rather than a composite one.
 CONVERGENCE_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("convergence_combinator", "combinator", "choice", choices=("any", "all")),
     FormField("convergence_window", "convergence window", "int"),
     FormField("convergence_tolerance", "tolerance", "float"),
+    FormField("track_expensive_statistics", "track E_ST/K_ST for display", "bool"),
 )
 
 # `replicate_tolerance`/`replicate_minimum`/`replicate_confidence` are
@@ -393,6 +412,8 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
                 )
             elif field.kind == "int_list":
                 payload[field.name] = _parse_int_list_named(field.name, text)
+            elif field.kind == "bool":
+                payload[field.name] = text == "true"
             else:
                 payload[field.name] = text
         payload["m"] = m_to_payload(values)
@@ -1114,6 +1135,9 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         "convergence_combinator": params.convergence_combinator,
         "convergence_window": str(params.convergence_window),
         "convergence_tolerance": str(params.convergence_tolerance),
+        "track_expensive_statistics": (
+            "true" if params.track_expensive_statistics else "false"
+        ),
         "n_replicates": str(params.n_replicates),
         "replicate_tolerance": (
             ""
@@ -1173,6 +1197,7 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "convergence_combinator",
     "convergence_window",
     "convergence_tolerance",
+    "track_expensive_statistics",
     "max_generations",
     "n_replicates",
     "replicate_tolerance",

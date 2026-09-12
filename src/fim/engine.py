@@ -107,7 +107,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, Literal, Protocol, TypeAlias, TypedDict
+from typing import Any, Final, Literal, Protocol, TypeAlias, TypedDict
 
 import numpy as np
 
@@ -289,11 +289,28 @@ class RunResult:
             just one statistic — see `SimulationParams.
             convergence_statistic`.
         convergence_histories: The same per-generation history as
-            `convergence_history`, but keyed by statistic name, for the
-            less common case of watching several statistics
-            simultaneously (design §9) — present either way, so a
-            caller does not need to know in advance which of the two
-            shapes a given run used.
+            `convergence_history`, but keyed by statistic name — no
+            longer only the watched subset. `D`/`G_ST`/`H_S`/`H_T` are
+            always present (`fim.engine._ALWAYS_TRACKED_STATISTICS`),
+            regardless of what `SimulationParams.convergence_statistic`
+            actually watches, since all four cost nothing extra to
+            compute or aggregate either way; `E_ST`/`K_ST` are present
+            when either is actually watched, or when
+            `SimulationParams.track_expensive_statistics` opts into
+            paying their own real, per-generation cost for a display
+            value (that field's own docstring has the measured
+            tradeoff). Only the watched subset ever influenced *why* the
+            run stopped (see `FinalReport.converged_on`) — every other
+            name here is present for a caller (a GUI trajectory panel,
+            design doc §6.2) that wants to plot more than just the
+            statistic that happened to be watched, never because it
+            factored into the stop decision itself. A run's own
+            `manifest.software_version` predating this change has
+            neither guarantee: its own persisted trajectory (were one
+            read back some other way) genuinely has no history at all
+            for a statistic that was not watched at the time, which is
+            not a defect to guard against, only an honest reflection of
+            what that older run actually recorded.
         manifest: The `RunManifest` recording this run's own bookkeeping
             metadata — when it started and ended, what software version
             produced it, and (once written to disk) the checksums
@@ -1027,6 +1044,7 @@ def _build_replica_lane(
         max_generations=lane_params.max_generations,
         statistics=lane_params.convergence_statistics,
         combinator=lane_params.convergence_combinator,
+        extra_statistics=_extra_tracked_statistics(lane_params),
     )
     state, equilibration_outcome = _generate_initial_state_with_outcome(
         lane_params, rng
@@ -2769,6 +2787,7 @@ def _run_one(
         max_generations=params.max_generations,
         statistics=params.convergence_statistics,
         combinator=params.convergence_combinator,
+        extra_statistics=_extra_tracked_statistics(params),
     )
 
     # Generation zero: the starting population before any migration,
@@ -2892,7 +2911,20 @@ def _run_one(
             extension_state = step(
                 extension_state, params, registry, rng, finite_alleles=finite_alleles
             )
-            values = _convergence_values(extension_state, params)
+            # `_convergence_values` now also returns `_ALWAYS_TRACKED_
+            # STATISTICS`/`track_expensive_statistics`'s own display-only
+            # extras (`fim.engine._watched_statistic_values`'s own
+            # docstring) — the sigma band stays scoped to exactly
+            # `params.convergence_statistics`, its own documented
+            # contract (`doc/configuration.md`'s `sigma_band_multiplier`
+            # entry: "reports each watched statistic"), so only those
+            # names are kept here rather than every name `values` now
+            # happens to carry.
+            values = {
+                name: value
+                for name, value in _convergence_values(extension_state, params).items()
+                if name in band_values
+            }
             for name, value in values.items():
                 band_values[name].append(value)
             band_rows.append({"generation": extension_state.generation, **values})
@@ -2962,29 +2994,109 @@ def _run_one(
     )
 
 
+_ALWAYS_TRACKED_STATISTICS: Final[tuple[str, ...]] = ("D", "G_ST", "H_S", "H_T")
+"""Statistics `_watched_statistic_values` always returns, regardless of
+`params.convergence_statistics`/`track_expensive_statistics`.
+
+`fim.statistics.differentiation.statistics_report`'s own `statistics`
+parameter already computes these four unconditionally, no matter what is
+passed in (each is either the shared `H_S`/`H_T` input every other field
+derives from, or an O(1) step once those are known) — before this
+constant existed, `_watched_statistic_values`'s own final filtering step
+still discarded whichever of these were not actually watched, so a GUI
+trajectory panel/live statistics table watching only `D` (this project's
+own stated default) never had a real history to show for `G_ST`/`H_S`/
+`H_T` even though computing them cost nothing extra. Design doc §6.2
+(`20260907-claude-sonnet-5-botanist-gui-redesign.md`) already describes
+the trajectory panel as plotting "all six report statistics" — this
+constant is what makes four of those six always real, for free, closing
+that gap. `E_ST`/`K_ST` are deliberately excluded: each is a genuine,
+independent O(total allele entries) pass `statistics_report` only pays for
+statistics named in the collection passed to it (commit `b12679b`,
+`FIM-24`/`FIM-32`, measured a ~38% reduction skipping both at a
+many-alleles configuration) — `SimulationParams.track_expensive_
+statistics` is the opt-in a caller sets to pay that cost back
+deliberately, in exchange for a real, continuously updated display value
+for those two as well (see `_statistics_to_compute`, below).
+"""
+
+
+def _statistics_to_compute(params: SimulationParams) -> frozenset[str]:
+    """Return every statistic name this generation's convergence check must compute.
+
+    Forwarded to `_statistics_for_locus`/`_statistics_for_locus_
+    vectorized`'s own `statistics` parameter, which controls only whether
+    `E_ST`/`K_ST` (the two genuinely expensive fields) are computed at all
+    this call, or left `math.nan` — `D`/`G_ST`/`H_S`/`H_T`/`H_ST` are
+    always computed by `statistics_report` regardless of what this
+    returns (`_ALWAYS_TRACKED_STATISTICS`'s own docstring), so this
+    function only ever needs to decide `E_ST`/`K_ST`'s own fate.
+
+    Always includes `params.convergence_statistics` (a watched `E_ST`/
+    `K_ST` must be computed for real regardless of the opt-in below, or
+    the run could never detect it converging); additionally includes
+    `E_ST`/`K_ST` whenever `params.track_expensive_statistics` is set,
+    even if neither is actually watched — the display-only opt-in
+    `SimulationParams.track_expensive_statistics`'s own docstring
+    describes.
+    """
+    statistics = set(params.convergence_statistics)
+    if params.track_expensive_statistics:
+        statistics |= {"E_ST", "K_ST"}
+    return frozenset(statistics)
+
+
+def _extra_tracked_statistics(params: SimulationParams) -> tuple[str, ...]:
+    """Return the `ConvergenceMonitor.extra_statistics` for a within-run monitor.
+
+    `_build_replica_lane`/`_run_one` both construct their own within-run
+    `ConvergenceMonitor` with `statistics=params.convergence_statistics`
+    (the subset that actually gates stopping) — this returns every other
+    name `_watched_statistic_values` can hand that monitor's own
+    `record()` this run (`_ALWAYS_TRACKED_STATISTICS`, always; `E_ST`/
+    `K_ST` too, when `params.track_expensive_statistics` opts in), minus
+    whichever of those are already in `statistics` (a name cannot appear
+    in both — `ConvergenceMonitor.__init__` rejects a repeat). Kept as
+    its own function, not inlined at each of those two call sites, so the
+    two can never independently drift out of sync with `_watched_
+    statistic_values`'s own actual return keys.
+    """
+    watched = set(params.convergence_statistics)
+    universe = set(_ALWAYS_TRACKED_STATISTICS)
+    if params.track_expensive_statistics:
+        universe |= {"E_ST", "K_ST"}
+    return tuple(sorted(universe - watched))
+
+
 def _convergence_values(
     state: ModelState,
     params: SimulationParams,
 ) -> dict[str, float]:
-    """Return every watched, currently-defined statistic's value, averaged across loci.
+    """Return every currently-defined tracked statistic's value, averaged across loci.
 
     Called once per generation by `_run_one`'s own main loop, to feed
     the convergence monitor whatever it needs to judge "has this
     settled down yet" (see this module's own docstring, above, for what
-    convergence means here). `params.convergence_statistics` names which
-    statistic(s) to actually watch — usually just one (`D`, most
-    commonly), but this project also supports watching several at once
-    and requiring either all of them, or any one of them, to settle
-    before calling the run converged (`SimulationParams.
-    convergence_combinator`, design §9).
+    convergence means here) — and, since `_ALWAYS_TRACKED_STATISTICS`
+    below, also to give a GUI a real, continuously updated history for
+    `D`/`G_ST`/`H_S`/`H_T` regardless of what `params.
+    convergence_statistics` actually watches (design doc §6.2). Only the
+    watched subset (`params.convergence_statistics`) — usually just one
+    (`D`, most commonly), but this project also supports watching several
+    at once and requiring either all of them, or any one of them, to
+    settle before calling the run converged (`SimulationParams.
+    convergence_combinator`, design §9) — ever influences the stop
+    decision; every other name this function returns is along for the
+    ride, never gating anything (`ConvergenceMonitor`'s own
+    `extra_statistics`).
 
     Computes each locus's full differentiation report exactly once and reads
-    every watched statistic from that same cached set of reports, rather than
-    recomputing per-locus statistics once per watched name — the several-
+    every tracked statistic from that same cached set of reports, rather than
+    recomputing per-locus statistics once per tracked name — the several-
     statistic case costs one extra dictionary lookup per statistic per
     locus this way, not another whole pass over the state.
 
-    A watched statistic that is undefined this generation (only ``G_ST``
+    A tracked statistic that is undefined this generation (only ``G_ST``
     can be, and only when every tracked locus is currently
     "monomorphic" — has only a single allele left, with no genetic
     variation remaining to measure at all; see `_mean_g_st_across_loci`)
@@ -2997,13 +3109,14 @@ def _convergence_values(
     ``D``/``G_ST`` are aggregated across loci per `params.
     locus_aggregation` (`_watched_statistic_values`), the identical
     estimator `report_for_state` uses for its own ``D``/``G_ST`` fields —
-    every other watched statistic (``E_ST``, ``K_ST``, ``H_S``, ``H_T``)
+    every other tracked statistic (``E_ST``, ``K_ST``, ``H_S``, ``H_T``)
     is unaffected by that choice and stays a plain per-locus mean either
     way (`_pooled_g_st_and_d`'s own docstring).
     """
-    watched = params.convergence_statistics
     locus_reports = tuple(
-        _statistics_for_locus(state, params, locus_index, statistics=watched)
+        _statistics_for_locus(
+            state, params, locus_index, statistics=_statistics_to_compute(params)
+        )
         for locus_index in range(state.locus_count)
     )
     return _watched_statistic_values(locus_reports, params, deme_count=state.deme_count)
@@ -3024,14 +3137,16 @@ def _convergence_values_vectorized(
     rows` already established for persistence, applied here to the
     other consumer that used to force that same round trip every tick
     (`ReplicaLane`'s own docstring has the measured cost this removes).
-    Otherwise identical to `_convergence_values`: same watched-statistic
+    Otherwise identical to `_convergence_values`: same tracked-statistic
     selection, same `locus_aggregation`-respecting `D`/`G_ST` handling,
     same "an undefined `G_ST` this generation is omitted, not
     substituted" rule.
     """
-    watched = params.convergence_statistics
+    statistics_to_compute = _statistics_to_compute(params)
     locus_reports = tuple(
-        _statistics_for_locus_vectorized(locus_state, params, statistics=watched)
+        _statistics_for_locus_vectorized(
+            locus_state, params, statistics=statistics_to_compute
+        )
         for locus_state in state.locus_states
     )
     # `VectorizedState` carries no `deme_count` of its own (unlike
@@ -3069,32 +3184,33 @@ def _watched_statistic_values(
     reviews that changes a scientific result).
 
     `D`/`G_ST` now go through the identical `_pooled_g_st_and_d` call
-    `report_for_state` itself makes, whenever either is actually
-    watched; every other statistic (`E_ST`, `K_ST`, `H_S`, `H_T`) is
-    unaffected by `locus_aggregation` and keeps using `_mean_statistic_
-    across_loci`, exactly as before (`_pooled_g_st_and_d`'s own
-    docstring: those five stay a plain per-locus mean regardless of the
-    aggregation choice).
+    `report_for_state` itself makes, always (`_ALWAYS_TRACKED_STATISTICS`
+    — no longer gated on either being watched, since both cost nothing
+    extra to compute or aggregate regardless); `H_S`/`H_T` are likewise
+    always returned, being `_pooled_g_st_and_d`'s own two inputs, already
+    computed either way. `E_ST`/`K_ST` (and any less common watched
+    statistic, like `H_ST`) are unaffected by `locus_aggregation` and stay
+    a plain per-locus mean via `_mean_statistic_across_loci`, included
+    only when actually watched or (`E_ST`/`K_ST` only) opted into via
+    `params.track_expensive_statistics` (`_statistics_to_compute`'s own
+    docstring — every other name here is either always present or never
+    computed at all this generation, so there is nothing to look up for
+    it).
     """
-    watched = params.convergence_statistics
-    values: dict[str, float] = {}
-    if "D" in watched or "G_ST" in watched:
-        mean_h_s = _mean(tuple(report["H_S"] for report in locus_reports))
-        mean_h_t = _mean(tuple(report["H_T"] for report in locus_reports))
-        g_st, d = _pooled_g_st_and_d(
-            locus_reports,
-            mean_h_s=mean_h_s,
-            mean_h_t=mean_h_t,
-            deme_count=deme_count,
-            locus_aggregation=params.locus_aggregation,
-        )
-        if "D" in watched:
-            values["D"] = d
-        if "G_ST" in watched and g_st is not None:
-            values["G_ST"] = g_st
-    for statistic in watched:
-        if statistic in ("D", "G_ST"):
-            continue
+    mean_h_s = _mean(tuple(report["H_S"] for report in locus_reports))
+    mean_h_t = _mean(tuple(report["H_T"] for report in locus_reports))
+    g_st, d = _pooled_g_st_and_d(
+        locus_reports,
+        mean_h_s=mean_h_s,
+        mean_h_t=mean_h_t,
+        deme_count=deme_count,
+        locus_aggregation=params.locus_aggregation,
+    )
+    values: dict[str, float] = {"D": d, "H_S": mean_h_s, "H_T": mean_h_t}
+    if g_st is not None:
+        values["G_ST"] = g_st
+    extra = _statistics_to_compute(params) - set(_ALWAYS_TRACKED_STATISTICS)
+    for statistic in extra:
         value = _mean_statistic_across_loci(locus_reports, statistic)
         if value is not None:
             values[statistic] = value

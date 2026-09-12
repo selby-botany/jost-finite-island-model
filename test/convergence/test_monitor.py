@@ -181,3 +181,72 @@ def test_monitor_constructor_validates_statistics_and_combinator() -> None:
             max_generations=10,
             combinator="either",  # type: ignore[arg-type]
         )
+
+
+def test_extra_statistics_are_recorded_but_never_gate_stopping() -> None:
+    """`extra_statistics` histories are kept, but only `statistics` decides stopping.
+
+    `fim.engine._watched_statistic_values`'s own "D/G_ST/H_S/H_T always
+    present for display, only the watched subset gates stopping" design
+    depends on this: a monitor watching only `D` (immediately stable)
+    with `H_S` as an `extra_statistic` that never stabilizes must still
+    stop as soon as `D` does — `H_S` riding along in `histories`, never
+    once consulted by the stop decision.
+    """
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(2, 0.0),
+        max_generations=10,
+        statistics=("D",),
+        extra_statistics=("H_S",),
+    )
+
+    # D is immediately stable; H_S drifts the entire time and would never
+    # stabilize under this same tolerance — if it were mistakenly folded
+    # into the stop decision, this monitor would never stop at all.
+    monitor.record(0, {"D": 0.5, "H_S": 0.0})
+    monitor.record(1, {"D": 0.5, "H_S": 0.1})
+
+    assert monitor.should_stop()
+    assert monitor.outcome().converged
+    assert monitor.histories == {"D": (0.5, 0.5), "H_S": (0.0, 0.1)}
+
+
+def test_extra_statistics_accepts_a_partial_mapping_like_watched_statistics() -> None:
+    """An extra statistic can be legitimately undefined on a given round too."""
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(2, 0.0),
+        max_generations=10,
+        statistics=("D",),
+        extra_statistics=("G_ST",),
+    )
+
+    monitor.record(0, {"D": 0.5})
+    monitor.record(1, {"D": 0.5, "G_ST": 0.3})
+
+    assert monitor.histories == {"D": (0.5, 0.5), "G_ST": (0.3,)}
+
+
+def test_extra_statistics_name_still_rejects_a_genuinely_unknown_name() -> None:
+    """A name outside both `statistics` and `extra_statistics` still raises."""
+    monitor = ConvergenceMonitor(
+        TrailingWindowCriterion(2, 0.0),
+        max_generations=10,
+        statistics=("D",),
+        extra_statistics=("G_ST",),
+    )
+
+    with pytest.raises(ValueError, match="unconfigured statistic"):
+        monitor.record(0, {"D": 0.5, "E_ST": 0.1})
+
+
+def test_extra_statistics_constructor_rejects_a_name_repeated_across_the_two_sets() -> (
+    None
+):
+    """A name cannot appear in both `statistics` and `extra_statistics`."""
+    with pytest.raises(ValueError, match="must not repeat a name"):
+        ConvergenceMonitor(
+            TrailingWindowCriterion(2, 0.0),
+            max_generations=10,
+            statistics=("D",),
+            extra_statistics=("D",),
+        )

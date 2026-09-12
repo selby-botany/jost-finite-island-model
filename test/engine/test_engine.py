@@ -1335,7 +1335,11 @@ def test_single_statistic_report_shape_is_the_multi_statistic_special_case(
 
     assert result.report["converged_on"] == "D"
     assert isinstance(result.report["converged_on"], str)
-    assert set(result.convergence_histories) == {"D"}
+    # `D`/`G_ST`/`H_S`/`H_T` are always present now, regardless of what
+    # is actually watched (`fim.engine._ALWAYS_TRACKED_STATISTICS`) — a
+    # display-only superset of the single watched statistic (`D` here),
+    # which never itself changes what `converged_on` reports.
+    assert set(result.convergence_histories) == {"D", "G_ST", "H_S", "H_T"}
     assert result.convergence_histories["D"] == result.convergence_history
 
 
@@ -1365,7 +1369,10 @@ def test_multi_statistic_run_watches_and_reports_every_statistic() -> None:
     )
     assert first.report == second.report
     assert first.report["converged_on"] == ["D", "G_ST"]
-    assert set(first.convergence_histories) == {"D", "G_ST"}
+    # `H_S`/`H_T` ride along too, always (`_ALWAYS_TRACKED_STATISTICS`) —
+    # `D`/`G_ST` here are both watched *and* always-tracked, so this run's
+    # own `converged_on` is unaffected by the two extra names.
+    assert set(first.convergence_histories) == {"D", "G_ST", "H_S", "H_T"}
     assert (
         len(first.convergence_histories["D"])
         == len(first.convergence_histories["G_ST"])
@@ -1852,6 +1859,239 @@ def test_convergence_values_vectorized_skips_e_st_and_k_st_when_only_d_is_watche
     assert "D" in watched
 
 
+def test_convergence_values_always_includes_the_always_tracked_four() -> None:
+    """`D`/`G_ST`/`H_S`/`H_T` are present regardless of what is watched.
+
+    The display-only counterpart to the two "skips E_ST/K_ST" tests
+    above: those four cost nothing extra to compute (`statistics_
+    report` already computes them unconditionally — `b12679b`'s own
+    docstring), so `_watched_statistic_values` no longer discards them
+    from the returned mapping just because they were not named in
+    `convergence_statistic`. Confirms `fim.engine._ALWAYS_TRACKED_
+    STATISTICS` end to end, through the same full convergence-check
+    entry point the "skips" tests exercise, not just at `_watched_
+    statistic_values` directly.
+    """
+    state = _two_locus_state_with_divergent_per_locus_estimates()
+    params = SimulationParams(
+        N=10, m=0.1, mu=0.0, d=2, seed=7, loci=state.loci, convergence_statistic="D"
+    )
+
+    values = _convergence_values(state, params)
+
+    assert set(values) == {"D", "G_ST", "H_S", "H_T"}
+
+
+def test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t() -> None:
+    """The array-native path returns the identical always-tracked superset."""
+    state = _two_locus_state_with_divergent_per_locus_estimates()
+    params = SimulationParams(
+        N=10, m=0.1, mu=0.0, d=2, seed=7, loci=state.loci, convergence_statistic="D"
+    )
+    vectorized_state = build_vectorized_state(state)
+
+    values = _convergence_values_vectorized(vectorized_state, params)
+
+    assert set(values) == {"D", "G_ST", "H_S", "H_T"}
+
+
+def test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`track_expensive_statistics=True` reaches `_e_st_from_demes`/`_k_st_from_demes`.
+
+    The opt-in's own call-count regression test, mirroring `test_
+    convergence_values_skips_e_st_and_k_st_when_only_d_is_watched`
+    exactly, but with the new field turned on and neither statistic
+    watched: proves the opt-in alone (no watching required) is enough to
+    reach both real implementations, end to end, through `_convergence_
+    values`.
+    """
+    state = _two_locus_state_with_divergent_per_locus_estimates()
+    params = SimulationParams(
+        N=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=state.loci,
+        convergence_statistic="D",
+        track_expensive_statistics=True,
+    )
+    e_st_calls = 0
+    k_st_calls = 0
+    original_e_st = differentiation._e_st_from_demes
+    original_k_st = differentiation._k_st_from_demes
+
+    def counting_e_st(*args: object, **kwargs: object) -> float:
+        nonlocal e_st_calls
+        e_st_calls += 1
+        return original_e_st(*args, **kwargs)  # type: ignore[arg-type]
+
+    def counting_k_st(*args: object, **kwargs: object) -> float:
+        nonlocal k_st_calls
+        k_st_calls += 1
+        return original_k_st(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(differentiation, "_e_st_from_demes", counting_e_st)
+    monkeypatch.setattr(differentiation, "_k_st_from_demes", counting_k_st)
+
+    values = _convergence_values(state, params)
+
+    assert e_st_calls > 0
+    assert k_st_calls > 0
+    assert set(values) == {"D", "G_ST", "H_S", "H_T", "E_ST", "K_ST"}
+
+
+def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The array-native path gets the identical opt-in fix."""
+    state = _two_locus_state_with_divergent_per_locus_estimates()
+    params = SimulationParams(
+        N=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=state.loci,
+        convergence_statistic="D",
+        track_expensive_statistics=True,
+    )
+    vectorized_state = build_vectorized_state(state)
+    e_st_calls = 0
+    k_st_calls = 0
+    original_e_st = differentiation._e_st_from_demes
+    original_k_st = differentiation._k_st_from_demes
+
+    def counting_e_st(*args: object, **kwargs: object) -> float:
+        nonlocal e_st_calls
+        e_st_calls += 1
+        return original_e_st(*args, **kwargs)  # type: ignore[arg-type]
+
+    def counting_k_st(*args: object, **kwargs: object) -> float:
+        nonlocal k_st_calls
+        k_st_calls += 1
+        return original_k_st(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(differentiation, "_e_st_from_demes", counting_e_st)
+    monkeypatch.setattr(differentiation, "_k_st_from_demes", counting_k_st)
+
+    values = _convergence_values_vectorized(vectorized_state, params)
+
+    assert e_st_calls > 0
+    assert k_st_calls > 0
+    assert set(values) == {"D", "G_ST", "H_S", "H_T", "E_ST", "K_ST"}
+
+
+def test_run_result_convergence_histories_include_always_tracked_statistics() -> None:
+    """A real, full scalar run's own `convergence_histories` include the free four.
+
+    End-to-end proof through `_run_one` itself (not just the per-
+    generation helper functions above): a run watching only `D` still
+    comes back with real `G_ST`/`H_S`/`H_T` history too, of the same
+    length as the watched one — the exact GUI-visible symptom the bug
+    report described (a trajectory panel/completed view that narrowed
+    down to only the watched statistic once a run finished).
+    """
+    params = SimulationParams(
+        N=15,
+        m=0.1,
+        mu=0.01,
+        d=2,
+        seed=99,
+        loci=(LocusSpec(1, 50),),
+        convergence_statistic="D",
+        convergence_window=4,
+        convergence_tolerance=0.02,
+        max_generations=20,
+        n_replicates=1,
+        replicate_tolerance=None,
+    )
+
+    result = _run(params)
+
+    assert set(result.convergence_histories) == {"D", "G_ST", "H_S", "H_T"}
+    for name in ("G_ST", "H_S", "H_T"):
+        assert len(result.convergence_histories[name]) == len(
+            result.convergence_generations
+        )
+
+
+def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in() -> None:
+    """`track_expensive_statistics=True` extends a real run's own recorded history.
+
+    Same run as above, only with the opt-in set — `E_ST`/`K_ST` now
+    join the always-tracked four in `RunResult.convergence_histories`,
+    each with a real per-generation history the same length as every
+    other tracked statistic's own.
+    """
+    params = SimulationParams(
+        N=15,
+        m=0.1,
+        mu=0.01,
+        d=2,
+        seed=99,
+        loci=(LocusSpec(1, 50),),
+        convergence_statistic="D",
+        convergence_window=4,
+        convergence_tolerance=0.02,
+        max_generations=20,
+        n_replicates=1,
+        replicate_tolerance=None,
+        track_expensive_statistics=True,
+    )
+
+    result = _run(params)
+
+    assert set(result.convergence_histories) == {
+        "D",
+        "G_ST",
+        "H_S",
+        "H_T",
+        "E_ST",
+        "K_ST",
+    }
+    for name in ("G_ST", "H_S", "H_T", "E_ST", "K_ST"):
+        assert len(result.convergence_histories[name]) == len(
+            result.convergence_generations
+        )
+
+
+def test_sigma_band_stays_scoped_to_watched_statistics_only() -> None:
+    """The within-run sigma band never picks up the new always-tracked extras.
+
+    `_run_one`'s own sigma-band extension buffers `_convergence_values`'
+    now-richer per-generation output — this confirms it still only ever
+    keeps what `doc/configuration.md`'s own `sigma_band_multiplier` entry
+    documents ("reports each watched statistic"), not every name
+    `_convergence_values` now happens to also return.
+    """
+    params = SimulationParams(
+        N=15,
+        m=0.1,
+        mu=0.01,
+        d=2,
+        seed=99,
+        loci=(LocusSpec(1, 50),),
+        convergence_statistic="D",
+        convergence_window=4,
+        convergence_tolerance=0.02,
+        max_generations=20,
+        n_replicates=1,
+        replicate_tolerance=None,
+        sigma_band_multiplier=2.0,
+        sigma_band_window=5,
+        track_expensive_statistics=True,
+    )
+
+    result = _run(params)
+
+    if result.report["converged"]:
+        assert result.manifest.sigma_band is not None
+        assert set(result.manifest.sigma_band) == {"D"}
+
+
 def test_locus_length_does_not_affect_the_report() -> None:
     """Locus length is inert data — only the frequency vectors drive statistics.
 
@@ -2309,6 +2549,19 @@ def test_fim_engine_backend_generational_matches_default(
     assert generational_result.run_id == lineal_result.run_id
     assert generational_result.report == lineal_result.report
     assert generational_result.final_state == lineal_result.final_state
+    # The always-tracked-statistics fix (`fim.engine._ALWAYS_TRACKED_
+    # STATISTICS`) reaches `"generational"`'s own per-lane monitor
+    # (`_build_replica_lane`) through the identical `_convergence_values`
+    # call `"lineal"`'s `_run_one` already makes — no separate wiring was
+    # needed for the batch/generational-backend path, confirmed here
+    # rather than merely assumed.
+    assert set(lineal_result.convergence_histories) == {"D", "G_ST", "H_S", "H_T"}
+    assert set(generational_result.convergence_histories) == {
+        "D",
+        "G_ST",
+        "H_S",
+        "H_T",
+    }
 
 
 def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None:

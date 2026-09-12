@@ -529,6 +529,47 @@ def test_unchecking_and_rechecking_the_sigma_band_toggle_keeps_a_typed_window_va
     assert window_value == "250"
 
 
+def test_track_expensive_statistics_checkbox_starts_unchecked(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The E_ST/K_ST display opt-in defaults unchecked, matching `SimulationParams`.
+
+    Unlike the sigma-band toggle above, this is a plain "bool" `FormField`
+    with no second, revealed field pair to seed -- this and the test
+    below are its own entire DOM-level coverage.
+    """
+    checked = drive(
+        window,
+        trigger="null",
+        read="document.getElementById('field-track_expensive_statistics').checked",
+        ready=_INPUT_SCREEN_READY,
+        is_ready=lambda value: value is False,
+        poll_attempts=500,
+    )
+
+    assert checked is False
+
+
+def test_checking_track_expensive_statistics_updates_the_checkbox(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Checking the box actually flips its own DOM state, live."""
+    checked = drive(
+        window,
+        trigger=(
+            "var cb = document.getElementById('field-track_expensive_statistics'); "
+            "cb.checked = true; "
+            "cb.dispatchEvent(new Event('change', {bubbles: true}));"
+        ),
+        read="document.getElementById('field-track_expensive_statistics').checked",
+        ready=_INPUT_SCREEN_READY,
+        is_ready=lambda value: value is True,
+        poll_attempts=500,
+    )
+
+    assert checked is True
+
+
 def test_navigating_to_configure_does_not_reset_run_view_state(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

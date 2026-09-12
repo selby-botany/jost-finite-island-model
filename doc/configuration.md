@@ -412,6 +412,38 @@ so convergence could never be detected.
 The statistic converges when the half-window mean difference is at most this
 value.
 
+### track_expensive_statistics
+
+- **Type:** boolean
+- **Default:** `false`
+
+Controls whether E<sub>ST</sub>/K<sub>ST</sub> are computed every generation
+for display, even when neither is being watched for convergence.
+D, G<sub>ST</sub>, H<sub>S</sub>, and H<sub>T</sub> are always tracked and
+available for display regardless of this setting and regardless of
+convergence_statistic — each is either the shared H<sub>S</sub>/H<sub>T</sub>
+input every other statistic derives from, or an O(1) step once those are
+known, so computing them costs nothing extra. E<sub>ST</sub> and
+K<sub>ST</sub> are different: each is a genuine, independent pass over every
+locus's own frequency table, repeated every single generation of the run
+(not merely once, for a final report). A performance investigation
+(commit `b12679b`, issues FIM-24/FIM-32) measured skipping both, when
+neither is watched, at roughly a **38% reduction** in per-generation
+convergence-check cost at a many-alleles reference configuration —
+enabling this setting pays that same cost back, deliberately, in exchange
+for a real, continuously updated E<sub>ST</sub>/K<sub>ST</sub> value in a
+GUI trajectory panel or live statistics table instead of "not known this
+generation." A statistic already named in convergence_statistic is always
+computed regardless of this setting — it has to be, for the run to detect
+it converging.
+
+Leave this `false` (the default) unless the display value is actually worth
+the recurring per-generation cost for your own configuration.
+
+```yaml
+track_expensive_statistics: true
+```
+
 ### max_generations
 
 - **Type:** positive integer
@@ -761,6 +793,7 @@ on this page).
 | replicate_tolerance negative or non-finite | rejected |
 | replicate_minimum less than 2 | rejected |
 | convergence_window greater than max_generations + 1 | rejected |
+| track_expensive_statistics not a boolean | rejected |
 | replicate_minimum greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
 | replicate_confidence not `0.90`, `0.95`, or `0.99` | rejected |
 | engine_backend not `lineal`, `generational`, `generational-vector`, or `auto` | rejected |

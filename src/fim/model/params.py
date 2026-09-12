@@ -244,6 +244,7 @@ PARAMETER_DEFAULTS: Final[dict[str, object]] = {
     "convergence_combinator": "all",
     "convergence_window": 50,
     "convergence_tolerance": 0.01,
+    "track_expensive_statistics": False,
     "max_generations": 10_000,
     "n_replicates": DEFAULT_N_REPLICATES,
     "replicate_tolerance": DEFAULT_REPLICATE_TOLERANCE,
@@ -282,6 +283,7 @@ _CONFIG_KEYS: Final = frozenset(
         "convergence_combinator",
         "convergence_window",
         "convergence_tolerance",
+        "track_expensive_statistics",
         "max_generations",
         "n_replicates",
         "replicate_tolerance",
@@ -402,6 +404,34 @@ class SimulationParams:
             A single statistic makes this a no-op special case.
         convergence_window: Trailing stability-window length.
         convergence_tolerance: Maximum half-window mean difference.
+        track_expensive_statistics: Whether the per-generation
+            convergence check also computes `E_ST`/`K_ST` even when
+            neither is actually watched — the display-only opt-in a
+            GUI trajectory panel/live statistics table uses to show
+            real, continuously updated values for those two instead of
+            "not known this generation", at a real, recurring
+            performance cost (never a correctness change: a run's own
+            convergence decision, and every other statistic, are
+            completely unaffected by this flag either way).
+            `D`/`G_ST`/`H_S`/`H_T` need no such flag and are always
+            computed and returned for free regardless — each is either
+            the shared `H_S`/`H_T` input every other field derives
+            from, or an O(1) step once those are known
+            (`fim.statistics.differentiation.statistics_report`'s own
+            `statistics` parameter). `E_ST` (an entropy pass over the
+            pooled table plus one per deme) and `K_ST` (a set union
+            across every deme's own alleles) are each a real,
+            independent O(total allele entries) pass over every
+            locus's own frequency table, *every generation of the run*
+            — commit `b12679b` (`FIM-24`/`FIM-32`) measured skipping
+            both, when neither is watched, at roughly a 38% reduction
+            in per-generation convergence-check cost at a many-alleles
+            reference configuration; turning this on pays that same
+            cost back, deliberately, in exchange for the display value.
+            `False` by default — an unconfigured run costs exactly what
+            it always has. A statistic already named in
+            `convergence_statistic` is computed regardless of this
+            flag, watched or not, exactly as before this field existed.
         max_generations: Hard generation safety cap.
         n_replicates: Number of independently seeded runs — the hard cap
             a replicate batch runs up to. Defaults to
@@ -564,6 +594,7 @@ class SimulationParams:
     convergence_combinator: ConvergenceCombinator = "all"
     convergence_window: int = 50
     convergence_tolerance: float = 0.01
+    track_expensive_statistics: bool = False
     max_generations: int = 10_000
     n_replicates: int = DEFAULT_N_REPLICATES
     replicate_tolerance: float | None = DEFAULT_REPLICATE_TOLERANCE
@@ -649,6 +680,7 @@ class SimulationParams:
             or self.convergence_tolerance < 0.0
         ):
             raise ValueError("convergence_tolerance must be non-negative")
+        _require_bool("track_expensive_statistics", self.track_expensive_statistics)
         _require_integer(
             "max_generations",
             self.max_generations,
@@ -834,6 +866,7 @@ class SimulationParams:
             "convergence_combinator": self.convergence_combinator,
             "convergence_window": self.convergence_window,
             "convergence_tolerance": self.convergence_tolerance,
+            "track_expensive_statistics": self.track_expensive_statistics,
             "max_generations": self.max_generations,
             "n_replicates": self.n_replicates,
             # Always present, unlike `initial_frequencies` below (whose
@@ -1001,6 +1034,13 @@ class SimulationParams:
                 config.get(
                     "convergence_tolerance",
                     PARAMETER_DEFAULTS["convergence_tolerance"],
+                ),
+            ),
+            track_expensive_statistics=_parse_bool(
+                "track_expensive_statistics",
+                config.get(
+                    "track_expensive_statistics",
+                    PARAMETER_DEFAULTS["track_expensive_statistics"],
                 ),
             ),
             max_generations=_parse_int(
@@ -1604,6 +1644,20 @@ def _parse_mutation_rate(value: Any) -> MutationRate:
     return tuple(_parse_float(f"mu[{index}]", item) for index, item in enumerate(value))
 
 
+def _parse_bool(name: str, value: Any) -> bool:
+    """Parse a config boolean — no truthy-string/int coercion, a real ``bool`` only.
+
+    Matches `_parse_int`/`_parse_float`'s own "the config layer trusts
+    real YAML/JSON booleans, malformed values are a config-author error,
+    not something to guess about" discipline. `bool` is checked before,
+    not instead of, ruling out `int`/`float` — matching `_require_bool`'s
+    own reasoning.
+    """
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean")
+    return value
+
+
 def _parse_optional_float(name: str, value: Any) -> float | None:
     """Parse a finite config float, or ``None`` when the key is absent."""
     if value is None:
@@ -1632,6 +1686,19 @@ def _parse_string(name: str, value: Any) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be a nonempty string")
     return value
+
+
+def _require_bool(name: str, value: bool) -> None:
+    """Validate a boolean parameter.
+
+    Unlike `_require_integer`'s own explicit `isinstance(value, bool)`
+    exclusion (`bool` being an `int` subclass, the thing that check
+    guards against), a boolean field wants exactly the opposite check:
+    the value must actually *be* a `bool`, not merely something
+    Python's own truthiness would accept.
+    """
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean")
 
 
 def _require_integer(name: str, value: int, minimum: int | None = None) -> None:

@@ -50,6 +50,7 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "convergence_combinator",
         "convergence_window",
         "convergence_tolerance",
+        "track_expensive_statistics",
         "n_replicates",
         "replicate_tolerance",
         "replicate_minimum",
@@ -105,6 +106,42 @@ def test_form_values_to_payload_parses_every_plain_field_kind() -> None:
     assert payload["max_generations"] == 1000
     assert payload["migrant_sampling"] == "stochastic"
     assert payload["m"] == 0.01
+
+
+def test_form_values_to_payload_coerces_a_bool_field_from_true_false_text() -> None:
+    """A "bool" field coerces the literal "true"/"false" text a checkbox writes.
+
+    `track_expensive_statistics` is this form's first plain "bool"
+    `FormField` — unlike `sigma_band_enabled`, it needs no dedicated
+    `*_to_payload` function of its own; the generic `all_fields()`
+    dispatch loop in `form_values_to_payload` handles it directly.
+    """
+    checked = dict(config_form.starter_form_values())
+    checked["track_expensive_statistics"] = "true"
+    unchecked = dict(config_form.starter_form_values())
+    unchecked["track_expensive_statistics"] = "false"
+
+    checked_payload = config_form.form_values_to_payload(checked)
+    unchecked_payload = config_form.form_values_to_payload(unchecked)
+
+    assert checked_payload["track_expensive_statistics"] is True
+    assert unchecked_payload["track_expensive_statistics"] is False
+
+
+def test_params_to_form_values_renders_track_expensive_statistics_as_text() -> None:
+    """`params_to_form_values` renders the field back as literal "true"/"false"."""
+    enabled = SimulationParams(
+        N=10, m=0.1, mu=0.0, d=2, seed=1, track_expensive_statistics=True
+    )
+    disabled = SimulationParams(
+        N=10, m=0.1, mu=0.0, d=2, seed=1, track_expensive_statistics=False
+    )
+
+    enabled_values = config_form.params_to_form_values(enabled)
+    disabled_values = config_form.params_to_form_values(disabled)
+
+    assert enabled_values["track_expensive_statistics"] == "true"
+    assert disabled_values["track_expensive_statistics"] == "false"
 
 
 def test_form_values_to_payload_accepts_a_per_deme_n_list() -> None:

@@ -352,6 +352,41 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   still shows its existing alert, without also landing on an unchanged
   Configure screen right after it. The "Configure a new run" button
   itself is unchanged.
+- The trajectory panel's own `D`/`G_ST`/`H_S`/`H_T` curves now always
+  show real, continuously updated values — live and in a finished run's
+  own completed view — regardless of which statistic `convergence_
+  statistic` is actually watching, closing botanist GUI design doc
+  §6.2's own "all six report statistics" text against the common case
+  (watching only `D`). Before this, `fim.engine._watched_statistic_
+  values` discarded any statistic not actually watched from `RunResult.
+  convergence_histories`, even though `fim.statistics.differentiation.
+  statistics_report` already computes `D`/`G_ST`/`H_S`/`H_T`
+  unconditionally every generation regardless (each is either the
+  shared `H_S`/`H_T` input every other field derives from, or an O(1)
+  step once those are known) — a watched-`D` run's own trajectory panel
+  updated live with all four while running (a separate, always-full
+  `report_for_state` snapshot already fed the live statistics table),
+  then visibly narrowed down to just `D` the instant the run finished,
+  since the *persisted* `convergence_histories` never had the other
+  three at all. `E_ST`/`K_ST` are different: each is a genuine,
+  independent O(total allele entries) pass over every locus's own
+  frequency table, repeated every generation — the exact cost commit
+  `b12679b` (`FIM-24`/`FIM-32`) measured skipping, when neither is
+  watched, at roughly a 38% reduction in per-generation convergence-
+  check cost at a many-alleles configuration. A new opt-in,
+  `SimulationParams.track_expensive_statistics` (`doc/configuration.md`,
+  a new checkbox in Configure's convergence group, off by default),
+  computes both anyway, deliberately paying that same cost back, when
+  their own display value in the trajectory panel/live statistics table
+  is worth it. `ConvergenceMonitor` gained a new constructor-only
+  `extra_statistics` parameter to carry this: it records a history for
+  additional statistics alongside the watched ones without ever letting
+  them influence the stop decision — the class does not need to know,
+  and a caller never has to tell it twice, which of its own recorded
+  histories is the subset actually deciding convergence versus which
+  are merely along for the ride. The within-run sigma band (§7.2) stays
+  scoped to exactly the watched statistics, its own documented contract,
+  unaffected by either change.
 
 ### Changed
 

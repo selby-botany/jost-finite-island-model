@@ -80,6 +80,15 @@ function collectFormValues() {
     // unconditionally, so it must always be present as an explicit
     // "true"/"false" string, never missing.
     values.sigma_band_enabled = data.has("sigma_band_enabled") ? "true" : "false";
+    // `track_expensive_statistics` is a plain "bool" `FormField` (unlike
+    // `sigma_band_enabled`, it reveals no second field pair), but an
+    // unchecked checkbox is absent from `FormData` for the identical
+    // reason -- `form_values_to_payload`'s own generic dispatch loop
+    // reads this key unconditionally for every `all_fields()` entry, so
+    // it must always be present too.
+    values.track_expensive_statistics = data.has("track_expensive_statistics")
+        ? "true"
+        : "false";
     return values;
 }
 

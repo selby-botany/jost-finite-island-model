@@ -113,6 +113,16 @@ class ConvergenceMonitor:
     *defined* rounds have accumulated — never sooner, from a padded
     history, and never blocked by a round where a different statistic
     happened to have no value.
+
+    ``extra_statistics`` (constructor-only) names statistics this monitor
+    also records a history for, alongside ``statistics``, without ever
+    letting them affect the stop decision — this class does not need to
+    know, and a caller never has to tell it twice, which of its own
+    recorded histories is the subset actually deciding convergence versus
+    which are merely along for the ride (recorded for display purposes
+    only). ``history``/``histories`` return every recorded statistic's
+    values either way; only the internal stability check (`record`,
+    below) ever distinguishes the two groups.
     """
 
     def __init__(
@@ -122,6 +132,7 @@ class ConvergenceMonitor:
         max_generations: int,
         statistics: Sequence[str] = ("value",),
         combinator: Combinator = "all",
+        extra_statistics: Sequence[str] = (),
     ) -> None:
         """Initialize an empty monitor.
 
@@ -134,30 +145,53 @@ class ConvergenceMonitor:
             criterion: Statistical stability rule, applied independently to
                 each watched statistic's own history.
             max_generations: Hard generation safety cap.
-            statistics: Names of the statistic(s) to watch. Defaults to one
-                unnamed statistic, matching ``record()``'s bare-float form.
+            statistics: Names of the statistic(s) to watch — these, and
+                only these, drive the stop decision (see `combinator`).
+                Defaults to one unnamed statistic, matching ``record()``'s
+                bare-float form.
             combinator: ``"all"`` requires every statistic to be stable
                 before stopping; ``"any"`` requires only one.
+            extra_statistics: Names of additional statistics to record a
+                history for, alongside ``statistics``, without those
+                names ever influencing the stop decision — this monitor
+                does not need to know, and never needs to be told again,
+                which of its own recorded histories is the subset
+                actually deciding convergence versus which are merely
+                along for the ride (`fim.engine._watched_statistic_
+                values`'s own "D/G_ST/H_S/H_T always present for display,
+                only the watched subset gates stopping" design is exactly
+                what this parameter exists to carry). Empty by default —
+                every existing caller, unaffected. A name repeated
+                between ``statistics`` and ``extra_statistics`` (or
+                within either one) is rejected, the same as a repeat
+                within ``statistics`` alone always has been.
 
         Raises:
-            ValueError: If ``max_generations``, ``statistics``, or
-                ``combinator`` is invalid.
+            ValueError: If ``max_generations``, ``statistics``,
+                ``extra_statistics``, or ``combinator`` is invalid.
         """
         if max_generations < 1:
             raise ValueError("max_generations must be at least 1")
         statistic_names = tuple(statistics)
+        extra_names = tuple(extra_statistics)
         if not statistic_names:
             raise ValueError("statistics must not be empty")
-        if len(set(statistic_names)) != len(statistic_names):
-            raise ValueError("statistics must not repeat a name")
+        all_names = statistic_names + extra_names
+        if len(set(all_names)) != len(all_names):
+            raise ValueError("statistics and extra_statistics must not repeat a name")
         if combinator not in {"any", "all"}:
             raise ValueError("combinator must be 'any' or 'all'")
         self._criterion = criterion
         self._max_generations = max_generations
+        # `_statistics` is the subset `record`'s own stability check
+        # (below) ever reads — `_all_statistics` (`_statistics` plus
+        # `extra_names`) is only ever used to validate incoming keys and
+        # to size `_histories`, never to decide whether to stop.
         self._statistics = statistic_names
+        self._all_statistics = all_names
         self._combinator = combinator
         self._generations: list[int] = []
-        self._histories: dict[str, list[float]] = {name: [] for name in statistic_names}
+        self._histories: dict[str, list[float]] = {name: [] for name in all_names}
         self._outcome = ConvergenceOutcome(False, False, None, None)
 
     @property
@@ -184,7 +218,15 @@ class ConvergenceMonitor:
 
     @property
     def histories(self) -> Mapping[str, tuple[float, ...]]:
-        """Return every watched statistic's recorded values, by name."""
+        """Return every recorded statistic's values, by name.
+
+        Covers both ``statistics`` (the watched subset actually deciding
+        convergence) and ``extra_statistics`` (recorded for display only,
+        never gating the stop decision) — the two are indistinguishable
+        from this property alone, by design; a caller that needs to know
+        which is which already has that answer from its own configured
+        ``statistics``/``extra_statistics``, not from this monitor.
+        """
         return {name: tuple(values) for name, values in self._histories.items()}
 
     def outcome(self) -> ConvergenceOutcome:
@@ -353,9 +395,9 @@ class ConvergenceMonitor:
         writing out a one-entry mapping every time.
         """
         if isinstance(value, Mapping):
-            unknown = set(value) - set(self._statistics)
+            unknown = set(value) - set(self._all_statistics)
             if unknown:
-                expected = ", ".join(sorted(self._statistics))
+                expected = ", ".join(sorted(self._all_statistics))
                 names = ", ".join(sorted(unknown))
                 raise ValueError(
                     f"record() values named unconfigured statistic(s) "
