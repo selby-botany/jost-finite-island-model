@@ -7383,6 +7383,40 @@ message, so `done_event` firing is itself proof that call
 handler would raise inside `_drain_batch_messages` first, and
 `on_message` (hence `done_event`) would never fire at all.
 
+<a id="gui.test_batch_running.test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report"></a>
+
+#### test\_a\_live\_batch\_shows\_a\_trajectory\_panel\_once\_two\_replicates\_report
+
+```python
+def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
+) -> None
+```
+
+The live trajectory panel (batch trajectory panel design `20260912-
+claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/restricted`,
+commit 1) appears mid-batch, not only once it finishes.
+
+`_push_batch_progress` needs at least two currently-reporting
+replicates before `reports_summary` defines any interval at all
+(its own docstring) — waits on real `.progress` sidecar files
+reaching that count, Python-side, rather than guessing a wall-clock
+delay is enough (this project's own house rule against a
+non-deterministic wait, `feedback_tests_are_functions_of_their_
+commit.md`) or polling the DOM concurrently with the background
+poll thread's own pushes (`_count_replicate_progress_sidecars`'s
+own docstring). Once that count is reached, the *next* poll tick
+(at most `_BATCH_POLL_INTERVAL_SECONDS` later) is guaranteed, by
+construction, to push a non-empty `statistics` dict -- the same
+"wait on the real precondition, not a fixed message count" fix
+`test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run`
+already applied for the analogous scalar-run race.
+
+Cancels the batch to end the test rather than waiting for it to
+converge (`convergence_window` is set unreachably high specifically
+so it does not, `_SET_UNREACHABLE_BATCH_CONVERGENCE`) -- the same
+"Cancel ends the test" precedent `test_running_screen.py`'s own
+Cancel-button test already established.
+
 <a id="gui.test_branding"></a>
 
 # gui.test\_branding

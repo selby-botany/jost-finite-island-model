@@ -8,6 +8,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A live trajectory panel for a batch run, matching the scalar panel's
+  own existing live view (batch trajectory panel design `20260912-
+  claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/restricted`,
+  commit 1 of 3: mean line only, no band yet). `_push_batch_progress`
+  gains `meanReportedGeneration` (the average generation across
+  whichever replicates have reported this tick — no single tick has one
+  shared generation the way a scalar run's own progress push does,
+  since replicates report at different generations by construction);
+  the client accumulates it, paired with each statistic's own pooled
+  mean, into the same live-trajectory arrays a scalar run's own
+  progress push already feeds. Still nothing drawn once a batch reaches
+  `completed` — that half of the design's own phased schedule (a real,
+  authoritative cross-replicate aggregate, not this live approximation)
+  has not landed yet.
 - `dev/bin/validate-repository` now runs automatically in two places
   rather than only by hand. The `pre-push` hook runs it before every
   push, where the pinned Docker images are already warm and a failure

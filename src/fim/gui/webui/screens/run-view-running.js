@@ -101,11 +101,17 @@ let showingLiveDemePair = false;
 // generations`/`convergence_histories` the engine's own convergence
 // monitor recorded, not this client-side approximation -- this state
 // exists only to have something to plot *while* the run is still
-// going, when that authoritative history does not exist yet. Scalar
-// runs only, matching `renderTrajectory`'s own existing scope
-// boundary: a batch's own `completed` view already hides this panel
-// entirely (`run-view-completed.js`'s own module docstring), so there
-// is nothing to accumulate for `onBatchProgress`.
+// going, when that authoritative history does not exist yet. Shared,
+// unchanged, by `onBatchProgress` too (batch trajectory panel design
+// `20260912-claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/
+// restricted`) -- only one of `onRunProgress`/`onBatchProgress` ever
+// fires during any one run's own `running` state, so there is no risk
+// of the two mixing into one array; `accumulateLiveBatchTrajectory`
+// (below) feeds it `meanReportedGeneration` and each statistic's own
+// pooled `mean` in place of a scalar tick's own single generation and
+// point value. A batch's own `completed` view still does not draw this
+// (unlike its `running` view now does) -- that half of the design
+// doc's own phased schedule has not landed yet.
 let liveTrajectoryGenerations = [];
 let liveTrajectoryHistories = {};
 
@@ -344,6 +350,53 @@ function accumulateLiveTrajectory(generation, statistics) {
     }
 }
 
+/**
+ * Append one batch progress tick to the same live trajectory
+ * accumulators a scalar run's own `accumulateLiveTrajectory` feeds
+ * (batch trajectory panel design `20260912-claude-sonnet-5-batch-
+ * trajectory-panel-design.md`, `selby/restricted`, commit 1: mean line
+ * only, no band yet).
+ *
+ * `meanGeneration` is `_push_batch_progress`'s own `meanReportedGeneration`
+ * -- an approximate, pooled x-axis (no single tick has one shared
+ * "generation" the way a scalar run's own progress push does, since
+ * replicates report at different generations by construction).
+ * `statistics[name]` is `reports_summary`'s own pre-formatted `{mean,
+ * low, high, sampleCount}` object, not a bare value the way a scalar
+ * tick's own `statistics[name]` is -- only `.mean` is plotted this
+ * phase, delegating to `accumulateLiveTrajectory` once flattened to
+ * that same bare-value shape rather than duplicating its own `Number`/
+ * `Number.isFinite` guard a second time.
+ * @param {number | undefined} meanGeneration
+ * @param {Record<string, {mean: string}> | undefined} statistics
+ */
+function accumulateLiveBatchTrajectory(meanGeneration, statistics) {
+    if (meanGeneration === undefined || !statistics) {
+        return;
+    }
+    const meansOnly = {};
+    for (const name of STATISTIC_NAMES) {
+        if (statistics[name]) {
+            meansOnly[name] = statistics[name].mean;
+        }
+    }
+    // `reports_summary` needs at least two currently-reporting replicates
+    // to define an interval at all (`_push_batch_progress`'s own
+    // docstring) -- `statistics` is naturally `{}` for the first tick or
+    // two. Skipping the tick entirely here, rather than pushing
+    // `meanGeneration` with no history values behind it, matters:
+    // `renderTrajectory`'s own "plottable" filter (`run-view-
+    // completed.js`) drops any statistic whose own history is shorter
+    // than the shared generations list -- one empty early tick would
+    // permanently shrink every statistic's own history one entry short
+    // for the rest of the run, hiding the whole panel forever instead
+    // of just not having anything to plot yet.
+    if (Object.keys(meansOnly).length === 0) {
+        return;
+    }
+    accumulateLiveTrajectory(meanGeneration, meansOnly);
+}
+
 window.fim.onRunProgress = function onRunProgress(payload) {
     progressBar.max = payload.maxGenerations;
     progressBar.value = payload.generation;
@@ -421,6 +474,10 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
     // here, not a placeholder for it: the table always shows something
     // meaningful for the batch's current state, never blank.
     renderBatchSummary(payload.statistics);
+    accumulateLiveBatchTrajectory(payload.meanReportedGeneration, payload.statistics);
+    if (typeof renderTrajectory === "function") {
+        renderTrajectory(liveTrajectoryGenerations, liveTrajectoryHistories);
+    }
     drawProgressPanels(payload);
 };
 

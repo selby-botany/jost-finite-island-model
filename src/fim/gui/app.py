@@ -2857,6 +2857,15 @@ def _push_batch_progress(
     empty (`{}`) for the first tick or two, before a second replicate
     has reported anything to summarize yet — `reports_summary` never
     raises for that, unlike `replicate_summary`.
+
+    `meanReportedGeneration`, when present (omitted while no replicate
+    has reported anything yet), is the live batch trajectory panel's
+    own x-axis for this tick (batch trajectory panel design `20260912-
+    claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/
+    restricted`) — `run-view-running.js`'s own `accumulateLiveBatch
+    Trajectory` appends it, paired with `statistics`' own per-name
+    `mean`, to the same client-side trajectory accumulator a scalar
+    run's own progress push already feeds.
     """
     states: list[ModelState] = []
     for index in range(1, params.n_replicates + 1):
@@ -2903,6 +2912,23 @@ def _push_batch_progress(
         "demeCount": params.d,
         "statistics": statistics,
     }
+    if states:
+        # The live batch trajectory panel's own x-axis (batch trajectory
+        # panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
+        # design.md`, `selby/restricted`, approach A): no single tick
+        # has one shared "generation" the way a scalar run's own
+        # progress push does, since replicates report at different
+        # generations by construction -- the *mean* across whichever
+        # replicates have reported this tick gives a meaningful, if
+        # approximate, sense of "how far along," without a fastest-
+        # replicate outlier dragging it forward the way a *max* would.
+        # Rounded to the nearest integer for a clean axis tick; omitted
+        # entirely (not `0`) when no replicate has reported yet, so the
+        # client's own accumulator (`accumulateLiveBatchTrajectory`)
+        # knows to skip this tick rather than plot a bogus generation 0.
+        progress_payload["meanReportedGeneration"] = round(
+            sum(state.generation for state in states) / len(states)
+        )
     pair = live_deme_pair()
     if pair is not None and pooled_points is not None:
         first_deme, second_deme = pair
