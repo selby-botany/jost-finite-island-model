@@ -2832,6 +2832,7 @@ def _push_batch_progress(
     working_directory: Path,
     live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
+    initial_states: dict[str, ModelState] | None = None,
 ) -> None:
     """Read every currently-reporting replicate's live state, push a pooled scatter.
 
@@ -2867,7 +2868,44 @@ def _push_batch_progress(
     Trajectory` appends it, paired with `statistics`' own per-name
     `mean`, to the same client-side trajectory accumulator a scalar
     run's own progress push already feeds.
+
+    `initialStatistics` is the identical pooled-interval shape as
+    `statistics`, but always for generation 0 specifically, across
+    every replicate ever seen reporting so far (not only this tick's
+    own currently-reporting subset — a replicate's own generation-0
+    state never changes, so once read it stays counted even after that
+    replicate moves on or finishes). Without this, the live trajectory
+    panel's own x-axis could only ever start wherever the *first*
+    two-or-more-replicates tick happened to land — plausibly generation
+    10+ for a fast-running batch whose replicates had already outrun
+    `_BATCH_POLL_INTERVAL_SECONDS`'s own first tick before this
+    function ever got to look — silently misrepresenting how much of
+    the run's own early history was actually skipped, not shown.
+    `initial_states` is the cross-tick cache that makes this cheap: read
+    once per replicate (`read_live_state(..., generation=0, ...)`, safe
+    to call at any later generation too, since `trajectory.jsonl` is
+    append-only and generation 0's own rows are never overwritten),
+    never re-read on a later tick.
+
+    Args:
+        window: See other bridge-pushing functions in this module.
+        params: This batch's own validated configuration.
+        run_id: This batch's own id (not any one replicate's).
+        working_directory: Where replicates are writing, mid-run.
+        live_deme_pair: See this function's own body, below.
+        digits: `Api._significant_digits`, formatting every statistic
+            this call sends exactly like every other bridge push does.
+        initial_states: A cache this function both reads and writes,
+            expected to be the *same* dict object across every tick of
+            one batch's own poll loop (`_drain_batch_messages` creates
+            one and passes it to every one of its own `_push_batch_
+            progress` calls) — `None` (the default) is only for a
+            caller that does not care about paying the one-time
+            generation-0 read cost again on every call, such as a test
+            exercising a single tick in isolation.
     """
+    if initial_states is None:
+        initial_states = {}
     states: list[ModelState] = []
     for index in range(1, params.n_replicates + 1):
         replicate_run_id = f"{run_id}-r{index:03}"
@@ -2877,14 +2915,21 @@ def _push_batch_progress(
         sidecar = read_progress_sidecar(directory / ".progress")
         if sidecar is None:
             continue
+        trajectory_path = directory / "trajectory.jsonl"
         state = read_live_state(
-            directory / "trajectory.jsonl",
+            trajectory_path,
             replicate_run_id,
             sidecar["generation"],
             params.loci,
         )
         if state is not None:
             states.append(state)
+        if replicate_run_id not in initial_states:
+            initial_state = read_live_state(
+                trajectory_path, replicate_run_id, 0, params.loci
+            )
+            if initial_state is not None:
+                initial_states[replicate_run_id] = initial_state
     pooled_points = pooled_frequency_points(states) if states else None
     panels = (
         panels_from_points(pooled_points, params.d) if pooled_points is not None else []
@@ -2906,12 +2951,34 @@ def _push_batch_progress(
         }
         for name, interval in raw_summary.items()
     }
+    raw_initial_summary = reports_summary(
+        [
+            report_for_state(
+                state,
+                params,
+                run_id=run_id,
+                converged=False,
+                reason="initial conditions",
+            )
+            for state in initial_states.values()
+        ]
+    )
+    initial_statistics = {
+        name: {
+            "mean": format_statistic(interval["mean"], digits),
+            "low": format_statistic(interval["low"], digits),
+            "high": format_statistic(interval["high"], digits),
+            "sampleCount": interval["sample_count"],
+        }
+        for name, interval in raw_initial_summary.items()
+    }
     progress_payload: dict[str, object] = {
         "replicateCount": params.n_replicates,
         "reportedReplicateCount": len(states),
         "panels": panels,
         "demeCount": params.d,
         "statistics": statistics,
+        "initialStatistics": initial_statistics,
     }
     if states:
         # The live batch trajectory panel's own x-axis (batch trajectory
@@ -3127,12 +3194,23 @@ def _drain_batch_messages(
         on_message(started)
     working_directory = started[1]
     logger.debug("batch message-drain thread started: %s", working_directory)
+    # One dict, for this batch's entire poll loop -- `_push_batch_
+    # progress`'s own `initial_states` parameter, read once per
+    # replicate (the first tick that sees it reporting at all) and
+    # never re-read on a later tick.
+    initial_states: dict[str, ModelState] = {}
     while True:
         try:
             message = message_queue.get(timeout=_BATCH_POLL_INTERVAL_SECONDS)
         except queue.Empty:
             _push_batch_progress(
-                window, params, run_id, working_directory, live_deme_pair, digits
+                window,
+                params,
+                run_id,
+                working_directory,
+                live_deme_pair,
+                digits,
+                initial_states,
             )
             continue
         if message[0] == "done":

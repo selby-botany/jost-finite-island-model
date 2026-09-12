@@ -1270,6 +1270,81 @@ def test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars(
     assert payload["statistics"] == {}
 
 
+def test_push_batch_progress_includes_a_generation_zero_baseline(
+    tmp_path: Path,
+    tiny_params: SimulationParams,
+) -> None:
+    """`initialStatistics` reflects generation 0, even once replicates move on.
+
+    Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+    trajectory-panel-design.md` (`selby/restricted`), follow-up:
+    without this, the live trajectory panel's own x-axis could only
+    ever start wherever the *first* two-or-more-replicates tick
+    happened to land -- plausibly well past generation 0 for a batch
+    that already outran a poll interval or two before this function
+    first got to look. Two replicates each write generation 0, then
+    advance to generation 2 -- `trajectory.jsonl` is append-only, so
+    generation 0's own rows stay readable even after later ones are
+    written (`read_live_state`'s own docstring), and this call reads
+    them via a fresh, real file read, the same as it reads the current
+    generation.
+    """
+    params = replace(tiny_params, n_replicates=2)
+    run_id = "batch-run-1"
+    gen0_state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+            ({AlleleId(0): 0.5, AlleleId(1): 0.5},),
+        ),
+    )
+    # Distinct from `gen0_state` so `initialStatistics` (generation 0)
+    # and `statistics` (generation 2, this tick's own current state)
+    # are provably not the same computation reused twice.
+    gen2_state = ModelState(
+        loci=(LocusSpec(1, 200),),
+        frequencies=(
+            ({AlleleId(0): 0.9, AlleleId(1): 0.1},),
+            ({AlleleId(0): 0.1, AlleleId(1): 0.9},),
+        ),
+        generation=2,
+    )
+    for index in (1, 2):
+        replicate_run_id = f"{run_id}-r{index:03}"
+        directory = batch_runner.replicate_output_directory(
+            tmp_path, run_id, replicate_run_id
+        )
+        directory.mkdir(parents=True)
+        store = LiveProgressStore(
+            JSONLTrajectoryStore(directory / "trajectory.jsonl"),
+            progress_path=directory / ".progress",
+            cancel_path=tmp_path / "cancel",
+        )
+        store.write_generation(
+            replicate_run_id, 0, gen0_state.to_rows(replicate_run_id)
+        )
+        store.write_generation(
+            replicate_run_id, 2, gen2_state.to_rows(replicate_run_id)
+        )
+    window = _FakeWindow()
+
+    app_module._push_batch_progress(window, params, run_id, tmp_path)
+
+    payload = _one_call_payload(window, "onBatchProgress")
+    assert payload["meanReportedGeneration"] == 2
+    initial_statistics = payload["initialStatistics"]
+    assert isinstance(initial_statistics, dict)
+    # Both replicates share the identical generation-0 state (an exact
+    # 0.5/0.5 split at both loci), so `D`'s own generation-0 mean is
+    # exactly 0 -- distinct from generation 2's own real spread, proof
+    # this is genuinely computed from generation 0, not the current
+    # tick's own `statistics` handed back under a second name.
+    assert initial_statistics["D"]["mean"] == "0"
+    statistics = payload["statistics"]
+    assert isinstance(statistics, dict)
+    assert statistics["D"]["mean"] != initial_statistics["D"]["mean"]
+
+
 def test_push_batch_progress_reports_nothing_before_any_replicate_starts(
     tmp_path: Path,
     tiny_params: SimulationParams,

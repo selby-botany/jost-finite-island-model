@@ -26,6 +26,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -376,3 +377,45 @@ def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None:
     assert settled["afterClick"]["ariaPressed"] == "false"
     assert "legend-item-hidden" in settled["afterClick"]["className"]
     assert settled["stillRunning"] == "running"
+
+
+def test_set_live_batch_trajectory_initial_point_updates_in_place(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Generation 0 is inserted once, then updated, never duplicated.
+
+    Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+    trajectory-panel-design.md` (`selby/restricted`), follow-up: unlike
+    `accumulateLiveBatchTrajectory`'s own always-append ticks,
+    generation 0's own `sampleCount` only ever grows as more replicates
+    start (a replicate's own generation-0 state never changes, so it
+    stays counted even after that replicate moves on), so calling this
+    again with a larger `sampleCount` must overwrite the existing
+    generation-0 point in place, not append a second one alongside it.
+    Called directly (`liveBatchTrajectory`, `setLiveBatchTrajectory
+    InitialPoint`, and `STATISTIC_NAMES` are plain globals shared
+    across every script this page loads, this file's own module
+    docstring's "one shared canvas... sharing one global scope" already
+    established) rather than through a real batch, since this is pure
+    client-side accumulator logic with no bridge call of its own to
+    exercise.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "setLiveBatchTrajectoryInitialPoint("
+            "{D: {mean: '0', low: '-0.1', high: '0.1', sampleCount: 2}});"
+            "setLiveBatchTrajectoryInitialPoint("
+            "{D: {mean: '0.01', low: '-0.05', high: '0.06', sampleCount: 5}});"
+        ),
+        read=(
+            "({length: liveBatchTrajectory.D.length, point: liveBatchTrajectory.D[0]})"
+        ),
+        is_ready=lambda value: value is not None,
+    )
+
+    assert settled["length"] == 1
+    assert settled["point"]["generation"] == 0
+    assert settled["point"]["mean"] == "0.01"
+    assert settled["point"]["sampleCount"] == 5

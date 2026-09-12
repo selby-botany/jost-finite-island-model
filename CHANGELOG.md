@@ -34,7 +34,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   legend-toggle visibility mechanism the scalar panel already has),
   shared by both the live and completed views, rather than extending
   the scalar panel's own single-shared-generation-list drawing code,
-  which does not fit this shape.
+  which does not fit this shape. The live view's own x-axis starts at
+  generation 0, not wherever the first two-or-more-replicates tick
+  happened to land: `_push_batch_progress` also reads (once per
+  replicate, cached) each reporting replicate's own generation-0 row —
+  `trajectory.jsonl` is append-only, so it stays readable even once a
+  replicate has moved well past it — and pools it into a growing
+  `initialStatistics` baseline the client keeps updated in place at
+  generation 0.
 - `dev/bin/validate-repository` now runs automatically in two places
   rather than only by hand. The `pre-push` hook runs it before every
   push, where the pinned Docker images are already warm and a failure

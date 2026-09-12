@@ -395,6 +395,55 @@ function accumulateLiveTrajectory(generation, statistics) {
  * @param {Record<string, {mean: string, low: string, high: string,
  *     sampleCount: number}> | undefined} statistics
  */
+/**
+ * Keep `liveBatchTrajectory[name]`'s own generation-0 point current,
+ * inserting it at index 0 the first time a name has one and
+ * overwriting it in place afterward (batch trajectory panel design
+ * `20260912-claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/
+ * restricted`, follow-up: without this, the live panel's own x-axis
+ * could only ever start wherever the *first* two-or-more-replicates
+ * tick happened to land -- plausibly well past generation 0 for a
+ * fast-running batch that has already outrun a few poll intervals by
+ * the time this page first looks -- silently understating how much of
+ * the run's own early history was actually skipped, not shown).
+ *
+ * `initialStatistics` is `_push_batch_progress`'s own pooled generation-
+ * 0 interval, across every replicate ever seen reporting so far --
+ * unlike a tick's own `statistics`, its own `sampleCount` only ever
+ * grows (a replicate's own generation-0 state never changes, so it
+ * stays counted even after that replicate moves on or finishes),
+ * which is exactly why this needs its own "update in place," not
+ * `accumulateLiveBatchTrajectory`'s own "always append:" the same
+ * generation would otherwise gain one redundant point per tick.
+ * @param {Record<string, {mean: string, low: string, high: string,
+ *     sampleCount: number}> | undefined} initialStatistics
+ */
+function setLiveBatchTrajectoryInitialPoint(initialStatistics) {
+    if (!initialStatistics) {
+        return;
+    }
+    for (const name of STATISTIC_NAMES) {
+        const interval = initialStatistics[name];
+        if (!interval) {
+            continue;
+        }
+        const point = {
+            generation: 0,
+            mean: interval.mean,
+            low: interval.low,
+            high: interval.high,
+            sampleCount: interval.sampleCount,
+        };
+        if (!liveBatchTrajectory[name]) {
+            liveBatchTrajectory[name] = [point];
+        } else if (liveBatchTrajectory[name][0]?.generation === 0) {
+            liveBatchTrajectory[name][0] = point;
+        } else {
+            liveBatchTrajectory[name].unshift(point);
+        }
+    }
+}
+
 function accumulateLiveBatchTrajectory(meanGeneration, statistics) {
     if (meanGeneration === undefined || !statistics) {
         return;
@@ -494,6 +543,7 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
     // here, not a placeholder for it: the table always shows something
     // meaningful for the batch's current state, never blank.
     renderBatchSummary(payload.statistics);
+    setLiveBatchTrajectoryInitialPoint(payload.initialStatistics);
     accumulateLiveBatchTrajectory(payload.meanReportedGeneration, payload.statistics);
     // `renderBatchTrajectory`, not `renderTrajectory` -- declared in
     // `run-view-completed.js`, which loads after this file, guarded the

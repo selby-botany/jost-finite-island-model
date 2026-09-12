@@ -6465,6 +6465,30 @@ directory is never created at all, the "has not started yet" case
 `_push_batch_progress`'s own docstring names as normal, not an
 error.
 
+<a id="gui.test_app_api.test_push_batch_progress_includes_a_generation_zero_baseline"></a>
+
+#### test\_push\_batch\_progress\_includes\_a\_generation\_zero\_baseline
+
+```python
+def test_push_batch_progress_includes_a_generation_zero_baseline(
+        tmp_path: Path, tiny_params: SimulationParams) -> None
+```
+
+`initialStatistics` reflects generation 0, even once replicates move on.
+
+Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+trajectory-panel-design.md` (`selby/restricted`), follow-up:
+without this, the live trajectory panel's own x-axis could only
+ever start wherever the *first* two-or-more-replicates tick
+happened to land -- plausibly well past generation 0 for a batch
+that already outran a poll interval or two before this function
+first got to look. Two replicates each write generation 0, then
+advance to generation 2 -- `trajectory.jsonl` is append-only, so
+generation 0's own rows stay readable even after later ones are
+written (`read_live_state`'s own docstring), and this call reads
+them via a fresh, real file read, the same as it reads the current
+generation.
+
 <a id="gui.test_app_api.test_push_batch_progress_reports_nothing_before_any_replicate_starts"></a>
 
 #### test\_push\_batch\_progress\_reports\_nothing\_before\_any\_replicate\_starts
@@ -7021,6 +7045,29 @@ message is the last thing it processes), so the one verification
 `evaluate_js` call each test below makes is never concurrent with
 anything.
 
+<a id="gui.test_batch_results_screen.test_batch_trajectory_domain_excludes_a_thin_samples_own_band"></a>
+
+#### test\_batch\_trajectory\_domain\_excludes\_a\_thin\_samples\_own\_band
+
+```python
+def test_batch_trajectory_domain_excludes_a_thin_samples_own_band(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A `sampleCount`-2 point's own wild band never widens the plotted axis.
+
+Confirmed live: a real, staggered-stopping batch's own `D` band
+reached `low: -2.98, high: 3.54` at its own tail (only 2 replicates
+still contributing -- Student's-t with 1 degree of freedom has an
+enormous critical value) for a statistic that never otherwise
+leaves roughly `[0, 1]`, squashing every earlier, better-supported
+generation into an unreadable sliver once the axis stretched to
+include it. `computeBatchTrajectoryValueDomain` is tested directly
+against a hand-built payload here (no real batch needed) rather
+than only indirectly through rendered canvas pixels, since a pure
+function's own return value is a far more direct assertion than
+reading pixel coverage back out of a canvas.
+
 <a id="gui.test_batch_results_screen.test_a_completed_batch_renders_the_run_view"></a>
 
 #### test\_a\_completed\_batch\_renders\_the\_run\_view
@@ -7507,6 +7554,33 @@ job is narrower: prove the *live* wiring reaches it too, by
 actually clicking a legend item while the batch is still `running`
 and confirming its own `aria-pressed`/class flip without an
 unhandled exception breaking the next real progress push.
+
+<a id="gui.test_batch_running.test_set_live_batch_trajectory_initial_point_updates_in_place"></a>
+
+#### test\_set\_live\_batch\_trajectory\_initial\_point\_updates\_in\_place
+
+```python
+def test_set_live_batch_trajectory_initial_point_updates_in_place(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Generation 0 is inserted once, then updated, never duplicated.
+
+Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+trajectory-panel-design.md` (`selby/restricted`), follow-up: unlike
+`accumulateLiveBatchTrajectory`'s own always-append ticks,
+generation 0's own `sampleCount` only ever grows as more replicates
+start (a replicate's own generation-0 state never changes, so it
+stays counted even after that replicate moves on), so calling this
+again with a larger `sampleCount` must overwrite the existing
+generation-0 point in place, not append a second one alongside it.
+Called directly (`liveBatchTrajectory`, `setLiveBatchTrajectory
+InitialPoint`, and `STATISTIC_NAMES` are plain globals shared
+across every script this page loads, this file's own module
+docstring's "one shared canvas... sharing one global scope" already
+established) rather than through a real batch, since this is pure
+client-side accumulator logic with no bridge call of its own to
+exercise.
 
 <a id="gui.test_branding"></a>
 
