@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from fim import engine
+from fim.convergence import StopReason
 from fim.engine import (
     Clock,
     FinalReport,
@@ -4185,3 +4186,163 @@ def test_vectorized_advancer_skips_migration_weights_cache_for_a_scalar_rate() -
     for _ in range(3):
         advancer.advance([lane], store)
         assert lane.migration_weights is None
+
+
+# Cross-backend *structural* parity (performance-baseline remediation
+# item 10, step 3: "add deterministic structural/per-operation
+# regression tests in CI where possible; leave timing/RSS comparison as
+# a controlled maintainer benchmark"). Everything below asserts the
+# shape of what a backend produced, never how long it took -- a
+# wall-clock comparison belongs in `dev/bin/benchmark-engines` and its
+# recorded tables (`doc/fim-engine-backend-benchmarks.md`), never in a
+# gate whose result would then depend on runner load rather than on the
+# commit (CLAUDE.md: "a test is a pure function of its commit").
+
+
+def _structural_backends() -> list[tuple[str, GenerationalBackend | LinealBackend]]:
+    """Return every engine backend/advancer combination `fim` can reach, named.
+
+    One list, so a newly added `Advancer` joins the cross-backend
+    structural invariant below by being added here once rather than by
+    someone remembering to write a parallel test for it. Built eagerly,
+    including the two numba-dependent entries, so the caller can skip
+    the whole comparison at once when `numba` is absent rather than
+    silently comparing a narrowed subset that still passes.
+    """
+    return [
+        ("lineal", LinealBackend()),
+        ("generational/sequential", GenerationalBackend(SequentialAdvancer())),
+        (
+            "generational/sequential+jit",
+            # `SequentialAdvancer`'s own `jit` is a plain `bool`, unlike
+            # `ThreadedAdvancer`'s `JitChoice` string, below.
+            GenerationalBackend(SequentialAdvancer(jit=True)),
+        ),
+        ("generational/threaded", GenerationalBackend(ThreadedAdvancer())),
+        (
+            "generational/threaded+jit",
+            GenerationalBackend(ThreadedAdvancer(jit="numba")),
+        ),
+        ("generational-vector", GenerationalBackend(VectorizedAdvancer())),
+    ]
+
+
+def test_every_engine_backend_visits_the_same_generations_and_output_shape() -> None:
+    """Every backend writes one full distribution per generation, deme, and locus.
+
+    The structural counterpart to this file's own value-level parity
+    tests, which are necessarily pairwise and necessarily narrow:
+    `test_generational_vector_backend_matches_lineal_exactly_without_
+    migration` can only compare `LinealBackend` to Backend V with
+    `m=0.0`, because with migration active the two diverge bit-for-bit
+    by design (`migrate_vectorized`'s dense matmul versus `migrate`'s
+    dict-based blend -- see that test's own docstring), and the
+    statistical tests that *do* run with migration active compare
+    distributions across hundreds of replicates rather than one run's
+    own structure.
+
+    That leaves a real gap this closes: with migration active -- the
+    ordinary, default case -- nothing asserted that all six
+    backend/advancer combinations even agree on *how much* they
+    produce. A backend that silently stopped one generation early, or
+    wrote generation zero twice, or dropped a locus, or emitted an
+    unnormalized distribution, would diverge in values anyway, so no
+    value comparison could distinguish that defect from the accepted
+    floating-point divergence. These invariants are independent of
+    every value:
+
+    - the generations visited are exactly `0 .. max_generations`,
+    - each `(generation, deme, locus)` appears once and its
+      frequencies sum to one,
+    - the stop reason, stopping generation, and `converged` flag agree
+      across every backend, and
+    - the persisted row keys and report keys are the same set
+      everywhere.
+
+    `convergence_tolerance=0.0` with a real window is what makes the
+    third invariant meaningful rather than coincidental: an exactly-zero
+    half-window mean difference effectively cannot occur here, so every
+    backend is expected to stop at the generation cap, and the
+    assertion says so directly instead of comparing whatever each one
+    happened to do. A backend that converged early would fail loudly
+    here rather than quietly being compared against a different-length
+    run.
+    """
+    pytest.importorskip("numba")
+    params = SimulationParams(
+        N=40,
+        m=0.2,
+        mu=0.1,
+        d=3,
+        seed=20260901,
+        loci=(LocusSpec(1, 2), LocusSpec(2, 2)),
+        mutation_model="finite_alleles",
+        convergence_window=4,
+        convergence_tolerance=0.0,
+        max_generations=6,
+        n_replicates=1,
+        replicate_tolerance=None,
+    )
+    expected_generations = tuple(range(params.max_generations + 1))
+    expected_groups = {
+        (generation, deme, locus.locus_id)
+        for generation in expected_generations
+        # Deme ids are 1-based in a persisted row, matching the
+        # model's own `ModelState` deme numbering.
+        for deme in range(1, params.d + 1)
+        for locus in params.loci
+    }
+
+    row_key_sets: dict[str, frozenset[str]] = {}
+    report_key_sets: dict[str, frozenset[str]] = {}
+    stopping_summaries: dict[str, tuple[object, object, object]] = {}
+
+    for name, backend in _structural_backends():
+        store = InMemoryTrajectoryStore()
+        result = backend.run(params, store, None, _clock)
+        assert isinstance(result, RunResult), name
+        rows = list(store.read(result.run_id))
+        assert rows, name
+
+        # Every row belongs to this run, and the generations present are
+        # exactly the expected contiguous range -- not merely the right
+        # count of them, which a duplicated generation zero alongside a
+        # missing final generation would also satisfy.
+        assert {row["run_id"] for row in rows} == {result.run_id}, name
+        assert tuple(sorted({row["generation"] for row in rows})) == (
+            expected_generations
+        ), name
+
+        # One complete, normalized frequency distribution per
+        # (generation, deme, locus): the "same shape of output" claim,
+        # asserted against a computed expectation rather than against
+        # another backend's output, so each backend stands on its own.
+        group_totals: dict[tuple[int, int, int], float] = {}
+        for row in rows:
+            key = (row["generation"], row["deme"], row["locus_id"])
+            group_totals[key] = group_totals.get(key, 0.0) + float(row["frequency"])
+        assert set(group_totals) == expected_groups, name
+        for key, total in group_totals.items():
+            assert total == pytest.approx(1.0, abs=1e-9), (name, key)
+
+        row_key_sets[name] = frozenset(rows[0].keys())
+        report_key_sets[name] = frozenset(result.report)
+        stopping_summaries[name] = (
+            result.report["reason"],
+            result.report["generation"],
+            result.report["converged"],
+        )
+
+    # `run_id` deliberately excluded from the cross-backend comparison
+    # below by comparing only key *sets* and the stopping summary:
+    # `deterministic_run_id` hashes a run's own whole configuration,
+    # `engine_backend` included, so every backend here has a different
+    # one by design.
+    assert len(set(row_key_sets.values())) == 1, row_key_sets
+    assert len(set(report_key_sets.values())) == 1, report_key_sets
+    assert len(set(stopping_summaries.values())) == 1, stopping_summaries
+    assert next(iter(stopping_summaries.values())) == (
+        StopReason.MAX_GENERATIONS,
+        params.max_generations,
+        False,
+    )

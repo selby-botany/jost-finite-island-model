@@ -4738,6 +4738,55 @@ tick, since a regression that rebuilds-and-discards a matrix every
 generation would leave this field `None` too, indistinguishable
 from the fix at a single tick.
 
+<a id="engine.test_engine.test_every_engine_backend_visits_the_same_generations_and_output_shape"></a>
+
+#### test\_every\_engine\_backend\_visits\_the\_same\_generations\_and\_output\_shape
+
+```python
+def test_every_engine_backend_visits_the_same_generations_and_output_shape(
+) -> None
+```
+
+Every backend writes one full distribution per generation, deme, and locus.
+
+The structural counterpart to this file's own value-level parity
+tests, which are necessarily pairwise and necessarily narrow:
+`test_generational_vector_backend_matches_lineal_exactly_without_
+migration` can only compare `LinealBackend` to Backend V with
+`m=0.0`, because with migration active the two diverge bit-for-bit
+by design (`migrate_vectorized`'s dense matmul versus `migrate`'s
+dict-based blend -- see that test's own docstring), and the
+statistical tests that *do* run with migration active compare
+distributions across hundreds of replicates rather than one run's
+own structure.
+
+That leaves a real gap this closes: with migration active -- the
+ordinary, default case -- nothing asserted that all six
+backend/advancer combinations even agree on *how much* they
+produce. A backend that silently stopped one generation early, or
+wrote generation zero twice, or dropped a locus, or emitted an
+unnormalized distribution, would diverge in values anyway, so no
+value comparison could distinguish that defect from the accepted
+floating-point divergence. These invariants are independent of
+every value:
+
+- the generations visited are exactly `0 .. max_generations`,
+- each `(generation, deme, locus)` appears once and its
+  frequencies sum to one,
+- the stop reason, stopping generation, and `converged` flag agree
+  across every backend, and
+- the persisted row keys and report keys are the same set
+  everywhere.
+
+`convergence_tolerance=0.0` with a real window is what makes the
+third invariant meaningful rather than coincidental: an exactly-zero
+half-window mean difference effectively cannot occur here, so every
+backend is expected to stop at the generation cap, and the
+assertion says so directly instead of comparing whatever each one
+happened to do. A backend that converged early would fail loudly
+here rather than quietly being compared against a different-length
+run.
+
 
 
 <a id="group-gui"></a>
