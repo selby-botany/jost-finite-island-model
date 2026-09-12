@@ -665,6 +665,27 @@ for the full decision guide and the measured evidence behind it.</p>
 mutation_model: finite_alleles
 migrant_sampling: continuous
 </code></pre>
+<p><strong>In the desktop app:</strong> this is the only one of this section's five
+settings with a control of its own. You will find it as <strong>execution
+engine</strong> in Configure's Structure panel, offering the same four values
+in the order <code>lineal</code>, <code>auto</code>, <code>generational</code>, <code>generational-vector</code>.
+The app defaults a brand-new, untouched form to <code>auto</code>, which is the
+recommended choice — it picks whichever engine measured fastest for your
+configuration, and the run records the engine it actually chose, so the
+run stays exactly as reproducible as one where you named an engine
+yourself. Loading a configuration file shows whatever that file
+says, including <code>generational</code> or <code>generational-vector</code>; saving it again
+writes the same value back unchanged.</p>
+<p>If the app or checkout you are using does not have the optional <code>numba</code>
+software installed, the two options that need it (<code>auto</code> and
+<code>generational-vector</code>) say so in their own labels. They stay selectable
+so a configuration file naming either one still loads and saves
+faithfully — but a run using them will report that <code>numba</code> is missing.
+Packaged beta downloads include <code>numba</code> already.</p>
+<p>The other four settings in this section have no app control, by design:
+<code>jit</code>, <code>auto_vector_min_d</code>, and <code>auto_vector_max_capacity</code> are
+machine-specific tuning values meant to be re-measured rather than typed
+in, and <code>auto</code> needs none of them set by hand.</p>
 <h3 id="jit">jit</h3>
 <ul>
 <li><strong>Type:</strong> <code>off</code> or <code>numba</code></li>

@@ -16,6 +16,7 @@
   - [6. The configuration form](#6-the-configuration-form)
     - [6.1 Two panels and the cardinality rule](#61-two-panels-and-the-cardinality-rule)
     - [6.2 Load-only badges and unrepresentable constructs](#62-load-only-badges-and-unrepresentable-constructs)
+    - [6.3 The execution-engine selector](#63-the-execution-engine-selector)
   - [7. Run orchestration](#7-run-orchestration)
     - [7.1 Scalar runs](#71-scalar-runs)
     - [7.2 Batch runs](#72-batch-runs)
@@ -160,6 +161,7 @@ as a structured `{"error": ...}` payload the page renders).
 | `get_initial_state_panels` / `get_initial_state_deme_pair_panel` | The `p_0` scatter shown before a run starts (§5.2). |
 | `load_yaml` / `save_yaml` | The File menu's "Open/Save configuration" actions. |
 | `get_default_max_workers` | The batch tab's own default worker-count suggestion. |
+| `get_engine_backend_availability` | Whether the optional `numba` dependency is installed, so the execution-engine selector can relabel the two options that need it (§6.3). |
 | `get_significant_digits` / `set_significant_digits` | The View menu's numeric-precision setting. |
 | `get_live_deme_pair` / `set_live_deme_pair` | The deme-pair selector for a `d > 3` scatter (matching `fim.viz.scatter`'s own large-`d` fallback). |
 | `list_recent_runs` | Screen 6's/File-menu's recent-runs list (§9). |
@@ -275,6 +277,73 @@ widget-unfriendly construct:
   `params_to_form_values` instead — the same "edit the YAML file
   directly" pattern this form has always used for a construct it
   cannot represent at all.
+
+### 6.3 The execution-engine selector
+
+The Structure panel's **execution engine** field sets
+`SimulationParams.engine_backend` — the first and, for now, only field
+of the "Advanced: execution & performance" group
+[`configuration.md`](configuration.md) documents under "Engine backend
+and JIT". Design doc:
+`20260911-claude-sonnet-5-gui-engine-backend-selector-design.md`
+(`selby/restricted`).
+
+It is a plain `<select>` offering all four legal values, ordered so the
+two real choices come first:
+
+| Option | What it is |
+|---|---|
+| `lineal` | The single-threaded reference implementation every other backend's correctness is checked against. |
+| `auto` (**default**) | Picks whichever backend this project's own recorded benchmarks found fastest for the configuration at hand. |
+| `generational` | Thread-parallel; bit-identical to `lineal` for a given seed. |
+| `generational-vector` | Array-native; fastest for large configurations. Needs `numba`. |
+
+Three points worth stating plainly, because each one is a decision
+rather than an accident:
+
+- **`auto` is the default, and `lineal` is not the fast option.**
+  `lineal` wins no configuration in this project's own recorded
+  benchmark history (`fim.model.params`'s own
+  `DEFAULT_AUTO_VECTOR_MIN_D`/`DEFAULT_AUTO_VECTOR_MAX_CAPACITY`
+  docstrings, re-measured across two machines); it is a correctness
+  reference, not a competitive execution choice. `auto` costs nothing
+  in reproducibility either — it resolves to a concrete backend and
+  stamps *that* into the run's own `manifest.json`, so a run started
+  with `auto` replays from its saved configuration exactly like one
+  that named a backend explicitly.
+- **All four values appear, even though a botanist realistically picks
+  between two.** A `<select>` with no `<option>` for a value cannot
+  render that value: the browser silently shows a different one, and
+  the next save writes *that* back. A hand-edited YAML or a reopened
+  manifest naming `generational`/`generational-vector` must round-trip
+  unchanged, so emphasis is carried by order and labeling rather than
+  by withholding values — the same "never silently misrepresent a real
+  field value" rule §6.2's per-locus `mu` case follows.
+- **`auto` and `generational-vector` are relabeled when `numba` is
+  missing.** Both need that optional dependency —
+  `generational-vector` imports it unconditionally, and `auto` resolves
+  to that backend for essentially every vector-eligible configuration
+  at the shipped thresholds. A source checkout installed without the
+  `[jit]` extra therefore gets both options relabeled "needs numba;
+  install `fim[jit]`" (`Api.get_engine_backend_availability`, §4.2)
+  rather than a selector promising something this install cannot do.
+  Relabeled, never disabled or removed, so the round trip above still
+  holds. Packaged beta builds bundle `numba`, so this path is a
+  source-checkout case rather than something a botanist meets (§15).
+
+The other four fields of that group — `jit`, `auto_vector_min_d`,
+`auto_vector_max_capacity`, `max_concurrent_replicates` — stay
+unexposed at their `SimulationParams` defaults, on purpose rather than
+pending. The first three are machine-specific benchmark artifacts meant
+to be re-measured with `dev/bin/benchmark-engines`, a developer
+workflow this screen's audience has no use for, and `auto`'s own
+resolution needs none of them set by hand.
+
+The σ band toggle above it needs no gating against this selector: every
+engine backend computes a within-run σ band. Earlier in this feature's
+history only `lineal` did, and gating was designed for; the engine-side
+work lifting that restriction landed first, so the gate was never
+built.
 
 ## 7. Run orchestration
 
@@ -492,6 +561,16 @@ build needs at both build and run time, and the beta build pipeline —
 are covered in
 [`doc/fim-simulator-detailed-design.md`](fim-simulator-detailed-design.md)
 §6.
+
+One packaging fact belongs here rather than there, because it is the
+execution-engine selector's own prerequisite: every beta packaging job
+installs the `[jit]` extra, so a packaged beta build bundles `numba` and
+the selector's recommended `auto` default actually works in the artifact
+a tester downloads. Without it, `auto` would fail nearly every real run
+with "needs the optional numba dependency" — a recommendation the
+product could not keep. The download is correspondingly larger. The
+release packaging jobs do not yet install it; until they do, a released
+build relabels the affected options instead of failing silently (§6.3).
 
 ## Metadata
 
