@@ -201,6 +201,40 @@ def _poll_until(
     return value
 
 
+def _expand_all_recent_run_groups(window: webview.Window) -> None:
+    """Click every date-bucket group's own toggle so its rows render.
+
+    Every group starts collapsed by default (item 2: "closed submenus by
+    default", `ensureGroupDefaults`) — most tests here care about the
+    rows themselves, not the grouping UI, so they call this once right
+    after the screen's own recent-runs fetch settles rather than
+    re-deriving "expand everything" inline at each call site.
+
+    Clicks in several rounds, not one: `"Earlier"` is itself a parent
+    group (item 3) whose own per-date sub-groups only appear in the DOM
+    -- collapsed by their own separate default -- once `"Earlier"`
+    itself has already been expanded, so a single pass over the
+    toggles visible at the start would miss them entirely.
+    """
+    _poll_until(
+        window,
+        "document.querySelectorAll('.open-run-group-toggle').length",
+        lambda value: value is not None and value > 0,
+    )
+    for _ in range(5):
+        window.evaluate_js(
+            "Array.from(document.querySelectorAll("
+            "'.open-run-group-toggle[aria-expanded=\"false\"]'"
+            ")).forEach((b) => b.click());"
+        )
+        remaining = window.evaluate_js(
+            "document.querySelectorAll("
+            "'.open-run-group-toggle[aria-expanded=\"false\"]').length"
+        )
+        if remaining == 0:
+            break
+
+
 def test_selecting_and_opening_a_recent_run_renders_screen_three(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -216,6 +250,7 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
             row_count = _poll_until(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
@@ -285,6 +320,7 @@ def test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve(
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
             row_count = _poll_until(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
@@ -356,6 +392,7 @@ def test_recent_runs_row_shows_config_summary_and_statistics(
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
             settled = _poll_until(
                 window,
                 "(function(){"
@@ -388,6 +425,60 @@ def test_recent_runs_row_shows_config_summary_and_statistics(
     assert "G_ST=" in settled["statisticsText"]
 
 
+def test_recent_runs_row_hides_fractional_seconds_in_the_ended_column(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The "Ended" column reads to the second, not the microsecond.
+
+    A real completed run's own `manifest.json` `ended_at` carries full
+    sub-second precision (`Api.list_home_runs`'s own `endedAt` passes it
+    through unchanged) -- `open-run.js`'s own `formatEndedAt` strips it
+    for *display* only (`buildRunRow`), so a human scanning the table
+    never needs microsecond resolution to recognize when a run finished.
+    Grouping/filtering (`dateBucketFor`/`matchesRecentRunsFilter`) still
+    use the raw, untrimmed value -- unaffected by this display-only
+    formatting, and not this test's own concern.
+    """
+    _write_run(tmp_path)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            settled = _poll_until(
+                window,
+                "(function(){"
+                "var row = document.querySelector("
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)'); "
+                "if (!row) { return null; } "
+                "return {endedAtCell: row.children[1].textContent};"
+                "})()",
+                lambda value: value is not None,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    ended_at_cell = settled["endedAtCell"]
+    # A real run's own `ended_at` is written with microsecond precision
+    # (e.g. `2026-09-12T13:54:36.292444Z`) -- confirming the rendered
+    # cell has no `.` at all is proof the fractional part was actually
+    # stripped, not merely that this particular run happened to end on
+    # an exact second.
+    assert "." not in ended_at_cell
+    assert ended_at_cell.endswith("Z")
+
+
 def test_a_batch_rows_statistics_cell_names_its_own_replicate_count(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -412,6 +503,7 @@ def test_a_batch_rows_statistics_cell_names_its_own_replicate_count(
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
             statistics_text = _poll_until(
                 window,
                 "(function(){"
@@ -455,6 +547,7 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
             _poll_until(
                 window,
                 "document.querySelector('.open-run-replicate-toggle') !== null",
@@ -809,6 +902,7 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
             _poll_until(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
@@ -895,6 +989,7 @@ def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
             _poll_until(
                 window,
                 f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
@@ -932,10 +1027,12 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
 ) -> None:
     """Design proposal for "a fantastically long results scroll": runs
     render grouped into date-bucket sections, each with its own
-    collapsible header naming its member count -- collapsing one
-    removes its rows from the DOM outright (`open-run.js`'s own
-    `renderRecentRuns`/`buildGroupHeaderRow`), the other bucket's own
-    rows unaffected.
+    collapsible header naming its member count. Every group starts
+    collapsed by default (`ensureGroupDefaults`), so opening the screen
+    shows headers only; expanding a header adds only its own rows
+    (`open-run.js`'s own `renderRecentRuns`/`buildGroupHeaderRow`), and
+    collapsing it again removes only its own rows, the other bucket's
+    own rows unaffected.
     """
     _write_run(tmp_path)
     batch_directory = _write_batch_run(tmp_path)
@@ -952,7 +1049,7 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
-            before = _poll_until(
+            collapsed = _poll_until(
                 window,
                 "(function(){"
                 "var headers = Array.from(document.querySelectorAll("
@@ -963,7 +1060,17 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
                 ".length;"
                 "return {headers: headers, rowCount: rows};"
                 "})()",
-                lambda value: value is not None and value.get("rowCount") == 2,
+                lambda value: value is not None and len(value.get("headers", [])) == 2,
+            )
+            # Every group starts collapsed -- expand everything (including
+            # "Earlier"'s own nested per-date sub-group, item 3) to see
+            # every row.
+            _expand_all_recent_run_groups(window)
+            after_expand = _poll_until(
+                window,
+                "document.querySelectorAll("
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
+                lambda value: value is not None and value == 2,
             )
             window.evaluate_js(
                 "document.querySelector('.open-run-group-toggle').click();"
@@ -974,7 +1081,13 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
                 "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
                 lambda value: value is not None and value == 1,
             )
-            outcome.put({"before": before, "afterCollapse": after_collapse})
+            outcome.put(
+                {
+                    "collapsed": collapsed,
+                    "afterExpand": after_expand,
+                    "afterCollapse": after_collapse,
+                }
+            )
         finally:
             window.destroy()
 
@@ -982,11 +1095,14 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert settled is not None
-    assert settled["before"]["rowCount"] == 2
-    assert any("Today" in header for header in settled["before"]["headers"])
-    assert any("Earlier" in header for header in settled["before"]["headers"])
+    # Collapsed by default: two group headers, zero run rows.
+    assert settled["collapsed"]["rowCount"] == 0
+    assert any("Today" in header for header in settled["collapsed"]["headers"])
+    assert any("Earlier" in header for header in settled["collapsed"]["headers"])
+    assert settled["afterExpand"] == 2
     # Collapsing the first ("Today") group's header removes only its own
-    # one row, leaving the "Earlier" batch row still rendered.
+    # one row, leaving the "Earlier" batch row (now inside its own
+    # expanded per-date sub-group) still rendered.
     assert settled["afterCollapse"] == 1
 
 
@@ -1013,6 +1129,17 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
         try:
             _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js("window.fim.menu.openRun();")
+            # Groups start collapsed by default -- expand them all first
+            # so the filter's own effect on row count is what's measured.
+            _poll_until(
+                window,
+                "document.querySelectorAll('.open-run-group-toggle').length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                "Array.from(document.querySelectorAll("
+                "'.open-run-group-toggle')).forEach((b) => b.click());"
+            )
             _poll_until(
                 window,
                 "document.querySelectorAll("

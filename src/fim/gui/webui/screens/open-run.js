@@ -42,26 +42,39 @@ let selectedTrajectoryPath = null;
 // this on every filter/group-toggle, so filtering and collapsing never
 // re-hit the filesystem.
 let allRecentRuns = [];
-// Group ids the user has explicitly collapsed this visit -- reset on
-// every fresh `refreshRecentRuns` (a stale collapse from a previous
-// visit's own now-discarded groups should not silently hide a group
-// that visit never had).
-let collapsedGroupIds = new Set();
+// Group ids the user has explicitly collapsed -- persists across visits
+// within this launch (`refreshRecentRuns` no longer resets this; see
+// its own comment for why). A group id is stable across re-fetches
+// within one calendar day ("Today"/"Yesterday"/"Earlier", or an
+// "Earlier"-nested literal date), so "the same group the user last
+// toggled" genuinely means the same thing on a later visit, not merely
+// a coincidentally-reused label.
+const collapsedGroupIds = new Set();
+// Group ids `ensureGroupDefaults` has already decided a default for --
+// distinct from `collapsedGroupIds` itself (which a user's own toggle
+// mutates freely): this is what lets a *newly appeared* group (a run
+// finishing today for the first time this launch, say) start collapsed
+// by default without also silently re-collapsing a group the user
+// already explicitly opened on an earlier visit.
+const knownGroupIds = new Set();
 
 const _ONE_DAY_MS = 24 * 60 * 60 * 1000;
 // Priority order for rendering -- runs are already newest-first
 // (`Api.list_home_runs`), but this makes bucket ordering an explicit,
 // tested invariant rather than an accident of that sort order.
-const _DATE_BUCKET_ORDER = ["Today", "This week", "Earlier", "Unknown date"];
+const _DATE_BUCKET_ORDER = ["Today", "Yesterday", "Earlier", "Unknown date"];
 
 /**
- * Bucket one run's own `endedAt` into a coarse "Today"/"This week"/
+ * Bucket one run's own `endedAt` into a coarse "Today"/"Yesterday"/
  * "Earlier" label -- the only grouping signal `RecentRun` exposes today
  * (large-sweep architecture roadmap doc `20260907-claude-sonnet-5-
  * large-sweep-architecture-roadmap.md`, `selby/restricted`, describes a
  * future `SweepManifest` one level above today's `BatchManifest`; once
  * that exists, a sweep-id group key can be added as a second, preferred
  * bucketing source here without touching `renderRecentRuns` itself).
+ * `"Earlier"` is further broken down by its own literal calendar date
+ * (`groupRecentRuns`, below) -- this function only ever needs to tell
+ * "today," "yesterday," and "everything else" apart.
  * @param {string} endedAt
  * @returns {string}
  */
@@ -77,14 +90,45 @@ function dateBucketFor(endedAt) {
         parsed.getMonth(),
         parsed.getDate()
     );
-    const ageMs = startOfToday.getTime() - startOfParsedDay.getTime();
-    if (ageMs < _ONE_DAY_MS) {
+    const ageDays = Math.round(
+        (startOfToday.getTime() - startOfParsedDay.getTime()) / _ONE_DAY_MS
+    );
+    if (ageDays <= 0) {
         return "Today";
     }
-    if (ageMs < 7 * _ONE_DAY_MS) {
-        return "This week";
+    if (ageDays === 1) {
+        return "Yesterday";
     }
     return "Earlier";
+}
+
+/**
+ * Format one run's own `endedAt` as a literal `YYYY-MM-DD` calendar
+ * date, in local time (matching `dateBucketFor`'s own local-time day
+ * boundary) -- `"Earlier"`'s own per-date sub-group label/id.
+ * @param {string} endedAt
+ * @returns {string}
+ */
+function calendarDateLabel(endedAt) {
+    const parsed = new Date(endedAt);
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+/**
+ * Strip sub-second precision from an ISO-8601 `endedAt` timestamp for
+ * display (`.292444Z` -> `Z`) -- the underlying value (used unchanged
+ * for date-bucketing and free-text filtering) keeps its full precision;
+ * only the rendered "Ended" column text is trimmed, since a human
+ * reader never needs microsecond resolution to recognize when a run
+ * finished.
+ * @param {string} endedAt
+ * @returns {string}
+ */
+function formatEndedAt(endedAt) {
+    return endedAt.replace(/\.\d+(?=Z?$)/, "");
 }
 
 /**
@@ -105,8 +149,15 @@ function matchesRecentRunsFilter(run, filterText) {
 
 /**
  * Split `runs` into date-bucket groups, in `_DATE_BUCKET_ORDER`.
+ * `"Earlier"` is itself a parent group whose own `subgroups` further
+ * split its runs by literal calendar date (newest first -- `runs`
+ * itself already arrives newest-first from `Api.list_home_runs`, and
+ * `Map` iteration order is insertion order, so no separate sort is
+ * needed) -- every other top-level bucket is a plain leaf group, its
+ * own `runs` rendered directly.
  * @param {Array<object>} runs
- * @returns {Array<{id: string, label: string, runs: Array<object>}>}
+ * @returns {Array<{id: string, label: string, runs?: Array<object>,
+ *     subgroups?: Array<{id: string, label: string, runs: Array<object>}>}>}
  */
 function groupRecentRuns(runs) {
     const buckets = new Map();
@@ -118,12 +169,68 @@ function groupRecentRuns(runs) {
         buckets.get(bucketId).push(run);
     }
     return _DATE_BUCKET_ORDER.filter((bucketId) => buckets.has(bucketId)).map(
-        (bucketId) => ({
-            id: bucketId,
-            label: bucketId,
-            runs: buckets.get(bucketId),
-        })
+        (bucketId) => {
+            const bucketRuns = buckets.get(bucketId);
+            if (bucketId !== "Earlier") {
+                return { id: bucketId, label: bucketId, runs: bucketRuns };
+            }
+            const dateGroups = new Map();
+            for (const run of bucketRuns) {
+                const dateLabel = calendarDateLabel(run.endedAt);
+                if (!dateGroups.has(dateLabel)) {
+                    dateGroups.set(dateLabel, []);
+                }
+                dateGroups.get(dateLabel).push(run);
+            }
+            const subgroups = Array.from(dateGroups.entries()).map(
+                ([dateLabel, dateRuns]) => ({
+                    id: `Earlier:${dateLabel}`,
+                    label: dateLabel,
+                    runs: dateRuns,
+                })
+            );
+            return { id: bucketId, label: bucketId, subgroups };
+        }
     );
+}
+
+/**
+ * Total run count for a group, recursing into `subgroups` for a parent
+ * group like `"Earlier"` -- `buildGroupHeaderRow`'s own `(N)` count, so
+ * a parent group's own header reads "Earlier (12)" for its full,
+ * combined count, not just however many of its own direct `runs` it
+ * has (a parent group's own `runs` is `undefined`, never an empty
+ * placeholder array, so this cannot silently read `0` for one instead
+ * of actually summing its children).
+ * @param {{runs?: Array<object>, subgroups?: Array<object>}} group
+ * @returns {number}
+ */
+function groupRunCount(group) {
+    return group.runs
+        ? group.runs.length
+        : group.subgroups.reduce((total, subgroup) => total + groupRunCount(subgroup), 0);
+}
+
+/**
+ * First-visit-only bookkeeping: any group id not already seen this
+ * launch defaults to collapsed (design ask: closed submenus by
+ * default) and is recorded as seen, so a *later* re-render (a filter
+ * keystroke, a fresh fetch) never re-applies that default over
+ * whatever the user has since done to it -- recurses into a parent
+ * group's own `subgroups` so a newly-appeared per-date sub-group under
+ * "Earlier" gets the identical treatment its own top-level siblings do.
+ * @param {Array<object>} groups
+ */
+function ensureGroupDefaults(groups) {
+    for (const group of groups) {
+        if (!knownGroupIds.has(group.id)) {
+            knownGroupIds.add(group.id);
+            collapsedGroupIds.add(group.id);
+        }
+        if (group.subgroups) {
+            ensureGroupDefaults(group.subgroups);
+        }
+    }
 }
 
 // Home's own shortcut cards (design §9, slice 3): both delegate to an
@@ -379,7 +486,7 @@ function buildRunRow(run) {
     const statisticsText = formatRowStatistics(run.statistics);
     for (const [value, className, isLabelCell] of [
         [run.runId, null, false],
-        [run.endedAt, null, false],
+        [formatEndedAt(run.endedAt), null, false],
         [run.label, null, true],
         [configText, "open-run-summary-cell", false],
         [statisticsText, "open-run-summary-cell", false],
@@ -447,14 +554,22 @@ function buildRunRow(run) {
  * "a fantastically long results scroll": collapsing a bucket removes
  * its rows from the DOM entirely, not merely hiding them, so a large
  * `results/` directory never pays for rendering rows nobody asked to
- * see). Collapsed state persists only for this visit (`collapsedGroupIds`,
- * reset by `refreshRecentRuns`), not across screen visits.
- * @param {{id: string, label: string, runs: Array<object>}} group
+ * see). Collapsed state survives across visits to this screen for the
+ * life of the window (`collapsedGroupIds`, seeded per-group the first
+ * time each group id is ever seen by `ensureGroupDefaults`).
+ * @param {{id: string, label: string, runs?: Array<object>,
+ *     subgroups?: Array<object>}} group
+ * @param {boolean} [nested] True for a date sub-group rendered inside
+ *     a parent bucket (e.g. one calendar day inside "Earlier"), so it
+ *     can be indented to show its place in the hierarchy.
  * @returns {HTMLTableRowElement}
  */
-function buildGroupHeaderRow(group) {
+function buildGroupHeaderRow(group, nested = false) {
     const row = document.createElement("tr");
     row.className = "open-run-group-header";
+    if (nested) {
+        row.classList.add("open-run-group-header-nested");
+    }
     const cell = document.createElement("td");
     cell.colSpan = 5;
     const toggle = document.createElement("button");
@@ -462,7 +577,7 @@ function buildGroupHeaderRow(group) {
     toggle.className = "open-run-group-toggle";
     const collapsed = collapsedGroupIds.has(group.id);
     toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    toggle.textContent = `${collapsed ? "▸" : "▾"} ${group.label} (${group.runs.length})`;
+    toggle.textContent = `${collapsed ? "▸" : "▾"} ${group.label} (${groupRunCount(group)})`;
     toggle.addEventListener("click", () => {
         if (collapsedGroupIds.has(group.id)) {
             collapsedGroupIds.delete(group.id);
@@ -477,6 +592,32 @@ function buildGroupHeaderRow(group) {
 }
 
 /**
+ * Append one group's own header row and, if expanded, its own content
+ * -- recurses into `subgroups` for a parent group like `"Earlier"`, so
+ * a leaf group (plain `runs`) and a parent group (nested `subgroups`)
+ * render through the identical function, one level deeper each time,
+ * rather than `renderRecentRuns` needing to know the tree's own depth
+ * up front.
+ * @param {object} group
+ * @param {boolean} [nested] See `buildGroupHeaderRow`.
+ */
+function renderGroup(group, nested = false) {
+    recentRunsBody.appendChild(buildGroupHeaderRow(group, nested));
+    if (collapsedGroupIds.has(group.id)) {
+        return;
+    }
+    if (group.subgroups) {
+        for (const subgroup of group.subgroups) {
+            renderGroup(subgroup, true);
+        }
+    } else {
+        for (const run of group.runs) {
+            recentRunsBody.appendChild(buildRunRow(run));
+        }
+    }
+}
+
+/**
  * Re-render the recent-runs table from `allRecentRuns` -- applies the
  * current filter text and group-collapse state, but never re-fetches
  * (`refreshRecentRuns` owns the one filesystem read per visit).
@@ -487,13 +628,13 @@ function renderRecentRuns() {
     const filtered = allRecentRuns.filter((run) =>
         matchesRecentRunsFilter(run, filterText)
     );
-    for (const group of groupRecentRuns(filtered)) {
-        recentRunsBody.appendChild(buildGroupHeaderRow(group));
-        if (!collapsedGroupIds.has(group.id)) {
-            for (const run of group.runs) {
-                recentRunsBody.appendChild(buildRunRow(run));
-            }
-        }
+    const groups = groupRecentRuns(filtered);
+    // Decide "closed by default" for any group this launch has never
+    // seen before *first*, so the very first render after a fresh fetch
+    // already reflects that default rather than briefly flashing open.
+    ensureGroupDefaults(groups);
+    for (const group of groups) {
+        renderGroup(group);
     }
     recentRunsCountLabel.textContent =
         filtered.length === allRecentRuns.length
@@ -522,7 +663,11 @@ async function refreshRecentRuns() {
     // own cache is keyed by directory, not by row, so it would
     // otherwise survive the next `renderRecentRuns()` untouched.
     window.__fimBatchReplicateCache = {};
-    collapsedGroupIds = new Set();
+    // `collapsedGroupIds` is intentionally NOT reset here -- a group the
+    // user collapsed or expanded on a previous visit should stay that
+    // way (item 2b); `ensureGroupDefaults` (called from
+    // `renderRecentRuns`) is what seeds a *new* group's default state
+    // (closed) the first time this window ever sees it.
     recentRunsFilterInput.value = "";
     allRecentRuns = await window.pywebview.api.list_home_runs();
     renderRecentRuns();

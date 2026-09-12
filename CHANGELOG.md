@@ -496,6 +496,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`test/test_reanalyze.py`) prove peak simultaneously-live rows stays
   near one generation's own row count regardless of total trajectory
   size, rather than a wall-clock timing measurement.
+- Home's own recent-runs list (`open-run.js`): the "Ended" column drops
+  its fractional seconds (`2026-09-12T13:54:36Z`, not `...:36.292444Z`)
+  for display only — grouping and free-text filtering still use the
+  full, untrimmed timestamp. Every date-bucket group (`Today`,
+  `Yesterday`, `Earlier`, and `Earlier`'s own per-date sub-groups, see
+  below) now starts collapsed by default rather than expanded, and a
+  group's collapsed/expanded state now persists across visits to the
+  screen for the life of the window instead of resetting on every
+  visit — a group id is tracked the first time it is ever seen
+  (`ensureGroupDefaults`) so a newly-appeared group still defaults
+  closed without disturbing a group the user already toggled earlier.
+  `Earlier` is now itself a parent group broken down by literal
+  calendar date (`Earlier > 2026-09-09`, `Earlier > 2026-09-05`, ...,
+  newest first), each with its own independent collapse state, rather
+  than one flat, potentially very long bucket.
 
 ### Removed
 

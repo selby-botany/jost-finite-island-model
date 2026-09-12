@@ -1172,6 +1172,15 @@ fieldset.composite > label {
     text-align: left;
 }
 
+/* A per-date sub-group nested inside a parent bucket (currently only
+ * "Earlier", broken down into its own calendar days -- item 3) --
+ * indented and de-emphasized relative to its parent's own top-level
+ * toggle so the hierarchy reads at a glance without a second column. */
+.open-run-group-header-nested .open-run-group-toggle {
+    padding-left: 1.5rem;
+    font-weight: 600;
+}
+
 /* Home enrichment (design doc `20260909-claude-sonnet-5-home-
  * enrichment-design.md`, `selby/restricted`): the config-summary/
  * statistics cells can run long (six fields, six statistics, all on

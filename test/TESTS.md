@@ -9745,6 +9745,26 @@ both new columns, including the full text still being reachable via
 each cell's own `title` attribute once the compact text is
 ellipsized.
 
+<a id="gui.test_open_run_screen.test_recent_runs_row_hides_fractional_seconds_in_the_ended_column"></a>
+
+#### test\_recent\_runs\_row\_hides\_fractional\_seconds\_in\_the\_ended\_column
+
+```python
+def test_recent_runs_row_hides_fractional_seconds_in_the_ended_column(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The "Ended" column reads to the second, not the microsecond.
+
+A real completed run's own `manifest.json` `ended_at` carries full
+sub-second precision (`Api.list_home_runs`'s own `endedAt` passes it
+through unchanged) -- `open-run.js`'s own `formatEndedAt` strips it
+for *display* only (`buildRunRow`), so a human scanning the table
+never needs microsecond resolution to recognize when a run finished.
+Grouping/filtering (`dateBucketFor`/`matchesRecentRunsFilter`) still
+use the raw, untrimmed value -- unaffected by this display-only
+formatting, and not this test's own concern.
+
 <a id="gui.test_open_run_screen.test_a_batch_rows_statistics_cell_names_its_own_replicate_count"></a>
 
 #### test\_a\_batch\_rows\_statistics\_cell\_names\_its\_own\_replicate\_count
@@ -9960,10 +9980,12 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
 
 Design proposal for "a fantastically long results scroll": runs
 render grouped into date-bucket sections, each with its own
-collapsible header naming its member count -- collapsing one
-removes its rows from the DOM outright (`open-run.js`'s own
-`renderRecentRuns`/`buildGroupHeaderRow`), the other bucket's own
-rows unaffected.
+collapsible header naming its member count. Every group starts
+collapsed by default (`ensureGroupDefaults`), so opening the screen
+shows headers only; expanding a header adds only its own rows
+(`open-run.js`'s own `renderRecentRuns`/`buildGroupHeaderRow`), and
+collapsing it again removes only its own rows, the other bucket's
+own rows unaffected.
 
 <a id="gui.test_open_run_screen.test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count"></a>
 
