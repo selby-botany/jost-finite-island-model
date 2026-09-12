@@ -2392,6 +2392,18 @@ def _bootstrap_interval(
     consistency with every other `ConfidenceInterval` this project
     reports — `low`/`high` are the authoritative bounds whenever the
     true interval is asymmetric, not `mean` plus or minus this value.
+    `sample_std` is `None` for the same reason, stated one step more
+    strongly: this constructor never sees a per-replicate sample of the
+    statistic at all — only a point estimate and a distribution of
+    *resampled grand ratios* — so there is no sample whose standard
+    deviation could be reported. (The standard deviation of
+    `bootstrap_values` itself is a bootstrap standard error of the point
+    estimate, a different quantity that would read identically under
+    that name; it is deliberately not substituted here.) `None` is
+    therefore also the signal a display layer reads as "this interval
+    has no honest symmetric summary at all — show `low`/`high`, not
+    `mean` plus or minus anything."
+
     `sample_count` is the number of *original* replicates the point
     estimate and every resample were drawn from, matching `confidence_
     interval`'s own meaning for that field — not the number of
@@ -2406,6 +2418,7 @@ def _bootstrap_interval(
         "half_width": (high - low) / 2.0,
         "low": low,
         "high": high,
+        "sample_std": None,
         "sample_count": sample_count,
         "confidence": confidence,
     }

@@ -2894,6 +2894,26 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
 
 The batch summary covers every statistic with at least two samples.
 
+<a id="engine.test_engine.test_replicate_summary_reports_a_real_sample_standard_deviation"></a>
+
+#### test\_replicate\_summary\_reports\_a\_real\_sample\_standard\_deviation
+
+```python
+def test_replicate_summary_reports_a_real_sample_standard_deviation(
+        tiny_params: SimulationParams) -> None
+```
+
+Every Student's-t interval carries the spread of its own replicates.
+
+The sample-standard-deviation half of botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §7.2 (see
+`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+`selby/restricted`): `confidence_interval` is the symmetric
+constructor, so `sample_std` is a real number here for every
+statistic — never `None`, which this project reserves for the
+percentile-bootstrap constructor that has no single honest value to
+report (see the bootstrap counterpart test below).
+
 <a id="engine.test_engine.test_replicate_summary_covers_every_numeric_final_report_key"></a>
 
 #### test\_replicate\_summary\_covers\_every\_numeric\_final\_report\_key
@@ -3239,6 +3259,31 @@ def test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate(
 ```
 
 The reported interval actually brackets the reported point estimate.
+
+<a id="engine.test_engine.test_bootstrap_replicate_summary_reports_no_sample_standard_deviation"></a>
+
+#### test\_bootstrap\_replicate\_summary\_reports\_no\_sample\_standard\_deviation
+
+```python
+def test_bootstrap_replicate_summary_reports_no_sample_standard_deviation(
+        tiny_params: SimulationParams) -> None
+```
+
+A percentile-bootstrap interval reports `sample_std` as `None`.
+
+The deliberate asymmetric case of the sample-standard-deviation
+design (`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+`selby/restricted`, approach A1): `_bootstrap_interval` never sees a
+per-replicate sample of the statistic at all — only a point estimate
+and a distribution of resampled *grand ratios* — so there is no
+single number that honestly describes how much the replicates
+differ from each other. `None` states that affirmatively, and is
+what the GUI's own tooltip reads as "this interval has no honest
+symmetric summary; show `low`/`high` alone."
+
+Paired with an explicit check that the interval really is asymmetric
+here, so this test cannot pass for the uninteresting reason that the
+bootstrap happened to reproduce a symmetric interval on this batch.
 
 <a id="engine.test_engine.test_bootstrap_replicate_summary_is_deterministic_for_a_given_rng_state"></a>
 
@@ -17891,6 +17936,42 @@ def test_matches_a_hand_computed_interval() -> None
 
 A tiny sample's interval matches hand-computed values exactly.
 
+<a id="statistics.test_interval.ConfidenceIntervalTests.test_sample_standard_deviation_matches_the_hand_computed_spread"></a>
+
+#### test\_sample\_standard\_deviation\_matches\_the\_hand\_computed\_spread
+
+```python
+def test_sample_standard_deviation_matches_the_hand_computed_spread() -> None
+```
+
+`sample_std` is the Bessel-corrected spread of the values themselves.
+
+Botanist GUI design doc §7.2 asks the batch meter's own tooltip
+to state "the equivalent sample standard deviation" beside the
+interval — a statement about how much the *replicates* differ
+from each other, not about how precisely their mean is known
+(`half_width`, which shrinks as replicates are added while this
+number does not). Hand-computed here from the same three values,
+dividing by `n - 1`, rather than restating the implementation's
+own expression.
+
+<a id="statistics.test_interval.ConfidenceIntervalTests.test_half_width_is_the_critical_value_times_the_standard_error"></a>
+
+#### test\_half\_width\_is\_the\_critical\_value\_times\_the\_standard\_error
+
+```python
+def test_half_width_is_the_critical_value_times_the_standard_error() -> None
+```
+
+`half_width` and `sample_std` stay algebraically consistent.
+
+The two fields are two views of one computed variance, so this
+pins them against each other (`half_width == t * sample_std /
+sqrt(n)`) rather than recomputing the same formula from the raw
+values twice — a later change that recomputed one of them from a
+different sample, or forgot Bessel's correction in only one
+place, shows up here and nowhere else.
+
 <a id="statistics.test_interval.ConfidenceIntervalTests.test_identical_values_produce_a_zero_width_interval"></a>
 
 #### test\_identical\_values\_produce\_a\_zero\_width\_interval
@@ -17910,6 +17991,17 @@ def test_more_replicates_at_the_same_spread_tightens_the_interval() -> None
 ```
 
 Doubling a repeated pattern's replicate count shrinks the interval.
+
+The two reported spreads scale differently, which is the whole
+reason §7.2's own tooltip states both: `half_width` describes
+how precisely the *mean* is known and falls steeply as
+replicates are added, while `sample_std` describes how much the
+*replicates* differ from each other and barely moves (here, only
+because Bessel's correction is milder at 40 values than at 4 —
+the underlying pattern is identical). Asserted as "one drops by
+more than a factor of three while the other stays within 20%"
+rather than with a tight equality, since the correction's own
+shift is real and should not be asserted away.
 
 <a id="statistics.test_interval.ConfidenceIntervalTests.test_default_confidence_is_ninety_five_percent"></a>
 

@@ -815,6 +815,11 @@ def test_run_batch_produces_replicate_and_summary_artifacts(
         }
     summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
     assert summary["D"]["sample_count"] == 3
+    # `sample_std` is part of the documented `summary.json` shape
+    # (`doc/usage.md`'s own "Batch `summary.json` and `manifest.json`"
+    # section) — a real number for every statistic, since the CLI writes
+    # `replicate_summary`'s own Student's-t intervals.
+    assert summary["D"]["sample_std"] >= 0.0
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["replicate_count"] == 3
     assert len(manifest["replicate_run_ids"]) == 3

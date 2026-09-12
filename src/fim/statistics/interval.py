@@ -94,6 +94,23 @@ class ConfidenceInterval(TypedDict):
             project's own convention is that the true underlying
             average plausibly falls within, at the requested
             `confidence` level.
+        sample_std: How much the supplied values differ from *each
+            other* — the ordinary, Bessel-corrected sample standard
+            deviation of `values` themselves, as opposed to
+            `half_width`, which describes how precisely their *mean* is
+            known. The two answer genuinely different questions: adding
+            more replicates narrows `half_width` while leaving
+            `sample_std` essentially where it was, since the
+            replicates' own spread is a property of the model being
+            simulated, not of how many times it was run. `None` means
+            the constructor that built this interval has no single
+            honest value to report — see `fim.engine._bootstrap_
+            interval`, which builds this same type from a percentile
+            bootstrap whose distribution is not generally symmetric, so
+            no one number describes its spread without misleading a
+            reader. A consumer can therefore read `None` as "this
+            interval is not a symmetric `mean ± half_width` summary;
+            `low`/`high` are the authoritative bounds."
         sample_count: How many values went into this interval — the
             same number `confidence_interval`'s own `values` argument
             had. Carried along here so a reader of the *result* alone
@@ -113,6 +130,14 @@ class ConfidenceInterval(TypedDict):
     half_width: float
     low: float
     high: float
+    # Required, not `NotRequired`, even though one of this type's two
+    # constructors can only ever supply `None`: a required-but-nullable
+    # field makes the type checker insist that every constructor --
+    # including one written later -- states an answer, so "this method
+    # defines no single honest value" can never be confused with
+    # "whoever wrote this forgot the field." That distinction is the one
+    # a consumer branches on.
+    sample_std: float | None
     sample_count: int
     confidence: float
 
@@ -175,11 +200,19 @@ def confidence_interval(
     variance = math.fsum((value - mean) ** 2 for value in values) / (sample_count - 1)
     standard_error = math.sqrt(variance / sample_count)
     half_width = student_t_critical_value(sample_count - 1, confidence) * standard_error
+    # Computed on its own line from the same `variance`, rather than by
+    # rescaling `standard_error` back up by `sqrt(sample_count)`: the two
+    # are algebraically identical but not bit-identical, and
+    # `standard_error`'s own expression above feeds every interval this
+    # project has ever reported. Deriving one from the other in either
+    # direction would change existing numbers for no reason.
+    sample_std = math.sqrt(variance)
     return {
         "mean": mean,
         "half_width": half_width,
         "low": mean - half_width,
         "high": mean + half_width,
+        "sample_std": sample_std,
         "sample_count": sample_count,
         "confidence": confidence,
     }

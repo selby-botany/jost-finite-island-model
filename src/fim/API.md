@@ -12381,6 +12381,23 @@ Fields:
         project's own convention is that the true underlying
         average plausibly falls within, at the requested
         `confidence` level.
+    sample_std: How much the supplied values differ from *each
+        other* — the ordinary, Bessel-corrected sample standard
+        deviation of `values` themselves, as opposed to
+        `half_width`, which describes how precisely their *mean* is
+        known. The two answer genuinely different questions: adding
+        more replicates narrows `half_width` while leaving
+        `sample_std` essentially where it was, since the
+        replicates' own spread is a property of the model being
+        simulated, not of how many times it was run. `None` means
+        the constructor that built this interval has no single
+        honest value to report — see `fim.engine._bootstrap_
+        interval`, which builds this same type from a percentile
+        bootstrap whose distribution is not generally symmetric, so
+        no one number describes its spread without misleading a
+        reader. A consumer can therefore read `None` as "this
+        interval is not a symmetric `mean ± half_width` summary;
+        `low`/`high` are the authoritative bounds."
     sample_count: How many values went into this interval — the
         same number `confidence_interval`'s own `values` argument
         had. Carried along here so a reader of the *result* alone
