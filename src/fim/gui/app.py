@@ -252,6 +252,57 @@ def format_statistic(
     return "undefined" if value is None else f"{value:.{digits}g}"
 
 
+def _interval_payload(interval: Mapping[str, Any], digits: int) -> dict[str, Any]:
+    """Reshape one `ConfidenceInterval` into `buildCiMeter`'s own input.
+
+    The single source of the `{mean, low, high, sampleCount}` shape every
+    batch-statistics payload this module sends the page uses — the live
+    batch progress push, the batch "done" payload, and the Home screen's
+    own per-row summary all route through here rather than each repeating
+    the same four `format_statistic` calls (which is how they were
+    written before the sample-standard-deviation field existed, and what
+    made adding it a four-place edit).
+
+    `halfWidth` and `sampleStd` are present **only** for an interval that
+    has an honest symmetric summary, and absent together otherwise
+    (sample-standard-deviation tooltip design `20260912-claude-sonnet-5-
+    sample-std-dev-tooltip-design.md`, `selby/restricted`, approaches A1
+    and B1). `sample_std` is `None` exactly when the interval came from
+    `fim.engine._bootstrap_interval`, whose own docstring says its
+    `half_width` is "a symmetrized summary kept only for display
+    consistency" and not the authoritative interval shape — so stating
+    *either* number for such an interval would state something its own
+    constructor disclaims. One decision, made once here, rather than the
+    page re-deriving "is this interval symmetric" from the numbers.
+
+    A `summary.json` written before `sample_std` existed has no such key
+    at all, which `.get` reads as `None` — so reopening an older batch
+    renders the same shorter tooltip, with no migration and no invented
+    number.
+
+    Args:
+        interval: A `ConfidenceInterval`, or the equivalent mapping read
+            back from a persisted `summary.json`.
+        digits: `Api._significant_digits`, formatting every number here
+            exactly like every other statistic this bridge sends.
+
+    Returns:
+        The page-facing dict, `halfWidth`/`sampleStd` included only when
+        `interval` carries a real `sample_std`.
+    """
+    payload: dict[str, Any] = {
+        "mean": format_statistic(interval["mean"], digits),
+        "low": format_statistic(interval["low"], digits),
+        "high": format_statistic(interval["high"], digits),
+        "sampleCount": interval["sample_count"],
+    }
+    sample_std = interval.get("sample_std")
+    if sample_std is not None:
+        payload["halfWidth"] = format_statistic(interval["half_width"], digits)
+        payload["sampleStd"] = format_statistic(sample_std, digits)
+    return payload
+
+
 # `H_S` above this value is the regime where `G_ST`'s own ratio-of-
 # heterozygosities construction can badly under-report real
 # differentiation between demes that in fact share no alleles at all
@@ -1912,10 +1963,8 @@ class Api:
             is `None` if the row's own `report.json`/`summary.json`
             could not be read; otherwise one entry per `_RESULT_
             STATISTIC_NAMES` name — a `format_statistic`-formatted
-            string for a scalar run, or `{"mean", "low", "high",
-            "sampleCount"}` (`format_statistic`-formatted mean/low/
-            high, matching `webui/meters.js`'s own `buildCiMeter`
-            input shape exactly) for a batch.
+            string for a scalar run, or `_interval_payload`'s own
+            `buildCiMeter` input shape for a batch.
         """
         digits = self._significant_digits
         rows: list[dict[str, Any]] = []
@@ -1931,12 +1980,7 @@ class Api:
                 raw_summary = _read_json_object(run.directory / "summary.json")
                 if raw_summary is not None:
                     statistics = {
-                        name: {
-                            "mean": format_statistic(interval["mean"], digits),
-                            "low": format_statistic(interval["low"], digits),
-                            "high": format_statistic(interval["high"], digits),
-                            "sampleCount": interval["sample_count"],
-                        }
+                        name: _interval_payload(interval, digits)
                         for name, interval in raw_summary.items()
                         if name in _RESULT_STATISTIC_NAMES
                     }
@@ -2916,7 +2960,8 @@ def _push_batch_progress(
     `statistics` is `reports_summary`'s own across-replicate confidence
     interval, computed from each currently-reporting replicate's *live*
     report (`report_for_state` on its just-read state) and pre-formatted
-    server-side exactly like `_batch_done_payload`'s own `summary` field
+    server-side (`_interval_payload`) exactly like `_batch_done_payload`'s
+    own `summary` field
     — keeps the running-state stats table live and populated rather
     than blank until the batch finishes. Naturally
     empty (`{}`) for the first tick or two, before a second replicate
@@ -3006,12 +3051,7 @@ def _push_batch_progress(
         ]
     )
     statistics = {
-        name: {
-            "mean": format_statistic(interval["mean"], digits),
-            "low": format_statistic(interval["low"], digits),
-            "high": format_statistic(interval["high"], digits),
-            "sampleCount": interval["sample_count"],
-        }
+        name: _interval_payload(interval, digits)
         for name, interval in raw_summary.items()
     }
     raw_initial_summary = reports_summary(
@@ -3027,12 +3067,7 @@ def _push_batch_progress(
         ]
     )
     initial_statistics = {
-        name: {
-            "mean": format_statistic(interval["mean"], digits),
-            "low": format_statistic(interval["low"], digits),
-            "high": format_statistic(interval["high"], digits),
-            "sampleCount": interval["sample_count"],
-        }
+        name: _interval_payload(interval, digits)
         for name, interval in raw_initial_summary.items()
     }
     progress_payload: dict[str, object] = {
@@ -3093,10 +3128,13 @@ def _batch_done_payload(
     own docstring names) — for "Open replicate" to hand
     straight to `Api.open_run` with no path logic of its own. `summary`
     is `replicate_summary`'s own per-statistic confidence interval,
-    pre-formatted server-side (`format_statistic`, matching every
-    other statistic this bridge ever sends the page: the client never
-    reimplements Python's own display formatting, for a batch's own
-    results the same as a scalar run's) — omitted entirely (an empty
+    pre-formatted server-side (`_interval_payload`, which wraps
+    `format_statistic`, matching every other statistic this bridge ever
+    sends the page: the client never reimplements Python's own display
+    formatting, for a batch's own results the same as a scalar run's,
+    and decides once — there rather than on the page — whether this
+    interval has an honest symmetric summary to state at all) — omitted
+    entirely (an empty
     `{}`) if `replicate_summary` itself has too few results to define
     an interval from, its own documented `ValueError` case, not
     something this bridge treats as a real error partway through an
@@ -3157,12 +3195,7 @@ def _batch_done_payload(
     except ValueError:
         raw_summary = {}
     summary = {
-        name: {
-            "mean": format_statistic(interval["mean"], digits),
-            "low": format_statistic(interval["low"], digits),
-            "high": format_statistic(interval["high"], digits),
-            "sampleCount": interval["sample_count"],
-        }
+        name: _interval_payload(interval, digits)
         for name, interval in raw_summary.items()
     }
     p0_state = generate_initial_state(params)

@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
 import pytest
 import yaml
 from webview.menu import Menu, MenuAction, MenuSeparator
@@ -26,6 +27,7 @@ from fim import __version__ as fim_version
 from fim import cli, update
 from fim.engine import (
     RunResult,
+    bootstrap_replicate_summary,
     deterministic_run_id,
     replicate_summary,
     report_for_state,
@@ -53,6 +55,7 @@ from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import read_manifest
 from fim.statistics import (
+    confidence_interval,
     effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
@@ -67,6 +70,86 @@ from fim.viz.scatter import frequency_points, pooled_scatter_panels
 def test_get_starter_form_matches_config_form_directly() -> None:
     """The bridge method adds no logic of its own beyond `starter_form_values`."""
     assert Api().get_starter_form() == starter_form_values()
+
+
+def test_interval_payload_states_the_symmetric_summary_for_a_t_interval() -> None:
+    """A real `confidence_interval` reaches the page with both §7.2 numbers.
+
+    `_interval_payload` is the one place this module decides whether an
+    interval has an honest symmetric summary to state
+    (`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+    `selby/restricted`, approaches A1 and B1), so both branches are
+    tested here directly rather than only through a real batch.
+    """
+    interval = confidence_interval([0.1, 0.4, 0.35, 0.9, 0.55])
+
+    payload = app_module._interval_payload(interval, 6)
+
+    assert payload["mean"] == format_statistic(interval["mean"])
+    assert payload["low"] == format_statistic(interval["low"])
+    assert payload["high"] == format_statistic(interval["high"])
+    assert payload["sampleCount"] == 5
+    assert payload["halfWidth"] == format_statistic(interval["half_width"])
+    assert payload["sampleStd"] == format_statistic(interval["sample_std"])
+
+
+def test_interval_payload_omits_the_summary_for_a_bootstrap_interval() -> None:
+    """A `sample_std` of `None` drops `halfWidth` and `sampleStd` together.
+
+    Both, not just the standard deviation: `_bootstrap_interval`'s own
+    `half_width` is "a symmetrized summary kept only for display
+    consistency," not the authoritative interval shape, so a page that
+    showed it would show a number that constructor disclaims. Built from
+    a real `bootstrap_replicate_summary` interval rather than a
+    hand-written dict, so the test tracks what that constructor actually
+    returns.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            "N": 20,
+            "d": 2,
+            "m": 0.1,
+            "mu": 0.01,
+            "seed": 1,
+            "n_replicates": 4,
+            "replicate_tolerance": None,
+            "replicate_minimum": 2,
+            "max_generations": 60,
+            "convergence_window": 5,
+        }
+    )
+    output = engine_fim(params.N, params.m, params.mu, params.d, params=params)
+    assert isinstance(output, tuple)
+    bootstrapped = bootstrap_replicate_summary(output, rng=np.random.default_rng(11))
+
+    payload = app_module._interval_payload(bootstrapped["D"], 6)
+
+    assert set(payload) == {"mean", "low", "high", "sampleCount"}
+
+
+def test_interval_payload_tolerates_a_summary_written_before_sample_std() -> None:
+    """Reopening an older batch renders the shorter tooltip, not a bogus number.
+
+    `Api.list_home_runs` reads a *persisted* `summary.json`, so every
+    batch written before `sample_std` existed reaches `_interval_payload`
+    with no such key at all. `.get` reads that as `None`, which lands in
+    the same branch a bootstrap-built interval does — no migration, and
+    no invented value. The literal below is `doc/usage.md`'s own
+    documented pre-change object, field for field.
+    """
+    legacy = {
+        "mean": 0.643,
+        "half_width": 0.021,
+        "low": 0.622,
+        "high": 0.664,
+        "sample_count": 40,
+        "confidence": 0.95,
+    }
+
+    payload = app_module._interval_payload(legacy, 6)
+
+    assert set(payload) == {"mean", "low", "high", "sampleCount"}
+    assert payload["sampleCount"] == 40
 
 
 def test_get_initial_form_falls_back_to_starter_values_for_a_stale_saved_form(
@@ -1143,6 +1226,13 @@ def test_batch_done_payload_summary_matches_replicate_summary(
     for name, interval in expected.items():
         assert summary[name]["mean"] == format_statistic(interval["mean"])
         assert summary[name]["sampleCount"] == interval["sample_count"]
+        # The two numbers botanist GUI design doc §7.2 asks the meter's
+        # own tooltip for, both present because `replicate_summary`
+        # builds symmetric Student's-t intervals
+        # (`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+        # `selby/restricted`).
+        assert summary[name]["halfWidth"] == format_statistic(interval["half_width"])
+        assert summary[name]["sampleStd"] == format_statistic(interval["sample_std"])
 
 
 def test_batch_done_payload_pools_every_replicate_final_state(
@@ -1660,7 +1750,14 @@ def test_list_home_runs_attaches_a_confidence_interval_per_statistic_for_a_batch
     assert row["statistics"] is not None
     for name in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"):
         interval = row["statistics"][name]
-        assert set(interval) == {"mean", "low", "high", "sampleCount"}
+        assert set(interval) == {
+            "mean",
+            "low",
+            "high",
+            "sampleCount",
+            "halfWidth",
+            "sampleStd",
+        }
         assert interval["sampleCount"] == 3
 
 

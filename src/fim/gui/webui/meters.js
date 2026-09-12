@@ -117,23 +117,51 @@ function ciCaption(sampleCount) {
  * Build one table row's cells for a statistic with a confidence
  * interval (a batch summary statistic). The value column shows the
  * mean to two digits; hovering the row shows `"mean [low, high] --
- * uncertainty across N independent replicates"` at full `format_
- * statistic` precision.
+ * uncertainty across N independent replicates; half-width H, equivalent
+ * sample standard deviation S"` at full `format_statistic` precision --
+ * the two numbers botanist GUI design doc §7.2 asks this tooltip for
+ * ("the meter's tooltip states both the confidence-interval half-width
+ * and the equivalent sample standard deviation").
  *
- * `interval.mean`/`.low`/`.high` arrive pre-formatted for display
- * (`format_statistic`, a `%.6g`-style string) -- parsed back into a
- * number here only for the two-digit value column, never reformatted
- * for the tooltip.
+ * Spelled out rather than written as `σ`, deliberately: §7.2's own
+ * governing requirement is that the cross-replicate interval never be
+ * "visually confusable with" the *within-run* σ band, which owns that
+ * glyph in this GUI (the `2σ`/`3σ` multiplier, the shaded trajectory
+ * region). "half-width" rather than `±` for the same reason in
+ * miniature -- `±` is an instruction to add and subtract, true only for
+ * a symmetric interval.
+ *
+ * `halfWidth`/`sampleStd` are present together or absent together
+ * (`fim.gui.app._interval_payload`: absent for an interval with no
+ * honest symmetric summary, currently only a percentile-bootstrap one).
+ * When absent, the whole clause is dropped and the tooltip is exactly
+ * the `mean [low, high] -- caption` form this project already shipped,
+ * whose `low`/`high` are the authoritative bounds in that case. Not a
+ * degraded placeholder: a reader who never sees the clause is told
+ * nothing false, and `low`/`high` already answer "how uncertain is
+ * this".
+ *
+ * `interval.mean`/`.low`/`.high`/`.halfWidth`/`.sampleStd` all arrive
+ * pre-formatted for display (`format_statistic`, a `%.6g`-style string)
+ * -- `mean` is parsed back into a number here only for the two-digit
+ * value column, never reformatted for the tooltip.
  *
  * @param {string} name
- * @param {{mean: string, low: string, high: string, sampleCount: number}} interval
+ * @param {{mean: string, low: string, high: string, sampleCount: number,
+ *     halfWidth?: string, sampleStd?: string}} interval
  * @returns {DocumentFragment}
  */
 function buildCiMeter(name, interval) {
     const cells = buildStatCells(name, formatToTwoDigits(interval.mean));
     const caption = ciCaption(interval.sampleCount);
-    cells.tooltip =
+    let tooltip =
         `${interval.mean} [${interval.low}, ${interval.high}] — ${caption}`;
+    if (interval.sampleStd !== undefined && interval.sampleStd !== null) {
+        tooltip +=
+            `; half-width ${interval.halfWidth}` +
+            `, equivalent sample standard deviation ${interval.sampleStd}`;
+    }
+    cells.tooltip = tooltip;
     return cells;
 }
 

@@ -643,3 +643,68 @@ def test_batch_progress_display_never_regresses(
 
     assert settled["barValue"] == 5
     assert settled["labelText"] == "5 / 10 replicates reporting"
+
+
+def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`buildCiMeter` branches on `sampleStd`, within one summary table.
+
+    Both halves of the sample-standard-deviation tooltip design
+    (`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+    `selby/restricted`) in one push, since the point is precisely that
+    the two shapes can differ row by row:
+
+    - An interval carrying `halfWidth`/`sampleStd` states both numbers
+      botanist GUI design doc §7.2 asks for, appended after the caption.
+    - An interval carrying neither states neither, falling back to
+      exactly the `mean [low, high] -- caption` text this project
+      already shipped. `fim.gui.app._interval_payload` omits the two keys
+      together for an interval built by `fim.engine._bootstrap_interval`,
+      whose own `half_width` is "a symmetrized summary kept only for
+      display consistency" rather than the authoritative interval shape
+      — so stating it would state something its own constructor
+      disclaims.
+
+    Driven as one synthetic `fim.onBatchProgress` payload rather than a
+    real batch: no production code path produces a bootstrap-built
+    interval today (`bootstrap_replicate_summary` has no caller outside
+    its own tests), so no real run can put the two shapes in the same
+    table at all — the display logic is still what needs proving, the
+    same reasoning `test_batch_progress_display_never_regresses` above
+    applies to its own two synthetic calls. The positive case is *also*
+    covered against a real batch, end to end, in
+    `test_batch_results_screen.py`.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.onBatchProgress({"
+            "replicateCount: 2, reportedReplicateCount: 2, panels: [], "
+            "demeCount: 2, statistics: {"
+            "D: {mean: '0.0588333', low: '0.0156696', high: '0.101997', "
+            "sampleCount: 2, halfWidth: '0.0431637', sampleStd: '0.0347684'}, "
+            "G_ST: {mean: '0.0549477', low: '0.0323088', high: '0.0845805', "
+            "sampleCount: 2}"
+            "}, initialStatistics: {}});"
+        ),
+        # `STATISTIC_NAMES`' own order puts `D` first and `G_ST` second
+        # (`webui/screens/run-view-completed.js`), and `renderBatchSummary`
+        # appends one row per name in that order.
+        read=(
+            "Array.from("
+            "document.querySelectorAll('#batch-results-summary-body tr')"
+            ").slice(0, 2).map(function (row) { return row.title; })"
+        ),
+        is_ready=lambda value: bool(value) and all(value),
+    )
+
+    assert settled[0] == (
+        "0.0588333 [0.0156696, 0.101997] — "
+        "uncertainty across 2 independent replicates; "
+        "half-width 0.0431637, equivalent sample standard deviation 0.0347684"
+    )
+    assert settled[1] == (
+        "0.0549477 [0.0323088, 0.0845805] — uncertainty across 2 independent replicates"
+    )

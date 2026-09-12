@@ -3770,10 +3770,8 @@ asked for this heavier per-row read, so neither pays for it.
   is `None` if the row's own `report.json`/`summary.json`
   could not be read; otherwise one entry per `_RESULT_
   STATISTIC_NAMES` name — a `format_statistic`-formatted
-  string for a scalar run, or `{"mean", "low", "high",
-  "sampleCount"}` (`format_statistic`-formatted mean/low/
-  high, matching `webui/meters.js`'s own `buildCiMeter`
-  input shape exactly) for a batch.
+  string for a scalar run, or `_interval_payload`'s own
+  `buildCiMeter` input shape for a batch.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 

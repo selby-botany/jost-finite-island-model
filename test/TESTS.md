@@ -5574,6 +5574,59 @@ def test_get_starter_form_matches_config_form_directly() -> None
 
 The bridge method adds no logic of its own beyond `starter_form_values`.
 
+<a id="gui.test_app_api.test_interval_payload_states_the_symmetric_summary_for_a_t_interval"></a>
+
+#### test\_interval\_payload\_states\_the\_symmetric\_summary\_for\_a\_t\_interval
+
+```python
+def test_interval_payload_states_the_symmetric_summary_for_a_t_interval(
+) -> None
+```
+
+A real `confidence_interval` reaches the page with both §7.2 numbers.
+
+`_interval_payload` is the one place this module decides whether an
+interval has an honest symmetric summary to state
+(`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+`selby/restricted`, approaches A1 and B1), so both branches are
+tested here directly rather than only through a real batch.
+
+<a id="gui.test_app_api.test_interval_payload_omits_the_summary_for_a_bootstrap_interval"></a>
+
+#### test\_interval\_payload\_omits\_the\_summary\_for\_a\_bootstrap\_interval
+
+```python
+def test_interval_payload_omits_the_summary_for_a_bootstrap_interval() -> None
+```
+
+A `sample_std` of `None` drops `halfWidth` and `sampleStd` together.
+
+Both, not just the standard deviation: `_bootstrap_interval`'s own
+`half_width` is "a symmetrized summary kept only for display
+consistency," not the authoritative interval shape, so a page that
+showed it would show a number that constructor disclaims. Built from
+a real `bootstrap_replicate_summary` interval rather than a
+hand-written dict, so the test tracks what that constructor actually
+returns.
+
+<a id="gui.test_app_api.test_interval_payload_tolerates_a_summary_written_before_sample_std"></a>
+
+#### test\_interval\_payload\_tolerates\_a\_summary\_written\_before\_sample\_std
+
+```python
+def test_interval_payload_tolerates_a_summary_written_before_sample_std(
+) -> None
+```
+
+Reopening an older batch renders the shorter tooltip, not a bogus number.
+
+`Api.list_home_runs` reads a *persisted* `summary.json`, so every
+batch written before `sample_std` existed reaches `_interval_payload`
+with no such key at all. `.get` reads that as `None`, which lands in
+the same branch a bootstrap-built interval does — no migration, and
+no invented value. The literal below is `doc/usage.md`'s own
+documented pre-change object, field for field.
+
 <a id="gui.test_app_api.test_get_initial_form_falls_back_to_starter_values_for_a_stale_saved_form"></a>
 
 #### test\_get\_initial\_form\_falls\_back\_to\_starter\_values\_for\_a\_stale\_saved\_form
@@ -7332,6 +7385,16 @@ replicates" (botanist GUI design doc §7.2: re-labeled "everywhere it
 appears... so it is never visually confusable with" the within-run
 sigma band) — `webui/meters.js`'s own `ciCaption`, not a second,
 independently worded phrase.
+
+It also states the two numbers the rest of that same §7.2 sentence
+asks for — "both the confidence-interval half-width and the
+equivalent sample standard deviation" (sample-standard-deviation
+tooltip design `20260912-claude-sonnet-5-sample-std-dev-tooltip-
+design.md`, `selby/restricted`) — spelled out rather than as a sigma
+glyph, which this GUI reserves for the within-run band the caption
+exists to stay distinguishable from. Checked in the same real-batch
+pass rather than as a second window test, since it is the same one
+tooltip string.
 
 <a id="gui.test_batch_results_screen.test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back"></a>
 
@@ -9764,6 +9827,43 @@ test, not the batch-execution timing that triggers it. No explicit
 reset call needed first: every test gets a fresh page load of its
 own, so the module-scoped high-water mark this proves already
 starts at its own initial `0` regardless.
+
+<a id="gui.test_input_screen.test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists"></a>
+
+#### test\_ci\_tooltip\_states\_its\_symmetric\_summary\_only\_when\_one\_exists
+
+```python
+def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+`buildCiMeter` branches on `sampleStd`, within one summary table.
+
+Both halves of the sample-standard-deviation tooltip design
+(`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+`selby/restricted`) in one push, since the point is precisely that
+the two shapes can differ row by row:
+
+- An interval carrying `halfWidth`/`sampleStd` states both numbers
+  botanist GUI design doc §7.2 asks for, appended after the caption.
+- An interval carrying neither states neither, falling back to
+  exactly the `mean [low, high] -- caption` text this project
+  already shipped. `fim.gui.app._interval_payload` omits the two keys
+  together for an interval built by `fim.engine._bootstrap_interval`,
+  whose own `half_width` is "a symmetrized summary kept only for
+  display consistency" rather than the authoritative interval shape
+  — so stating it would state something its own constructor
+  disclaims.
+
+Driven as one synthetic `fim.onBatchProgress` payload rather than a
+real batch: no production code path produces a bootstrap-built
+interval today (`bootstrap_replicate_summary` has no caller outside
+its own tests), so no real run can put the two shapes in the same
+table at all — the display logic is still what needs proving, the
+same reasoning `test_batch_progress_display_never_regresses` above
+applies to its own two synthetic calls. The positive case is *also*
+covered against a real batch, end to end, in
+`test_batch_results_screen.py`.
 
 <a id="gui.test_loci_grid_screen"></a>
 
