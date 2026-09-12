@@ -786,20 +786,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Packaged **beta** builds now bundle `numba`, so the new execution
-  engine control's recommended `auto` choice actually works in the
-  artifact a tester downloads. Every one of the five beta packaging jobs
-  installed the `dev` extra only, which never pulls in `numba`; `auto`
-  resolves to the `generational-vector` engine for essentially every
-  eligible configuration, and that engine requires `numba` outright —
-  so `auto` would have failed nearly every real run in a packaged build
-  with "needs the optional numba dependency." **Your next beta download
-  will be noticeably larger** as a result; that is the bundled `numba`
-  compiler, and it is what makes the recommended engine choice real
-  rather than a promise the download could not keep. Release builds do
-  not yet bundle it; until they do, the app relabels the two options
-  that need `numba` whenever the running install lacks it, rather than
-  offering a choice that fails only once a run starts.
+- Packaged **beta and release** builds now bundle `numba`, so the new
+  execution engine control's recommended `auto` choice actually works in
+  the artifact a tester or user downloads. Every one of the beta and
+  release packaging jobs installed the `dev` extra only, which never
+  pulls in `numba`; `auto` resolves to the `generational-vector` engine
+  for essentially every eligible configuration, and that engine requires
+  `numba` outright — so `auto` would have failed nearly every real run
+  in a packaged build with "needs the optional numba dependency." **Your
+  next download will be noticeably larger** as a result; that is the
+  bundled `numba` compiler, and it is what makes the recommended engine
+  choice real rather than a promise the download could not keep. The app
+  still relabels the two options that need `numba` whenever the running
+  install genuinely lacks it (a source checkout without the `[jit]`
+  extra), rather than offering a choice that fails only once a run
+  starts.
 - `dev/bin/check-webui-assets`'s own JS scanning ran its class-name
   regexes directly against raw source, comments included — an
   apostrophe inside an ordinary prose `//` comment (this codebase's own

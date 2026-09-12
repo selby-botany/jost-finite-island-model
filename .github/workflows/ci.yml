@@ -283,7 +283,23 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      # `.[dev,jit]`, not `.[dev]` -- the one line every job in this
+      # group (windows/windows-arm64/macos-arm64/macos-x64/linux-x64)
+      # shares, for the same reason `beta.yml`'s own `windows-beta-x64`
+      # states in full: Configure's `engine_backend` selector defaults
+      # to `"auto"`, which resolves to `"generational-vector"` for
+      # essentially every vector-eligible config, and that backend
+      # imports `numba` unconditionally. Without this, a released
+      # build's own headline recommendation fails every such run.
+      # `beta.yml` carries the identical line first (`bf576ba`), so this
+      # job's first real run -- the next tag push -- is also the first
+      # time this exact combination is exercised on Windows/Linux CI at
+      # all: verified locally on macOS only so far (a real `pyinstaller`
+      # build with `numba`/`llvmlite` bundled, running a vector-eligible
+      # config end to end), matching `pyproject.toml`'s own `[jit]`
+      # comment ("Windows not yet verified"). A failure here fails this
+      # job loudly rather than shipping a broken release silently.
+      - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           pyinstaller --workpath .pyinstaller-build --noconfirm
           packaging/fim.spec
@@ -365,7 +381,8 @@ jobs:
           python-version: "3.12"
           architecture: arm64
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      # `.[dev,jit]` -- see `windows`'s own identical step, above.
+      - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           pyinstaller --workpath .pyinstaller-build --noconfirm
           packaging/fim.spec
@@ -460,7 +477,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      # `.[dev,jit]` -- see `windows`'s own identical step, above.
+      - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           pyinstaller --workpath .pyinstaller-build --noconfirm
           packaging/fim.spec
@@ -528,7 +546,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      # `.[dev,jit]` -- see `windows`'s own identical step, above.
+      - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           pyinstaller --workpath .pyinstaller-build --noconfirm
           packaging/fim.spec
@@ -641,7 +660,8 @@ jobs:
               libgirepository1.0-dev libcairo2-dev \
               gir1.2-gtk-3.0 gir1.2-webkit2-4.0 gir1.2-soup-2.4 \
               libwebkit2gtk-4.0-37 xvfb xauth procps
-      - run: python -m pip install -e ".[dev]"
+      # `.[dev,jit]` -- see `windows`'s own identical step, above.
+      - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           pyinstaller --workpath .pyinstaller-build --noconfirm
           packaging/fim.spec

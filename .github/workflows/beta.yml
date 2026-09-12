@@ -109,11 +109,15 @@ jobs:
       #
       # Scoped to the beta workflow first, deliberately: `pyproject.
       # toml` records numba+pyinstaller as verified on macOS only
-      # ("Windows not yet verified"), and a beta artifact is exactly
-      # where that gap gets closed before ci.yml's own five release
-      # packaging jobs (windows/windows-arm64/macos-arm64/macos-x64/
-      # linux-x64, all still `.[dev]`) follow. Until they do, a released
-      # build without numba degrades honestly rather than silently:
+      # ("Windows not yet verified"), and a beta artifact is meant to be
+      # where that gap gets closed before a tagged release depends on
+      # it. `ci.yml`'s own five release packaging jobs (windows/
+      # windows-arm64/macos-arm64/macos-x64/linux-x64) now install the
+      # identical pair too -- added once this line existed here to copy,
+      # not gated on a real beta run actually having exercised it yet
+      # (neither workflow has, as of this comment: `beta.yml` triggers
+      # on `staging`, not `dev`). Until one of them does, a build
+      # without numba degrades honestly rather than silently:
       # `Api.get_engine_backend_availability` relabels the numba-
       # dependent options in the selector itself.
       - run: python -m pip install -e ".[dev,jit]"

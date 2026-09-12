@@ -80,11 +80,17 @@ dependencies = [
 # displayed/compared percentage, then not (`20260901-claude-sonnet-5-
 # fim-engine-backend-factory-design.md` §10 Stage F9). Fixed by having
 # that one job install `[dev,jit]` instead, so Backend V's own code
-# gets real exercise and real coverage in the job that gates on it; no
-# other job installs `[jit]`, and none needs to — `numba` staying a true
-# optional extra for actual installs is a property of the package's own
-# dependency graph, not of what this one job's own venv happens to
-# have. Design doc `20260901-claude-sonnet-5-fim-engine-
+# gets real exercise and real coverage in the job that gates on it.
+# `beta.yml`'s five packaging jobs and `ci.yml`'s five release packaging
+# jobs (windows/windows-arm64/macos-arm64/macos-x64/linux-x64, in both
+# workflows) install `[dev,jit]` too, for an unrelated reason of their
+# own -- Configure's `engine_backend` selector defaults to `"auto"`,
+# which needs `numba` to actually work in the artifact each workflow
+# produces (see either workflow's own comment on that step). `numba`
+# staying a true optional extra for an ordinary `pip install fim` is a
+# property of the package's own dependency graph, not of how many CI
+# jobs happen to install it for their own reasons. Design doc
+# `20260901-claude-sonnet-5-fim-engine-
 # backend-factory-design.md` §5.3/§10 Stage F5: `numba` 0.67.0 confirmed
 # to compile scalar `Generator.binomial`/`.random`/`.integers`/
 # `.uniform` calls bit-identically under `nogil=True`, and to build/run
