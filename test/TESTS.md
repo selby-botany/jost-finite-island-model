@@ -5823,6 +5823,51 @@ locus with a genuinely different rate is needed to actually keep
 `mu` a tuple, unlike the `N`/`m` cases just above, which stay
 non-scalar with `tiny_params`'s own single deme pair already.
 
+<a id="gui.test_app_api.test_identity_recovery_reference_payload_matches_the_statistics_functions_directly"></a>
+
+#### test\_identity\_recovery\_reference\_payload\_matches\_the\_statistics\_functions\_directly
+
+```python
+def test_identity_recovery_reference_payload_matches_the_statistics_functions_directly(
+        tiny_params: SimulationParams) -> None
+```
+
+`_identity_recovery_reference_payload` is Whitlock's `rate`/`equilibrium`.
+
+A second, different closed-form reference from `_equilibrium_
+reference_payload`'s own asymptote line (design doc §6.2) — a full
+curve, `f0(t) = equilibrium * (1 - rate**t)`, not a single value —
+so this test checks the two raw ingredients the page evaluates that
+formula from client-side, not a pre-sampled series.
+
+<a id="gui.test_app_api.test_identity_recovery_reference_payload_is_none_for_a_per_deme_population_size"></a>
+
+#### test\_identity\_recovery\_reference\_payload\_is\_none\_for\_a\_per\_deme\_population\_size
+
+```python
+def test_identity_recovery_reference_payload_is_none_for_a_per_deme_population_size(
+        tiny_params: SimulationParams) -> None
+```
+
+A per-deme `N` has no single scalar these identity-recovery functions accept.
+
+Matches `_equilibrium_reference_payload`'s own identical scalar-only
+scope boundary, applied here to the two arguments (`N`, `m`) this
+family of functions actually needs — no `mu`/`d` at all, unlike the
+equilibrium family, since Whitlock (1992)'s own model is deme-count-
+and mutation-independent by construction.
+
+<a id="gui.test_app_api.test_identity_recovery_reference_payload_is_none_for_a_migration_matrix"></a>
+
+#### test\_identity\_recovery\_reference\_payload\_is\_none\_for\_a\_migration\_matrix
+
+```python
+def test_identity_recovery_reference_payload_is_none_for_a_migration_matrix(
+        tiny_params: SimulationParams) -> None
+```
+
+A migration matrix has no single scalar `m` this family of functions accepts.
+
 <a id="gui.test_app_api.test_get_equilibrium_sweep_holds_the_other_three_fields_fixed"></a>
 
 #### test\_get\_equilibrium\_sweep\_holds\_the\_other\_three\_fields\_fixed
@@ -5831,7 +5876,7 @@ non-scalar with `tiny_params`'s own single deme pair already.
 def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None
 ```
 
-Sweeping `m` recomputes `D`/`G_ST` at each point using the same N/d/mu.
+Sweeping `m` recomputes `D`/`G_ST`/`E_ST` at each point using the same N/d/mu.
 
 <a id="gui.test_app_api.test_get_equilibrium_sweep_reports_e_st_as_none_at_mu_zero"></a>
 
@@ -6582,6 +6627,21 @@ computed fresh from the reopened run's own manifest params
 (`_equilibrium_reference_payload`'s own docstring) — `_write_run`'s
 own defaults (`N=20, d=2, m=0.1, mu=0.01`) are all plain scalars, so
 a real prediction is expected here, not `None`.
+
+<a id="gui.test_app_api.test_open_run_carries_the_real_identity_recovery_reference"></a>
+
+#### test\_open\_run\_carries\_the\_real\_identity\_recovery\_reference
+
+```python
+def test_open_run_carries_the_real_identity_recovery_reference(
+        tmp_path: Path) -> None
+```
+
+A reopened run's own `identityRecovery` matches Whitlock's formulas directly.
+
+A second, different overlay from `equilibrium` immediately above
+(design doc §6.2) — computed fresh from the same reopened run's own
+manifest params.
 
 <a id="gui.test_app_api.test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis"></a>
 

@@ -132,13 +132,17 @@ async function refreshPresetsList() {
  * same YAML file.
  * @param {string} presetId
  * @param {string} presetTitle
+ * @returns {Promise<boolean>} whether the preset actually applied --
+ *     a caller that also wants to navigate somewhere on success (Home's
+ *     own `home-example-select`, `screens/open-run.js`) needs this to
+ *     avoid jumping to Configure after a load that only showed an alert.
  */
 async function applyPreset(presetId, presetTitle) {
     const result = await window.pywebview.api.get_preset_form_values(presetId);
     if (!result.ok) {
         presetsDialog.close();
         window.alert(`Could not load this example: ${result.message}`);
-        return;
+        return false;
     }
     applyFormValues(result.values);
     await revalidate();
@@ -155,7 +159,17 @@ async function applyPreset(presetId, presetTitle) {
     // docstring), not only forking it verbatim.
     lastLoadedPresetTitle = presetTitle;
     configureDuplicatePresetButton.disabled = false;
+    return true;
 }
+
+// Exported so a second entry point can apply a preset without going
+// through `modal-presets` itself -- Home's own worked-example shortcut
+// (`screens/open-run.js`'s `home-example-select`) is the first caller,
+// mirroring how `loadExample`, above, is already exported the same way.
+// `presetsDialog.close()` inside `applyPreset` is a safe no-op when that
+// dialog was never opened (a closed `<dialog>`'s own `close()` does
+// nothing), so this thin wrapper needs no guard of its own.
+window.fim.applyPreset = applyPreset;
 
 // Set once `showPresetYaml`'s own bridge call has settled and the
 // dialog is genuinely showing the requested preset's own text --

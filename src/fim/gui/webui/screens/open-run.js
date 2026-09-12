@@ -33,6 +33,7 @@ const openButton = document.getElementById("open-run-open-button");
 const openRunBackButton = document.getElementById("open-run-back-button");
 const homeNewRunButton = document.getElementById("home-new-run-button");
 const homeExploreButton = document.getElementById("home-explore-button");
+const homeExampleSelect = document.getElementById("home-example-select");
 
 let selectedTrajectoryPath = null;
 
@@ -138,6 +139,69 @@ homeNewRunButton.addEventListener("click", () => {
 
 homeExploreButton.addEventListener("click", () => {
     window.fim.menu.explore();
+});
+
+// Set once `refreshHomeExampleOptions`'s own bridge call has settled and
+// the dropdown genuinely lists this visit's own built-in examples --
+// `window.__fimXReady`-flag precedent (`presets.js`'s own
+// `__fimPresetsListReady`, `__fimOpenRunRecentRunsLoaded` above) for the
+// identical reason: a test polling only "the select exists" could
+// otherwise observe it with no example options yet, in the narrow
+// window before this async call resolves.
+window.__fimHomeExampleOptionsReady = false;
+
+/**
+ * Populate `home-example-select` with this visit's own built-in worked
+ * examples -- `Api.list_presets`'s own combined list, filtered to
+ * `builtin` entries only (design ask: "one of the examples," not every
+ * user-saved configuration too; the full combined list stays reachable
+ * only from the picker `fim.menu.loadExample` opens). Re-fetched on
+ * every visit to Home rather than once, matching `refreshRecentRuns`'s
+ * own "never trust a stale fetch across visits" precedent, even though
+ * the built-in set itself never changes at runtime.
+ */
+async function refreshHomeExampleOptions() {
+    window.__fimHomeExampleOptionsReady = false;
+    const placeholder = homeExampleSelect.options[0];
+    homeExampleSelect.replaceChildren(placeholder);
+    homeExampleSelect.value = "";
+    const result = await window.pywebview.api.list_presets();
+    const examples = result.ok
+        ? result.presets.filter((preset) => preset.builtin)
+        : [];
+    for (const example of examples) {
+        const option = document.createElement("option");
+        option.value = example.id;
+        option.textContent = example.title;
+        homeExampleSelect.appendChild(option);
+    }
+    window.__fimHomeExampleOptionsReady = true;
+}
+
+// A plain, immediately-acting pulldown (botanist GUI design doc's own
+// "jump-start" precedent for a shortcut like this): picking an example
+// applies it and navigates straight to Configure, then resets to its
+// own placeholder so the control always reads as an action, never as
+// "currently showing example X" -- Configure itself, not this select,
+// is where the loaded values are actually reviewed. Reuses `presets.js`'s
+// own `applyPreset` (the exact mechanism `modal-presets`'s own picker
+// already calls) via `window.fim.applyPreset`, so this is genuinely a
+// second entry point to one mechanism, not a second, independent way of
+// loading a preset's values. Only navigates on a successful apply --
+// `applyPreset`'s own rejected-values path already shows an alert, and
+// jumping to Configure on top of that would land on an unchanged form
+// right after telling the user why nothing changed.
+homeExampleSelect.addEventListener("change", async () => {
+    const presetId = homeExampleSelect.value;
+    if (!presetId) {
+        return;
+    }
+    const presetTitle = homeExampleSelect.selectedOptions[0].textContent;
+    homeExampleSelect.value = "";
+    const applied = await window.fim.applyPreset(presetId, presetTitle);
+    if (applied) {
+        window.fim.showConfigureScreen();
+    }
 });
 
 function showOpenRunBanner(message) {
@@ -509,4 +573,5 @@ window.fim.showOpenRunScreen = function showOpenRunScreen() {
     differentiationOrdersInput.value = "";
     window.fim.showScreen("screen-open-run");
     refreshRecentRuns();
+    refreshHomeExampleOptions();
 };

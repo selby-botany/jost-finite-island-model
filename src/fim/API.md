@@ -2847,18 +2847,23 @@ driver thread, before this method was written; see
 
 **Returns**:
 
-- ``{"ok"` - True, "equilibrium": ...}` once the run has *started*
-  — not once it finishes; the real outcome arrives via the
-  pushed calls above. `equilibrium` is `_equilibrium_reference_
-  payload`'s own result (design doc §6.2's predicted-
-  equilibrium trajectory overlay) — `None` for a batch (never
-  computed there — batch has no trajectory panel of its own to
-  overlay onto) or for a scalar run whose `N`/`m`/`mu` are not
-  all plain scalars; the page caches it client-side for the
-  live trajectory panel to draw against on every subsequent
-  progress tick (`webui/screens/run-view-running.js`'s own
-  `setLiveEquilibriumReference`), and the same value is reused,
-  not recomputed, in the eventual `"done"` push
+- ``{"ok"` - True, "equilibrium": ..., "identityRecovery": ...}`
+  once the run has *started* — not once it finishes; the real
+  outcome arrives via the pushed calls above. `equilibrium` is
+  `_equilibrium_reference_payload`'s own result (design doc
+  §6.2's predicted-equilibrium trajectory overlay);
+  `identityRecovery` is `_identity_recovery_reference_
+  payload`'s own result (that same section's closed-form
+  recovery *curve*, a second and different reference overlay —
+  see that function's own docstring). Both `None` for a batch
+  (never computed there — batch has no trajectory panel of its
+  own to overlay onto) or for a scalar run whose `N`/`m`(/`mu`,
+  for `equilibrium` only) are not all plain scalars; the page
+  caches both client-side for the live trajectory panel to
+  draw against on every subsequent progress tick (`webui/
+  screens/run-view-running.js`'s own `setLiveEquilibriumReference`/
+  `setLiveIdentityRecoveryReference`), and the same values are
+  reused, not recomputed, in the eventual `"done"` push
   (`_drain_run_messages`). `{"ok": False, "message": ...}` if
   the form does not validate or the output directory cannot be
   allocated.
@@ -3726,13 +3731,14 @@ reuse, not a second rendering path.
 
 - ``{"ok"` - True, "runId", "report", "panels", "statistics",
   "outputDirectory", "generationCount", "demeCount",
-  "sigmaBand", "equilibrium"}` on success — `sigmaBand` is
-  `_sigma_band_payload`'s own result (sigma-band GUI design
-  doc `20260910-claude-sonnet-5-gui-sigma-band-design.md`,
-  `selby/restricted`, slice 4), `None` for a run that never
-  requested one; `equilibrium` is `_equilibrium_reference_
-  payload`'s own result (botanist GUI design doc §6.2's
-  predicted-equilibrium trajectory overlay), computed fresh
+  "sigmaBand", "equilibrium", "identityRecovery"}` on success
+  — `sigmaBand` is `_sigma_band_payload`'s own result (sigma-band
+  GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+  design.md`, `selby/restricted`, slice 4), `None` for a run
+  that never requested one; `equilibrium`/`identityRecovery`
+  are `_equilibrium_reference_payload`'s/`_identity_recovery_
+  reference_payload`'s own results (botanist GUI design doc
+  §6.2's two predicted-trajectory overlays), computed fresh
   from this reopened run's own manifest params, `None` when
   those params are not all plain scalars. `{"ok": False,
 - `"message"` - ...}` if no trajectory was given, the

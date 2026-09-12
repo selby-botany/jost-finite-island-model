@@ -41,6 +41,8 @@ import yaml
 
 from fim import cli
 from fim import paths as paths_module
+from fim.gui import app as app_module
+from fim.gui import presets as presets_module
 from fim.gui.app import create_window
 
 pytestmark = pytest.mark.gui
@@ -558,6 +560,159 @@ def test_home_explore_card_opens_explore(
     )
 
     assert settled is False
+
+
+def test_home_example_select_lists_only_built_in_examples(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """`home-example-select` lists the built-in worked examples only.
+
+    Populated by `refreshHomeExampleOptions()` from `Api.list_presets`'s
+    own `builtin` entries, filtering out any user-saved preset — the
+    full combined list stays reachable only from the existing
+    `modal-presets` picker (`fim.menu.loadExample`). The option order
+    and titles must match `fim.gui.presets.list_presets` directly (not
+    a hand-copied count), the same "read the real module, don't
+    re-derive a snapshot" precedent `test_presets.py`'s own
+    `_REAL_PRESETS` sets — a real gap this test would have caught: an
+    earlier draft asserted a bare option count, which would not have
+    noticed the dropdown silently including a user-saved preset instead
+    of a missing built-in one.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="window.fim.showOpenRunScreen();",
+        read=(
+            "({"
+            "ready: window.__fimHomeExampleOptionsReady === true, "
+            "labels: Array.from("
+            "document.getElementById('home-example-select').options"
+            ").map((option) => option.textContent), "
+            "placeholderSelected: "
+            "document.getElementById('home-example-select').value === ''"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("ready"),
+    )
+
+    expected_titles = [
+        preset.title
+        for preset in presets_module.list_presets(app_module._webui_directory())
+    ]
+    assert settled["labels"] == ["Try a worked example…", *expected_titles]
+    assert settled["placeholderSelected"] is True
+
+
+def test_choosing_a_home_example_applies_it_and_opens_configure(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Picking an example applies its values, opens Configure, then resets.
+
+    A plain, immediately-acting pulldown (no separate confirm step): the
+    `change` event alone drives it, matching how a real user's own
+    pulldown selection fires it. Selects the "Stepping-stone (spatial)
+    migration" example specifically (option index 2 — index 0 is the
+    placeholder, index 1 is "Unequal island sizes with a migration
+    hub") since its own d=6 ring matrix is distinct from the starter
+    form's own defaults, the identical "a changed field is real proof
+    the click did something" reasoning `test_presets_screen.py`'s own
+    equivalent test already uses for the same preset. Reuses
+    `presets.js`'s own `applyPreset` via `window.fim.applyPreset` —
+    genuinely the same apply path the File-menu picker uses, not a
+    second, independent one.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.showOpenRunScreen(); "
+            "setTimeout(async () => { "
+            "await new Promise((resolve) => { "
+            "const check = () => window.__fimHomeExampleOptionsReady "
+            "? resolve() : setTimeout(check, 20); "
+            "check(); "
+            "}); "
+            "const select = document.getElementById('home-example-select'); "
+            "select.selectedIndex = 2; "
+            "select.dispatchEvent(new Event('change')); "
+            "}, 0);"
+        ),
+        read=(
+            "({"
+            "configureVisible: "
+            "!document.getElementById('screen-configure').hidden, "
+            "mMode: document.querySelector("
+            "'input[name=\"m_mode\"]:checked')?.value, "
+            "nValue: document.getElementById('field-N').value, "
+            "selectValue: "
+            "document.getElementById('home-example-select').value"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None and value.get("configureVisible") is True
+        ),
+        poll_attempts=500,
+    )
+
+    assert settled["configureVisible"] is True
+    assert settled["mMode"] == "matrix"
+    assert settled["nValue"] == "150"
+    # Reset to its own placeholder afterward — the control always reads
+    # as an action, never as "currently showing example X."
+    assert settled["selectValue"] == ""
+
+
+def test_home_example_select_excludes_a_user_saved_preset(
+    window: webview.Window,
+) -> None:
+    """A user-saved preset never appears in Home's own example shortcut.
+
+    "One of the examples" (the design ask) means built-in worked
+    examples only — a user-saved configuration stays reachable solely
+    from the full `modal-presets` picker. Needs its own two-stage,
+    manually driven window (save, then reopen Home) rather than the
+    shared `drive` fixture, which destroys its window after one stage.
+    """
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "window.__testSaveDone = false; "
+                "window.pywebview.api.save_current_as_preset("
+                "'Test user preset', collectFormValues()"
+                ").then(() => { window.__testSaveDone = true; });"
+            )
+            _poll_until(
+                window, "window.__testSaveDone === true", lambda value: value is True
+            )
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            settled = _poll_until(
+                window,
+                "({"
+                "ready: window.__fimHomeExampleOptionsReady === true, "
+                "labels: Array.from("
+                "document.getElementById('home-example-select').options"
+                ").map((option) => option.textContent)"
+                "})",
+                lambda value: value is not None and value.get("ready"),
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert "Test user preset" not in settled["labels"]
+    expected_titles = [
+        preset.title
+        for preset in presets_module.list_presets(app_module._webui_directory())
+    ]
+    assert settled["labels"] == ["Try a worked example…", *expected_titles]
 
 
 def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(

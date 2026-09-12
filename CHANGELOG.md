@@ -335,6 +335,23 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shares none of that `[0, 1]` domain, and is already shown as its own
   single-number prediction; a second, small chart for it against `N`/
   `m` is a reasonable, explicitly deferred follow-up, not built here.
+- Home's "New run" card gains a "Try a worked example…" pulldown beside
+  its existing "Configure a new run" button — a second, independent way
+  in, reaching the identical apply mechanism the File menu's own "Load
+  example…" picker already uses (`screens/presets.js`'s `applyPreset`,
+  now also exported as `window.fim.applyPreset`) rather than a second,
+  parallel one. Lists this visit's own built-in worked examples only
+  (`Api.list_presets`'s `builtin` entries), not user-saved
+  configurations — a full combined list stays reachable only from the
+  existing picker. A plain, immediately-acting `<select>`: choosing an
+  example applies its values and navigates straight to Configure, then
+  resets to its own "Try a worked example…" placeholder, so the control
+  always reads as an action rather than "currently showing example X."
+  Navigates only on a successful apply — the previous rejected-values
+  path (a built-in example whose configuration no longer validates)
+  still shows its existing alert, without also landing on an unchanged
+  Configure screen right after it. The "Configure a new run" button
+  itself is unchanged.
 
 ### Changed
 

@@ -405,7 +405,21 @@
          already reaches from anywhere, drawn larger here since a
          returning user landing on Home is often deciding between
          exactly these two next steps (design §9's own reasoning for
-         the Explore card). -->
+         the Explore card).
+
+         `home-example-select` (added afterward, on top of this slice):
+         a second, independent way into the New run card -- jump
+         straight to Configure with one worked example's own values
+         already applied, without a click into Configure followed by
+         File > "Load example…" to reach the identical picker
+         (`screens/presets.js`'s `fim.menu.loadExample`/`applyPreset`).
+         Populated at runtime (`screens/open-run.js`) from `Api.
+         list_presets`'s own built-in entries only -- a user-saved
+         preset is deliberately left out of this shortcut and stays
+         reachable only from the full picker, matching "one of the
+         examples" rather than every saved configuration. The
+         "Configure a new run" button itself is untouched: an
+         additional way in, never a replacement. -->
     <div class="home-cards">
       <div class="home-card">
         <h3>New run</h3>
@@ -414,6 +428,9 @@
           <button type="button" id="home-new-run-button" class="primary-action">
             Configure a new run
           </button>
+          <select id="home-example-select" aria-label="Try a worked example">
+            <option value="" selected>Try a worked example…</option>
+          </select>
         </div>
       </div>
       <div class="home-card">

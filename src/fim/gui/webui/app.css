@@ -642,6 +642,25 @@ fieldset.composite > label {
     cursor: not-allowed;
 }
 
+/* `home-example-select` (Home's "New run" card): a plain `<select>`
+ * sharing an `.actions` row with a real `<button>` -- matched to that
+ * button's own sizing/border/radius so the two read as one action
+ * group, not a mismatched form control dropped beside styled buttons. */
+.actions select {
+    font: inherit;
+    padding: 0.45rem 0.9rem;
+    border-radius: 6px;
+    border: 1px solid var(--fim-border);
+    background: var(--fim-background);
+    color: var(--fim-foreground);
+    cursor: pointer;
+}
+
+.actions select:hover {
+    border-color: var(--fim-action);
+    background: var(--fim-surface-soft);
+}
+
 .button-icon {
     width: 1rem;
     height: 1rem;
