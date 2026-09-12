@@ -412,6 +412,16 @@ band in <code>manifest.json</code>'s own <code>sigma_band_multiplier</code>/
 <code>sigma_band_window</code>/<code>sigma_band</code> fields. A run that requested the band
 but only ever hit max_generations produces neither the artifact nor
 the manifest fields — an unconverged tail is never extended.</p>
+<p>Works under every engine_backend (<code>lineal</code>, <code>generational</code>,
+<code>generational-vector</code>, and <code>auto</code> resolving to either of the latter
+two), and under batches of any size — each replicate gets its own
+independent band, computed from its own converged tail. <code>lineal</code> and
+<code>generational</code> produce bit-identical bands for the same seed, since
+both continue the run with the same per-generation code;
+<code>generational-vector</code> computes its own band array-natively and, like
+that backend generally, is not expected to match the other two
+bit-for-bit. A replicate that an adaptive replicate_tolerance stop
+discarded never gets a band, since its results are not kept at all.</p>
 <h3 id="sigma_band_window">sigma_band_window</h3>
 <ul>
 <li><strong>Type:</strong> integer at least 2</li>
@@ -853,8 +863,8 @@ on this page).</p>
 <td>rejected</td>
 </tr>
 <tr>
-<td>sigma_band_multiplier/sigma_band_window with engine_backend resolving to anything but lineal</td>
-<td>rejected</td>
+<td>sigma_band_multiplier/sigma_band_window with any engine_backend</td>
+<td>accepted</td>
 </tr>
 </tbody>
 </table>
