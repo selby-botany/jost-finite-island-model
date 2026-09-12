@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = PROJECT_ROOT / "dev" / "bin" / "generate-api-docs"
 
@@ -15,6 +17,32 @@ GENERATOR = PROJECT_ROOT / "dev" / "bin" / "generate-api-docs"
 # background agent hits when it forgets, or targets the wrong worktree's
 # own `.venv-312`, entirely from within the test suite).
 _UNACTIVATED_PATH = "/usr/bin:/bin"
+
+
+def _repository_managed_venv_exists() -> bool:
+    """Whether `bin/python3`'s own "prefer repository-managed
+    environments" glob (`.venv`, `.venv-*`) has anything to find here.
+
+    True on every local development checkout (`.venv-312`, by this
+    project's own convention). False in CI (confirmed live,
+    `34718735434`): CI installs directly into the runner's own
+    already-provisioned Python rather than creating a project-local
+    virtualenv at all, so there is no "unactivated shell forgot to
+    activate a venv" scenario to reproduce there in the first place --
+    every ambient Python on a CI runner already has every package this
+    project needs, on every `PATH`, which is exactly what makes
+    `test_generator_runs_without_an_activated_virtualenv` unable to
+    observe the real, local-only failure mode it is named for: with
+    `_UNACTIVATED_PATH` and no `.venv*` for `bin/python3` to prefer
+    instead, the fallback loop finds a genuinely bare `/usr/bin/python3`
+    with none of this project's own dependencies installed (confirmed
+    directly -- the same `ModuleNotFoundError: No module named
+    'pydoc_markdown'` CI hit, reproduced locally against a bare
+    `/usr/bin/python3` under this exact stripped `PATH`), which is a
+    fact about the CI runner's own install strategy, not a regression
+    in `bin/python3` or either generator.
+    """
+    return (PROJECT_ROOT / ".venv").exists() or any(PROJECT_ROOT.glob(".venv-*"))
 
 
 def test_generator_documents_every_source_module(tmp_path: Path) -> None:
@@ -52,6 +80,15 @@ def test_generator_runs_without_an_activated_virtualenv(tmp_path: Path) -> None:
     "every module gets documented"); this test's own job is narrower:
     confirm the two environments produce identical output.
     """
+    if not _repository_managed_venv_exists():
+        pytest.skip(
+            "no repository-managed virtualenv (.venv/.venv-*) present -- "
+            "this environment installs packages directly into its own "
+            "already-provisioned Python (see _repository_managed_venv_exists's "
+            "own docstring), so bin/python3's venv-preference fallback has "
+            "nothing to find here regardless of PATH; the invariant this "
+            "test checks does not apply"
+        )
     unactivated_output = tmp_path / "unactivated" / "API.md"
     ordinary_output = tmp_path / "ordinary" / "API.md"
 
