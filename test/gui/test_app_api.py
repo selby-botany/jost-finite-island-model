@@ -1545,6 +1545,19 @@ def test_list_home_runs_attaches_config_summary_and_statistics_for_a_scalar_run(
         "mu": "0.01",
         "mutation_model": "infinite_alleles",
     }
+    # Dict equality above doesn't check key order, but the client does
+    # care: `formatRowConfigSummary`'s own `Object.entries` walk (and
+    # JSON, which preserves object key order over the bridge) render
+    # this in insertion order. `seed` sorts last -- the field a reader
+    # cares about least when scanning "what's different about this run".
+    assert list(row["configSummary"].keys()) == [
+        "N",
+        "d",
+        "m",
+        "mu",
+        "mutation_model",
+        "seed",
+    ]
     assert row["statistics"] is not None
     for name in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"):
         assert row["statistics"][name] == format_statistic(

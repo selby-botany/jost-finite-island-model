@@ -338,8 +338,10 @@ function generationMode() {
  * (home enrichment design doc `20260909-claude-sonnet-5-home-
  * enrichment-design.md`, `selby/restricted`). `Object.entries` walks
  * `configSummary` in `Api.list_home_runs`'s own fixed key order (`N`,
- * `d`, `seed`, `m`, `mu`, `mutation_model`) — JSON preserves object key
- * order, so nothing here needs to know that order itself.
+ * `d`, `m`, `mu`, `mutation_model`, `seed` — `seed` last, the field a
+ * reader cares about least when scanning for "what's different about
+ * this run") — JSON preserves object key order, so nothing here needs
+ * to know that order itself.
  * @param {Record<string, string> | null} configSummary
  * @returns {string}
  */

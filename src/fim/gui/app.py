@@ -545,8 +545,12 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
             params` from `reanalyze_trajectory`.
 
     Returns:
-        `{"N", "d", "seed", "m", "mu", "mutation_model"}` — every value
-        a short, human-readable string. `m`/`mu` collapse their own
+        `{"N", "d", "m", "mu", "mutation_model", "seed"}` — every value
+        a short, human-readable string, `seed` last (the field a reader
+        cares about least when scanning for "what's different about
+        this run," `Api.list_home_runs`'s own home enrichment design
+        doc `20260909-claude-sonnet-5-home-enrichment-design.md`,
+        `selby/restricted`). `m`/`mu` collapse their own
         composite modes to one representative string each (a scalar
         rate, a `"<topology> @ <rate>"` pair, `"matrix"`, or
         `"mu_b=<rate>"`) rather than every sub-field, so a `d`-by-`d`
@@ -574,10 +578,10 @@ def _run_config_summary(params: SimulationParams) -> dict[str, str]:
     return {
         "N": n_text,
         "d": str(params.d),
-        "seed": str(params.seed),
         "m": m_text,
         "mu": mu_text,
         "mutation_model": params.mutation_model,
+        "seed": str(params.seed),
     }
 
 
@@ -1901,7 +1905,7 @@ class Api:
             "isBatch", "configSummary", "statistics"}` — the first six
             keys identical to `list_recent_runs`'s own shape.
             `configSummary` is `_run_config_summary`'s own `{"N", "d",
-            "seed", "m", "mu", "mutation_model"}`, or `None` if
+            "m", "mu", "mutation_model", "seed"}`, or `None` if
             `RecentRun.manifest` was unavailable (a hand-built row in a
             test) or its own parameters no longer validate. `statistics`
             is `None` if the row's own `report.json`/`summary.json`

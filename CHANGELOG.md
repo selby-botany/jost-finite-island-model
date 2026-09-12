@@ -511,6 +511,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   calendar date (`Earlier > 2026-09-09`, `Earlier > 2026-09-05`, ...,
   newest first), each with its own independent collapse state, rather
   than one flat, potentially very long bucket.
+- `_run_config_summary`'s own field order moves `seed` to the end
+  (`N`, `d`, `m`, `mu`, `mutation_model`, `seed`) — the field a reader
+  cares about least when scanning Home's own Configuration column (or
+  Compare's differing-fields legend, which shares this same summary)
+  for "what's different about this run."
 
 ### Removed
 

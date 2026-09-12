@@ -3616,7 +3616,7 @@ asked for this heavier per-row read, so neither pays for it.
   "isBatch", "configSummary", "statistics"}` — the first six
   keys identical to `list_recent_runs`'s own shape.
   `configSummary` is `_run_config_summary`'s own `{"N", "d",
-  "seed", "m", "mu", "mutation_model"}`, or `None` if
+  "m", "mu", "mutation_model", "seed"}`, or `None` if
   `RecentRun.manifest` was unavailable (a hand-built row in a
   test) or its own parameters no longer validate. `statistics`
   is `None` if the row's own `report.json`/`summary.json`
