@@ -516,6 +516,27 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cares about least when scanning Home's own Configuration column (or
   Compare's differing-fields legend, which shares this same summary)
   for "what's different about this run."
+- Double-clicking a run row on Home opens it directly (final
+  generation, no differentiation-q sweep), the same shortcut a batch's
+  own "Open replicate" button already gave one replicate at a time —
+  no separate click into the row, then a second click on "Open." A
+  batch row's own double-click is a safe no-op (its single-click
+  handler already explains why there is no single trajectory to open
+  this way).
+- The Generation/differentiation-q sweep controls move from the old
+  "Open a run…" screen to the Results card itself
+  (`#results-reanalyze-controls`, inside the unified run view's own
+  `completed` state) — choosing a different persisted generation, or
+  requesting a sweep, now happens *after* a run is already showing
+  (live-just-finished or reopened alike), re-analyzing it in place via
+  a "Re-analyze" button, rather than having to be chosen blind before
+  opening. Opening a run (via the "Open" button, a recent-run row's own
+  double-click, or a batch's own "Open replicate") always starts at the
+  final generation with no sweep now; `Api.open_run`'s own return
+  payload and `_drain_run_messages`'s own live `"done"` push both gained
+  a `trajectoryPath` field so the Results card knows what to re-analyze
+  either way. Hidden for a batch's own `completed` view, which has no
+  single trajectory of its own.
 
 ### Removed
 

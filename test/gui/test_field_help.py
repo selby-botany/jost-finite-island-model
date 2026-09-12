@@ -1,6 +1,7 @@
 """Static-analysis guard over the inline field tooltips (botanist GUI
 design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
-Configure, plus the Home/open-run screen's own two re-analysis controls
+Configure, plus the Results card's own two re-analysis controls
+(`#results-reanalyze-controls`, inside `#screen-run` -- design item 6)
 that share the same mechanism outside that section's own Configure-only
 scope.
 
@@ -31,11 +32,18 @@ _FIELD_HELP_JS = _WEBUI_ROOT / "field-help.js"
 # existing later) are out of scope. A plain slice on each section's own
 # start/end markers is enough: `index.html` has exactly one of each
 # section, confirmed by `test_screen_configure_exists_exactly_once`/
-# `test_screen_open_run_exists_exactly_once` below, so slicing between a
+# `test_screen_run_exists_exactly_once` below, so slicing between a
 # section's own open tag and the next `</section>` cannot silently grab
-# the wrong region.
+# the wrong region. `screen-run` (not the narrower `#results-reanalyze-
+# controls` div itself) is the marker for the same reason `field-help.js`
+# scopes its own selectors that wide (see its own `wireAllFieldTooltips`
+# docstring) -- a `<div>` marker would need to count nested `<div>`s to
+# find its own real close tag, since (unlike `<section>`) divs nest here;
+# `screen-run` has no other field/group needing a tooltip today, so the
+# wider, non-nesting section marker already scopes exactly as tightly in
+# practice.
 _CONFIGURE_SECTION_START = '<section id="screen-configure"'
-_OPEN_RUN_SECTION_START = '<section id="screen-open-run"'
+_SCREEN_RUN_SECTION_START = '<section id="screen-run"'
 _SECTION_END = "</section>"
 
 _FIELD_LABEL = re.compile(r'<label for="field-([a-zA-Z0-9_]+)"')
@@ -63,9 +71,9 @@ def _configure_field_and_group_keys() -> set[str]:
     return set(_FIELD_LABEL.findall(section)) | set(_GROUP_LEGEND.findall(section))
 
 
-def _open_run_field_and_group_keys() -> set[str]:
-    """Every `data-field-help="<key>"` label and legend key on open-run."""
-    section = _section_html(_OPEN_RUN_SECTION_START)
+def _screen_run_field_and_group_keys() -> set[str]:
+    """Every `data-field-help="<key>"` label and legend key on `screen-run`."""
+    section = _section_html(_SCREEN_RUN_SECTION_START)
     return set(_DATA_FIELD_HELP_LABEL.findall(section)) | set(
         _GROUP_LEGEND.findall(section)
     )
@@ -86,10 +94,10 @@ def test_screen_configure_exists_exactly_once() -> None:
     assert html.count(_CONFIGURE_SECTION_START) == 1
 
 
-def test_screen_open_run_exists_exactly_once() -> None:
-    """`_section_html`'s own slicing assumption holds for open-run."""
+def test_screen_run_exists_exactly_once() -> None:
+    """`_section_html`'s own slicing assumption holds for `screen-run`."""
     html = _INDEX_HTML.read_text(encoding="utf-8")
-    assert html.count(_OPEN_RUN_SECTION_START) == 1
+    assert html.count(_SCREEN_RUN_SECTION_START) == 1
 
 
 def test_every_field_help_key_names_a_real_field_or_group() -> None:
@@ -98,7 +106,7 @@ def test_every_field_help_key_names_a_real_field_or_group() -> None:
     Catches a field renamed or removed after its own tooltip was
     written, left behind as a key nothing ever looks up.
     """
-    real_keys = _configure_field_and_group_keys() | _open_run_field_and_group_keys()
+    real_keys = _configure_field_and_group_keys() | _screen_run_field_and_group_keys()
     stale_keys = _field_help_keys() - real_keys
 
     assert stale_keys == set(), (
@@ -121,10 +129,10 @@ def test_every_configure_field_and_group_has_a_tooltip() -> None:
     )
 
 
-def test_every_open_run_field_and_group_has_a_tooltip() -> None:
-    """Every open-run field/group has a `FIELD_HELP` entry -- none forgotten."""
-    missing_keys = _open_run_field_and_group_keys() - _field_help_keys()
+def test_every_screen_run_field_and_group_has_a_tooltip() -> None:
+    """Every `screen-run` field/group has a `FIELD_HELP` entry -- none forgotten."""
+    missing_keys = _screen_run_field_and_group_keys() - _field_help_keys()
 
     assert missing_keys == set(), (
-        f"Open-run has fields/groups with no FIELD_HELP entry: {sorted(missing_keys)}"
+        f"screen-run has fields/groups with no FIELD_HELP entry: {sorted(missing_keys)}"
     )

@@ -2081,12 +2081,20 @@ class Api:
 
         Returns:
             `{"ok": True, "runId", "report", "panels", "statistics",
-            "outputDirectory", "generationCount", "demeCount",
-            "sigmaBand", "equilibrium", "identityRecovery"}` on success
-            — `sigmaBand` is `_sigma_band_payload`'s own result (sigma-band
-            GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-            design.md`, `selby/restricted`, slice 4), `None` for a run
-            that never requested one; `equilibrium`/`identityRecovery`
+            "outputDirectory", "trajectoryPath", "generationCount",
+            "demeCount", "sigmaBand", "equilibrium",
+            "identityRecovery"}` on success — `trajectoryPath` echoes
+            this call's own resolved `trajectoryPath` input, so the
+            Results card's own re-analysis controls (item 6) can re-
+            issue this same call with a different `generation`/
+            `differentiationOrders` against whichever run is currently
+            showing, reopened or live-just-finished (`_drain_run_
+            messages`'s own `"done"` payload carries the identical key
+            for that second case); `sigmaBand` is `_sigma_band_payload`'s
+            own result (sigma-band GUI design doc `20260910-claude-
+            sonnet-5-gui-sigma-band-design.md`, `selby/restricted`,
+            slice 4), `None` for a run that never requested one;
+            `equilibrium`/`identityRecovery`
             are `_equilibrium_reference_payload`'s/`_identity_recovery_
             reference_payload`'s own results (botanist GUI design doc
             §6.2's two predicted-trajectory overlays), computed fresh
@@ -2143,6 +2151,7 @@ class Api:
                 report, self._significant_digits
             ),
             "outputDirectory": str(trajectory_path.parent),
+            "trajectoryPath": str(trajectory_path),
             "generationCount": reanalyzed.manifest.generation_count,
             "demeCount": reanalyzed.params.d,
             # Sigma-band GUI design doc `20260910-claude-sonnet-5-gui-
@@ -2678,6 +2687,16 @@ def _drain_run_messages(
                 },
                 "effectiveAlleles": _effective_allele_summary(result.report, digits),
                 "outputDirectory": str(output_directory),
+                # The Results card's own re-analysis controls (Home/results
+                # design item 6: "Generation"/"Differentiation-q sweep,"
+                # relocated here from the old open-run screen) need a
+                # trajectory to re-analyze even for a just-finished live
+                # run, not only a reopened one -- `Api.open_run`'s own
+                # return payload carries the identical key for that
+                # second case. Every scalar run's own trajectory is
+                # always at this fixed path (`Api.list_home_runs`'s own
+                # established `directory / "trajectory.jsonl"` join).
+                "trajectoryPath": str(output_directory / "trajectory.jsonl"),
                 "generationCount": result.manifest.generation_count,
                 "demeCount": deme_count,
                 # The trajectory panel (botanist GUI design doc

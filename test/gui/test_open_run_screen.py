@@ -296,14 +296,219 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     assert settled["trajectoryFrameHidden"] is True
 
 
-def test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve(
+def test_double_clicking_a_recent_run_row_opens_it_directly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Double-clicking a run row opens it, without a separate "Open" click.
+
+    Design item 5: the same "final generation, no sweep" shortcut a
+    single click plus the "Open" button already gives (the test right
+    above this one), reached in one interaction instead of two --
+    `open-run.js`'s own `openTrajectory`, shared by both paths.
+    """
+    output = _write_run(tmp_path)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            row_count = _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value > 0,
+            )
+            settled = None
+            if row_count == 1:
+                window.evaluate_js(
+                    f"document.querySelector({_REAL_ROW_SELECTOR})"
+                    ".dispatchEvent(new MouseEvent("
+                    "'dblclick', {bubbles: true}));"
+                )
+                settled = _poll_until(
+                    window,
+                    "({"
+                    "runViewState: window.fim.getRunViewState(), "
+                    "runId: "
+                    "document.getElementById('results-run-id').textContent, "
+                    "screenOpenRunHidden: "
+                    "document.getElementById('screen-open-run').hidden"
+                    "})",
+                    lambda value: (
+                        value is not None and value.get("runViewState") == "completed"
+                    ),
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None, "`completed` was never reached after double-clicking"
+    assert settled["runViewState"] == "completed"
+    assert settled["runId"].startswith("run-")
+    assert settled["screenOpenRunHidden"] is True
+    assert output.exists()
+
+
+def test_double_clicking_a_batch_row_does_not_open_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A batch row's own double-click is a safe no-op, not a crash or a
+    (nonsensical) attempt to open a manifest with no single trajectory.
+
+    `open-run.js`'s own single-click handler already draws this exact
+    "no single trajectory" boundary for a batch row (`showOpenRunBanner`)
+    -- the double-click handler only needs to defer to it, not repeat
+    the message, so this test's own bar is simply "still on Home, still
+    `initial`," not a duplicated banner assertion.
+    """
+    _write_batch_run(tmp_path)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(
+                f"document.querySelector({_REAL_ROW_SELECTOR})"
+                ".dispatchEvent(new MouseEvent("
+                "'dblclick', {bubbles: true}));"
+            )
+            # Nothing async to await on a no-op -- read state directly
+            # rather than polling for a change that should never happen.
+            outcome.put(
+                {
+                    "runViewState": window.evaluate_js("window.fim.getRunViewState()"),
+                    "screenOpenRunHidden": window.evaluate_js(
+                        "document.getElementById('screen-open-run').hidden"
+                    ),
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["runViewState"] == "initial"
+    assert settled["screenOpenRunHidden"] is False
+
+
+def test_reanalyzing_at_a_chosen_generation_updates_the_outcome_text(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Choosing "choose" plus a generation re-analyzes at that generation.
+
+    Design item 6's other half (the sweep is the test right below this
+    one): `#results-outcome`'s own text states the generation the
+    current report is for (`run-view-completed.js`'s own
+    `enterCompletedState`), so re-analyzing at a different, explicit
+    generation than the one the run opened at (its final one) is
+    observable directly from that text, without needing to inspect the
+    stats table's own numbers.
+    """
+    _write_run(tmp_path)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            row_count = _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value > 0,
+            )
+            settled = None
+            if row_count == 1:
+                window.evaluate_js(
+                    f"document.querySelector({_REAL_ROW_SELECTOR}).click();"
+                )
+                window.evaluate_js(
+                    "document.getElementById('open-run-open-button').click();"
+                )
+                opened_outcome = _poll_until(
+                    window,
+                    "({"
+                    "runViewState: window.fim.getRunViewState(), "
+                    "outcomeText: "
+                    "document.getElementById('results-outcome').textContent"
+                    "})",
+                    lambda value: (
+                        value is not None and value.get("runViewState") == "completed"
+                    ),
+                )
+                window.evaluate_js(
+                    "document.querySelector("
+                    '\'input[name="results_generation_mode"]'
+                    '[value="choose"]\').checked = true;'
+                    "document.getElementById('results-generation-value')"
+                    ".value = '1';"
+                    "document.getElementById('results-reanalyze-button').click();"
+                )
+                reanalyzed_outcome = _poll_until(
+                    window,
+                    "document.getElementById('results-outcome').textContent",
+                    lambda value: value is not None and "generation 1" in value,
+                )
+                settled = {
+                    "openedOutcome": opened_outcome["outcomeText"],
+                    "reanalyzedOutcome": reanalyzed_outcome,
+                }
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    # The run's own final generation is not 1 (`_write_run`'s own
+    # `max_generations=10`, `convergence_window=4` converges well
+    # before generation 1 could be its own final one) -- confirming the
+    # *opened* text differs from the *reanalyzed* one is what proves the
+    # click actually changed something, not merely that "generation 1"
+    # happens to already be on screen by coincidence.
+    assert "generation 1" not in settled["openedOutcome"]
+    assert "generation 1" in settled["reanalyzedOutcome"]
+
+
+def test_reanalyzing_a_run_with_a_differentiation_q_sweep_draws_the_curve(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A requested differentiation-q sweep renders both the lines and the curve.
 
-    No existing test drove this specific field through the real DOM at
-    all before this one (`test/gui/test_app_api.py`'s own `Api.open_run`
+    The sweep is entered on the Results card itself (design item 6:
+    relocated from the old open-run screen, where it had to be chosen
+    *before* opening) -- open the run first, at its default final
+    generation with no sweep, then set `#results-differentiation-orders`
+    and click `#results-reanalyze-button` to re-analyze in place. No
+    existing test drove this specific field through the real DOM at all
+    before this one (`test/gui/test_app_api.py`'s own `Api.open_run`
     coverage only ever calls it as a plain Python function) — this is
     also the first real proof that `run-view-completed.js`'s own
     `drawDifferentiationQCurve` (botanist GUI design doc `20260907-
@@ -332,11 +537,19 @@ def test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve(
                     f"document.querySelector({_REAL_ROW_SELECTOR}).click();"
                 )
                 window.evaluate_js(
-                    "document.getElementById('open-run-differentiation-orders')"
+                    "document.getElementById('open-run-open-button').click();"
+                )
+                _poll_until(
+                    window,
+                    "window.fim.getRunViewState()",
+                    lambda value: value == "completed",
+                )
+                window.evaluate_js(
+                    "document.getElementById('results-differentiation-orders')"
                     ".value = '0, 1, 2';"
                 )
                 window.evaluate_js(
-                    "document.getElementById('open-run-open-button').click();"
+                    "document.getElementById('results-reanalyze-button').click();"
                 )
                 settled = _poll_until(
                     window,
@@ -352,7 +565,9 @@ def test_opening_a_run_with_a_differentiation_q_sweep_draws_the_curve(
                     ".width"
                     "})",
                     lambda value: (
-                        value is not None and value.get("runViewState") == "completed"
+                        value is not None
+                        and value.get("runViewState") == "completed"
+                        and value.get("lineCount", 0) > 0
                     ),
                 )
             outcome.put(settled)

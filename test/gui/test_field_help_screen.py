@@ -1,6 +1,7 @@
 """Headless functional tests for the inline field tooltips (botanist GUI
 design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
-Configure, plus the Home/open-run screen's own two re-analysis controls
+Configure, plus the Results card's own two re-analysis controls
+(`#results-reanalyze-controls`, inside `#screen-run` -- design item 6)
 that share the same mechanism.
 
 Real DOM-driven proof that `webui/field-help.js` actually shows and hides
@@ -151,24 +152,28 @@ def test_a_group_legend_is_keyboard_focusable_and_shows_its_own_tooltip(
     assert settled["matchesFieldHelp"] is True
 
 
-def test_the_open_run_screens_differentiation_orders_label_shows_its_tooltip(
+def test_the_results_cards_differentiation_orders_label_shows_its_tooltip(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """The open-run screen's own `data-field-help` label -- not the
+    """The Results card's own `data-field-help` label -- not the
     `field-<key>` id convention `wireFieldTooltip`'s callers elsewhere all
     use -- still resolves to the right `FIELD_HELP` entry.
 
     Exercises the code path `wireAllFieldTooltips` added for this screen:
     the key comes from `label.dataset.fieldHelp` directly, not from
     slicing a `field-` prefix off `label.htmlFor` (this label's own `for`
-    is `open-run-differentiation-orders`, which has no such prefix).
+    is `results-differentiation-orders`, which has no such prefix).
+    Firing a synthetic `mouseenter` works regardless of `#run-completed`'s
+    own `hidden` state (unlike `.focus()`, `dispatchEvent` does not care
+    whether the target is actually visible) -- no need to drive an actual
+    run to completion first just to reach this label.
     """
     settled = drive(
         window,
         ready=_INPUT_SCREEN_READY,
         trigger=(
             "document.querySelector("
-            "'label[for=\"open-run-differentiation-orders\"]')"
+            "'label[for=\"results-differentiation-orders\"]')"
             ".dispatchEvent(new Event('mouseenter'));"
         ),
         read=(
@@ -176,7 +181,7 @@ def test_the_open_run_screens_differentiation_orders_label_shows_its_tooltip(
             "hidden: document.querySelector('.field-tooltip').hidden, "
             "matchesFieldHelp: document.querySelector('.field-tooltip')"
             ".textContent === window.FIM_FIELD_HELP"
-            ".open_run_differentiation_orders"
+            ".results_differentiation_orders"
             "})"
         ),
         is_ready=lambda value: value is not None and value.get("hidden") is False,
@@ -186,10 +191,10 @@ def test_the_open_run_screens_differentiation_orders_label_shows_its_tooltip(
     assert settled["matchesFieldHelp"] is True
 
 
-def test_the_open_run_screens_generation_legend_shows_its_own_tooltip(
+def test_the_results_cards_generation_legend_shows_its_own_tooltip(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """The open-run screen's own "Generation" mode-selector group works
+    """The Results card's own "Generation" mode-selector group works
     the same way `m_mode`'s Configure-side legend already does, confirming
     the widened `wireAllFieldTooltips` selector actually reaches it."""
     settled = drive(
@@ -197,17 +202,17 @@ def test_the_open_run_screens_generation_legend_shows_its_own_tooltip(
         ready=_INPUT_SCREEN_READY,
         trigger=(
             "document.querySelector("
-            "'legend[data-field-help=\"open_run_generation_mode\"]')"
+            "'legend[data-field-help=\"results_generation_mode\"]')"
             ".dispatchEvent(new Event('mouseenter'));"
         ),
         read=(
             "({"
             "tabIndex: document.querySelector("
-            "'legend[data-field-help=\"open_run_generation_mode\"]')"
+            "'legend[data-field-help=\"results_generation_mode\"]')"
             ".tabIndex, "
             "hidden: document.querySelector('.field-tooltip').hidden, "
             "matchesFieldHelp: document.querySelector('.field-tooltip')"
-            ".textContent === window.FIM_FIELD_HELP.open_run_generation_mode"
+            ".textContent === window.FIM_FIELD_HELP.results_generation_mode"
             "})"
         ),
         is_ready=lambda value: value is not None and value.get("hidden") is False,

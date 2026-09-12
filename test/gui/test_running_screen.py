@@ -272,6 +272,55 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
     assert settled["neSText"] != ""
 
 
+def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls() -> None:
+    """A just-finished live run's own Results card offers re-analysis too.
+
+    Design item 6: the Generation/Differentiation-q sweep controls
+    (relocated here from the old open-run screen) work for a live-just-
+    finished run, not only a reopened one -- they need `window.fim.
+    getCompletedTrajectoryPath()` to actually be set for that to be
+    possible at all, which needs `_drain_run_messages`'s own `"done"`
+    payload to carry a real `trajectoryPath` (`test/gui/test_app_api.py`'s
+    own `test_open_run_echoes_the_trajectory_path_it_was_given` covers
+    the reopened-run half of this same payload key).
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                settled = window.evaluate_js(
+                    "({"
+                    "trajectoryPath: window.fim.getCompletedTrajectoryPath(), "
+                    "reanalyzeHidden: "
+                    "document.getElementById('results-reanalyze-controls').hidden"
+                    "})"
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["trajectoryPath"] is not None
+    assert settled["trajectoryPath"].endswith("trajectory.jsonl")
+    assert settled["reanalyzeHidden"] is False
+
+
 def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> None:
     """A completed scalar run draws its own statistic-vs-generation trajectory.
 

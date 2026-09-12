@@ -3730,12 +3730,20 @@ reuse, not a second rendering path.
 **Returns**:
 
 - ``{"ok"` - True, "runId", "report", "panels", "statistics",
-  "outputDirectory", "generationCount", "demeCount",
-  "sigmaBand", "equilibrium", "identityRecovery"}` on success
-  — `sigmaBand` is `_sigma_band_payload`'s own result (sigma-band
-  GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
-  design.md`, `selby/restricted`, slice 4), `None` for a run
-  that never requested one; `equilibrium`/`identityRecovery`
+  "outputDirectory", "trajectoryPath", "generationCount",
+  "demeCount", "sigmaBand", "equilibrium",
+  "identityRecovery"}` on success — `trajectoryPath` echoes
+  this call's own resolved `trajectoryPath` input, so the
+  Results card's own re-analysis controls (item 6) can re-
+  issue this same call with a different `generation`/
+  `differentiationOrders` against whichever run is currently
+  showing, reopened or live-just-finished (`_drain_run_
+  messages`'s own `"done"` payload carries the identical key
+  for that second case); `sigmaBand` is `_sigma_band_payload`'s
+  own result (sigma-band GUI design doc `20260910-claude-
+  sonnet-5-gui-sigma-band-design.md`, `selby/restricted`,
+  slice 4), `None` for a run that never requested one;
+  `equilibrium`/`identityRecovery`
   are `_equilibrium_reference_payload`'s/`_identity_recovery_
   reference_payload`'s own results (botanist GUI design doc
   §6.2's two predicted-trajectory overlays), computed fresh

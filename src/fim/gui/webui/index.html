@@ -321,6 +321,45 @@
              but not displayed. -->
         <p id="results-run-id" class="results-run-id" hidden></p>
         <p id="results-outcome" class="results-outcome"></p>
+        <!-- Re-analyze this same trajectory at a different persisted
+             generation, or with a differentiation-q sweep -- design
+             item 6, relocated here (from the old "Open a run…" screen,
+             where it had to be chosen *before* opening) so it applies
+             equally to a just-finished live run and a reopened one.
+             Scalar-only: hidden for a batch's own `completed` view,
+             which has no single trajectory of its own to re-analyze
+             (`run-view-completed.js`'s own `enterCompletedState`). -->
+        <div id="results-reanalyze-controls" hidden>
+          <fieldset class="composite">
+            <legend data-field-help="results_generation_mode">Generation</legend>
+            <label>
+              <input
+                type="radio"
+                name="results_generation_mode"
+                value="final"
+                checked
+              > final
+            </label>
+            <label>
+              <input type="radio" name="results_generation_mode" value="choose"> choose
+            </label>
+            <input type="text" id="results-generation-value" placeholder="generation">
+          </fieldset>
+          <div class="field">
+            <label
+              for="results-differentiation-orders"
+              data-field-help="results_differentiation_orders"
+            >Differentiation-q sweep</label>
+            <input
+              type="text"
+              id="results-differentiation-orders"
+              placeholder="e.g. 0, 1, 2"
+            >
+          </div>
+          <div class="actions">
+            <button type="button" id="results-reanalyze-button">Re-analyze</button>
+          </div>
+        </div>
         <div id="results-differentiation-q" hidden>
           <canvas id="results-differentiation-q-canvas"></canvas>
           <div id="results-differentiation-q-lines"></div>
@@ -482,32 +521,13 @@
         Browse for trajectory.jsonl…
       </button>
     </div>
-    <fieldset class="composite">
-      <legend data-field-help="open_run_generation_mode">Generation</legend>
-      <label>
-        <input
-          type="radio"
-          name="open_run_generation_mode"
-          value="final"
-          checked
-        > final
-      </label>
-      <label>
-        <input type="radio" name="open_run_generation_mode" value="choose"> choose
-      </label>
-      <input type="text" id="open-run-generation-value" placeholder="generation">
-    </fieldset>
-    <div class="field">
-      <label
-        for="open-run-differentiation-orders"
-        data-field-help="open_run_differentiation_orders"
-      >Differentiation-q sweep</label>
-      <input
-        type="text"
-        id="open-run-differentiation-orders"
-        placeholder="e.g. 0, 1, 2"
-      >
-    </div>
+    <!-- Generation/differentiation-q sweep selection used to live here
+         (design item 6) -- opening a run now always means "final
+         generation, no sweep"; choosing a different generation or a
+         q-sweep instead happens on the Results card itself, once the
+         run is showing (`#results-reanalyze-controls`, below), so a
+         changed choice re-renders the same run in place rather than
+         requiring "guess the right settings, then open." -->
     <div class="actions">
       <button type="button" id="open-run-back-button">Back</button>
       <button type="button" id="open-run-open-button" disabled>

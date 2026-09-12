@@ -125,10 +125,10 @@ const FIELD_HELP = {
     dark_mode_override: "Follow system matches your OS's own light/dark " +
         "setting. Light or Dark overrides it for this app only, applied " +
         "immediately.",
-    open_run_generation_mode: "Which persisted generation to re-analyze: " +
+    results_generation_mode: "Which persisted generation to re-analyze: " +
         "final (the trajectory's last persisted generation), or choose " +
         "any other generation that was actually persisted.",
-    open_run_differentiation_orders: "Hill-number differentiation orders " +
+    results_differentiation_orders: "Hill-number differentiation orders " +
         "to compute at the chosen generation, comma- or space-separated " +
         "(e.g. 0, 1, 2) — q=0 and q=2 match the report's own K_ST and D; " +
         "q=1 matches E_ST. Blank re-analyzes with no sweep.",
@@ -231,19 +231,27 @@ function wireGroupTooltip(legendElement, key) {
 
 /**
  * Wire every field label and `[data-field-help]` legend inside Configure,
- * plus the Home/open-run screen's own two re-analysis controls (generation
- * mode, differentiation-q sweep). Called once, at parse time -- unlike
- * almost everything else this page wires, this markup is static HTML
- * present from first load, not built by a later bridge call, so there is
- * nothing to wait for.
+ * plus the Results card's own two re-analysis controls (generation mode,
+ * differentiation-q sweep, `#results-reanalyze-controls` inside `#screen-
+ * run`). Called once, at parse time -- unlike almost everything else this
+ * page wires, this markup is static HTML present from first load, not
+ * built by a later bridge call, so there is nothing to wait for.
  *
  * Configure's own labels use the `field-<key>` id convention, so their
- * `FIELD_HELP` key is derived by slicing that prefix off; the two open-run
- * controls don't share that id convention (`open-run-generation-value`,
- * `open-run-differentiation-orders` -- borrowed from the Tk-era screen's
- * own ids), so they carry an explicit `data-field-help="<key>"` on the
- * `<label>` itself instead, the same opt-in mechanism a composite
- * `<fieldset>`'s own `<legend>` already used for its group-level tooltip.
+ * `FIELD_HELP` key is derived by slicing that prefix off; the two re-
+ * analysis controls don't share that id convention (`results-generation-
+ * value`, `results-differentiation-orders` -- ids borrowed from the Tk-
+ * era screen's own naming, only the `open-run-` prefix ever changed, when
+ * these moved off the open-run screen entirely, design item 6), so they
+ * carry an explicit `data-field-help="<key>"` on the `<label>` itself
+ * instead, the same opt-in mechanism a composite `<fieldset>`'s own
+ * `<legend>` already used for its group-level tooltip. Scoped to
+ * `#screen-run` rather than the tighter `#results-reanalyze-controls`
+ * itself only because that's this file's own established per-screen
+ * scoping granularity (`#screen-configure`, above) -- `#screen-run` has
+ * no other `[data-field-help]`/`label[for^="field-"]` element today
+ * (`test/gui/test_field_help.py`'s own static check enforces this stays
+ * true), so the wider scope catches everything the tighter one would.
  */
 function wireAllFieldTooltips() {
     document
@@ -254,13 +262,13 @@ function wireAllFieldTooltips() {
     document
         .querySelectorAll(
             "#screen-configure legend[data-field-help], " +
-                "#screen-open-run legend[data-field-help]"
+                "#screen-run legend[data-field-help]"
         )
         .forEach((legend) => {
             wireGroupTooltip(legend, legend.dataset.fieldHelp);
         });
     document
-        .querySelectorAll("#screen-open-run label[data-field-help]")
+        .querySelectorAll("#screen-run label[data-field-help]")
         .forEach((label) => {
             wireFieldTooltip(label, label.dataset.fieldHelp);
         });

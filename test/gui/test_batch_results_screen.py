@@ -183,6 +183,56 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     assert settled["trajectoryFrameHidden"] is True
 
 
+def test_a_completed_batch_hides_the_reanalyze_controls() -> None:
+    """A batch's own `completed` view hides item 6's re-analysis controls.
+
+    A batch manifest has no single trajectory of its own to re-analyze
+    (the same "no single trajectory" boundary `open-run.js`'s own
+    single-click row handler already draws for a batch row on Home) --
+    `enterCompletedState`'s own `resultsReanalyzeControls.hidden = isBatch`
+    is what enforces this; the scalar counterpart (hidden is `False`) is
+    `test/gui/test_running_screen.py`'s own `test_a_live_runs_own_done_
+    payload_enables_the_reanalyze_controls`.
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                settled = window.evaluate_js(
+                    "({"
+                    "runViewState: window.fim.getRunViewState(), "
+                    "reanalyzeHidden: "
+                    "document.getElementById('results-reanalyze-controls').hidden, "
+                    "trajectoryPath: window.fim.getCompletedTrajectoryPath()"
+                    "})"
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["runViewState"] == "completed"
+    assert settled["reanalyzeHidden"] is True
+    assert settled["trajectoryPath"] is None
+
+
 def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None:
     """`buildCiMeter`'s own tooltip states "uncertainty across N independent
     replicates" (botanist GUI design doc §7.2: re-labeled "everywhere it

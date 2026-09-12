@@ -113,6 +113,16 @@ const resultsDifferentiationQCanvas = document.getElementById(
 const resultsDifferentiationQLines = document.getElementById(
     "results-differentiation-q-lines"
 );
+// Item 6's re-analysis controls (relocated here from the old open-run
+// screen, `open-run.js`'s own former `generationMode`/`openButton`
+// logic) -- scalar-only, hidden for a batch's own `completed` view
+// (`enterCompletedState`, below).
+const resultsReanalyzeControls = document.getElementById("results-reanalyze-controls");
+const resultsGenerationValueInput = document.getElementById("results-generation-value");
+const resultsDifferentiationOrdersInput = document.getElementById(
+    "results-differentiation-orders"
+);
+const resultsReanalyzeButton = document.getElementById("results-reanalyze-button");
 const gStCautionNote = document.getElementById("g-st-caution-note");
 // `batchResultsTableEl` is the `<table>` whose own `hidden` attribute
 // gates visibility; `batchResultsSummary` is its `<tbody>`, where
@@ -1173,6 +1183,12 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
 window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) {
     window.fim.setRunViewState("completed");
     window.fim.setCompletedOutputDirectory(payload.outputDirectory);
+    // `undefined` (a batch's own payload carries no such key at all) is
+    // normalized to `null` here rather than left as `undefined` -- the
+    // getter's own contract (`app.js`'s own doc comment) promises
+    // `string|null`, matching `completedOutputDirectory`'s identical
+    // shape immediately above.
+    window.fim.setCompletedTrajectoryPath(payload.trajectoryPath ?? null);
     runProgress.hidden = true;
     if (initialStats) {
         initialStats.hidden = true;
@@ -1189,6 +1205,10 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     resultsStats.hidden = isBatch;
     batchResultsTableEl.hidden = !isBatch;
     batchResultsTable.hidden = !isBatch;
+    // Item 6: a batch has no single trajectory of its own to re-analyze
+    // (the exact same "no single trajectory" boundary `open-run.js`'s
+    // own single-click row handler already draws for a batch row).
+    resultsReanalyzeControls.hidden = isBatch;
     resultsRunId.textContent = payload.runId;
     // `wireCompletedScrubber` (scalar branch, below) fetches animation
     // frames over a real, un-awaited-by-any-caller bridge call --
@@ -1222,6 +1242,18 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedFinalStatistics = null;
         renderTrajectory(undefined, undefined);
     } else {
+        // A different run just opened (or a live run just finished) --
+        // any generation/sweep choice left over from whatever this
+        // card showed before must not silently apply to it too. A
+        // re-analysis of *this* run (`resultsReanalyzeButton`'s own
+        // handler) re-enters this same branch on success, which is
+        // exactly why that handler's own chosen generation/sweep values
+        // are read into `values` *before* this call, not after.
+        document.querySelector(
+            'input[name="results_generation_mode"][value="final"]'
+        ).checked = true;
+        resultsGenerationValueInput.value = "";
+        resultsDifferentiationOrdersInput.value = "";
         const report = payload.report;
         const reason = report.reason.charAt(0).toUpperCase() + report.reason.slice(1);
         resultsOutcome.textContent = `${reason}: generation ${report.generation}`;
@@ -1300,4 +1332,54 @@ window.fim.returnToInitialState = function returnToInitialState() {
 // would do for a fresh start but without actually starting a run.
 resultsBackButton.addEventListener("click", () => {
     window.fim.returnToInitialState();
+});
+
+/**
+ * Read `#results-reanalyze-controls`'s own generation-mode radio group
+ * -- the Results-card counterpart to the old open-run screen's own
+ * (now removed) `generationMode` helper, same "default to final if
+ * somehow nothing is checked" fallback.
+ * @returns {"final"|"choose"}
+ */
+function resultsGenerationMode() {
+    const checked = document.querySelector(
+        'input[name="results_generation_mode"]:checked'
+    );
+    return checked ? checked.value : "final";
+}
+
+// Item 6: re-analyze whichever run is currently showing (live-just-
+// finished or reopened -- `window.fim.getCompletedTrajectoryPath()`
+// covers both, `enterCompletedState` sets it from `payload.
+// trajectoryPath` either way) at a different persisted generation, or
+// with a differentiation-q sweep, without leaving the Results card.
+// Literal reuse of `Api.open_run`, the exact bridge call the old open-
+// run screen's own "Open" button used to make before item 6 moved
+// these controls here -- re-entering `completed` on success re-renders
+// this same screen with the new report, not a second rendering path.
+resultsReanalyzeButton.addEventListener("click", async () => {
+    const trajectoryPath = window.fim.getCompletedTrajectoryPath();
+    if (trajectoryPath === null) {
+        window.fim.showRunBanner("no trajectory to re-analyze");
+        return;
+    }
+    const result = await window.pywebview.api.open_run({
+        trajectoryPath,
+        generationMode: resultsGenerationMode(),
+        generation: resultsGenerationValueInput.value,
+        differentiationOrders: resultsDifferentiationOrdersInput.value,
+    });
+    if (!result.ok) {
+        window.fim.showRunBanner(result.message);
+        return;
+    }
+    window.fim.showRunBanner("");
+    // A different generation/sweep of the same run is re-analyzed here
+    // exactly like a different persisted run being opened is (`open-
+    // run.js`'s own `openTrajectory`) -- both are "the trajectory
+    // legend no longer describes what's on screen" moments (design
+    // §6.2's legend-toggle; `resetTrajectoryLegendVisibility`'s own doc
+    // comment names both).
+    window.fim.resetTrajectoryLegendVisibility();
+    window.fim.enterCompletedState(result, false);
 });

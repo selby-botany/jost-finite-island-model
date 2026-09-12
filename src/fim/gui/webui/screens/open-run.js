@@ -25,10 +25,6 @@ const recentRunsBody = document.getElementById("open-run-recent-runs-body");
 const recentRunsFilterInput = document.getElementById("open-run-filter");
 const recentRunsCountLabel = document.getElementById("open-run-count");
 const browseButton = document.getElementById("browse-trajectory-button");
-const generationValueInput = document.getElementById("open-run-generation-value");
-const differentiationOrdersInput = document.getElementById(
-    "open-run-differentiation-orders"
-);
 const openButton = document.getElementById("open-run-open-button");
 const openRunBackButton = document.getElementById("open-run-back-button");
 const homeNewRunButton = document.getElementById("home-new-run-button");
@@ -326,13 +322,6 @@ function setSelectedTrajectory(path) {
     openButton.disabled = path === null;
 }
 
-function generationMode() {
-    const checked = document.querySelector(
-        'input[name="open_run_generation_mode"]:checked'
-    );
-    return checked ? checked.value : "final";
-}
-
 /**
  * Render one row's own config summary as a compact, single-line string
  * (home enrichment design doc `20260909-claude-sonnet-5-home-
@@ -427,6 +416,15 @@ function buildReplicateRow(replicate) {
         row.classList.add("selected");
         showOpenRunBanner("");
         setSelectedTrajectory(replicate.trajectoryPath);
+    });
+    // Double-clicking a replicate row opens it directly (item 5), the
+    // same "final generation, no sweep" shortcut a top-level run row's
+    // own double-click gives (below) -- a replicate is one single
+    // trajectory just like a scalar run is, so the same click-then-
+    // Open-button round trip would otherwise be needed for no reason.
+    row.addEventListener("dblclick", async (event) => {
+        event.stopPropagation();
+        await openTrajectory(replicate.trajectoryPath);
     });
     return row;
 }
@@ -546,6 +544,20 @@ function buildRunRow(run) {
         }
         showOpenRunBanner("");
         setSelectedTrajectory(run.trajectoryPath);
+    });
+    // Double-clicking a run row opens it directly (item 5) -- final
+    // generation, no differentiation-q sweep, exactly what the "Open"
+    // button does once a row is selected, without the intermediate
+    // click. A batch row has no single trajectory to open this way
+    // (the single-click handler above already explains why and shows
+    // the banner saying so); the batch's own click already fired by
+    // the time a real double-click's second `dblclick` event reaches
+    // here, so this only needs to skip it, not repeat that message.
+    row.addEventListener("dblclick", async () => {
+        if (run.isBatch) {
+            return;
+        }
+        await openTrajectory(run.trajectoryPath);
     });
     return row;
 }
@@ -689,29 +701,38 @@ browseButton.addEventListener("click", async () => {
     setSelectedTrajectory(result.path);
 });
 
-openButton.addEventListener("click", async () => {
-    if (selectedTrajectoryPath === null) {
-        showOpenRunBanner("no trajectory selected");
-        return;
-    }
-    const values = {
-        trajectoryPath: selectedTrajectoryPath,
-        generationMode: generationMode(),
-        generation: generationValueInput.value,
-        differentiationOrders: differentiationOrdersInput.value,
-    };
-    const result = await window.pywebview.api.open_run(values);
+/**
+ * Open `trajectoryPath` at its final generation, no differentiation-q
+ * sweep, landing on the unified run view's own `completed` state --
+ * the one operation both the "Open" button and a run row's own
+ * double-click (item 5) reduce to, now that choosing a different
+ * generation or a sweep happens on the Results card itself, after
+ * opening (item 6, `run-view-completed.js`'s own `results-reanalyze-
+ * button`), not before. Reports failure via this screen's own banner;
+ * on success, resets the trajectory legend's own display-only
+ * visibility toggle before entering `completed` (design §6.2's legend-
+ * toggle; `run-view-completed.js`'s own `resetTrajectoryLegendVisibility`
+ * doc comment names both points this happens at).
+ * @param {string} trajectoryPath
+ * @returns {Promise<void>}
+ */
+async function openTrajectory(trajectoryPath) {
+    const result = await window.pywebview.api.open_run({ trajectoryPath });
     if (!result.ok) {
         showOpenRunBanner(result.message);
         return;
     }
     showOpenRunBanner("");
-    // A different persisted run being opened is the other of the two
-    // points the trajectory legend's own display-only visibility toggle
-    // resets (design §6.2's legend-toggle; `run-view-completed.js`'s own
-    // `resetTrajectoryLegendVisibility` doc comment names both).
     window.fim.resetTrajectoryLegendVisibility();
     window.fim.enterCompletedState(result, false);
+}
+
+openButton.addEventListener("click", async () => {
+    if (selectedTrajectoryPath === null) {
+        showOpenRunBanner("no trajectory selected");
+        return;
+    }
+    await openTrajectory(selectedTrajectoryPath);
 });
 
 openRunBackButton.addEventListener("click", () => {
@@ -721,8 +742,6 @@ openRunBackButton.addEventListener("click", () => {
 window.fim.showOpenRunScreen = function showOpenRunScreen() {
     showOpenRunBanner("");
     setSelectedTrajectory(null);
-    generationValueInput.value = "";
-    differentiationOrdersInput.value = "";
     window.fim.showScreen("screen-open-run");
     refreshRecentRuns();
     refreshHomeExampleOptions();
