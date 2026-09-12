@@ -165,6 +165,51 @@ def test_batch_trajectory_domain_excludes_a_thin_samples_own_band(
     assert settled["maxValue"] == 1
 
 
+def test_batch_trajectory_domain_keeps_a_uniformly_small_samples_own_band(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A *uniformly* small `sampleCount` (every point, not just a thin tail)
+    still counts toward the domain -- the threshold is relative to the
+    largest `sampleCount` seen, not an absolute cutoff.
+
+    A real regression this test guards against: `fim.engine.pooled_
+    convergence_histories` now holds each replicate's own final value
+    constant once it stops (carry-forward), which means a completed
+    batch's own `sampleCount` is constant across every generation of
+    one statistic's own history -- there is no more "thin tail" for an
+    absolute cutoff to distinguish from a "well-supported" earlier
+    point, since there is no longer any variation within one statistic
+    to compare against at all. An earlier version of this threshold
+    was an absolute `sampleCount >= 4`; for a real but small (2-3
+    replicate) completed batch, every one of its points would have
+    fallen below that absolute floor, incorrectly excluding its own
+    real, stable band from the domain entirely, not just an unstable
+    outlier -- confirmed live to reproduce before this test was
+    written to guard against a return of that regression.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.__testDomain = computeBatchTrajectoryValueDomain({"
+            "D: ["
+            "{generation: 0, mean: '0.2', low: '-3', high: '4', sampleCount: 2},"
+            "{generation: 5, mean: '0.4', low: '-3', high: '4', sampleCount: 2}"
+            "]"
+            "});"
+        ),
+        read="window.__testDomain",
+        is_ready=lambda value: value is not None,
+    )
+
+    # Both points share the same `sampleCount` (2) -- the largest seen
+    # anywhere in this view is also 2, so the relative threshold (half
+    # of the largest) is satisfied by both, and their own real `[-3, 4]`
+    # band correctly widens the domain rather than being excluded.
+    assert settled["minValue"] == -3
+    assert settled["maxValue"] == 4
+
+
 def test_a_completed_batch_renders_the_run_view() -> None:
     """A finished two-replicate batch shows a run id, two table rows, and six stat rows.
 
@@ -386,6 +431,77 @@ def test_a_completed_batchs_own_pooled_trajectory_renders() -> None:
         "H_T",
     ]
     assert settled["canvasNonBlank"] > 0
+
+
+def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter() -> None:
+    """The completed batch scrubber (batch trajectory panel design
+    `20260912-claude-sonnet-5-batch-trajectory-panel-design.md`,
+    `selby/restricted`) shows, has a real generation range, and
+    scrubbing to a real frame updates the label without error.
+
+    `test/gui/test_app_api.py`'s own `test_get_batch_animation_frames_
+    ships_client_ready_pooled_panels` already proves the underlying
+    bridge call returns real, correctly shaped frames as a plain Python
+    call; this test proves the page's own JavaScript
+    (`wireCompletedBatchScrubber`) actually wires them into the shared
+    scrubber UI and that scrubbing itself redraws without throwing,
+    which no Python-only test can check. Waits on `window.
+    __fimScrubberPending` settling (`wireCompletedScrubber`'s own
+    established pattern, extended to its batch counterpart) rather than
+    guessing a delay is enough for the un-awaited bridge call to land.
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_STAGGERED_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    if not window.evaluate_js("window.__fimScrubberPending"):
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                before = window.evaluate_js(
+                    "({"
+                    "scrubberHidden: "
+                    "document.getElementById('scrubber-controls').hidden, "
+                    "scrubberMax: "
+                    "document.getElementById('scrubber-range').max"
+                    "})"
+                )
+                window.evaluate_js(
+                    "(function(){"
+                    "var range = document.getElementById('scrubber-range');"
+                    "range.value = Math.floor(Number(range.max) / 2);"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "})();"
+                )
+                after_scrub_label = window.evaluate_js(
+                    "document.getElementById('scrubber-label').textContent"
+                )
+                settled = {"before": before, "afterScrubLabel": after_scrub_label}
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, "batch never reached done within the wait budget"
+    assert settled["before"]["scrubberHidden"] is False
+    assert int(settled["before"]["scrubberMax"]) > 0
+    assert "Generation" in settled["afterScrubLabel"]
 
 
 def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None:

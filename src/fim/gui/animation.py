@@ -28,6 +28,7 @@ the caller, rather than re-verifying it a second time.
 
 from __future__ import annotations
 
+import bisect
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -36,8 +37,9 @@ from typing import Final
 
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
+from fim.persistence.store import TrajectoryRow
 from fim.reanalyze import group_rows_by_generation
-from fim.viz.scatter import FloatArray, frequency_points
+from fim.viz.scatter import FloatArray, frequency_points, pooled_frequency_points
 
 GUI_ANIMATION_MAX_FRAMES: Final = 100
 
@@ -98,6 +100,82 @@ def pre_render_frames(
         len(frames),
         len(grouped),
         trajectory_path,
+    )
+    return frames
+
+
+def pre_render_batch_frames(
+    replicates: Sequence[tuple[str, Path]],
+    params: SimulationParams,
+    *,
+    max_frames: int = GUI_ANIMATION_MAX_FRAMES,
+) -> list[AnimationFrame]:
+    """Sample up to `max_frames` *pooled* frames' worth of coordinates from a batch.
+
+    The completed-batch counterpart to `pre_render_frames`, needed
+    because a batch has no single `trajectory.jsonl` to sample from —
+    one per replicate instead, each stopping at its own generation
+    (batch trajectory panel design `20260912-claude-sonnet-5-batch-
+    trajectory-panel-design.md`, `selby/restricted`). A replicate that
+    already stopped by a given sampled generation contributes its own
+    *final* state at that point rather than dropping out of the pooled
+    frame entirely — the identical "hold each replicate's own last
+    value constant once it stops" choice `fim.engine.pooled_
+    convergence_histories` already makes for the trajectory panel's own
+    confidence band, applied here to the scatter instead: dropping a
+    converged replicate from later frames would be the same
+    survivorship-biased picture that function's own docstring explains
+    was a real, reported defect for the band.
+
+    Args:
+        replicates: One `(run_id, trajectory_path)` pair per replicate
+            — `run_id` is that replicate's own id (`RunResult.run_id`,
+            `"{batch_run_id}-r{index:03}"`), not the batch's own id,
+            matching every row's own recorded `run_id` in that
+            replicate's `trajectory.jsonl`.
+        params: The batch's own validated parameters, shared by every
+            replicate.
+        max_frames: See `select_sample_generations`.
+
+    Returns:
+        One `AnimationFrame` per sampled generation, sorted ascending
+        by generation, each `points` already pooled across every
+        replicate (`fim.viz.scatter.pooled_frequency_points`) — the
+        same per-frame shape `pre_render_frames` returns for a single
+        replicate, so the bridge method building the client payload
+        (`Api.get_batch_animation_frames`) converts it with the
+        identical `panels_from_points` call `get_animation_frames`
+        already uses, no batch-specific client shape needed. Empty if
+        no replicate has persisted anything yet.
+    """
+    per_replicate: list[tuple[list[int], dict[int, list[TrajectoryRow]]]] = []
+    for run_id, trajectory_path in replicates:
+        grouped = group_rows_by_generation(trajectory_path, run_id)
+        if grouped:
+            per_replicate.append((sorted(grouped), grouped))
+    if not per_replicate:
+        return []
+    max_generation = max(generations[-1] for generations, _ in per_replicate)
+    sampled = select_sample_generations(range(max_generation + 1), max_frames)
+    frames: list[AnimationFrame] = []
+    for generation in sampled:
+        states = []
+        for generations, grouped in per_replicate:
+            # The largest recorded generation at or before this sampled
+            # one -- always found (`index >= 0`), since every
+            # replicate's own first recorded generation is 0
+            # (`_run_one`'s own docstring: persisted unconditionally
+            # before the main loop ever runs) and every sampled
+            # generation is itself `>= 0`.
+            index = bisect.bisect_right(generations, generation) - 1
+            use_generation = generations[index]
+            states.append(ModelState.from_rows(grouped[use_generation], params.loci))
+        points = pooled_frequency_points(states)
+        frames.append(AnimationFrame(generation=generation, points=points))
+    logger.debug(
+        "pre-rendered %d pooled batch animation frame(s) from %d replicate(s)",
+        len(frames),
+        len(per_replicate),
     )
     return frames
 

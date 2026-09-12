@@ -51,7 +51,28 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `low`/`high` from its own range calculation (its `mean` still counts,
   and the point itself is still drawn, possibly clipped) rather than
   letting one unstable late point squash every earlier, better-
-  supported generation into an unreadable sliver.
+  supported generation into an unreadable sliver. The exclusion
+  threshold is relative, not absolute — a point counts toward the axis
+  once its own `sampleCount` reaches half of the largest `sampleCount`
+  seen anywhere in the current view — so a uniformly small completed
+  batch (fewer replicates than an absolute cutoff would require) still
+  gets its own real, stable band sized into the axis rather than
+  excluded outright.
+- A completed batch run gains the same generation scrubber a completed
+  scalar run already has (`wireCompletedBatchScrubber`, reusing the
+  existing `Api.get_animation_frames`/`wireCompletedScrubber`/
+  `window.fim.setScrubberFrames` pipeline's own client-side code
+  unchanged): dragging it replays the pooled scatter across every
+  recorded generation, backed by a new `Api.get_batch_animation_frames`
+  bridge method and `fim.gui.animation.pre_render_batch_frames`, which
+  pools each replicate's own trajectory file the same carried-forward
+  way `pooled_convergence_histories` now does, so a replicate that
+  stopped early still contributes its own frozen final state at every
+  later sampled generation rather than dropping out of the scrub
+  entirely. Scoped to the completed view only — a live run's scrubber
+  remains hidden for both scalar and batch runs, matching scalar's own
+  existing (never live) behavior; this closes the batch side of that
+  same gap, not a new asymmetry.
 - `dev/bin/validate-repository` now runs automatically in two places
   rather than only by hand. The `pre-push` hook runs it before every
   push, where the pinned Docker images are already warm and a failure

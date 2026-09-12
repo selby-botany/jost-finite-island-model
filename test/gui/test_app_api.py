@@ -2275,6 +2275,45 @@ def test_get_batch_deme_pair_panel_reports_no_replicates_without_raising(
     assert "message" in result
 
 
+def test_get_batch_animation_frames_ships_client_ready_pooled_panels(
+    tmp_path: Path,
+) -> None:
+    """The completed batch scrubber's own bridge call returns real, pooled panels.
+
+    Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+    trajectory-panel-design.md` (`selby/restricted`) -- `demeCount`/
+    `frames[*].panels`' own shape is identical to `get_animation_
+    frames`'s scalar return (confirmed directly against that test's
+    own assertions, immediately above this one in this file), so the
+    page's existing scrubber machinery needs no batch-specific reading
+    logic.
+    """
+    output = _write_run(tmp_path, d=2, n_replicates=3)
+
+    result = Api().get_batch_animation_frames(str(output))
+
+    assert result["ok"] is True
+    assert result["demeCount"] == 2
+    frames = result["frames"]
+    assert isinstance(frames, list)
+    assert len(frames) >= 2
+    assert frames[0]["generation"] == 0
+    for frame in frames:
+        panels = frame["panels"]
+        assert isinstance(panels, list)
+        assert len(panels) == 1
+        assert panels[0]["x_label"] == "Deme 1"
+
+
+def test_get_batch_animation_frames_reports_a_missing_batch_without_raising(
+    tmp_path: Path,
+) -> None:
+    result = Api().get_batch_animation_frames(str(tmp_path / "never-written"))
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
 class _FakeMenuWindow:
     """Minimal `webview.Window` stand-in for `_build_menu`'s own structural test.
 

@@ -66,7 +66,7 @@ from fim.engine import (
     reports_summary,
 )
 from fim.gui import batch_runner, presets, recent_runs, runner
-from fim.gui.animation import pre_render_frames
+from fim.gui.animation import pre_render_batch_frames, pre_render_frames
 from fim.gui.config_form import (
     field_for_error,
     form_values_to_payload,
@@ -2466,6 +2466,69 @@ class Api:
         except (OSError, ValueError) as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "panel": panel}
+
+    @_log_bridge_call
+    def get_batch_animation_frames(self, output_directory: str) -> dict[str, Any]:
+        """Sample and ship every pooled animation frame for a completed batch.
+
+        `get_animation_frames`'s own batch counterpart (batch trajectory
+        panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
+        design.md`, `selby/restricted`) -- the completed batch view's
+        own scrubber wires to this exactly like a scalar run's own
+        scrubber wires to `get_animation_frames`, both loading their
+        whole sampled set up front so play/pause/scrub are pure
+        client-side JavaScript afterward, zero further Python calls
+        during playback.
+
+        Reads the batch's own top-level manifest for `replicate_run_
+        ids` (each replicate's own real id, needed to validate that
+        replicate's own trajectory rows -- `fim.gui.animation.pre_
+        render_batch_frames`'s own `replicates` argument) rather than
+        re-deriving them from directory names, the same "read the
+        published, atomic artifacts on disk" source of truth `list_
+        recent_runs`/`open_run` already use.
+
+        Args:
+            output_directory: The batch's own top-level artifact
+                directory (Screen 4's `outputDirectory`).
+
+        Returns:
+            `{"ok": True, "demeCount", "frames": [{"generation",
+            "panels"}, ...]}` -- identical shape to `get_animation_
+            frames`'s own return, so the page's existing scrubber
+            machinery (`webui/screens/run-view-controls.js`'s own
+            `setScrubberFrames`) needs no batch-specific branch at all.
+            `{"ok": False, "message": ...}` if the batch manifest or
+            any replicate's own trajectory cannot be read.
+        """
+        directory = Path(output_directory)
+        try:
+            manifest = read_batch_manifest(directory / "manifest.json")
+            params = manifest.params()
+            replicates = [
+                (
+                    replicate_run_id,
+                    batch_runner.replicate_output_directory(
+                        directory, manifest.run_id, replicate_run_id
+                    )
+                    / "trajectory.jsonl",
+                )
+                for replicate_run_id in manifest.replicate_run_ids
+            ]
+            frames = pre_render_batch_frames(replicates, params)
+        except (OSError, ValueError, KeyError) as error:
+            return {"ok": False, "message": str(error)}
+        return {
+            "ok": True,
+            "demeCount": params.d,
+            "frames": [
+                {
+                    "generation": frame.generation,
+                    "panels": panels_from_points(frame.points, params.d),
+                }
+                for frame in frames
+            ],
+        }
 
     @_log_bridge_call
     def ping(self) -> str:

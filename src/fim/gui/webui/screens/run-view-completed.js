@@ -846,20 +846,71 @@ function buildTrajectoryLegendItem(name, label, swatchClassName) {
 // degree of freedom (`sampleCount === 2`) has a two-tailed 95% critical
 // value near 12.7, so a perfectly ordinary difference between two
 // replicates' own values can produce a `low`/`high` many times wider
-// than the statistic's own natural range. Confirmed live: the tail end
-// of a real, staggered-stopping batch's own `D` band reached `[-2.98,
-// 3.54]` for a statistic that never otherwise leaves roughly `[0, 1]`.
-// Left in the *data* unchanged (`pooled_convergence_histories` never
-// drops a point just because its own interval is wide -- design §
-// "a real, honest picture... not an artifact to smooth over") but
-// excluded from the *domain* calculation below: a single unstable
-// late point should not squash every earlier, better-supported point
-// into an unreadable sliver at the plot's own vertical center. The
-// mean is never excluded regardless of sample count -- only the
-// low/high band's own contribution to the axis range is gated, so the
-// central tendency's own story is always visible even when its
-// uncertainty band is not fully.
-const _MIN_SAMPLE_COUNT_FOR_DOMAIN = 4;
+// than the statistic's own natural range. Originally confirmed live
+// against `pooled_convergence_histories`'s own pre-carry-forward
+// behavior: the tail end of a real, staggered-stopping batch's own `D`
+// band reached `[-2.98, 3.54]` for a statistic that never otherwise
+// leaves roughly `[0, 1]`, because `sampleCount` shrank sharply as
+// replicates finished and dropped out of the pool. That engine-level
+// bug is now fixed at its own source (each replicate's own final value
+// is held constant once it stops, rather than dropped -- that
+// function's own docstring), which already keeps `sampleCount`
+// constant across every generation of one statistic's own completed
+// history. This *relative* threshold (a point counts only once its own
+// `sampleCount` is at least half of the largest `sampleCount` seen
+// anywhere in the current view) is what is left worth guarding
+// against: the *live* view's own accumulator (`run-view-running.js`'s
+// `liveBatchTrajectory`) still legitimately starts thin and grows
+// tick by tick as more replicates begin reporting, a real, still-
+// occurring case this same domain calculation is shared with. An
+// *absolute* cutoff was tried first and rejected: it would incorrectly
+// exclude a small (fewer than the cutoff) but otherwise perfectly
+// ordinary completed batch's own band from the domain entirely, since
+// carry-forward means every one of its points shares that same small
+// count uniformly, not just a thin tail.
+const _MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN = 0.5;
+
+/**
+ * Compute the y-axis domain `drawBatchTrajectoryCurve` plots against --
+ * factored out into its own pure function specifically so a test can
+ * assert on it directly (a hand-built payload in, a `{minValue,
+ * maxValue}` out), rather than only indirectly through rendered canvas
+ * pixels.
+ *
+ * A point's own `mean` always contributes to the domain, regardless of
+ * `sampleCount`; its own `low`/`high` contribute only once `sampleCount`
+ * reaches `_MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN` of the largest
+ * `sampleCount` seen anywhere in `visiblePooled` (see that constant's
+ * own comment for why a *relative*, not absolute, threshold) -- an
+ * unstable, thin-sample band still *draws* at its own true, possibly
+ * enormous width (canvas silently clips whatever falls outside
+ * `[plotTop, plotBottom]`, the same as it would for any other value
+ * outside the visible area), it simply never gets to decide how far
+ * the axis itself stretches for every other, better-supported point.
+ * @param {Record<string, Array<{mean: string, low: string, high: string,
+ *     sampleCount: number}>>} visiblePooled
+ * @returns {{minValue: number, maxValue: number}}
+ */
+function computeBatchTrajectoryValueDomain(visiblePooled) {
+    const allPoints = Object.values(visiblePooled).flat();
+    const maxSampleCount = Math.max(0, ...allPoints.map((point) => point.sampleCount));
+    const minSampleCountForDomain = maxSampleCount * _MIN_SAMPLE_COUNT_FRACTION_FOR_DOMAIN;
+    const allValues = allPoints.flatMap((point) => {
+        const values = [Number(point.mean)];
+        if (point.sampleCount >= minSampleCountForDomain) {
+            values.push(Number(point.low), Number(point.high));
+        }
+        return values;
+    });
+    // The domain always includes [0, 1], matching `drawTrajectoryCurve`'s
+    // own identical reasoning: every named statistic's own natural range
+    // starts there, so this reads against the same fixed floor/ceiling a
+    // reader of any other statistic on this page already expects.
+    return {
+        minValue: Math.min(0, ...allValues),
+        maxValue: Math.max(1, ...allValues),
+    };
+}
 
 /**
  * Draw a completed batch's own pooled trajectory (batch trajectory
@@ -885,46 +936,6 @@ const _MIN_SAMPLE_COUNT_FOR_DOMAIN = 4;
  *     `drawTrajectoryCurve` already established for its own
  *     `visiblePlottable` argument.
  */
-/**
- * Compute the y-axis domain `drawBatchTrajectoryCurve` plots against --
- * factored out into its own pure function specifically so a test can
- * assert on it directly (a hand-built payload in, a `{minValue,
- * maxValue}` out), rather than only indirectly through rendered canvas
- * pixels.
- *
- * A point's own `mean` always contributes to the domain, regardless of
- * `sampleCount`; its own `low`/`high` contribute only once `sampleCount`
- * reaches `_MIN_SAMPLE_COUNT_FOR_DOMAIN` (see that constant's own
- * comment for the confirmed-live case this excludes) -- an unstable,
- * thin-sample band still *draws* at its own true, possibly enormous
- * width (canvas silently clips whatever falls outside `[plotTop,
- * plotBottom]`, the same as it would for any other value outside the
- * visible area), it simply never gets to decide how far the axis
- * itself stretches for every other, better-supported point.
- * @param {Record<string, Array<{mean: string, low: string, high: string,
- *     sampleCount: number}>>} visiblePooled
- * @returns {{minValue: number, maxValue: number}}
- */
-function computeBatchTrajectoryValueDomain(visiblePooled) {
-    const allValues = Object.values(visiblePooled).flatMap((points) =>
-        points.flatMap((point) => {
-            const values = [Number(point.mean)];
-            if (point.sampleCount >= _MIN_SAMPLE_COUNT_FOR_DOMAIN) {
-                values.push(Number(point.low), Number(point.high));
-            }
-            return values;
-        })
-    );
-    // The domain always includes [0, 1], matching `drawTrajectoryCurve`'s
-    // own identical reasoning: every named statistic's own natural range
-    // starts there, so this reads against the same fixed floor/ceiling a
-    // reader of any other statistic on this page already expects.
-    return {
-        minValue: Math.min(0, ...allValues),
-        maxValue: Math.max(1, ...allValues),
-    };
-}
-
 function drawBatchTrajectoryCurve(canvas, visiblePooled) {
     const context = canvas.getContext("2d");
     const width = canvas.width;
@@ -1448,6 +1459,54 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
 }
 
 /**
+ * The batch counterpart to `wireCompletedScrubber` -- a completed
+ * batch's own scrubber replays its *pooled* scatter across replicates,
+ * generation by generation (batch trajectory panel design `20260912-
+ * claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/
+ * restricted`, scoped to the completed view only -- there is no live-
+ * run scrubber for either run type today, a separate, larger, deferred
+ * design). Shares `scrubberControls`/`window.fim.setScrubberFrames`
+ * unchanged with the scalar case; only the bridge call
+ * (`get_batch_animation_frames`, not `get_animation_frames`) and the
+ * per-tick redraw differ -- no `updateScrubbedTrajectory` call here,
+ * since that function updates the *scalar* stats table/trajectory
+ * marker specifically, neither of which a batch's own completed view
+ * has (`renderBatchSummary`'s own always-current final summary, and
+ * `renderBatchTrajectory`'s own pooled band, are not scrub-tick-aware
+ * yet -- left as a future enhancement, not attempted here).
+ *
+ * @param {string} outputDirectory
+ */
+async function wireCompletedBatchScrubber(outputDirectory) {
+    window.__fimScrubberPending = (window.__fimScrubberPending || 0) + 1;
+    try {
+        const result = await window.pywebview.api.get_batch_animation_frames(
+            outputDirectory
+        );
+        // Same staleness guard as `wireCompletedScrubber`'s own --
+        // this call is un-awaited by its own caller, so the state may
+        // already have moved on by the time it resolves.
+        if (
+            window.fim.getRunViewState() !== "completed" ||
+            window.fim.getCompletedOutputDirectory() !== outputDirectory
+        ) {
+            return;
+        }
+        if (!result.ok || result.frames.length === 0) {
+            scrubberControls.hidden = true;
+            window.fim.resetScrubber();
+            return;
+        }
+        scrubberControls.hidden = false;
+        window.fim.setScrubberFrames(result.frames, (frame) => {
+            drawCompletedOverview(frame.panels);
+        });
+    } finally {
+        window.__fimScrubberPending -= 1;
+    }
+}
+
+/**
  * Enter `completed`: render a just-finished (or re-opened) run's own
  * summary. The one shared entry point every caller uses.
  *
@@ -1503,18 +1562,17 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         resultsOutcome.textContent = "";
         renderBatchSummary(payload.summary);
         renderBatchTable(payload.replicates, payload.p0Statistics);
-        scrubberControls.hidden = true;
-        window.fim.resetScrubber();
-        // A batch's own `completed` view is a pooled final-state
-        // scatter across replicates (this file's own module docstring)
-        // -- still nothing for a scrub tick to ever answer (there is no
-        // scrubber to wire for a batch at all), but, as of batch
-        // trajectory panel design `20260912-claude-sonnet-5-batch-
-        // trajectory-panel-design.md` (`selby/restricted`) commit 2, no
-        // longer nothing to plot: `renderBatchTrajectory` (not
-        // `renderTrajectory`, which assumes one shared generation list
-        // every statistic's own history aligns against -- an assumption
-        // `payload.pooledConvergenceHistories`'s own per-point-scoped
+        // A batch's own completed scrubber replays the pooled scatter
+        // across replicates, generation by generation
+        // (`wireCompletedBatchScrubber`'s own docstring) -- added
+        // alongside the trajectory panel below, both parts of the same
+        // batch trajectory panel design `20260912-claude-sonnet-5-
+        // batch-trajectory-panel-design.md` (`selby/restricted`).
+        wireCompletedBatchScrubber(payload.outputDirectory);
+        // `renderBatchTrajectory` (not `renderTrajectory`, which
+        // assumes one shared generation list every statistic's own
+        // history aligns against -- an assumption `payload.
+        // pooledConvergenceHistories`'s own per-point-scoped
         // generations do not hold) draws the real, authoritative
         // cross-replicate aggregate.
         completedTrajectoryGenerations = null;
