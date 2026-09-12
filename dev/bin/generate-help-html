@@ -46,15 +46,77 @@ from __future__ import annotations
 
 import argparse
 import html
+import importlib.util
+import os
 import re
 import sys
 from collections import Counter
 from pathlib import Path
 from re import Match
 
-from markdown_it import MarkdownIt
-
 ROOT = Path(__file__).resolve().parents[2]
+
+_REEXEC_SENTINEL = "_FIM_GENERATE_HELP_HTML_REEXEC"
+
+
+def _ensure_project_interpreter() -> None:
+    """Re-exec under this repository's own Python if `markdown_it` is not
+    installed for whichever interpreter this process is already running.
+
+    This script's `#!/usr/bin/env python3` shebang resolves whatever
+    `python3` happens to be first on the caller's own `PATH` -- for a
+    plain shell that never ran `source .venv-312/bin/activate` (or
+    activated some *other* worktree's own `.venv-312`, a mistake a
+    background agent has made more than once this session), that is very
+    unlikely to be a Python with this project's `[dev]` extra, and
+    therefore `markdown-it-py`, installed. Rather than depend on that
+    activation step at all, the one already-active interpreter is used
+    as-is when it already has the package (so an already-activated,
+    valid venv sees no behavior change); otherwise this process re-execs
+    itself under `bin/python3` -- the same repository-relative wrapper
+    `bin/pydoc-markdown`, `bin/mypy`, `bin/ruff`, and `bin/pytest`
+    already resolve through -- which finds a real project virtualenv
+    purely from the repository's own path, with no dependency on shell
+    activation, and exits with its own clear, actionable message if none
+    exists at all. One rule, applied consistently, rather than a
+    "sometimes uses PATH, sometimes doesn't" hybrid.
+
+    The `_REEXEC_SENTINEL` environment variable guards against looping
+    forever if the resolved interpreter *still* lacks the package (for
+    example, a `bin/python3` PATH fallback that finds some unrelated
+    system Python 3.12+): the second attempt reports a plain, specific
+    error instead of re-execing again.
+    """
+    if importlib.util.find_spec("markdown_it") is not None:
+        return
+
+    if os.environ.get(_REEXEC_SENTINEL) == "1":
+        sys.stderr.write(
+            f"generate-help-html: markdown_it is not installed under "
+            f"{sys.executable}\n"
+            "Install the project's dev dependencies: python -m pip "
+            'install -e ".[dev]"\n'
+        )
+        raise SystemExit(1)
+
+    project_python = ROOT / "bin" / "python3"
+    if not project_python.is_file():
+        sys.stderr.write(
+            f"generate-help-html: {project_python} not found -- run this "
+            "script from within the jost-finite-island-model repository\n"
+        )
+        raise SystemExit(1)
+
+    env = dict(os.environ)
+    env[_REEXEC_SENTINEL] = "1"
+    script = str(Path(__file__).resolve())
+    os.execve(str(project_python), [str(project_python), script, *sys.argv[1:]], env)
+
+
+_ensure_project_interpreter()
+
+import markdown_it  # noqa: E402 -- must follow the interpreter bootstrap above
+
 sys.path.insert(0, str(ROOT / "dev" / "lib"))
 from docslug import anchor_for  # noqa: E402 -- must follow the sys.path insert above
 
@@ -249,7 +311,7 @@ def render_doc(filename: str) -> str:
     """Render one embedded doc's Markdown source to a body-only HTML fragment."""
     source = (DOC_DIR / filename).read_text(encoding="utf-8")
     source = render_inline_math(source)
-    renderer = MarkdownIt("gfm-like", {"html": True}).disable("linkify")
+    renderer = markdown_it.MarkdownIt("gfm-like", {"html": True}).disable("linkify")
     rendered = renderer.render(source)
     rendered = inject_header_ids(rendered)
     return rewrite_links(rendered)

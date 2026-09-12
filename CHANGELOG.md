@@ -412,6 +412,47 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `dev/bin/generate-test-docs` and `dev/bin/generate-help-html` no
+  longer depend on the invoking shell having already activated a
+  project virtualenv. Both scripts previously assumed a bare
+  `pydoc-markdown` (the former, via `subprocess.run`) or a bare
+  `python3` shebang with `markdown-it-py` already importable (the
+  latter) would resolve correctly on the caller's own `PATH` — an
+  assumption a background agent repeatedly broke this session by
+  forgetting `source .venv-312/bin/activate` entirely, or by activating
+  a *different* worktree's own `.venv-312`, either crashing the
+  generator outright (`FileNotFoundError: pydoc-markdown`,
+  `ModuleNotFoundError: No module named 'markdown_it'`) or — worse —
+  silently regenerating committed documentation from the wrong source
+  tree. `generate-test-docs` now widens its subprocess `PATH` with this
+  repository's own `bin/` before invoking `pydoc-markdown`, the same
+  technique `dev/bin/generate-api-docs` already used; `bin/pydoc-
+  markdown` resolves a real project virtualenv purely from the
+  repository's own path (via `bin/python3`), with no dependency on
+  shell activation. `generate-help-html` now checks, before importing
+  `markdown_it`, whether its own interpreter already has the package
+  and — if not — re-execs itself once under `bin/python3`. Both
+  generators fall back to `bin/python3`'s own clear, actionable message
+  ("Python 3.12 or newer was not found — create .venv with Python
+  3.12+...") instead of a raw traceback when no project virtualenv
+  exists at all, and `generate-test-docs`'s own top-level error handling
+  now reports a failed `pydoc-markdown` invocation the same way rather
+  than an unhandled `subprocess.CalledProcessError`. An already-activated
+  virtualenv's own tools still take precedence when present — one
+  consistent rule (prefer what's already active, fall back to the
+  repository's own resolution), not a "sometimes uses `PATH`, sometimes
+  doesn't" hybrid. `dev/bin/generate-api-docs` needed no change: its
+  existing `PATH="${root}/bin:${PATH}"` widening already routed through
+  the same `bin/pydoc-markdown` wrapper. Verified with a genuinely clean
+  environment (`env -i PATH=/usr/bin:/bin`, no venv activated and no
+  `pydoc-markdown` on `PATH` at all): all three generators now produce
+  output byte-identical to a normal activated-venv run, and all three
+  fail with the same clear message (rather than a traceback) when no
+  `.venv*` directory exists anywhere under the repository root at all.
+  `test/validation/test_api_docs.py` and `test/validation/
+  test_test_docs.py` each gained a regression test running their
+  generator under this same unactivated `PATH` and asserting its output
+  matches an ordinary run byte-for-byte.
 - The secret scan in `dev/bin/validate-repository` now scans the
   project's commit history (`gitleaks git`) rather than the working
   tree (`gitleaks dir`). Scanning files on disk meant reading three

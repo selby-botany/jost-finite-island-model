@@ -8,6 +8,14 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = PROJECT_ROOT / "dev" / "bin" / "generate-test-docs"
 
+# A minimal, `.venv*`-free `PATH` -- no activated virtualenv, and none of
+# this repository's own `bin/` wrappers pre-added by a caller (`pytest`
+# itself always runs from inside an activated virtualenv, so this is the
+# only way to actually exercise the "plain, unactivated shell" case a
+# background agent hits when it forgets, or targets the wrong worktree's
+# own `.venv-312`, entirely from within the test suite).
+_UNACTIVATED_PATH = "/usr/bin:/bin"
+
 # Mirrors `generate-test-docs`'s own `_GROUPS` tuple -- kept as a
 # separate, independently-written list (not imported from the
 # generator) so this test can actually catch the generator's own
@@ -67,3 +75,42 @@ def test_every_test_directory_is_a_documented_group() -> None:
     }
     documented = {group for group in _GROUPS if group}
     assert actual == documented
+
+
+def test_generator_runs_without_an_activated_virtualenv(tmp_path: Path) -> None:
+    """The generator resolves its own virtualenv from the repository's own
+    path, with no dependency on the caller's shell having activated one
+    first -- the exact recurring failure mode (a background agent
+    forgetting, or activating the wrong worktree's own `.venv-312`) this
+    generator's `pydoc-markdown` `PATH` widening (mirroring `dev/bin/
+    generate-api-docs`'s own) exists to eliminate.
+
+    Compared against a normal, ordinary-environment run rather than the
+    committed `test/TESTS.md` -- freshness of the committed file against
+    the real test tree is `pre-push`'s own job; this test's own job is
+    narrower: confirm the two environments produce identical output.
+    """
+    unactivated_output = tmp_path / "unactivated" / "TESTS.md"
+    ordinary_output = tmp_path / "ordinary" / "TESTS.md"
+
+    unactivated = subprocess.run(
+        [str(GENERATOR), str(unactivated_output)],
+        cwd=PROJECT_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": _UNACTIVATED_PATH},
+    )
+    ordinary = subprocess.run(
+        [str(GENERATOR), str(ordinary_output)],
+        cwd=PROJECT_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert unactivated.returncode == 0, unactivated.stderr
+    assert ordinary.returncode == 0, ordinary.stderr
+    assert unactivated_output.read_text(encoding="utf-8") == ordinary_output.read_text(
+        encoding="utf-8"
+    )

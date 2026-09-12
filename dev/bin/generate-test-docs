@@ -44,12 +44,14 @@ Arguments:
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
+_BIN_DIR = _ROOT / "bin"
 _TEST_ROOT = _ROOT / "test"
 _DEFAULT_OUTPUT = _TEST_ROOT / "TESTS.md"
 
@@ -115,6 +117,24 @@ def _render_modules(directory: Path, modules: list[str], label: str) -> str:
     so a same-named file in a different group can never be the one
     actually resolved.
 
+    A bare `"pydoc-markdown"` on this process's own ambient `PATH` is
+    exactly the fragile assumption this generator used to make: it
+    depends on the caller's shell having already activated the right
+    virtualenv (`source .venv-312/bin/activate`), a step a background
+    agent has repeatedly forgotten or performed against the wrong
+    worktree's own `.venv-312`, either crashing this generator outright
+    or -- worse -- silently documenting the wrong source tree. Prepending
+    this repository's own `bin/` here is the identical `PATH` widening
+    `dev/bin/generate-api-docs` already applies for its own
+    `pydoc-markdown` call: `bin/pydoc-markdown` resolves a real project
+    virtualenv purely from the repository's own path (via `bin/
+    python3`), with no dependency on shell activation at all, and prints
+    a clear, actionable message of its own if no such virtualenv exists.
+    An already-activated virtualenv's own `pydoc-markdown` still wins
+    when present (it precedes `bin/` on the resulting `PATH`) -- one
+    consistent rule, not a "sometimes uses PATH, sometimes doesn't"
+    hybrid.
+
     Args:
         directory: The one directory `pydoc-markdown`'s own `-I` search
             path is scoped to.
@@ -126,8 +146,13 @@ def _render_modules(directory: Path, modules: list[str], label: str) -> str:
         The qualified Markdown for every module in `modules`, in order.
 
     Raises:
-        subprocess.CalledProcessError: If `pydoc-markdown` itself fails.
+        subprocess.CalledProcessError: If `pydoc-markdown` itself fails
+            (including a real project virtualenv being unresolvable at
+            all -- `bin/python3`'s own stderr, propagated in
+            `error.stderr`, names the missing virtualenv explicitly).
     """
+    env = dict(os.environ)
+    env["PATH"] = f"{_BIN_DIR}{os.pathsep}{env.get('PATH', '')}"
     command = ["pydoc-markdown", "-q", "-I", str(directory)]
     for module in modules:
         command.extend(["-m", module])
@@ -137,6 +162,7 @@ def _render_modules(directory: Path, modules: list[str], label: str) -> str:
         capture_output=True,
         text=True,
         cwd=_ROOT,
+        env=env,
     )
     text = result.stdout
     for module in modules:
@@ -228,7 +254,29 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    document = _render_document()
+    # A missing/unresolvable `pydoc-markdown` (no project virtualenv
+    # anywhere under the repository root, and none on the ambient PATH
+    # either) is reported here as one clear, actionable line -- not the
+    # raw `subprocess.CalledProcessError`/`FileNotFoundError` traceback
+    # a caller would otherwise see, which names neither the missing
+    # tool nor the fix.
+    try:
+        document = _render_document()
+    except subprocess.CalledProcessError as error:
+        sys.stderr.write(
+            f"generate-test-docs: {' '.join(error.cmd)} failed "
+            f"(exit {error.returncode})\n"
+        )
+        if error.stderr:
+            sys.stderr.write(error.stderr)
+        return 1
+    except FileNotFoundError as error:
+        sys.stderr.write(
+            f"generate-test-docs: could not run pydoc-markdown: {error}\n"
+            "Build the project virtualenv: python3.12 -m venv .venv-312 "
+            '&& .venv-312/bin/python -m pip install -e ".[dev]"\n'
+        )
+        return 1
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(document, encoding="utf-8")
     print(f"generate-test-docs: wrote {args.output}", file=sys.stderr)
