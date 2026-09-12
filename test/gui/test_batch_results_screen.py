@@ -510,6 +510,16 @@ def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None:
     appears... so it is never visually confusable with" the within-run
     sigma band) — `webui/meters.js`'s own `ciCaption`, not a second,
     independently worded phrase.
+
+    It also states the two numbers the rest of that same §7.2 sentence
+    asks for — "both the confidence-interval half-width and the
+    equivalent sample standard deviation" (sample-standard-deviation
+    tooltip design `20260912-claude-sonnet-5-sample-std-dev-tooltip-
+    design.md`, `selby/restricted`) — spelled out rather than as a sigma
+    glyph, which this GUI reserves for the within-run band the caption
+    exists to stay distinguishable from. Checked in the same real-batch
+    pass rather than as a second window test, since it is the same one
+    tooltip string.
     """
     done_event = threading.Event()
     messages: list[RunMessage | BatchMessage] = []
@@ -547,6 +557,12 @@ def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None:
     )
     # `_SET_TINY_BATCH_FIELDS` requests 2 replicates.
     assert "uncertainty across 2 independent replicates" in tooltip
+    assert "half-width " in tooltip
+    assert "equivalent sample standard deviation " in tooltip
+    # The sigma glyph belongs to the within-run band, not to this one
+    # (spelled as a code point so this file itself stays plain ASCII,
+    # matching every other Python module here, which writes "sigma").
+    assert chr(0x03C3) not in tooltip
 
 
 def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:

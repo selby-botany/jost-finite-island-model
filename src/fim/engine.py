@@ -2320,7 +2320,11 @@ def replicate_summary(
 
     Returns:
         One `ConfidenceInterval` per statistic name in `FinalReport`
-        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``).
+        (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
+        ``Gs``, ``Gd`` — the same nine `reports_summary` itself lists,
+        restated here rather than abbreviated, since this list had
+        silently kept naming only the first seven after ``Gs``/``Gd``
+        were added).
         ``G_ST`` is undefined for a replicate whose locus is monomorphic
         across every deme (``H_T == 0``); such replicates are dropped
         from ``G_ST``'s own sample rather than papered over with a
@@ -2524,6 +2528,18 @@ def _bootstrap_interval(
     consistency with every other `ConfidenceInterval` this project
     reports — `low`/`high` are the authoritative bounds whenever the
     true interval is asymmetric, not `mean` plus or minus this value.
+    `sample_std` is `None` for the same reason, stated one step more
+    strongly: this constructor never sees a per-replicate sample of the
+    statistic at all — only a point estimate and a distribution of
+    *resampled grand ratios* — so there is no sample whose standard
+    deviation could be reported. (The standard deviation of
+    `bootstrap_values` itself is a bootstrap standard error of the point
+    estimate, a different quantity that would read identically under
+    that name; it is deliberately not substituted here.) `None` is
+    therefore also the signal a display layer reads as "this interval
+    has no honest symmetric summary at all — show `low`/`high`, not
+    `mean` plus or minus anything."
+
     `sample_count` is the number of *original* replicates the point
     estimate and every resample were drawn from, matching `confidence_
     interval`'s own meaning for that field — not the number of
@@ -2538,6 +2554,7 @@ def _bootstrap_interval(
         "half_width": (high - low) / 2.0,
         "low": low,
         "high": high,
+        "sample_std": None,
         "sample_count": sample_count,
         "confidence": confidence,
     }

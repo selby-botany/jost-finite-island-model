@@ -2,6 +2,7 @@
 
 import functools
 import itertools
+import math
 import statistics
 from collections.abc import Sequence
 from dataclasses import replace
@@ -1125,6 +1126,39 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
     assert summary["D"]["confidence"] == 0.95
 
 
+def test_replicate_summary_reports_a_real_sample_standard_deviation(
+    tiny_params: SimulationParams,
+) -> None:
+    """Every Student's-t interval carries the spread of its own replicates.
+
+    The sample-standard-deviation half of botanist GUI design doc
+    `20260907-claude-sonnet-5-botanist-gui-redesign.md` §7.2 (see
+    `20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+    `selby/restricted`): `confidence_interval` is the symmetric
+    constructor, so `sample_std` is a real number here for every
+    statistic — never `None`, which this project reserves for the
+    percentile-bootstrap constructor that has no single honest value to
+    report (see the bootstrap counterpart test below).
+    """
+    params = SimulationParams.from_mapping({**tiny_params.to_dict(), "n_replicates": 5})
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+
+    summary = replicate_summary(output)
+
+    for name, interval in summary.items():
+        sample_std = interval["sample_std"]
+        assert sample_std is not None, name
+        assert sample_std >= 0.0, name
+    # Recomputed straight from the same replicates' own `D` draws, so
+    # this pins the reported number against the sample it claims to
+    # describe rather than against the implementation's own expression.
+    draws = [result.report["D"] for result in output]
+    mean = statistics.fmean(draws)
+    variance = sum((value - mean) ** 2 for value in draws) / (len(draws) - 1)
+    assert summary["D"]["sample_std"] == pytest.approx(math.sqrt(variance))
+
+
 def test_replicate_summary_covers_every_numeric_final_report_key(
     tiny_params: SimulationParams,
 ) -> None:
@@ -1673,6 +1707,41 @@ def test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate(
         assert interval["low"] <= interval["mean"] <= interval["high"], statistic
         assert interval["sample_count"] == len(output)
         assert interval["confidence"] == 0.95
+
+
+def test_bootstrap_replicate_summary_reports_no_sample_standard_deviation(
+    tiny_params: SimulationParams,
+) -> None:
+    """A percentile-bootstrap interval reports `sample_std` as `None`.
+
+    The deliberate asymmetric case of the sample-standard-deviation
+    design (`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+    `selby/restricted`, approach A1): `_bootstrap_interval` never sees a
+    per-replicate sample of the statistic at all — only a point estimate
+    and a distribution of resampled *grand ratios* — so there is no
+    single number that honestly describes how much the replicates
+    differ from each other. `None` states that affirmatively, and is
+    what the GUI's own tooltip reads as "this interval has no honest
+    symmetric summary; show `low`/`high` alone."
+
+    Paired with an explicit check that the interval really is asymmetric
+    here, so this test cannot pass for the uninteresting reason that the
+    bootstrap happened to reproduce a symmetric interval on this batch.
+    """
+    params = SimulationParams.from_mapping(
+        {**tiny_params.to_dict(), "n_replicates": 8, "replicate_tolerance": None}
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+
+    summary = bootstrap_replicate_summary(output, rng=np.random.default_rng(3))
+
+    assert summary, "the bootstrap summary defines at least `D`"
+    for statistic, interval in summary.items():
+        assert interval["sample_std"] is None, statistic
+    left = summary["D"]["mean"] - summary["D"]["low"]
+    right = summary["D"]["high"] - summary["D"]["mean"]
+    assert left != pytest.approx(right, abs=1e-12)
 
 
 def test_bootstrap_replicate_summary_is_deterministic_for_a_given_rng_state(

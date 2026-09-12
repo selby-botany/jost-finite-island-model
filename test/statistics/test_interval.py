@@ -213,17 +213,73 @@ class ConfidenceIntervalTests(unittest.TestCase):
         self.assertAlmostEqual(interval["low"], 2.0 - expected_half_width, places=12)
         self.assertAlmostEqual(interval["high"], 2.0 + expected_half_width, places=12)
 
+    def test_sample_standard_deviation_matches_the_hand_computed_spread(self) -> None:
+        """`sample_std` is the Bessel-corrected spread of the values themselves.
+
+        Botanist GUI design doc §7.2 asks the batch meter's own tooltip
+        to state "the equivalent sample standard deviation" beside the
+        interval — a statement about how much the *replicates* differ
+        from each other, not about how precisely their mean is known
+        (`half_width`, which shrinks as replicates are added while this
+        number does not). Hand-computed here from the same three values,
+        dividing by `n - 1`, rather than restating the implementation's
+        own expression.
+        """
+        interval = confidence_interval([1.0, 2.0, 3.0], confidence=0.95)
+        sample_std = interval["sample_std"]
+        assert sample_std is not None
+        # mean 2.0; squared deviations 1.0, 0.0, 1.0; divided by n - 1 = 2.
+        self.assertAlmostEqual(sample_std, 1.0, places=12)
+
+    def test_half_width_is_the_critical_value_times_the_standard_error(self) -> None:
+        """`half_width` and `sample_std` stay algebraically consistent.
+
+        The two fields are two views of one computed variance, so this
+        pins them against each other (`half_width == t * sample_std /
+        sqrt(n)`) rather than recomputing the same formula from the raw
+        values twice — a later change that recomputed one of them from a
+        different sample, or forgot Bessel's correction in only one
+        place, shows up here and nowhere else.
+        """
+        values = [0.1, 0.4, 0.35, 0.9, 0.55]
+        interval = confidence_interval(values, confidence=0.99)
+        sample_std = interval["sample_std"]
+        assert sample_std is not None
+        expected = (
+            student_t_critical_value(len(values) - 1, 0.99)
+            * sample_std
+            / math.sqrt(len(values))
+        )
+        self.assertAlmostEqual(interval["half_width"], expected, places=12)
+
     def test_identical_values_produce_a_zero_width_interval(self) -> None:
         """No variance in the sample means a certain, zero-width interval."""
         interval = confidence_interval([0.5, 0.5, 0.5, 0.5], confidence=0.95)
         self.assertEqual(interval["half_width"], 0.0)
         self.assertEqual(interval["low"], interval["high"])
+        self.assertEqual(interval["sample_std"], 0.0)
 
     def test_more_replicates_at_the_same_spread_tightens_the_interval(self) -> None:
-        """Doubling a repeated pattern's replicate count shrinks the interval."""
+        """Doubling a repeated pattern's replicate count shrinks the interval.
+
+        The two reported spreads scale differently, which is the whole
+        reason §7.2's own tooltip states both: `half_width` describes
+        how precisely the *mean* is known and falls steeply as
+        replicates are added, while `sample_std` describes how much the
+        *replicates* differ from each other and barely moves (here, only
+        because Bessel's correction is milder at 40 values than at 4 —
+        the underlying pattern is identical). Asserted as "one drops by
+        more than a factor of three while the other stays within 20%"
+        rather than with a tight equality, since the correction's own
+        shift is real and should not be asserted away.
+        """
         small = confidence_interval([1.0, 2.0, 3.0, 4.0])
         large = confidence_interval([1.0, 2.0, 3.0, 4.0] * 10)
-        self.assertLess(large["half_width"], small["half_width"])
+        self.assertLess(large["half_width"], small["half_width"] / 3.0)
+        small_std, large_std = small["sample_std"], large["sample_std"]
+        assert small_std is not None
+        assert large_std is not None
+        self.assertLess(abs(large_std - small_std), 0.2 * small_std)
 
     def test_default_confidence_is_ninety_five_percent(self) -> None:
         """Omitting `confidence` matches the documented 95% default."""

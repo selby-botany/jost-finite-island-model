@@ -665,7 +665,8 @@ Written only for n<sub>replicates</sub> greater than one, alongside the
 files above.
 
 `summary.json` maps each reported statistic name (`D`, G<sub>ST</sub>, E<sub>ST</sub>,
-K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>) to its across-replicate confidence interval:
+K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, G<sub>s</sub>, G<sub>d</sub>) to its across-replicate
+confidence interval:
 
 ```json
 {
@@ -674,11 +675,35 @@ K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>) to its across-repl
     "half_width": 0.021,
     "low": 0.622,
     "high": 0.664,
+    "sample_std": 0.133,
     "sample_count": 40,
     "confidence": 0.95
   }
 }
 ```
+
+`half_width` and `sample_std` answer two different questions, and it is
+worth keeping them apart:
+
+- `half_width` is how precisely the **average** is known — the "± 0.021"
+  half of a "0.643 ± 0.021" report. Running more replicates shrinks it.
+- `sample_std` is how much the **replicates themselves** differ from one
+  another. Running more replicates does not shrink it, because it
+  describes the model's own run-to-run variability rather than your
+  measurement of it.
+
+`sample_std` can also be `null`, meaning "this interval has no single
+honest value to report here." That happens only for an interval built by
+resampling rather than by the ordinary Student's-t formula (see
+`fim.engine.bootstrap_replicate_summary`), whose two sides are not
+generally the same width — for such an interval, read `low` and `high`
+as the real bounds rather than treating `mean` ± `half_width` as the
+whole story. Every interval the command line writes today reports a real
+number.
+
+A `summary.json` written by an older version of this program has no
+`sample_std` field at all. Nothing needs converting: every tool here
+reads such a file as though the value were `null`.
 
 G<sub>ST</sub> can have a smaller sample_count than the other statistics: a
 replicate whose locus is monomorphic across every deme reports G<sub>ST</sub> as

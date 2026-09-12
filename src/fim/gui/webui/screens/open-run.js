@@ -355,7 +355,14 @@ function formatRowConfigSummary(configSummary) {
  * is stated once, as a leading note, rather than six times over --
  * repeating an identical caption after every one of six statistics
  * would bury the actual numbers this cell exists to show.
- * @param {Record<string, string | {mean: string, low: string, high: string, sampleCount: number}> | null} statistics
+ *
+ * The same reasoning keeps `halfWidth`/`sampleStd` out of this cell,
+ * even though the payload carries them (`fim.gui.app._interval_payload`):
+ * §7.2 asks for those two numbers in "the meter's tooltip"
+ * (`meters.js`'s own `buildCiMeter`), and six more "half-width X,
+ * equivalent sample standard deviation Y" clauses on one line would
+ * bury exactly what this cell is for.
+ * @param {Record<string, string | {mean: string, low: string, high: string, sampleCount: number, halfWidth?: string, sampleStd?: string}> | null} statistics
  * @returns {string}
  */
 function formatRowStatistics(statistics) {

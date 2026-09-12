@@ -3070,6 +3070,26 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
 
 The batch summary covers every statistic with at least two samples.
 
+<a id="engine.test_engine.test_replicate_summary_reports_a_real_sample_standard_deviation"></a>
+
+#### test\_replicate\_summary\_reports\_a\_real\_sample\_standard\_deviation
+
+```python
+def test_replicate_summary_reports_a_real_sample_standard_deviation(
+        tiny_params: SimulationParams) -> None
+```
+
+Every Student's-t interval carries the spread of its own replicates.
+
+The sample-standard-deviation half of botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §7.2 (see
+`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+`selby/restricted`): `confidence_interval` is the symmetric
+constructor, so `sample_std` is a real number here for every
+statistic — never `None`, which this project reserves for the
+percentile-bootstrap constructor that has no single honest value to
+report (see the bootstrap counterpart test below).
+
 <a id="engine.test_engine.test_replicate_summary_covers_every_numeric_final_report_key"></a>
 
 #### test\_replicate\_summary\_covers\_every\_numeric\_final\_report\_key
@@ -3415,6 +3435,31 @@ def test_bootstrap_replicate_summary_interval_contains_its_own_point_estimate(
 ```
 
 The reported interval actually brackets the reported point estimate.
+
+<a id="engine.test_engine.test_bootstrap_replicate_summary_reports_no_sample_standard_deviation"></a>
+
+#### test\_bootstrap\_replicate\_summary\_reports\_no\_sample\_standard\_deviation
+
+```python
+def test_bootstrap_replicate_summary_reports_no_sample_standard_deviation(
+        tiny_params: SimulationParams) -> None
+```
+
+A percentile-bootstrap interval reports `sample_std` as `None`.
+
+The deliberate asymmetric case of the sample-standard-deviation
+design (`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+`selby/restricted`, approach A1): `_bootstrap_interval` never sees a
+per-replicate sample of the statistic at all — only a point estimate
+and a distribution of resampled *grand ratios* — so there is no
+single number that honestly describes how much the replicates
+differ from each other. `None` states that affirmatively, and is
+what the GUI's own tooltip reads as "this interval has no honest
+symmetric summary; show `low`/`high` alone."
+
+Paired with an explicit check that the interval really is asymmetric
+here, so this test cannot pass for the uninteresting reason that the
+bootstrap happened to reproduce a symmetric interval on this batch.
 
 <a id="engine.test_engine.test_bootstrap_replicate_summary_is_deterministic_for_a_given_rng_state"></a>
 
@@ -5705,6 +5750,59 @@ def test_get_starter_form_matches_config_form_directly() -> None
 
 The bridge method adds no logic of its own beyond `starter_form_values`.
 
+<a id="gui.test_app_api.test_interval_payload_states_the_symmetric_summary_for_a_t_interval"></a>
+
+#### test\_interval\_payload\_states\_the\_symmetric\_summary\_for\_a\_t\_interval
+
+```python
+def test_interval_payload_states_the_symmetric_summary_for_a_t_interval(
+) -> None
+```
+
+A real `confidence_interval` reaches the page with both §7.2 numbers.
+
+`_interval_payload` is the one place this module decides whether an
+interval has an honest symmetric summary to state
+(`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+`selby/restricted`, approaches A1 and B1), so both branches are
+tested here directly rather than only through a real batch.
+
+<a id="gui.test_app_api.test_interval_payload_omits_the_summary_for_a_bootstrap_interval"></a>
+
+#### test\_interval\_payload\_omits\_the\_summary\_for\_a\_bootstrap\_interval
+
+```python
+def test_interval_payload_omits_the_summary_for_a_bootstrap_interval() -> None
+```
+
+A `sample_std` of `None` drops `halfWidth` and `sampleStd` together.
+
+Both, not just the standard deviation: `_bootstrap_interval`'s own
+`half_width` is "a symmetrized summary kept only for display
+consistency," not the authoritative interval shape, so a page that
+showed it would show a number that constructor disclaims. Built from
+a real `bootstrap_replicate_summary` interval rather than a
+hand-written dict, so the test tracks what that constructor actually
+returns.
+
+<a id="gui.test_app_api.test_interval_payload_tolerates_a_summary_written_before_sample_std"></a>
+
+#### test\_interval\_payload\_tolerates\_a\_summary\_written\_before\_sample\_std
+
+```python
+def test_interval_payload_tolerates_a_summary_written_before_sample_std(
+) -> None
+```
+
+Reopening an older batch renders the shorter tooltip, not a bogus number.
+
+`Api.list_home_runs` reads a *persisted* `summary.json`, so every
+batch written before `sample_std` existed reaches `_interval_payload`
+with no such key at all. `.get` reads that as `None`, which lands in
+the same branch a bootstrap-built interval does — no migration, and
+no invented value. The literal below is `doc/usage.md`'s own
+documented pre-change object, field for field.
+
 <a id="gui.test_app_api.test_get_initial_form_falls_back_to_starter_values_for_a_stale_saved_form"></a>
 
 #### test\_get\_initial\_form\_falls\_back\_to\_starter\_values\_for\_a\_stale\_saved\_form
@@ -7463,6 +7561,16 @@ replicates" (botanist GUI design doc §7.2: re-labeled "everywhere it
 appears... so it is never visually confusable with" the within-run
 sigma band) — `webui/meters.js`'s own `ciCaption`, not a second,
 independently worded phrase.
+
+It also states the two numbers the rest of that same §7.2 sentence
+asks for — "both the confidence-interval half-width and the
+equivalent sample standard deviation" (sample-standard-deviation
+tooltip design `20260912-claude-sonnet-5-sample-std-dev-tooltip-
+design.md`, `selby/restricted`) — spelled out rather than as a sigma
+glyph, which this GUI reserves for the within-run band the caption
+exists to stay distinguishable from. Checked in the same real-batch
+pass rather than as a second window test, since it is the same one
+tooltip string.
 
 <a id="gui.test_batch_results_screen.test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back"></a>
 
@@ -9895,6 +10003,43 @@ test, not the batch-execution timing that triggers it. No explicit
 reset call needed first: every test gets a fresh page load of its
 own, so the module-scoped high-water mark this proves already
 starts at its own initial `0` regardless.
+
+<a id="gui.test_input_screen.test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists"></a>
+
+#### test\_ci\_tooltip\_states\_its\_symmetric\_summary\_only\_when\_one\_exists
+
+```python
+def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+`buildCiMeter` branches on `sampleStd`, within one summary table.
+
+Both halves of the sample-standard-deviation tooltip design
+(`20260912-claude-sonnet-5-sample-std-dev-tooltip-design.md`,
+`selby/restricted`) in one push, since the point is precisely that
+the two shapes can differ row by row:
+
+- An interval carrying `halfWidth`/`sampleStd` states both numbers
+  botanist GUI design doc §7.2 asks for, appended after the caption.
+- An interval carrying neither states neither, falling back to
+  exactly the `mean [low, high] -- caption` text this project
+  already shipped. `fim.gui.app._interval_payload` omits the two keys
+  together for an interval built by `fim.engine._bootstrap_interval`,
+  whose own `half_width` is "a symmetrized summary kept only for
+  display consistency" rather than the authoritative interval shape
+  — so stating it would state something its own constructor
+  disclaims.
+
+Driven as one synthetic `fim.onBatchProgress` payload rather than a
+real batch: no production code path produces a bootstrap-built
+interval today (`bootstrap_replicate_summary` has no caller outside
+its own tests), so no real run can put the two shapes in the same
+table at all — the display logic is still what needs proving, the
+same reasoning `test_batch_progress_display_never_regresses` above
+applies to its own two synthetic calls. The positive case is *also*
+covered against a real batch, end to end, in
+`test_batch_results_screen.py`.
 
 <a id="gui.test_loci_grid_screen"></a>
 
@@ -18067,6 +18212,42 @@ def test_matches_a_hand_computed_interval() -> None
 
 A tiny sample's interval matches hand-computed values exactly.
 
+<a id="statistics.test_interval.ConfidenceIntervalTests.test_sample_standard_deviation_matches_the_hand_computed_spread"></a>
+
+#### test\_sample\_standard\_deviation\_matches\_the\_hand\_computed\_spread
+
+```python
+def test_sample_standard_deviation_matches_the_hand_computed_spread() -> None
+```
+
+`sample_std` is the Bessel-corrected spread of the values themselves.
+
+Botanist GUI design doc §7.2 asks the batch meter's own tooltip
+to state "the equivalent sample standard deviation" beside the
+interval — a statement about how much the *replicates* differ
+from each other, not about how precisely their mean is known
+(`half_width`, which shrinks as replicates are added while this
+number does not). Hand-computed here from the same three values,
+dividing by `n - 1`, rather than restating the implementation's
+own expression.
+
+<a id="statistics.test_interval.ConfidenceIntervalTests.test_half_width_is_the_critical_value_times_the_standard_error"></a>
+
+#### test\_half\_width\_is\_the\_critical\_value\_times\_the\_standard\_error
+
+```python
+def test_half_width_is_the_critical_value_times_the_standard_error() -> None
+```
+
+`half_width` and `sample_std` stay algebraically consistent.
+
+The two fields are two views of one computed variance, so this
+pins them against each other (`half_width == t * sample_std /
+sqrt(n)`) rather than recomputing the same formula from the raw
+values twice — a later change that recomputed one of them from a
+different sample, or forgot Bessel's correction in only one
+place, shows up here and nowhere else.
+
 <a id="statistics.test_interval.ConfidenceIntervalTests.test_identical_values_produce_a_zero_width_interval"></a>
 
 #### test\_identical\_values\_produce\_a\_zero\_width\_interval
@@ -18086,6 +18267,17 @@ def test_more_replicates_at_the_same_spread_tightens_the_interval() -> None
 ```
 
 Doubling a repeated pattern's replicate count shrinks the interval.
+
+The two reported spreads scale differently, which is the whole
+reason §7.2's own tooltip states both: `half_width` describes
+how precisely the *mean* is known and falls steeply as
+replicates are added, while `sample_std` describes how much the
+*replicates* differ from each other and barely moves (here, only
+because Bessel's correction is milder at 40 values than at 4 —
+the underlying pattern is identical). Asserted as "one drops by
+more than a factor of three while the other stays within 20%"
+rather than with a tight equality, since the correction's own
+shift is real and should not be asserted away.
 
 <a id="statistics.test_interval.ConfidenceIntervalTests.test_default_confidence_is_ninety_five_percent"></a>
 

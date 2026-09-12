@@ -2464,7 +2464,11 @@ docstring for why it does not raise this same case itself).
 **Returns**:
 
   One `ConfidenceInterval` per statistic name in `FinalReport`
-  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``).
+  (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
+  ``Gs``, ``Gd`` — the same nine `reports_summary` itself lists,
+  restated here rather than abbreviated, since this list had
+  silently kept naming only the first seven after ``Gs``/``Gd``
+  were added).
   ``G_ST`` is undefined for a replicate whose locus is monomorphic
   across every deme (``H_T == 0``); such replicates are dropped
   from ``G_ST``'s own sample rather than papered over with a
@@ -3770,10 +3774,8 @@ asked for this heavier per-row read, so neither pays for it.
   is `None` if the row's own `report.json`/`summary.json`
   could not be read; otherwise one entry per `_RESULT_
   STATISTIC_NAMES` name — a `format_statistic`-formatted
-  string for a scalar run, or `{"mean", "low", "high",
-  "sampleCount"}` (`format_statistic`-formatted mean/low/
-  high, matching `webui/meters.js`'s own `buildCiMeter`
-  input shape exactly) for a batch.
+  string for a scalar run, or `_interval_payload`'s own
+  `buildCiMeter` input shape for a batch.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 
@@ -12381,6 +12383,23 @@ Fields:
         project's own convention is that the true underlying
         average plausibly falls within, at the requested
         `confidence` level.
+    sample_std: How much the supplied values differ from *each
+        other* — the ordinary, Bessel-corrected sample standard
+        deviation of `values` themselves, as opposed to
+        `half_width`, which describes how precisely their *mean* is
+        known. The two answer genuinely different questions: adding
+        more replicates narrows `half_width` while leaving
+        `sample_std` essentially where it was, since the
+        replicates' own spread is a property of the model being
+        simulated, not of how many times it was run. `None` means
+        the constructor that built this interval has no single
+        honest value to report — see `fim.engine._bootstrap_
+        interval`, which builds this same type from a percentile
+        bootstrap whose distribution is not generally symmetric, so
+        no one number describes its spread without misleading a
+        reader. A consumer can therefore read `None` as "this
+        interval is not a symmetric `mean ± half_width` summary;
+        `low`/`high` are the authoritative bounds."
     sample_count: How many values went into this interval — the
         same number `confidence_interval`'s own `values` argument
         had. Carried along here so a reader of the *result* alone

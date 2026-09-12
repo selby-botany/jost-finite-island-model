@@ -638,18 +638,41 @@ the alleles are rare and nearly equal.</p>
 <code>replicate-NNN/</code> subdirectories, each of which holds the four scalar-run
 files above.</p>
 <p><code>summary.json</code> maps each reported statistic name (<code>D</code>, G<sub>ST</sub>, E<sub>ST</sub>,
-K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>) to its across-replicate confidence interval:</p>
+K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, G<sub>s</sub>, G<sub>d</sub>) to its across-replicate
+confidence interval:</p>
 <pre><code class="language-json">{
   &quot;D&quot;: {
     &quot;mean&quot;: 0.643,
     &quot;half_width&quot;: 0.021,
     &quot;low&quot;: 0.622,
     &quot;high&quot;: 0.664,
+    &quot;sample_std&quot;: 0.133,
     &quot;sample_count&quot;: 40,
     &quot;confidence&quot;: 0.95
   }
 }
 </code></pre>
+<p><code>half_width</code> and <code>sample_std</code> answer two different questions, and it is
+worth keeping them apart:</p>
+<ul>
+<li><code>half_width</code> is how precisely the <strong>average</strong> is known — the &quot;± 0.021&quot;
+half of a &quot;0.643 ± 0.021&quot; report. Running more replicates shrinks it.</li>
+<li><code>sample_std</code> is how much the <strong>replicates themselves</strong> differ from one
+another. Running more replicates does not shrink it, because it
+describes the model's own run-to-run variability rather than your
+measurement of it.</li>
+</ul>
+<p><code>sample_std</code> can also be <code>null</code>, meaning &quot;this interval has no single
+honest value to report here.&quot; That happens only for an interval built by
+resampling rather than by the ordinary Student's-t formula (see
+<code>fim.engine.bootstrap_replicate_summary</code>), whose two sides are not
+generally the same width — for such an interval, read <code>low</code> and <code>high</code>
+as the real bounds rather than treating <code>mean</code> ± <code>half_width</code> as the
+whole story. Every interval the command line writes today reports a real
+number.</p>
+<p>A <code>summary.json</code> written by an older version of this program has no
+<code>sample_std</code> field at all. Nothing needs converting: every tool here
+reads such a file as though the value were <code>null</code>.</p>
 <p>G<sub>ST</sub> can have a smaller sample_count than the other statistics: a
 replicate whose locus is monomorphic across every deme reports G<sub>ST</sub> as
 <code>null</code> in its own <code>report.json</code>, and that replicate is excluded from
