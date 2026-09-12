@@ -97,6 +97,85 @@ JS_CONTAINS_PATTERN = re.compile(
 NON_FILE_SCHEMES = ("http://", "https://", "mailto:", "data:", "javascript:")
 
 
+def strip_js_comments(text: str) -> str:
+    """Blank out `//`/`/* */` comments in JS source, without touching
+    a real string or template literal.
+
+    `script_classes()`'s own class-name regexes (`JS_STRING_PATTERN`
+    and friends) run against this output, never the raw source --
+    otherwise an apostrophe inside an ordinary prose `//` comment (this
+    codebase's own dominant comment style is full of contractions and
+    possessives: "doesn't," "the run's own") is indistinguishable from
+    a real string's opening quote to a regex with no concept of
+    "comment." A stray one can pair up with some *later* apostrophe or
+    quote anywhere else in the file and silently swallow everything in
+    between as one giant bogus "string," hiding every real class
+    reference in that span from both the orphan check and the unstyled-
+    class check without printing anything to say so. Confirmed live:
+    adding a few unremarkable prose comments to `run-view-completed.js`
+    (no code change at all) was enough to shift this parity and make
+    `.legend-item`/`.legend-item-hidden`/`.swatch-dashed` -- three
+    classes very much still in real use -- newly report as orphaned.
+    `css_classes()`'s own `COMMENT_PATTERN` already does the CSS-comment
+    half of this for stylesheets; this is the JS counterpart, needed
+    here because JS also has `//` line comments, which a single non-
+    DOTALL-aware pattern cannot also cover correctly.
+
+    A small hand-rolled scanner rather than a comment-matching regex of
+    its own, because *that* regex would have the identical problem one
+    level up: it would need to already know which quotes are real
+    strings to know which `//`/`/*` are really comments. Walking the
+    text once, character by character, and tracking "currently inside a
+    string" as real state (with backslash-escapes honored) sidesteps
+    the chicken-and-egg problem entirely.
+
+    Args:
+        text: Raw JavaScript source.
+
+    Returns:
+        The same text with every comment's own characters replaced by
+        spaces (preserving every other character's position, including
+        newlines outside of comments, though nothing here depends on
+        that) and every string/template literal's own contents left
+        completely untouched.
+    """
+    result: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch in ("'", '"', "`"):
+            quote = ch
+            result.append(ch)
+            i += 1
+            while i < n:
+                c = text[i]
+                result.append(c)
+                if c == "\\" and i + 1 < n:
+                    result.append(text[i + 1])
+                    i += 2
+                    continue
+                i += 1
+                if c == quote:
+                    break
+            continue
+        if text.startswith("//", i):
+            end = text.find("\n", i)
+            end = n if end == -1 else end
+            result.append(" " * (end - i))
+            i = end
+            continue
+        if text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            end = n if end == -1 else end + 2
+            result.append(" " * (end - i))
+            i = end
+            continue
+        result.append(ch)
+        i += 1
+    return "".join(result)
+
+
 def webui_files(suffix: str) -> tuple[Path, ...]:
     """Return every file under the webui tree with the given suffix.
 
@@ -176,7 +255,7 @@ def script_classes() -> tuple[dict[str, Path], set[str], set[str]]:
     mentioned: set[str] = set()
 
     for path in webui_files(".js"):
-        text = path.read_text(encoding="utf-8")
+        text = strip_js_comments(path.read_text(encoding="utf-8"))
 
         for argument in JS_APPLY_PATTERN.findall(text):
             for _, literal in JS_STRING_PATTERN.findall(argument):

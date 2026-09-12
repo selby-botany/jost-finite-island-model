@@ -545,6 +545,25 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `dev/bin/check-webui-assets`'s own JS scanning ran its class-name
+  regexes directly against raw source, comments included — an
+  apostrophe inside an ordinary prose `//` comment (this codebase's own
+  dominant comment style: "doesn't," "the run's own") is indistinguishable
+  from a real string's opening quote to a regex with no concept of
+  "comment," so a stray one could pair up with some later apostrophe or
+  quote anywhere else in the file and silently swallow everything
+  between them as one giant bogus "string," hiding every real class
+  reference in that span from both the orphan check and the unstyled-
+  class check without printing anything to say so. Confirmed live:
+  adding a few unremarkable prose comments to `run-view-completed.js`
+  (no code change at all) was enough to shift this parity and make
+  three classes very much still in real use newly report as orphaned.
+  New `strip_js_comments` (a small hand-rolled, string-literal-aware
+  scanner, not a comment-matching regex of its own — that regex would
+  have the identical chicken-and-egg problem one level up) blanks out
+  `//`/`/* */` comments before `script_classes()`'s own regexes run,
+  mirroring `css_classes()`'s own established comment-stripping for
+  stylesheets.
 - Home's own worked-example pulldown (`#home-example-select`) overflowed
   its "New run" card's left edge at a narrow window width, instead of
   wrapping or shrinking the way `.actions`'s own `flex-wrap` already
