@@ -86,6 +86,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_properties`](#statistics.test_properties)
 - [`test/validation/`](#group-validation)
   - [`test_api_docs`](#validation.test_api_docs)
+  - [`test_benchmark_provenance`](#validation.test_benchmark_provenance)
   - [`test_beta_workflow`](#validation.test_beta_workflow)
   - [`test_calibration_provenance`](#validation.test_calibration_provenance)
   - [`test_ci_runtime_budget`](#validation.test_ci_runtime_budget)
@@ -18211,6 +18212,103 @@ the real source tree is `pre-push`'s own job (and
 `test_generator_documents_every_source_module`, above, already covers
 "every module gets documented"); this test's own job is narrower:
 confirm the two environments produce identical output.
+
+<a id="validation.test_benchmark_provenance"></a>
+
+# validation.test\_benchmark\_provenance
+
+The engine-backend benchmark record stays provenanced and out of the gate.
+
+The performance-baseline remediation this file answers asks for two
+separate things, and these tests hold both in place: deterministic
+structural checks belong in continuous integration, while
+timing/RSS comparison stays a controlled maintainer benchmark. A
+wall-clock threshold in the gate would make pass/fail a function of
+runner load rather than of the commit -- what the project's own test
+determinism rule forbids -- so nothing here times anything. Instead
+they check that the benchmark *record* keeps the properties that make a
+recorded number meaningful at all, and that the benchmark *tooling*
+never leaks into the gate.
+
+<a id="validation.test_benchmark_provenance.test_benchmark_tooling_is_never_executed_by_the_deterministic_gate"></a>
+
+#### test\_benchmark\_tooling\_is\_never\_executed\_by\_the\_deterministic\_gate
+
+```python
+def test_benchmark_tooling_is_never_executed_by_the_deterministic_gate(
+) -> None
+```
+
+No benchmark script is invoked by `build` or by `ci.yml`.
+
+The same invariant `test_calibration_provenance.py` asserts for
+`calibrate-statistical-bands`, for the timing/RSS tooling instead: a
+benchmark's result is a property of the machine and its momentary
+load, not of the commit, so running one inside the gate would make
+the gate non-deterministic by construction. This checks the two
+files that would actually carry such a regression, rather than
+trusting the exclusion to stay true by nobody thinking of it.
+
+Deliberately an absence check, not a lint-line check: these scripts
+are not currently part of `build`'s own `ruff` argument list either
+(unlike `calibrate-statistical-bands`, which is), so their names are
+expected nowhere in `build` at all. Were they added to the lint
+list later -- a reasonable change, and independent of this one --
+only the `run ...` half of this assertion would still apply.
+
+<a id="validation.test_benchmark_provenance.test_every_benchmark_table_records_its_commit_and_hardware"></a>
+
+#### test\_every\_benchmark\_table\_records\_its\_commit\_and\_hardware
+
+```python
+def test_every_benchmark_table_records_its_commit_and_hardware() -> None
+```
+
+Each `B.x` section states the commit, machine, and date behind its numbers.
+
+Without this, a table added in a hurry reads exactly like a fully
+provenanced one -- a number with no commit or machine beside it
+looks like current behavior on the reader's own hardware, and is
+not. Asserted per section rather than by counting occurrences
+document-wide, so a section that omits one field cannot be covered
+for by another section that happens to state it twice.
+
+<a id="validation.test_benchmark_provenance.test_auto_vector_defaults_match_the_recorded_benchmark_conclusion"></a>
+
+#### test\_auto\_vector\_defaults\_match\_the\_recorded\_benchmark\_conclusion
+
+```python
+def test_auto_vector_defaults_match_the_recorded_benchmark_conclusion(
+) -> None
+```
+
+The shipped `"auto"` cutover is the one the recorded sweep concluded.
+
+`auto_vector_min_d`/`auto_vector_max_capacity` are the only two
+constants in the package whose values are justified purely by a
+benchmark result rather than by anything checkable from the code
+itself. The remediation this file answers asks that they be revised
+"only from a recorded benchmark result, not from an unqualified
+machine-specific observation" -- which is enforceable exactly here:
+changing either default without updating the document that justifies
+it fails, so the edit has to name its own evidence.
+
+<a id="validation.test_benchmark_provenance.test_benchmark_document_records_its_unmeasured_axes"></a>
+
+#### test\_benchmark\_document\_records\_its\_unmeasured\_axes
+
+```python
+def test_benchmark_document_records_its_unmeasured_axes() -> None
+```
+
+The replicate-concurrency gap is named in the record, not silently absent.
+
+`benchmark-engines` sweeps `d`, `N`, `mu`, `m`, locus length, and
+`n_replicates`; it has no `max_concurrent_replicates` axis at all,
+and no table records either replicate axis. A reader comparing this
+document against the remediation's own list of axes to sweep
+("demes, loci, capacity, and replicate concurrency separately")
+would otherwise have to infer the omission from what is not there.
 
 <a id="validation.test_beta_workflow"></a>
 
