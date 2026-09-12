@@ -55,6 +55,7 @@ import yaml
 from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
+from fim import engine as engine_module
 from fim import logging_setup, paths, update
 from fim.cli import load_config
 from fim.engine import (
@@ -1718,6 +1719,42 @@ class Api:
         workers` directly rather than inventing a second default.
         """
         return batch_runner.default_max_workers()
+
+    @_log_bridge_call
+    def get_engine_backend_availability(self) -> dict[str, bool]:
+        """Report which optional dependencies the engine selector needs.
+
+        Configure's own `engine_backend` `<select>` offers all four legal
+        values, two of which need the optional `numba` dependency to run
+        at all: `"generational-vector"` imports it unconditionally
+        (`fim.model.vectorized`'s own mutate step has no pure-Python
+        fallback), and `"auto"` — the selector's own recommended default
+        — resolves to that backend for essentially every vector-eligible
+        configuration at the shipped `auto_vector_min_d`/
+        `auto_vector_max_capacity` defaults. A source checkout installed
+        without the `[jit]` extra can therefore select either and watch
+        the run fail with `build_engine_backend`'s own "needs the
+        optional numba dependency" `ValueError`.
+
+        Reported rather than hidden: the page relabels exactly those two
+        options (`screens/config-modals.js`'s own
+        `applyEngineBackendAvailability`) instead of removing them, so
+        every legal value still round-trips through save/load — the same
+        reason all four are listed in the first place (GUI engine-backend
+        selector design doc `20260911-claude-sonnet-5-gui-engine-backend-
+        selector-design.md`, approach A3 alongside B3).
+
+        Delegates to `fim.engine._numba_is_available` through the module
+        rather than importing the function by name, deliberately: that
+        function is module-level "specifically so a test can monkeypatch
+        it directly" (its own docstring), and a `from ... import` would
+        bind a copy at import time and quietly defeat exactly that hook.
+
+        Returns:
+            `{"numba": True}` when the optional `numba` dependency can be
+            imported in this install, `{"numba": False}` otherwise.
+        """
+        return {"numba": engine_module._numba_is_available()}
 
     @_log_bridge_call
     def get_significant_digits(self) -> int:

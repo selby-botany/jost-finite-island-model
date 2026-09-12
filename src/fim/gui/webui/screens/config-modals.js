@@ -321,6 +321,57 @@ function focusInvalidField(field) {
 window.fim.focusInvalidField = focusInvalidField;
 
 /**
+ * The two `engine_backend` options that cannot run without the optional
+ * `numba` dependency, each with the suffix that says so. Kept beside
+ * `applyEngineBackendAvailability` rather than inline in it so the list
+ * reads as the fact it is: `"generational-vector"` imports numba
+ * unconditionally, and `"auto"` resolves to that backend for
+ * essentially every vector-eligible configuration at the shipped
+ * thresholds, so both are genuinely unavailable -- while `"lineal"` and
+ * `"generational"` are entirely unaffected.
+ * @type {Array<[string, string]>}
+ */
+const NUMBA_DEPENDENT_BACKENDS = [
+    ["auto", " — needs numba; install fim[jit]"],
+    ["generational-vector", " — needs numba; install fim[jit]"],
+];
+
+/**
+ * Relabel the `engine_backend` options this install cannot actually run
+ * (`Api.get_engine_backend_availability`, GUI engine-backend selector
+ * design doc approach A3). A source checkout without the `[jit]` extra
+ * is an ordinary case -- this project's own test suite already
+ * accommodates it with `pytest.importorskip("numba")` -- and a selector
+ * whose recommended default silently fails at run time is exactly what
+ * A3 exists to prevent.
+ *
+ * Relabels rather than removes or disables: every legal
+ * `SimulationParams.engine_backend` value must stay selectable so a
+ * loaded YAML or reopened manifest naming one of these still
+ * round-trips (approach B3's own correctness requirement). The label is
+ * the honest part; the value is untouched.
+ *
+ * Idempotent -- the suffix is appended only when not already present --
+ * so a second call (a reload, a test calling it directly) can never
+ * stack duplicates onto the same option.
+ */
+async function applyEngineBackendAvailability() {
+    const availability = await window.pywebview.api.get_engine_backend_availability();
+    if (availability.numba) {
+        return;
+    }
+    const select = document.getElementById("field-engine_backend");
+    for (const [value, suffix] of NUMBA_DEPENDENT_BACKENDS) {
+        const option = select.querySelector(`option[value="${value}"]`);
+        if (option !== null && !option.textContent.endsWith(suffix)) {
+            option.textContent += suffix;
+        }
+    }
+}
+
+window.fim.applyEngineBackendAvailability = applyEngineBackendAvailability;
+
+/**
  * Significant digits (design §4.2 -- moved out of the native View
  * menu's own quick-toggle submenu into an ordinary Configure field).
  * Not a `SimulationParams` field: no `name`/`form="input-form"`, no

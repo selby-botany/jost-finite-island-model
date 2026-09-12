@@ -92,6 +92,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [delete\_user\_preset](#fim.gui.app.Api.delete_user_preset)
     * [save\_yaml](#fim.gui.app.Api.save_yaml)
     * [get\_default\_max\_workers](#fim.gui.app.Api.get_default_max_workers)
+    * [get\_engine\_backend\_availability](#fim.gui.app.Api.get_engine_backend_availability)
     * [get\_significant\_digits](#fim.gui.app.Api.get_significant_digits)
     * [set\_significant\_digits](#fim.gui.app.Api.set_significant_digits)
     * [get\_dark\_mode\_override](#fim.gui.app.Api.get_dark_mode_override)
@@ -3503,6 +3504,48 @@ Return the Batch tab's own default parallel-worker count.
 never reaches `form_values_to_payload` — so it has no
 `config_form` entry; this reuses `batch_runner.default_max_
 workers` directly rather than inventing a second default.
+
+<a id="fim.gui.app.Api.get_engine_backend_availability"></a>
+
+#### get\_engine\_backend\_availability
+
+```python
+@_log_bridge_call
+def get_engine_backend_availability() -> dict[str, bool]
+```
+
+Report which optional dependencies the engine selector needs.
+
+Configure's own `engine_backend` `<select>` offers all four legal
+values, two of which need the optional `numba` dependency to run
+at all: `"generational-vector"` imports it unconditionally
+(`fim.model.vectorized`'s own mutate step has no pure-Python
+fallback), and `"auto"` — the selector's own recommended default
+— resolves to that backend for essentially every vector-eligible
+configuration at the shipped `auto_vector_min_d`/
+`auto_vector_max_capacity` defaults. A source checkout installed
+without the `[jit]` extra can therefore select either and watch
+the run fail with `build_engine_backend`'s own "needs the
+optional numba dependency" `ValueError`.
+
+Reported rather than hidden: the page relabels exactly those two
+options (`screens/config-modals.js`'s own
+`applyEngineBackendAvailability`) instead of removing them, so
+every legal value still round-trips through save/load — the same
+reason all four are listed in the first place (GUI engine-backend
+selector design doc `20260911-claude-sonnet-5-gui-engine-backend-
+selector-design.md`, approach A3 alongside B3).
+
+Delegates to `fim.engine._numba_is_available` through the module
+rather than importing the function by name, deliberately: that
+function is module-level "specifically so a test can monkeypatch
+it directly" (its own docstring), and a `from ... import` would
+bind a copy at import time and quietly defeat exactly that hook.
+
+**Returns**:
+
+- ``{"numba"` - True}` when the optional `numba` dependency can be
+  imported in this install, `{"numba": False}` otherwise.
 
 <a id="fim.gui.app.Api.get_significant_digits"></a>
 

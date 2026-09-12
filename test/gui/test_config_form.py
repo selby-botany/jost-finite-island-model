@@ -55,6 +55,7 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "replicate_tolerance",
         "replicate_minimum",
         "replicate_confidence",
+        "engine_backend",
     }
     # `m`, `mu`/`mu_b`, `loci`/`locus_lengths`, `convergence_statistic`,
     # and `p_0` are all composite mode selectors — never plain
@@ -1038,3 +1039,76 @@ def test_tab_for_error_routes_plain_and_composite_messages(
 def test_tab_for_error_returns_none_for_an_unknown_key_message() -> None:
     """A message naming no field this form exposes resolves to no tab."""
     assert config_form.tab_for_error("unknown configuration key(s): bogus") is None
+
+
+@pytest.mark.parametrize(
+    "backend",
+    ["lineal", "auto", "generational", "generational-vector"],
+)
+def test_engine_backend_round_trips_every_legal_value(backend: str) -> None:
+    """All four legal `engine_backend` values survive a full form round trip.
+
+    The correctness case the GUI engine-backend selector design doc
+    (`20260911-claude-sonnet-5-gui-engine-backend-selector-design.md`)
+    rejected approach B1 over: a value the form cannot represent is not
+    merely invisible, it is silently rewritten on the next save. The two
+    de-emphasized values (`"generational"`/`"generational-vector"`) are
+    the ones that matter here — a botanist rarely picks either, but a
+    hand-edited YAML or a reopened manifest can genuinely hold one.
+
+    `finite_alleles` and a short locus because `"generational-vector"`
+    refuses any other mutation model outright
+    (`_validate_engine_backend`), not for any reason to do with the form
+    itself — the starter config's own single 200-base locus is replaced
+    rather than supplemented, since `loci` and `locus_lengths` cannot
+    both be given.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **yaml.safe_load(STARTER_CONFIG),
+            "loci": [{"locus_id": 1, "length": 3}],
+            "mutation_model": "finite_alleles",
+            "engine_backend": backend,
+        }
+    )
+
+    values = config_form.params_to_form_values(params)
+    restored = SimulationParams.from_mapping(config_form.form_values_to_payload(values))
+
+    assert values["engine_backend"] == backend
+    assert restored.engine_backend == backend
+
+
+def test_starter_form_values_still_seeds_the_lineal_engine_backend() -> None:
+    """A fresh form keeps `SimulationParams`'s own default, unchanged by the selector.
+
+    Adding the control changes nothing for a user who never touches it:
+    `STARTER_CONFIG` names no `engine_backend`, so the starter form
+    seeds `PARAMETER_DEFAULTS`'s own `"lineal"`. The page's own `auto`
+    default selection (`index.html`) is only what an untouched
+    `<select>` shows, and is overwritten the moment any real form —
+    starter or saved — is applied over it.
+    """
+    assert config_form.starter_form_values()["engine_backend"] == "lineal"
+
+
+def test_payload_to_yaml_text_orders_engine_backend_last() -> None:
+    """`engine_backend` is emitted, and emitted in `configuration.md`'s own order.
+
+    Its documented section ("Engine backend and JIT") follows "Analysis
+    and execution", whose last key is `migrant_sampling` — so
+    `_YAML_KEY_ORDER` places it after that rather than leaving
+    `payload_to_yaml_text`'s own defensive "unknown key" fallback to
+    append it in whatever order the payload dict happened to build.
+    """
+    text = config_form.payload_to_yaml_text(
+        config_form.form_values_to_payload(
+            {**config_form.starter_form_values(), "engine_backend": "auto"}
+        )
+    )
+    keys = [
+        line.split(":", 1)[0] for line in text.splitlines() if not line.startswith(" ")
+    ]
+
+    assert "engine_backend: auto" in text
+    assert keys.index("engine_backend") > keys.index("migrant_sampling")

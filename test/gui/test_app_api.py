@@ -25,6 +25,7 @@ from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
 from fim import cli, update
+from fim import engine as engine_module
 from fim.engine import (
     RunResult,
     bootstrap_replicate_summary,
@@ -184,6 +185,33 @@ def test_get_initial_form_falls_back_to_starter_values_for_a_stale_saved_form(
 def test_get_default_max_workers_matches_batch_runner_directly() -> None:
     """The Batch tab's default is `batch_runner.default_max_workers`, not invented."""
     assert Api().get_default_max_workers() == default_max_workers()
+
+
+def test_get_engine_backend_availability_matches_the_engine_probe_directly() -> None:
+    """The selector's numba answer is `fim.engine`'s own, never a second probe."""
+    assert Api().get_engine_backend_availability() == {
+        "numba": engine_module._numba_is_available()
+    }
+
+
+@pytest.mark.parametrize("available", [True, False])
+def test_get_engine_backend_availability_follows_a_numba_less_install(
+    monkeypatch: pytest.MonkeyPatch, available: bool
+) -> None:
+    """Both answers are reported honestly, without uninstalling anything.
+
+    Exercises approach A3's own real case — a source checkout installed
+    without the `[jit]` extra — through the monkeypatch hook
+    `fim.engine._numba_is_available`'s own docstring exists to provide.
+    A `from ... import` of that function in `fim.gui.app` would bind a
+    copy at import time and silently defeat this; going through the
+    module does not, which is exactly what this parametrization proves.
+    """
+    monkeypatch.setattr(
+        engine_module, "_numba_is_available", lambda: available, raising=True
+    )
+
+    assert Api().get_engine_backend_availability() == {"numba": available}
 
 
 def test_list_presets_matches_presets_module_directly() -> None:

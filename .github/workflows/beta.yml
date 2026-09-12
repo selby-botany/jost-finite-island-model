@@ -72,11 +72,13 @@ jobs:
   # macos-x64/linux-x64 jobs step for step, duplicated rather than
   # shared via a reusable workflow (the same "don't touch the proven
   # release path to make room for a lower-stakes one" tradeoff already
-  # accepted) -- with two differences:
+  # accepted) -- with three differences:
   # `version.txt` is overwritten with the computed label before
-  # building (safe: this checkout is never pushed back), and every
+  # building (safe: this checkout is never pushed back), every
   # output filename carries a `-beta` suffix so a beta download is
-  # never mistaken for a real release artifact by filename alone.
+  # never mistaken for a real release artifact by filename alone, and
+  # every job here installs `.[dev,jit]` rather than `.[dev]` (see
+  # windows-beta-x64's own comment on that step, just below).
   windows-beta-x64:
     needs: compute-beta-label
     runs-on: windows-latest
@@ -86,7 +88,35 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      # `.[dev,jit]`, not `.[dev]` -- the one line every job in this
+      # group shares for the same reason, stated once here rather than
+      # five times. Configure now offers an `engine_backend` selector
+      # whose recommended default is `"auto"`, and `fim.engine.
+      # _resolve_auto_engine_backend` picks `"generational-vector"` for
+      # essentially every vector-eligible config at the shipped
+      # `auto_vector_min_d`/`auto_vector_max_capacity` defaults. That
+      # backend imports `numba` *unconditionally* (`fim.model.
+      # vectorized`'s own mutate step has no pure-Python fallback), so a
+      # packaged build without the `jit` extra fails every such run with
+      # `build_engine_backend`'s own "needs the optional numba
+      # dependency" ValueError -- the selector's own headline
+      # recommendation, broken in the artifact a tester actually
+      # downloads. `pyproject.toml`'s own `[jit]` comment is explicit
+      # that `numba` is never a base dependency, so it has to be asked
+      # for here rather than inherited; ci.yml's coverage-gated `build`
+      # job already installs the same pair for its own, different
+      # reason.
+      #
+      # Scoped to the beta workflow first, deliberately: `pyproject.
+      # toml` records numba+pyinstaller as verified on macOS only
+      # ("Windows not yet verified"), and a beta artifact is exactly
+      # where that gap gets closed before ci.yml's own five release
+      # packaging jobs (windows/windows-arm64/macos-arm64/macos-x64/
+      # linux-x64, all still `.[dev]`) follow. Until they do, a released
+      # build without numba degrades honestly rather than silently:
+      # `Api.get_engine_backend_availability` relabels the numba-
+      # dependent options in the selector itself.
+      - run: python -m pip install -e ".[dev,jit]"
       - shell: pwsh
         env:
           BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
@@ -162,7 +192,7 @@ jobs:
           python-version: "3.12"
           architecture: arm64
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev,jit]"
       - shell: pwsh
         env:
           BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
@@ -237,7 +267,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           printf '%s+%s' "${{ needs.compute-beta-label.outputs.label }}"
           "${{ needs.compute-beta-label.outputs.short_sha }}" > version.txt
@@ -303,7 +333,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           printf '%s+%s' "${{ needs.compute-beta-label.outputs.label }}"
           "${{ needs.compute-beta-label.outputs.short_sha }}" > version.txt
@@ -408,7 +438,7 @@ jobs:
               libgirepository1.0-dev libcairo2-dev \
               gir1.2-gtk-3.0 gir1.2-webkit2-4.0 gir1.2-soup-2.4 \
               libwebkit2gtk-4.0-37 xvfb xauth procps
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           printf '%s+%s' "${{ needs.compute-beta-label.outputs.label }}"
           "${{ needs.compute-beta-label.outputs.short_sha }}" > version.txt

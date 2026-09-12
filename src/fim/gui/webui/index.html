@@ -712,10 +712,20 @@
        reusable grid component design §4.4 describes (phase 3); the
        "Advanced: execution & performance" disclosure (`engine_backend`,
        `jit`, `auto_vector_min_d`, `auto_vector_max_capacity`,
-       `max_concurrent_replicates`) is not present at all, since none of
-       those `SimulationParams` fields have ever had a GUI control to
-       relocate -- adding one is new surface, not a reorganization, and
-       is scoped as its own follow-up. -->
+       `max_concurrent_replicates`) is still only partly built.
+
+       Its first and only field, `engine_backend`, now ships as a plain
+       `<select>` in the Structure panel below (GUI engine-backend
+       selector design doc `20260911-claude-sonnet-5-gui-engine-backend-
+       selector-design.md`, approaches B3/C) -- new surface rather than
+       a relocation, since none of these five fields ever had a GUI
+       control to move. The other four stay unexposed at their
+       `SimulationParams` defaults, on purpose rather than pending:
+       `jit`/`auto_vector_min_d`/`auto_vector_max_capacity` are
+       machine-specific benchmark artifacts meant to be re-measured with
+       `dev/bin/benchmark-engines`, a developer workflow this screen's
+       own audience has no business being handed, and `"auto"`'s own
+       resolution needs none of them set by hand. -->
   <section id="screen-configure" class="screen" hidden>
     <div id="configure-banner" class="banner" hidden></div>
     <div class="configure-layout">
@@ -995,6 +1005,47 @@
         <div class="field">
           <label for="field-n_replicates">n_replicates</label>
           <input type="text" id="field-n_replicates" name="n_replicates" form="input-form">
+        </div>
+        <!-- Execution engine (GUI engine-backend selector design doc
+             `20260911-claude-sonnet-5-gui-engine-backend-selector-
+             design.md`, approach B3) -- the first field of the
+             "Advanced: execution & performance" group this screen's own
+             header comment has anticipated since the two-panel Configure
+             redesign landed. Deliberately outside `batch-only-fields`
+             below: `engine_backend` is just as meaningful for a single
+             scalar run as for a batch, unlike `replicate_*`.
+
+             All four legal values are present so every real
+             `SimulationParams.engine_backend` a loaded YAML or reopened
+             manifest can hold renders honestly (approach B3 over B1 --
+             a missing `<option>` silently downgrades a deliberately
+             chosen field on the next save). Order carries the
+             recommendation instead: `lineal` and `auto` first, `auto`
+             `selected` by default, the two array/thread-parallel
+             choices below them as visibly secondary. `auto` is the
+             default because this project's own recorded benchmark
+             history (`model/params.py`'s `DEFAULT_AUTO_VECTOR_MIN_D`/
+             `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` docstrings) has
+             `"lineal"` winning no benchmarked configuration at all --
+             it is the golden reference every other backend's
+             correctness is checked against, not a competitive execution
+             choice -- and because `"auto"` stamps the concrete backend
+             it resolved to into the run's own manifest, so it costs
+             nothing in reproducibility or auditability.
+
+             `auto`/`generational-vector` need the optional `numba`
+             dependency; `screens/config-modals.js`'s own
+             `applyEngineBackendAvailability` relabels exactly those two
+             when the running install lacks it, rather than leaving the
+             selector promising something this install cannot do. -->
+        <div class="field">
+          <label for="field-engine_backend">execution engine</label>
+          <select id="field-engine_backend" name="engine_backend" form="input-form">
+            <option value="lineal">lineal (reference &mdash; single-threaded, exact)</option>
+            <option value="auto" selected>auto (recommended &mdash; fastest for this configuration)</option>
+            <option value="generational">generational (thread-parallel, exact)</option>
+            <option value="generational-vector">generational-vector (array-native, fastest for large configurations)</option>
+          </select>
         </div>
         <div id="batch-only-fields" hidden>
           <div class="field">

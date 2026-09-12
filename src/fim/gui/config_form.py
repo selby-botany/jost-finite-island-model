@@ -180,6 +180,28 @@ CONVERGENCE_FIELDS: Final[tuple[FormField, ...]] = (
 # shape, so they stay plain `FormField`s. `replicate_tolerance` is
 # `float | None`; an empty field means "unset", matching
 # `SimulationParams`'s own default.
+#
+# `engine_backend` (GUI engine-backend selector design doc
+# `20260911-claude-sonnet-5-gui-engine-backend-selector-design.md`,
+# approaches B3/C) sits on this tab for the same reason
+# `migrant_sampling` sits on Migration: it is an execution-flavored
+# field, no tab breakdown ever named a tab for it, and this is the
+# closest existing home — not because it has anything to do with
+# batching (it is equally meaningful for a single, scalar run, which is
+# why its markup lives beside `n_replicates` rather than inside the
+# `batch-only-fields` group `index.html` hides for `n_replicates == 1`).
+#
+# All four legal `SimulationParams.engine_backend` values are listed,
+# not only the two a botanist realistically chooses between (design
+# approach B3, over B1): `params_to_form_values` renders whatever a
+# loaded YAML or reopened manifest actually holds, and an option the
+# `<select>` does not have cannot be rendered — the browser silently
+# shows some other one instead, and the next save quietly downgrades a
+# deliberately chosen field. The same "never silently misrepresent a
+# real field value" rule `mu_from_params`'s own per-locus case already
+# follows. Ordering and default selection (`"auto"`, labeled
+# recommended) are `index.html`'s own concern; this tuple only declares
+# which values are legal.
 BATCH_FIELDS: Final[tuple[FormField, ...]] = (
     FormField("n_replicates", "n_replicates", "int"),
     FormField("replicate_tolerance", "replicate tolerance", "optional_float"),
@@ -189,6 +211,12 @@ BATCH_FIELDS: Final[tuple[FormField, ...]] = (
         "replicate confidence",
         "float_choice",
         choices=("0.9", "0.95", "0.99"),
+    ),
+    FormField(
+        "engine_backend",
+        "execution engine",
+        "choice",
+        choices=("lineal", "auto", "generational", "generational-vector"),
     ),
 )
 
@@ -1146,6 +1174,14 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         ),
         "replicate_minimum": str(params.replicate_minimum),
         "replicate_confidence": str(params.replicate_confidence),
+        # The raw stored string, rendered as-is whichever of the four
+        # legal values it is — including the two the selector
+        # de-emphasizes. A YAML or manifest that deliberately names
+        # `"generational"`/`"generational-vector"` round-trips back out
+        # unchanged rather than being silently rewritten to whatever
+        # option the `<select>` happens to fall back on (design approach
+        # B3's own correctness requirement).
+        "engine_backend": params.engine_backend,
     }
     values.update(m_from_params(params))
     values.update(mu_from_params(params))
@@ -1204,6 +1240,10 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "replicate_minimum",
     "replicate_confidence",
     "migrant_sampling",
+    # Last, matching `configuration.md`'s own section order: its
+    # "Engine backend and JIT" section follows "Analysis and execution",
+    # of which `migrant_sampling` just above is the final key.
+    "engine_backend",
 )
 
 

@@ -8,6 +8,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- An **execution engine** control in the desktop app's Configure screen
+  (Structure panel), the first graphical way to choose
+  `engine_backend` — until now every run the app could start was
+  unconditionally the `lineal` reference engine, the one engine this
+  project's own recorded benchmarks never found fastest at any tested
+  configuration. All four values are offered, with `lineal` and `auto`
+  listed first and a brand-new form defaulting to `auto`, the
+  recommended choice: it picks whichever engine measured fastest for the
+  configuration at hand and records the engine it actually chose in the
+  run's own `manifest.json`, so an `auto` run replays from its saved
+  configuration exactly like one that named an engine explicitly.
+  `generational` and `generational-vector` appear below them as
+  secondary choices rather than being hidden — a configuration file or
+  reopened run naming either must load and save back unchanged, which a
+  `<select>` with no matching option cannot do. The within-run σ band
+  toggle above it needs no gating against this selector: every one of
+  the four engine backends computes a σ band. That was not true when
+  this control was designed — only `lineal` did, and the design
+  accordingly called for disabling the σ band checkbox whenever a
+  different engine was chosen, with a note explaining the limitation.
+  The engine-side work extending the band to the remaining backends
+  landed first, so that gate was never built: a disabled checkbox would
+  now describe a restriction that no longer exists (design doc
+  `20260911-claude-sonnet-5-gui-engine-backend-selector-design.md`,
+  `selby/restricted`, approach D and commit-schedule step 3).
 - Each across-replicate confidence interval now reports the equivalent
   sample standard deviation alongside its half-width, completing
   botanist GUI design doc §7.2's own requirement that "the meter's
@@ -761,6 +786,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Packaged **beta** builds now bundle `numba`, so the new execution
+  engine control's recommended `auto` choice actually works in the
+  artifact a tester downloads. Every one of the five beta packaging jobs
+  installed the `dev` extra only, which never pulls in `numba`; `auto`
+  resolves to the `generational-vector` engine for essentially every
+  eligible configuration, and that engine requires `numba` outright —
+  so `auto` would have failed nearly every real run in a packaged build
+  with "needs the optional numba dependency." **Your next beta download
+  will be noticeably larger** as a result; that is the bundled `numba`
+  compiler, and it is what makes the recommended engine choice real
+  rather than a promise the download could not keep. Release builds do
+  not yet bundle it; until they do, the app relabels the two options
+  that need `numba` whenever the running install lacks it, rather than
+  offering a choice that fails only once a run starts.
 - `dev/bin/check-webui-assets`'s own JS scanning ran its class-name
   regexes directly against raw source, comments included — an
   apostrophe inside an ordinary prose `//` comment (this codebase's own
