@@ -8,6 +8,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `doc/configuration.md` entries for `equilibrium_convergence_window`,
+  `equilibrium_convergence_tolerance`, and `equilibrium_max_generations`
+  — the equilibrium-split starting condition's three configuration keys,
+  which shipped accepted by `SimulationParams.from_mapping` and settable
+  from a config file but documented nowhere user-facing. One shared
+  section (they must be set together, or not at all) covering what the
+  two ancestral-population phases do, what each key controls, why the
+  generation cap is fatal here unlike `max_generations`, and the mutual
+  exclusivity with an explicit p<sub>0</sub>, plus seven new validation-summary
+  rows. Found by comparing `_CONFIG_KEYS` against the document
+  programmatically rather than by eye; see the 2026-09-12
+  API-compatibility-policy design, Approach E.
 - A trajectory panel for a batch run, both while it is still running
   and once it finishes (batch trajectory panel design `20260912-
   claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/

@@ -360,6 +360,55 @@ p_0:
       1: 0.90
 ```
 
+### equilibrium_convergence_window, equilibrium_convergence_tolerance, equilibrium_max_generations
+
+- **Type:** integer of at least 2; non-negative number; positive integer
+- **Default:** absent (all three)
+
+Together these select the **equilibrium-split** starting condition instead
+of the Dirichlet draw above. Set all three, or none of them: a partial
+configuration is rejected rather than guessed at.
+
+Equilibrium-split founds your demes from a real ancestral population rather
+than from a prior. It runs in two phases. First it simulates *one* population
+holding the same total number of gene copies your whole run will have (the sum
+of every deme's `N`, all in one deme), applying mutation and drift generation
+after generation — there is nothing to migrate between with only one deme —
+until that population's own diversity (H<sub>S</sub>, which equals H<sub>T</sub> when there is
+only one deme) stops changing. Then it splits that finished population into
+your `d` demes, each drawing its own `N` gene copies from the shared pool
+without replacement, so every deme gets a different sample. That sampling is a
+genuine founder effect: your demes already differ a little at generation 0,
+from the chance of which copies each one happened to receive.
+
+The three keys control only the first phase:
+
+- **equilibrium_convergence_window** — how many recent generations to compare
+  when deciding that the ancestral population's diversity has settled. It is
+  deliberately separate from convergence_window, because this phase runs at a
+  different population size than your real run and has no reason to share a
+  threshold with it.
+- **equilibrium_convergence_tolerance** — how close those generations must be
+  to count as settled, in H<sub>S</sub>'s own units.
+- **equilibrium_max_generations** — the safety limit on the first phase.
+
+One important difference from max_generations: reaching
+equilibrium_max_generations without settling is an **error**, not an ordinary
+result. A run founded from a population that never reached equilibrium would
+defeat the only thing this mode exists to provide, so it stops with a message
+instead of continuing.
+
+Equilibrium-split cannot be combined with an explicit p<sub>0</sub> — a run cannot both
+fix its starting frequencies and derive them — and it uses its own random
+number stream, derived from `seed`, so the same `seed` always reproduces the
+same founding populations.
+
+```yaml
+equilibrium_convergence_window: 50
+equilibrium_convergence_tolerance: 0.005
+equilibrium_max_generations: 5000
+```
+
 ## Convergence
 
 ### convergence_statistic
@@ -844,3 +893,10 @@ on this page).
 | sigma_band_multiplier not `2.0` or `3.0` | rejected |
 | sigma_band_window less than 2 | rejected |
 | sigma_band_multiplier/sigma_band_window with engine_backend resolving to anything but lineal | rejected |
+| one or two of the three equilibrium\_ keys given instead of all three | rejected |
+| any equilibrium\_ key given together with p<sub>0</sub> | rejected |
+| equilibrium_convergence_window less than 2 | rejected |
+| equilibrium_convergence_tolerance negative or non-finite | rejected |
+| equilibrium_max_generations less than 1 | rejected |
+| equilibrium_convergence_window greater than equilibrium_max_generations + 1 | rejected |
+| equilibrium_max_generations reached without the ancestral phase settling | run fails (not a benign outcome) |
