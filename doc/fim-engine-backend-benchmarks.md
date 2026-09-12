@@ -23,6 +23,7 @@ table below with the exact command shown above it.
 - [B.4 `d` sweep extended to `d=500`](#b4-d-sweep-extended-to-d500)
 - [B.5 Joint `d` × locus-length sweep (heatmap)](#b5-joint-d--locus-length-sweep-heatmap)
 - [B.6 Joint `d` × locus-length sweep, post-Phase-7 (2026-09-05)](#b6-joint-d--locus-length-sweep-post-phase-7-2026-09-05)
+- [Known gaps: axes not yet measured](#known-gaps-axes-not-yet-measured)
 
 ## Reading the tables
 
@@ -537,3 +538,56 @@ not the engine. A future RSS characterization aimed at engine-internal memory
 behavior specifically (rather than whole-run memory behavior, which this grid
 does answer, just uninformatively across backends) would need either a
 null/discarding store or a much shorter run.
+
+## Known gaps: axes not yet measured
+
+Recorded here, named, rather than left as a silent absence someone has to
+notice by reading the table of contents and inferring what is missing. Each
+of these needs real hardware time on an idle machine — hours, for the
+larger ones — which is why none is closed by code alone; none is blocked on
+a design decision.
+
+### Replicate concurrency (`max_concurrent_replicates`) has never been swept
+
+`max_concurrent_replicates` caps how many replicate lanes are ever alive at
+once (`fim.engine.run_batch`; `None`, the default, means every requested
+replicate). It exists specifically for its effect on **steady-state memory**
+under `"generational-vector"`, where each concurrently active lane holds its
+own cached `VectorizedState` — so bounding the lane count bounds that
+backend's working set independently of `n_replicates`. What that bound costs
+in wall-clock time, and how much peak RSS it actually buys, is unmeasured:
+
+- **No table here sweeps it.** Every table above holds it at its default.
+- **`dev/bin/benchmark-engines` has no axis for it.** Its `--sweep` field
+  list is `d`, `N`, `mu`, `m`, `loci-length`, and `replicates` — adding a
+  `max-concurrent-replicates` axis is a small, self-contained change to that
+  script, and is a prerequisite for the sweep rather than part of it.
+- **Correctness is already covered, and is not the gap.** That a window
+  changes only *when* a lane is built, never what a run computes, is
+  asserted directly for both the dict-based and the vectorized advancer
+  (`test_max_concurrent_replicates_does_not_change_what_a_batch_computes`
+  and `test_generational_vector_backend_windowed_batch_matches_unbounded`),
+  as is the lane-count bound itself
+  (`test_run_batch_bounds_concurrently_active_lanes_to_the_configured_window`).
+  What is missing is only the performance/memory characterization.
+
+The honest consequence: this document supports no recommendation about what
+to set `max_concurrent_replicates` to, for any configuration. Until the
+sweep runs, the default (`None`) is the only setting with recorded evidence
+behind it, and that evidence is every table above rather than a comparison.
+A useful sweep would need `--measure-rss` and a store that does not dominate
+peak RSS — see B.6's own closing note on exactly that limitation.
+
+### Batch size (`n_replicates`) is sweepable but unrecorded
+
+Distinct from the above, and often confused with it: `n_replicates` is how
+many replicates a batch runs, `max_concurrent_replicates` is how many of
+them may be in flight at once. `benchmark-engines` **can** sweep
+`n_replicates` (`--sweep replicates`), but no table in this document records
+a run of it — every table above instead holds it fixed (at `16`, or at `12`
+for B.6) and sweeps something else. So the cross-engine comparisons here are
+all at one batch size, and nothing measured says whether the `V`-versus-`G`
+boundary moves with batch size the way B.5 showed it moves with `d` and
+capacity together.
+
+This one needs only machine time, not a tooling change.
