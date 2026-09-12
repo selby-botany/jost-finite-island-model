@@ -8,6 +8,33 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Deterministic structural regression tests for the engine-backend
+  performance work, in place of any wall-clock gate. A new cross-backend
+  test runs all six backend/advancer combinations `fim` can reach
+  (`lineal`; `generational` with `SequentialAdvancer`, with and without
+  `jit`; `generational` with `ThreadedAdvancer`, with and without
+  `jit="numba"`; and `generational-vector`) against one identical
+  migration-active configuration and asserts what every backend must
+  agree on regardless of value: the generations visited are exactly
+  `0 .. max_generations`, each `(generation, deme, locus)` appears once
+  with frequencies summing to one, and the stop reason, stopping
+  generation, `converged` flag, persisted row keys, and report keys are
+  the same everywhere. This is a gap the existing value-level parity
+  tests could not cover — with migration active, `generational-vector`
+  diverges from `lineal` bit-for-bit by design, so a backend that
+  stopped a generation early, wrote generation zero twice, dropped a
+  locus, or emitted an unnormalized distribution was
+  indistinguishable from that accepted divergence. A second new file
+  keeps the benchmark *record* honest rather than timing anything:
+  every `B.x` table in
+  [`doc/fim-engine-backend-benchmarks.md`](doc/fim-engine-backend-benchmarks.md)
+  must state the commit, machine, and date behind its numbers; the
+  shipped `auto_vector_min_d`/`auto_vector_max_capacity` defaults must
+  match the values that document's own recorded sweep concluded, so
+  neither can be changed without naming its evidence; and no benchmark
+  script may be invoked by `build` or by `ci.yml`, since a benchmark's
+  result is a property of the machine and its momentary load rather
+  than of the commit.
 - A trajectory panel for a batch run, both while it is still running
   and once it finishes (batch trajectory panel design `20260912-
   claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/
