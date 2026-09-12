@@ -24,6 +24,7 @@ const exploreM = document.getElementById("explore-m");
 const exploreMu = document.getElementById("explore-mu");
 const exploreAxis = document.getElementById("explore-axis");
 const exploreCanvas = document.getElementById("explore-canvas");
+const exploreLegend = document.getElementById("explore-legend");
 const explorePredictions = document.getElementById("explore-predictions");
 
 let exploreReturnScreen = "screen-run";
@@ -42,6 +43,20 @@ const EXPLORE_PREDICTION_LABELS = {
     E_ST: "E_ST",
     identity_recovery_half_life: "Half-life (generations)",
 };
+
+// The sweep curve's own three plotted series, in draw/legend order --
+// `E_ST` (`equilibrium_shannon_differentiation`) joins `D`/`G_ST` here
+// (`Api.get_equilibrium_sweep`'s own docstring has the "why now, not
+// before" reasoning) since it shares their identical `[0, 1]`
+// differentiation domain. Colored from `run-view-completed.js`'s own
+// module-scope `STATISTIC_TRAJECTORY_COLORS` (loaded before this file,
+// index.html's own <script> order) rather than a second, independently
+// chosen palette -- botanist GUI design doc §11.3's own "disciplined
+// statistic color language" names this exact reuse ("the axis label on
+// Explore") as part of the same one statistic-color contract every
+// other screen already honors: a color learned as "D" on Results reads
+// as "D" here too, with no separate legend to re-learn.
+const EXPLORE_SWEEP_SERIES = ["D", "G_ST", "E_ST"];
 
 /**
  * Read the four field values as the plain strings the bridge expects.
@@ -92,19 +107,71 @@ function syncExploreCanvasSize() {
 new ResizeObserver(syncExploreCanvasSize).observe(exploreCanvas);
 
 /**
- * Draw the swept prediction curve: `D` and `G_ST` as two lines against
- * `sweep.points`' own `x`, on a fixed `[0, 1]` y-domain
- * (`PROBABILITY_TICK_VALUES`, declared in `scatter.js` — both predicted
- * statistics live on the same probability scale a frequency scatter
- * panel's own axes already use), an x-domain fit to the swept range
- * itself, log-scaled for `m`/`mu` (both span several orders of
- * magnitude, the same reason `_geometric_sweep` spaces them
- * geometrically rather than linearly server-side), and a dashed
- * vertical marker at the configuration's own current value.
+ * Build the sweep curve's own legend -- one swatch per
+ * `EXPLORE_SWEEP_SERIES` entry, the same "swatch span plus a text node"
+ * shape `run-view-completed.js`'s own `renderTrajectory` already builds
+ * its legend from. Unlike that legend, `EXPLORE_SWEEP_SERIES` never
+ * varies from one redraw to the next (always exactly `D`/`G_ST`/`E_ST`,
+ * whether or not a given point's own value is defined at this
+ * configuration -- a gap in the line, not an absent series), so this
+ * runs once at module load rather than being rebuilt on every
+ * `refreshExplore`.
+ */
+function renderExploreLegend() {
+    exploreLegend.replaceChildren();
+    for (const name of EXPLORE_SWEEP_SERIES) {
+        const item = document.createElement("span");
+        const swatch = document.createElement("span");
+        swatch.className = "swatch";
+        swatch.style.backgroundColor = STATISTIC_TRAJECTORY_COLORS[name];
+        item.appendChild(swatch);
+        item.appendChild(document.createTextNode(name));
+        exploreLegend.appendChild(item);
+    }
+}
+renderExploreLegend();
+
+/**
+ * Return `#explore-axis`'s own `<option>` label text for `axisKey` --
+ * the exact wording already shown in that dropdown for whichever field
+ * is being swept, read directly from the DOM rather than a second,
+ * separately maintained label table that could quietly drift from it.
+ * @param {string} axisKey
+ * @returns {string}
+ */
+function exploreAxisLabel(axisKey) {
+    for (const option of exploreAxis.options) {
+        if (option.value === axisKey) {
+            return option.textContent;
+        }
+    }
+    return axisKey;
+}
+
+/**
+ * Draw the swept prediction curve: `D`, `G_ST`, and `E_ST`
+ * (`EXPLORE_SWEEP_SERIES`) as three lines against `sweep.points`' own
+ * `x`, on a fixed `[0, 1]` y-domain (`PROBABILITY_TICK_VALUES`, declared
+ * in `scatter.js` — every plotted statistic lives on the same
+ * differentiation scale a frequency scatter panel's own axes already
+ * use), an x-domain fit to the swept range itself, log-scaled for
+ * `m`/`mu` (both span several orders of magnitude, the same reason
+ * `_geometric_sweep` spaces them geometrically rather than linearly
+ * server-side), a dashed vertical marker at the configuration's own
+ * current value, and axis titles naming both what is swept (the x-axis,
+ * `exploreAxisLabel`) and what the shared y-domain means -- see
+ * `EXPLORE_SWEEP_SERIES`'s own comment for the legend those three lines
+ * share, drawn separately into `#explore-legend`, not on the canvas.
+ *
+ * `identity_recovery_half_life` (generations, unbounded) deliberately
+ * has no line here: it does not share this `[0, 1]` domain --
+ * `Api.get_equilibrium_sweep`'s own docstring has the fuller "why not
+ * plotted, and why that is a deliberate, deferred follow-up" reasoning.
  *
  * @param {HTMLCanvasElement} canvas
  * @param {{axis: string, current: number,
- *     points: Array<{x: number, D: number|null, G_ST: number|null}>}} sweep
+ *     points: Array<{x: number, D: number|null, G_ST: number|null,
+ *     E_ST: number|null}>}} sweep
  */
 function drawSweepCurve(canvas, sweep) {
     const context = canvas.getContext("2d");
@@ -115,10 +182,13 @@ function drawSweepCurve(canvas, sweep) {
         return;
     }
 
-    const plotLeft = 40;
+    // Extra left margin (over a bare tick-label width) for the rotated
+    // y-axis title; extra bottom margin (over a bare tick-label height)
+    // for the x-axis title beneath the existing numeric ticks.
+    const plotLeft = 54;
     const plotRight = width - 12;
     const plotTop = 12;
-    const plotBottom = height - 28;
+    const plotBottom = height - 46;
 
     const logScale = sweep.axis === "m" || sweep.axis === "mu";
     const xs = sweep.points.map((point) => point.x);
@@ -174,8 +244,32 @@ function drawSweepCurve(canvas, sweep) {
         context.fillText(formatExploreTick(point.x), xToPixel(point.x), plotBottom + 4);
     }
 
+    // X-axis title: whichever field is being swept, in `#explore-axis`'s
+    // own <option> wording (`exploreAxisLabel`) -- naming the four
+    // possible swept quantities the same way Configure's own field
+    // labels/`FIELD_HELP` already do, rather than inventing new wording
+    // for the same concept a second time.
+    context.textAlign = "center";
+    context.textBaseline = "bottom";
+    context.fillText(exploreAxisLabel(sweep.axis), (plotLeft + plotRight) / 2, height - 2);
+
+    // Y-axis title: every plotted series (`EXPLORE_SWEEP_SERIES`) shares
+    // this one `[0, 1]` differentiation scale -- `differentiation.py`'s
+    // own module docstring frames `D`/`G_ST`/`E_ST` alike as "some way
+    // of asking how much bigger H_T is than H_S, relative to some
+    // baseline," so one shared title names the whole family rather than
+    // any one line's own name (already distinguished by color in
+    // `#explore-legend`, not repeated here).
+    context.save();
+    context.translate(12, (plotTop + plotBottom) / 2);
+    context.rotate(-Math.PI / 2);
+    context.textAlign = "center";
+    context.textBaseline = "alphabetic";
+    context.fillText("Differentiation", 0, 0);
+    context.restore();
+
     /**
-     * @param {"D"|"G_ST"} key
+     * @param {"D"|"G_ST"|"E_ST"} key
      * @param {string} color
      */
     function drawLine(key, color) {
@@ -203,8 +297,9 @@ function drawSweepCurve(canvas, sweep) {
         }
         context.stroke();
     }
-    drawLine("D", "#1f6fb2");
-    drawLine("G_ST", "#d97a26");
+    for (const name of EXPLORE_SWEEP_SERIES) {
+        drawLine(name, STATISTIC_TRAJECTORY_COLORS[name]);
+    }
 
     // The configuration's own current value on this axis.
     context.setLineDash([4, 3]);

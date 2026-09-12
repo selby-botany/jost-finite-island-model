@@ -537,6 +537,28 @@ def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None:
     for point in result["points"]:
         expected_g_st = equilibrium_g_st(450, point["x"], 0.00003, 20)
         assert point["G_ST"] == pytest.approx(expected_g_st)
+        expected_e_st = equilibrium_shannon_differentiation(
+            450, point["x"], 0.00003, 20
+        )
+        assert point["E_ST"] == pytest.approx(expected_e_st)
+
+
+def test_get_equilibrium_sweep_reports_e_st_as_none_at_mu_zero() -> None:
+    """`E_ST` (like `D`) is undefined at `mu == 0`; `G_ST` alone stays defined.
+
+    Mirrors `test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_
+    zero`'s own case, one level down: the sweep's own per-point `mu == 0`
+    (reachable by sweeping `N`/`d`/`m` while the fixed `mu` field is `0`,
+    not only by sweeping `mu` itself, since `_EQUILIBRIUM_SWEEP_DOMAINS`'s
+    own `mu` range never reaches exactly `0`).
+    """
+    result = Api().get_equilibrium_sweep(axis="N", n="450", m="0.001", mu="0", d="20")
+
+    assert result["ok"] is True
+    for point in result["points"]:
+        assert point["D"] is None
+        assert point["E_ST"] is None
+        assert point["G_ST"] is not None
 
 
 def test_get_equilibrium_sweep_rounds_integer_axes() -> None:

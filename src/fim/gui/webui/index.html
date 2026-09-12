@@ -552,6 +552,12 @@
           </select>
         </div>
         <canvas id="explore-canvas"></canvas>
+        <!-- Reuses `run-view-completed.js`'s own `.run-trajectory-legend`/
+             `.swatch` classes unmodified -- one canvas plus a swatch-per-
+             series legend beneath it, the identical shape
+             `#compare-trajectory-legend`, below, also reuses those same
+             classes for. -->
+        <div id="explore-legend" class="run-trajectory-legend"></div>
       </div>
       <table class="stats-table" id="explore-predictions">
         <tbody>

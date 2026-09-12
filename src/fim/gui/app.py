@@ -1218,14 +1218,19 @@ class Api:
     def get_equilibrium_sweep(
         self, axis: str, n: str, m: str, mu: str, d: str
     ) -> dict[str, Any]:
-        """Sweep one of N/d/m/mu and return predicted D/G_ST across it.
+        """Sweep one of N/d/m/mu and return predicted D/G_ST/E_ST across it.
 
         Explore's own curve (design doc
         `20260907-claude-sonnet-5-botanist-gui-redesign.md` §5.2):
         `axis` sweeps across `_EQUILIBRIUM_SWEEP_DOMAINS[axis]`, a fixed
         display range independent of the other three fields' current
         values, which are held fixed at whatever `get_equilibrium_
-        predictions` was just called with.
+        predictions` was just called with. `E_ST` (`equilibrium_shannon_
+        differentiation`) joins `D`/`G_ST` here rather than staying
+        computed-but-unplotted the way `get_equilibrium_predictions`
+        alone left it — it shares the identical `[0, 1]` differentiation
+        domain those two already plot on, so the same axes and the same
+        gap-handling client-side `drawLine` cover it with no new chart.
 
         Args:
             axis: Which field to sweep — one of `"N"`, `"d"`, `"m"`,
@@ -1237,13 +1242,21 @@ class Api:
 
         Returns:
             `{"ok": True, "axis": axis, "current": <parsed current value
-            of axis>, "points": [{"x": ..., "D": ..., "G_ST": ...},
-            ...]}` — `D`/`G_ST` are `None` (not a formatted string —
-            plotting reads these as numbers) wherever that point's own
-            configuration makes the prediction undefined, e.g. `D` at
-            `mu == 0`; `{"ok": False, "message": ...}` if `axis` is not
-            one of the four names above, or if `n`/`d`/`m`/`mu` do not
-            parse.
+            of axis>, "points": [{"x": ..., "D": ..., "G_ST": ...,
+            "E_ST": ...}, ...]}` — `D`/`G_ST`/`E_ST` are `None` (not a
+            formatted string — plotting reads these as numbers) wherever
+            that point's own configuration makes the prediction
+            undefined, e.g. `D`/`E_ST` at `mu == 0`; `{"ok": False,
+            "message": ...}` if `axis` is not one of the four names
+            above, or if `n`/`d`/`m`/`mu` do not parse.
+
+            `identity_recovery_half_life` (generations, unbounded) is
+            deliberately not part of this sweep: it shares no `[0, 1]`
+            domain with `D`/`G_ST`/`E_ST` (`get_equilibrium_predictions`
+            already surfaces it as Explore's own single-number
+            prediction instead) — a second sweep/chart for it against
+            `N`/`m` (the only two axes it depends on) is a reasonable,
+            deliberately deferred follow-up, not built here.
         """
         if axis not in _EQUILIBRIUM_SWEEP_DOMAINS:
             return {
@@ -1286,7 +1299,20 @@ class Api:
                 )
             except ValueError:
                 predicted_g_st = None
-            points.append({"x": value, "D": predicted_d, "G_ST": predicted_g_st})
+            try:
+                predicted_e_st: float | None = equilibrium_shannon_differentiation(
+                    sweep_n, sweep_m, sweep_mu, sweep_d
+                )
+            except ValueError:
+                predicted_e_st = None
+            points.append(
+                {
+                    "x": value,
+                    "D": predicted_d,
+                    "G_ST": predicted_g_st,
+                    "E_ST": predicted_e_st,
+                }
+            )
 
         return {"ok": True, "axis": axis, "current": current, "points": points}
 

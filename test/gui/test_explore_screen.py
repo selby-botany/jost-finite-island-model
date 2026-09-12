@@ -147,3 +147,137 @@ def test_changing_a_field_recomputes_predictions(
     result = outcome.get(timeout=10)
 
     assert result["after"] != result["before"]
+
+
+def test_sweep_curve_has_a_legend_matching_the_shared_statistic_color_palette(
+    window: webview.Window,
+) -> None:
+    """`#explore-legend` names all three plotted lines in the shared statistic colors.
+
+    Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+    redesign.md` §11.3: "the axis label on Explore" is named directly as
+    part of the one statistic-color contract every screen shares, so this
+    reads `STATISTIC_TRAJECTORY_COLORS` (`run-view-completed.js`, a
+    module-scope `const` in the same classic-script global scope every
+    `webui/screens/*.js` file shares, per `index.html`'s own `<script>`
+    order) back from the live page rather than hardcoding a second copy
+    of those hex values here — a real color drift between the two would
+    fail this test, not silently pass with a stale expectation.
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
+            _poll_until(
+                "window.__fimExploreReady === true", lambda value: value is True
+            )
+            result = window.evaluate_js(
+                "({"
+                "items: Array.from("
+                "document.getElementById('explore-legend').children"
+                ").map((span) => ({"
+                "text: span.textContent, "
+                "color: span.querySelector('.swatch').style.backgroundColor"
+                "})), "
+                "expectedColors: {"
+                "D: STATISTIC_TRAJECTORY_COLORS.D, "
+                "G_ST: STATISTIC_TRAJECTORY_COLORS.G_ST, "
+                "E_ST: STATISTIC_TRAJECTORY_COLORS.E_ST"
+                "}"
+                "})"
+            )
+            outcome.put(result)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    names = [item["text"] for item in result["items"]]
+    assert names == ["D", "G_ST", "E_ST"]
+
+    def _to_rgb(hex_color: str) -> str:
+        red, green, blue = (
+            int(hex_color[1:3], 16),
+            int(hex_color[3:5], 16),
+            int(hex_color[5:7], 16),
+        )
+        return f"rgb({red}, {green}, {blue})"
+
+    for item in result["items"]:
+        expected_hex = result["expectedColors"][item["text"]]
+        assert item["color"] == _to_rgb(expected_hex)
+
+
+def test_sweep_curve_draws_axis_titles(window: webview.Window) -> None:
+    """The canvas draws a real x-axis title (the swept field) and y-axis title.
+
+    Checked the same way `test_results_screen.py`'s own sigma-band test
+    checks a canvas fill actually happened: the alpha channel of a small
+    rectangle in each title's own drawn region, non-zero only if
+    something was actually painted there (a canvas starts fully
+    transparent) -- not by trying to read the text back out of raster
+    pixels, which no test in this package attempts.
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
+            _poll_until(
+                "window.__fimExploreReady === true", lambda value: value is True
+            )
+            result = window.evaluate_js(
+                "(() => {"
+                "var c = document.getElementById('explore-canvas');"
+                "var ctx = c.getContext('2d');"
+                "var data = ctx.getImageData(0, 0, c.width, c.height).data;"
+                "function nonBlankInRect(x0, y0, x1, y1) {"
+                "  var count = 0;"
+                "  for (var y = y0; y < y1; y++) {"
+                "    for (var x = x0; x < x1; x++) {"
+                "      var i = (y * c.width + x) * 4 + 3;"
+                "      if (data[i] !== 0) { count += 1; }"
+                "    }"
+                "  }"
+                "  return count;"
+                "}"
+                # Bottom strip: the x-axis title (`exploreAxisLabel`); left
+                # strip: the rotated "Differentiation" y-axis title.
+                "return {"
+                "  xTitleNonBlankPixels: nonBlankInRect("
+                "0, c.height - 14, c.width, c.height - 2), "
+                "  yTitleNonBlankPixels: nonBlankInRect(2, 0, 24, c.height)"
+                "};"
+                "})()"
+            )
+            outcome.put(result)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    assert result["xTitleNonBlankPixels"] > 0
+    assert result["yTitleNonBlankPixels"] > 0

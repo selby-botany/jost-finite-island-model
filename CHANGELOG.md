@@ -312,6 +312,29 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   what each does and, for the q sweep, which order matches the
   report's own `K_ST`/`D`/`E_ST` — these two controls were the only
   fields in the GUI without one.
+- Explore's sweep-curve plot (design doc `20260907-claude-sonnet-5-
+  botanist-gui-redesign.md` §5.2) now labels both axes, names its
+  plotted lines with a real legend, and plots a third statistic,
+  `E_ST`, that `Api.get_equilibrium_sweep` computed but never actually
+  drew. The x-axis title reuses `#explore-axis`'s own `<option>`
+  wording — the same four swept-quantity labels the dropdown already
+  shows, never a second, separately maintained copy of them; the
+  y-axis title, "Differentiation," names the shared `[0, 1]` scale
+  every plotted statistic lives on. The legend reuses `run-view-
+  completed.js`'s own `STATISTIC_TRAJECTORY_COLORS` rather than a
+  second, independently chosen palette — design §11.3's "disciplined
+  statistic color language" names "the axis label on Explore" directly
+  as part of that one contract, so a color learned as `D` on Results
+  or Compare means the same thing here. `equilibrium_shannon_
+  differentiation` (`E_ST`) joins `equilibrium_d`/`equilibrium_g_st` in
+  `get_equilibrium_sweep`'s own response, sharing their identical
+  `[0, 1]` domain and gap-handling (a point undefined at this
+  configuration, e.g. every one of the three at `mu == 0`, breaks the
+  line rather than interpolating across it). `identity_recovery_half_
+  life` (generations, unbounded) stays deliberately off this chart — it
+  shares none of that `[0, 1]` domain, and is already shown as its own
+  single-number prediction; a second, small chart for it against `N`/
+  `m` is a reasonable, explicitly deferred follow-up, not built here.
 
 ### Changed
 
