@@ -217,8 +217,59 @@ def reanalyze_trajectory(
     # recorded about it.
     verify_trajectory_integrity(trajectory_path, manifest)
     params = manifest.params()
-    rows = list(JSONLTrajectoryStore(trajectory_path).read(manifest.run_id))
-    if not rows:
+    # A single streaming pass, rather than `list(store.read(...))`
+    # followed by filtering: a persisted trajectory can hold far more
+    # rows than any one generation's worth (every deme/locus/allele
+    # combination present, for every generation the run ever reached),
+    # and every row past this point is only ever used for one selected
+    # generation — materializing every row simultaneously just to
+    # discard all but one generation's worth wastes memory in direct
+    # proportion to how long the run went on for. This still reads
+    # every row exactly once (`observed_generation_count`, below, is a
+    # real cross-check that genuinely needs to see every row's own
+    # generation number) and performs the full-file SHA-256 check above
+    # unweakened — see `doc/20260906-gpt-5.6-open-issues.md` item 9 (the
+    # restricted-repo issue tracker) for the fuller accounting of what
+    # is, and is not, avoidable here.
+    #
+    # `seen_generations` only ever holds distinct generation numbers
+    # (plain `int`s — one entry per generation, not per row), so it
+    # stays small even for a trajectory with many rows per generation.
+    # `generation_rows` accumulates only the rows belonging to whichever
+    # generation is ultimately selected.
+    #
+    # When `generation` is `None` ("show me the final result," `fim
+    # stats`'s own default with no extra flags), the target generation
+    # is the highest generation number present anywhere in the file —
+    # but `JSONLTrajectoryStore.read` promises only "oldest first" (its
+    # own write order), not that a single run's rows arrive sorted by
+    # generation, so which generation is "highest" cannot be known until
+    # every row has been seen. `running_max`/`generation_rows` track
+    # that highest-so-far value and its rows as the stream is consumed:
+    # any row whose generation exceeds the running max starts a fresh
+    # buffer (the old one can no longer be the eventual maximum); any
+    # row matching the running max is appended to it; anything lower is
+    # dropped. Because `running_max` only ever increases, it — and its
+    # accompanying buffer — equal the true global maximum and *all* of
+    # its rows once the stream is exhausted, regardless of what order
+    # the file's rows happen to be in.
+    running_max: int | None = None
+    generation_rows: list[TrajectoryRow] = []
+    seen_generations: set[int] = set()
+    row_count = 0
+    for row in JSONLTrajectoryStore(trajectory_path).read(manifest.run_id):
+        row_count += 1
+        row_generation = row["generation"]
+        seen_generations.add(row_generation)
+        if generation is not None:
+            if row_generation == generation:
+                generation_rows.append(row)
+        elif running_max is None or row_generation > running_max:
+            running_max = row_generation
+            generation_rows = [row]
+        elif row_generation == running_max:
+            generation_rows.append(row)
+    if row_count == 0:
         raise ValueError(f"trajectory has no rows for {manifest.run_id}")
     # A second, independent consistency check beyond the checksum above:
     # even a file whose bytes match their own recorded fingerprint could
@@ -226,20 +277,14 @@ def reanalyze_trajectory(
     # different run) — comparing how many distinct generations are
     # actually present against how many the manifest claims catches that
     # mismatch too.
-    observed_generation_count = len({row["generation"] for row in rows})
+    observed_generation_count = len(seen_generations)
     if observed_generation_count != manifest.generation_count:
         raise ValueError(
             f"trajectory has {observed_generation_count} generation(s), "
             f"manifest records {manifest.generation_count} — the file may "
             "have been edited since the run completed"
         )
-    # No `generation` requested (the ordinary case) means "show me the
-    # final result," exactly like `fim stats` with no extra flags —
-    # the highest generation number actually present in the file.
-    resolved_generation = (
-        generation if generation is not None else max(row["generation"] for row in rows)
-    )
-    generation_rows = [row for row in rows if row["generation"] == resolved_generation]
+    resolved_generation = generation if generation is not None else running_max
     if not generation_rows:
         raise ValueError(f"trajectory has no generation {resolved_generation}")
     state = ModelState.from_rows(generation_rows, params.loci)

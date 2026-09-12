@@ -357,6 +357,33 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   validation-harness oracle by `test_report_for_state_ratio_of_means_
   matches_the_pooled_oracle`.
 
+- `fim.reanalyze.reanalyze_trajectory` no longer materializes an
+  entire persisted trajectory into one list before selecting the one
+  requested generation's rows out of it (`doc/20260906-gpt-5.6-open-
+  issues.md`, the restricted-repo open-issues tracker, item 9) — it now
+  streams `JSONLTrajectoryStore.read` in a single pass, retaining only
+  the selected generation's own rows. This is a narrower win than the
+  issue's own "stream rows and retain only the requested generation"
+  wording suggests: `verify_trajectory_integrity`'s full-file SHA-256
+  digest check already reads every byte in fixed-size chunks regardless
+  (unweakened, still required — the tamper/corruption check this
+  project relies on), and the independent distinct-generation-count
+  consistency check genuinely needs every row's own generation number,
+  not just the requested generation's. Neither check is skipped or
+  shortened. The real, achievable savings is holding only one
+  generation's rows in memory at a time instead of every row the
+  trajectory has ever recorded — for `generation=None` (the "final
+  generation" default), a single-pass rolling-maximum buffer resolves
+  which generation is highest without assuming `JSONLTrajectoryStore.
+  read`'s own file-order guarantee ("oldest first") implies rows arrive
+  sorted by generation, which it does not promise. Every existing error
+  case (a missing/malformed requested generation, an empty trajectory,
+  a generation-count mismatch, a tampered file) raises with unchanged
+  wording and type. New `weakref`-based liveness regression tests
+  (`test/test_reanalyze.py`) prove peak simultaneously-live rows stays
+  near one generation's own row count regardless of total trajectory
+  size, rather than a wall-clock timing measurement.
+
 ### Removed
 
 - `fim.convergence.criteria.AnyCriterion`/`AllCriterion`, the two
