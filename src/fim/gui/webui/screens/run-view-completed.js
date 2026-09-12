@@ -86,6 +86,16 @@ let hiddenTrajectoryStatistics = new Set();
 // history it may no longer have close at hand.
 let lastTrajectoryRenderArgs = null;
 
+// The batch counterpart to `lastTrajectoryRenderArgs` (batch trajectory
+// panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
+// design.md`, `selby/restricted`, commit 2) -- `renderBatchTrajectory`'s
+// own last `pooledConvergenceHistories` argument, cached the same way
+// and for the same reason: a legend click's own toggle re-render.
+// Shares `hiddenTrajectoryStatistics` with the scalar panel (only one
+// of the two views ever shows at once, so there is no risk of one
+// view's own toggle silently fighting the other's).
+let lastPooledConvergenceHistories = null;
+
 /**
  * Reset the trajectory legend's own hidden-statistic set to "everything
  * visible" -- called whenever a genuinely new run starts or a different
@@ -831,6 +841,224 @@ function buildTrajectoryLegendItem(name, label, swatchClassName) {
     return item;
 }
 
+/**
+ * Draw a completed batch's own pooled trajectory (batch trajectory
+ * panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
+ * design.md`, `selby/restricted`, commit 2) -- one mean line plus a
+ * shaded low/high band per statistic, each on its *own* generation
+ * axis rather than one shared list (`pooled_convergence_histories`'s
+ * own docstring: different statistics can have different generation
+ * coverage once replicates start dropping out, so there is no single
+ * shared list every statistic's own points would otherwise need to
+ * align against). Deliberately not `drawTrajectoryCurve` extended in
+ * place -- that function's own domain/axis math assumes one shared
+ * `generations` array indexing every statistic's own `histories`
+ * entry at the same position, an assumption this payload's own shape
+ * does not hold.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @param {Record<string, Array<{generation: number, mean: string,
+ *     low: string, high: string, sampleCount: number}>>} visiblePooled
+ *     Already filtered to the statistics currently visible
+ *     (`hiddenTrajectoryStatistics`) -- this function draws exactly
+ *     what it is given, the same division of responsibility
+ *     `drawTrajectoryCurve` already established for its own
+ *     `visiblePlottable` argument.
+ */
+function drawBatchTrajectoryCurve(canvas, visiblePooled) {
+    const context = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    context.clearRect(0, 0, width, height);
+    const names = Object.keys(visiblePooled);
+    if (names.length === 0) {
+        return;
+    }
+
+    const plotLeft = 42;
+    const plotRight = width - 12;
+    const plotTop = 12;
+    const plotBottom = height - 22;
+
+    const allGenerations = names.flatMap((name) =>
+        visiblePooled[name].map((point) => point.generation)
+    );
+    const allValues = names.flatMap((name) =>
+        visiblePooled[name].flatMap((point) => [
+            Number(point.low),
+            Number(point.high),
+        ])
+    );
+    const minGeneration = Math.min(...allGenerations);
+    const maxGeneration = Math.max(...allGenerations);
+    // The domain always includes [0, 1], matching `drawTrajectoryCurve`'s
+    // own identical reasoning: every named statistic's own natural range
+    // starts there, so this reads against the same fixed floor/ceiling a
+    // reader of any other statistic on this page already expects.
+    const minValue = Math.min(0, ...allValues);
+    const maxValue = Math.max(1, ...allValues);
+
+    function xToPixel(generation) {
+        const fraction =
+            maxGeneration === minGeneration
+                ? 0
+                : (generation - minGeneration) / (maxGeneration - minGeneration);
+        return plotLeft + fraction * (plotRight - plotLeft);
+    }
+    function yToPixel(value) {
+        const fraction =
+            maxValue === minValue ? 0 : (value - minValue) / (maxValue - minValue);
+        return plotBottom - fraction * (plotBottom - plotTop);
+    }
+
+    const style = getComputedStyle(document.documentElement);
+    const borderColor = style.getPropertyValue("--fim-border").trim();
+    const mutedColor = style.getPropertyValue("--fim-muted").trim();
+
+    context.strokeStyle = borderColor;
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(plotLeft, plotTop);
+    context.lineTo(plotLeft, plotBottom);
+    context.lineTo(plotRight, plotBottom);
+    context.stroke();
+
+    context.fillStyle = mutedColor;
+    context.font = "10px sans-serif";
+    context.textAlign = "right";
+    context.textBaseline = "middle";
+    context.fillText(maxValue.toFixed(2), plotLeft - 6, plotTop);
+    context.fillText(minValue.toFixed(2), plotLeft - 6, plotBottom);
+    context.textBaseline = "top";
+    context.fillText(`gen ${maxGeneration}`, plotRight, plotBottom + 4);
+    context.textAlign = "left";
+    context.fillText(`gen ${minGeneration}`, plotLeft, plotBottom + 4);
+
+    for (const name of names) {
+        const points = visiblePooled[name];
+        const color = STATISTIC_TRAJECTORY_COLORS[name] || mutedColor;
+        // The shaded band: `high` left-to-right, then `low` back
+        // right-to-left, closing one filled polygon -- the standard
+        // "confidence band" fill technique, needed here (rather than
+        // `drawTrajectoryCurve`'s own single `fillRect`) because a
+        // pooled band's own width is not constant across generations,
+        // shrinking whenever a replicate stops contributing.
+        context.fillStyle = color;
+        context.globalAlpha = 0.2;
+        context.beginPath();
+        points.forEach((point, index) => {
+            const x = xToPixel(point.generation);
+            const y = yToPixel(Number(point.high));
+            if (index === 0) {
+                context.moveTo(x, y);
+            } else {
+                context.lineTo(x, y);
+            }
+        });
+        for (let index = points.length - 1; index >= 0; index -= 1) {
+            const point = points[index];
+            context.lineTo(xToPixel(point.generation), yToPixel(Number(point.low)));
+        }
+        context.closePath();
+        context.fill();
+        context.globalAlpha = 1;
+
+        context.strokeStyle = color;
+        context.lineWidth = 2;
+        context.beginPath();
+        points.forEach((point, index) => {
+            const x = xToPixel(point.generation);
+            const y = yToPixel(Number(point.mean));
+            if (index === 0) {
+                context.moveTo(x, y);
+            } else {
+                context.lineTo(x, y);
+            }
+        });
+        context.stroke();
+    }
+}
+
+/**
+ * Render a completed batch's own pooled trajectory panel, including its
+ * legend -- the batch counterpart to `renderTrajectory`, called from
+ * `enterCompletedState`'s own batch branch instead of that function
+ * (batch trajectory panel design `20260912-claude-sonnet-5-batch-
+ * trajectory-panel-design.md`, `selby/restricted`, commit 2).
+ *
+ * @param {Record<string, Array<{generation: number, mean: string,
+ *     low: string, high: string, sampleCount: number}>> | undefined} pooledConvergenceHistories
+ */
+function renderBatchTrajectory(pooledConvergenceHistories) {
+    lastPooledConvergenceHistories = pooledConvergenceHistories;
+    const names = pooledConvergenceHistories ? Object.keys(pooledConvergenceHistories) : [];
+    if (names.length === 0) {
+        runTrajectoryFrame.hidden = true;
+        runTrajectoryLegend.replaceChildren();
+        return;
+    }
+    runTrajectoryFrame.hidden = false;
+    const canvas = runTrajectoryCanvas;
+    canvas.width = canvas.clientWidth || canvas.width;
+    canvas.height = canvas.clientHeight || canvas.height;
+    const visiblePooled = Object.fromEntries(
+        names
+            .filter((name) => !hiddenTrajectoryStatistics.has(name))
+            .map((name) => [name, pooledConvergenceHistories[name]])
+    );
+    drawBatchTrajectoryCurve(canvas, visiblePooled);
+    runTrajectoryLegend.replaceChildren();
+    for (const name of names) {
+        runTrajectoryLegend.appendChild(
+            buildBatchTrajectoryLegendItem(name, `${name} (pooled across replicates)`)
+        );
+    }
+}
+
+/**
+ * The batch counterpart to `buildTrajectoryLegendItem` -- identical in
+ * every way except which render function a toggle click re-invokes
+ * (`renderBatchTrajectory`, via `lastPooledConvergenceHistories`,
+ * rather than `renderTrajectory`). Kept as a separate function, not a
+ * shared one taking a callback, so each stays a plain, directly
+ * readable "build this legend item" function -- the one real
+ * difference between them is small enough that threading a callback
+ * through would read as more indirection than the two call sites
+ * actually save.
+ * @param {string} name a tracked statistic name (`STATISTIC_NAMES`).
+ * @param {string} label the full text shown beside the swatch.
+ * @returns {HTMLSpanElement}
+ */
+function buildBatchTrajectoryLegendItem(name, label) {
+    const hidden = hiddenTrajectoryStatistics.has(name);
+    const item = document.createElement("span");
+    item.className = hidden ? "legend-item legend-item-hidden" : "legend-item";
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
+    item.setAttribute("aria-pressed", String(!hidden));
+    const swatch = document.createElement("span");
+    swatch.className = "swatch";
+    swatch.style.backgroundColor = STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
+    item.appendChild(swatch);
+    item.appendChild(document.createTextNode(label));
+    const toggle = () => {
+        if (hiddenTrajectoryStatistics.has(name)) {
+            hiddenTrajectoryStatistics.delete(name);
+        } else {
+            hiddenTrajectoryStatistics.add(name);
+        }
+        renderBatchTrajectory(lastPooledConvergenceHistories);
+    };
+    item.addEventListener("click", toggle);
+    item.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggle();
+        }
+    });
+    return item;
+}
+
 function renderDifferentiationQ(report) {
     // Only `Api.open_run`'s own payload can carry this (design §4.6's
     // q-sweep field) -- a live run's own `"done"` push never does, so
@@ -1230,9 +1458,16 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         window.fim.resetScrubber();
         // A batch's own `completed` view is a pooled final-state
         // scatter across replicates (this file's own module docstring)
-        // — no one trajectory of its own to plot either, and so nothing
-        // for a scrub tick to ever answer (there is no scrubber to wire
-        // for a batch in the first place).
+        // -- still nothing for a scrub tick to ever answer (there is no
+        // scrubber to wire for a batch at all), but, as of batch
+        // trajectory panel design `20260912-claude-sonnet-5-batch-
+        // trajectory-panel-design.md` (`selby/restricted`) commit 2, no
+        // longer nothing to plot: `renderBatchTrajectory` (not
+        // `renderTrajectory`, which assumes one shared generation list
+        // every statistic's own history aligns against -- an assumption
+        // `payload.pooledConvergenceHistories`'s own per-point-scoped
+        // generations do not hold) draws the real, authoritative
+        // cross-replicate aggregate.
         completedTrajectoryGenerations = null;
         completedTrajectoryHistories = null;
         completedSigmaBand = null;
@@ -1240,7 +1475,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedIdentityRecovery = null;
         completedGenerationCount = null;
         completedFinalStatistics = null;
-        renderTrajectory(undefined, undefined);
+        renderBatchTrajectory(payload.pooledConvergenceHistories);
     } else {
         // A different run just opened (or a live run just finished) --
         // any generation/sweep choice left over from whatever this

@@ -1,6 +1,7 @@
 """End-to-end tests for the deterministic library engine."""
 
 import functools
+import itertools
 import statistics
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -27,6 +28,7 @@ from fim.engine import (
     build_engine_backend,
     deterministic_run_id,
     fim,
+    pooled_convergence_histories,
     replicate_summary,
     report_for_state,
     run_batch,
@@ -696,6 +698,100 @@ def test_replicate_summary_covers_every_numeric_final_report_key(
     summary = replicate_summary(output)
 
     assert set(summary) == numeric_fields
+
+
+def test_pooled_convergence_histories_shrinks_as_replicates_stop() -> None:
+    """Each statistic's own per-generation sample count never increases.
+
+    Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+    trajectory-panel-design.md` (`selby/restricted`), commit 2: a real
+    5-replicate batch, each replicate stopping at its own (stochastic,
+    but fully deterministic for this fixed seed) generation -- the
+    exact "replicates stop at different generations" case the design's
+    own approach C exists to handle. `sample_count` at any generation
+    counts only the replicates whose own history reaches that far
+    (`RunResult.convergence_generations`/`convergence_histories`,
+    already computed, never before pooled across replicates), so once a
+    replicate stops, every later generation's own count can only stay
+    the same or drop -- never climb back up. A structural invariant
+    true regardless of exactly *which* generation each replicate
+    happens to stop at, so this test does not depend on that stochastic
+    detail beyond the fixed seed already making it reproducible.
+
+    Not built from `tiny_params`: its own tight, fast-converging
+    defaults have every replicate stop at the identical generation
+    (confirmed live -- the whole reason this test needs staggered
+    stops), so this test picks its own `seed`/`convergence_tolerance`/
+    `max_generations` specifically to produce real spread (`[3, 5, 6,
+    12, 15]`, confirmed live for this exact configuration) instead.
+    """
+    params = SimulationParams(
+        N=20,
+        m=0.1,
+        mu=0.01,
+        d=2,
+        seed=42,
+        loci=(LocusSpec(1, 200),),
+        convergence_window=4,
+        convergence_tolerance=0.02,
+        max_generations=30,
+        n_replicates=5,
+        replicate_tolerance=None,
+    )
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+    # A real precondition for the rest of this test to mean anything:
+    # if every replicate happened to stop at the identical generation,
+    # "shrinks as replicates stop" would never actually get exercised.
+    final_generations = {result.report["generation"] for result in output}
+    assert len(final_generations) > 1, (
+        "fixture no longer produces staggered stopping generations -- "
+        "pick a different seed/tolerance so this test still exercises "
+        "the shrinking-sample-size case it is named for"
+    )
+
+    pooled = pooled_convergence_histories(output)
+
+    # Only the always-tracked four (`fim.engine._ALWAYS_TRACKED_
+    # STATISTICS`), not all six `STATISTIC_NAMES` the completed
+    # scalar/live-batch trajectory panels can show -- `E_ST`/`K_ST`
+    # only ever get a *per-generation* history at all with
+    # `track_expensive_statistics=True` (unset here), unlike a live
+    # tick's own `report_for_state`, which always computes a full
+    # report regardless of that setting.
+    assert set(pooled) == {"D", "G_ST", "H_S", "H_T"}
+    for name, points in pooled.items():
+        generations = [point["generation"] for point in points]
+        assert generations == sorted(generations), f"{name}: not ascending"
+        assert len(generations) == len(set(generations)), (
+            f"{name}: duplicate generation"
+        )
+        sample_counts = [point["sample_count"] for point in points]
+        assert all(
+            later <= earlier for earlier, later in itertools.pairwise(sample_counts)
+        ), f"{name}: sample_count increased at a later generation"
+        assert all(point["low"] <= point["mean"] <= point["high"] for point in points)
+    # Generation 0 (every replicate's own persisted initial state,
+    # `_run_one`'s own docstring: "fed to the convergence monitor before
+    # the loop... runs a single generation") is the one point every
+    # replicate, regardless of when it stops, always contributes to.
+    assert pooled["D"][0]["generation"] == 0
+    assert pooled["D"][0]["sample_count"] == 5
+
+
+def test_pooled_convergence_histories_requires_at_least_two_results(
+    tiny_params: SimulationParams,
+) -> None:
+    """The same "single replicate has no interval" guard `replicate_summary` applies."""
+    output = fim(
+        tiny_params.N, tiny_params.m, tiny_params.mu, tiny_params.d, params=tiny_params
+    )
+    assert isinstance(output, RunResult)
+
+    with pytest.raises(ValueError, match="at least two results"):
+        pooled_convergence_histories(())
+    with pytest.raises(ValueError, match="at least two results"):
+        pooled_convergence_histories((output,))
 
 
 def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:

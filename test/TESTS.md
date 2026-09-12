@@ -2914,6 +2914,49 @@ metadata fields) so a future statistic added to `FinalReport` and
 never propagated here fails this test immediately, rather than
 only being noticed by inspection.
 
+<a id="engine.test_engine.test_pooled_convergence_histories_shrinks_as_replicates_stop"></a>
+
+#### test\_pooled\_convergence\_histories\_shrinks\_as\_replicates\_stop
+
+```python
+def test_pooled_convergence_histories_shrinks_as_replicates_stop() -> None
+```
+
+Each statistic's own per-generation sample count never increases.
+
+Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+trajectory-panel-design.md` (`selby/restricted`), commit 2: a real
+5-replicate batch, each replicate stopping at its own (stochastic,
+but fully deterministic for this fixed seed) generation -- the
+exact "replicates stop at different generations" case the design's
+own approach C exists to handle. `sample_count` at any generation
+counts only the replicates whose own history reaches that far
+(`RunResult.convergence_generations`/`convergence_histories`,
+already computed, never before pooled across replicates), so once a
+replicate stops, every later generation's own count can only stay
+the same or drop -- never climb back up. A structural invariant
+true regardless of exactly *which* generation each replicate
+happens to stop at, so this test does not depend on that stochastic
+detail beyond the fixed seed already making it reproducible.
+
+Not built from `tiny_params`: its own tight, fast-converging
+defaults have every replicate stop at the identical generation
+(confirmed live -- the whole reason this test needs staggered
+stops), so this test picks its own `seed`/`convergence_tolerance`/
+`max_generations` specifically to produce real spread (`[3, 5, 6,
+12, 15]`, confirmed live for this exact configuration) instead.
+
+<a id="engine.test_engine.test_pooled_convergence_histories_requires_at_least_two_results"></a>
+
+#### test\_pooled\_convergence\_histories\_requires\_at\_least\_two\_results
+
+```python
+def test_pooled_convergence_histories_requires_at_least_two_results(
+        tiny_params: SimulationParams) -> None
+```
+
+The same "single replicate has no interval" guard `replicate_summary` applies.
+
 <a id="engine.test_engine.test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary"></a>
 
 #### test\_sequential\_batch\_derives\_valid\_seeds\_at\_the\_seed\_zero\_boundary
@@ -7013,6 +7056,31 @@ single-click row handler already draws for a batch row on Home) --
 is what enforces this; the scalar counterpart (hidden is `False`) is
 `test/gui/test_running_screen.py`'s own `test_a_live_runs_own_done_
 payload_enables_the_reanalyze_controls`.
+
+<a id="gui.test_batch_results_screen.test_a_completed_batchs_own_pooled_trajectory_renders"></a>
+
+#### test\_a\_completed\_batchs\_own\_pooled\_trajectory\_renders
+
+```python
+def test_a_completed_batchs_own_pooled_trajectory_renders() -> None
+```
+
+The completed batch trajectory panel (batch trajectory panel
+design `20260912-claude-sonnet-5-batch-trajectory-panel-design.md`,
+`selby/restricted`, commit 2) actually renders, given a real batch
+whose replicates stop at genuinely staggered generations.
+
+`test/engine/test_engine.py`'s own `test_pooled_convergence_
+histories_shrinks_as_replicates_stop` already proves the underlying
+aggregation math is correct as a plain Python call, for this exact
+same configuration; this test proves the page's own JavaScript
+(`renderBatchTrajectory`/`drawBatchTrajectoryCurve`) actually draws
+the payload it is given, which no Python-only test can check.
+Checks that *something* real was drawn (a legend entry per tracked
+statistic, real non-transparent canvas pixels), not the exact
+pooled numbers themselves -- re-deriving those independently here
+would only re-implement the aggregation this test is not the one
+responsible for verifying.
 
 <a id="gui.test_batch_results_screen.test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip"></a>
 

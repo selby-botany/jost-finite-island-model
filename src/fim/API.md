@@ -62,6 +62,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [report\_for\_state](#fim.engine.report_for_state)
   * [reports\_summary](#fim.engine.reports_summary)
   * [replicate\_summary](#fim.engine.replicate_summary)
+  * [pooled\_convergence\_histories](#fim.engine.pooled_convergence_histories)
   * [bootstrap\_replicate\_summary](#fim.engine.bootstrap_replicate_summary)
 * [fim.gui](#fim.gui)
 * [fim.gui.animation](#fim.gui.animation)
@@ -2474,6 +2475,83 @@ docstring for why it does not raise this same case itself).
 **Raises**:
 
 - `ValueError` - If fewer than two results are supplied.
+
+<a id="fim.engine.pooled_convergence_histories"></a>
+
+#### pooled\_convergence\_histories
+
+```python
+def pooled_convergence_histories(
+        results: Sequence[RunResult],
+        *,
+        confidence: float = 0.95) -> dict[str, tuple[dict[str, float], ...]]
+```
+
+Return each statistic's own across-replicate history, generation by generation.
+
+A batch's own counterpart to `replicate_summary` (batch trajectory
+panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
+design.md`, `selby/restricted`, commit 2): that function pools
+every replicate's own single *final* value into one confidence
+interval; this pools every replicate's own *entire* recorded
+history (`RunResult.convergence_generations`/`convergence_
+histories`, already computed as a byproduct of each replicate's own
+`ConvergenceMonitor`, never before pooled across replicates) into
+one confidence interval *per generation*, reusing the identical
+`confidence_interval` math `reports_summary` already established.
+
+Replicates stop at different generations by construction (an
+adaptive `replicate_tolerance` stop, or simply different random
+walks reaching their own criterion at different times) — at any one
+generation `G`, only the replicates whose own history actually
+reaches that far contribute to `G`'s own interval; a replicate that
+already stopped at generation 40 contributes nothing to generation
+55's own mean. This is a real, honest picture (this many replicates
+were still running at this generation), not an artifact to smooth
+over — the same "explicitly shown as omitted rather than papered
+over" precedent `OMITTED_SUMMARY_TEXT`/`buildOmittedMeter`
+(`fim/gui/webui/screens/run-view-completed.js`) already established
+for a statistic missing from too few replicates.
+
+Each statistic's own returned sequence carries its own `generation`
+per point rather than sharing one external generation list the way
+`RunResult.convergence_generations` does for a single replicate:
+different statistics can have different, non-nested sets of
+generations with at least two defined replicates (`G_ST` drops any
+replicate whose own locus went monomorphic, `replicate_summary`'s
+own docstring), so a shared list one statistic is missing an entry
+from would otherwise force every other statistic's own points at
+that position out of alignment. Self-describing per point trades a
+slightly larger payload for never needing that alignment assumption
+on the reading side.
+
+**Arguments**:
+
+- `results` - Two or more independently seeded replicate results —
+  the same input `replicate_summary` takes, from a completed
+  batch's own final results.
+- `confidence` - Two-tailed confidence level; see
+  `fim.statistics.interval.confidence_interval`.
+
+
+**Returns**:
+
+  One entry per statistic name that has at least one generation
+  with two or more defined replicates, each a tuple of `{"generation",
+  "mean", "low", "high", "sample_count"}` dicts in ascending
+  generation order. A statistic with no such generation at all
+  (every replicate dropped it, or fewer than two replicates ever
+  recorded it) is omitted from the returned mapping entirely,
+  matching `reports_summary`'s own "short of two defined values,
+  omitted" contract, applied here per generation rather than once.
+
+
+**Raises**:
+
+- `ValueError` - If fewer than two results are supplied — the same
+  "a single replicate has no interval to compute" guard
+  `replicate_summary` already applies to its own single-value
+  case.
 
 <a id="fim.engine.bootstrap_replicate_summary"></a>
 

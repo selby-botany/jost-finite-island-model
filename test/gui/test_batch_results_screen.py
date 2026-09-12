@@ -77,6 +77,33 @@ setField('n_replicates', '2');
 setField('max_workers', '2');
 """
 
+# A 5-replicate batch whose own replicates stop at staggered generations
+# (`[3, 5, 6, 12, 15]`, confirmed live for this exact configuration) --
+# the same values `test/engine/test_engine.py`'s own `test_pooled_
+# convergence_histories_shrinks_as_replicates_stop` uses, needed here so
+# the completed batch trajectory panel's own pooled band actually
+# exercises real, uneven replicate coverage across generations, not
+# just the every-replicate-stops-together case `_SET_TINY_BATCH_FIELDS`
+# happens to produce.
+_SET_STAGGERED_BATCH_FIELDS = """
+function setField(name, value) {
+    const field = document.getElementById(`field-${name}`);
+    field.value = value;
+    field.dispatchEvent(new Event('input', {bubbles: true}));
+}
+setField('N', '20');
+setField('d', '2');
+setField('seed', '42');
+setField('m_rate', '0.1');
+setField('mu_value', '0.01');
+setField('locus_lengths', '200');
+setField('convergence_window', '4');
+setField('convergence_tolerance', '0.02');
+setField('max_generations', '30');
+setField('n_replicates', '5');
+setField('max_workers', '3');
+"""
+
 
 def _wait_for_input_screen_ready(window: webview.Window) -> None:
     """Poll until the run view's own async initialization has finished.
@@ -176,11 +203,15 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     # reader did not already know.
     second_row = settled["secondRowCells"]
     assert second_row[2] == "Converged"
-    # A batch's own `completed` view is a pooled final-state scatter
-    # across replicates (`run-view-completed.js`'s own module docstring)
-    # -- no one trajectory of its own to plot (botanist GUI design doc
-    # §6.2's own trajectory panel is scalar-run-only, this slice).
-    assert settled["trajectoryFrameHidden"] is True
+    # A batch's own `completed` view now draws a pooled trajectory too
+    # (batch trajectory panel design `20260912-claude-sonnet-5-batch-
+    # trajectory-panel-design.md`, `selby/restricted`, commit 2) --
+    # `test_a_completed_batchs_own_pooled_trajectory_shrinks_as_
+    # replicates_stop`, below, is the dedicated test for its own
+    # content; this one only needs to confirm the panel is no longer
+    # unconditionally hidden the way it used to be (`git blame` this
+    # line for the pre-commit-2 assertion, `True`).
+    assert settled["trajectoryFrameHidden"] is False
 
 
 def test_a_completed_batch_hides_the_reanalyze_controls() -> None:
@@ -231,6 +262,86 @@ def test_a_completed_batch_hides_the_reanalyze_controls() -> None:
     assert settled["runViewState"] == "completed"
     assert settled["reanalyzeHidden"] is True
     assert settled["trajectoryPath"] is None
+
+
+def test_a_completed_batchs_own_pooled_trajectory_renders() -> None:
+    """The completed batch trajectory panel (batch trajectory panel
+    design `20260912-claude-sonnet-5-batch-trajectory-panel-design.md`,
+    `selby/restricted`, commit 2) actually renders, given a real batch
+    whose replicates stop at genuinely staggered generations.
+
+    `test/engine/test_engine.py`'s own `test_pooled_convergence_
+    histories_shrinks_as_replicates_stop` already proves the underlying
+    aggregation math is correct as a plain Python call, for this exact
+    same configuration; this test proves the page's own JavaScript
+    (`renderBatchTrajectory`/`drawBatchTrajectoryCurve`) actually draws
+    the payload it is given, which no Python-only test can check.
+    Checks that *something* real was drawn (a legend entry per tracked
+    statistic, real non-transparent canvas pixels), not the exact
+    pooled numbers themselves -- re-deriving those independently here
+    would only re-implement the aggregation this test is not the one
+    responsible for verifying.
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_STAGGERED_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                settled = window.evaluate_js(
+                    "({"
+                    "runViewState: window.fim.getRunViewState(), "
+                    "frameHidden: "
+                    "document.getElementById('run-trajectory-frame').hidden, "
+                    "legendTexts: Array.from(document.querySelectorAll("
+                    "'#run-trajectory-legend .legend-item')"
+                    ").map((el) => el.textContent), "
+                    "canvasNonBlank: (function() {"
+                    "  var c = document.getElementById('run-trajectory-canvas');"
+                    "  var ctx = c.getContext('2d');"
+                    "  var data = ctx.getImageData(0, 0, c.width, c.height).data;"
+                    "  var count = 0;"
+                    "  for (var i = 3; i < data.length; i += 4) {"
+                    "    if (data[i] > 0) { count += 1; }"
+                    "  }"
+                    "  return count;"
+                    "})()"
+                    "})"
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, "batch never reached done within the wait budget"
+    assert settled["runViewState"] == "completed"
+    assert settled["frameHidden"] is False
+    # The always-tracked four (`track_expensive_statistics` is not set
+    # by `_SET_STAGGERED_BATCH_FIELDS`, so `E_ST`/`K_ST` never get a
+    # per-generation history at all -- `pooled_convergence_histories`'s
+    # own docstring, and `test_pooled_convergence_histories_shrinks_
+    # as_replicates_stop`'s identical assertion for this same case).
+    assert sorted(text.split(" ")[0] for text in settled["legendTexts"]) == [
+        "D",
+        "G_ST",
+        "H_S",
+        "H_T",
+    ]
+    assert settled["canvasNonBlank"] > 0
 
 
 def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None:

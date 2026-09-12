@@ -2205,6 +2205,117 @@ def replicate_summary(
     return reports_summary([result.report for result in results], confidence=confidence)
 
 
+def pooled_convergence_histories(
+    results: Sequence[RunResult],
+    *,
+    confidence: float = 0.95,
+) -> dict[str, tuple[dict[str, float], ...]]:
+    """Return each statistic's own across-replicate history, generation by generation.
+
+    A batch's own counterpart to `replicate_summary` (batch trajectory
+    panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
+    design.md`, `selby/restricted`, commit 2): that function pools
+    every replicate's own single *final* value into one confidence
+    interval; this pools every replicate's own *entire* recorded
+    history (`RunResult.convergence_generations`/`convergence_
+    histories`, already computed as a byproduct of each replicate's own
+    `ConvergenceMonitor`, never before pooled across replicates) into
+    one confidence interval *per generation*, reusing the identical
+    `confidence_interval` math `reports_summary` already established.
+
+    Replicates stop at different generations by construction (an
+    adaptive `replicate_tolerance` stop, or simply different random
+    walks reaching their own criterion at different times) — at any one
+    generation `G`, only the replicates whose own history actually
+    reaches that far contribute to `G`'s own interval; a replicate that
+    already stopped at generation 40 contributes nothing to generation
+    55's own mean. This is a real, honest picture (this many replicates
+    were still running at this generation), not an artifact to smooth
+    over — the same "explicitly shown as omitted rather than papered
+    over" precedent `OMITTED_SUMMARY_TEXT`/`buildOmittedMeter`
+    (`fim/gui/webui/screens/run-view-completed.js`) already established
+    for a statistic missing from too few replicates.
+
+    Each statistic's own returned sequence carries its own `generation`
+    per point rather than sharing one external generation list the way
+    `RunResult.convergence_generations` does for a single replicate:
+    different statistics can have different, non-nested sets of
+    generations with at least two defined replicates (`G_ST` drops any
+    replicate whose own locus went monomorphic, `replicate_summary`'s
+    own docstring), so a shared list one statistic is missing an entry
+    from would otherwise force every other statistic's own points at
+    that position out of alignment. Self-describing per point trades a
+    slightly larger payload for never needing that alignment assumption
+    on the reading side.
+
+    Args:
+        results: Two or more independently seeded replicate results —
+            the same input `replicate_summary` takes, from a completed
+            batch's own final results.
+        confidence: Two-tailed confidence level; see
+            `fim.statistics.interval.confidence_interval`.
+
+    Returns:
+        One entry per statistic name that has at least one generation
+        with two or more defined replicates, each a tuple of `{"generation",
+        "mean", "low", "high", "sample_count"}` dicts in ascending
+        generation order. A statistic with no such generation at all
+        (every replicate dropped it, or fewer than two replicates ever
+        recorded it) is omitted from the returned mapping entirely,
+        matching `reports_summary`'s own "short of two defined values,
+        omitted" contract, applied here per generation rather than once.
+
+    Raises:
+        ValueError: If fewer than two results are supplied — the same
+            "a single replicate has no interval to compute" guard
+            `replicate_summary` already applies to its own single-value
+            case.
+    """
+    if len(results) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+        raise ValueError("pooled_convergence_histories requires at least two results")
+    statistic_names = sorted(
+        {name for result in results for name in result.convergence_histories}
+    )
+    # Built once per replicate, not re-scanned per generation: an O(1)
+    # generation -> value lookup per statistic, rather than repeatedly
+    # searching `convergence_generations` for a match.
+    per_replicate_lookup: list[dict[str, dict[int, float]]] = [
+        {
+            name: dict(zip(result.convergence_generations, values, strict=True))
+            for name, values in result.convergence_histories.items()
+        }
+        for result in results
+    ]
+    all_generations = sorted(
+        {
+            generation
+            for result in results
+            for generation in result.convergence_generations
+        }
+    )
+    pooled: dict[str, list[dict[str, float]]] = {name: [] for name in statistic_names}
+    for generation in all_generations:
+        for name in statistic_names:
+            values = [
+                lookup[name][generation]
+                for lookup in per_replicate_lookup
+                if generation in lookup.get(name, {})
+            ]
+            if len(values) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+                continue
+            interval = confidence_interval(values, confidence=confidence)
+            pooled[name].append(
+                {
+                    "generation": generation,
+                    "mean": interval["mean"],
+                    "low": interval["low"],
+                    "high": interval["high"],
+                    "sample_count": interval["sample_count"],
+                }
+            )
+    return {name: tuple(points) for name, points in pooled.items() if points}
+
+
 def _grand_ratio_of_means(
     reports: Sequence[FinalReport], deme_count: int
 ) -> tuple[float | None, float]:

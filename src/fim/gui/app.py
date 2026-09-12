@@ -60,6 +60,7 @@ from fim.cli import load_config
 from fim.engine import (
     RunResult,
     deterministic_run_id,
+    pooled_convergence_histories,
     replicate_summary,
     report_for_state,
     reports_summary,
@@ -2980,6 +2981,20 @@ def _batch_done_payload(
     generation-0 state, pre-formatted like every other statistic this
     bridge sends — giving the table a baseline row the researcher can
     compare every replicate against.
+
+    `pooledConvergenceHistories` is `pooled_convergence_histories`'s
+    own result, pre-formatted (batch trajectory panel design `20260912-
+    claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/
+    restricted`, commit 2) — deliberately a different key from a scalar
+    "done" payload's own `convergenceHistories` (bare per-generation
+    floats, one shared generation list) rather than reusing that name
+    for a differently-shaped value: each point here already carries its
+    own `generation` alongside `mean`/`low`/`high`/`sampleCount`, since
+    different statistics can have different generation coverage once
+    replicates start dropping out (that function's own docstring).
+    Empty (`{}`), the same as `summary` immediately above, if
+    `pooled_convergence_histories` itself has too few results to define
+    even one generation's own interval from.
     """
     replicates = [
         {
@@ -3032,6 +3047,23 @@ def _batch_done_payload(
         name: format_statistic(p0_report[name], digits)
         for name in _RESULT_STATISTIC_NAMES
     }
+    try:
+        raw_pooled_histories = pooled_convergence_histories(results)
+    except ValueError:
+        raw_pooled_histories = {}
+    pooled_convergence_histories_payload = {
+        name: [
+            {
+                "generation": point["generation"],
+                "mean": format_statistic(point["mean"], digits),
+                "low": format_statistic(point["low"], digits),
+                "high": format_statistic(point["high"], digits),
+                "sampleCount": point["sample_count"],
+            }
+            for point in points
+        ]
+        for name, points in raw_pooled_histories.items()
+    }
     return {
         "runId": run_id,
         "outputDirectory": str(output_directory),
@@ -3042,6 +3074,7 @@ def _batch_done_payload(
         "summary": summary,
         "demeCount": params.d,
         "p0Statistics": p0_statistics,
+        "pooledConvergenceHistories": pooled_convergence_histories_payload,
     }
 
 
