@@ -708,3 +708,139 @@ def test_ci_tooltip_states_its_symmetric_summary_only_when_one_exists(
     assert settled[1] == (
         "0.0549477 [0.0323088, 0.0845805] — uncertainty across 2 independent replicates"
     )
+
+
+def test_engine_backend_selector_lists_all_four_options_recommendation_first(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The execution-engine `<select>` shows four options, `auto` labeled recommended.
+
+    Approach B3's own shape, proven against the real rendered DOM rather
+    than the markup source: all four legal `SimulationParams.engine_
+    backend` values are present so none can ever be silently downgraded
+    on save, but `lineal` and `auto` come first and `auto` carries the
+    "recommended" wording — the two-real-choices emphasis the design
+    asked for, expressed through order and labeling rather than by
+    withholding values.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="null",
+        read=(
+            "Array.from("
+            "document.querySelectorAll('#field-engine_backend option')"
+            ").map(function (option) "
+            "{ return [option.value, option.textContent]; })"
+        ),
+        is_ready=lambda value: bool(value) and len(value) == 4,
+        poll_attempts=500,
+    )
+
+    assert [value for value, _ in settled] == [
+        "lineal",
+        "auto",
+        "generational",
+        "generational-vector",
+    ]
+    assert "reference" in settled[0][1]
+    assert "recommended" in settled[1][1]
+
+
+def test_engine_backend_selector_defaults_to_auto(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """An untouched selector sits on `auto`, this screen's own recommended choice.
+
+    The `selected` attribute is what a botanist who never opens this
+    field actually gets. `starter_form_values()`'s own `"lineal"` (the
+    `SimulationParams` default, unchanged) only wins once a real form is
+    applied over the markup — which is why the two differ on purpose and
+    both are asserted, here and in `test_config_form.py`.
+    """
+    selected = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "document.getElementById('field-engine_backend')"
+            ".selectedIndex = -1;"
+            "document.getElementById('field-engine_backend').selectedIndex = "
+            "Array.from("
+            "document.querySelectorAll('#field-engine_backend option')"
+            ").findIndex(function (option) { return option.defaultSelected; });"
+        ),
+        read="document.getElementById('field-engine_backend').value",
+        is_ready=bool,
+        poll_attempts=500,
+    )
+
+    assert selected == "auto"
+
+
+def test_engine_backend_selector_accepts_every_legal_value(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Each of the four values can actually be set on the live `<select>`.
+
+    The browser-level half of `test_config_form.py`'s own round-trip
+    test: assigning a value with no matching `<option>` leaves a
+    `<select>` reading back the empty string rather than raising, so a
+    missing option is exactly the silent, unobservable downgrade
+    approach B1 was rejected over. Reading each assignment straight back
+    out of the real DOM is what makes that observable.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="null",
+        read=(
+            "['lineal', 'auto', 'generational', 'generational-vector']"
+            ".map(function (candidate) {"
+            "var select = document.getElementById('field-engine_backend');"
+            "select.value = candidate;"
+            "return select.value;"
+            "})"
+        ),
+        is_ready=lambda value: bool(value) and len(value) == 4,
+        poll_attempts=500,
+    )
+
+    assert settled == ["lineal", "auto", "generational", "generational-vector"]
+
+
+def test_engine_backend_options_are_relabeled_without_numba(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Without numba, `auto`/`generational-vector` say so; the other two are untouched.
+
+    Approach A3, driven through the real page: `applyEngineBackend
+    Availability` is re-run against a stubbed bridge reporting no numba,
+    rather than uninstalling the dependency, and the labels are read
+    back out of the live DOM. Values are deliberately left alone — every
+    legal value must stay selectable for approach B3's own round trip,
+    so the honesty lives in the label, not in a disabled or removed
+    option.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.pywebview.api.get_engine_backend_availability = "
+            "function () { return Promise.resolve({numba: false}); };"
+            "window.fim.applyEngineBackendAvailability();"
+        ),
+        read=(
+            "Array.from("
+            "document.querySelectorAll('#field-engine_backend option')"
+            ").map(function (option) "
+            "{ return [option.value, option.textContent]; })"
+        ),
+        is_ready=lambda value: bool(value) and "numba" in value[1][1],
+        poll_attempts=500,
+    )
+
+    labels = dict(settled)
+    assert labels["auto"].endswith(" — needs numba; install fim[jit]")
+    assert labels["generational-vector"].endswith(" — needs numba; install fim[jit]")
+    assert "numba" not in labels["lineal"]
+    assert "numba" not in labels["generational"]

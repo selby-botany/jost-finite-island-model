@@ -212,6 +212,11 @@ async function initializeRunView() {
     // the true starter values -- `fim.menu.newConfiguration` above is
     // the only caller that still wants an unconditional reset.
     enterInitialState(false);
+    // Before the form is populated, not after: this only rewrites two
+    // `engine_backend` option *labels* (never a value), but doing it
+    // first means no frame ever shows a label this install cannot
+    // honor.
+    await window.fim.applyEngineBackendAvailability();
     await loadInitialForm();
     await renderInitialPreview();
     // Awaited before the ready flag flips, like the two calls above --

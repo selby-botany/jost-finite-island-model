@@ -5888,6 +5888,36 @@ def test_get_default_max_workers_matches_batch_runner_directly() -> None
 
 The Batch tab's default is `batch_runner.default_max_workers`, not invented.
 
+<a id="gui.test_app_api.test_get_engine_backend_availability_matches_the_engine_probe_directly"></a>
+
+#### test\_get\_engine\_backend\_availability\_matches\_the\_engine\_probe\_directly
+
+```python
+def test_get_engine_backend_availability_matches_the_engine_probe_directly(
+) -> None
+```
+
+The selector's numba answer is `fim.engine`'s own, never a second probe.
+
+<a id="gui.test_app_api.test_get_engine_backend_availability_follows_a_numba_less_install"></a>
+
+#### test\_get\_engine\_backend\_availability\_follows\_a\_numba\_less\_install
+
+```python
+@pytest.mark.parametrize("available", [True, False])
+def test_get_engine_backend_availability_follows_a_numba_less_install(
+        monkeypatch: pytest.MonkeyPatch, available: bool) -> None
+```
+
+Both answers are reported honestly, without uninstalling anything.
+
+Exercises approach A3's own real case — a source checkout installed
+without the `[jit]` extra — through the monkeypatch hook
+`fim.engine._numba_is_available`'s own docstring exists to provide.
+A `from ... import` of that function in `fim.gui.app` would bind a
+copy at import time and silently defeat this; going through the
+module does not, which is exactly what this parametrization proves.
+
 <a id="gui.test_app_api.test_list_presets_matches_presets_module_directly"></a>
 
 #### test\_list\_presets\_matches\_presets\_module\_directly
@@ -9157,6 +9187,68 @@ def test_tab_for_error_returns_none_for_an_unknown_key_message() -> None
 
 A message naming no field this form exposes resolves to no tab.
 
+<a id="gui.test_config_form.test_engine_backend_round_trips_every_legal_value"></a>
+
+#### test\_engine\_backend\_round\_trips\_every\_legal\_value
+
+```python
+@pytest.mark.parametrize(
+    "backend",
+    ["lineal", "auto", "generational", "generational-vector"],
+)
+def test_engine_backend_round_trips_every_legal_value(backend: str) -> None
+```
+
+All four legal `engine_backend` values survive a full form round trip.
+
+The correctness case the GUI engine-backend selector design doc
+(`20260911-claude-sonnet-5-gui-engine-backend-selector-design.md`)
+rejected approach B1 over: a value the form cannot represent is not
+merely invisible, it is silently rewritten on the next save. The two
+de-emphasized values (`"generational"`/`"generational-vector"`) are
+the ones that matter here — a botanist rarely picks either, but a
+hand-edited YAML or a reopened manifest can genuinely hold one.
+
+`finite_alleles` and a short locus because `"generational-vector"`
+refuses any other mutation model outright
+(`_validate_engine_backend`), not for any reason to do with the form
+itself — the starter config's own single 200-base locus is replaced
+rather than supplemented, since `loci` and `locus_lengths` cannot
+both be given.
+
+<a id="gui.test_config_form.test_starter_form_values_still_seeds_the_lineal_engine_backend"></a>
+
+#### test\_starter\_form\_values\_still\_seeds\_the\_lineal\_engine\_backend
+
+```python
+def test_starter_form_values_still_seeds_the_lineal_engine_backend() -> None
+```
+
+A fresh form keeps `SimulationParams`'s own default, unchanged by the selector.
+
+Adding the control changes nothing for a user who never touches it:
+`STARTER_CONFIG` names no `engine_backend`, so the starter form
+seeds `PARAMETER_DEFAULTS`'s own `"lineal"`. The page's own `auto`
+default selection (`index.html`) is only what an untouched
+`<select>` shows, and is overwritten the moment any real form —
+starter or saved — is applied over it.
+
+<a id="gui.test_config_form.test_payload_to_yaml_text_orders_engine_backend_last"></a>
+
+#### test\_payload\_to\_yaml\_text\_orders\_engine\_backend\_last
+
+```python
+def test_payload_to_yaml_text_orders_engine_backend_last() -> None
+```
+
+`engine_backend` is emitted, and emitted in `configuration.md`'s own order.
+
+Its documented section ("Engine backend and JIT") follows "Analysis
+and execution", whose last key is `migrant_sampling` — so
+`_YAML_KEY_ORDER` places it after that rather than leaving
+`payload_to_yaml_text`'s own defensive "unknown key" fallback to
+append it in whatever order the payload dict happened to build.
+
 <a id="gui.test_config_modal_dialogs"></a>
 
 # gui.test\_config\_modal\_dialogs
@@ -10090,6 +10182,79 @@ same reasoning `test_batch_progress_display_never_regresses` above
 applies to its own two synthetic calls. The positive case is *also*
 covered against a real batch, end to end, in
 `test_batch_results_screen.py`.
+
+<a id="gui.test_input_screen.test_engine_backend_selector_lists_all_four_options_recommendation_first"></a>
+
+#### test\_engine\_backend\_selector\_lists\_all\_four\_options\_recommendation\_first
+
+```python
+def test_engine_backend_selector_lists_all_four_options_recommendation_first(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The execution-engine `<select>` shows four options, `auto` labeled recommended.
+
+Approach B3's own shape, proven against the real rendered DOM rather
+than the markup source: all four legal `SimulationParams.engine_
+backend` values are present so none can ever be silently downgraded
+on save, but `lineal` and `auto` come first and `auto` carries the
+"recommended" wording — the two-real-choices emphasis the design
+asked for, expressed through order and labeling rather than by
+withholding values.
+
+<a id="gui.test_input_screen.test_engine_backend_selector_defaults_to_auto"></a>
+
+#### test\_engine\_backend\_selector\_defaults\_to\_auto
+
+```python
+def test_engine_backend_selector_defaults_to_auto(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+An untouched selector sits on `auto`, this screen's own recommended choice.
+
+The `selected` attribute is what a botanist who never opens this
+field actually gets. `starter_form_values()`'s own `"lineal"` (the
+`SimulationParams` default, unchanged) only wins once a real form is
+applied over the markup — which is why the two differ on purpose and
+both are asserted, here and in `test_config_form.py`.
+
+<a id="gui.test_input_screen.test_engine_backend_selector_accepts_every_legal_value"></a>
+
+#### test\_engine\_backend\_selector\_accepts\_every\_legal\_value
+
+```python
+def test_engine_backend_selector_accepts_every_legal_value(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Each of the four values can actually be set on the live `<select>`.
+
+The browser-level half of `test_config_form.py`'s own round-trip
+test: assigning a value with no matching `<option>` leaves a
+`<select>` reading back the empty string rather than raising, so a
+missing option is exactly the silent, unobservable downgrade
+approach B1 was rejected over. Reading each assignment straight back
+out of the real DOM is what makes that observable.
+
+<a id="gui.test_input_screen.test_engine_backend_options_are_relabeled_without_numba"></a>
+
+#### test\_engine\_backend\_options\_are\_relabeled\_without\_numba
+
+```python
+def test_engine_backend_options_are_relabeled_without_numba(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Without numba, `auto`/`generational-vector` say so; the other two are untouched.
+
+Approach A3, driven through the real page: `applyEngineBackend
+Availability` is re-run against a stubbed bridge reporting no numba,
+rather than uninstalling the dependency, and the labels are read
+back out of the live DOM. Values are deliberately left alone — every
+legal value must stay selectable for approach B3's own round trip,
+so the honesty lives in the label, not in a disabled or removed
+option.
 
 <a id="gui.test_loci_grid_screen"></a>
 
