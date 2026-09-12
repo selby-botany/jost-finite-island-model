@@ -2225,28 +2225,42 @@ def pooled_convergence_histories(
 
     Replicates stop at different generations by construction (an
     adaptive `replicate_tolerance` stop, or simply different random
-    walks reaching their own criterion at different times) — at any one
-    generation `G`, only the replicates whose own history actually
-    reaches that far contribute to `G`'s own interval; a replicate that
-    already stopped at generation 40 contributes nothing to generation
-    55's own mean. This is a real, honest picture (this many replicates
-    were still running at this generation), not an artifact to smooth
-    over — the same "explicitly shown as omitted rather than papered
-    over" precedent `OMITTED_SUMMARY_TEXT`/`buildOmittedMeter`
-    (`fim/gui/webui/screens/run-view-completed.js`) already established
-    for a statistic missing from too few replicates.
+    walks reaching their own criterion at different times). A first
+    version of this function counted, at each generation, only the
+    replicates whose own history actually reached that far — reported
+    live as a real defect, not the intended "honest, shrinking sample"
+    the design doc's own first draft described: a replicate stopping is
+    usually *because it converged*, not a random dropout, so the
+    replicates still running at a later generation are systematically
+    the stragglers, not a representative subset of the original cohort
+    — confirmed live against a real batch, where 14 of 20 replicates
+    converged together at generation 7 and the very next generation's
+    own interval, computed from only the 6 remaining stragglers, was
+    several times wider than generation 7's own, for no reason related
+    to the population's actual behavior. This function instead holds
+    each replicate's own final value constant for every later
+    generation too, once it stops — every one of `results` contributes
+    at every generation from 0 through the slowest replicate's own
+    final generation, so the interval's own width reflects genuine
+    cross-replicate spread throughout, not how many stragglers happen
+    to remain.
 
     Each statistic's own returned sequence carries its own `generation`
     per point rather than sharing one external generation list the way
     `RunResult.convergence_generations` does for a single replicate:
-    different statistics can have different, non-nested sets of
-    generations with at least two defined replicates (`G_ST` drops any
-    replicate whose own locus went monomorphic, `replicate_summary`'s
-    own docstring), so a shared list one statistic is missing an entry
-    from would otherwise force every other statistic's own points at
-    that position out of alignment. Self-describing per point trades a
-    slightly larger payload for never needing that alignment assumption
-    on the reading side.
+    a statistic can go undefined for some *interior* stretch of a
+    replicate's own history (`G_ST`, whenever every tracked locus is
+    currently monomorphic — `_convergence_values`'s own docstring), not
+    only trail off at the end the way a stopped replicate does: without
+    knowing *which* generations were skipped, this function cannot
+    safely reconstruct a generation-aligned history for that one
+    replicate's own contribution to that one statistic at all, so a
+    replicate whose own `convergence_histories[name]` is shorter than
+    its own `convergence_generations` is dropped from `name`'s own pool
+    entirely (never guessed at, and never allowed to corrupt every
+    other replicate's own alignment) — `ConvergenceMonitor` does not
+    currently expose a per-statistic generation list that would let a
+    future version place these correctly instead of dropping them.
 
     Args:
         results: Two or more independently seeded replicate results —
@@ -2261,9 +2275,10 @@ def pooled_convergence_histories(
         "mean", "low", "high", "sample_count"}` dicts in ascending
         generation order. A statistic with no such generation at all
         (every replicate dropped it, or fewer than two replicates ever
-        recorded it) is omitted from the returned mapping entirely,
-        matching `reports_summary`'s own "short of two defined values,
-        omitted" contract, applied here per generation rather than once.
+        recorded it without an interior gap) is omitted from the
+        returned mapping entirely, matching `reports_summary`'s own
+        "short of two defined values, omitted" contract, applied here
+        per generation rather than once.
 
     Raises:
         ValueError: If fewer than two results are supplied — the same
@@ -2277,33 +2292,45 @@ def pooled_convergence_histories(
         {name for result in results for name in result.convergence_histories}
     )
     # Built once per replicate, not re-scanned per generation: an O(1)
-    # generation -> value lookup per statistic, rather than repeatedly
-    # searching `convergence_generations` for a match.
-    per_replicate_lookup: list[dict[str, dict[int, float]]] = [
-        {
-            name: dict(zip(result.convergence_generations, values, strict=True))
-            for name, values in result.convergence_histories.items()
-        }
+    # generation -> value lookup per statistic, plus that same
+    # replicate's own last (highest-generation) recorded value for
+    # `name` -- the value later generations carry forward once this
+    # replicate's own real history for `name` has ended. A replicate
+    # whose own `values` is shorter than `convergence_generations` (an
+    # interior gap, not just stopping early -- see this function's own
+    # docstring) contributes no lookup entry for `name` at all, the
+    # "drop rather than guess" choice that same docstring explains.
+    per_replicate_lookup: list[dict[str, dict[int, float]]] = []
+    per_replicate_last_value: list[dict[str, float]] = []
+    for result in results:
+        lookup: dict[str, dict[int, float]] = {}
+        last_value: dict[str, float] = {}
+        for name, values in result.convergence_histories.items():
+            if len(values) != len(result.convergence_generations):
+                continue
+            by_generation = dict(
+                zip(result.convergence_generations, values, strict=True)
+            )
+            lookup[name] = by_generation
+            last_value[name] = by_generation[max(by_generation)]
+        per_replicate_lookup.append(lookup)
+        per_replicate_last_value.append(last_value)
+    max_generation = max(
+        generation
         for result in results
-    ]
-    all_generations = sorted(
-        {
-            generation
-            for result in results
-            for generation in result.convergence_generations
-        }
+        for generation in result.convergence_generations
     )
     pooled: dict[str, list[dict[str, float]]] = {name: [] for name in statistic_names}
-    for generation in all_generations:
+    for generation in range(max_generation + 1):
         for name in statistic_names:
-            values = [
-                lookup[name][generation]
-                for lookup in per_replicate_lookup
-                if generation in lookup.get(name, {})
+            pooled_values = [
+                lookup[name].get(generation, per_replicate_last_value[index][name])
+                for index, lookup in enumerate(per_replicate_lookup)
+                if name in lookup
             ]
-            if len(values) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
+            if len(pooled_values) < _MINIMUM_REPLICATE_SUMMARY_COUNT:
                 continue
-            interval = confidence_interval(values, confidence=confidence)
+            interval = confidence_interval(pooled_values, confidence=confidence)
             pooled[name].append(
                 {
                     "generation": generation,

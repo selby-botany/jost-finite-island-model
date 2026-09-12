@@ -1,7 +1,6 @@
 """End-to-end tests for the deterministic library engine."""
 
 import functools
-import itertools
 import statistics
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -700,23 +699,31 @@ def test_replicate_summary_covers_every_numeric_final_report_key(
     assert set(summary) == numeric_fields
 
 
-def test_pooled_convergence_histories_shrinks_as_replicates_stop() -> None:
-    """Each statistic's own per-generation sample count never increases.
+def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward() -> (
+    None
+):
+    """A replicate's own `sample_count` contribution never disappears once it stops.
 
     Batch trajectory panel design `20260912-claude-sonnet-5-batch-
-    trajectory-panel-design.md` (`selby/restricted`), commit 2: a real
-    5-replicate batch, each replicate stopping at its own (stochastic,
-    but fully deterministic for this fixed seed) generation -- the
-    exact "replicates stop at different generations" case the design's
-    own approach C exists to handle. `sample_count` at any generation
-    counts only the replicates whose own history reaches that far
-    (`RunResult.convergence_generations`/`convergence_histories`,
-    already computed, never before pooled across replicates), so once a
-    replicate stops, every later generation's own count can only stay
-    the same or drop -- never climb back up. A structural invariant
-    true regardless of exactly *which* generation each replicate
-    happens to stop at, so this test does not depend on that stochastic
-    detail beyond the fixed seed already making it reproducible.
+    trajectory-panel-design.md` (`selby/restricted`): a real 5-replicate
+    batch, each replicate stopping at its own (stochastic, but fully
+    deterministic for this fixed seed) generation -- the exact
+    "replicates stop at different generations" case commit 2's own
+    first draft got wrong, reported live: counting only the replicates
+    *still running* at a later generation is systematically biased
+    (a replicate stops because it converged, not at random, so the
+    ones still running later are the stragglers, not a representative
+    subset) and produced a real, confirmed case where the very next
+    generation's own interval, computed from only 6 of 20 remaining
+    stragglers, was several times wider than the generation before it
+    — for no reason related to the population's actual behavior. This
+    function now holds each replicate's own final value constant for
+    every later generation too, so `sample_count` stays at `len(results)`
+    for the entire plotted range instead of shrinking as replicates
+    finish -- structural invariants below hold regardless of exactly
+    *which* generation each replicate happens to stop at, so this test
+    does not depend on that stochastic detail beyond the fixed seed
+    already making it reproducible.
 
     Not built from `tiny_params`: its own tight, fast-converging
     defaults have every replicate stop at the identical generation
@@ -740,15 +747,16 @@ def test_pooled_convergence_histories_shrinks_as_replicates_stop() -> None:
     )
     output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
     assert isinstance(output, tuple)
+    final_generations = sorted(result.report["generation"] for result in output)
     # A real precondition for the rest of this test to mean anything:
     # if every replicate happened to stop at the identical generation,
-    # "shrinks as replicates stop" would never actually get exercised.
-    final_generations = {result.report["generation"] for result in output}
-    assert len(final_generations) > 1, (
+    # there would be nothing for "carries a value forward" to exercise.
+    assert len(set(final_generations)) > 1, (
         "fixture no longer produces staggered stopping generations -- "
         "pick a different seed/tolerance so this test still exercises "
-        "the shrinking-sample-size case it is named for"
+        "the carry-forward case it is named for"
     )
+    earliest_stop = final_generations[0]
 
     pooled = pooled_convergence_histories(output)
 
@@ -762,21 +770,27 @@ def test_pooled_convergence_histories_shrinks_as_replicates_stop() -> None:
     assert set(pooled) == {"D", "G_ST", "H_S", "H_T"}
     for name, points in pooled.items():
         generations = [point["generation"] for point in points]
-        assert generations == sorted(generations), f"{name}: not ascending"
-        assert len(generations) == len(set(generations)), (
-            f"{name}: duplicate generation"
+        # Dense, not sparse: every integer generation from 0 through
+        # the slowest replicate's own final one, not only generations
+        # some replicate happened to stop at.
+        assert generations == list(range(final_generations[-1] + 1)), (
+            f"{name}: not a dense, ascending 0..max range"
         )
         sample_counts = [point["sample_count"] for point in points]
-        assert all(
-            later <= earlier for earlier, later in itertools.pairwise(sample_counts)
-        ), f"{name}: sample_count increased at a later generation"
+        # The whole point of carrying a value forward: every replicate
+        # still counts everywhere, so this never drops below 5, unlike
+        # the pre-fix behavior this test's own docstring describes.
+        assert all(count == 5 for count in sample_counts), (
+            f"{name}: sample_count dropped below the full replicate "
+            f"count somewhere -- carry-forward is not working"
+        )
         assert all(point["low"] <= point["mean"] <= point["high"] for point in points)
-    # Generation 0 (every replicate's own persisted initial state,
-    # `_run_one`'s own docstring: "fed to the convergence monitor before
-    # the loop... runs a single generation") is the one point every
-    # replicate, regardless of when it stops, always contributes to.
     assert pooled["D"][0]["generation"] == 0
-    assert pooled["D"][0]["sample_count"] == 5
+    # The generation right after the earliest replicate stops is
+    # exactly the point the pre-fix code got wrong (that replicate
+    # would have vanished from the pool there instead of contributing
+    # its own carried-forward value) -- still a full sample count now.
+    assert pooled["D"][earliest_stop + 1]["sample_count"] == 5
 
 
 def test_pooled_convergence_histories_requires_at_least_two_results(
@@ -792,6 +806,49 @@ def test_pooled_convergence_histories_requires_at_least_two_results(
         pooled_convergence_histories(())
     with pytest.raises(ValueError, match="at least two results"):
         pooled_convergence_histories((output,))
+
+
+def test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap(
+    tiny_params: SimulationParams,
+) -> None:
+    """A statistic shorter than `convergence_generations` is dropped, not guessed at.
+
+    `ConvergenceMonitor.record` can genuinely omit one tracked statistic
+    on some round without omitting the others (`G_ST`, whenever every
+    tracked locus is currently monomorphic -- `_convergence_values`'s
+    own docstring), leaving that one statistic's own history shorter
+    than `convergence_generations` for that one replicate. Without a
+    per-statistic generation list (`ConvergenceMonitor` does not track
+    one), this function cannot know *which* generation was skipped, so
+    it drops that replicate's own contribution to that one statistic
+    entirely (`pooled_convergence_histories`'s own docstring) rather
+    than guessing an alignment that could silently pair a real value
+    with the wrong generation. Simulated here by shortening one real
+    replicate's own `G_ST` history by one entry after the fact
+    (`dataclasses.replace`, `RunResult` is frozen) -- deliberately not
+    a hand-built `RunResult` from scratch, so every other field stays
+    exactly what a real run actually produced.
+    """
+    params = replace(tiny_params, n_replicates=2)
+    output = fim(params.N, params.m, params.mu, params.d, params=params)
+    assert isinstance(output, tuple)
+    assert len(output) == 2
+    intact, corrupted = output
+    shortened_histories = dict(corrupted.convergence_histories)
+    shortened_histories["G_ST"] = shortened_histories["G_ST"][:-1]
+    corrupted = replace(corrupted, convergence_histories=shortened_histories)
+
+    pooled = pooled_convergence_histories((intact, corrupted))
+
+    # `G_ST` drops out of the pool entirely: with only 2 replicates
+    # total and one dropped for this one statistic, no generation ever
+    # has the required minimum of 2 defined values left.
+    assert "G_ST" not in pooled
+    # Every other statistic is untouched -- the corruption above only
+    # ever touched `G_ST`'s own history, on one replicate.
+    assert set(pooled) == {"D", "H_S", "H_T"}
+    for name in ("D", "H_S", "H_T"):
+        assert all(point["sample_count"] == 2 for point in pooled[name])
 
 
 def test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary() -> None:

@@ -68,6 +68,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.animation](#fim.gui.animation)
   * [AnimationFrame](#fim.gui.animation.AnimationFrame)
   * [pre\_render\_frames](#fim.gui.animation.pre_render_frames)
+  * [pre\_render\_batch\_frames](#fim.gui.animation.pre_render_batch_frames)
   * [select\_sample\_generations](#fim.gui.animation.select_sample_generations)
 * [fim.gui.app](#fim.gui.app)
   * [format\_statistic](#fim.gui.app.format_statistic)
@@ -110,6 +111,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_animation\_deme\_pair\_frames](#fim.gui.app.Api.get_animation_deme_pair_frames)
     * [get\_deme\_pair\_panel](#fim.gui.app.Api.get_deme_pair_panel)
     * [get\_batch\_deme\_pair\_panel](#fim.gui.app.Api.get_batch_deme_pair_panel)
+    * [get\_batch\_animation\_frames](#fim.gui.app.Api.get_batch_animation_frames)
     * [ping](#fim.gui.app.Api.ping)
     * [ping\_from\_worker](#fim.gui.app.Api.ping_from_worker)
     * [open\_external\_link](#fim.gui.app.Api.open_external_link)
@@ -2502,28 +2504,42 @@ one confidence interval *per generation*, reusing the identical
 
 Replicates stop at different generations by construction (an
 adaptive `replicate_tolerance` stop, or simply different random
-walks reaching their own criterion at different times) — at any one
-generation `G`, only the replicates whose own history actually
-reaches that far contribute to `G`'s own interval; a replicate that
-already stopped at generation 40 contributes nothing to generation
-55's own mean. This is a real, honest picture (this many replicates
-were still running at this generation), not an artifact to smooth
-over — the same "explicitly shown as omitted rather than papered
-over" precedent `OMITTED_SUMMARY_TEXT`/`buildOmittedMeter`
-(`fim/gui/webui/screens/run-view-completed.js`) already established
-for a statistic missing from too few replicates.
+walks reaching their own criterion at different times). A first
+version of this function counted, at each generation, only the
+replicates whose own history actually reached that far — reported
+live as a real defect, not the intended "honest, shrinking sample"
+the design doc's own first draft described: a replicate stopping is
+usually *because it converged*, not a random dropout, so the
+replicates still running at a later generation are systematically
+the stragglers, not a representative subset of the original cohort
+— confirmed live against a real batch, where 14 of 20 replicates
+converged together at generation 7 and the very next generation's
+own interval, computed from only the 6 remaining stragglers, was
+several times wider than generation 7's own, for no reason related
+to the population's actual behavior. This function instead holds
+each replicate's own final value constant for every later
+generation too, once it stops — every one of `results` contributes
+at every generation from 0 through the slowest replicate's own
+final generation, so the interval's own width reflects genuine
+cross-replicate spread throughout, not how many stragglers happen
+to remain.
 
 Each statistic's own returned sequence carries its own `generation`
 per point rather than sharing one external generation list the way
 `RunResult.convergence_generations` does for a single replicate:
-different statistics can have different, non-nested sets of
-generations with at least two defined replicates (`G_ST` drops any
-replicate whose own locus went monomorphic, `replicate_summary`'s
-own docstring), so a shared list one statistic is missing an entry
-from would otherwise force every other statistic's own points at
-that position out of alignment. Self-describing per point trades a
-slightly larger payload for never needing that alignment assumption
-on the reading side.
+a statistic can go undefined for some *interior* stretch of a
+replicate's own history (`G_ST`, whenever every tracked locus is
+currently monomorphic — `_convergence_values`'s own docstring), not
+only trail off at the end the way a stopped replicate does: without
+knowing *which* generations were skipped, this function cannot
+safely reconstruct a generation-aligned history for that one
+replicate's own contribution to that one statistic at all, so a
+replicate whose own `convergence_histories[name]` is shorter than
+its own `convergence_generations` is dropped from `name`'s own pool
+entirely (never guessed at, and never allowed to corrupt every
+other replicate's own alignment) — `ConvergenceMonitor` does not
+currently expose a per-statistic generation list that would let a
+future version place these correctly instead of dropping them.
 
 **Arguments**:
 
@@ -2541,9 +2557,10 @@ on the reading side.
   "mean", "low", "high", "sample_count"}` dicts in ascending
   generation order. A statistic with no such generation at all
   (every replicate dropped it, or fewer than two replicates ever
-  recorded it) is omitted from the returned mapping entirely,
-  matching `reports_summary`'s own "short of two defined values,
-  omitted" contract, applied here per generation rather than once.
+  recorded it without an interior gap) is omitted from the
+  returned mapping entirely, matching `reports_summary`'s own
+  "short of two defined values, omitted" contract, applied here
+  per generation rather than once.
 
 
 **Raises**:
@@ -2727,6 +2744,59 @@ Sample up to `max_frames` frames' worth of coordinates from a trajectory.
   frame's `points` is a plain `frequency_points` array, computed
   directly from the persisted rows, nothing written to disk and
   nothing for the caller to close.
+
+<a id="fim.gui.animation.pre_render_batch_frames"></a>
+
+#### pre\_render\_batch\_frames
+
+```python
+def pre_render_batch_frames(
+        replicates: Sequence[tuple[str, Path]],
+        params: SimulationParams,
+        *,
+        max_frames: int = GUI_ANIMATION_MAX_FRAMES) -> list[AnimationFrame]
+```
+
+Sample up to `max_frames` *pooled* frames' worth of coordinates from a batch.
+
+The completed-batch counterpart to `pre_render_frames`, needed
+because a batch has no single `trajectory.jsonl` to sample from —
+one per replicate instead, each stopping at its own generation
+(batch trajectory panel design `20260912-claude-sonnet-5-batch-
+trajectory-panel-design.md`, `selby/restricted`). A replicate that
+already stopped by a given sampled generation contributes its own
+*final* state at that point rather than dropping out of the pooled
+frame entirely — the identical "hold each replicate's own last
+value constant once it stops" choice `fim.engine.pooled_
+convergence_histories` already makes for the trajectory panel's own
+confidence band, applied here to the scatter instead: dropping a
+converged replicate from later frames would be the same
+survivorship-biased picture that function's own docstring explains
+was a real, reported defect for the band.
+
+**Arguments**:
+
+- `replicates` - One `(run_id, trajectory_path)` pair per replicate
+  — `run_id` is that replicate's own id (`RunResult.run_id`,
+  `"{batch_run_id}-r{index:03}"`), not the batch's own id,
+  matching every row's own recorded `run_id` in that
+  replicate's `trajectory.jsonl`.
+- `params` - The batch's own validated parameters, shared by every
+  replicate.
+- `max_frames` - See `select_sample_generations`.
+
+
+**Returns**:
+
+  One `AnimationFrame` per sampled generation, sorted ascending
+  by generation, each `points` already pooled across every
+  replicate (`fim.viz.scatter.pooled_frequency_points`) — the
+  same per-frame shape `pre_render_frames` returns for a single
+  replicate, so the bridge method building the client payload
+  (`Api.get_batch_animation_frames`) converts it with the
+  identical `panels_from_points` call `get_animation_frames`
+  already uses, no batch-specific client shape needed. Empty if
+  no replicate has persisted anything yet.
 
 <a id="fim.gui.animation.select_sample_generations"></a>
 
@@ -4050,6 +4120,50 @@ itself.
   read, or the requested demes are out of range.
   `first_deme == second_deme` is a deliberate self-comparison,
   not an error (`deme_pair_panel`'s own docstring).
+
+<a id="fim.gui.app.Api.get_batch_animation_frames"></a>
+
+#### get\_batch\_animation\_frames
+
+```python
+@_log_bridge_call
+def get_batch_animation_frames(output_directory: str) -> dict[str, Any]
+```
+
+Sample and ship every pooled animation frame for a completed batch.
+
+`get_animation_frames`'s own batch counterpart (batch trajectory
+panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
+design.md`, `selby/restricted`) -- the completed batch view's
+own scrubber wires to this exactly like a scalar run's own
+scrubber wires to `get_animation_frames`, both loading their
+whole sampled set up front so play/pause/scrub are pure
+client-side JavaScript afterward, zero further Python calls
+during playback.
+
+Reads the batch's own top-level manifest for `replicate_run_
+ids` (each replicate's own real id, needed to validate that
+replicate's own trajectory rows -- `fim.gui.animation.pre_
+render_batch_frames`'s own `replicates` argument) rather than
+re-deriving them from directory names, the same "read the
+published, atomic artifacts on disk" source of truth `list_
+recent_runs`/`open_run` already use.
+
+**Arguments**:
+
+- `output_directory` - The batch's own top-level artifact
+  directory (Screen 4's `outputDirectory`).
+
+
+**Returns**:
+
+- ``{"ok"` - True, "demeCount", "frames": [{"generation",
+  "panels"}, ...]}` -- identical shape to `get_animation_
+  frames`'s own return, so the page's existing scrubber
+  machinery (`webui/screens/run-view-controls.js`'s own
+  `setScrubberFrames`) needs no batch-specific branch at all.
+- ``{"ok"` - False, "message": ...}` if the batch manifest or
+  any replicate's own trajectory cannot be read.
 
 <a id="fim.gui.app.Api.ping"></a>
 

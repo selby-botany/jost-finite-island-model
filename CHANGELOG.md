@@ -23,11 +23,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   full recorded history. New `fim.engine.pooled_convergence_histories`
   pools each replicate's own `convergence_generations`/`convergence_
   histories` into one confidence interval per generation per statistic
-  — replicates stop at different generations by construction, so only
-  the replicates whose own history reaches a given generation
-  contribute to it there, giving a real, honest sample size that
-  shrinks as replicates finish rather than an artifact papered over.
-  `_batch_done_payload` gains `pooledConvergenceHistories`; `run-view-
+  — replicates stop at different generations by construction, so each
+  replicate's own final value is held constant for every later
+  generation too, once it stops, rather than dropped from the pool (a
+  replicate stopping is usually *because it converged*, not a random
+  dropout, so counting only the replicates still running at a later
+  generation would systematically pool the stragglers alone — a real,
+  confirmed defect, not merely a hypothetical one). `_batch_done_
+  payload` gains `pooledConvergenceHistories`; `run-view-
   completed.js` gains a dedicated `renderBatchTrajectory`/
   `drawBatchTrajectoryCurve` (a shaded low/high band plus a mean line
   per statistic, each on its own generation axis, with the same

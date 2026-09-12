@@ -2914,30 +2914,37 @@ metadata fields) so a future statistic added to `FinalReport` and
 never propagated here fails this test immediately, rather than
 only being noticed by inspection.
 
-<a id="engine.test_engine.test_pooled_convergence_histories_shrinks_as_replicates_stop"></a>
+<a id="engine.test_engine.test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward"></a>
 
-#### test\_pooled\_convergence\_histories\_shrinks\_as\_replicates\_stop
+#### test\_pooled\_convergence\_histories\_carries\_a\_stopped\_replicates\_value\_forward
 
 ```python
-def test_pooled_convergence_histories_shrinks_as_replicates_stop() -> None
+def test_pooled_convergence_histories_carries_a_stopped_replicates_value_forward(
+) -> (None)
 ```
 
-Each statistic's own per-generation sample count never increases.
+A replicate's own `sample_count` contribution never disappears once it stops.
 
 Batch trajectory panel design `20260912-claude-sonnet-5-batch-
-trajectory-panel-design.md` (`selby/restricted`), commit 2: a real
-5-replicate batch, each replicate stopping at its own (stochastic,
-but fully deterministic for this fixed seed) generation -- the
-exact "replicates stop at different generations" case the design's
-own approach C exists to handle. `sample_count` at any generation
-counts only the replicates whose own history reaches that far
-(`RunResult.convergence_generations`/`convergence_histories`,
-already computed, never before pooled across replicates), so once a
-replicate stops, every later generation's own count can only stay
-the same or drop -- never climb back up. A structural invariant
-true regardless of exactly *which* generation each replicate
-happens to stop at, so this test does not depend on that stochastic
-detail beyond the fixed seed already making it reproducible.
+trajectory-panel-design.md` (`selby/restricted`): a real 5-replicate
+batch, each replicate stopping at its own (stochastic, but fully
+deterministic for this fixed seed) generation -- the exact
+"replicates stop at different generations" case commit 2's own
+first draft got wrong, reported live: counting only the replicates
+*still running* at a later generation is systematically biased
+(a replicate stops because it converged, not at random, so the
+ones still running later are the stragglers, not a representative
+subset) and produced a real, confirmed case where the very next
+generation's own interval, computed from only 6 of 20 remaining
+stragglers, was several times wider than the generation before it
+— for no reason related to the population's actual behavior. This
+function now holds each replicate's own final value constant for
+every later generation too, so `sample_count` stays at `len(results)`
+for the entire plotted range instead of shrinking as replicates
+finish -- structural invariants below hold regardless of exactly
+*which* generation each replicate happens to stop at, so this test
+does not depend on that stochastic detail beyond the fixed seed
+already making it reproducible.
 
 Not built from `tiny_params`: its own tight, fast-converging
 defaults have every replicate stop at the identical generation
@@ -2956,6 +2963,33 @@ def test_pooled_convergence_histories_requires_at_least_two_results(
 ```
 
 The same "single replicate has no interval" guard `replicate_summary` applies.
+
+<a id="engine.test_engine.test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap"></a>
+
+#### test\_pooled\_convergence\_histories\_drops\_a\_replicate\_with\_an\_interior\_gap
+
+```python
+def test_pooled_convergence_histories_drops_a_replicate_with_an_interior_gap(
+        tiny_params: SimulationParams) -> None
+```
+
+A statistic shorter than `convergence_generations` is dropped, not guessed at.
+
+`ConvergenceMonitor.record` can genuinely omit one tracked statistic
+on some round without omitting the others (`G_ST`, whenever every
+tracked locus is currently monomorphic -- `_convergence_values`'s
+own docstring), leaving that one statistic's own history shorter
+than `convergence_generations` for that one replicate. Without a
+per-statistic generation list (`ConvergenceMonitor` does not track
+one), this function cannot know *which* generation was skipped, so
+it drops that replicate's own contribution to that one statistic
+entirely (`pooled_convergence_histories`'s own docstring) rather
+than guessing an alignment that could silently pair a real value
+with the wrong generation. Simulated here by shortening one real
+replicate's own `G_ST` history by one entry after the fact
+(`dataclasses.replace`, `RunResult` is frozen) -- deliberately not
+a hand-built `RunResult` from scratch, so every other field stays
+exactly what a real run actually produced.
 
 <a id="engine.test_engine.test_sequential_batch_derives_valid_seeds_at_the_seed_zero_boundary"></a>
 
@@ -5199,6 +5233,46 @@ def test_pre_render_frames_are_sorted_ascending_by_generation(
 
 Frames come back in generation order regardless of trajectory row order.
 
+<a id="gui.test_animation.test_pre_render_batch_frames_carries_a_stopped_replicates_state_forward"></a>
+
+#### test\_pre\_render\_batch\_frames\_carries\_a\_stopped\_replicates\_state\_forward
+
+```python
+def test_pre_render_batch_frames_carries_a_stopped_replicates_state_forward(
+        tmp_path: Path) -> None
+```
+
+A replicate's own final state still contributes to frames after it stops.
+
+Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+trajectory-panel-design.md` (`selby/restricted`): the scatter's own
+counterpart to `fim.engine.pooled_convergence_histories`'s identical
+carry-forward choice for the trajectory band -- dropping a
+converged replicate from later frames would pool an ever-shrinking,
+systematically-biased subset (the stragglers), not a representative
+sample, the same real defect that function's own docstring
+describes.
+
+The earliest-stopping replicate is placed first in `replicates`
+(`pooled_frequency_points` concatenates row-wise, in the given
+order), so its own frozen final block always starts at offset 0 in
+every later frame's own pooled points -- letting this test compare
+that one block directly (an exact array match) rather than
+reasoning about the *whole* pooled array's own row count, which
+otherwise drifts on its own as mutation introduces new alleles
+across generations, unrelated to whether any replicate stopped.
+
+<a id="gui.test_animation.test_pre_render_batch_frames_is_empty_for_no_replicates"></a>
+
+#### test\_pre\_render\_batch\_frames\_is\_empty\_for\_no\_replicates
+
+```python
+def test_pre_render_batch_frames_is_empty_for_no_replicates(
+        tmp_path: Path) -> None
+```
+
+No replicates at all is a degenerate, non-erroring input, not a crash.
+
 <a id="gui.test_animation.test_animation_module_never_imports_matplotlib"></a>
 
 #### test\_animation\_module\_never\_imports\_matplotlib
@@ -6930,6 +7004,25 @@ def test_get_initial_state_deme_pair_panel_permits_a_self_comparison() -> None
 
 `first_deme == second_deme` succeeds for the initial-state preview too.
 
+<a id="gui.test_app_api.test_get_batch_animation_frames_ships_client_ready_pooled_panels"></a>
+
+#### test\_get\_batch\_animation\_frames\_ships\_client\_ready\_pooled\_panels
+
+```python
+def test_get_batch_animation_frames_ships_client_ready_pooled_panels(
+        tmp_path: Path) -> None
+```
+
+The completed batch scrubber's own bridge call returns real, pooled panels.
+
+Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+trajectory-panel-design.md` (`selby/restricted`) -- `demeCount`/
+`frames[*].panels`' own shape is identical to `get_animation_
+frames`'s scalar return (confirmed directly against that test's
+own assertions, immediately above this one in this file), so the
+page's existing scrubber machinery needs no batch-specific reading
+logic.
+
 <a id="gui.test_app_api.test_build_menu_has_exactly_file_run_and_help"></a>
 
 #### test\_build\_menu\_has\_exactly\_file\_run\_and\_help
@@ -7068,6 +7161,34 @@ than only indirectly through rendered canvas pixels, since a pure
 function's own return value is a far more direct assertion than
 reading pixel coverage back out of a canvas.
 
+<a id="gui.test_batch_results_screen.test_batch_trajectory_domain_keeps_a_uniformly_small_samples_own_band"></a>
+
+#### test\_batch\_trajectory\_domain\_keeps\_a\_uniformly\_small\_samples\_own\_band
+
+```python
+def test_batch_trajectory_domain_keeps_a_uniformly_small_samples_own_band(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+A *uniformly* small `sampleCount` (every point, not just a thin tail)
+still counts toward the domain -- the threshold is relative to the
+largest `sampleCount` seen, not an absolute cutoff.
+
+A real regression this test guards against: `fim.engine.pooled_
+convergence_histories` now holds each replicate's own final value
+constant once it stops (carry-forward), which means a completed
+batch's own `sampleCount` is constant across every generation of
+one statistic's own history -- there is no more "thin tail" for an
+absolute cutoff to distinguish from a "well-supported" earlier
+point, since there is no longer any variation within one statistic
+to compare against at all. An earlier version of this threshold
+was an absolute `sampleCount >= 4`; for a real but small (2-3
+replicate) completed batch, every one of its points would have
+fallen below that absolute floor, incorrectly excluding its own
+real, stable band from the domain entirely, not just an unstable
+outlier -- confirmed live to reproduce before this test was
+written to guard against a return of that regression.
+
 <a id="gui.test_batch_results_screen.test_a_completed_batch_renders_the_run_view"></a>
 
 #### test\_a\_completed\_batch\_renders\_the\_run\_view
@@ -7128,6 +7249,30 @@ statistic, real non-transparent canvas pixels), not the exact
 pooled numbers themselves -- re-deriving those independently here
 would only re-implement the aggregation this test is not the one
 responsible for verifying.
+
+<a id="gui.test_batch_results_screen.test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter"></a>
+
+#### test\_a\_completed\_batchs\_own\_scrubber\_replays\_the\_pooled\_scatter
+
+```python
+def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter() -> None
+```
+
+The completed batch scrubber (batch trajectory panel design
+`20260912-claude-sonnet-5-batch-trajectory-panel-design.md`,
+`selby/restricted`) shows, has a real generation range, and
+scrubbing to a real frame updates the label without error.
+
+`test/gui/test_app_api.py`'s own `test_get_batch_animation_frames_
+ships_client_ready_pooled_panels` already proves the underlying
+bridge call returns real, correctly shaped frames as a plain Python
+call; this test proves the page's own JavaScript
+(`wireCompletedBatchScrubber`) actually wires them into the shared
+scrubber UI and that scrubbing itself redraws without throwing,
+which no Python-only test can check. Waits on `window.
+__fimScrubberPending` settling (`wireCompletedScrubber`'s own
+established pattern, extended to its batch counterpart) rather than
+guessing a delay is enough for the un-awaited bridge call to land.
 
 <a id="gui.test_batch_results_screen.test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip"></a>
 
