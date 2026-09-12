@@ -491,9 +491,62 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   opened — not on the ordinary running-to-completed transition of the
   same run, so a mid-run choice to hide a noisy curve survives into
   that run's own completed view.
+- The GUI's own in-app Help screen now shows a short reframing note at
+  the top of "Usage guide" and "Configuration reference," pointing out
+  that a `fim run`/`fim stats` command line names the terminal
+  equivalent of what the rail's own screens already do, and that every
+  configuration field is also a Configure-screen control — closing a
+  documentation-review finding that the two embedded docs (written for
+  every reader alike, on purpose — see `dev/bin/generate-help-html`'s
+  own module docstring on why a second, GUI-only copy is not built
+  instead) can otherwise read as CLI-only inside an app with no
+  terminal in sight. The note is generated-only (`dev/bin/
+  generate-help-html`'s new `_GUI_REFRAME_NOTE`), never written into
+  `doc/usage.md`/`doc/configuration.md` themselves, so the single-
+  source-of-truth property the whole mechanism exists for is
+  unaffected; a fuller restructuring of either document was considered
+  and set aside as the wrong-sized fix — see
+  `20260911-claude-sonnet-5-gui-help-content-tailoring-design.md`
+  (`selby/restricted`) for the full investigation.
 
 ### Changed
 
+- Documentation review: `README.md`, `doc/usage.md`, `doc/configuration.md`,
+  `doc/fim-simulator-design.md`, and `doc/examples/*/config.yaml` corrected
+  against the current codebase. `n_replicates`'s default changing from `1`
+  to `200` (below) had left several worked examples, the "complete example"
+  in `doc/configuration.md`, `doc/fim-simulator-design.md`'s own §12
+  walkthrough, and two `doc/examples/*/config.yaml` files silently
+  describing a scalar run while actually running as a 200-replicate
+  adaptive batch on the current default — every one now states
+  `n_replicates: 1` explicitly, the same fix `fim init`'s own starter
+  config already needed and got. `locus_aggregation` (below) had shipped
+  with no `doc/configuration.md` entry at all; added, with a validation-
+  summary row and a corrected description of `report.json`'s own `D`/G<sub>ST</sub>
+  aggregation in `doc/usage.md`. `doc/fim-gui-design.md` and `doc/fim-
+  gui-test-plan.md` had fallen behind the botanist GUI redesign's own
+  shipped reality (the persistent rail, the two-panel Configure screen,
+  and the File/Run/Help-only menu bar superseding the six-tab modal
+  system and five-menu bar both documents still described; the test-plan
+  table listed 18 of the real 37 `test/gui/` files and 202 of the real 446
+  tests) — both corrected, with a documented gap remaining (Explore/
+  Compare/Home enrichment, tooltips, dark mode, the welcome panel, and the
+  σ-band/predicted-equilibrium overlays still need a fuller design-doc
+  pass in `doc/fim-gui-design.md`). `doc/usage.md`'s own GUI screen table
+  gained the Home recent-runs enrichment, the live/σ-band/predicted-
+  equilibrium trajectory panel, the Compare trajectory overlay, and the
+  Presets/dark-mode/welcome-panel saved-preference additions it was
+  missing.
+- `doc/fim-simulator-design.md`'s own Appendix B (the engine backend
+  benchmark tables, B.1 through B.6) moves to a new standalone document,
+  [`doc/fim-engine-backend-benchmarks.md`](doc/fim-engine-backend-benchmarks.md) —
+  a living reference doc like `doc/configuration.md`, not a dated design
+  note, so it carries no version-pinned metadata footer, matching that
+  precedent. The appendix's own tables and provenance stamps moved
+  verbatim; `doc/fim-simulator-design.md` keeps a short pointer in the
+  appendix's place, and every cross-reference to it (§9.1's own table,
+  `dev/bin/generate-heatmap-queue`'s inline comment) now points at the new
+  file.
 - `n_replicates`'s own default changes from `1` to `200`, and
   `replicate_tolerance`'s own default changes from unset (`None`) to
   `0.01` (matching `convergence_tolerance`'s own default) — an

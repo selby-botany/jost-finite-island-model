@@ -134,6 +134,45 @@ EMBEDDED_DOCS: tuple[tuple[str, str], ...] = (
 EMBEDDED_FILENAMES = {filename for _, filename in EMBEDDED_DOCS}
 SLUG_FOR_FILENAME = {filename: slug for slug, filename in EMBEDDED_DOCS}
 
+# A short, GUI-only reframing note prepended to each rendered fragment
+# (2026-09-11 documentation drift audit). `usage.md`/`configuration.md`
+# are written once, for every reader (CLI and GUI alike, per their own
+# "Who this document is for" framing) -- deliberately: embedding them
+# verbatim (this script's own module docstring, above) avoids a second,
+# separately-drifting GUI-only copy. That leaves every terminal
+# invocation (`fim run CONFIG ...`, `fim stats ...`) and CLI flag in
+# these two files rendering unchanged inside a desktop app with no
+# terminal in sight -- not wrong, since the GUI performs the identical
+# underlying operation, but liable to read as "something I need to type"
+# to a reader who has never opened a shell. Rather than stripping or
+# reorganizing the source docs (the CLI-only and universally-useful
+# content in both files is interleaved sentence by sentence, not
+# separable into whole sections a marker could cleanly skip -- a worked
+# example's own science narrative is exactly what a GUI user loading it
+# as a preset needs, only its trailing `fim run ...` line is not), one
+# short note is injected here, at generation time, reframing what
+# follows without touching a single word of the source Markdown: the
+# single-source-of-truth property this whole pipeline exists for is
+# unaffected, since this text exists only in the generated fragment, not
+# in `doc/usage.md`/`doc/configuration.md` themselves.
+_GUI_REFRAME_NOTE: dict[str, str] = {
+    "usage": (
+        '<div class="help-gui-note"><p><strong>Reading this in fim-gui?</strong> '
+        "This guide describes every action from a terminal. fim-gui performs "
+        "the exact same operations through its own screens (Home, Configure, "
+        "Run/Results, Explore, Compare) -- a command line like "
+        "<code>fim run CONFIG</code> below names the equivalent terminal "
+        "invocation, not something you need to type.</p></div>"
+    ),
+    "configuration": (
+        '<div class="help-gui-note"><p><strong>Reading this in fim-gui?</strong> '
+        "Every setting below is also a field on the Configure screen, "
+        "grouped the same way this reference's own sections are. This page "
+        "documents the underlying YAML key each field corresponds to and "
+        "its exact type, default, and constraints.</p></div>"
+    ),
+}
+
 
 # ---------------------------------------------------------------------------
 # Math: a purpose-built inline handler (design §4.2), not a LaTeX engine --
@@ -314,7 +353,10 @@ def render_doc(filename: str) -> str:
     renderer = markdown_it.MarkdownIt("gfm-like", {"html": True}).disable("linkify")
     rendered = renderer.render(source)
     rendered = inject_header_ids(rendered)
-    return rewrite_links(rendered)
+    rendered = rewrite_links(rendered)
+    slug = SLUG_FOR_FILENAME[filename]
+    note = _GUI_REFRAME_NOTE.get(slug)
+    return rendered if note is None else note + rendered
 
 
 def main(argv: list[str] | None = None) -> int:

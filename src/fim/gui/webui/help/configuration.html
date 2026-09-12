@@ -1,4 +1,4 @@
-<h1 id="fim-configuration-reference"><code>fim</code> configuration reference</h1>
+<div class="help-gui-note"><p><strong>Reading this in fim-gui?</strong> Every setting below is also a field on the Configure screen, grouped the same way this reference's own sections are. This page documents the underlying YAML key each field corresponds to and its exact type, default, and constraints.</p></div><h1 id="fim-configuration-reference"><code>fim</code> configuration reference</h1>
 <p><code>fim run</code> accepts one YAML mapping. Unknown keys, incompatible shapes, and
 out-of-range values are errors. See <a href="#" data-fim-help="usage" data-fim-anchor="">Using <code>fim</code></a> for commands and
 the <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/README.md">project overview</a> for installation.</p>
@@ -31,7 +31,7 @@ convergence_combinator: all
 convergence_window: 50
 convergence_tolerance: 0.01
 max_generations: 10000
-n_replicates: 1
+n_replicates: 1   # opt-in single scalar run; the library default is 200
 </code></pre>
 <h2 id="required-model-keys">Required model keys</h2>
 <h3 id="n"><code>N</code></h3>
@@ -431,6 +431,37 @@ sigma_band_multiplier, above, for the full mechanism.</p>
 <p>This setting controls E<sub>ST</sub>. Jost's <code>D</code> and K<sub>ST</sub> use equal deme weighting by
 definition. When every deme is the same size, both settings produce the same
 E<sub>ST</sub>.</p>
+<h3 id="locus_aggregation">locus_aggregation</h3>
+<ul>
+<li><strong>Type:</strong> <code>ratio_of_means</code> or <code>mean_of_ratios</code></li>
+<li><strong>Default:</strong> <code>ratio_of_means</code></li>
+</ul>
+<p>Controls how <code>D</code> and G<sub>ST</sub> combine across loci in the final report,
+when more than one locus is tracked. Every other reported statistic
+(H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>) is unaffected — each is already a
+linear mean across loci, with no such ambiguity to resolve.</p>
+<ul>
+<li><code>ratio_of_means</code> (the default): average H<sub>S</sub>/H<sub>T</sub> across loci
+first, then compute one <code>D</code>/G<sub>ST</sub> from those pooled values. This
+matches what the exact gene-identity recursion predicts and avoids a
+small-denominator instability a per-locus ratio can have.</li>
+<li><code>mean_of_ratios</code>: compute <code>D</code>/G<sub>ST</sub> at each locus independently,
+then average those — this project's own original behavior, kept
+available for comparability with literature or prior analyses that
+used it, not because it is the better estimator. Measured against the
+exact gene-identity recursion at this project's own reference scale,
+<code>ratio_of_means</code> landed within 0.25% of the recursion's own
+prediction where <code>mean_of_ratios</code> was off by 1.88% (up to 4.84% of
+<code>D</code> alone in the worst individually measured scenario) — see
+<code>CHANGELOG.md</code>'s own entry for this change for the full comparison.</li>
+</ul>
+<p>The convergence monitor's watched <code>D</code>/G<sub>ST</sub> (when either is the
+convergence_statistic) respects this same setting, so a run never
+watches a different estimator than the one its own final report shows.</p>
+<pre><code class="language-yaml">n_loci: 2
+locus_lengths: [50, 500]
+locus_aggregation: mean_of_ratios   # opt back into the pre-2026-09 behavior
+</code></pre>
 <h3 id="nreplicates">n<sub>replicates</sub></h3>
 <ul>
 <li><strong>Type:</strong> positive integer</li>
@@ -767,6 +798,14 @@ on this page).</p>
 </tr>
 <tr>
 <td>replicate_confidence not <code>0.90</code>, <code>0.95</code>, or <code>0.99</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>deme_weighting not <code>size</code> or <code>equal</code></td>
+<td>rejected</td>
+</tr>
+<tr>
+<td>locus_aggregation not <code>ratio_of_means</code> or <code>mean_of_ratios</code></td>
 <td>rejected</td>
 </tr>
 <tr>

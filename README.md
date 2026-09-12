@@ -149,8 +149,9 @@ See [installation alternatives](install/README.md) and the
 
 ## Outputs
 
-Each scalar CLI run (`n_replicates: 1`, the default) writes exactly four
-artifacts:
+Each scalar CLI run (`n_replicates: 1`; the library default is actually
+`200`, an adaptively-stopped batch — see [n_replicates](doc/configuration.md#nreplicates))
+writes exactly four artifacts:
 
 | File | Purpose |
 |---|---|
@@ -188,10 +189,13 @@ its own `manifest.json`. See [output schemas](doc/usage.md#output-schemas).
   per-locus list, or derived per locus from a single per-base rate
   (`mu_b`) and each locus's own `length`, so loci of different lengths
   need not mutate at an identical, hand-picked rate.
-- `n_replicates` runs that many independently seeded replicates. With the
-  opt-in `replicate_tolerance` set, a batch stops as soon as every watched
+- `n_replicates` runs that many independently seeded replicates, and
+  defaults to `200`, not `1` — set it explicitly to `1` for a single,
+  ordinary run with no batching. With `replicate_tolerance` set (also on
+  by default, at `0.01`), a batch stops as soon as every watched
   statistic's across-replicate confidence interval is tight enough,
-  rather than requiring a hand-guessed replicate count in advance.
+  rather than requiring a hand-guessed replicate count in advance, or
+  running the full `n_replicates` every time.
 
 The [simulator design](doc/fim-simulator-design.md)
 defines the complete scientific and architectural contract.
@@ -225,6 +229,7 @@ defines the complete scientific and architectural contract.
 - [Detailed implementation design](doc/fim-simulator-detailed-design.md)
 - [Detailed test plan](doc/fim-simulator-detailed-test-plan.md)
 - [Externally accessible engine API](doc/fim-simulator-functional-api.md)
+- [Engine backend benchmark results](doc/fim-engine-backend-benchmarks.md)
 - [Desktop GUI design](doc/fim-gui-design.md)
 - [Operational logging design](doc/fim-logging-design.md)
 - [Desktop GUI test plan](doc/fim-gui-test-plan.md)

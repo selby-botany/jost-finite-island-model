@@ -35,7 +35,7 @@ convergence_combinator: all
 convergence_window: 50
 convergence_tolerance: 0.01
 max_generations: 10000
-n_replicates: 1
+n_replicates: 1   # opt-in single scalar run; the library default is 200
 ```
 
 ## Required model keys
@@ -509,6 +509,40 @@ This setting controls E<sub>ST</sub>. Jost's `D` and K<sub>ST</sub> use equal de
 definition. When every deme is the same size, both settings produce the same
 E<sub>ST</sub>.
 
+### locus_aggregation
+
+- **Type:** `ratio_of_means` or `mean_of_ratios`
+- **Default:** `ratio_of_means`
+
+Controls how `D` and G<sub>ST</sub> combine across loci in the final report,
+when more than one locus is tracked. Every other reported statistic
+(H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>, K<sub>ST</sub>) is unaffected — each is already a
+linear mean across loci, with no such ambiguity to resolve.
+
+- `ratio_of_means` (the default): average H<sub>S</sub>/H<sub>T</sub> across loci
+  first, then compute one `D`/G<sub>ST</sub> from those pooled values. This
+  matches what the exact gene-identity recursion predicts and avoids a
+  small-denominator instability a per-locus ratio can have.
+- `mean_of_ratios`: compute `D`/G<sub>ST</sub> at each locus independently,
+  then average those — this project's own original behavior, kept
+  available for comparability with literature or prior analyses that
+  used it, not because it is the better estimator. Measured against the
+  exact gene-identity recursion at this project's own reference scale,
+  `ratio_of_means` landed within 0.25% of the recursion's own
+  prediction where `mean_of_ratios` was off by 1.88% (up to 4.84% of
+  `D` alone in the worst individually measured scenario) — see
+  `CHANGELOG.md`'s own entry for this change for the full comparison.
+
+The convergence monitor's watched `D`/G<sub>ST</sub> (when either is the
+convergence_statistic) respects this same setting, so a run never
+watches a different estimator than the one its own final report shows.
+
+```yaml
+n_loci: 2
+locus_lengths: [50, 500]
+locus_aggregation: mean_of_ratios   # opt back into the pre-2026-09 behavior
+```
+
 ### n<sub>replicates</sub>
 
 - **Type:** positive integer
@@ -796,6 +830,8 @@ on this page).
 | track_expensive_statistics not a boolean | rejected |
 | replicate_minimum greater than n<sub>replicates</sub> | silently capped at n<sub>replicates</sub> |
 | replicate_confidence not `0.90`, `0.95`, or `0.99` | rejected |
+| deme_weighting not `size` or `equal` | rejected |
+| locus_aggregation not `ratio_of_means` or `mean_of_ratios` | rejected |
 | engine_backend not `lineal`, `generational`, `generational-vector`, or `auto` | rejected |
 | jit not `off` or `numba` | rejected |
 | auto_vector_min_d less than 1 | rejected |
