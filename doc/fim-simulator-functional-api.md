@@ -303,10 +303,11 @@ directly from a frequency table instead of from a live simulation.
   max_generations` as a hard safety cap.
 - **`ConvergenceCriterion`** and its concrete rules —
   `TrailingWindowCriterion`/`trailing_window_stable` (has a statistic's
-  own recent history stopped moving), `ConfidenceIntervalCriterion` (has
-  a confidence interval across replicates tightened enough), and the two
-  combinators `AllCriterion`/`AnyCriterion` for requiring several rules
-  (or several watched statistics) to agree.
+  own recent history stopped moving) and `ConfidenceIntervalCriterion`
+  (has a confidence interval across replicates tightened enough).
+  Watching several statistics at once (requiring them to agree) is a
+  `ConvergenceMonitor` feature — see `convergence_combinator` in
+  `doc/configuration.md` — not a separate criterion class.
 - **`ConvergenceOutcome`**, **`StopReason`** — what a monitor's own
   decision looked like: which generation, whether it converged or hit
   the cap, and why.

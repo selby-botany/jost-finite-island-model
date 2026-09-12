@@ -5,10 +5,9 @@ enough?" It is organized into two modules:
 
 - `fim.convergence.criteria` — the individual, swappable *rules* for
   judging whether a statistic's history has settled down (a trailing-
-  window comparison for a single run, a confidence-interval check
-  across replicates, and two combinators for requiring several rules
-  or several statistics to agree). See that module's own docstring for
-  why no single fixed generation count could work for every run.
+  window comparison for a single run, and a confidence-interval check
+  across replicates). See that module's own docstring for why no
+  single fixed generation count could work for every run.
 - `fim.convergence.monitor` — the stateful class (`ConvergenceMonitor`)
   that actually drives a run using one of those rules: it accumulates
   the watched statistic's history generation by generation, asks the
@@ -21,8 +20,6 @@ Every public name from both modules is re-exported here.
 """
 
 from fim.convergence.criteria import (
-    AllCriterion,
-    AnyCriterion,
     ConfidenceIntervalCriterion,
     ConvergenceCriterion,
     TrailingWindowCriterion,
@@ -35,8 +32,6 @@ from fim.convergence.monitor import (
 )
 
 __all__ = [
-    "AllCriterion",
-    "AnyCriterion",
     "ConfidenceIntervalCriterion",
     "ConvergenceCriterion",
     "ConvergenceMonitor",

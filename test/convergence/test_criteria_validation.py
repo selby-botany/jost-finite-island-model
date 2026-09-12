@@ -1,4 +1,4 @@
-"""Validation and combinator tests for convergence criteria."""
+"""Validation tests for convergence criteria."""
 
 from __future__ import annotations
 
@@ -7,8 +7,6 @@ import math
 import pytest
 
 from fim.convergence.criteria import (
-    AllCriterion,
-    AnyCriterion,
     ConfidenceIntervalCriterion,
     TrailingWindowCriterion,
     trailing_window_stable,
@@ -39,25 +37,12 @@ def test_trailing_window_requires_a_complete_window() -> None:
     assert not trailing_window_stable([1.0], 2, 0.0)
 
 
-def test_criterion_constructor_and_combinators_validate_children() -> None:
-    """Configured and composite criteria reject invalid empty definitions."""
+def test_trailing_window_criterion_constructor_validates_configuration() -> None:
+    """The configured criterion rejects an invalid window or tolerance."""
     with pytest.raises(ValueError, match="window"):
         TrailingWindowCriterion(1, 0.0)
     with pytest.raises(ValueError, match="tolerance"):
         TrailingWindowCriterion(2, -1.0)
-    with pytest.raises(ValueError, match="AnyCriterion"):
-        AnyCriterion(())
-    with pytest.raises(ValueError, match="AllCriterion"):
-        AllCriterion(())
-
-
-def test_any_and_all_criteria_short_circuit_on_child_results() -> None:
-    """Any and all expose normal Boolean composition over child criteria."""
-    stable = TrailingWindowCriterion(2, 0.0)
-    unstable = TrailingWindowCriterion(2, 0.1)
-
-    assert AnyCriterion((stable, unstable)).is_stable([1.0, 1.0])
-    assert not AllCriterion((stable, unstable)).is_stable([1.0, 1.2])
 
 
 def test_monitor_rejects_invalid_records_and_records_history() -> None:

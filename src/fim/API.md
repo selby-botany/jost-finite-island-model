@@ -21,12 +21,6 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [ConfidenceIntervalCriterion](#fim.convergence.criteria.ConfidenceIntervalCriterion)
     * [\_\_post\_init\_\_](#fim.convergence.criteria.ConfidenceIntervalCriterion.__post_init__)
     * [is\_stable](#fim.convergence.criteria.ConfidenceIntervalCriterion.is_stable)
-  * [AnyCriterion](#fim.convergence.criteria.AnyCriterion)
-    * [\_\_post\_init\_\_](#fim.convergence.criteria.AnyCriterion.__post_init__)
-    * [is\_stable](#fim.convergence.criteria.AnyCriterion.is_stable)
-  * [AllCriterion](#fim.convergence.criteria.AllCriterion)
-    * [\_\_post\_init\_\_](#fim.convergence.criteria.AllCriterion.__post_init__)
-    * [is\_stable](#fim.convergence.criteria.AllCriterion.is_stable)
 * [fim.convergence.monitor](#fim.convergence.monitor)
   * [StopReason](#fim.convergence.monitor.StopReason)
   * [ConvergenceOutcome](#fim.convergence.monitor.ConvergenceOutcome)
@@ -537,10 +531,9 @@ enough?" It is organized into two modules:
 
 - `fim.convergence.criteria` — the individual, swappable *rules* for
   judging whether a statistic's history has settled down (a trailing-
-  window comparison for a single run, a confidence-interval check
-  across replicates, and two combinators for requiring several rules
-  or several statistics to agree). See that module's own docstring for
-  why no single fixed generation count could work for every run.
+  window comparison for a single run, and a confidence-interval check
+  across replicates). See that module's own docstring for why no
+  single fixed generation count could work for every run.
 - `fim.convergence.monitor` — the stateful class (`ConvergenceMonitor`)
   that actually drives a run using one of those rules: it accumulates
   the watched statistic's history generation by generation, asks the
@@ -573,12 +566,10 @@ protocol (a single `is_stable` method), so `fim.convergence.monitor.
 ConvergenceMonitor` — the class that actually drives a run's stop
 decision — never needs to know *which* rule it is applying, only that
 whatever object it was given can answer that one question. This module
-provides two concrete rules (`TrailingWindowCriterion`, the ordinary
+provides two concrete rules: `TrailingWindowCriterion`, the ordinary
 within-run default, and `ConfidenceIntervalCriterion`, used for
 replicate batches — see each class's own docstring for when to use
-which) plus two combinators (`AnyCriterion`, `AllCriterion`) for
-requiring several statistics — or several different rules on the same
-statistic — to agree before declaring convergence.
+which.
 
 <a id="fim.convergence.criteria.ConvergenceCriterion"></a>
 
@@ -595,8 +586,8 @@ one method" — this class is never instantiated directly and defines
 no behavior of its own; it exists purely so that
 `fim.convergence.monitor.ConvergenceMonitor` can accept *any*
 object that answers `is_stable` the same way, whether that object
-is `TrailingWindowCriterion`, `ConfidenceIntervalCriterion`, one of
-the two combinators below, or something built elsewhere entirely.
+is `TrailingWindowCriterion`, `ConfidenceIntervalCriterion`, or
+something built elsewhere entirely.
 
 <a id="fim.convergence.criteria.ConvergenceCriterion.is_stable"></a>
 
@@ -714,9 +705,8 @@ Dataclass field validation cannot happen in the field
 declarations themselves, so `__post_init__` (a hook the
 `dataclass` decorator calls automatically right after every
 field is set) is where it happens instead — the same reason
-`ConfidenceIntervalCriterion`, `AnyCriterion`, and
-`AllCriterion`, below, each define one too. Rejecting an
-invalid `window`/`tolerance` here, at construction time,
+`ConfidenceIntervalCriterion`, below, defines one too. Rejecting
+an invalid `window`/`tolerance` here, at construction time,
 surfaces a configuration mistake immediately rather than
 letting it silently produce a criterion that can never
 actually detect stability once a run is already under way.
@@ -783,99 +773,6 @@ and why the Student's-t method is used to compute one; this
 method's whole job is deciding whether that computed interval
 (specifically its `half_width`, the "± 3%" half of a "52% ±
 3%"-style report) has narrowed to at most `tolerance` yet.
-
-<a id="fim.convergence.criteria.AnyCriterion"></a>
-
-## AnyCriterion Objects
-
-```python
-@dataclass(frozen=True, slots=True)
-class AnyCriterion()
-```
-
-Declare stability when any child criterion is stable.
-
-A "combinator" here means an object that is itself a
-`ConvergenceCriterion` (it has an `is_stable` method, exactly like
-`TrailingWindowCriterion` or `ConfidenceIntervalCriterion`), but
-computes its own answer by asking several *other* criteria and
-combining their answers, rather than looking at the history
-directly itself — this is what makes it possible to require, say,
-"either a trailing window has settled *or* a confidence interval
-has tightened enough" as a single rule, by wrapping one of each
-inside an `AnyCriterion`. Note the distinction from
-`fim.convergence.monitor.ConvergenceMonitor`'s own ``combinator``
-setting: that combinator decides how *several statistics* (e.g.
-both D and G_ST) must agree, each judged by the *same* criterion,
-while `AnyCriterion`/`AllCriterion` instead combine several
-*criteria* applied to the *same* one statistic's history. The two
-can be nested together when a project genuinely needs both at once.
-
-<a id="fim.convergence.criteria.AnyCriterion.__post_init__"></a>
-
-#### \_\_post\_init\_\_
-
-```python
-def __post_init__() -> None
-```
-
-Reject an empty combinator.
-
-A combinator with zero child criteria could never mean
-anything sensible — "any of these" and "all of these" are both
-undefined once there is nothing to check — so this is caught
-immediately at construction rather than silently producing an
-object whose `is_stable` would need a special-cased answer.
-
-<a id="fim.convergence.criteria.AnyCriterion.is_stable"></a>
-
-#### is\_stable
-
-```python
-def is_stable(history: Sequence[float]) -> bool
-```
-
-Return whether any child criterion is stable.
-
-<a id="fim.convergence.criteria.AllCriterion"></a>
-
-## AllCriterion Objects
-
-```python
-@dataclass(frozen=True, slots=True)
-class AllCriterion()
-```
-
-Declare stability only when every child criterion is stable.
-
-The stricter counterpart to `AnyCriterion`, above — see that
-class's own docstring for what a "combinator" is here and how this
-differs from `fim.convergence.monitor.ConvergenceMonitor`'s own,
-differently scoped ``combinator`` setting.
-
-<a id="fim.convergence.criteria.AllCriterion.__post_init__"></a>
-
-#### \_\_post\_init\_\_
-
-```python
-def __post_init__() -> None
-```
-
-Reject an empty combinator.
-
-See `AnyCriterion.__post_init__` for why an empty combinator is
-rejected immediately rather than left to define `is_stable`'s
-behavior on zero children.
-
-<a id="fim.convergence.criteria.AllCriterion.is_stable"></a>
-
-#### is\_stable
-
-```python
-def is_stable(history: Sequence[float]) -> bool
-```
-
-Return whether every child criterion is stable.
 
 <a id="fim.convergence.monitor"></a>
 
@@ -990,16 +887,28 @@ statistic's own history, so its stability is judged once enough
 history, and never blocked by a round where a different statistic
 happened to have no value.
 
+``extra_statistics`` (constructor-only) names statistics this monitor
+also records a history for, alongside ``statistics``, without ever
+letting them affect the stop decision — this class does not need to
+know, and a caller never has to tell it twice, which of its own
+recorded histories is the subset actually deciding convergence versus
+which are merely along for the ride (recorded for display purposes
+only). ``history``/``histories`` return every recorded statistic's
+values either way; only the internal stability check (`record`,
+below) ever distinguishes the two groups.
+
 <a id="fim.convergence.monitor.ConvergenceMonitor.__init__"></a>
 
 #### \_\_init\_\_
 
 ```python
-def __init__(criterion: ConvergenceCriterion,
-             *,
-             max_generations: int,
-             statistics: Sequence[str] = ("value", ),
-             combinator: Combinator = "all") -> None
+def __init__(
+    criterion: ConvergenceCriterion,
+    *,
+    max_generations: int,
+    statistics: Sequence[str] = ("value", ),
+    combinator: Combinator = "all",
+    extra_statistics: Sequence[str] = ()) -> None
 ```
 
 Initialize an empty monitor.
@@ -1014,16 +923,32 @@ decision can be made.
 - `criterion` - Statistical stability rule, applied independently to
   each watched statistic's own history.
 - `max_generations` - Hard generation safety cap.
-- `statistics` - Names of the statistic(s) to watch. Defaults to one
-  unnamed statistic, matching ``record()``'s bare-float form.
+- `statistics` - Names of the statistic(s) to watch — these, and
+  only these, drive the stop decision (see `combinator`).
+  Defaults to one unnamed statistic, matching ``record()``'s
+  bare-float form.
 - `combinator` - ``"all"`` requires every statistic to be stable
   before stopping; ``"any"`` requires only one.
+- `extra_statistics` - Names of additional statistics to record a
+  history for, alongside ``statistics``, without those
+  names ever influencing the stop decision — this monitor
+  does not need to know, and never needs to be told again,
+  which of its own recorded histories is the subset
+  actually deciding convergence versus which are merely
+  along for the ride (`fim.engine._watched_statistic_
+  values`'s own "D/G_ST/H_S/H_T always present for display,
+  only the watched subset gates stopping" design is exactly
+  what this parameter exists to carry). Empty by default —
+  every existing caller, unaffected. A name repeated
+  between ``statistics`` and ``extra_statistics`` (or
+  within either one) is rejected, the same as a repeat
+  within ``statistics`` alone always has been.
 
 
 **Raises**:
 
-- `ValueError` - If ``max_generations``, ``statistics``, or
-  ``combinator`` is invalid.
+- `ValueError` - If ``max_generations``, ``statistics``,
+  ``extra_statistics``, or ``combinator`` is invalid.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.generations"></a>
 
@@ -1066,7 +991,14 @@ one named in ``statistics``; use ``histories`` for every statistic.
 def histories() -> Mapping[str, tuple[float, ...]]
 ```
 
-Return every watched statistic's recorded values, by name.
+Return every recorded statistic's values, by name.
+
+Covers both ``statistics`` (the watched subset actually deciding
+convergence) and ``extra_statistics`` (recorded for display only,
+never gating the stop decision) — the two are indistinguishable
+from this property alone, by design; a caller that needs to know
+which is which already has that answer from its own configured
+``statistics``/``extra_statistics``, not from this monitor.
 
 <a id="fim.convergence.monitor.ConvergenceMonitor.outcome"></a>
 
@@ -1366,11 +1298,28 @@ Fields:
         just one statistic — see `SimulationParams.
         convergence_statistic`.
     convergence_histories: The same per-generation history as
-        `convergence_history`, but keyed by statistic name, for the
-        less common case of watching several statistics
-        simultaneously (design §9) — present either way, so a
-        caller does not need to know in advance which of the two
-        shapes a given run used.
+        `convergence_history`, but keyed by statistic name — no
+        longer only the watched subset. `D`/`G_ST`/`H_S`/`H_T` are
+        always present (`fim.engine._ALWAYS_TRACKED_STATISTICS`),
+        regardless of what `SimulationParams.convergence_statistic`
+        actually watches, since all four cost nothing extra to
+        compute or aggregate either way; `E_ST`/`K_ST` are present
+        when either is actually watched, or when
+        `SimulationParams.track_expensive_statistics` opts into
+        paying their own real, per-generation cost for a display
+        value (that field's own docstring has the measured
+        tradeoff). Only the watched subset ever influenced *why* the
+        run stopped (see `FinalReport.converged_on`) — every other
+        name here is present for a caller (a GUI trajectory panel,
+        design doc §6.2) that wants to plot more than just the
+        statistic that happened to be watched, never because it
+        factored into the stop decision itself. A run's own
+        `manifest.software_version` predating this change has
+        neither guarantee: its own persisted trajectory (were one
+        read back some other way) genuinely has no history at all
+        for a statistic that was not watched at the time, which is
+        not a defect to guard against, only an honest reflection of
+        what that older run actually recorded.
     manifest: The `RunManifest` recording this run's own bookkeeping
         metadata — when it started and ended, what software version
         produced it, and (once written to disk) the checksums
@@ -2898,18 +2847,23 @@ driver thread, before this method was written; see
 
 **Returns**:
 
-- ``{"ok"` - True, "equilibrium": ...}` once the run has *started*
-  — not once it finishes; the real outcome arrives via the
-  pushed calls above. `equilibrium` is `_equilibrium_reference_
-  payload`'s own result (design doc §6.2's predicted-
-  equilibrium trajectory overlay) — `None` for a batch (never
-  computed there — batch has no trajectory panel of its own to
-  overlay onto) or for a scalar run whose `N`/`m`/`mu` are not
-  all plain scalars; the page caches it client-side for the
-  live trajectory panel to draw against on every subsequent
-  progress tick (`webui/screens/run-view-running.js`'s own
-  `setLiveEquilibriumReference`), and the same value is reused,
-  not recomputed, in the eventual `"done"` push
+- ``{"ok"` - True, "equilibrium": ..., "identityRecovery": ...}`
+  once the run has *started* — not once it finishes; the real
+  outcome arrives via the pushed calls above. `equilibrium` is
+  `_equilibrium_reference_payload`'s own result (design doc
+  §6.2's predicted-equilibrium trajectory overlay);
+  `identityRecovery` is `_identity_recovery_reference_
+  payload`'s own result (that same section's closed-form
+  recovery *curve*, a second and different reference overlay —
+  see that function's own docstring). Both `None` for a batch
+  (never computed there — batch has no trajectory panel of its
+  own to overlay onto) or for a scalar run whose `N`/`m`(/`mu`,
+  for `equilibrium` only) are not all plain scalars; the page
+  caches both client-side for the live trajectory panel to
+  draw against on every subsequent progress tick (`webui/
+  screens/run-view-running.js`'s own `setLiveEquilibriumReference`/
+  `setLiveIdentityRecoveryReference`), and the same values are
+  reused, not recomputed, in the eventual `"done"` push
   (`_drain_run_messages`). `{"ok": False, "message": ...}` if
   the form does not validate or the output directory cannot be
   allocated.
@@ -3132,14 +3086,19 @@ def get_equilibrium_sweep(axis: str, n: str, m: str, mu: str,
                           d: str) -> dict[str, Any]
 ```
 
-Sweep one of N/d/m/mu and return predicted D/G_ST across it.
+Sweep one of N/d/m/mu and return predicted D/G_ST/E_ST across it.
 
 Explore's own curve (design doc
 `20260907-claude-sonnet-5-botanist-gui-redesign.md` §5.2):
 `axis` sweeps across `_EQUILIBRIUM_SWEEP_DOMAINS[axis]`, a fixed
 display range independent of the other three fields' current
 values, which are held fixed at whatever `get_equilibrium_
-predictions` was just called with.
+predictions` was just called with. `E_ST` (`equilibrium_shannon_
+differentiation`) joins `D`/`G_ST` here rather than staying
+computed-but-unplotted the way `get_equilibrium_predictions`
+alone left it — it shares the identical `[0, 1]` differentiation
+domain those two already plot on, so the same axes and the same
+gap-handling client-side `drawLine` cover it with no new chart.
 
 **Arguments**:
 
@@ -3154,13 +3113,21 @@ predictions` was just called with.
 **Returns**:
 
 - ``{"ok"` - True, "axis": axis, "current": <parsed current value
-  of axis>, "points": [{"x": ..., "D": ..., "G_ST": ...},
-  ...]}` — `D`/`G_ST` are `None` (not a formatted string —
-  plotting reads these as numbers) wherever that point's own
-  configuration makes the prediction undefined, e.g. `D` at
-  `mu == 0`; `{"ok": False, "message": ...}` if `axis` is not
-  one of the four names above, or if `n`/`d`/`m`/`mu` do not
-  parse.
+  of axis>, "points": [{"x": ..., "D": ..., "G_ST": ...,
+- `"E_ST"` - ...}, ...]}` — `D`/`G_ST`/`E_ST` are `None` (not a
+  formatted string — plotting reads these as numbers) wherever
+  that point's own configuration makes the prediction
+  undefined, e.g. `D`/`E_ST` at `mu == 0`; `{"ok": False,
+- `"message"` - ...}` if `axis` is not one of the four names
+  above, or if `n`/`d`/`m`/`mu` do not parse.
+
+  `identity_recovery_half_life` (generations, unbounded) is
+  deliberately not part of this sweep: it shares no `[0, 1]`
+  domain with `D`/`G_ST`/`E_ST` (`get_equilibrium_predictions`
+  already surfaces it as Explore's own single-number
+  prediction instead) — a second sweep/chart for it against
+  `N`/`m` (the only two axes it depends on) is a reasonable,
+  deliberately deferred follow-up, not built here.
 
 <a id="fim.gui.app.Api.load_yaml"></a>
 
@@ -3764,13 +3731,14 @@ reuse, not a second rendering path.
 
 - ``{"ok"` - True, "runId", "report", "panels", "statistics",
   "outputDirectory", "generationCount", "demeCount",
-  "sigmaBand", "equilibrium"}` on success — `sigmaBand` is
-  `_sigma_band_payload`'s own result (sigma-band GUI design
-  doc `20260910-claude-sonnet-5-gui-sigma-band-design.md`,
-  `selby/restricted`, slice 4), `None` for a run that never
-  requested one; `equilibrium` is `_equilibrium_reference_
-  payload`'s own result (botanist GUI design doc §6.2's
-  predicted-equilibrium trajectory overlay), computed fresh
+  "sigmaBand", "equilibrium", "identityRecovery"}` on success
+  — `sigmaBand` is `_sigma_band_payload`'s own result (sigma-band
+  GUI design doc `20260910-claude-sonnet-5-gui-sigma-band-
+  design.md`, `selby/restricted`, slice 4), `None` for a run
+  that never requested one; `equilibrium`/`identityRecovery`
+  are `_equilibrium_reference_payload`'s/`_identity_recovery_
+  reference_payload`'s own results (botanist GUI design doc
+  §6.2's two predicted-trajectory overlays), computed fresh
   from this reopened run's own manifest params, `None` when
   those params are not all plain scalars. `{"ok": False,
 - `"message"` - ...}` if no trajectory was given, the
@@ -4405,6 +4373,15 @@ One model-input screen field's config key, label, and value kind.
   is "choice" restricted to a fixed set of numbers rather
   than tokens (`replicate_confidence`) — `from_mapping`
   requires an actual `float`, not its string spelling.
+  "bool" is a plain, always-present checkbox (unlike the
+  sigma-band toggle's own `sigma_band_enabled`, which gates a
+  *second*, conditionally-present field pair and so is not a
+  plain `FormField` at all) — its text is the literal
+  `"true"`/`"false"` `collectFormValues` (`config-modals.js`)
+  always writes for a checkbox field, coerced to a real
+  Python `bool` here, matching a `SimulationParams` field
+  whose own default is already a plain boolean
+  (`track_expensive_statistics`).
 - `choices` - The fixed option list for a "choice"/"float_choice"
   field; empty otherwise.
 
@@ -8052,6 +8029,34 @@ functions that actually use each one.
   A single statistic makes this a no-op special case.
 - `convergence_window` - Trailing stability-window length.
 - `convergence_tolerance` - Maximum half-window mean difference.
+- `track_expensive_statistics` - Whether the per-generation
+  convergence check also computes `E_ST`/`K_ST` even when
+  neither is actually watched — the display-only opt-in a
+  GUI trajectory panel/live statistics table uses to show
+  real, continuously updated values for those two instead of
+  "not known this generation", at a real, recurring
+  performance cost (never a correctness change: a run's own
+  convergence decision, and every other statistic, are
+  completely unaffected by this flag either way).
+  `D`/`G_ST`/`H_S`/`H_T` need no such flag and are always
+  computed and returned for free regardless — each is either
+  the shared `H_S`/`H_T` input every other field derives
+  from, or an O(1) step once those are known
+  (`fim.statistics.differentiation.statistics_report`'s own
+  `statistics` parameter). `E_ST` (an entropy pass over the
+  pooled table plus one per deme) and `K_ST` (a set union
+  across every deme's own alleles) are each a real,
+  independent O(total allele entries) pass over every
+  locus's own frequency table, *every generation of the run*
+  — commit `b12679b` (`FIM-24`/`FIM-32`) measured skipping
+  both, when neither is watched, at roughly a 38% reduction
+  in per-generation convergence-check cost at a many-alleles
+  reference configuration; turning this on pays that same
+  cost back, deliberately, in exchange for the display value.
+  `False` by default — an unconfigured run costs exactly what
+  it always has. A statistic already named in
+  `convergence_statistic` is computed regardless of this
+  flag, watched or not, exactly as before this field existed.
 - `max_generations` - Hard generation safety cap.
 - `n_replicates` - Number of independently seeded runs — the hard cap
   a replicate batch runs up to. Defaults to

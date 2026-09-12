@@ -357,6 +357,32 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   validation-harness oracle by `test_report_for_state_ratio_of_means_
   matches_the_pooled_oracle`.
 
+### Removed
+
+- `fim.convergence.criteria.AnyCriterion`/`AllCriterion`, the two
+  criterion-combinator classes for stacking several stability *rules*
+  over one shared statistic's history. They were exported publicly
+  (`fim.convergence.__all__`) but never constructed anywhere in
+  production code (`src/fim/engine.py`'s three `ConvergenceMonitor`
+  call sites, and `src/fim/model/initial.py`'s own equilibrium monitor,
+  build only `TrailingWindowCriterion`/`ConfidenceIntervalCriterion`),
+  and no configuration key ever offered a way to request one; the only
+  tests exercising them were direct, isolated unit tests of the classes
+  themselves, never through `ConvergenceMonitor`. They combine a
+  different axis than `ConvergenceMonitor`'s own `combinator` setting
+  (which agrees across several *statistics*, each judged by the *same*
+  criterion, and remains unchanged) — retrofitting them onto that
+  existing logic would not have been a behavior-preserving refactor,
+  only new, currently unneeded configuration surface for combining
+  several *criteria* on one statistic. Removed as dead public API
+  rather than left in place on the chance of a future use; see the
+  2026-09-06 open-issues rollup, item 11, for the full analysis and
+  rejected "wire them in" alternative. No deprecation cycle: this is a
+  manually versioned, internally developed library with no known
+  external consumers, so a straight removal with this note is this
+  project's own established practice for a pre-existing but unused
+  public name.
+
 ### Fixed
 
 - The secret scan in `dev/bin/validate-repository` now scans the

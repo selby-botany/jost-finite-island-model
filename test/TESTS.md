@@ -37,6 +37,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_batch_running`](#gui.test_batch_running)
   - [`test_branding`](#gui.test_branding)
   - [`test_compare_screen`](#gui.test_compare_screen)
+  - [`test_completed_scrubber`](#gui.test_completed_scrubber)
   - [`test_config_form`](#gui.test_config_form)
   - [`test_config_modal_dialogs`](#gui.test_config_modal_dialogs)
   - [`test_dark_mode_screen`](#gui.test_dark_mode_screen)
@@ -1200,6 +1201,42 @@ tests instead call `fim.reanalyze` directly, the way `fim.gui`'s
 "open an existing run" and animated-trajectory paths do
 (`doc/fim-gui-design.md` §8, §9).
 
+<a id="test.test_reanalyze.test_reanalyze_trajectory_does_not_hold_every_row_live_for_an_early_generation"></a>
+
+#### test\_reanalyze\_trajectory\_does\_not\_hold\_every\_row\_live\_for\_an\_early\_generation
+
+```python
+def test_reanalyze_trajectory_does_not_hold_every_row_live_for_an_early_generation(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An explicit early generation never keeps later generations' rows alive.
+
+The worst case for a `rows = list(store.read(...))`-style
+implementation: re-analyzing generation 0 out of many still means
+every later generation gets read (the integrity/consistency checks
+require it), so the old code would hold the *entire* trajectory's
+rows live simultaneously even though only generation 0's own rows
+are ever used. This proves the streaming rewrite does not.
+
+<a id="test.test_reanalyze.test_reanalyze_trajectory_does_not_hold_every_row_live_for_the_final_generation"></a>
+
+#### test\_reanalyze\_trajectory\_does\_not\_hold\_every\_row\_live\_for\_the\_final\_generation
+
+```python
+def test_reanalyze_trajectory_does_not_hold_every_row_live_for_the_final_generation(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The default ("final generation") path is equally memory-bounded.
+
+`generation=None` cannot know which generation is the maximum until
+the stream ends (`reanalyze_trajectory`'s own docstring on
+`JSONLTrajectoryStore.read`'s ordering guarantee), so this exercises
+the rolling running-max buffer specifically: every earlier
+generation's buffered rows must be dropped, not accumulated, each
+time a higher generation number is seen.
+
 <a id="test.test_reanalyze.test_reanalyze_trajectory_matches_the_live_report"></a>
 
 #### test\_reanalyze\_trajectory\_matches\_the\_live\_report
@@ -2200,7 +2237,7 @@ The update command never accesses the network without --check.
 
 # convergence.test\_criteria\_validation
 
-Validation and combinator tests for convergence criteria.
+Validation tests for convergence criteria.
 
 <a id="convergence.test_criteria_validation.test_trailing_window_rejects_invalid_configuration"></a>
 
@@ -2232,25 +2269,16 @@ def test_trailing_window_requires_a_complete_window() -> None
 
 A partial history is never reported as stable.
 
-<a id="convergence.test_criteria_validation.test_criterion_constructor_and_combinators_validate_children"></a>
+<a id="convergence.test_criteria_validation.test_trailing_window_criterion_constructor_validates_configuration"></a>
 
-#### test\_criterion\_constructor\_and\_combinators\_validate\_children
-
-```python
-def test_criterion_constructor_and_combinators_validate_children() -> None
-```
-
-Configured and composite criteria reject invalid empty definitions.
-
-<a id="convergence.test_criteria_validation.test_any_and_all_criteria_short_circuit_on_child_results"></a>
-
-#### test\_any\_and\_all\_criteria\_short\_circuit\_on\_child\_results
+#### test\_trailing\_window\_criterion\_constructor\_validates\_configuration
 
 ```python
-def test_any_and_all_criteria_short_circuit_on_child_results() -> None
+def test_trailing_window_criterion_constructor_validates_configuration(
+) -> None
 ```
 
-Any and all expose normal Boolean composition over child criteria.
+The configured criterion rejects an invalid window or tolerance.
 
 <a id="convergence.test_criteria_validation.test_monitor_rejects_invalid_records_and_records_history"></a>
 
@@ -2467,6 +2495,56 @@ def test_monitor_constructor_validates_statistics_and_combinator() -> None
 ```
 
 Statistic names and the combinator are validated at construction.
+
+<a id="convergence.test_monitor.test_extra_statistics_are_recorded_but_never_gate_stopping"></a>
+
+#### test\_extra\_statistics\_are\_recorded\_but\_never\_gate\_stopping
+
+```python
+def test_extra_statistics_are_recorded_but_never_gate_stopping() -> None
+```
+
+`extra_statistics` histories are kept, but only `statistics` decides stopping.
+
+`fim.engine._watched_statistic_values`'s own "D/G_ST/H_S/H_T always
+present for display, only the watched subset gates stopping" design
+depends on this: a monitor watching only `D` (immediately stable)
+with `H_S` as an `extra_statistic` that never stabilizes must still
+stop as soon as `D` does — `H_S` riding along in `histories`, never
+once consulted by the stop decision.
+
+<a id="convergence.test_monitor.test_extra_statistics_accepts_a_partial_mapping_like_watched_statistics"></a>
+
+#### test\_extra\_statistics\_accepts\_a\_partial\_mapping\_like\_watched\_statistics
+
+```python
+def test_extra_statistics_accepts_a_partial_mapping_like_watched_statistics(
+) -> None
+```
+
+An extra statistic can be legitimately undefined on a given round too.
+
+<a id="convergence.test_monitor.test_extra_statistics_name_still_rejects_a_genuinely_unknown_name"></a>
+
+#### test\_extra\_statistics\_name\_still\_rejects\_a\_genuinely\_unknown\_name
+
+```python
+def test_extra_statistics_name_still_rejects_a_genuinely_unknown_name(
+) -> None
+```
+
+A name outside both `statistics` and `extra_statistics` still raises.
+
+<a id="convergence.test_monitor.test_extra_statistics_constructor_rejects_a_name_repeated_across_the_two_sets"></a>
+
+#### test\_extra\_statistics\_constructor\_rejects\_a\_name\_repeated\_across\_the\_two\_sets
+
+```python
+def test_extra_statistics_constructor_rejects_a_name_repeated_across_the_two_sets(
+) -> (None)
+```
+
+A name cannot appear in both `statistics` and `extra_statistics`.
 
 
 
@@ -3435,6 +3513,116 @@ Mirrors `test_convergence_values_skips_e_st_and_k_st_when_only_d_
 is_watched` above, through `_convergence_values_vectorized` instead
 — proves `VectorizedState`'s own dense-array path skips the same
 work, not just the dict-based path.
+
+<a id="engine.test_engine.test_convergence_values_always_includes_the_always_tracked_four"></a>
+
+#### test\_convergence\_values\_always\_includes\_the\_always\_tracked\_four
+
+```python
+def test_convergence_values_always_includes_the_always_tracked_four() -> None
+```
+
+`D`/`G_ST`/`H_S`/`H_T` are present regardless of what is watched.
+
+The display-only counterpart to the two "skips E_ST/K_ST" tests
+above: those four cost nothing extra to compute (`statistics_
+report` already computes them unconditionally — `b12679b`'s own
+docstring), so `_watched_statistic_values` no longer discards them
+from the returned mapping just because they were not named in
+`convergence_statistic`. Confirms `fim.engine._ALWAYS_TRACKED_
+STATISTICS` end to end, through the same full convergence-check
+entry point the "skips" tests exercise, not just at `_watched_
+statistic_values` directly.
+
+<a id="engine.test_engine.test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t"></a>
+
+#### test\_convergence\_values\_vectorized\_always\_includes\_d\_g\_st\_h\_s\_h\_t
+
+```python
+def test_convergence_values_vectorized_always_includes_d_g_st_h_s_h_t(
+) -> None
+```
+
+The array-native path returns the identical always-tracked superset.
+
+<a id="engine.test_engine.test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched"></a>
+
+#### test\_track\_expensive\_statistics\_computes\_e\_st\_and\_k\_st\_even\_when\_unwatched
+
+```python
+def test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`track_expensive_statistics=True` reaches `_e_st_from_demes`/`_k_st_from_demes`.
+
+The opt-in's own call-count regression test, mirroring `test_
+convergence_values_skips_e_st_and_k_st_when_only_d_is_watched`
+exactly, but with the new field turned on and neither statistic
+watched: proves the opt-in alone (no watching required) is enough to
+reach both real implementations, end to end, through `_convergence_
+values`.
+
+<a id="engine.test_engine.test_track_expensive_statistics_vectorized_computes_e_st_and_k_st"></a>
+
+#### test\_track\_expensive\_statistics\_vectorized\_computes\_e\_st\_and\_k\_st
+
+```python
+def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The array-native path gets the identical opt-in fix.
+
+<a id="engine.test_engine.test_run_result_convergence_histories_include_always_tracked_statistics"></a>
+
+#### test\_run\_result\_convergence\_histories\_include\_always\_tracked\_statistics
+
+```python
+def test_run_result_convergence_histories_include_always_tracked_statistics(
+) -> None
+```
+
+A real, full scalar run's own `convergence_histories` include the free four.
+
+End-to-end proof through `_run_one` itself (not just the per-
+generation helper functions above): a run watching only `D` still
+comes back with real `G_ST`/`H_S`/`H_T` history too, of the same
+length as the watched one — the exact GUI-visible symptom the bug
+report described (a trajectory panel/completed view that narrowed
+down to only the watched statistic once a run finished).
+
+<a id="engine.test_engine.test_run_result_convergence_histories_include_e_st_k_st_when_opted_in"></a>
+
+#### test\_run\_result\_convergence\_histories\_include\_e\_st\_k\_st\_when\_opted\_in
+
+```python
+def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in(
+) -> None
+```
+
+`track_expensive_statistics=True` extends a real run's own recorded history.
+
+Same run as above, only with the opt-in set — `E_ST`/`K_ST` now
+join the always-tracked four in `RunResult.convergence_histories`,
+each with a real per-generation history the same length as every
+other tracked statistic's own.
+
+<a id="engine.test_engine.test_sigma_band_stays_scoped_to_watched_statistics_only"></a>
+
+#### test\_sigma\_band\_stays\_scoped\_to\_watched\_statistics\_only
+
+```python
+def test_sigma_band_stays_scoped_to_watched_statistics_only() -> None
+```
+
+The within-run sigma band never picks up the new always-tracked extras.
+
+`_run_one`'s own sigma-band extension buffers `_convergence_values`'
+now-richer per-generation output — this confirms it still only ever
+keeps what `doc/configuration.md`'s own `sigma_band_multiplier` entry
+documents ("reports each watched statistic"), not every name
+`_convergence_values` now happens to also return.
 
 <a id="engine.test_engine.test_locus_length_does_not_affect_the_report"></a>
 
@@ -5635,6 +5823,51 @@ locus with a genuinely different rate is needed to actually keep
 `mu` a tuple, unlike the `N`/`m` cases just above, which stay
 non-scalar with `tiny_params`'s own single deme pair already.
 
+<a id="gui.test_app_api.test_identity_recovery_reference_payload_matches_the_statistics_functions_directly"></a>
+
+#### test\_identity\_recovery\_reference\_payload\_matches\_the\_statistics\_functions\_directly
+
+```python
+def test_identity_recovery_reference_payload_matches_the_statistics_functions_directly(
+        tiny_params: SimulationParams) -> None
+```
+
+`_identity_recovery_reference_payload` is Whitlock's `rate`/`equilibrium`.
+
+A second, different closed-form reference from `_equilibrium_
+reference_payload`'s own asymptote line (design doc §6.2) — a full
+curve, `f0(t) = equilibrium * (1 - rate**t)`, not a single value —
+so this test checks the two raw ingredients the page evaluates that
+formula from client-side, not a pre-sampled series.
+
+<a id="gui.test_app_api.test_identity_recovery_reference_payload_is_none_for_a_per_deme_population_size"></a>
+
+#### test\_identity\_recovery\_reference\_payload\_is\_none\_for\_a\_per\_deme\_population\_size
+
+```python
+def test_identity_recovery_reference_payload_is_none_for_a_per_deme_population_size(
+        tiny_params: SimulationParams) -> None
+```
+
+A per-deme `N` has no single scalar these identity-recovery functions accept.
+
+Matches `_equilibrium_reference_payload`'s own identical scalar-only
+scope boundary, applied here to the two arguments (`N`, `m`) this
+family of functions actually needs — no `mu`/`d` at all, unlike the
+equilibrium family, since Whitlock (1992)'s own model is deme-count-
+and mutation-independent by construction.
+
+<a id="gui.test_app_api.test_identity_recovery_reference_payload_is_none_for_a_migration_matrix"></a>
+
+#### test\_identity\_recovery\_reference\_payload\_is\_none\_for\_a\_migration\_matrix
+
+```python
+def test_identity_recovery_reference_payload_is_none_for_a_migration_matrix(
+        tiny_params: SimulationParams) -> None
+```
+
+A migration matrix has no single scalar `m` this family of functions accepts.
+
 <a id="gui.test_app_api.test_get_equilibrium_sweep_holds_the_other_three_fields_fixed"></a>
 
 #### test\_get\_equilibrium\_sweep\_holds\_the\_other\_three\_fields\_fixed
@@ -5643,7 +5876,23 @@ non-scalar with `tiny_params`'s own single deme pair already.
 def test_get_equilibrium_sweep_holds_the_other_three_fields_fixed() -> None
 ```
 
-Sweeping `m` recomputes `D`/`G_ST` at each point using the same N/d/mu.
+Sweeping `m` recomputes `D`/`G_ST`/`E_ST` at each point using the same N/d/mu.
+
+<a id="gui.test_app_api.test_get_equilibrium_sweep_reports_e_st_as_none_at_mu_zero"></a>
+
+#### test\_get\_equilibrium\_sweep\_reports\_e\_st\_as\_none\_at\_mu\_zero
+
+```python
+def test_get_equilibrium_sweep_reports_e_st_as_none_at_mu_zero() -> None
+```
+
+`E_ST` (like `D`) is undefined at `mu == 0`; `G_ST` alone stays defined.
+
+Mirrors `test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_
+zero`'s own case, one level down: the sweep's own per-point `mu == 0`
+(reachable by sweeping `N`/`d`/`m` while the fixed `mu` field is `0`,
+not only by sweeping `mu` itself, since `_EQUILIBRIUM_SWEEP_DOMAINS`'s
+own `mu` range never reaches exactly `0`).
 
 <a id="gui.test_app_api.test_get_equilibrium_sweep_rounds_integer_axes"></a>
 
@@ -6378,6 +6627,21 @@ computed fresh from the reopened run's own manifest params
 (`_equilibrium_reference_payload`'s own docstring) — `_write_run`'s
 own defaults (`N=20, d=2, m=0.1, mu=0.01`) are all plain scalars, so
 a real prediction is expected here, not `None`.
+
+<a id="gui.test_app_api.test_open_run_carries_the_real_identity_recovery_reference"></a>
+
+#### test\_open\_run\_carries\_the\_real\_identity\_recovery\_reference
+
+```python
+def test_open_run_carries_the_real_identity_recovery_reference(
+        tmp_path: Path) -> None
+```
+
+A reopened run's own `identityRecovery` matches Whitlock's formulas directly.
+
+A second, different overlay from `equilibrium` immediately above
+(design doc §6.2) — computed fresh from the same reopened run's own
+manifest params.
 
 <a id="gui.test_app_api.test_open_run_choose_reanalyzes_an_earlier_generation_as_re_analysis"></a>
 
@@ -7228,6 +7492,77 @@ the page's own `change` handler on `compareTrajectoryStatistic`
 actually redraws ``compare`-trajectory-canvas` from that same
 already-fetched data, for a statistic other than the default `D`.
 
+<a id="gui.test_completed_scrubber"></a>
+
+# gui.test\_completed\_scrubber
+
+Headless functional tests for the unified run view's `completed`-state
+scrubber updating the stats table and trajectory panel, not only the
+scatter (botanist GUI design doc §6.2/§6.3, `20260907-claude-sonnet-5-
+botanist-gui-redesign.md`, `selby/restricted`).
+
+Before this, dragging ``scrubber`-range` on a just-finished (or reopened)
+scalar run redrew only the scatter canvas (`wireCompletedScrubber`'s own
+`drawFrame` callback, `screens/run-view-completed.js`) -- the six-row
+stats table and the trajectory panel stayed frozen at the run's final
+values no matter where the scrubber sat, a real, confirmed-live gap (not
+a hypothesis) design §6.3's own "a scrubber... letting a user drag back
+through already-computed history" already calls for. This module proves
+the fix: scrubbing away from the final frame (1) updates the watched
+convergence statistic's own row, and `D`/`G_ST`/`H_S`/`H_T`'s own rows
+regardless of whether they are actually watched (`fim.engine._ALWAYS_
+TRACKED_STATISTICS` -- landed after this module was first written,
+folded in here rather than tracked as a second, separate change), to
+that generation's real recorded value, (2) marks `E_ST`/`K_ST` "not
+known at this generation" rather than a possibly-misleading final value
+whenever neither is watched nor `track_expensive_statistics` opted in
+(`ConvergenceMonitor.record` only ever records the always-tracked four
+plus whichever of `E_ST`/`K_ST` were actually requested -- with neither
+requested here, those two alone have no per-generation history to
+show), (3) draws a moving vertical marker on the trajectory canvas at
+the scrubbed generation, and (4) restores the real, authoritative final
+statistics and removes the marker exactly at the scrubber's own last
+frame.
+
+Uses the same small, fast-converging configuration `test_results_screen.
+py`'s own module docstring documents choosing for this exact reason
+(completes in well under a second) -- `convergence_window`'s own minimum
+of 2 forces at least one recorded generation past 0 before stability can
+first be evaluated, so every run here always has more than one persisted
+generation (and so a populated, enabled scrubber) to actually scrub
+through.
+
+<a id="gui.test_completed_scrubber.test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker"></a>
+
+#### test\_scrubbing\_to\_an\_earlier\_generation\_updates\_the\_stats\_table\_and\_marker
+
+```python
+def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
+        window: webview.Window) -> None
+```
+
+Scrubbing away from the final frame shows the watched statistic's
+own real, per-generation value (different at two different scrubbed
+generations -- proof it is a real lookup, not a static copy), marks
+the other five "not known at this generation" rather than a stale
+final value, and moves the trajectory canvas's own marker (a
+different pixel snapshot than the just-completed, unscrubbed
+panel).
+
+<a id="gui.test_completed_scrubber.test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_marker"></a>
+
+#### test\_scrubbing\_back\_to\_the\_final\_frame\_restores\_the\_real\_statistics\_and\_marker
+
+```python
+def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_marker(
+        window: webview.Window) -> None
+```
+
+Scrubbing away and then back to the scrubber's own last frame
+restores the exact statistics table and trajectory canvas the run
+first completed with -- the marker is specific to a non-final
+scrub position, not a permanent addition to the panel.
+
 <a id="gui.test_config_form"></a>
 
 # gui.test\_config\_form
@@ -7282,6 +7617,33 @@ def test_form_values_to_payload_parses_every_plain_field_kind() -> None
 ```
 
 Int, choice, and int_list fields all coerce to the right Python type.
+
+<a id="gui.test_config_form.test_form_values_to_payload_coerces_a_bool_field_from_true_false_text"></a>
+
+#### test\_form\_values\_to\_payload\_coerces\_a\_bool\_field\_from\_true\_false\_text
+
+```python
+def test_form_values_to_payload_coerces_a_bool_field_from_true_false_text(
+) -> None
+```
+
+A "bool" field coerces the literal "true"/"false" text a checkbox writes.
+
+`track_expensive_statistics` is this form's first plain "bool"
+`FormField` — unlike `sigma_band_enabled`, it needs no dedicated
+`*_to_payload` function of its own; the generic `all_fields()`
+dispatch loop in `form_values_to_payload` handles it directly.
+
+<a id="gui.test_config_form.test_params_to_form_values_renders_track_expensive_statistics_as_text"></a>
+
+#### test\_params\_to\_form\_values\_renders\_track\_expensive\_statistics\_as\_text
+
+```python
+def test_params_to_form_values_renders_track_expensive_statistics_as_text(
+) -> None
+```
+
+`params_to_form_values` renders the field back as literal "true"/"false".
 
 <a id="gui.test_config_form.test_form_values_to_payload_accepts_a_per_deme_n_list"></a>
 
@@ -8239,6 +8601,44 @@ the formula's own monotonicity in `m`, so a real recomputation is
 distinguishable from a stale, unchanged reading by simple inequality,
 with no dependency on either value's own exact digits.
 
+<a id="gui.test_explore_screen.test_sweep_curve_has_a_legend_matching_the_shared_statistic_color_palette"></a>
+
+#### test\_sweep\_curve\_has\_a\_legend\_matching\_the\_shared\_statistic\_color\_palette
+
+```python
+def test_sweep_curve_has_a_legend_matching_the_shared_statistic_color_palette(
+        window: webview.Window) -> None
+```
+
+``explore`-legend` names all three plotted lines in the shared statistic colors.
+
+Botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §11.3: "the axis label on Explore" is named directly as
+part of the one statistic-color contract every screen shares, so this
+reads `STATISTIC_TRAJECTORY_COLORS` (`run-view-completed.js`, a
+module-scope `const` in the same classic-script global scope every
+`webui/screens/*.js` file shares, per `index.html`'s own `<script>`
+order) back from the live page rather than hardcoding a second copy
+of those hex values here — a real color drift between the two would
+fail this test, not silently pass with a stale expectation.
+
+<a id="gui.test_explore_screen.test_sweep_curve_draws_axis_titles"></a>
+
+#### test\_sweep\_curve\_draws\_axis\_titles
+
+```python
+def test_sweep_curve_draws_axis_titles(window: webview.Window) -> None
+```
+
+The canvas draws a real x-axis title (the swept field) and y-axis title.
+
+Checked the same way `test_results_screen.py`'s own sigma-band test
+checks a canvas fill actually happened: the alpha channel of a small
+rectangle in each title's own drawn region, non-zero only if
+something was actually painted there (a canvas starts fully
+transparent) -- not by trying to read the text back out of raster
+pixels, which no test in this package attempts.
+
 <a id="gui.test_field_help"></a>
 
 # gui.test\_field\_help
@@ -8862,6 +9262,32 @@ sequence of synchronous `evaluate_js` calls against one window is
 enough — no background thread involved, matching `test_open_run_
 screen.py`'s own "plain, synchronous request/response" precedent).
 
+<a id="gui.test_input_screen.test_track_expensive_statistics_checkbox_starts_unchecked"></a>
+
+#### test\_track\_expensive\_statistics\_checkbox\_starts\_unchecked
+
+```python
+def test_track_expensive_statistics_checkbox_starts_unchecked(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The E_ST/K_ST display opt-in defaults unchecked, matching `SimulationParams`.
+
+Unlike the sigma-band toggle above, this is a plain "bool" `FormField`
+with no second, revealed field pair to seed -- this and the test
+below are its own entire DOM-level coverage.
+
+<a id="gui.test_input_screen.test_checking_track_expensive_statistics_updates_the_checkbox"></a>
+
+#### test\_checking\_track\_expensive\_statistics\_updates\_the\_checkbox
+
+```python
+def test_checking_track_expensive_statistics_updates_the_checkbox(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Checking the box actually flips its own DOM state, live.
+
 <a id="gui.test_input_screen.test_navigating_to_configure_does_not_reset_run_view_state"></a>
 
 #### test\_navigating\_to\_configure\_does\_not\_reset\_run\_view\_state
@@ -9385,6 +9811,70 @@ def test_home_explore_card_opens_explore(window: webview.Window,
 ```
 
 Home enrichment design doc's own slice 3: "Explore" reaches Explore.
+
+<a id="gui.test_open_run_screen.test_home_example_select_lists_only_built_in_examples"></a>
+
+#### test\_home\_example\_select\_lists\_only\_built\_in\_examples
+
+```python
+def test_home_example_select_lists_only_built_in_examples(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+`home-example-select` lists the built-in worked examples only.
+
+Populated by `refreshHomeExampleOptions()` from `Api.list_presets`'s
+own `builtin` entries, filtering out any user-saved preset — the
+full combined list stays reachable only from the existing
+`modal-presets` picker (`fim.menu.loadExample`). The option order
+and titles must match `fim.gui.presets.list_presets` directly (not
+a hand-copied count), the same "read the real module, don't
+re-derive a snapshot" precedent `test_presets.py`'s own
+`_REAL_PRESETS` sets — a real gap this test would have caught: an
+earlier draft asserted a bare option count, which would not have
+noticed the dropdown silently including a user-saved preset instead
+of a missing built-in one.
+
+<a id="gui.test_open_run_screen.test_choosing_a_home_example_applies_it_and_opens_configure"></a>
+
+#### test\_choosing\_a\_home\_example\_applies\_it\_and\_opens\_configure
+
+```python
+def test_choosing_a_home_example_applies_it_and_opens_configure(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Picking an example applies its values, opens Configure, then resets.
+
+A plain, immediately-acting pulldown (no separate confirm step): the
+`change` event alone drives it, matching how a real user's own
+pulldown selection fires it. Selects the "Stepping-stone (spatial)
+migration" example specifically (option index 2 — index 0 is the
+placeholder, index 1 is "Unequal island sizes with a migration
+hub") since its own d=6 ring matrix is distinct from the starter
+form's own defaults, the identical "a changed field is real proof
+the click did something" reasoning `test_presets_screen.py`'s own
+equivalent test already uses for the same preset. Reuses
+`presets.js`'s own `applyPreset` via `window.fim.applyPreset` —
+genuinely the same apply path the File-menu picker uses, not a
+second, independent one.
+
+<a id="gui.test_open_run_screen.test_home_example_select_excludes_a_user_saved_preset"></a>
+
+#### test\_home\_example\_select\_excludes\_a\_user\_saved\_preset
+
+```python
+def test_home_example_select_excludes_a_user_saved_preset(
+        window: webview.Window) -> None
+```
+
+A user-saved preset never appears in Home's own example shortcut.
+
+"One of the examples" (the design ask) means built-in worked
+examples only — a user-saved configuration stays reachable solely
+from the full `modal-presets` picker. Needs its own two-stage,
+manually driven window (save, then reopen Home) rather than the
+shared `drive` fixture, which destroys its window after one stage.
 
 <a id="gui.test_open_run_screen.test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line"></a>
 
@@ -10639,6 +11129,31 @@ payload -> JSON -> `run-view-completed.js`'s own `renderTrajectory`)
 actually renders something, not only that `Api`'s own Python-level
 `RunResult` already carries the data (`test_app_api.py`'s own
 coverage of that).
+
+<a id="gui.test_running_screen.test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels"></a>
+
+#### test\_trajectory\_legend\_toggle\_hides\_and\_restores\_a\_curves\_own\_pixels
+
+```python
+def test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels(
+) -> None
+```
+
+Clicking a legend entry actually hides that statistic's own drawn pixels.
+
+Botanist GUI design doc §6.2's own legend-toggle: display-only, so
+this proves the *canvas* changes (`run-view-completed.js`'s own
+`buildTrajectoryLegendItem`/`hiddenTrajectoryStatistics`), not just
+that a CSS class toggled — the same "count non-blank pixels" idiom
+`test_open_run_screen.py`'s own sigma-band test already established.
+Clicking "G_ST (simulated)" must also hide its own "G_ST (predicted
+equilibrium)" companion (this feature's own scope), while every
+other statistic's own entry (including the identity-recovery curve,
+which this feature does not toggle at all — it is not one of the six
+report statistics the legend-toggle scopes to) stays untouched;
+clicking it again must restore the exact original pixel count,
+proving the toggle is purely a display filter, never a re-request or
+a loss of the underlying data.
 
 <a id="gui.test_running_screen.test_trajectory_panel_updates_live_while_a_run_is_still_going"></a>
 
@@ -17113,6 +17628,28 @@ def test_generator_documents_every_source_module(tmp_path: Path) -> None
 
 Every committed Python module receives an API section.
 
+<a id="validation.test_api_docs.test_generator_runs_without_an_activated_virtualenv"></a>
+
+#### test\_generator\_runs\_without\_an\_activated\_virtualenv
+
+```python
+def test_generator_runs_without_an_activated_virtualenv(
+        tmp_path: Path) -> None
+```
+
+The generator resolves its own virtualenv from the repository's own
+path, with no dependency on the caller's shell having activated one
+first -- the exact recurring failure mode (a background agent
+forgetting, or activating the wrong worktree's own `.venv-312`) this
+generator's `bin/pydoc-markdown` indirection exists to eliminate.
+
+Compared against a normal, ordinary-environment run rather than the
+committed `src/fim/API.md` -- freshness of the committed file against
+the real source tree is `pre-push`'s own job (and
+`test_generator_documents_every_source_module`, above, already covers
+"every module gets documented"); this test's own job is narrower:
+confirm the two environments produce identical output.
+
 <a id="validation.test_beta_workflow"></a>
 
 # validation.test\_beta\_workflow
@@ -19687,6 +20224,27 @@ def test_every_test_directory_is_a_documented_group() -> None
 `_GROUPS` here (and the generator's own) covers every real
 subdirectory of `test/` that actually holds `.py` files, other than
 `test/data/` (fixture JSON, not code).
+
+<a id="validation.test_test_docs.test_generator_runs_without_an_activated_virtualenv"></a>
+
+#### test\_generator\_runs\_without\_an\_activated\_virtualenv
+
+```python
+def test_generator_runs_without_an_activated_virtualenv(
+        tmp_path: Path) -> None
+```
+
+The generator resolves its own virtualenv from the repository's own
+path, with no dependency on the caller's shell having activated one
+first -- the exact recurring failure mode (a background agent
+forgetting, or activating the wrong worktree's own `.venv-312`) this
+generator's `pydoc-markdown` `PATH` widening (mirroring `dev/bin/
+generate-api-docs`'s own) exists to eliminate.
+
+Compared against a normal, ordinary-environment run rather than the
+committed `test/TESTS.md` -- freshness of the committed file against
+the real test tree is `pre-push`'s own job; this test's own job is
+narrower: confirm the two environments produce identical output.
 
 <a id="validation.test_webui_assets"></a>
 

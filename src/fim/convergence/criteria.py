@@ -16,12 +16,10 @@ protocol (a single `is_stable` method), so `fim.convergence.monitor.
 ConvergenceMonitor` — the class that actually drives a run's stop
 decision — never needs to know *which* rule it is applying, only that
 whatever object it was given can answer that one question. This module
-provides two concrete rules (`TrailingWindowCriterion`, the ordinary
+provides two concrete rules: `TrailingWindowCriterion`, the ordinary
 within-run default, and `ConfidenceIntervalCriterion`, used for
 replicate batches — see each class's own docstring for when to use
-which) plus two combinators (`AnyCriterion`, `AllCriterion`) for
-requiring several statistics — or several different rules on the same
-statistic — to agree before declaring convergence.
+which.
 """
 
 from __future__ import annotations
@@ -45,8 +43,8 @@ class ConvergenceCriterion(Protocol):
     no behavior of its own; it exists purely so that
     `fim.convergence.monitor.ConvergenceMonitor` can accept *any*
     object that answers `is_stable` the same way, whether that object
-    is `TrailingWindowCriterion`, `ConfidenceIntervalCriterion`, one of
-    the two combinators below, or something built elsewhere entirely.
+    is `TrailingWindowCriterion`, `ConfidenceIntervalCriterion`, or
+    something built elsewhere entirely.
     """
 
     def is_stable(self, history: Sequence[float]) -> bool:
@@ -154,9 +152,8 @@ class TrailingWindowCriterion:
         declarations themselves, so `__post_init__` (a hook the
         `dataclass` decorator calls automatically right after every
         field is set) is where it happens instead — the same reason
-        `ConfidenceIntervalCriterion`, `AnyCriterion`, and
-        `AllCriterion`, below, each define one too. Rejecting an
-        invalid `window`/`tolerance` here, at construction time,
+        `ConfidenceIntervalCriterion`, below, defines one too. Rejecting
+        an invalid `window`/`tolerance` here, at construction time,
         surfaces a configuration mistake immediately rather than
         letting it silently produce a criterion that can never
         actually detect stability once a run is already under way.
@@ -219,70 +216,3 @@ class ConfidenceIntervalCriterion:
             return False
         interval = confidence_interval(history, confidence=self.confidence)
         return interval["half_width"] <= self.tolerance
-
-
-@dataclass(frozen=True, slots=True)
-class AnyCriterion:
-    """Declare stability when any child criterion is stable.
-
-    A "combinator" here means an object that is itself a
-    `ConvergenceCriterion` (it has an `is_stable` method, exactly like
-    `TrailingWindowCriterion` or `ConfidenceIntervalCriterion`), but
-    computes its own answer by asking several *other* criteria and
-    combining their answers, rather than looking at the history
-    directly itself — this is what makes it possible to require, say,
-    "either a trailing window has settled *or* a confidence interval
-    has tightened enough" as a single rule, by wrapping one of each
-    inside an `AnyCriterion`. Note the distinction from
-    `fim.convergence.monitor.ConvergenceMonitor`'s own ``combinator``
-    setting: that combinator decides how *several statistics* (e.g.
-    both D and G_ST) must agree, each judged by the *same* criterion,
-    while `AnyCriterion`/`AllCriterion` instead combine several
-    *criteria* applied to the *same* one statistic's history. The two
-    can be nested together when a project genuinely needs both at once.
-    """
-
-    criteria: tuple[ConvergenceCriterion, ...]
-
-    def __post_init__(self) -> None:
-        """Reject an empty combinator.
-
-        A combinator with zero child criteria could never mean
-        anything sensible — "any of these" and "all of these" are both
-        undefined once there is nothing to check — so this is caught
-        immediately at construction rather than silently producing an
-        object whose `is_stable` would need a special-cased answer.
-        """
-        if not self.criteria:
-            raise ValueError("AnyCriterion requires at least one criterion")
-
-    def is_stable(self, history: Sequence[float]) -> bool:
-        """Return whether any child criterion is stable."""
-        return any(criterion.is_stable(history) for criterion in self.criteria)
-
-
-@dataclass(frozen=True, slots=True)
-class AllCriterion:
-    """Declare stability only when every child criterion is stable.
-
-    The stricter counterpart to `AnyCriterion`, above — see that
-    class's own docstring for what a "combinator" is here and how this
-    differs from `fim.convergence.monitor.ConvergenceMonitor`'s own,
-    differently scoped ``combinator`` setting.
-    """
-
-    criteria: tuple[ConvergenceCriterion, ...]
-
-    def __post_init__(self) -> None:
-        """Reject an empty combinator.
-
-        See `AnyCriterion.__post_init__` for why an empty combinator is
-        rejected immediately rather than left to define `is_stable`'s
-        behavior on zero children.
-        """
-        if not self.criteria:
-            raise ValueError("AllCriterion requires at least one criterion")
-
-    def is_stable(self, history: Sequence[float]) -> bool:
-        """Return whether every child criterion is stable."""
-        return all(criterion.is_stable(history) for criterion in self.criteria)

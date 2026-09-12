@@ -858,12 +858,18 @@ generation. 𝖯["convergence_statistic"] also accepts a list of several
 statistics, combined by 𝖯["convergence_combinator"] (`"all"`, the
 default — every watched statistic must be simultaneously stable — or
 `"any"` — stopping as soon as one is), landing as §9's "several statistics
-needed to agree before stopping." `AnyCriterion`/`AllCriterion` here
-compose several *criteria* over one shared history (useful for stacking
-different stability rules on the same statistic); the several-*statistic*
-case is a distinct axis, handled directly by `ConvergenceMonitor` itself
-(below) rather than by these two classes, since each watched statistic
-needs its own independent history, not a shared one.
+needed to agree before stopping." That combination is handled directly by
+`ConvergenceMonitor` itself (below), since each watched statistic needs
+its own independent history, not a shared one.
+
+An earlier revision of this module also shipped `AnyCriterion`/
+`AllCriterion`, a pair of combinators for stacking several stability
+*rules* over one shared history — a different axis from combining several
+*statistics*, above. No configuration surface ever constructed one and no
+production caller ever used them, so they were removed as dead public API
+rather than kept as an unreachable, untested-in-context feature (2026-09-06
+open-issues rollup, item 11). Revisit only if a concrete need for
+multi-rule stacking on a single statistic actually arises.
 
 **`convergence/monitor.py`.** `ConvergenceMonitor` wraps one criterion,
 applied independently to one history per watched statistic, plus a
