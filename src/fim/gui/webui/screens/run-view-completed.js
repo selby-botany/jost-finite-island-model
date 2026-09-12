@@ -841,6 +841,26 @@ function buildTrajectoryLegendItem(name, label, swatchClassName) {
     return item;
 }
 
+// A confidence interval computed from only 2 or 3 independent replicates
+// is mathematically correct but can be enormous -- Student's-t with 1
+// degree of freedom (`sampleCount === 2`) has a two-tailed 95% critical
+// value near 12.7, so a perfectly ordinary difference between two
+// replicates' own values can produce a `low`/`high` many times wider
+// than the statistic's own natural range. Confirmed live: the tail end
+// of a real, staggered-stopping batch's own `D` band reached `[-2.98,
+// 3.54]` for a statistic that never otherwise leaves roughly `[0, 1]`.
+// Left in the *data* unchanged (`pooled_convergence_histories` never
+// drops a point just because its own interval is wide -- design §
+// "a real, honest picture... not an artifact to smooth over") but
+// excluded from the *domain* calculation below: a single unstable
+// late point should not squash every earlier, better-supported point
+// into an unreadable sliver at the plot's own vertical center. The
+// mean is never excluded regardless of sample count -- only the
+// low/high band's own contribution to the axis range is gated, so the
+// central tendency's own story is always visible even when its
+// uncertainty band is not fully.
+const _MIN_SAMPLE_COUNT_FOR_DOMAIN = 4;
+
 /**
  * Draw a completed batch's own pooled trajectory (batch trajectory
  * panel design `20260912-claude-sonnet-5-batch-trajectory-panel-
@@ -865,6 +885,46 @@ function buildTrajectoryLegendItem(name, label, swatchClassName) {
  *     `drawTrajectoryCurve` already established for its own
  *     `visiblePlottable` argument.
  */
+/**
+ * Compute the y-axis domain `drawBatchTrajectoryCurve` plots against --
+ * factored out into its own pure function specifically so a test can
+ * assert on it directly (a hand-built payload in, a `{minValue,
+ * maxValue}` out), rather than only indirectly through rendered canvas
+ * pixels.
+ *
+ * A point's own `mean` always contributes to the domain, regardless of
+ * `sampleCount`; its own `low`/`high` contribute only once `sampleCount`
+ * reaches `_MIN_SAMPLE_COUNT_FOR_DOMAIN` (see that constant's own
+ * comment for the confirmed-live case this excludes) -- an unstable,
+ * thin-sample band still *draws* at its own true, possibly enormous
+ * width (canvas silently clips whatever falls outside `[plotTop,
+ * plotBottom]`, the same as it would for any other value outside the
+ * visible area), it simply never gets to decide how far the axis
+ * itself stretches for every other, better-supported point.
+ * @param {Record<string, Array<{mean: string, low: string, high: string,
+ *     sampleCount: number}>>} visiblePooled
+ * @returns {{minValue: number, maxValue: number}}
+ */
+function computeBatchTrajectoryValueDomain(visiblePooled) {
+    const allValues = Object.values(visiblePooled).flatMap((points) =>
+        points.flatMap((point) => {
+            const values = [Number(point.mean)];
+            if (point.sampleCount >= _MIN_SAMPLE_COUNT_FOR_DOMAIN) {
+                values.push(Number(point.low), Number(point.high));
+            }
+            return values;
+        })
+    );
+    // The domain always includes [0, 1], matching `drawTrajectoryCurve`'s
+    // own identical reasoning: every named statistic's own natural range
+    // starts there, so this reads against the same fixed floor/ceiling a
+    // reader of any other statistic on this page already expects.
+    return {
+        minValue: Math.min(0, ...allValues),
+        maxValue: Math.max(1, ...allValues),
+    };
+}
+
 function drawBatchTrajectoryCurve(canvas, visiblePooled) {
     const context = canvas.getContext("2d");
     const width = canvas.width;
@@ -883,20 +943,9 @@ function drawBatchTrajectoryCurve(canvas, visiblePooled) {
     const allGenerations = names.flatMap((name) =>
         visiblePooled[name].map((point) => point.generation)
     );
-    const allValues = names.flatMap((name) =>
-        visiblePooled[name].flatMap((point) => [
-            Number(point.low),
-            Number(point.high),
-        ])
-    );
     const minGeneration = Math.min(...allGenerations);
     const maxGeneration = Math.max(...allGenerations);
-    // The domain always includes [0, 1], matching `drawTrajectoryCurve`'s
-    // own identical reasoning: every named statistic's own natural range
-    // starts there, so this reads against the same fixed floor/ceiling a
-    // reader of any other statistic on this page already expects.
-    const minValue = Math.min(0, ...allValues);
-    const maxValue = Math.max(1, ...allValues);
+    const { minValue, maxValue } = computeBatchTrajectoryValueDomain(visiblePooled);
 
     function xToPixel(generation) {
         const fraction =

@@ -38,6 +38,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -119,6 +120,49 @@ def _wait_for_input_screen_ready(window: webview.Window) -> None:
         f"the run view was not ready within "
         f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
     )
+
+
+def test_batch_trajectory_domain_excludes_a_thin_samples_own_band(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """A `sampleCount`-2 point's own wild band never widens the plotted axis.
+
+    Confirmed live: a real, staggered-stopping batch's own `D` band
+    reached `low: -2.98, high: 3.54` at its own tail (only 2 replicates
+    still contributing -- Student's-t with 1 degree of freedom has an
+    enormous critical value) for a statistic that never otherwise
+    leaves roughly `[0, 1]`, squashing every earlier, better-supported
+    generation into an unreadable sliver once the axis stretched to
+    include it. `computeBatchTrajectoryValueDomain` is tested directly
+    against a hand-built payload here (no real batch needed) rather
+    than only indirectly through rendered canvas pixels, since a pure
+    function's own return value is a far more direct assertion than
+    reading pixel coverage back out of a canvas.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.__testDomain = computeBatchTrajectoryValueDomain({"
+            "D: ["
+            "{generation: 0, mean: '0.2', low: '0.1', high: '0.3', sampleCount: 5},"
+            "{generation: 5, mean: '0.4', low: '-3', high: '4', sampleCount: 2}"
+            "]"
+            "});"
+        ),
+        read="window.__testDomain",
+        is_ready=lambda value: value is not None,
+    )
+
+    # The thin-sample point's own wild `low`/`high` (-3/4) are excluded
+    # entirely -- only its `mean` (0.4), the well-supported point's own
+    # real `[0.1, 0.3]` band, and the always-included `[0, 1]` floor/
+    # ceiling bound the domain. Confirms the exclusion actually fires
+    # (not merely that these particular numbers stay inside `[0, 1]`
+    # regardless): -3/4 would otherwise widen `minValue`/`maxValue`
+    # well past this assertion.
+    assert settled["minValue"] == 0
+    assert settled["maxValue"] == 1
 
 
 def test_a_completed_batch_renders_the_run_view() -> None:

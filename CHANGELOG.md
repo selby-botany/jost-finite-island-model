@@ -41,7 +41,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `trajectory.jsonl` is append-only, so it stays readable even once a
   replicate has moved well past it — and pools it into a growing
   `initialStatistics` baseline the client keeps updated in place at
-  generation 0.
+  generation 0. A confidence interval computed from only two or three
+  replicates is mathematically correct but can be enormous (Student's-t
+  with 1 degree of freedom has a two-tailed 95% critical value near
+  12.7); the plotted axis now excludes a thin-sample point's own
+  `low`/`high` from its own range calculation (its `mean` still counts,
+  and the point itself is still drawn, possibly clipped) rather than
+  letting one unstable late point squash every earlier, better-
+  supported generation into an unreadable sliver.
 - `dev/bin/validate-repository` now runs automatically in two places
   rather than only by hand. The `pre-push` hook runs it before every
   push, where the pinned Docker images are already warm and a failure
