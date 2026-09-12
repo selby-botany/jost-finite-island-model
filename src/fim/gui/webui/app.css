@@ -645,7 +645,15 @@ fieldset.composite > label {
 /* `home-example-select` (Home's "New run" card): a plain `<select>`
  * sharing an `.actions` row with a real `<button>` -- matched to that
  * button's own sizing/border/radius so the two read as one action
- * group, not a mismatched form control dropped beside styled buttons. */
+ * group, not a mismatched form control dropped beside styled buttons.
+ * `min-width: 0` overrides a flex item's own default `min-width: auto`
+ * -- without it, a `<select>` refuses to shrink below its own widest
+ * `<option>`'s rendered width (several real worked-example titles are
+ * long, e.g. "Per-base mutation rate across unequal locus lengths"),
+ * overflowing `.home-card`'s own bounding box at a narrow window width
+ * instead of wrapping or shrinking the way `.actions`'s own `flex-wrap`
+ * otherwise allows every other child to. `max-width: 100%` is the
+ * actual shrink target once `min-width` no longer forbids it. */
 .actions select {
     font: inherit;
     padding: 0.45rem 0.9rem;
@@ -654,6 +662,8 @@ fieldset.composite > label {
     background: var(--fim-background);
     color: var(--fim-foreground);
     cursor: pointer;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .actions select:hover {

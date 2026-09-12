@@ -715,6 +715,65 @@ def test_home_example_select_excludes_a_user_saved_preset(
     assert settled["labels"] == ["Try a worked example…", *expected_titles]
 
 
+def test_home_example_select_stays_inside_its_card_at_a_narrow_window_width(
+    window: webview.Window,
+) -> None:
+    """`home-example-select` never overflows `.home-card`'s own bounding box.
+
+    A real, reported layout bug: a `<select>` element defaults to
+    `min-width: auto` inside a flex container (`.actions`, `app.css`),
+    so it refuses to shrink below its own widest `<option>`'s rendered
+    width (several real worked-example titles are long, e.g. "Per-base
+    mutation rate across unequal locus lengths") — at a narrow window
+    width, the control overflowed its own card's left edge rather than
+    wrapping or shrinking the way `.actions`'s own `flex-wrap` already
+    lets every other child do. `window.resize` (a Python-side pywebview
+    call, not something the shared `drive` fixture's own JS-string
+    `trigger` can express) needs its own manually driven window, the
+    same precedent `test_home_example_select_excludes_a_user_saved_
+    preset`, just above, already established for a different reason.
+
+    Confirmed live before fixing: reverting the `app.css` fix reproduced
+    `selectLeft: -2.5` (past the *viewport's* own left edge, let alone
+    the card's) at this same window width.
+    """
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.resize(420, 700)
+            window.evaluate_js("window.fim.showOpenRunScreen();")
+            settled = _poll_until(
+                window,
+                "(function() {"
+                "if (window.__fimHomeExampleOptionsReady !== true) { return null; }"
+                "var card = document.querySelector('.home-cards .home-card');"
+                "var select = document.getElementById('home-example-select');"
+                "var cardRect = card.getBoundingClientRect();"
+                "var selectRect = select.getBoundingClientRect();"
+                "return {"
+                "cardLeft: cardRect.left, cardRight: cardRect.right,"
+                "selectLeft: selectRect.left, selectRight: selectRect.right"
+                "};"
+                "})()",
+                lambda value: value is not None,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    # A small tolerance, not an exact `>=`/`<=`, matching sub-pixel
+    # layout rounding this project's own other bounding-box assertions
+    # already tolerate.
+    assert settled["selectLeft"] >= settled["cardLeft"] - 0.5
+    assert settled["selectRight"] <= settled["cardRight"] + 0.5
+
+
 def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

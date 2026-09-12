@@ -9876,6 +9876,34 @@ from the full `modal-presets` picker. Needs its own two-stage,
 manually driven window (save, then reopen Home) rather than the
 shared `drive` fixture, which destroys its window after one stage.
 
+<a id="gui.test_open_run_screen.test_home_example_select_stays_inside_its_card_at_a_narrow_window_width"></a>
+
+#### test\_home\_example\_select\_stays\_inside\_its\_card\_at\_a\_narrow\_window\_width
+
+```python
+def test_home_example_select_stays_inside_its_card_at_a_narrow_window_width(
+        window: webview.Window) -> None
+```
+
+`home-example-select` never overflows `.home-card`'s own bounding box.
+
+A real, reported layout bug: a `<select>` element defaults to
+`min-width: auto` inside a flex container (`.actions`, `app.css`),
+so it refuses to shrink below its own widest `<option>`'s rendered
+width (several real worked-example titles are long, e.g. "Per-base
+mutation rate across unequal locus lengths") — at a narrow window
+width, the control overflowed its own card's left edge rather than
+wrapping or shrinking the way `.actions`'s own `flex-wrap` already
+lets every other child do. `window.resize` (a Python-side pywebview
+call, not something the shared `drive` fixture's own JS-string
+`trigger` can express) needs its own manually driven window, the
+same precedent `test_home_example_select_excludes_a_user_saved_
+preset`, just above, already established for a different reason.
+
+Confirmed live before fixing: reverting the `app.css` fix reproduced
+`selectLeft: -2.5` (past the *viewport's* own left edge, let alone
+the card's) at this same window width.
+
 <a id="gui.test_open_run_screen.test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line"></a>
 
 #### test\_opening\_a\_run\_with\_a\_sigma\_band\_shows\_it\_with\_no\_curve\_line

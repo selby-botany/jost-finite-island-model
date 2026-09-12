@@ -525,6 +525,23 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Home's own worked-example pulldown (`#home-example-select`) overflowed
+  its "New run" card's left edge at a narrow window width, instead of
+  wrapping or shrinking the way `.actions`'s own `flex-wrap` already
+  lets every other child do. A `<select>` defaults to `min-width: auto`
+  inside a flex container, so it refuses to shrink below its own widest
+  `<option>`'s rendered width — several real worked-example titles are
+  long enough (e.g. "Per-base mutation rate across unequal locus
+  lengths") to exceed the card's own available width well before the
+  window gets uncomfortably narrow. `.actions select` now sets
+  `min-width: 0` (the actual fix — it is what let the browser refuse to
+  shrink the control at all) plus `max-width: 100%` (the shrink target
+  once `min-width` no longer forbids it). Confirmed live at 420px and
+  760px window widths, both before (reproduced `selectLeft: -2.5`, past
+  the viewport's own left edge) and after the fix; new regression test
+  `test_home_example_select_stays_inside_its_card_at_a_narrow_window_
+  width` (`test/gui/test_open_run_screen.py`) confirmed to fail against
+  the pre-fix CSS before confirming it passes against the fix.
 - The unified run view's `completed` state scrubber (`screens/run-view-
   completed.js`) now updates the six-row stats table and the trajectory
   panel while scrubbing a just-finished (or reopened) scalar run's own
