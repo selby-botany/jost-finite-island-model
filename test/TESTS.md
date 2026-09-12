@@ -2682,40 +2682,216 @@ def test_sigma_band_is_reproducible_for_the_same_seed(
 
 The same seed and configuration reproduce a byte-identical band.
 
-<a id="engine.test_engine.test_sigma_band_rejects_every_non_lineal_backend"></a>
+<a id="engine.test_engine.test_sigma_band_is_supported_under_every_resolved_backend"></a>
 
-#### test\_sigma\_band\_rejects\_every\_non\_lineal\_backend
+#### test\_sigma\_band\_is\_supported\_under\_every\_resolved\_backend
 
 ```python
 @pytest.mark.parametrize(
     "backend_changes",
     [
         {
-            "engine_backend": "generational"
+            "engine_backend": "lineal"
         },
         {
-            "engine_backend": "generational-vector",
-            "mutation_model": "finite_alleles",
-            "migrant_sampling": "continuous",
+            "engine_backend": "generational"
         },
         # `"auto"`, with the default `mutation_model="infinite_alleles"`,
         # always resolves to `"generational"`
-        # (`_resolve_auto_engine_backend`) — never `"lineal"`.
+        # (`_resolve_auto_engine_backend`) — never `"lineal"`, which is
+        # exactly why v1's own `"lineal"`-only restriction left this
+        # feature unreachable for this project's recommended default.
         {
             "engine_backend": "auto"
         },
     ],
 )
-def test_sigma_band_rejects_every_non_lineal_backend(
+def test_sigma_band_is_supported_under_every_resolved_backend(
         tiny_params: SimulationParams, backend_changes: dict[str,
                                                              object]) -> None
 ```
 
-v1 only supports `"lineal"` — every other resolved backend is rejected outright.
+v2 lifted v1's `"lineal"`-only restriction — design doc decision 7.
 
-Never a silent no-op: `sigma_band_multiplier` being set but ignored
-would be exactly the kind of "the request was quietly dropped"
-failure this design's own decision 5 rejects.
+The direct replacement for this test's own v1 predecessor
+(`test_sigma_band_rejects_every_non_lineal_backend`), which asserted
+a `ValueError` here. v2's own step 7 removes that guard deliberately,
+so the assertion inverts: every one of these resolved backends now
+computes a real band rather than refusing the request.
+`"generational-vector"` needs a bounded finite-alleles capacity and
+so is covered separately, below.
+
+<a id="engine.test_engine.test_sigma_band_under_generational_matches_lineal_exactly"></a>
+
+#### test\_sigma\_band\_under\_generational\_matches\_lineal\_exactly
+
+```python
+def test_sigma_band_under_generational_matches_lineal_exactly(
+        tiny_params: SimulationParams) -> None
+```
+
+`"generational"` reuses v1's extension helper, so its band is identical.
+
+Decision 7's own reasoning for sharing one dict-based implementation
+between the two backends, turned into an assertion: `Sequential
+Advancer` steps a lane with exactly the `step(...)` call `_run_one`
+itself uses and is bit-identical to `LinealBackend` for the same seed,
+so sharing `_run_dict_based_sigma_band_extension` must leave the two
+backends' bands bit-identical too — not merely statistically close.
+A future change that accidentally gave `"generational"` its own
+divergent extension path would fail here.
+
+<a id="engine.test_engine.test_sigma_band_is_none_under_generational_when_the_run_only_hits_the_cap"></a>
+
+#### test\_sigma\_band\_is\_none\_under\_generational\_when\_the\_run\_only\_hits\_the\_cap
+
+```python
+def test_sigma_band_is_none_under_generational_when_the_run_only_hits_the_cap(
+) -> None
+```
+
+A capped `"generational"` lane is never extended either — decision 3, batch-side.
+
+The batch-path counterpart to `test_sigma_band_is_none_when_the_run_
+only_hits_the_cap`: `_lane_is_sigma_band_eligible` gates on the
+lane's own `outcome.converged`, so an unconverged lane gets no band
+no matter which backend drove it.
+
+<a id="engine.test_engine.test_sigma_band_extends_every_replicate_of_a_generational_batch"></a>
+
+#### test\_sigma\_band\_extends\_every\_replicate\_of\_a\_generational\_batch
+
+```python
+def test_sigma_band_extends_every_replicate_of_a_generational_batch() -> None
+```
+
+A real batch gets one band per replicate, not just the first.
+
+`_apply_sigma_band_extensions` walks every finalized lane, so a
+multi-replicate batch's own manifests come out the same shape v1's
+`"lineal"` scalar case already produced — the v2 enforcement
+inventory's own "identical in shape to v1's `"lineal"` case".
+
+<a id="engine.test_engine.test_sigma_band_is_never_computed_for_an_adaptively_abandoned_lane"></a>
+
+#### test\_sigma\_band\_is\_never\_computed\_for\_an\_adaptively\_abandoned\_lane
+
+```python
+def test_sigma_band_is_never_computed_for_an_adaptively_abandoned_lane(
+) -> None
+```
+
+An adaptive stop's abandoned lanes get no band — decision 8's closing note.
+
+`_apply_sigma_band_extensions` skips any lane with no `result` at
+all, which is exactly the set an adaptive `replicate_tolerance` stop
+discarded from the store just above `run_batch`'s own early return.
+A band is therefore never computed from, or persisted for, a
+replicate the adaptive stop chose not to keep.
+
+<a id="engine.test_engine.test_vectorized_sigma_band_matches_its_own_trajectory_rows"></a>
+
+#### test\_vectorized\_sigma\_band\_matches\_its\_own\_trajectory\_rows
+
+```python
+def test_vectorized_sigma_band_matches_its_own_trajectory_rows() -> None
+```
+
+`_run_vectorized_sigma_band_extension`'s band reduces exactly its own rows.
+
+The array-native mirror of `test_sigma_band_summary_matches_a_hand_
+computed_mean_and_sigma`, checked against a real
+`"generational-vector"` run rather than an injected series: the
+reported band must be the population mean/sigma of precisely the
+per-generation values the same extension recorded, so a helper that
+buffered one set of numbers and summarized another would fail here.
+
+<a id="engine.test_engine.test_vectorized_extension_keeps_minted_identities_through_extinction"></a>
+
+#### test\_vectorized\_extension\_keeps\_minted\_identities\_through\_extinction
+
+```python
+def test_vectorized_extension_keeps_minted_identities_through_extinction(
+) -> None
+```
+
+The extension never forgets an allele minted and since driven extinct.
+
+Decision 7's own named bug, guarded directly. A V-lane's minted
+bookkeeping lives inside `VectorizedState`, never in
+`lane.finite_alleles`, so continuing such a lane by rebuilding a
+state from `lane.state` alone (or by switching to the dict-based
+`step`) would treat only the currently-*present* alleles as the
+whole minted set — re-minting identities the run had permanently
+retired and undercounting `minted_count`.
+
+Asserted in three parts: that rebuilding really would lose
+information (otherwise this test would pass for the wrong reason, on
+a run where nothing had gone extinct yet); that the extension window
+genuinely spans an extinction *and* a later reappearance (so the
+scenario is actually exercised); and that the real extension's own
+bookkeeping only ever advances.
+
+<a id="engine.test_engine.test_sigma_band_extensions_never_interleave_with_batch_ticks"></a>
+
+#### test\_sigma\_band\_extensions\_never\_interleave\_with\_batch\_ticks
+
+```python
+def test_sigma_band_extensions_never_interleave_with_batch_ticks() -> None
+```
+
+No lane's own advancement is delayed by another lane's extension.
+
+Decision 8's rejected inline alternative, turned into a regression
+test. Running each extension the instant its lane was found in
+`newly_stopped` would step `sigma_band_window` further generations
+for that lane *before* the batch's next tick advanced any other
+still-active lane — stalling a live batch's visible progress. The
+deferred post-pass cannot: every extension must happen after the
+final tick.
+
+The configuration is deliberately staggered (one replicate runs far
+longer than the other three), so inline and deferred would genuinely
+differ here — with every lane converging on the same generation the
+two orderings would be indistinguishable and this test would prove
+nothing.
+
+<a id="engine.test_engine.test_vectorized_sigma_band_caches_peak_in_the_post_pass_then_release"></a>
+
+#### test\_vectorized\_sigma\_band\_caches\_peak\_in\_the\_post\_pass\_then\_release
+
+```python
+def test_vectorized_sigma_band_caches_peak_in_the_post_pass_then_release(
+) -> None
+```
+
+Deferred caches peak during the post-pass and are all released by its end.
+
+Decision 9's accepted worst case, measured rather than merely
+asserted: with the band enabled, every eligible lane defers its
+`VectorizedState` release (reopening the growth `FIM-48` closed), so
+all of them are alive when the post-pass begins. The cost stays a
+*temporary* peak because the pass releases each lane's own cache the
+instant that lane's extension finishes — so the live count falls
+monotonically through the pass and reaches zero by its end, rather
+than persisting after the batch returns.
+
+<a id="engine.test_engine.test_a_batch_without_a_sigma_band_still_releases_caches_at_finalization"></a>
+
+#### test\_a\_batch\_without\_a\_sigma\_band\_still\_releases\_caches\_at\_finalization
+
+```python
+def test_a_batch_without_a_sigma_band_still_releases_caches_at_finalization(
+) -> None
+```
+
+Decision 9's own "opt-in" half: no band requested, `FIM-48` unchanged.
+
+The control for the test above. `_finalize_replica_lane` only skips
+its release for a sigma-band-eligible lane, so a batch that never
+asked for a band must still release every `VectorizedState` the
+instant its lane stops — exactly `FIM-48`'s own guarantee, not
+weakened by v2 having made a conditional out of it.
 
 <a id="engine.test_engine.test_replicates_are_independently_reproducible"></a>
 

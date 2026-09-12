@@ -1,7 +1,9 @@
 """End-to-end tests for the deterministic library engine."""
 
 import functools
+import itertools
 import statistics
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,7 +39,11 @@ from fim.model.locus import LocusSpec, finite_allele_capacity
 from fim.model.operators import _population_sizes
 from fim.model.params import ConvergenceCombinator, SimulationParams
 from fim.model.state import ModelState
-from fim.model.vectorized import build_vectorized_state, vectorized_state_to_model_state
+from fim.model.vectorized import (
+    build_vectorized_state,
+    step_vectorized,
+    vectorized_state_to_model_state,
+)
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
 from fim.statistics import differentiation
@@ -269,38 +275,489 @@ def test_sigma_band_is_reproducible_for_the_same_seed(
 @pytest.mark.parametrize(
     "backend_changes",
     [
+        {"engine_backend": "lineal"},
         {"engine_backend": "generational"},
-        {
-            "engine_backend": "generational-vector",
-            "mutation_model": "finite_alleles",
-            "migrant_sampling": "continuous",
-        },
         # `"auto"`, with the default `mutation_model="infinite_alleles"`,
         # always resolves to `"generational"`
-        # (`_resolve_auto_engine_backend`) — never `"lineal"`.
+        # (`_resolve_auto_engine_backend`) — never `"lineal"`, which is
+        # exactly why v1's own `"lineal"`-only restriction left this
+        # feature unreachable for this project's recommended default.
         {"engine_backend": "auto"},
     ],
 )
-def test_sigma_band_rejects_every_non_lineal_backend(
+def test_sigma_band_is_supported_under_every_resolved_backend(
     tiny_params: SimulationParams, backend_changes: dict[str, object]
 ) -> None:
-    """v1 only supports `"lineal"` — every other resolved backend is rejected outright.
+    """v2 lifted v1's `"lineal"`-only restriction — design doc decision 7.
 
-    Never a silent no-op: `sigma_band_multiplier` being set but ignored
-    would be exactly the kind of "the request was quietly dropped"
-    failure this design's own decision 5 rejects.
+    The direct replacement for this test's own v1 predecessor
+    (`test_sigma_band_rejects_every_non_lineal_backend`), which asserted
+    a `ValueError` here. v2's own step 7 removes that guard deliberately,
+    so the assertion inverts: every one of these resolved backends now
+    computes a real band rather than refusing the request.
+    `"generational-vector"` needs a bounded finite-alleles capacity and
+    so is covered separately, below.
     """
     params = _sigma_band_params(tiny_params, **backend_changes)
 
-    with pytest.raises(ValueError, match="sigma_band_multiplier/sigma_band_window"):
-        fim(
-            params.N,
-            params.m,
-            params.mu,
-            params.d,
-            params=params,
-            clock=_clock,
+    result = _run(params)
+
+    assert result.report["converged"]
+    assert result.manifest.sigma_band is not None
+    assert set(result.manifest.sigma_band) == set(params.convergence_statistics)
+    assert result.manifest.sigma_band_multiplier == 2.0
+    assert result.manifest.sigma_band_window == 5
+    assert result.sigma_band_trajectory is not None
+    assert len(result.sigma_band_trajectory) == 5
+
+
+def test_sigma_band_under_generational_matches_lineal_exactly(
+    tiny_params: SimulationParams,
+) -> None:
+    """`"generational"` reuses v1's extension helper, so its band is identical.
+
+    Decision 7's own reasoning for sharing one dict-based implementation
+    between the two backends, turned into an assertion: `Sequential
+    Advancer` steps a lane with exactly the `step(...)` call `_run_one`
+    itself uses and is bit-identical to `LinealBackend` for the same seed,
+    so sharing `_run_dict_based_sigma_band_extension` must leave the two
+    backends' bands bit-identical too — not merely statistically close.
+    A future change that accidentally gave `"generational"` its own
+    divergent extension path would fail here.
+    """
+    lineal = _run(_sigma_band_params(tiny_params, engine_backend="lineal"))
+    generational = _run(_sigma_band_params(tiny_params, engine_backend="generational"))
+
+    assert generational.manifest.sigma_band == lineal.manifest.sigma_band
+    assert generational.sigma_band_trajectory == lineal.sigma_band_trajectory
+
+
+def test_sigma_band_is_none_under_generational_when_the_run_only_hits_the_cap() -> None:
+    """A capped `"generational"` lane is never extended either — decision 3, batch-side.
+
+    The batch-path counterpart to `test_sigma_band_is_none_when_the_run_
+    only_hits_the_cap`: `_lane_is_sigma_band_eligible` gates on the
+    lane's own `outcome.converged`, so an unconverged lane gets no band
+    no matter which backend drove it.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "convergence_window": 2,
+            "convergence_tolerance": 0.0,
+            "max_generations": 2,
+            "sigma_band_multiplier": 2.0,
+            "sigma_band_window": 5,
+            "engine_backend": "generational",
+        }
+    )
+
+    result = _run(params)
+
+    assert not result.report["converged"]
+    assert result.manifest.sigma_band is None
+    assert result.manifest.sigma_band_multiplier is None
+    assert result.manifest.sigma_band_window is None
+    assert result.sigma_band_trajectory is None
+
+
+def test_sigma_band_extends_every_replicate_of_a_generational_batch() -> None:
+    """A real batch gets one band per replicate, not just the first.
+
+    `_apply_sigma_band_extensions` walks every finalized lane, so a
+    multi-replicate batch's own manifests come out the same shape v1's
+    `"lineal"` scalar case already produced — the v2 enforcement
+    inventory's own "identical in shape to v1's `"lineal"` case".
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 3,
+            "sigma_band_multiplier": 2.0,
+            "sigma_band_window": 5,
+            "engine_backend": "generational",
+        }
+    )
+
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+    assert len(output) == 3
+
+    for result in output:
+        assert result.manifest.sigma_band is not None
+        assert result.manifest.sigma_band_multiplier == 2.0
+        assert result.manifest.sigma_band_window == 5
+        assert result.sigma_band_trajectory is not None
+        assert len(result.sigma_band_trajectory) == 5
+    # Each replicate has its own seeded stream, so the bands genuinely
+    # differ — proof every lane ran its own extension rather than one
+    # lane's result being copied across all three.
+    assert len({repr(result.manifest.sigma_band) for result in output}) == 3
+
+
+def test_sigma_band_is_never_computed_for_an_adaptively_abandoned_lane() -> None:
+    """An adaptive stop's abandoned lanes get no band — decision 8's closing note.
+
+    `_apply_sigma_band_extensions` skips any lane with no `result` at
+    all, which is exactly the set an adaptive `replicate_tolerance` stop
+    discarded from the store just above `run_batch`'s own early return.
+    A band is therefore never computed from, or persisted for, a
+    replicate the adaptive stop chose not to keep.
+    """
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 10,
+            "replicate_minimum": 3,
+            "replicate_tolerance": 1000.0,
+            "sigma_band_multiplier": 2.0,
+            "sigma_band_window": 5,
+            "engine_backend": "generational",
+        }
+    )
+
+    output = fim(params.N, params.m, params.mu, params.d, params=params, clock=_clock)
+    assert isinstance(output, tuple)
+    # The adaptive stop keeps strictly fewer than the requested ten.
+    assert len(output) == 3
+    # Every *kept* replicate still gets its own band.
+    for result in output:
+        assert result.manifest.sigma_band is not None
+        assert result.sigma_band_trajectory is not None
+
+
+def _sigma_band_vector_params(**overrides: object) -> SimulationParams:
+    """A sigma-band-enabled config `VectorizedAdvancer` accepts.
+
+    `loci=(LocusSpec(1, 2),)` gives a finite-alleles capacity of just 16
+    (`finite_allele_capacity`), deliberately: a tiny identity space makes
+    alleles go extinct and later reappear routinely within a short
+    extension window, which is exactly the scenario decision 7's
+    forgotten-minted-identity bug would silently mishandle. A
+    `length=200` locus (this file's own `_tiny_config`) would instead
+    exceed `auto_vector_max_capacity` outright.
+    """
+    base = SimulationParams(
+        N=40,
+        m=0.2,
+        mu=0.1,
+        d=3,
+        seed=20260901,
+        loci=(LocusSpec(1, 2),),  # capacity 16
+        mutation_model="finite_alleles",
+        convergence_window=4,
+        convergence_tolerance=1.0,
+        max_generations=10,
+        n_replicates=1,
+        replicate_tolerance=None,
+        sigma_band_multiplier=2.0,
+        sigma_band_window=12,
+    )
+    return replace(base, **overrides)  # type: ignore[arg-type]
+
+
+def _drive_vector_lane_to_stop(params: SimulationParams) -> ReplicaLane:
+    """Advance one `VectorizedAdvancer` lane until it stops, without finalizing it.
+
+    Deliberately skips `_finalize_replica_lane`, so the lane is observed
+    in exactly the state `_apply_sigma_band_extensions` sees it in: its
+    `vectorized_state` still live and correctly up to date.
+    """
+    store = InMemoryTrajectoryStore()
+    lane = _build_replica_lane(params, 0, None, store, _clock)
+    advancer = VectorizedAdvancer()
+    while not lane.monitor.should_stop():
+        advancer.advance([lane], store)
+    return lane
+
+
+def _present_allele_ids(locus_state: object) -> set[int]:
+    """Return which allele ids carry any frequency at all in a locus's dense array."""
+    frequencies = locus_state.frequencies  # type: ignore[attr-defined]
+    return {int(i) for i in np.flatnonzero(frequencies.sum(axis=0) > 0.0)}
+
+
+def _lanes_holding_caches(lanes: Sequence[ReplicaLane]) -> int:
+    """Count how many lanes still hold a `VectorizedAdvancer` cache.
+
+    `vectorized_state` is the field `_finalize_replica_lane` releases
+    immediately for an ineligible lane and defers for an eligible one, so
+    counting it is how decision 9's own peak-then-release claim is
+    observed directly rather than asserted.
+    """
+    return sum(1 for lane in lanes if lane.vectorized_state is not None)
+
+
+def test_vectorized_sigma_band_matches_its_own_trajectory_rows() -> None:
+    """`_run_vectorized_sigma_band_extension`'s band reduces exactly its own rows.
+
+    The array-native mirror of `test_sigma_band_summary_matches_a_hand_
+    computed_mean_and_sigma`, checked against a real
+    `"generational-vector"` run rather than an injected series: the
+    reported band must be the population mean/sigma of precisely the
+    per-generation values the same extension recorded, so a helper that
+    buffered one set of numbers and summarized another would fail here.
+    """
+    pytest.importorskip("numba")
+    params = _sigma_band_vector_params()
+
+    result = GenerationalBackend(VectorizedAdvancer()).run(
+        params, InMemoryTrajectoryStore(), None, _clock
+    )
+    assert isinstance(result, RunResult)
+    assert result.manifest.sigma_band is not None
+    assert result.sigma_band_trajectory is not None
+    assert len(result.sigma_band_trajectory) == 12
+
+    for name, band in result.manifest.sigma_band.items():
+        series: list[float] = []
+        for row in result.sigma_band_trajectory:
+            if name not in row:
+                continue
+            value = row[name]
+            assert isinstance(value, float)
+            series.append(value)
+        expected_sigma = statistics.pstdev(series)
+        assert band["mean"] == pytest.approx(statistics.fmean(series))
+        assert band["sigma"] == pytest.approx(expected_sigma)
+        assert band["lower"] == pytest.approx(band["mean"] - 2.0 * expected_sigma)
+        assert band["upper"] == pytest.approx(band["mean"] + 2.0 * expected_sigma)
+
+
+def test_vectorized_extension_keeps_minted_identities_through_extinction() -> None:
+    """The extension never forgets an allele minted and since driven extinct.
+
+    Decision 7's own named bug, guarded directly. A V-lane's minted
+    bookkeeping lives inside `VectorizedState`, never in
+    `lane.finite_alleles`, so continuing such a lane by rebuilding a
+    state from `lane.state` alone (or by switching to the dict-based
+    `step`) would treat only the currently-*present* alleles as the
+    whole minted set — re-minting identities the run had permanently
+    retired and undercounting `minted_count`.
+
+    Asserted in three parts: that rebuilding really would lose
+    information (otherwise this test would pass for the wrong reason, on
+    a run where nothing had gone extinct yet); that the extension window
+    genuinely spans an extinction *and* a later reappearance (so the
+    scenario is actually exercised); and that the real extension's own
+    bookkeeping only ever advances.
+    """
+    pytest.importorskip("numba")
+    params = _sigma_band_vector_params()
+
+    lane = _drive_vector_lane_to_stop(params)
+    assert lane.vectorized_state is not None
+    before = lane.vectorized_state.locus_states[0]
+    minted_before = int(before.minted_mask.sum())
+
+    # Part 1: the rejected approach demonstrably loses minted identities.
+    rebuilt = build_vectorized_state(lane.state).locus_states[0]
+    assert int(rebuilt.minted_mask.sum()) < minted_before
+    assert rebuilt.minted_count < before.minted_count
+
+    # Part 2: replay the same window on an identically-seeded second lane
+    # to confirm an extinction and a later reappearance really occur in
+    # it. A replay is needed because the extension itself persists no
+    # per-generation state, only each watched statistic's own value.
+    replay = _drive_vector_lane_to_stop(params)
+    assert replay.vectorized_state is not None
+    sizes = np.asarray(
+        _population_sizes(replay.params.N, replay.state.deme_count), dtype=np.int64
+    )
+    presence = [_present_allele_ids(replay.vectorized_state.locus_states[0])]
+    vectorized_state = replay.vectorized_state
+    assert isinstance(replay.params.m, float)
+    for _ in range(12):
+        vectorized_state = step_vectorized(
+            vectorized_state,
+            replay.migration_weights,
+            replay.params.mutation_rates,
+            sizes,
+            replay.rng,
+            symmetric_rate=replay.params.m,
         )
+        presence.append(_present_allele_ids(vectorized_state.locus_states[0]))
+    went_extinct: set[int] = set()
+    for earlier, later in itertools.pairwise(presence):
+        went_extinct |= earlier - later
+    reappeared = {
+        allele
+        for index, present in enumerate(presence)
+        for allele in present
+        if any(allele not in prior for prior in presence[:index])
+    }
+    assert went_extinct, "window exercised no extinction — scenario not covered"
+    assert went_extinct & reappeared, "no allele reappeared after going extinct"
+
+    # Part 3: the real extension's bookkeeping only ever advances.
+    band, trajectory = engine._run_vectorized_sigma_band_extension(
+        lane, multiplier=2.0, window=12
+    )
+    assert band and len(trajectory) == 12
+    assert lane.vectorized_state is not None
+    after = lane.vectorized_state.locus_states[0]
+    assert int(after.minted_mask.sum()) >= minted_before
+    assert after.minted_count >= before.minted_count
+    # Every identity minted before the extension is still marked minted.
+    assert bool(np.all(after.minted_mask[before.minted_mask]))
+
+
+def test_sigma_band_extensions_never_interleave_with_batch_ticks() -> None:
+    """No lane's own advancement is delayed by another lane's extension.
+
+    Decision 8's rejected inline alternative, turned into a regression
+    test. Running each extension the instant its lane was found in
+    `newly_stopped` would step `sigma_band_window` further generations
+    for that lane *before* the batch's next tick advanced any other
+    still-active lane — stalling a live batch's visible progress. The
+    deferred post-pass cannot: every extension must happen after the
+    final tick.
+
+    The configuration is deliberately staggered (one replicate runs far
+    longer than the other three), so inline and deferred would genuinely
+    differ here — with every lane converging on the same generation the
+    two orderings would be indistinguishable and this test would prove
+    nothing.
+    """
+    events: list[str] = []
+    real_extension = engine._run_dict_based_sigma_band_extension
+
+    def recording_extension(*args: object, **kwargs: object) -> object:
+        events.append("extension")
+        return real_extension(*args, **kwargs)  # type: ignore[arg-type]
+
+    class RecordingAdvancer:
+        """A real `SequentialAdvancer`, logging one event per tick."""
+
+        def __init__(self) -> None:
+            self._inner = SequentialAdvancer()
+
+        def advance(
+            self, active_lanes: Sequence[ReplicaLane], store: TrajectoryStore
+        ) -> list[ReplicaLane]:
+            events.append("tick")
+            return self._inner.advance(active_lanes, store)
+
+    params = SimulationParams.from_mapping(
+        {
+            **_tiny_config(),
+            "n_replicates": 4,
+            "convergence_tolerance": 0.02,
+            "max_generations": 40,
+            "sigma_band_multiplier": 2.0,
+            "sigma_band_window": 5,
+        }
+    )
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            engine, "_run_dict_based_sigma_band_extension", recording_extension
+        )
+        results = run_batch(
+            params, InMemoryTrajectoryStore(), None, _clock, RecordingAdvancer()
+        )
+
+    # The batch really is staggered: lanes stopped on different generations.
+    assert len({result.manifest.generation for result in results}) > 1
+    # Every lane got an extension...
+    assert events.count("extension") == len(results) == 4
+    # ...and not one of them ran before the batch's final tick.
+    first_extension = events.index("extension")
+    assert "tick" not in events[first_extension:]
+
+
+def test_vectorized_sigma_band_caches_peak_in_the_post_pass_then_release() -> None:
+    """Deferred caches peak during the post-pass and are all released by its end.
+
+    Decision 9's accepted worst case, measured rather than merely
+    asserted: with the band enabled, every eligible lane defers its
+    `VectorizedState` release (reopening the growth `FIM-48` closed), so
+    all of them are alive when the post-pass begins. The cost stays a
+    *temporary* peak because the pass releases each lane's own cache the
+    instant that lane's extension finishes — so the live count falls
+    monotonically through the pass and reaches zero by its end, rather
+    than persisting after the batch returns.
+    """
+    pytest.importorskip("numba")
+    params = _sigma_band_vector_params(
+        n_replicates=4, convergence_tolerance=0.02, max_generations=40
+    )
+    live_counts: list[int] = []
+    observed: dict[str, int] = {}
+    real_apply = engine._apply_sigma_band_extensions
+    real_extension = engine._run_vectorized_sigma_band_extension
+
+    def capturing_apply(lanes: Sequence[ReplicaLane], advancer: object) -> None:
+        observed["before"] = _lanes_holding_caches(lanes)
+
+        def recording_extension(lane: ReplicaLane, **kwargs: object) -> object:
+            # Counted *before* this lane's own release, so the first
+            # observation is the genuine peak.
+            live_counts.append(_lanes_holding_caches(lanes))
+            return real_extension(lane, **kwargs)  # type: ignore[arg-type]
+
+        with pytest.MonkeyPatch.context() as inner:
+            inner.setattr(
+                engine, "_run_vectorized_sigma_band_extension", recording_extension
+            )
+            real_apply(lanes, advancer)  # type: ignore[arg-type]
+        observed["after"] = _lanes_holding_caches(lanes)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(engine, "_apply_sigma_band_extensions", capturing_apply)
+        results = GenerationalBackend(VectorizedAdvancer()).run(
+            params, InMemoryTrajectoryStore(), None, _clock
+        )
+    assert isinstance(results, tuple)
+    assert len(results) == 4
+
+    # The peak is real: every eligible lane deferred its release, so all
+    # four were alive at once — the cost decision 9 names explicitly.
+    assert observed["before"] == 4
+    assert live_counts == [4, 3, 2, 1]
+    # ...and it is only a peak: nothing is still held afterward.
+    assert observed["after"] == 0
+    for result in results:
+        assert result.manifest.sigma_band is not None
+
+
+def test_a_batch_without_a_sigma_band_still_releases_caches_at_finalization() -> None:
+    """Decision 9's own "opt-in" half: no band requested, `FIM-48` unchanged.
+
+    The control for the test above. `_finalize_replica_lane` only skips
+    its release for a sigma-band-eligible lane, so a batch that never
+    asked for a band must still release every `VectorizedState` the
+    instant its lane stops — exactly `FIM-48`'s own guarantee, not
+    weakened by v2 having made a conditional out of it.
+    """
+    pytest.importorskip("numba")
+    params = _sigma_band_vector_params(
+        n_replicates=4,
+        convergence_tolerance=0.02,
+        max_generations=40,
+        sigma_band_multiplier=None,
+        sigma_band_window=None,
+    )
+    observed: dict[str, int] = {}
+    real_apply = engine._apply_sigma_band_extensions
+
+    def capturing_apply(lanes: Sequence[ReplicaLane], advancer: object) -> None:
+        observed["before"] = _lanes_holding_caches(lanes)
+        real_apply(lanes, advancer)  # type: ignore[arg-type]
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(engine, "_apply_sigma_band_extensions", capturing_apply)
+        results = GenerationalBackend(VectorizedAdvancer()).run(
+            params, InMemoryTrajectoryStore(), None, _clock
+        )
+    assert isinstance(results, tuple)
+
+    # Nothing was ever deferred: every cache was already released by
+    # `_finalize_replica_lane`, before the post-pass was even reached.
+    assert observed["before"] == 0
+    for result in results:
+        assert result.manifest.sigma_band is None
+        assert result.sigma_band_trajectory is None
 
 
 def test_replicates_are_independently_reproducible(
