@@ -7485,6 +7485,29 @@ so it does not, `_SET_UNREACHABLE_BATCH_CONVERGENCE`) -- the same
 "Cancel ends the test" precedent `test_running_screen.py`'s own
 Cancel-button test already established.
 
+<a id="gui.test_batch_running.test_a_live_batch_trajectory_legend_toggle_works_mid_run"></a>
+
+#### test\_a\_live\_batch\_trajectory\_legend\_toggle\_works\_mid\_run
+
+```python
+def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None
+```
+
+A legend click during a still-running batch re-renders, not crashes.
+
+Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+trajectory-panel-design.md` (`selby/restricted`), commit 3: the
+live view's own accumulator (`run-view-running.js`'s own
+`liveBatchTrajectory`) now feeds the same `renderBatchTrajectory`/
+`buildBatchTrajectoryLegendItem` a completed batch's own trajectory
+already uses (`test/gui/test_batch_results_screen.py`'s own
+`test_a_completed_batchs_own_pooled_trajectory_renders` proves that
+machinery draws correctly in the completed case) -- this test's own
+job is narrower: prove the *live* wiring reaches it too, by
+actually clicking a legend item while the batch is still `running`
+and confirming its own `aria-pressed`/class flip without an
+unhandled exception breaking the next real progress push.
+
 <a id="gui.test_branding"></a>
 
 # gui.test\_branding

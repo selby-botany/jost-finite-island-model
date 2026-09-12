@@ -281,3 +281,98 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
     # watched or not"), not only whichever is being watched for
     # convergence.
     assert settled["legendChildCount"] == 6
+
+
+def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None:
+    """A legend click during a still-running batch re-renders, not crashes.
+
+    Batch trajectory panel design `20260912-claude-sonnet-5-batch-
+    trajectory-panel-design.md` (`selby/restricted`), commit 3: the
+    live view's own accumulator (`run-view-running.js`'s own
+    `liveBatchTrajectory`) now feeds the same `renderBatchTrajectory`/
+    `buildBatchTrajectoryLegendItem` a completed batch's own trajectory
+    already uses (`test/gui/test_batch_results_screen.py`'s own
+    `test_a_completed_batchs_own_pooled_trajectory_renders` proves that
+    machinery draws correctly in the completed case) -- this test's own
+    job is narrower: prove the *live* wiring reaches it too, by
+    actually clicking a legend item while the batch is still `running`
+    and confirming its own `aria-pressed`/class flip without an
+    unhandled exception breaking the next real progress push.
+    """
+    started_event = threading.Event()
+    cancelled_event = threading.Event()
+    working_directory_holder: list[Path] = []
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] == "started":
+            started_event.set()
+            working_directory_holder.append(message[1])
+        if message[0] in ("done", "cancelled", "error"):
+            cancelled_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_BATCH_FIELDS
+                + _SET_UNREACHABLE_BATCH_CONVERGENCE
+                + "document.getElementById('run-button').click();"
+            )
+            if not started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                outcome.put(None)
+                return
+            working_directory = working_directory_holder[0]
+            reported_enough = False
+            for _ in range(_READY_POLL_ATTEMPTS):
+                if _count_replicate_progress_sidecars(working_directory) >= 2:
+                    reported_enough = True
+                    break
+                time.sleep(_READY_POLL_INTERVAL_SECONDS)
+            settled = None
+            if reported_enough:
+                time.sleep(1.0)
+                before = window.evaluate_js(
+                    "document.querySelector('#run-trajectory-legend .legend-item')"
+                    ".getAttribute('aria-pressed')"
+                )
+                window.evaluate_js(
+                    "document.querySelector("
+                    "'#run-trajectory-legend .legend-item').click();"
+                )
+                after_click = window.evaluate_js(
+                    "({"
+                    "ariaPressed: document.querySelector("
+                    "'#run-trajectory-legend .legend-item')"
+                    ".getAttribute('aria-pressed'), "
+                    "className: document.querySelector("
+                    "'#run-trajectory-legend .legend-item').className"
+                    "})"
+                )
+                # A real, later progress tick must still land cleanly --
+                # proof the toggle did not leave the accumulator/renderer
+                # pair in a broken state a later `onBatchProgress` call
+                # would throw inside.
+                time.sleep(1.0)
+                still_running = window.evaluate_js("window.fim.getRunViewState()")
+                settled = {
+                    "before": before,
+                    "afterClick": after_click,
+                    "stillRunning": still_running,
+                }
+            window.evaluate_js("document.getElementById('cancel-run-button').click();")
+            cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, "never saw two replicates report progress in time"
+    assert settled["before"] == "true"
+    assert settled["afterClick"]["ariaPressed"] == "false"
+    assert "legend-item-hidden" in settled["afterClick"]["className"]
+    assert settled["stillRunning"] == "running"

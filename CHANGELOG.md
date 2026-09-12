@@ -8,37 +8,33 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- A live trajectory panel for a batch run, matching the scalar panel's
-  own existing live view (batch trajectory panel design `20260912-
-  claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/restricted`,
-  commit 1 of 3: mean line only, no band yet). `_push_batch_progress`
-  gains `meanReportedGeneration` (the average generation across
-  whichever replicates have reported this tick — no single tick has one
-  shared generation the way a scalar run's own progress push does,
-  since replicates report at different generations by construction);
-  the client accumulates it, paired with each statistic's own pooled
-  mean, into the same live-trajectory arrays a scalar run's own
-  progress push already feeds.
-- A completed batch's own trajectory panel (batch trajectory panel
-  design `20260912-claude-sonnet-5-batch-trajectory-panel-design.md`,
-  `selby/restricted`, commit 2 of 3): once a batch finishes, a real
-  cross-replicate mean-and-band curve per statistic, computed from
-  every replicate's own full recorded history rather than the live
-  view's own tick-by-tick approximation. New `fim.engine.pooled_
-  convergence_histories` pools each replicate's own `convergence_
-  generations`/`convergence_histories` into one confidence interval
-  per generation per statistic — replicates stop at different
-  generations by construction, so only the replicates whose own
-  history reaches a given generation contribute to it there, giving a
-  real, honest sample size that shrinks as replicates finish rather
-  than an artifact papered over. `_batch_done_payload` gains
-  `pooledConvergenceHistories`; `run-view-completed.js` gains a
-  dedicated `renderBatchTrajectory`/`drawBatchTrajectoryCurve` (a
-  shaded low/high band plus a mean line per statistic, each on its own
-  generation axis, with the same legend-toggle visibility mechanism the
-  scalar panel already has) rather than extending the scalar panel's
-  own single-shared-generation-list drawing code, which does not fit
-  this shape.
+- A trajectory panel for a batch run, both while it is still running
+  and once it finishes (batch trajectory panel design `20260912-
+  claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/
+  restricted`) — previously scalar-only. While running,
+  `_push_batch_progress` gains `meanReportedGeneration` (the average
+  generation across whichever replicates have reported this tick — no
+  single tick has one shared generation the way a scalar run's own
+  progress push does, since replicates report at different generations
+  by construction); the client accumulates it, paired with each
+  statistic's own pooled mean/low/high, into a live mean-and-band
+  approximation, replaced outright once the batch actually finishes by
+  a real cross-replicate aggregate computed from every replicate's own
+  full recorded history. New `fim.engine.pooled_convergence_histories`
+  pools each replicate's own `convergence_generations`/`convergence_
+  histories` into one confidence interval per generation per statistic
+  — replicates stop at different generations by construction, so only
+  the replicates whose own history reaches a given generation
+  contribute to it there, giving a real, honest sample size that
+  shrinks as replicates finish rather than an artifact papered over.
+  `_batch_done_payload` gains `pooledConvergenceHistories`; `run-view-
+  completed.js` gains a dedicated `renderBatchTrajectory`/
+  `drawBatchTrajectoryCurve` (a shaded low/high band plus a mean line
+  per statistic, each on its own generation axis, with the same
+  legend-toggle visibility mechanism the scalar panel already has),
+  shared by both the live and completed views, rather than extending
+  the scalar panel's own single-shared-generation-list drawing code,
+  which does not fit this shape.
 - `dev/bin/validate-repository` now runs automatically in two places
   rather than only by hand. The `pre-push` hook runs it before every
   push, where the pinned Docker images are already warm and a failure

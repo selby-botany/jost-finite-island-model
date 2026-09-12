@@ -101,19 +101,31 @@ let showingLiveDemePair = false;
 // generations`/`convergence_histories` the engine's own convergence
 // monitor recorded, not this client-side approximation -- this state
 // exists only to have something to plot *while* the run is still
-// going, when that authoritative history does not exist yet. Shared,
-// unchanged, by `onBatchProgress` too (batch trajectory panel design
-// `20260912-claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/
-// restricted`) -- only one of `onRunProgress`/`onBatchProgress` ever
-// fires during any one run's own `running` state, so there is no risk
-// of the two mixing into one array; `accumulateLiveBatchTrajectory`
-// (below) feeds it `meanReportedGeneration` and each statistic's own
-// pooled `mean` in place of a scalar tick's own single generation and
-// point value. A batch's own `completed` view still does not draw this
-// (unlike its `running` view now does) -- that half of the design
-// doc's own phased schedule has not landed yet.
+// going, when that authoritative history does not exist yet. Scalar-
+// only -- a batch run has its own, differently-shaped accumulator
+// (`liveBatchTrajectory`, immediately below) since it needs a band,
+// not just a line (batch trajectory panel design `20260912-claude-
+// sonnet-5-batch-trajectory-panel-design.md`, `selby/restricted`,
+// commit 3).
 let liveTrajectoryGenerations = [];
 let liveTrajectoryHistories = {};
+
+// A live batch's own trajectory accumulator -- one entry per tracked
+// statistic, each a growing array of `{generation, mean, low, high,
+// sampleCount}` points, the identical shape `run-view-completed.js`'s
+// own `renderBatchTrajectory`/`drawBatchTrajectoryCurve` already draws
+// for a *completed* batch's own real, authoritative pooled history
+// (commit 2) -- reused as-is here rather than a second drawing path,
+// since a shared x-axis (every point in a live batch tick shares the
+// identical `meanReportedGeneration`, unlike the completed case's own
+// per-statistic-scoped generations) is simply a special case that
+// shape already handles. Replaced outright once the batch finishes
+// (`onBatchDone` calls `enterCompletedState`, whose own batch branch
+// draws `payload.pooledConvergenceHistories` instead) -- this client-
+// side approximation exists only for while the batch is still going,
+// matching `liveTrajectoryGenerations`/`liveTrajectoryHistories`'s own
+// identical "replaced once real data exists" scalar precedent above.
+let liveBatchTrajectory = {};
 
 // The live trajectory's own predicted-equilibrium reference line (design
 // §6.2's own closing paragraph: "the run's own progress toward... that
@@ -165,6 +177,7 @@ function enterRunningState(isBatch = false) {
     showingLiveDemePair = false;
     liveTrajectoryGenerations = [];
     liveTrajectoryHistories = {};
+    liveBatchTrajectory = {};
     // `Api.start_run` has not resolved yet at this point (called
     // synchronously, before `run-view-controls.js`'s own `onRunClicked`
     // awaits that bridge call) -- reset now, set for real once it
@@ -351,50 +364,57 @@ function accumulateLiveTrajectory(generation, statistics) {
 }
 
 /**
- * Append one batch progress tick to the same live trajectory
- * accumulators a scalar run's own `accumulateLiveTrajectory` feeds
- * (batch trajectory panel design `20260912-claude-sonnet-5-batch-
- * trajectory-panel-design.md`, `selby/restricted`, commit 1: mean line
- * only, no band yet).
+ * Append one batch progress tick to `liveBatchTrajectory`, one point
+ * per statistic that has a defined interval this tick (batch
+ * trajectory panel design `20260912-claude-sonnet-5-batch-trajectory-
+ * panel-design.md`, `selby/restricted`, commit 3: the live band,
+ * reusing `renderBatchTrajectory`/`drawBatchTrajectoryCurve`'s own
+ * per-statistic-scoped point shape -- see `liveBatchTrajectory`'s own
+ * declaration comment for why that shape, built for the *completed*
+ * case, already fits this live one too).
  *
  * `meanGeneration` is `_push_batch_progress`'s own `meanReportedGeneration`
  * -- an approximate, pooled x-axis (no single tick has one shared
  * "generation" the way a scalar run's own progress push does, since
- * replicates report at different generations by construction).
- * `statistics[name]` is `reports_summary`'s own pre-formatted `{mean,
- * low, high, sampleCount}` object, not a bare value the way a scalar
- * tick's own `statistics[name]` is -- only `.mean` is plotted this
- * phase, delegating to `accumulateLiveTrajectory` once flattened to
- * that same bare-value shape rather than duplicating its own `Number`/
- * `Number.isFinite` guard a second time.
+ * replicates report at different generations by construction), shared
+ * by every statistic's own point *this tick* (unlike the completed
+ * case's own genuinely-different-per-statistic generations). `sample
+ * Count` rides straight through from `statistics[name]` -- already the
+ * exact `{mean, low, high, sampleCount}` shape `reports_summary`
+ * produces and `_push_batch_progress` formats, no flattening needed
+ * the way feeding the scalar accumulator used to require.
+ *
+ * A statistic missing from `statistics` this tick (fewer than two
+ * currently-reporting replicates define it yet, `_push_batch_
+ * progress`'s own documented threshold) simply gets no point appended
+ * to its own array this tick -- unlike the scalar accumulator's shared-
+ * array hazard this function used to inherit, one statistic's own gap
+ * cannot shrink any *other* statistic's own array here, since each has
+ * always been independently scoped from the start.
  * @param {number | undefined} meanGeneration
- * @param {Record<string, {mean: string}> | undefined} statistics
+ * @param {Record<string, {mean: string, low: string, high: string,
+ *     sampleCount: number}> | undefined} statistics
  */
 function accumulateLiveBatchTrajectory(meanGeneration, statistics) {
     if (meanGeneration === undefined || !statistics) {
         return;
     }
-    const meansOnly = {};
     for (const name of STATISTIC_NAMES) {
-        if (statistics[name]) {
-            meansOnly[name] = statistics[name].mean;
+        const interval = statistics[name];
+        if (!interval) {
+            continue;
         }
+        if (!liveBatchTrajectory[name]) {
+            liveBatchTrajectory[name] = [];
+        }
+        liveBatchTrajectory[name].push({
+            generation: meanGeneration,
+            mean: interval.mean,
+            low: interval.low,
+            high: interval.high,
+            sampleCount: interval.sampleCount,
+        });
     }
-    // `reports_summary` needs at least two currently-reporting replicates
-    // to define an interval at all (`_push_batch_progress`'s own
-    // docstring) -- `statistics` is naturally `{}` for the first tick or
-    // two. Skipping the tick entirely here, rather than pushing
-    // `meanGeneration` with no history values behind it, matters:
-    // `renderTrajectory`'s own "plottable" filter (`run-view-
-    // completed.js`) drops any statistic whose own history is shorter
-    // than the shared generations list -- one empty early tick would
-    // permanently shrink every statistic's own history one entry short
-    // for the rest of the run, hiding the whole panel forever instead
-    // of just not having anything to plot yet.
-    if (Object.keys(meansOnly).length === 0) {
-        return;
-    }
-    accumulateLiveTrajectory(meanGeneration, meansOnly);
 }
 
 window.fim.onRunProgress = function onRunProgress(payload) {
@@ -475,8 +495,12 @@ window.fim.onBatchProgress = function onBatchProgress(payload) {
     // meaningful for the batch's current state, never blank.
     renderBatchSummary(payload.statistics);
     accumulateLiveBatchTrajectory(payload.meanReportedGeneration, payload.statistics);
-    if (typeof renderTrajectory === "function") {
-        renderTrajectory(liveTrajectoryGenerations, liveTrajectoryHistories);
+    // `renderBatchTrajectory`, not `renderTrajectory` -- declared in
+    // `run-view-completed.js`, which loads after this file, guarded the
+    // same way that function's own scalar counterpart already is
+    // immediately below `onRunProgress`.
+    if (typeof renderBatchTrajectory === "function") {
+        renderBatchTrajectory(liveBatchTrajectory);
     }
     drawProgressPanels(payload);
 };
