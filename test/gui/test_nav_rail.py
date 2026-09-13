@@ -19,6 +19,8 @@ from typing import Any
 import pytest
 import webview
 
+from fim.gui import app as app_module
+from fim.gui import presets as presets_module
 from fim.gui.app import await_bridge_threads
 
 pytestmark = pytest.mark.gui
@@ -260,3 +262,123 @@ def test_clicking_the_brand_mark_opens_the_about_dialog(
         )
 
     assert _drive(window, steps) is True
+
+
+def test_configure_back_button_returns_to_whichever_screen_preceded_it(
+    window: webview.Window,
+) -> None:
+    """`configure-back-button` returns to Explore, not a fixed destination.
+
+    Configure is reachable from nearly everywhere (the rail, the
+    parameter strip, Home's own shortcuts, the File menu) -- a fixed
+    "Back to Home" would be wrong here, since Explore, not Home, is
+    genuinely whichever screen was showing right before Configure opened
+    this time. The same `exploreReturnScreen`/"Back" contract `screen-
+    help`/`screen-explore`/`screen-compare` already established
+    (`screens/explore.js`'s own module docstring), extended to Configure.
+    Explore chosen deliberately over Home: Configure's own *default*
+    return screen is already `screen-open-run` (Home) before this test
+    ever runs, so returning to Home would pass even if this bookkeeping
+    never actually updated `configureReturnScreen` at all.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("window.fim.menu.explore();")
+        poll_until(
+            "!document.getElementById('screen-explore').hidden",
+            lambda value: value is True,
+        )
+        window.evaluate_js("window.fim.showConfigureScreen();")
+        poll_until(
+            "!document.getElementById('screen-configure').hidden",
+            lambda value: value is True,
+        )
+        window.evaluate_js("document.getElementById('configure-back-button').click();")
+        return poll_until(
+            "({"
+            "exploreVisible: !document.getElementById('screen-explore').hidden, "
+            "configureVisible: !document.getElementById('screen-configure').hidden"
+            "})",
+            lambda value: value is not None and value["configureVisible"] is False,
+        )
+
+    result = _drive(window, steps)
+    assert result == {"exploreVisible": True, "configureVisible": False}
+
+
+def test_configure_example_select_lists_only_built_in_examples(
+    window: webview.Window,
+) -> None:
+    """`configure-example-select` offers the identical shortcut Home's own
+    `home-example-select` does — built-in worked examples only, populated
+    by the same shared `refreshExampleOptions` (`screens/presets.js`), not
+    a second, independently maintained option list that could drift from
+    it (`test_open_run_screen.py`'s own `test_home_example_select_lists_
+    only_built_in_examples` is the identical test for Home's copy).
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("window.fim.showConfigureScreen();")
+        return poll_until(
+            "({"
+            "ready: window.__fimConfigureExampleOptionsReady === true, "
+            "labels: Array.from("
+            "document.getElementById('configure-example-select').options"
+            ").map((option) => option.textContent)"
+            "})",
+            lambda value: value is not None and value.get("ready"),
+        )
+
+    result = _drive(window, steps)
+    expected_titles = [
+        preset.title
+        for preset in presets_module.list_presets(app_module._webui_directory())
+    ]
+    assert result["labels"] == ["Try a worked example…", *expected_titles]
+
+
+def test_choosing_a_configure_example_applies_it_without_leaving_configure(
+    window: webview.Window,
+) -> None:
+    """Picking an example applies its values in place, then resets — no
+    navigation, unlike Home's own identical shortcut: there is nowhere
+    else to jump to, since the whole point is loading a different
+    example without leaving Configure. Selects "Stepping-stone (spatial)
+    migration" (option index 2) specifically, the same real, distinct-
+    from-the-starter-defaults choice `test_open_run_screen.py`'s own
+    `test_choosing_a_home_example_applies_it_and_opens_configure` and
+    `test_presets_screen.py`'s own equivalent test both already use.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("window.fim.showConfigureScreen();")
+        poll_until(
+            "window.__fimConfigureExampleOptionsReady === true",
+            lambda value: value is True,
+        )
+        window.evaluate_js(
+            "(function(){"
+            "var select = document.getElementById('configure-example-select');"
+            "select.selectedIndex = 2;"
+            "select.dispatchEvent(new Event('change'));"
+            "})();"
+        )
+        return poll_until(
+            "({"
+            "configureVisible: !document.getElementById('screen-configure').hidden, "
+            "mMode: document.querySelector("
+            "'input[name=\"m_mode\"]:checked')?.value, "
+            "nValue: document.getElementById('field-N').value, "
+            "selectValue: "
+            "document.getElementById('configure-example-select').value"
+            "})",
+            lambda value: value is not None and value.get("mMode") == "matrix",
+        )
+
+    result = _drive(window, steps)
+    assert result["configureVisible"] is True
+    assert result["mMode"] == "matrix"
+    assert result["nValue"] == "150"
+    # Reset to its own placeholder afterward — the control always reads
+    # as an action, never as "currently showing example X."
+    assert result["selectValue"] == ""

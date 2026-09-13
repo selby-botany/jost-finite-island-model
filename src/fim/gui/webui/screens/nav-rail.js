@@ -40,6 +40,25 @@ const STATIC_DESTINATION_TO_SCREEN = {
 };
 
 const railButtons = document.querySelectorAll(".rail-item");
+const configureBackButton = document.getElementById("configure-back-button");
+const configureExampleSelect = document.getElementById("configure-example-select");
+
+// Configure is reachable from nearly everywhere (the rail, the
+// parameter strip, Home's own "Configure a new run"/worked-example
+// shortcuts, the File menu) -- `showConfigureScreen`, below, records
+// whichever screen was actually showing right before it every time it
+// is called, the same `exploreReturnScreen` pattern `screens/explore.js`
+// already established, rather than a single fixed "Back" destination
+// that would be wrong whenever Configure was opened from somewhere else.
+let configureReturnScreen = "screen-open-run";
+
+// Set once `refreshConfigureExampleOptions`'s own bridge call has
+// settled and the dropdown genuinely lists this visit's own built-in
+// examples -- the same `window.__fimHomeExampleOptionsReady` precedent
+// (`screens/open-run.js`) for the identical reason: a test polling only
+// "the select exists" could otherwise observe it with no example
+// options yet, in the narrow window before this async call resolves.
+window.__fimConfigureExampleOptionsReady = false;
 
 /**
  * The rail destination that owns `screenId`, resolving `screen-run`'s
@@ -146,15 +165,41 @@ function updateParameterStrip(values) {
 window.fim.updateParameterStrip = updateParameterStrip;
 
 /**
+ * Populate `configure-example-select` with this visit's own built-in
+ * worked examples -- `screens/presets.js`'s own shared `refreshExample
+ * Options`, the identical source Home's own `home-example-select` uses.
+ * Re-fetched on every visit to Configure, matching that same "never
+ * trust a stale fetch across visits" precedent, even though the
+ * built-in set itself never changes at runtime.
+ */
+async function refreshConfigureExampleOptions() {
+    window.__fimConfigureExampleOptionsReady = false;
+    await window.fim.refreshExampleOptions(configureExampleSelect);
+    window.__fimConfigureExampleOptionsReady = true;
+}
+
+/**
  * Open the Configure landing destination (interim this phase -- see
  * this file's own module docstring). Exposed on `window.fim` the same
  * way every other destination's own `show*` entry point is, for the
  * rail's click handler below and for `run-view-initial.js`'s "invalid
  * field" routing to reach later if it chooses to; unused outside this
  * file for now.
+ *
+ * Records whichever screen was showing right before this call (unless
+ * that screen is already Configure itself -- calling this a second time
+ * while already on Configure must not overwrite the real return screen
+ * with Configure) so `configure-back-button`, below, returns there, the
+ * same `exploreReturnScreen` bookkeeping `screens/explore.js`'s own
+ * `showExplore` already established.
  */
-function showConfigureScreen() {
+async function showConfigureScreen() {
+    const currentlyVisible = document.querySelector(".screen:not([hidden])");
+    if (currentlyVisible !== null && currentlyVisible.id !== "screen-configure") {
+        configureReturnScreen = currentlyVisible.id;
+    }
     window.fim.showScreen("screen-configure");
+    await refreshConfigureExampleOptions();
 }
 
 window.fim.showConfigureScreen = showConfigureScreen;
@@ -229,6 +274,26 @@ function wireNavRail() {
     document
         .getElementById("configure-explore-button")
         .addEventListener("click", () => window.fim.menu.explore());
+    configureBackButton.addEventListener("click", () => {
+        window.fim.showScreen(configureReturnScreen);
+    });
+    // A plain, immediately-acting pulldown, the identical "jump-start"
+    // shortcut Home's own `home-example-select` offers
+    // (`screens/open-run.js`) -- applies in place via `window.fim.
+    // applyPreset` and resets to its own placeholder so the control
+    // always reads as an action, never as "currently showing example X."
+    // No navigation on success (unlike Home's own version): there is
+    // nowhere else to jump to, since the point is loading a different
+    // example without leaving Configure at all.
+    configureExampleSelect.addEventListener("change", async () => {
+        const presetId = configureExampleSelect.value;
+        if (!presetId) {
+            return;
+        }
+        const presetTitle = configureExampleSelect.selectedOptions[0].textContent;
+        configureExampleSelect.value = "";
+        await window.fim.applyPreset(presetId, presetTitle);
+    });
 
     // Matches `index.html`'s own static default (`screen-open-run` is
     // the only `.screen` section not marked `hidden` there) -- Home is

@@ -255,29 +255,17 @@ window.__fimHomeExampleOptionsReady = false;
 
 /**
  * Populate `home-example-select` with this visit's own built-in worked
- * examples -- `Api.list_presets`'s own combined list, filtered to
- * `builtin` entries only (design ask: "one of the examples," not every
- * user-saved configuration too; the full combined list stays reachable
- * only from the picker `fim.menu.loadExample` opens). Re-fetched on
- * every visit to Home rather than once, matching `refreshRecentRuns`'s
- * own "never trust a stale fetch across visits" precedent, even though
- * the built-in set itself never changes at runtime.
+ * examples -- `screens/presets.js`'s own shared `refreshExampleOptions`
+ * (design ask: "one of the examples," not every user-saved
+ * configuration too; the full combined list stays reachable only from
+ * the picker `fim.menu.loadExample` opens). Re-fetched on every visit to
+ * Home rather than once, matching `refreshRecentRuns`'s own "never trust
+ * a stale fetch across visits" precedent, even though the built-in set
+ * itself never changes at runtime.
  */
 async function refreshHomeExampleOptions() {
     window.__fimHomeExampleOptionsReady = false;
-    const placeholder = homeExampleSelect.options[0];
-    homeExampleSelect.replaceChildren(placeholder);
-    homeExampleSelect.value = "";
-    const result = await window.pywebview.api.list_presets();
-    const examples = result.ok
-        ? result.presets.filter((preset) => preset.builtin)
-        : [];
-    for (const example of examples) {
-        const option = document.createElement("option");
-        option.value = example.id;
-        option.textContent = example.title;
-        homeExampleSelect.appendChild(option);
-    }
+    await window.fim.refreshExampleOptions(homeExampleSelect);
     window.__fimHomeExampleOptionsReady = true;
 }
 

@@ -593,6 +593,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `20260911-claude-sonnet-5-gui-help-content-tailoring-design.md`
   (`selby/restricted`) for the full investigation.
 
+- Two additions to the Configure screen's own footer actions: a
+  "Try a worked example…" pulldown, the identical shortcut Home's own
+  card already offers — applies a built-in example's values in place,
+  with no navigation away from Configure, since there is nowhere else
+  to jump to; and a "Back" button, returning to whichever screen was
+  showing right before Configure opened (the rail, the parameter
+  strip, Home's own shortcuts, and the File menu can all reach
+  Configure, so a fixed destination would be wrong most of the time).
+  Both share their existing mechanism rather than a second,
+  independent one: the pulldown reuses `home-example-select`'s own
+  `applyPreset` and now-shared option-list builder, and "Back" is the
+  identical `screen-help`/`screen-explore`/`screen-compare` return-
+  screen contract, extended to Configure.
+
 ### Changed
 
 - `fim.statistics.differentiation`'s `FrequencyTable` type alias narrowed

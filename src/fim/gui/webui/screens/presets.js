@@ -164,12 +164,45 @@ async function applyPreset(presetId, presetTitle) {
 
 // Exported so a second entry point can apply a preset without going
 // through `modal-presets` itself -- Home's own worked-example shortcut
-// (`screens/open-run.js`'s `home-example-select`) is the first caller,
-// mirroring how `loadExample`, above, is already exported the same way.
-// `presetsDialog.close()` inside `applyPreset` is a safe no-op when that
-// dialog was never opened (a closed `<dialog>`'s own `close()` does
-// nothing), so this thin wrapper needs no guard of its own.
+// (`screens/open-run.js`'s `home-example-select`) and Configure's own
+// identical shortcut (`screens/nav-rail.js`'s `configure-example-select`)
+// are both callers, mirroring how `loadExample`, above, is already
+// exported the same way. `presetsDialog.close()` inside `applyPreset` is
+// a safe no-op when that dialog was never opened (a closed `<dialog>`'s
+// own `close()` does nothing), so this thin wrapper needs no guard of its
+// own.
 window.fim.applyPreset = applyPreset;
+
+/**
+ * Populate `selectElement` with this visit's own built-in worked
+ * examples -- `Api.list_presets`'s own combined list, filtered to
+ * `builtin` entries only (a user-saved preset is deliberately left out
+ * of this shortcut and stays reachable only from the full picker this
+ * file's own `modal-presets` opens, matching "one of the examples"
+ * rather than every saved configuration). Shared by Home's own
+ * `home-example-select` (`screens/open-run.js`) and Configure's own
+ * `configure-example-select` (`screens/nav-rail.js`) — both offer the
+ * identical shortcut, so this is the one place that builds the option
+ * list rather than two independently maintained copies.
+ * @param {HTMLSelectElement} selectElement
+ */
+async function refreshExampleOptions(selectElement) {
+    const placeholder = selectElement.options[0];
+    selectElement.replaceChildren(placeholder);
+    selectElement.value = "";
+    const result = await window.pywebview.api.list_presets();
+    const examples = result.ok
+        ? result.presets.filter((preset) => preset.builtin)
+        : [];
+    for (const example of examples) {
+        const option = document.createElement("option");
+        option.value = example.id;
+        option.textContent = example.title;
+        selectElement.appendChild(option);
+    }
+}
+
+window.fim.refreshExampleOptions = refreshExampleOptions;
 
 // Set once `showPresetYaml`'s own bridge call has settled and the
 // dialog is genuinely showing the requested preset's own text --

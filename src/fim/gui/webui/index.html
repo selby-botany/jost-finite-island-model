@@ -728,6 +728,18 @@
        resolution needs none of them set by hand. -->
   <section id="screen-configure" class="screen" hidden>
     <div id="configure-banner" class="banner" hidden></div>
+    <!-- "Back," the same contract `screen-help`/`screen-explore`/
+         `screen-compare` already established (`nav-rail.js`'s own
+         `configureReturnScreen`, mirroring `explore.js`'s own
+         `exploreReturnScreen`): returns to whichever screen was showing
+         right before Configure was opened, not a fixed destination --
+         Configure is reachable from nearly everywhere (the rail, the
+         parameter strip, Home's own "Configure a new run" and worked-
+         example shortcuts, the File menu), so a fixed "Back to Home"
+         would be wrong every time it was opened from somewhere else. -->
+    <div class="actions">
+      <button type="button" id="configure-back-button">Back</button>
+    </div>
     <div class="configure-layout">
       <div class="configure-panel" id="configure-panel-fim-parameters">
         <h2>FIM parameters</h2>
@@ -1136,9 +1148,23 @@
          loaded via the picker (`screens/presets.js`'s own `lastLoaded
          PresetTitle`) -- there is nothing to fork before then; "Save
          current as…" (inside the picker) already covers a genuinely
-         from-scratch save. -->
+         from-scratch save.
+
+         `configure-example-select` (added afterward, on top of this
+         slice): the identical shortcut Home's own `home-example-select`
+         already offers (`screens/open-run.js`), so a user already on
+         Configure who decides to start from a different worked example
+         instead does not have to leave the screen and come back to
+         reach it. Populated the same way, from the same shared
+         `refreshExampleOptions` (`screens/presets.js`); applies in
+         place via `window.fim.applyPreset` with no navigation, since
+         there is nowhere else to jump to -- unlike Home's own version,
+         which jumps to Configure on success. -->
     <div class="actions">
       <button type="button" id="configure-load-button">Load configuration…</button>
+      <select id="configure-example-select" aria-label="Try a worked example">
+        <option value="" selected>Try a worked example…</option>
+      </select>
       <button type="button" id="configure-save-button">Save configuration…</button>
       <button type="button" id="configure-duplicate-preset-button" disabled>
         Duplicate current configuration

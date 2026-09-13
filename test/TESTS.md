@@ -10703,6 +10703,63 @@ the same "About fim" dialog the Help menu already opens
 `showAboutModal`) -- proof the click handler is actually wired, not
 only that the button exists (`test_branding.py`'s own static check).
 
+<a id="gui.test_nav_rail.test_configure_back_button_returns_to_whichever_screen_preceded_it"></a>
+
+#### test\_configure\_back\_button\_returns\_to\_whichever\_screen\_preceded\_it
+
+```python
+def test_configure_back_button_returns_to_whichever_screen_preceded_it(
+        window: webview.Window) -> None
+```
+
+`configure-back-button` returns to Explore, not a fixed destination.
+
+Configure is reachable from nearly everywhere (the rail, the
+parameter strip, Home's own shortcuts, the File menu) -- a fixed
+"Back to Home" would be wrong here, since Explore, not Home, is
+genuinely whichever screen was showing right before Configure opened
+this time. The same `exploreReturnScreen`/"Back" contract `screen-
+help`/`screen-explore`/`screen-compare` already established
+(`screens/explore.js`'s own module docstring), extended to Configure.
+Explore chosen deliberately over Home: Configure's own *default*
+return screen is already `screen-open-run` (Home) before this test
+ever runs, so returning to Home would pass even if this bookkeeping
+never actually updated `configureReturnScreen` at all.
+
+<a id="gui.test_nav_rail.test_configure_example_select_lists_only_built_in_examples"></a>
+
+#### test\_configure\_example\_select\_lists\_only\_built\_in\_examples
+
+```python
+def test_configure_example_select_lists_only_built_in_examples(
+        window: webview.Window) -> None
+```
+
+`configure-example-select` offers the identical shortcut Home's own
+`home-example-select` does — built-in worked examples only, populated
+by the same shared `refreshExampleOptions` (`screens/presets.js`), not
+a second, independently maintained option list that could drift from
+it (`test_open_run_screen.py`'s own `test_home_example_select_lists_
+only_built_in_examples` is the identical test for Home's copy).
+
+<a id="gui.test_nav_rail.test_choosing_a_configure_example_applies_it_without_leaving_configure"></a>
+
+#### test\_choosing\_a\_configure\_example\_applies\_it\_without\_leaving\_configure
+
+```python
+def test_choosing_a_configure_example_applies_it_without_leaving_configure(
+        window: webview.Window) -> None
+```
+
+Picking an example applies its values in place, then resets — no
+navigation, unlike Home's own identical shortcut: there is nowhere
+else to jump to, since the whole point is loading a different
+example without leaving Configure. Selects "Stepping-stone (spatial)
+migration" (option index 2) specifically, the same real, distinct-
+from-the-starter-defaults choice `test_open_run_screen.py`'s own
+`test_choosing_a_home_example_applies_it_and_opens_configure` and
+`test_presets_screen.py`'s own equivalent test both already use.
+
 <a id="gui.test_open_run_screen"></a>
 
 # gui.test\_open\_run\_screen
