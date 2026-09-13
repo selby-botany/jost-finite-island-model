@@ -1113,7 +1113,7 @@ class Api:
                 cancel_event,
                 max_workers=max_workers,
             )
-        except FileExistsError as error:
+        except (FileExistsError, ValueError) as error:
             logger.warning("batch run failed to start: %s", error)
             return {"ok": False, "message": str(error)}
         logger.info(
