@@ -154,6 +154,93 @@ hook is unreachable on exactly this failure. An implementation built that
 way passed every unit test and was silent on the real hang; only an
 end-to-end test against a genuinely wedged interpreter revealed it.
 
+### Batch runs are lineal-backend-only
+
+**Status:** the reachable, default-experience case is fixed; the underlying
+gap (no working batch execution path for a non-lineal backend, in either
+the GUI or the CLI) is not
+**Affects:** `fim gui` (all platforms); `fim run --replicates` from the CLI
+**First observed:** 2026-09-13, from a real user's first run of a fresh
+packaged `macos-arm64` beta build
+
+#### What you would see
+
+On the Run screen, with a batch configured (`n_replicates` greater than 1)
+and the execution engine set to anything but `lineal` — including `auto`,
+the selector's own recommended default — clicking "Run simulation" appeared
+to do nothing. The window in fact showed an error message once the batch
+run's background thread failed:
+
+```text
+max_workers/store_factory are lineal-backend-only; they have no effect
+under engine_backend='auto'
+```
+
+A fresh install's own starter configuration is not affected: it starts at
+`n_replicates=1`, for which this combination cannot arise. The user who hit
+this had changed `n_replicates` to configure a batch, which is a normal,
+expected choice, and left `engine_backend` at `auto`, likewise the
+selector's own recommended default — reaching the broken combination
+required no unusual or advanced action.
+
+#### What the application does about it now
+
+As of 2026-09-13, the input screen locks the execution-engine selector to
+`lineal` and disables it whenever a batch is configured
+(`config-modals.js`'s `syncConditionalVisibility`), so the broken
+combination can no longer be selected from the GUI. `fim.gui.batch_runner
+.start_batch_run` also now rejects any other `engine_backend` synchronously,
+before starting a background thread or touching the output directory,
+rather than letting the failure surface later and asynchronously from
+inside that thread. Both changes only prevent the combination from being
+submitted; neither adds an execution path that does not already exist.
+
+#### Technical detail
+
+`fim.engine.fim()`'s own real-parallel batch execution — a
+`ProcessPoolExecutor` pool sized by `max_workers`, writing through a
+`store_factory` — is implemented only for `engine_backend="lineal"`; `fim()`
+itself raises `ValueError` outright if `max_workers` or `store_factory` is
+given together with any other backend. `GenerationalBackend.run()` takes a
+single `store` (not a factory) and has no `max_workers` parameter at all,
+relying instead on `params.max_concurrent_replicates` and its own
+`Advancer` for concurrency — a genuinely different concurrency model, not
+merely a missing parameter.
+
+Both `fim.gui.batch_runner._batch_worker` and the CLI's own
+`_command_run_batch` (`src/fim/cli.py`) unconditionally call `fim(...,
+max_workers=N, store_factory=functools.partial(...))` for any batch. This
+predates the `engine_backend` GUI selector; it is only that selector — and
+specifically its recommended `auto` default, which never resolves to
+`lineal` (`_resolve_auto_engine_backend`'s own documented contract) — that
+first made a non-`lineal` backend reachable as a *default* choice for a
+batch, surfacing a pre-existing gap as a real, first-run failure rather
+than a documented restriction.
+
+There is, today, no code path that produces the established
+`replicate-NNN/` per-replicate directory plus batch manifest layout for a
+non-lineal batch, even setting the `max_workers`/`store_factory` mismatch
+aside — `JSONLTrajectoryStore` binds to exactly one output path, and
+nothing in this codebase fans one `GenerationalBackend`/`GenerationalVector
+Backend` run out across many replicates' own separate output directories.
+Building that is a real feature, not a defect fix, and is why this issue
+stays open: the fixes above close off the one way a user can reach the
+broken combination today, not the absence of the feature itself.
+
+Relevant code:
+
+- `fim.engine.fim`, `src/fim/engine.py` — the `max_workers`/`store_factory`
+  ⇄ `engine_backend` guard that raises the error above
+- `syncConditionalVisibility`, `src/fim/gui/webui/screens/config-modals.js`
+  — the GUI-level lock
+- `start_batch_run`, `src/fim/gui/batch_runner.py` — the synchronous,
+  defense-in-depth check (covers a loaded configuration file predating the
+  GUI lock, or a directly crafted bridge call)
+- `_batch_worker` (`src/fim/gui/batch_runner.py`) and `_command_run_batch`
+  (`src/fim/cli.py`) — the two call sites with no non-lineal execution path
+- `test/gui/test_input_screen.py` and `test/gui/test_batch_runner.py` —
+  regression tests for both layers of the mitigation
+
 ### Linux build image is pinned to an end-of-life Debian release
 
 **Status:** stopgap applied; durable fix not started
