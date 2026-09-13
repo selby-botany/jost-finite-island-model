@@ -601,3 +601,143 @@ def test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption(
     assert "2\u03c3" in settled["captionText"]
     assert "3 generations" in settled["captionText"]
     assert settled["canvasNonBlankPixelCount"] > 0
+
+
+def test_run_view_fits_the_default_window_without_excess_scrolling() -> None:
+    """A completed scalar run's trajectory panel and stats table are on-screen.
+
+    Real, reported layout bug at the app's own default window size
+    (`create_window`'s own `width=900, height=700`): the scatter frame's
+    own vh-based width formula (`app.css`) and the trajectory frame's
+    fixed 480px width neither shrink to fit a narrower row, so `.run-
+    plot-row`'s `flex-wrap` dropped the trajectory panel and stats table
+    to a second, stacked line at their full, un-shrunk (tall-window)
+    sizes \u2014 taller, together, than the whole 700px-tall window, pushing
+    both almost entirely below the fold with no visible hint that
+    scrolling would reveal them. Confirmed live before the fix: the
+    document needed roughly 640px of scroll past the window to reach
+    `#run-trajectory-frame`.
+
+    The fix (`#run-plot-row.run-plot-row-has-trajectory` rules in
+    `app.css`, gated by `setTrajectoryFrameHidden` in `run-view-
+    completed.js`) shrinks both frames only when a trajectory panel is
+    actually competing for the row, so they render side by side on one
+    line instead of stacking \u2014 this test checks exactly that: `#run-
+    trajectory-frame` and `#results-stats` both sit within the window's
+    own viewport, at the same top offset as `#run-canvas` (same line,
+    not wrapped below it), rather than merely "somewhere reachable by
+    scrolling."
+    """
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            window.resize(900, 700)
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                _SET_TINY_FIELDS + "document.getElementById('run-button').click();"
+            )
+            _poll_until(
+                window,
+                "window.fim.getRunViewState()",
+                lambda value: value == "completed",
+            )
+            settled = _poll_until(
+                window,
+                "(function() {"
+                "var row = document.getElementById('run-plot-row');"
+                "var canvas = document.getElementById('run-canvas');"
+                "var trajectory = document.getElementById('run-trajectory-frame');"
+                "var stats = document.getElementById('results-stats');"
+                "if (trajectory.hidden || stats.hidden) { return null; }"
+                "var canvasRect = canvas.getBoundingClientRect();"
+                "var trajectoryRect = trajectory.getBoundingClientRect();"
+                "var statsRect = stats.getBoundingClientRect();"
+                "return {"
+                "rowHasTrajectoryClass: "
+                "row.classList.contains('run-plot-row-has-trajectory'), "
+                "innerHeight: window.innerHeight, "
+                "canvasTop: canvasRect.top, canvasBottom: canvasRect.bottom, "
+                "trajectoryTop: trajectoryRect.top, "
+                "trajectoryBottom: trajectoryRect.bottom, "
+                "statsTop: statsRect.top, statsBottom: statsRect.bottom"
+                "};"
+                "})()",
+                lambda value: value is not None,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["rowHasTrajectoryClass"] is True
+    # Same line as the scatter plot, not wrapped onto a line below it --
+    # a small tolerance for sub-pixel layout rounding, matching this
+    # project's other bounding-box assertions.
+    assert abs(settled["trajectoryTop"] - settled["canvasTop"]) < 5
+    assert abs(settled["statsTop"] - settled["canvasTop"]) < 30
+    # Fully visible within the actual window -- not merely reachable by
+    # scrolling -- which is the whole point of the fix.
+    assert settled["trajectoryBottom"] <= settled["innerHeight"]
+    assert settled["statsBottom"] <= settled["innerHeight"]
+
+
+def test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix() -> None:
+    """The `initial` p_0 view's scatter plot keeps its full, un-shrunk size.
+
+    Companion to `test_run_view_fits_the_default_window_without_excess_
+    scrolling`, just above: `app.css`'s own `@media (max-width: 1300px)`
+    rules are gated on `#run-plot-row`'s own `run-plot-row-has-
+    trajectory` class specifically so a state with no trajectory panel
+    to make room for \u2014 the `initial` p_0 scatter, shown before any run
+    starts \u2014 never shrinks needlessly. Confirmed live: reverting the
+    gate (applying the shrunk widths unconditionally) measurably shrinks
+    `#run-canvas` in this exact state even though nothing here ever
+    overflowed the window in the first place.
+    """
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            window.resize(900, 700)
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "document.querySelector('[data-destination=\"run\"]').click();"
+            )
+            _poll_until(
+                window,
+                "window.fim.getRunViewState()",
+                lambda value: value == "initial",
+            )
+            settled = _poll_until(
+                window,
+                "(function() {"
+                "var row = document.getElementById('run-plot-row');"
+                "var canvas = document.getElementById('run-canvas');"
+                "return {"
+                "rowHasTrajectoryClass: "
+                "row.classList.contains('run-plot-row-has-trajectory'), "
+                "canvasWidth: canvas.getBoundingClientRect().width"
+                "};"
+                "})()",
+                lambda value: value is not None and value.get("canvasWidth", 0) > 0,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["rowHasTrajectoryClass"] is False
+    # The un-shrunk formula (`@media (max-height: 760px)`, still in
+    # effect at 900x700) puts the scatter canvas at roughly 387px wide;
+    # the (wrongly) shrunk formula this test guards against would put it
+    # at roughly 157px. 300px is comfortably between the two.
+    assert settled["canvasWidth"] > 300

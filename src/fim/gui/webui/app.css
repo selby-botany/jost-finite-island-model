@@ -769,6 +769,54 @@ fieldset.composite > label {
     }
 }
 
+/* At the app's own default window size (900x700, `create_window` in
+ * `app.py`), a completed scalar (or batch) run's own trajectory panel
+ * (`#run-trajectory-frame`) sits beside the scatter frame in the same
+ * `.run-plot-row`. The scatter frame's own preferred width (`calc(100vh
+ * - 190px)` above, ~480px) plus the trajectory frame's fixed 480px --
+ * neither shrinks in response to available *width*, only height --
+ * sum to well over the row's own available width, so the row's own
+ * `flex-wrap` (necessarily) drops the trajectory frame and stats table
+ * to a second line. That reflow itself is correct (the wide comparison
+ * screenshot's own side-by-side arrangement was never going to fit
+ * unmodified at 900px), but *both* frames still claimed their full
+ * tall-window heights on their own line, so the two stacked lines
+ * together were taller than the whole 700px-tall window, pushing the
+ * trajectory panel and stats table almost entirely below the fold with
+ * no hint that scrolling would reveal them.
+ *
+ * Gated on `#run-plot-row`'s own `run-plot-row-has-trajectory` class
+ * (`run-view-completed.js`'s `setTrajectoryFrameHidden`), not applied
+ * whenever the window is merely narrow: the `initial` p_0 view and a
+ * completed run with no trajectory of its own to show already fit --
+ * the scatter plot is alone (or paired with just one stats table) --
+ * and shrinking it there too would only make an already-working layout
+ * needlessly smaller. This breakpoint (900px is comfortably inside it;
+ * the wide comparison screenshot's width is not) gives the scatter
+ * frame a shallower vh-based height budget when a trajectory panel is
+ * also competing for the row -- close to half its usual share rather
+ * than nearly all of it -- so that, paired with `.run-trajectory-
+ * frame`'s own matching rule below, both frames fit on one row instead
+ * of stacking at all. Confirmed live at 900x700 (see `test/gui/
+ * test_results_screen.py`'s own `test_run_view_fits_the_default_
+ * window_without_excess_scrolling`): before, the document needed
+ * roughly 640px of scroll past the window to reach the trajectory
+ * panel and stats table; after, both render on the scatter plot's own
+ * row, fully visible, with well under 150px of scroll remaining (the
+ * completed-run summary text/scrubber/reason line below the plot row,
+ * unrelated to this fix -- already present, in smaller degree, even in
+ * the wide-window case).
+ */
+@media (max-width: 1300px) {
+    #run-plot-row.run-plot-row-has-trajectory .run-canvas-frame {
+        width: min(100%, 620px, calc(100vh - 332px));
+    }
+
+    #run-plot-row.run-plot-row-has-trajectory #run-canvas {
+        max-height: calc(100vh - 332px);
+    }
+}
+
 .run-axis-selectors {
     display: contents;
 }
@@ -832,6 +880,29 @@ fieldset.composite > label {
     flex-direction: column;
     gap: 0.35rem;
     width: min(100%, 480px);
+}
+
+/* Paired with `#run-plot-row.run-plot-row-has-trajectory .run-canvas-
+ * frame`'s own `@media (max-width: 1300px)` rule above (see its comment
+ * for the full before/after): at the app's own 900x700 default, the
+ * scatter frame's shrunk width (above) plus this frame's un-shrunk
+ * 480px would still exceed `.run-plot-row`'s own available width, so it
+ * (and the stats table beside it) would drop to a second, stacked line
+ * -- correct as a fallback, but at its full un-shrunk 480px/434px
+ * footprint that second line alone was taller than the scatter frame's
+ * own row, doubling the run view's total height and pushing the
+ * trajectory panel and stats table almost entirely below the default
+ * window. Shrinking this frame too, not only the scatter one, lets
+ * both fit on the scatter row's own line instead of wrapping at all.
+ * Scoped the same way as the sibling rule (`run-plot-row-has-
+ * trajectory`, kept in sync with this element's own `hidden` by
+ * `setTrajectoryFrameHidden`) even though `[hidden]{display:none}`
+ * already makes an un-scoped width moot whenever this frame itself is
+ * hidden -- explicit here rather than relying on that. */
+@media (max-width: 1300px) {
+    #run-plot-row.run-plot-row-has-trajectory .run-trajectory-frame {
+        width: min(100%, 300px);
+    }
 }
 
 /* `#compare-trajectory-canvas` shares this rule -- `screens/compare.js`

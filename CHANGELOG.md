@@ -1268,6 +1268,36 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   own branding-exclusion section reserves the Selby name and mark
   separately, all rights, apart from the AGPL. A new line states that
   exclusion plainly, right beside the license itself.
+- The unified run view's trajectory panel and six-row statistics table
+  at the app's own default window size (`create_window`'s own
+  `width=900, height=700`): a completed scalar (or batch) run's scatter
+  plot rendered, but the trajectory chart (D/G_ST/H_S/H_T curves,
+  predicted-equilibrium overlays, generation scrubber) and stats table
+  beside it were pushed almost entirely below the window — only a
+  sliver of the stats table visible at the very bottom — needing a
+  manual window resize to a much wider size before either became
+  visible, even though both already rendered cleanly side by side at
+  that wider size. The scatter frame's own vh-based width formula and
+  the trajectory frame's fixed 480px width neither shrunk in response
+  to available *width* (only height), so `.run-plot-row`'s `flex-wrap`
+  correctly dropped the trajectory frame and stats table to a second,
+  stacked line, but at their full, wide-window sizes — taller, stacked,
+  than the whole 700px-tall window. `app.css` now shrinks both frames
+  together, but only when a trajectory panel is actually competing for
+  the row (`#run-plot-row`'s own `run-plot-row-has-trajectory` class,
+  set by a new `setTrajectoryFrameHidden` helper in `run-view-
+  completed.js`, alongside the existing `hidden` toggle) — the `initial`
+  p_0 view and a trajectory-less completed run already fit and are left
+  unshrunk. Confirmed live at 900x700: before, the document needed
+  roughly 640px of scroll past the window to reach the trajectory
+  panel; after, both it and the stats table render on the scatter
+  plot's own row, fully visible, with well under 150px of scroll
+  remaining (the completed-run summary text/scrubber/reason line below
+  the plot row, unrelated to this fix). Confirmed unchanged at a wide
+  window (1400x900). New regression tests in `test/gui/test_results_
+  screen.py`: `test_run_view_fits_the_default_window_without_excess_
+  scrolling` and `test_run_view_initial_state_canvas_is_unaffected_by_
+  the_trajectory_fix`.
 
 ---
 

@@ -123,6 +123,7 @@ window.fim.resetTrajectoryLegendVisibility = function resetTrajectoryLegendVisib
 const resultsRunId = document.getElementById("results-run-id");
 const resultsOutcome = document.getElementById("results-outcome");
 const resultsStats = document.getElementById("results-stats");
+const runPlotRow = document.getElementById("run-plot-row");
 const runTrajectoryFrame = document.getElementById("run-trajectory-frame");
 const runTrajectoryCanvas = document.getElementById("run-trajectory-canvas");
 const runTrajectoryLegend = document.getElementById("run-trajectory-legend");
@@ -583,6 +584,28 @@ function drawTrajectoryCurve(
 }
 
 /**
+ * Show or hide the trajectory panel, and keep `#run-plot-row`'s own
+ * `run-plot-row-has-trajectory` class in sync with it.
+ *
+ * `app.css`'s own `@media (max-width: 1300px)` rules for `.run-canvas-
+ * frame`/`.run-trajectory-frame` key off this class rather than
+ * shrinking unconditionally at a narrow window: the scatter plot only
+ * needs to give up room to fit a *third* item — the trajectory panel —
+ * onto the same row (or, wrapped, to keep the wrapped line's own
+ * height down), never for the `initial` p_0 view or a scalar/batch
+ * `completed` view with no trajectory of its own to show, where the
+ * canvas is already alone (or paired with just one stats table) and
+ * has no overflow problem to solve. Every caller that sets `run
+ * TrajectoryFrame.hidden` (`renderTrajectory`, `renderBatchTrajectory`)
+ * goes through this instead of setting it directly.
+ * @param {boolean} hidden
+ */
+function setTrajectoryFrameHidden(hidden) {
+    runTrajectoryFrame.hidden = hidden;
+    runPlotRow.classList.toggle("run-plot-row-has-trajectory", !hidden);
+}
+
+/**
  * Show (or hide) the trajectory panel for the just-shown completed run.
  *
  * A live scalar run's own already-computed `RunResult.convergence_
@@ -658,7 +681,7 @@ function renderTrajectory(
     ];
     const hasCurve = generations && histories && generations.length > 0;
     if (!hasCurve && !sigmaBand) {
-        runTrajectoryFrame.hidden = true;
+        setTrajectoryFrameHidden(true);
         runTrajectoryLegend.replaceChildren();
         runTrajectorySigmaBandCaption.hidden = true;
         runTrajectorySigmaBandCaption.replaceChildren();
@@ -668,7 +691,7 @@ function renderTrajectory(
         ? generations
         : [Math.max(0, generationCount - sigmaBand.window), generationCount];
     const effectiveHistories = hasCurve ? histories : {};
-    runTrajectoryFrame.hidden = false;
+    setTrajectoryFrameHidden(false);
     const canvas = runTrajectoryCanvas;
     canvas.width = canvas.clientWidth || canvas.width;
     canvas.height = canvas.clientHeight || canvas.height;
@@ -1061,11 +1084,11 @@ function renderBatchTrajectory(pooledConvergenceHistories) {
     lastPooledConvergenceHistories = pooledConvergenceHistories;
     const names = pooledConvergenceHistories ? Object.keys(pooledConvergenceHistories) : [];
     if (names.length === 0) {
-        runTrajectoryFrame.hidden = true;
+        setTrajectoryFrameHidden(true);
         runTrajectoryLegend.replaceChildren();
         return;
     }
-    runTrajectoryFrame.hidden = false;
+    setTrajectoryFrameHidden(false);
     const canvas = runTrajectoryCanvas;
     canvas.width = canvas.clientWidth || canvas.width;
     canvas.height = canvas.clientHeight || canvas.height;

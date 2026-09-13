@@ -10802,6 +10802,31 @@ from-the-starter-defaults choice `test_open_run_screen.py`'s own
 `test_choosing_a_home_example_applies_it_and_opens_configure` and
 `test_presets_screen.py`'s own equivalent test both already use.
 
+<a id="gui.test_nav_rail.test_choosing_the_non_loadable_configure_example_shows_an_inline_notice"></a>
+
+#### test\_choosing\_the\_non\_loadable\_configure\_example\_shows\_an\_inline\_notice
+
+```python
+def test_choosing_the_non_loadable_configure_example_shows_an_inline_notice(
+        window: webview.Window) -> None
+```
+
+The one non-loadable example shows Configure's own banner, not an alert.
+
+Design doc `20260913-claude-sonnet-5-gui-worked-example-loadability-
+design.md` (`selby/restricted`), Option C: `window.alert`'s blocking
+OS chrome replaced with `showExampleLoadNotice`'s own inline,
+non-modal banner. Index 5 — "Per-base mutation rate across unequal
+locus lengths" — is the one built-in example
+`test_every_other_builtin_preset_loads_into_form_values`
+(`test_app_api.py`) confirms has no form representation; picked by
+index here for the identical reason other tests in this file pick a
+specific example by index (a real, checked value, not an arbitrary
+placeholder). The bare title, not the "(view YAML only)" label
+text, must appear in the notice — a real regression found live
+while writing this test, before `refreshExampleOptions`'s own
+`dataset.presetTitle` existed to separate the two.
+
 <a id="gui.test_open_run_screen"></a>
 
 # gui.test\_open\_run\_screen
@@ -11097,6 +11122,25 @@ equivalent test already uses for the same preset. Reuses
 `presets.js`'s own `applyPreset` via `window.fim.applyPreset` —
 genuinely the same apply path the File-menu picker uses, not a
 second, independent one.
+
+<a id="gui.test_open_run_screen.test_choosing_the_non_loadable_home_example_shows_an_inline_notice"></a>
+
+#### test\_choosing\_the\_non\_loadable\_home\_example\_shows\_an\_inline\_notice
+
+```python
+def test_choosing_the_non_loadable_home_example_shows_an_inline_notice(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The one non-loadable example shows Home's own banner, not an alert,
+and does not navigate to Configure.
+
+Design doc `20260913-claude-sonnet-5-gui-worked-example-loadability-
+design.md` (`selby/restricted`), Option C — the Home-screen
+counterpart of `test_nav_rail.py`'s own identically named test for
+Configure's own select. `home-example-select` only navigates on a
+successful apply (`open-run.js`'s own `change` handler); staying on
+Home here is the direct proof that branch was not taken.
 
 <a id="gui.test_open_run_screen.test_home_example_select_excludes_a_user_saved_preset"></a>
 
@@ -12155,6 +12199,59 @@ is fully opaque; a canvas starts fully transparent), the identical
 check `test_compare_screen.py`'s own `_canvas_has_nonblank_pixels_
 script` already established for an unrelated canvas, not
 independently reinvented here.
+
+<a id="gui.test_results_screen.test_run_view_fits_the_default_window_without_excess_scrolling"></a>
+
+#### test\_run\_view\_fits\_the\_default\_window\_without\_excess\_scrolling
+
+```python
+def test_run_view_fits_the_default_window_without_excess_scrolling() -> None
+```
+
+A completed scalar run's trajectory panel and stats table are on-screen.
+
+Real, reported layout bug at the app's own default window size
+(`create_window`'s own `width=900, height=700`): the scatter frame's
+own vh-based width formula (`app.css`) and the trajectory frame's
+fixed 480px width neither shrink to fit a narrower row, so `.run-
+plot-row`'s `flex-wrap` dropped the trajectory panel and stats table
+to a second, stacked line at their full, un-shrunk (tall-window)
+sizes — taller, together, than the whole 700px-tall window, pushing
+both almost entirely below the fold with no visible hint that
+scrolling would reveal them. Confirmed live before the fix: the
+document needed roughly 640px of scroll past the window to reach
+``run`-trajectory-frame`.
+
+The fix (``run`-plot-row.run-plot-row-has-trajectory` rules in
+`app.css`, gated by `setTrajectoryFrameHidden` in `run-view-
+completed.js`) shrinks both frames only when a trajectory panel is
+actually competing for the row, so they render side by side on one
+line instead of stacking — this test checks exactly that: ``run`-
+trajectory-frame` and ``results`-stats` both sit within the window's
+own viewport, at the same top offset as ``run`-canvas` (same line,
+not wrapped below it), rather than merely "somewhere reachable by
+scrolling."
+
+<a id="gui.test_results_screen.test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix"></a>
+
+#### test\_run\_view\_initial\_state\_canvas\_is\_unaffected\_by\_the\_trajectory\_fix
+
+```python
+def test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix(
+) -> None
+```
+
+The `initial` p_0 view's scatter plot keeps its full, un-shrunk size.
+
+Companion to `test_run_view_fits_the_default_window_without_excess_
+scrolling`, just above: `app.css`'s own `@media (max-width: 1300px)`
+rules are gated on ``run`-plot-row`'s own `run-plot-row-has-
+trajectory` class specifically so a state with no trajectory panel
+to make room for — the `initial` p_0 scatter, shown before any run
+starts — never shrinks needlessly. Confirmed live: reverting the
+gate (applying the shrunk widths unconditionally) measurably shrinks
+``run`-canvas` in this exact state even though nothing here ever
+overflowed the window in the first place.
 
 <a id="gui.test_runner"></a>
 
