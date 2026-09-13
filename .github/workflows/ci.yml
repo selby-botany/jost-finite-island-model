@@ -283,22 +283,26 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      # `.[dev,jit]`, not `.[dev]` -- the one line every job in this
-      # group (windows/windows-arm64/macos-arm64/macos-x64/linux-x64)
-      # shares, for the same reason `beta.yml`'s own `windows-beta-x64`
-      # states in full: Configure's `engine_backend` selector defaults
-      # to `"auto"`, which resolves to `"generational-vector"` for
-      # essentially every vector-eligible config, and that backend
-      # imports `numba` unconditionally. Without this, a released
-      # build's own headline recommendation fails every such run.
-      # `beta.yml` carries the identical line first (`bf576ba`), so this
-      # job's first real run -- the next tag push -- is also the first
-      # time this exact combination is exercised on Windows/Linux CI at
-      # all: verified locally on macOS only so far (a real `pyinstaller`
-      # build with `numba`/`llvmlite` bundled, running a vector-eligible
-      # config end to end), matching `pyproject.toml`'s own `[jit]`
-      # comment ("Windows not yet verified"). A failure here fails this
-      # job loudly rather than shipping a broken release silently.
+      # `.[dev,jit]`, not `.[dev]` -- three of this group's five jobs
+      # share this line (this one, `macos-arm64`, and `linux-x64`;
+      # `windows-arm64` and `macos-x64` are the two real exceptions --
+      # see each of their own comments for why), for the same reason
+      # `beta.yml`'s own `windows-beta-x64` states in full: Configure's
+      # `engine_backend` selector defaults to `"auto"`, which resolves
+      # to `"generational-vector"` for essentially every vector-eligible
+      # config, and that backend imports `numba` unconditionally.
+      # Without this, a released build's own headline recommendation
+      # fails every such run on the platforms it can actually reach.
+      #
+      # `beta.yml` carries the identical line first (`bf576ba`) and,
+      # since then, ran for real (`34733912094`): confirmed live that
+      # `win_amd64` (this job's own platform), `macosx_12_0_arm64`, and
+      # the `manylinux` wheels all have a real `numba`/`llvmlite` wheel
+      # to install, while `win_arm64` and `macosx_..._x86_64` do not --
+      # see `windows-arm64`'s and `macos-x64`'s own comments for the
+      # exact upstream citation. A failure on one of the three platforms
+      # this line covers fails that job loudly rather than shipping a
+      # broken release silently.
       - run: python -m pip install -e ".[dev,jit]"
       - run: >-
           pyinstaller --workpath .pyinstaller-build --noconfirm
@@ -381,8 +385,16 @@ jobs:
           python-version: "3.12"
           architecture: arm64
           cache: pip
-      # `.[dev,jit]` -- see `windows`'s own identical step, above.
-      - run: python -m pip install -e ".[dev,jit]"
+      # `.[dev]`, not `.[dev,jit]`, on this one job only -- confirmed
+      # live (`beta.yml`'s own `windows-beta-arm64`, run `34733912094`):
+      # `numba==0.67.*`'s own pinned `llvmlite<0.50,>=0.49.0dev0` ships
+      # no `win_arm64` wheel at all below Python 3.14, so `pip` falls
+      # back to a source build, which itself fails under this runner's
+      # ARM64 MSVC cross-compilation toolchain. Not a version this
+      # project can pin around -- see `windows`'s own step comment,
+      # above, for the fuller reasoning and `beta.yml`'s identical
+      # `windows-beta-arm64` comment for the full upstream citation.
+      - run: python -m pip install -e ".[dev]"
       - run: >-
           pyinstaller --workpath .pyinstaller-build --noconfirm
           packaging/fim.spec
@@ -546,8 +558,18 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      # `.[dev,jit]` -- see `windows`'s own identical step, above.
-      - run: python -m pip install -e ".[dev,jit]"
+      # `.[dev]`, not `.[dev,jit]`, on this one job only -- confirmed
+      # live (`beta.yml`'s own `macos-beta-x64`, run `34733912094`):
+      # `llvmlite` 0.49.0 (the only release `numba==0.67.*` accepts)
+      # ships no `macosx_..._x86_64` wheel at all, for any supported
+      # Python version -- only `macosx_12_0_arm64`. `pip` falls back to
+      # a source build, which fails looking for a system LLVM install
+      # this runner does not have. Apple Silicon is the only macOS
+      # architecture `numba`/`llvmlite` currently ships a wheel for at
+      # all; see `windows`'s own step comment, above, for the fuller
+      # reasoning and `beta.yml`'s identical `macos-beta-x64` comment
+      # for the full upstream citation.
+      - run: python -m pip install -e ".[dev]"
       - run: >-
           pyinstaller --workpath .pyinstaller-build --noconfirm
           packaging/fim.spec

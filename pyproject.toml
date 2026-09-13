@@ -81,21 +81,42 @@ dependencies = [
 # fim-engine-backend-factory-design.md` §10 Stage F9). Fixed by having
 # that one job install `[dev,jit]` instead, so Backend V's own code
 # gets real exercise and real coverage in the job that gates on it.
-# `beta.yml`'s five packaging jobs and `ci.yml`'s five release packaging
-# jobs (windows/windows-arm64/macos-arm64/macos-x64/linux-x64, in both
-# workflows) install `[dev,jit]` too, for an unrelated reason of their
-# own -- Configure's `engine_backend` selector defaults to `"auto"`,
-# which needs `numba` to actually work in the artifact each workflow
-# produces (see either workflow's own comment on that step). `numba`
-# staying a true optional extra for an ordinary `pip install fim` is a
-# property of the package's own dependency graph, not of how many CI
-# jobs happen to install it for their own reasons. Design doc
-# `20260901-claude-sonnet-5-fim-engine-
+# Three of `beta.yml`'s five packaging jobs and the identical three of
+# `ci.yml`'s five release packaging jobs (windows/macos-arm64/
+# linux-x64, in both workflows) install `[dev,jit]` too, for an
+# unrelated reason of their own -- Configure's `engine_backend`
+# selector defaults to `"auto"`, which needs `numba` to actually work
+# in the artifact each workflow produces (see either workflow's own
+# comment on that step). `numba` staying a true optional extra for an
+# ordinary `pip install fim` is a property of the package's own
+# dependency graph, not of how many CI jobs happen to install it for
+# their own reasons. Design doc `20260901-claude-sonnet-5-fim-engine-
 # backend-factory-design.md` §5.3/§10 Stage F5: `numba` 0.67.0 confirmed
 # to compile scalar `Generator.binomial`/`.random`/`.integers`/
 # `.uniform` calls bit-identically under `nogil=True`, and to build/run
-# correctly under this project's own pinned `pyinstaller==6.*` on macOS
-# (66 MB bundled, one benign warning; Windows not yet verified).
+# correctly under this project's own pinned `pyinstaller==6.*` on
+# Apple-Silicon macOS (66 MB bundled, one benign warning) and, since
+# confirmed live in CI (run `34733912094`), on Windows x64 and Linux
+# x64 too.
+#
+# The other two packaging jobs (`windows-arm64`/`windows-beta-arm64`,
+# `macos-x64`/`macos-beta-x64`) install `[dev]` only, and this is not a
+# version this project can pin its way out of: `numba==0.67.*` pins
+# `llvmlite<0.50,>=0.49.0dev0`, and `llvmlite` 0.49.0's own published
+# wheels (confirmed directly against its PyPI file listing) cover
+# `win_amd64`/`macosx_12_0_arm64`/`manylinux2014_x86_64`/
+# `manylinux_2_27_aarch64` only -- no `macosx_..._x86_64` wheel exists
+# at any supported Python version, and `win_arm64` exists only for
+# Python 3.14, newer than this project's own pinned `python-version:
+# "3.12"`. `pip` falling back to a source build fails on both (no
+# system LLVM on the macOS Intel runner; the ARM64 MSVC cross-compiler
+# cannot build `numba`'s own `_dispatcher.cpp` on the Windows ARM64
+# runner) -- confirmed live, not assumed, in the same CI run.
+# `Api.get_engine_backend_availability`'s own defensive probe is what
+# makes shipping these two platforms anyway safe: a build without
+# `numba` relabels the two options that need it in the selector itself,
+# rather than promising something this platform/architecture pair
+# cannot do.
 jit = [
     "numba==0.67.*",
 ]

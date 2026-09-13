@@ -328,8 +328,11 @@ rather than an accident:
   install `fim[jit]`" (`Api.get_engine_backend_availability`, §4.2)
   rather than a selector promising something this install cannot do.
   Relabeled, never disabled or removed, so the round trip above still
-  holds. Packaged builds (beta and release) bundle `numba`, so this
-  path is a source-checkout case rather than something a botanist meets
+  holds. Packaged builds bundle `numba` on the three platform/
+  architecture combinations `numba`/`llvmlite` actually ship a wheel
+  for — Apple Silicon macOS, Windows x64, and Linux x64 — so this path
+  is a source-checkout case there, but a real, expected case on Intel
+  macOS and Windows ARM64, where no packaged build bundles it at all
   (§15).
 
 The other four fields of that group — `jit`, `auto_vector_min_d`,
@@ -564,23 +567,23 @@ are covered in
 §6.
 
 One packaging fact belongs here rather than there, because it is the
-execution-engine selector's own prerequisite: every beta and release
-packaging job installs the `[jit]` extra, so a packaged build bundles
-`numba` and the selector's recommended `auto` default actually works in
-the artifact a tester or user downloads. Without it, `auto` would fail
-nearly every real run with "needs the optional numba dependency" — a
+execution-engine selector's own prerequisite: three of each workflow's
+five packaging jobs install the `[jit]` extra, so a packaged build for
+Apple Silicon macOS, Windows x64, or Linux x64 bundles `numba` and the
+selector's recommended `auto` default actually works in the artifact a
+tester or user downloads there. Without it, `auto` would fail nearly
+every real run with "needs the optional numba dependency" — a
 recommendation the product could not keep. The download is
-correspondingly larger. `beta.yml` carries this line first; `ci.yml`'s
-own five release packaging jobs carry the identical line, added once
-`beta.yml`'s own existed to copy rather than gated on a real beta run
-having exercised it end to end first — `pyproject.toml`'s own `[jit]`
-comment still records Windows/Linux pyinstaller+numba coverage as real
-only on macOS so far. Until a real run on each platform confirms it, a
-build that hits a genuine problem fails that one packaging job loudly
-rather than shipping a broken artifact; a build that simply lacks
-`numba` for some other reason (a source checkout without `[jit]`
-installed) relabels the affected options instead of failing silently
-(§6.3).
+correspondingly larger on those three platforms. The other two
+(Windows ARM64, Intel macOS) do not bundle `numba` at all — confirmed
+live (`beta.yml` run `34733912094`) that `numba==0.67.*`'s own required
+`llvmlite` release ships no wheel for either, a real upstream gap this
+project cannot pin its way around (`pyproject.toml`'s own `[jit]`
+comment has the full citation) — so a build for either platform
+relabels the two `numba`-dependent options in the selector itself
+(§6.3), the identical mechanism a source checkout without `[jit]`
+installed already uses, rather than promising something that platform
+cannot do.
 
 ## Metadata
 

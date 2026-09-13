@@ -786,21 +786,26 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Packaged **beta and release** builds now bundle `numba`, so the new
-  execution engine control's recommended `auto` choice actually works in
-  the artifact a tester or user downloads. Every one of the beta and
-  release packaging jobs installed the `dev` extra only, which never
-  pulls in `numba`; `auto` resolves to the `generational-vector` engine
-  for essentially every eligible configuration, and that engine requires
-  `numba` outright — so `auto` would have failed nearly every real run
-  in a packaged build with "needs the optional numba dependency." **Your
-  next download will be noticeably larger** as a result; that is the
+- Packaged builds for Apple Silicon macOS, Windows x64, and Linux x64
+  now bundle `numba`, so the new execution engine control's recommended
+  `auto` choice actually works in the artifact a tester or user
+  downloads on those platforms. Every beta and release packaging job
+  installed the `dev` extra only, which never pulls in `numba`; `auto`
+  resolves to the `generational-vector` engine for essentially every
+  eligible configuration, and that engine requires `numba` outright —
+  so `auto` would have failed nearly every real run in a packaged build
+  with "needs the optional numba dependency." **Downloads for those
+  three platforms will be noticeably larger** as a result; that is the
   bundled `numba` compiler, and it is what makes the recommended engine
-  choice real rather than a promise the download could not keep. The app
-  still relabels the two options that need `numba` whenever the running
-  install genuinely lacks it (a source checkout without the `[jit]`
-  extra), rather than offering a choice that fails only once a run
-  starts.
+  choice real rather than a promise the download could not keep.
+  Windows ARM64 and Intel macOS packaged builds do not bundle `numba` —
+  confirmed live that `numba`'s own required `llvmlite` release ships
+  no installable wheel for either, a real upstream gap this project
+  cannot pin its way around, not an oversight. The app relabels the two
+  options that need `numba` whenever the running install genuinely
+  lacks it — a source checkout without the `[jit]` extra, or one of
+  these two specific packaged platforms — rather than offering a choice
+  that fails only once a run starts.
 - `dev/bin/check-webui-assets`'s own JS scanning ran its class-name
   regexes directly against raw source, comments included — an
   apostrophe inside an ordinary prose `//` comment (this codebase's own

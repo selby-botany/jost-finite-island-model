@@ -88,11 +88,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      # `.[dev,jit]`, not `.[dev]` -- the one line every job in this
-      # group shares for the same reason, stated once here rather than
-      # five times. Configure now offers an `engine_backend` selector
-      # whose recommended default is `"auto"`, and `fim.engine.
-      # _resolve_auto_engine_backend` picks `"generational-vector"` for
+      # `.[dev,jit]`, not `.[dev]` -- three of this group's five jobs
+      # share this line for the same reason, stated once here rather
+      # than three times (`windows-beta-arm64` and `macos-beta-x64` are
+      # the two real exceptions -- see each of their own comments for
+      # why). Configure now offers an `engine_backend` selector whose
+      # recommended default is `"auto"`, and `fim.engine._resolve_
+      # auto_engine_backend` picks `"generational-vector"` for
       # essentially every vector-eligible config at the shipped
       # `auto_vector_min_d`/`auto_vector_max_capacity` defaults. That
       # backend imports `numba` *unconditionally* (`fim.model.
@@ -107,19 +109,14 @@ jobs:
       # job already installs the same pair for its own, different
       # reason.
       #
-      # Scoped to the beta workflow first, deliberately: `pyproject.
-      # toml` records numba+pyinstaller as verified on macOS only
-      # ("Windows not yet verified"), and a beta artifact is meant to be
-      # where that gap gets closed before a tagged release depends on
-      # it. `ci.yml`'s own five release packaging jobs (windows/
-      # windows-arm64/macos-arm64/macos-x64/linux-x64) now install the
-      # identical pair too -- added once this line existed here to copy,
-      # not gated on a real beta run actually having exercised it yet
-      # (neither workflow has, as of this comment: `beta.yml` triggers
-      # on `staging`, not `dev`). Until one of them does, a build
-      # without numba degrades honestly rather than silently:
-      # `Api.get_engine_backend_availability` relabels the numba-
-      # dependent options in the selector itself.
+      # This job's own platform (`win_amd64`) is one of the three
+      # `numba==0.67.*`'s own pinned `llvmlite<0.50,>=0.49.0dev0` ships
+      # a real wheel for (confirmed live, run `34733912094`, alongside
+      # the two exceptions failing) -- along with `macosx_12_0_arm64`
+      # and `manylinux2014_x86_64`/`manylinux_2_27_aarch64`, which is
+      # why `ci.yml`'s own `windows`/`macos-arm64`/`linux-x64` release
+      # jobs install the identical pair too, and its own
+      # `windows-arm64`/`macos-x64` do not, matching this file exactly.
       - run: python -m pip install -e ".[dev,jit]"
       - shell: pwsh
         env:
@@ -196,7 +193,25 @@ jobs:
           python-version: "3.12"
           architecture: arm64
           cache: pip
-      - run: python -m pip install -e ".[dev,jit]"
+      # `.[dev]`, not `.[dev,jit]`, on this one job only -- confirmed live
+      # (run `34733912094`) that `numba==0.67.*`'s own pinned dependency,
+      # `llvmlite<0.50,>=0.49.0dev0`, ships no `win_arm64` wheel at all
+      # for any Python earlier than 3.14 (PyPI's own file listing for
+      # `llvmlite` 0.49.0: `win_arm64` exists only for `cp314`). `pip`
+      # falls back to building from source, which itself fails --
+      # `numba`'s own `_dispatcher.cpp` does not build under this
+      # runner's ARM64 MSVC cross-compilation toolchain either. This is
+      # a real, current upstream gap, not a transient CI failure or a
+      # version pin this project can fix by choosing a different
+      # `numba`/`llvmlite` release: it is the only release in the range
+      # `numba==0.67.*` accepts. `Api.get_engine_backend_availability`'s
+      # own defensive probe (approach A3 of design doc `20260911-claude-
+      # sonnet-5-gui-engine-backend-selector-design.md`, `selby/
+      # restricted`) is exactly the mechanism that makes this safe to
+      # ship anyway: a beta built without `numba` relabels the two
+      # options that need it, rather than promising something this one
+      # platform/architecture combination cannot do.
+      - run: python -m pip install -e ".[dev]"
       - shell: pwsh
         env:
           BETA_LABEL: ${{ needs.compute-beta-label.outputs.label }}
@@ -337,7 +352,18 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -e ".[dev,jit]"
+      # `.[dev]`, not `.[dev,jit]` -- see `windows-beta-arm64`'s own
+      # comment for the full reasoning; the concrete fact for this job
+      # specifically (confirmed live, run `34733912094`): `llvmlite`
+      # 0.49.0 (the only release `numba==0.67.*` accepts) ships no
+      # `macosx_..._x86_64` wheel at all -- PyPI's own file listing has
+      # `macosx_12_0_arm64` only, for every supported Python version,
+      # not merely this one. `pip` falls back to a source build, which
+      # itself fails looking for a system LLVM install this runner does
+      # not have. Not a version this project can pin around; Apple
+      # Silicon is the only macOS architecture `numba`/`llvmlite`
+      # currently ships a wheel for at all.
+      - run: python -m pip install -e ".[dev]"
       - run: >-
           printf '%s+%s' "${{ needs.compute-beta-label.outputs.label }}"
           "${{ needs.compute-beta-label.outputs.short_sha }}" > version.txt
