@@ -811,6 +811,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The desktop app now opens to **Home**, not **Run**. Botanist GUI
+  redesign doc §9 calls Home "a richer landing destination reachable
+  from anywhere via the rail," but the rail's own default highlight and
+  `index.html`'s static markup still both named `screen-run` — a fresh
+  launch landed on the initial-conditions preview instead, with Home's
+  own recent-runs/example content never fetched until something else
+  navigated there. `index.html`'s `.screen` sections now default the
+  other way (`screen-open-run` visible, `screen-run` hidden), `nav-
+  rail.js`'s own startup highlight matches, and `run-view-initial.js`'s
+  launch sequence now calls `showOpenRunScreen()` explicitly so Home
+  shows real, current data immediately rather than a static empty
+  shell. Opening a run from Home, clicking "Run" in the rail, and a
+  run's own start/finish still jumping to Run/Results are all
+  unaffected — none of those paths depended on which screen happened to
+  be showing at launch.
 - Packaged builds for Apple Silicon macOS, Windows x64, and Linux x64
   now bundle `numba`, so the new execution engine control's recommended
   `auto` choice actually works in the artifact a tester or user

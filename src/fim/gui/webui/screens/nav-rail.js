@@ -230,7 +230,17 @@ function wireNavRail() {
         .getElementById("configure-explore-button")
         .addEventListener("click", () => window.fim.menu.explore());
 
-    updateRailHighlight("screen-run");
+    // Matches `index.html`'s own static default (`screen-open-run` is
+    // the only `.screen` section not marked `hidden` there) -- Home is
+    // this app's landing destination (botanist GUI design doc §9), not
+    // Run. `run-view-initial.js`'s own `initializeRunView` re-shows
+    // Home explicitly moments later (`window.fim.showOpenRunScreen()`,
+    // to populate it with real recent-runs/example data rather than
+    // leaving `index.html`'s static empty markup showing), which calls
+    // `showScreen` and so already updates this highlight on its own --
+    // this call only keeps the rail correct for the brief window before
+    // that happens, and stays correct even if that call is ever removed.
+    updateRailHighlight("screen-open-run");
 }
 
 whenApiReady(wireNavRail);

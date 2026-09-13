@@ -100,16 +100,32 @@ def test_rail_has_the_six_destinations_plus_help_in_order(
     ]
 
 
-def test_run_is_the_default_highlighted_destination(window: webview.Window) -> None:
-    """`screen-run` is the default-visible screen; the rail agrees on launch."""
+def test_home_is_the_default_highlighted_destination(window: webview.Window) -> None:
+    """`screen-open-run` (Home) is the default-visible screen on launch.
+
+    Botanist GUI design doc §9: "Home replaces the current 'Open a run'
+    screen with a richer landing destination" -- a fresh launch shows
+    Home, not Run, and the rail agrees.
+    """
     current = _drive(
         window,
         lambda _poll_until: window.evaluate_js(
-            "document.querySelector('.rail-item[data-destination=\"run\"]')"
-            ".getAttribute('aria-current')"
+            "({"
+            "homeCurrent: document.querySelector("
+            "'.rail-item[data-destination=\"home\"]').getAttribute('aria-current'), "
+            "runCurrent: document.querySelector("
+            "'.rail-item[data-destination=\"run\"]').getAttribute('aria-current'), "
+            "homeVisible: !document.getElementById('screen-open-run').hidden, "
+            "runVisible: !document.getElementById('screen-run').hidden"
+            "})"
         ),
     )
-    assert current == "true"
+    assert current == {
+        "homeCurrent": "true",
+        "runCurrent": "false",
+        "homeVisible": True,
+        "runVisible": False,
+    }
 
 
 def test_parameter_strip_shows_the_starter_configuration_on_launch(

@@ -54,8 +54,15 @@ def test_help_screen_shows_usage_and_back_returns_to_the_prior_screen(
                 lambda value: value["helpVisible"] is True,
             )
             window.evaluate_js("document.getElementById('help-back-button').click();")
+            # Home (`screen-open-run`), not Run: `showHelp` was triggered
+            # straight from launch, with no navigation in between, and
+            # Home is this app's own default landing screen
+            # (`test_nav_rail.py`'s own
+            # `test_home_is_the_default_highlighted_destination`) --
+            # `help.js`'s own `returnScreen` captured whichever screen
+            # was actually showing at that moment, not a fixed default.
             back_visible = _poll_until(
-                "!document.getElementById('screen-run').hidden",
+                "!document.getElementById('screen-open-run').hidden",
                 lambda value: value is True,
             )
             outcome.put(

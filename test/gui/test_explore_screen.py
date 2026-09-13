@@ -72,8 +72,16 @@ def test_menu_explore_shows_predictions_and_back_returns_to_the_prior_screen(
             window.evaluate_js(
                 "document.getElementById('explore-back-button').click();"
             )
+            # Home (`screen-open-run`), not Run: `fim.menu.explore()` was
+            # triggered straight from launch, with no navigation in
+            # between, and Home is this app's own default landing screen
+            # (`test_nav_rail.py`'s own
+            # `test_home_is_the_default_highlighted_destination`) --
+            # `explore.js`'s own `exploreReturnScreen` captured whichever
+            # screen was actually showing at that moment, not a fixed
+            # default.
             back_visible = _poll_until(
-                "!document.getElementById('screen-run').hidden",
+                "!document.getElementById('screen-open-run').hidden",
                 lambda value: value is True,
             )
             outcome.put(

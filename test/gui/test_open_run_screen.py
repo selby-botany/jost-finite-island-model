@@ -215,11 +215,35 @@ def _expand_all_recent_run_groups(window: webview.Window) -> None:
     -- collapsed by their own separate default -- once `"Earlier"`
     itself has already been expanded, so a single pass over the
     toggles visible at the start would miss them entirely.
+
+    Waits for `window.__fimOpenRunRecentRunsLoaded === true`, not only
+    for a toggle to exist: the app's own launch sequence now shows Home
+    by default and pre-populates it (`run-view-initial.js`'s own
+    `initializeRunView`), so a toggle from that earlier, unrelated fetch
+    can already be sitting in the DOM the moment a caller's own trigger
+    (`menu.openRun()`/`showOpenRunScreen()`) fires a fresh one -- a
+    toggle-only check would then proceed immediately against that stale
+    render, only for the fresh fetch to replace it out from under this
+    function moments later (confirmed live: a real `TypeError: null is
+    not an object` clicking a row this function had just expanded,
+    because `refreshRecentRuns()`'s own `recentRunsBody.replaceChildren
+    ()` had already rebuilt the table again in between). The loaded
+    flag is reset to `false` synchronously by `refreshRecentRuns()`'s
+    own first statement, before any of its own `await`s ever suspend it
+    -- by the time a caller's own triggering `evaluate_js` call returns
+    to Python, a fresh fetch has therefore already flipped it, so
+    waiting for `true` again here can only mean *this* fetch's own
+    render, never a stale one.
     """
     _poll_until(
         window,
-        "document.querySelectorAll('.open-run-group-toggle').length",
-        lambda value: value is not None and value > 0,
+        "({"
+        "loaded: window.__fimOpenRunRecentRunsLoaded === true, "
+        "toggleCount: document.querySelectorAll('.open-run-group-toggle').length"
+        "})",
+        lambda value: (
+            value is not None and value["loaded"] is True and value["toggleCount"] > 0
+        ),
     )
     for _ in range(5):
         window.evaluate_js(
@@ -1346,10 +1370,30 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
             window.evaluate_js("window.fim.menu.openRun();")
             # Groups start collapsed by default -- expand them all first
             # so the filter's own effect on row count is what's measured.
+            # Waits for `window.__fimOpenRunRecentRunsLoaded === true`,
+            # not only for a toggle to exist -- the app's own launch
+            # sequence now shows Home by default and pre-populates it
+            # (`run-view-initial.js`'s own `initializeRunView`), so a
+            # toggle from that earlier, unrelated fetch can already be
+            # in the DOM the moment `menu.openRun()` above fires a fresh
+            # one; without this, the filter typed below could land on a
+            # render this test's own fetch is about to replace, and
+            # `refreshRecentRuns()`'s own `recentRunsFilterInput.value =
+            # ""` reset would silently clear it back out
+            # (`_expand_all_recent_run_groups`'s own docstring records
+            # the identical race in full, confirmed live).
             _poll_until(
                 window,
-                "document.querySelectorAll('.open-run-group-toggle').length",
-                lambda value: value is not None and value > 0,
+                "({"
+                "loaded: window.__fimOpenRunRecentRunsLoaded === true, "
+                "toggleCount: document.querySelectorAll("
+                "'.open-run-group-toggle').length"
+                "})",
+                lambda value: (
+                    value is not None
+                    and value["loaded"] is True
+                    and value["toggleCount"] > 0
+                ),
             )
             window.evaluate_js(
                 "Array.from(document.querySelectorAll("

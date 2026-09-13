@@ -10613,16 +10613,20 @@ def test_rail_has_the_six_destinations_plus_help_in_order(
 
 The rail's own seven buttons match design §3.1's own destination list.
 
-<a id="gui.test_nav_rail.test_run_is_the_default_highlighted_destination"></a>
+<a id="gui.test_nav_rail.test_home_is_the_default_highlighted_destination"></a>
 
-#### test\_run\_is\_the\_default\_highlighted\_destination
+#### test\_home\_is\_the\_default\_highlighted\_destination
 
 ```python
-def test_run_is_the_default_highlighted_destination(
+def test_home_is_the_default_highlighted_destination(
         window: webview.Window) -> None
 ```
 
-`screen-run` is the default-visible screen; the rail agrees on launch.
+`screen-open-run` (Home) is the default-visible screen on launch.
+
+Botanist GUI design doc §9: "Home replaces the current 'Open a run'
+screen with a richer landing destination" -- a fresh launch shows
+Home, not Run, and the rail agrees.
 
 <a id="gui.test_nav_rail.test_parameter_strip_shows_the_starter_configuration_on_launch"></a>
 

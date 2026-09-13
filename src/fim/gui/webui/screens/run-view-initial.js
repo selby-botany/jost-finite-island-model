@@ -219,6 +219,25 @@ async function initializeRunView() {
     await window.fim.applyEngineBackendAvailability();
     await loadInitialForm();
     await renderInitialPreview();
+    // Home, not Run, is this app's landing destination on a fresh
+    // launch (botanist GUI design doc §9: "Home replaces the current
+    // 'Open a run' screen with a richer landing destination"). Routed
+    // through the exact same entry point the rail's own Home button
+    // uses (`open-run.js`'s `showOpenRunScreen`) rather than leaving
+    // `index.html`'s static markup (already `screen-open-run` by
+    // default -- see that file's own `.screen` sections) to stand on
+    // its own: a real launch should show current recent-runs/example
+    // data immediately, the same as clicking Home ever after, not a
+    // static empty shell that only populates once something else
+    // navigates there. Awaited, unlike every click-driven caller of
+    // `showOpenRunScreen` -- this is the one caller that also needs to
+    // know the real bridge calls it starts (`list_home_runs`, `list_
+    // presets`) have actually settled before flipping `window.
+    // __fimRunViewReady` below, the same "no un-awaited bridge call
+    // still in flight when a test's own teardown destroys the window"
+    // discipline `test/gui/conftest.py`'s own module docstring records
+    // at length for this exact function's other call site.
+    await window.fim.showOpenRunScreen();
     // Awaited before the ready flag flips, like the two calls above --
     // not fire-and-forget: an un-awaited bridge call still in flight
     // when a test's own teardown destroys the window is exactly the

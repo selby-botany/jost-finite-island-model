@@ -746,10 +746,26 @@ openRunBackButton.addEventListener("click", () => {
     window.fim.showScreen("screen-run");
 });
 
-window.fim.showOpenRunScreen = function showOpenRunScreen() {
+window.fim.showOpenRunScreen = async function showOpenRunScreen() {
     showOpenRunBanner("");
     setSelectedTrajectory(null);
     window.fim.showScreen("screen-open-run");
-    refreshRecentRuns();
-    refreshHomeExampleOptions();
+    // Still fire-and-forget from every existing (click-driven) caller's
+    // own point of view -- the screen switch above already happened
+    // synchronously, before either `await` below ever suspends this
+    // function, so a caller that does not await this call (every one
+    // today) sees no change in when the screen itself appears. Awaiting
+    // both calls here, rather than leaving them fully detached the way
+    // this function used to, only matters to a caller that *does* await
+    // it -- `run-view-initial.js`'s own launch sequence, which needs
+    // both real bridge calls fully settled before flipping `window.
+    // __fimRunViewReady`, the same flag every GUI test's own teardown
+    // gates on. Without that, a launch-triggered `list_home_runs()` can
+    // still be in flight when a test destroys its window moments later
+    // (`test/gui/conftest.py`'s own module docstring records this exact
+    // failure shape at length for this function's original, single
+    // click-driven call site -- a second, always-fired call site at
+    // bootstrap reintroduces it for every test, not just Home's own,
+    // unless this function's own caller can wait for it).
+    await Promise.all([refreshRecentRuns(), refreshHomeExampleOptions()]);
 };

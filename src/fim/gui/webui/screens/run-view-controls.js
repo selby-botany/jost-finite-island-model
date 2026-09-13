@@ -39,6 +39,28 @@ async function onRunClicked() {
         window.fim.focusInvalidField(result.field);
         return;
     }
+    // Design §3.1: "clicking 'Run simulation' anywhere in Configure
+    // jumps to the Run destination" -- `fim.menu.runSimulation` (the
+    // Configure footer's own button, and the native Run menu) already
+    // gets this by navigating *before* clicking this same button, but a
+    // valid submission through this handler is the one genuine
+    // "starting a run" event regardless of which caller reached it, so
+    // it belongs here too, not only in one caller's own wrapper. Real
+    // usage never needed this explicitly before Home became this app's
+    // own default landing screen (`run-button` physically lives inside
+    // `screen-run`, unreachable by a real click while hidden), but a
+    // scripted `.click()` can still reach it from elsewhere (`test/
+    // gui/*.py`'s own trigger scripts), and this handler's own
+    // trajectory/scatter canvases both size themselves from `client
+    // Width`/`clientHeight` at draw time -- a canvas drawn while its
+    // section is `hidden` (`display: none`, `clientWidth === 0`) sticks
+    // at a stale, wrong size until something else happens to redraw it
+    // later, `scatter.js`'s own `ResizeObserver` safety net notwith-
+    // standing (`run-trajectory-canvas` has no such observer at all).
+    // Showing the real destination unconditionally, before any of that
+    // drawing starts, is simpler and more robust than teaching every
+    // canvas its own resize-recovery path.
+    window.fim.showScreen("screen-run");
     const values = collectFormValues();
     // Enter `running` now, synchronously, before awaiting the bridge
     // call -- not after it resolves. `Api.start_run` starts the run
