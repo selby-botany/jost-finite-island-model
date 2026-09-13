@@ -13,12 +13,18 @@ that exact class (pywebview's own non-daemon HTTP handler threads);
 `in_flight_bridge_threads`/`await_bridge_threads`, tested below, are the
 structural one for in-flight bridge calls specifically, wired into
 production via `create_window`'s own `events.closing` registration and
-`_build_menu`'s own "Quit fim" wrapper (design doc `20260912-claude-
-sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/restricted`
--- these two functions lived only in `test/gui/conftest.py` before that
-document, moved here in full so production code and the test suite
-share one implementation). The deadman is the backstop for whatever
-leftover thread neither of those catches, which is why its own
+its own `_wrap_destroy_to_settle_first` (design doc `20260912-claude-
+sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/restricted`,
+plus that document's own 2026-09-13 addendum -- these two functions
+lived only in `test/gui/conftest.py` before that document, moved here in
+full so production code and the test suite share one implementation).
+The latter rebinds the window's own `destroy` attribute rather than
+wrapping one caller of it (originally just `_build_menu`'s own "Quit
+fim" action, until the addendum found that call site was not the only
+one that mattered -- `test/gui/` alone has upward of ninety direct
+`.destroy()` calls, one per real window most of the tests below and
+throughout this directory build). The deadman is the backstop for
+whatever leftover thread neither of those catches, which is why its own
 correctness is worth testing directly rather than trusting by
 inspection.
 """
@@ -492,6 +498,62 @@ def test_the_window_close_hook_gives_up_after_its_own_timeout() -> None:
         assert elapsed < app_module._BRIDGE_SETTLE_TIMEOUT_SECONDS + 2.0
         assert still_alive
     finally:
+        blocker.join(timeout=5)
+
+
+@pytest.mark.gui
+def test_a_direct_destroy_call_settles_an_in_flight_bridge_call_first() -> None:
+    """`window.destroy()`, called directly — no menu, no `events.closing`
+    — still settles an in-flight bridge call first.
+
+    The gap the original two-hook design (`20260912-claude-sonnet-5-
+    shutdown-bridge-thread-settle-design.md`, `selby/restricted`)
+    missed: `events.closing` does not fire for a direct `.destroy()`
+    call on macOS at all, and that design scoped the remaining gap to
+    exactly one call site (`_build_menu`'s own "Quit fim" action). In
+    practice, direct `.destroy()` calls are the overwhelmingly common
+    case, not the rare one — `test/gui/` alone has upward of ninety of
+    them across roughly twenty files, nearly all of them this exact
+    shape: a raw `create_window(...)`, destroyed directly in the test's
+    own `finally` block, with no settle step of its own. Confirmed live
+    to recur, repeatedly, in a full local `-m gui -n 2` run even after
+    the original two-hook fix landed: a real, named `js_bridge_call.
+    <locals>._call` thread stranded at interpreter shutdown, several
+    times across one evening's own runs.
+
+    `create_window`'s own `_wrap_destroy_to_settle_first` rebinds this
+    exact window's own `destroy` attribute, so this test calls
+    `window.destroy()` exactly the way the other ~90 call sites already
+    do — no special API, no awareness of the fix required from any of
+    them.
+    """
+    window = app_module.create_window(hidden=True)
+    release = threading.Event()
+    blocker = _make_bridge_thread(release)
+    outcome: queue.Queue[tuple[float, bool]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        _wait_for_input_screen_ready(window)
+        blocker.start()
+
+        def release_soon() -> None:
+            time.sleep(0.2)
+            release.set()
+
+        threading.Thread(target=release_soon, daemon=True).start()
+
+        started = time.monotonic()
+        window.destroy()
+        elapsed = time.monotonic() - started
+        outcome.put((elapsed, blocker.is_alive()))
+
+    webview.start(_drive)
+    try:
+        elapsed, still_alive = outcome.get(timeout=10)
+        assert elapsed >= 0.15
+        assert not still_alive
+    finally:
+        release.set()
         blocker.join(timeout=5)
 
 

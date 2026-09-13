@@ -12,13 +12,15 @@ merely a planned improvement. Items that are fully fixed move to
 ### Intermittent hang during GUI shutdown
 
 **Status:** cause identified; the one diagnosed cause is now settled at the
-source, in both the test suite and the application, with the deadman timer
-kept as a backstop for whatever the next undiagnosed cause turns out to be
+source, universally, in both the test suite and the application, with the
+deadman timer kept as a backstop for whatever the next undiagnosed cause
+turns out to be
 **Affects:** `fim gui` (all platforms)
 **First observed:** 2026-09-06, in continuous integration
 **Diagnosed:** 2026-09-07, from a captured thread dump
-**Production fix landed:** 2026-09-13 (design doc `20260912-claude-sonnet-5-
-shutdown-bridge-thread-settle-design.md`, `selby/restricted`)
+**Production fix landed:** 2026-09-13, corrected same day (design doc
+`20260912-claude-sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/
+restricted` — see its own addendum for what the first landing missed)
 
 #### What you would see
 
@@ -92,26 +94,46 @@ is actually destroyed, applied once as a structural backstop rather than
 re-derived at every call site.
 
 That backstop now runs in the real application, not only in the test
-suite's own teardown, at both of the two ways this application can trigger
-a close: `create_window` registers it on `window.events.closing`, a real,
-synchronous hook every platform's own native close-request handler fires
-before tearing the window down (confirmed live on macOS: a slow subscriber
-measurably delayed the platform's own close call by its own full
-duration); and `_build_menu`'s own "Quit fim" action settles explicitly
-before calling `window.destroy()`, needed because `window.destroy()` does
-not fire `events.closing` at all on macOS (confirmed live — traced to
+suite's own teardown. `create_window` registers it on `window.events.
+closing`, a real, synchronous hook every platform's own native
+close-request handler fires before tearing the window down (confirmed live
+on macOS: a slow subscriber measurably delayed the platform's own close
+call by its own full duration) — but `window.destroy()` does not fire
+`events.closing` at all on macOS (confirmed live — traced to
 `NSWindow.close` bypassing the `windowShouldClose_` delegate method
-entirely), so relying on the `events.closing` hook alone would have left
-the File menu's own Quit item on the most commonly used development
-platform completely unprotected.
+entirely), so a direct `.destroy()` call needs its own settle step
+regardless of platform.
+
+The first landing of this fix (2026-09-13) wrapped exactly one such direct
+call site by hand — `_build_menu`'s own "Quit fim" action — on the theory
+that it was the only one. It was not checked against the codebase, and it
+was wrong: the same day, the flake recurred repeatedly in ordinary local
+full-suite runs, through a call site the fix never touched. `test/gui/`
+alone has upward of ninety direct `window.destroy()` calls across roughly
+twenty files — nearly every GUI test builds its own raw window and destroys
+it directly in its own teardown, the identical unprotected shape "Quit fim"
+was, just multiplied twenty-fold instead of closed once. Corrected the same
+day: `create_window` now rebinds the window instance's own `destroy`
+attribute (`_wrap_destroy_to_settle_first`) to settle first, so every
+caller that holds a reference to that window — the ~90 test files,
+"Quit fim" (now a bare `window.destroy` reference again, no closure needed),
+or pywebview's own internal shutdown sweep — settles with no change of its
+own, rather than requiring each call site to remember it independently. See
+the design doc's own addendum for the full account, including why
+retrofitting `await_bridge_threads()` into each of those ~20 files by hand
+was rejected as the same "same fix, drifting apart" risk this project
+already avoided once for `in_flight_bridge_threads`/`await_bridge_threads`
+themselves.
 
 Why this issue stays open regardless: this closes the one specific,
-diagnosed, reproduced race for the two real ways this application can
-trigger a close today. It does not, and cannot, prove no other non-daemon
-thread can ever strand itself before or after this fix — the mechanism
-that produces this class of defect is a property of the libraries involved
-rather than of any single bug (see below), so the deadman stays exactly as
-it is, as the backstop for whatever the next instance turns out to be.
+diagnosed, reproduced race for every way this application (and its own test
+suite) can trigger a close today, by construction rather than by having
+audited every call site — it does not, and cannot, prove no other
+non-daemon thread can ever strand itself for some entirely different
+reason. The mechanism that produces this class of defect is a property of
+the libraries involved rather than of any single bug (see below), so the
+deadman stays exactly as it is, as the backstop for whatever the next
+instance turns out to be.
 
 History and its limits:
 
@@ -122,10 +144,18 @@ History and its limits:
   intermittency was untrustworthy as evidence of a fix.
 - It then recurred twice on 2026-09-07, the second time with the
   diagnostics in place, which named the thread and ended the guesswork.
+- The first fix (2026-09-13) covered exactly one direct `.destroy()` call
+  site and recurred the same day through the ~90 others nothing had
+  audited — corrected the same day by settling in the window instance's
+  own `destroy` method instead of one caller of it.
 
-The lesson worth keeping: three clean runs of an intermittent failure
-demonstrated nothing. What resolved it was capturing the failure, which
-required building the diagnostics first.
+Two lessons worth keeping. First: three clean runs of an intermittent
+failure demonstrated nothing. What resolved the original diagnosis was
+capturing the failure, which required building the diagnostics first.
+Second, from the same-day recurrence: a fix scoped to "the one call site
+that needs it" is only as good as the audit behind that claim — `grep -rc`
+across the actual call sites should be step one of a fix like this, not a
+diagnostic run after it recurs.
 
 Do not remove or lengthen the deadman on the assumption that the underlying
 bug is gone. The mechanism that produces this class of defect is a property
@@ -139,9 +169,10 @@ Relevant code:
 - `in_flight_bridge_threads`/`await_bridge_threads` in `src/fim/gui/app.py`
   — the structural fix for the diagnosed cause, shared by production and
   the test suite
-- `create_window`'s own `events.closing` registration and `_build_menu`'s
-  own "Quit fim" wrapper, both in `src/fim/gui/app.py` — the two real
-  places that fix is actually wired into the running application
+- `create_window`'s own `events.closing` registration and its own
+  `_wrap_destroy_to_settle_first`, both in `src/fim/gui/app.py` — the two
+  real hooks that fix is actually wired into the running application (and,
+  via the second one, into every test that builds a real window)
 - `test/gui/test_shutdown_deadman.py` — regression tests for both wiring
   points, and for `in_flight_bridge_threads`/`await_bridge_threads`
   themselves

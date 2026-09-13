@@ -3731,10 +3731,10 @@ def _settle_before_close() -> None:
 
     On macOS specifically, `window.destroy()` does not fire this event
     at all (confirmed live — traced to `NSWindow.close` bypassing the
-    `windowShouldClose_` delegate method entirely) — `_build_menu`'s own
-    "Quit fim" action, the one direct `window.destroy()` call site in
-    this module, settles explicitly instead, independent of whether a
-    given platform's own `destroy()` happens to reach this subscriber.
+    `windowShouldClose_` delegate method entirely) — `_wrap_destroy_to_
+    settle_first` (`create_window`, below) makes every direct `.destroy()`
+    call settle on its own instead, independent of whether a given
+    platform's own `destroy()` happens to reach this subscriber.
 
     Args:
         None
@@ -3743,6 +3743,59 @@ def _settle_before_close() -> None:
         None
     """
     await_bridge_threads()
+
+
+def _wrap_destroy_to_settle_first(window: webview.Window) -> None:
+    """Make `window.destroy()` itself settle in-flight bridge calls first.
+
+    `events.closing` (registered on `window` just before this is called,
+    `create_window`) already covers a platform-triggered close, but does
+    not fire at all for a direct `window.destroy()` call on macOS
+    (`_settle_before_close`'s own docstring). Design doc `20260912-
+    claude-sonnet-5-shutdown-bridge-thread-settle-design.md` (`selby/
+    restricted`) originally scoped that remaining gap to exactly one
+    call site — `_build_menu`'s own "Quit fim" action — and wrapped that
+    one closure by hand. That scoping was wrong, found only after the
+    fix landed and the shutdown flake kept recurring anyway: `test/gui/`
+    alone has upward of ninety direct `.destroy()` calls across some
+    twenty test files, nearly all of them a raw `create_window(...)` in
+    the file's own `_drive()`-style teardown, `window.destroy()` called
+    directly with no settle step of its own — the identical unprotected
+    shape "Quit fim" was, just multiplied ninety-fold instead of fixed
+    once. Retrofitting `await_bridge_threads()` into each of those call
+    sites individually would be exactly the "same fix repeated at every
+    call site, drifting apart" risk this project already rejected once
+    for `in_flight_bridge_threads`/`await_bridge_threads` themselves
+    (that design doc's own decision 1).
+
+    Rebinding the *instance's* own `destroy` attribute, not the class
+    method, means every caller that already holds a reference to this
+    exact `window` object — a test's own `finally: window.destroy()`,
+    `_build_menu`'s own "Quit fim" action (now a bare `window.destroy`
+    reference again, no closure of its own needed), or pywebview's own
+    internal shutdown sweep over `webview.windows` — settles first with
+    no change of its own, closing off the whole class of "forgot to
+    settle before destroy" bugs structurally rather than requiring every
+    call site, present or future, to remember it independently.
+
+    Args:
+        window: The window whose own `destroy` method to wrap in place.
+
+    Returns:
+        None. `window.destroy` is reassigned as a side effect.
+    """
+    original_destroy = window.destroy
+
+    def destroy_after_settling() -> None:
+        await_bridge_threads()
+        original_destroy()
+
+    # Deliberate: pywebview's own stubs type `destroy` as a plain bound
+    # method, not a mutable attribute, but `Window` itself has no
+    # `__slots__` (confirmed live) and Python allows shadowing a bound
+    # method with an instance attribute freely; this is exactly that,
+    # not a real type error.
+    window.destroy = destroy_after_settling  # type: ignore[method-assign]
 
 
 def _set_macos_application_name(name: str) -> None:
@@ -3855,10 +3908,18 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     # Settles an in-flight bridge call before the platform's own native
     # close proceeds — real, synchronous, and cross-platform (`_settle_
     # before_close`'s own docstring), but not, on its own, a close from
-    # every reachable path: `_build_menu`'s own "Quit fim" action settles
-    # separately, for the one confirmed real gap this alone does not
-    # cover.
+    # every reachable path: `window.destroy()` does not fire this event
+    # at all on macOS (confirmed live, same docstring), so a direct
+    # `.destroy()` call anywhere still bypasses it.
     created.events.closing += _settle_before_close
+    # `_wrap_destroy_to_settle_first`'s own docstring has the full
+    # reasoning: this closes that remaining gap structurally, for every
+    # direct `.destroy()` caller (there turned out to be many more of
+    # them than the one "Quit fim" menu action design doc `20260912-
+    # claude-sonnet-5-shutdown-bridge-thread-settle-design.md` originally
+    # scoped this to), rather than requiring each one to remember its own
+    # settle call.
+    _wrap_destroy_to_settle_first(created)
     logger.debug("window created (hidden=%s)", hidden)
     return created
 
@@ -3894,20 +3955,13 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     `fim.menu` namespace so no new Python business logic exists anywhere
     in this menu: every item reuses an `Api` method or JS-side screen
     state a screen already tracks — a second entry point into logic
-    that already exists, not new logic. Quit
-    alone needs no JS round trip — `window.destroy()` is a window-level
-    call, not app state — but does settle any in-flight bridge call
-    first (`quit_now`, below): this is the one direct `window.destroy()`
-    call site in the whole module, and `window.destroy()` does not
-    itself reach `create_window`'s own `events.closing` registration on
-    every platform (confirmed live on macOS — design doc `20260912-
-    claude-sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/
-    restricted`), so this settles explicitly rather than relying on it.
+    that already exists, not new logic. Quit alone needs no JS round
+    trip — `window.destroy()` is a window-level call, not app state —
+    and needs no settle wrapper of its own any more either:
+    `create_window`'s own `_wrap_destroy_to_settle_first` already rebinds
+    this exact `window`'s own `destroy` attribute to settle first, so the
+    bare method reference below already does.
     """
-
-    def quit_now() -> None:
-        await_bridge_threads()
-        window.destroy()
 
     def dispatch(script: str) -> Callable[[], None]:
         def call_into_page() -> None:
@@ -3946,7 +4000,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
                 "Reveal output folder", dispatch("fim.menu.revealOutputFolder()")
             ),
             MenuSeparator(),
-            MenuAction("Quit fim", quit_now),
+            MenuAction("Quit fim", window.destroy),
         ],
     )
     # No "Animate" item (`doc/fim-gui-design.md` §5.1): the

@@ -12587,12 +12587,18 @@ that exact class (pywebview's own non-daemon HTTP handler threads);
 `in_flight_bridge_threads`/`await_bridge_threads`, tested below, are the
 structural one for in-flight bridge calls specifically, wired into
 production via `create_window`'s own `events.closing` registration and
-`_build_menu`'s own "Quit fim" wrapper (design doc `20260912-claude-
-sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/restricted`
--- these two functions lived only in `test/gui/conftest.py` before that
-document, moved here in full so production code and the test suite
-share one implementation). The deadman is the backstop for whatever
-leftover thread neither of those catches, which is why its own
+its own `_wrap_destroy_to_settle_first` (design doc `20260912-claude-
+sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/restricted`,
+plus that document's own 2026-09-13 addendum -- these two functions
+lived only in `test/gui/conftest.py` before that document, moved here in
+full so production code and the test suite share one implementation).
+The latter rebinds the window's own `destroy` attribute rather than
+wrapping one caller of it (originally just `_build_menu`'s own "Quit
+fim" action, until the addendum found that call site was not the only
+one that mattered -- `test/gui/` alone has upward of ninety direct
+`.destroy()` calls, one per real window most of the tests below and
+throughout this directory build). The deadman is the backstop for
+whatever leftover thread neither of those catches, which is why its own
 correctness is worth testing directly rather than trusting by
 inspection.
 
@@ -12852,6 +12858,40 @@ Mirrors `await_bridge_threads`'s own existing "deliberately does not
 fail on timeout" contract — a leaked thread is a real defect, but
 this hook's own job is only to give one a real chance to finish, not
 to block a close indefinitely if it never does.
+
+<a id="gui.test_shutdown_deadman.test_a_direct_destroy_call_settles_an_in_flight_bridge_call_first"></a>
+
+#### test\_a\_direct\_destroy\_call\_settles\_an\_in\_flight\_bridge\_call\_first
+
+```python
+@pytest.mark.gui
+def test_a_direct_destroy_call_settles_an_in_flight_bridge_call_first(
+) -> None
+```
+
+`window.destroy()`, called directly — no menu, no `events.closing`
+— still settles an in-flight bridge call first.
+
+The gap the original two-hook design (`20260912-claude-sonnet-5-
+shutdown-bridge-thread-settle-design.md`, `selby/restricted`)
+missed: `events.closing` does not fire for a direct `.destroy()`
+call on macOS at all, and that design scoped the remaining gap to
+exactly one call site (`_build_menu`'s own "Quit fim" action). In
+practice, direct `.destroy()` calls are the overwhelmingly common
+case, not the rare one — `test/gui/` alone has upward of ninety of
+them across roughly twenty files, nearly all of them this exact
+shape: a raw `create_window(...)`, destroyed directly in the test's
+own `finally` block, with no settle step of its own. Confirmed live
+to recur, repeatedly, in a full local `-m gui -n 2` run even after
+the original two-hook fix landed: a real, named `js_bridge_call.
+<locals>._call` thread stranded at interpreter shutdown, several
+times across one evening's own runs.
+
+`create_window`'s own `_wrap_destroy_to_settle_first` rebinds this
+exact window's own `destroy` attribute, so this test calls
+`window.destroy()` exactly the way the other ~90 call sites already
+do — no special API, no awareness of the fix required from any of
+them.
 
 <a id="gui.test_shutdown_deadman.test_the_quit_menu_action_settles_an_in_flight_bridge_call_first"></a>
 
