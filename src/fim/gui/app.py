@@ -853,6 +853,7 @@ class Api:
         on_message: (
             Callable[[runner.RunMessage | batch_runner.BatchMessage], None] | None
         ) = None,
+        on_batch_progress: Callable[[dict[str, object]], None] | None = None,
         preferences_path: Path | None = None,
     ) -> None:
         """Start with no run in flight.
@@ -884,6 +885,24 @@ class Api:
                 Event`/`queue.Queue`, no `evaluate_js` call of the
                 test's own involved) instead of polling the DOM for the
                 same fact.
+            on_batch_progress: Test-only hook, called with `_push_batch_
+                progress`'s own `progress_payload` dict, right after
+                that tick's own `window.evaluate_js(fim.onBatchProgress
+                (...))` push — a batch's own per-generation progress is
+                never a `BatchMessage` (`_drain_batch_messages`'s own
+                docstring: "nothing here is possible... it is entirely
+                file-mediated"), so `on_message` alone cannot observe
+                it. Exists so a test can wait for a specific real
+                condition (commonly: the first tick whose own
+                `payload["statistics"]` is non-empty, guaranteed once
+                two or more replicates have reported) via a `threading.
+                Event`, the same "push, not poll" shape `on_message`
+                already gives a scalar or terminal batch message,
+                without a test-side `window.evaluate_js` poll loop
+                racing this same background thread's own pushes — see
+                `test/gui/test_running_screen.py`'s own module
+                docstring for why that race is a real, previously
+                diagnosed defect, not a theoretical one.
             preferences_path: Where `GuiPreferences` are loaded from and
                 saved to (`fim.gui.preferences`). Defaults to
                 `preferences_file_path()`'s own real, platform-specific
@@ -894,6 +913,7 @@ class Api:
         self._open_folder = open_folder
         self._on_run_started = on_run_started
         self._on_message = on_message
+        self._on_batch_progress = on_batch_progress
         self._preferences_path = (
             preferences_path
             if preferences_path is not None
@@ -1118,6 +1138,7 @@ class Api:
                 self._significant_digits,
                 self.get_live_deme_pair,
                 self._on_message,
+                self._on_batch_progress,
             ),
             daemon=True,
         ).start()
@@ -2977,6 +2998,7 @@ def _push_batch_progress(
     live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
     initial_states: dict[str, ModelState] | None = None,
+    on_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> None:
     """Read every currently-reporting replicate's live state, push a pooled scatter.
 
@@ -3048,6 +3070,9 @@ def _push_batch_progress(
             caller that does not care about paying the one-time
             generation-0 read cost again on every call, such as a test
             exercising a single tick in isolation.
+        on_progress: Test-only hook, called with this tick's own
+            `progress_payload` right after it is pushed to the page —
+            see `Api.__init__`'s own docstring for what it is for.
     """
     if initial_states is None:
         initial_states = {}
@@ -3143,6 +3168,8 @@ def _push_batch_progress(
                 pooled_points, first_deme - 1, second_deme - 1
             )
     window.evaluate_js(f"fim.onBatchProgress({json.dumps(progress_payload)})")
+    if on_progress is not None:
+        on_progress(progress_payload)
 
 
 def _batch_done_payload(
@@ -3287,6 +3314,7 @@ def _drain_batch_messages(
     digits: int = _FORMAT_STATISTIC_DEFAULT_DIGITS,
     live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
     on_message: Callable[[batch_runner.BatchMessage], None] | None = None,
+    on_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> None:
     """Push every `batch_runner.BatchMessage`, polling live progress between them.
 
@@ -3313,6 +3341,8 @@ def _drain_batch_messages(
     straight to `_push_batch_progress` (see its own docstring), never
     to `_batch_done_payload` (Screen 4's own completed-batch selector
     is a separate, on-demand mechanism, `get_batch_deme_pair_panel`).
+    `on_progress` also rides along to `_push_batch_progress`, unchanged
+    every tick — see `Api.__init__`'s own docstring for what it is for.
     """
     started = message_queue.get()
     if started[0] != "started":
@@ -3344,6 +3374,7 @@ def _drain_batch_messages(
                 live_deme_pair,
                 digits,
                 initial_states,
+                on_progress,
             )
             continue
         if message[0] == "done":

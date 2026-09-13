@@ -8022,18 +8022,20 @@ commit 1) appears mid-batch, not only once it finishes.
 
 `_push_batch_progress` needs at least two currently-reporting
 replicates before `reports_summary` defines any interval at all
-(its own docstring) — waits on real `.progress` sidecar files
-reaching that count, Python-side, rather than guessing a wall-clock
+(its own docstring) — waits on `Api`'s own `on_batch_progress` hook
+(`_wait_for_progress_with_statistics`) for the first tick whose own
+`statistics` dict is non-empty, rather than guessing a wall-clock
 delay is enough (this project's own house rule against a
 non-deterministic wait, `feedback_tests_are_functions_of_their_
 commit.md`) or polling the DOM concurrently with the background
-poll thread's own pushes (`_count_replicate_progress_sidecars`'s
-own docstring). Once that count is reached, the *next* poll tick
-(at most `_BATCH_POLL_INTERVAL_SECONDS` later) is guaranteed, by
-construction, to push a non-empty `statistics` dict -- the same
-"wait on the real precondition, not a fixed message count" fix
-`test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run`
-already applied for the analogous scalar-run race.
+poll thread's own pushes (`_wait_for_progress_with_statistics`'s own
+docstring). An earlier version of this test polled `.progress`
+sidecar files for the same fact, then slept a fixed margin before
+reading the DOM once — confirmed live to be not always enough on a
+slower CI runner (two real CI failures, `test_a_live_batch_trajectory
+_legend_toggle_works_mid_run`'s own identical race hit the same run).
+`on_batch_progress` fires only after its own tick's `evaluate_js`
+push has already completed, so no such margin is needed at all here.
 
 Cancels the batch to end the test rather than waiting for it to
 converge (`convergence_window` is set unreachably high specifically
@@ -8063,6 +8065,16 @@ job is narrower: prove the *live* wiring reaches it too, by
 actually clicking a legend item while the batch is still `running`
 and confirming its own `aria-pressed`/class flip without an
 unhandled exception breaking the next real progress push.
+
+Waits on `Api`'s own `on_batch_progress` hook throughout, the same
+"push, not poll" shape `test_a_live_batch_shows_a_trajectory_panel_
+once_two_replicates_report`'s own docstring explains in full — an
+earlier, `.progress`-sidecar-polling-then-fixed-sleep version of
+this test raised a real `JavascriptException` on CI (`querySelector`
+returning `null` — the legend had not rendered yet when the sleep
+ended), confirmed live rather than assumed to be a slower-CI-runner
+instance of the identical race the sibling test above hit in the
+same run.
 
 <a id="gui.test_batch_running.test_set_live_batch_trajectory_initial_point_updates_in_place"></a>
 

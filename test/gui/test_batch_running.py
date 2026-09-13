@@ -27,7 +27,6 @@ import queue
 import threading
 import time
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -175,22 +174,44 @@ def test_start_run_dispatches_a_real_batch_and_pushes_its_done_message() -> None
     assert len(results) == 2
 
 
-def _count_replicate_progress_sidecars(working_directory: Path) -> int:
-    """Count how many replicates have written their own `.progress` sidecar.
+def _wait_for_progress_with_statistics(
+    progress_queue: queue.Queue[dict[str, Any]], timeout: float
+) -> dict[str, Any] | None:
+    """Drain `progress_queue` until a tick with a non-empty `statistics`
+    dict arrives, or `timeout` elapses overall.
 
-    Reads the filesystem directly, Python-side — never `evaluate_js` --
-    so this can be polled in a loop concurrently with `_drain_batch_
-    messages`'s own background poll thread without racing it the way a
-    DOM-polling loop would (this file's own module docstring, and
-    `test/gui/test_running_screen.py`'s identical reasoning for its own
-    `on_message`/`api.get_live_deme_pair()` waits, both record why).
-    Glob-based rather than reconstructing each replicate's own exact
-    directory name (`batch_runner.replicate_output_directory` needs the
-    batch's own deterministic `run_id`, not available to a test driving
-    only the DOM) — `replicate-*` is that helper's own fixed naming
-    scheme either way.
+    Fed by `Api(on_batch_progress=...)` (`app.py`'s own docstring on that
+    hook), which is called *after* that tick's own `window.evaluate_js
+    (fim.onBatchProgress(...))` push already completed — so by the time
+    this function returns, the DOM has already been updated by that
+    exact tick, and a caller's own single, immediately-following
+    `evaluate_js` read needs no additional wait or margin of its own.
+    This is the reason this hook exists at all rather than a Python-side
+    poll of `.progress` sidecar files (an earlier version of this file
+    did that, then slept a fixed margin and hoped the page had caught up
+    — confirmed live, twice, not enough on a slower CI runner) or a
+    DOM-polling loop of the test's own (`test/gui/test_running_screen.
+    py`'s own module docstring: racing `_drain_batch_messages`'s own
+    background `evaluate_js` calls is a real, previously diagnosed
+    defect, not a theoretical one) — push, not poll, all the way through.
+
+    The first few ticks legitimately have empty `statistics`
+    (`_push_batch_progress`'s own docstring: needs two or more
+    currently-reporting replicates before `reports_summary` defines any
+    interval at all), so this drains past those rather than returning
+    the first item unconditionally.
     """
-    return len(list(working_directory.glob("replicate-*/.progress")))
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        try:
+            payload = progress_queue.get(timeout=remaining)
+        except queue.Empty:
+            return None
+        if payload.get("statistics"):
+            return payload
 
 
 def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> None:
@@ -200,18 +221,20 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
 
     `_push_batch_progress` needs at least two currently-reporting
     replicates before `reports_summary` defines any interval at all
-    (its own docstring) — waits on real `.progress` sidecar files
-    reaching that count, Python-side, rather than guessing a wall-clock
+    (its own docstring) — waits on `Api`'s own `on_batch_progress` hook
+    (`_wait_for_progress_with_statistics`) for the first tick whose own
+    `statistics` dict is non-empty, rather than guessing a wall-clock
     delay is enough (this project's own house rule against a
     non-deterministic wait, `feedback_tests_are_functions_of_their_
     commit.md`) or polling the DOM concurrently with the background
-    poll thread's own pushes (`_count_replicate_progress_sidecars`'s
-    own docstring). Once that count is reached, the *next* poll tick
-    (at most `_BATCH_POLL_INTERVAL_SECONDS` later) is guaranteed, by
-    construction, to push a non-empty `statistics` dict -- the same
-    "wait on the real precondition, not a fixed message count" fix
-    `test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run`
-    already applied for the analogous scalar-run race.
+    poll thread's own pushes (`_wait_for_progress_with_statistics`'s own
+    docstring). An earlier version of this test polled `.progress`
+    sidecar files for the same fact, then slept a fixed margin before
+    reading the DOM once — confirmed live to be not always enough on a
+    slower CI runner (two real CI failures, `test_a_live_batch_trajectory
+    _legend_toggle_works_mid_run`'s own identical race hit the same run).
+    `on_batch_progress` fires only after its own tick's `evaluate_js`
+    push has already completed, so no such margin is needed at all here.
 
     Cancels the batch to end the test rather than waiting for it to
     converge (`convergence_window` is set unreachably high specifically
@@ -219,18 +242,17 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
     "Cancel ends the test" precedent `test_running_screen.py`'s own
     Cancel-button test already established.
     """
-    started_event = threading.Event()
     cancelled_event = threading.Event()
-    working_directory_holder: list[Path] = []
+    progress_queue: queue.Queue[dict[str, Any]] = queue.Queue()
 
     def on_message(message: RunMessage | BatchMessage) -> None:
-        if message[0] == "started":
-            started_event.set()
-            working_directory_holder.append(message[1])
         if message[0] in ("done", "cancelled", "error"):
             cancelled_event.set()
 
-    window = create_window(api=Api(on_message=on_message), hidden=True)
+    window = create_window(
+        api=Api(on_message=on_message, on_batch_progress=progress_queue.put),
+        hidden=True,
+    )
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
     def _drive() -> None:
@@ -241,22 +263,10 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
                 + _SET_UNREACHABLE_BATCH_CONVERGENCE
                 + "document.getElementById('run-button').click();"
             )
-            if not started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                outcome.put(None)
-                return
-            working_directory = working_directory_holder[0]
-            reported_enough = False
-            for _ in range(_READY_POLL_ATTEMPTS):
-                if _count_replicate_progress_sidecars(working_directory) >= 2:
-                    reported_enough = True
-                    break
-                time.sleep(_READY_POLL_INTERVAL_SECONDS)
             settled = None
-            if reported_enough:
-                # One real `_BATCH_POLL_INTERVAL_SECONDS` tick (0.5s),
-                # plus margin, guarantees the push this test is waiting
-                # for has already reached the page.
-                time.sleep(1.0)
+            if _wait_for_progress_with_statistics(
+                progress_queue, _EVENT_WAIT_TIMEOUT_SECONDS
+            ):
                 settled = window.evaluate_js(
                     "({"
                     "frameHidden: "
@@ -275,7 +285,7 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, "never saw two replicates report progress in time"
+    assert settled is not None, "never saw a progress push with statistics in time"
     assert settled["frameHidden"] is False
     # All six report statistics, matching the scalar live trajectory's
     # own default (design §6.2: "all six report statistics... each
@@ -299,19 +309,28 @@ def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None:
     actually clicking a legend item while the batch is still `running`
     and confirming its own `aria-pressed`/class flip without an
     unhandled exception breaking the next real progress push.
+
+    Waits on `Api`'s own `on_batch_progress` hook throughout, the same
+    "push, not poll" shape `test_a_live_batch_shows_a_trajectory_panel_
+    once_two_replicates_report`'s own docstring explains in full — an
+    earlier, `.progress`-sidecar-polling-then-fixed-sleep version of
+    this test raised a real `JavascriptException` on CI (`querySelector`
+    returning `null` — the legend had not rendered yet when the sleep
+    ended), confirmed live rather than assumed to be a slower-CI-runner
+    instance of the identical race the sibling test above hit in the
+    same run.
     """
-    started_event = threading.Event()
     cancelled_event = threading.Event()
-    working_directory_holder: list[Path] = []
+    progress_queue: queue.Queue[dict[str, Any]] = queue.Queue()
 
     def on_message(message: RunMessage | BatchMessage) -> None:
-        if message[0] == "started":
-            started_event.set()
-            working_directory_holder.append(message[1])
         if message[0] in ("done", "cancelled", "error"):
             cancelled_event.set()
 
-    window = create_window(api=Api(on_message=on_message), hidden=True)
+    window = create_window(
+        api=Api(on_message=on_message, on_batch_progress=progress_queue.put),
+        hidden=True,
+    )
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
 
     def _drive() -> None:
@@ -322,19 +341,10 @@ def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None:
                 + _SET_UNREACHABLE_BATCH_CONVERGENCE
                 + "document.getElementById('run-button').click();"
             )
-            if not started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
-                outcome.put(None)
-                return
-            working_directory = working_directory_holder[0]
-            reported_enough = False
-            for _ in range(_READY_POLL_ATTEMPTS):
-                if _count_replicate_progress_sidecars(working_directory) >= 2:
-                    reported_enough = True
-                    break
-                time.sleep(_READY_POLL_INTERVAL_SECONDS)
             settled = None
-            if reported_enough:
-                time.sleep(1.0)
+            if _wait_for_progress_with_statistics(
+                progress_queue, _EVENT_WAIT_TIMEOUT_SECONDS
+            ):
                 before = window.evaluate_js(
                     "document.querySelector('#run-trajectory-legend .legend-item')"
                     ".getAttribute('aria-pressed')"
@@ -355,9 +365,18 @@ def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None:
                 # A real, later progress tick must still land cleanly --
                 # proof the toggle did not leave the accumulator/renderer
                 # pair in a broken state a later `onBatchProgress` call
-                # would throw inside.
-                time.sleep(1.0)
-                still_running = window.evaluate_js("window.fim.getRunViewState()")
+                # would throw inside. Any further tick at all proves
+                # this, not only one with a non-empty `statistics` dict
+                # (a replicate finishing early can legitimately make a
+                # later tick's own `statistics` empty again) -- a plain
+                # queue drain, not `_wait_for_progress_with_statistics`.
+                still_running = None
+                try:
+                    progress_queue.get(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
+                except queue.Empty:
+                    pass
+                else:
+                    still_running = window.evaluate_js("window.fim.getRunViewState()")
                 settled = {
                     "before": before,
                     "afterClick": after_click,
@@ -372,7 +391,7 @@ def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None:
     webview.start(_drive)
     settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
 
-    assert settled is not None, "never saw two replicates report progress in time"
+    assert settled is not None, "never saw a progress push with statistics in time"
     assert settled["before"] == "true"
     assert settled["afterClick"]["ariaPressed"] == "false"
     assert "legend-item-hidden" in settled["afterClick"]["className"]

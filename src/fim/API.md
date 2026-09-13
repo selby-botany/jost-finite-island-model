@@ -2927,6 +2927,8 @@ def __init__(*,
              on_message: (
                  Callable[[runner.RunMessage | batch_runner.BatchMessage],
                           None] | None) = None,
+             on_batch_progress: Callable[[dict[str, object]], None]
+             | None = None,
              preferences_path: Path | None = None) -> None
 ```
 
@@ -2960,6 +2962,24 @@ Start with no run in flight.
   Event`/`queue.Queue`, no `evaluate_js` call of the
   test's own involved) instead of polling the DOM for the
   same fact.
+- `on_batch_progress` - Test-only hook, called with `_push_batch_
+  progress`'s own `progress_payload` dict, right after
+  that tick's own `window.evaluate_js(fim.onBatchProgress
+  (...))` push — a batch's own per-generation progress is
+  never a `BatchMessage` (`_drain_batch_messages`'s own
+- `docstring` - "nothing here is possible... it is entirely
+  file-mediated"), so `on_message` alone cannot observe
+  it. Exists so a test can wait for a specific real
+  condition (commonly: the first tick whose own
+  `payload["statistics"]` is non-empty, guaranteed once
+  two or more replicates have reported) via a `threading.
+  Event`, the same "push, not poll" shape `on_message`
+  already gives a scalar or terminal batch message,
+  without a test-side `window.evaluate_js` poll loop
+  racing this same background thread's own pushes — see
+  `test/gui/test_running_screen.py`'s own module
+  docstring for why that race is a real, previously
+  diagnosed defect, not a theoretical one.
 - `preferences_path` - Where `GuiPreferences` are loaded from and
   saved to (`fim.gui.preferences`). Defaults to
   `preferences_file_path()`'s own real, platform-specific
