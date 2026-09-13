@@ -42,6 +42,26 @@ const STATIC_DESTINATION_TO_SCREEN = {
 const railButtons = document.querySelectorAll(".rail-item");
 const configureBackButton = document.getElementById("configure-back-button");
 const configureExampleSelect = document.getElementById("configure-example-select");
+const configureBanner = document.getElementById("configure-banner");
+
+/**
+ * Show (or, given a falsy `message`, hide) Configure's own banner --
+ * the identical `showRunBanner`/`showOpenRunBanner`/`showCompareBanner`
+ * shape every other screen already established, mirrored here rather
+ * than shared, since each screen's own banner element and return target
+ * are otherwise independent. `screens/presets.js`'s own `showExample
+ * LoadNotice` is the first caller from outside this file.
+ * @param {string} message
+ */
+function showConfigureBanner(message) {
+    if (!message) {
+        configureBanner.hidden = true;
+        configureBanner.textContent = "";
+        return;
+    }
+    configureBanner.hidden = false;
+    configureBanner.textContent = message;
+}
 
 // Configure is reachable from nearly everywhere (the rail, the
 // parameter strip, Home's own "Configure a new run"/worked-example
@@ -290,7 +310,14 @@ function wireNavRail() {
         if (!presetId) {
             return;
         }
-        const presetTitle = configureExampleSelect.selectedOptions[0].textContent;
+        // The option's own bare title (`refreshExampleOptions`'s own
+        // `dataset.presetTitle`, `screens/presets.js`), not its visible
+        // `textContent` -- the latter carries a "(view YAML only)"
+        // suffix for the one example this affects, meant for the
+        // pulldown's own label, not to be echoed back inside
+        // `showExampleLoadNotice`'s own message.
+        const presetTitle = configureExampleSelect.selectedOptions[0].dataset
+            .presetTitle;
         configureExampleSelect.value = "";
         await window.fim.applyPreset(presetId, presetTitle);
     });

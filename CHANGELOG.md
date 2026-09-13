@@ -606,6 +606,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `applyPreset` and now-shared option-list builder, and "Back" is the
   identical `screen-help`/`screen-explore`/`screen-compare` return-
   screen contract, extended to Configure.
+- The one built-in worked example this form has no way to represent (a
+  genuinely per-locus `mu` — deliberate, documented scope, `doc/fim-
+  gui-design.md` §6.2, not a bug) is now labeled "(view YAML only)" in
+  every place it can be picked from — both worked-example pulldowns and
+  the full "Load example…" picker — rather than looking identical to
+  the other six until actually picked and failing. Picking it anyway
+  now shows a small, non-blocking inline notice on whichever screen is
+  showing, instead of a blocking native `window.alert`.
 
 ### Changed
 

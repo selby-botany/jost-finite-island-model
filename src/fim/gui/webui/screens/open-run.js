@@ -279,15 +279,21 @@ async function refreshHomeExampleOptions() {
 // already calls) via `window.fim.applyPreset`, so this is genuinely a
 // second entry point to one mechanism, not a second, independent way of
 // loading a preset's values. Only navigates on a successful apply --
-// `applyPreset`'s own rejected-values path already shows an alert, and
-// jumping to Configure on top of that would land on an unchanged form
-// right after telling the user why nothing changed.
+// `applyPreset`'s own rejected-values path already shows an inline
+// notice on this same screen (`showExampleLoadNotice`), and jumping to
+// Configure on top of that would land on an unchanged form right after
+// telling the user why nothing changed.
 homeExampleSelect.addEventListener("change", async () => {
     const presetId = homeExampleSelect.value;
     if (!presetId) {
         return;
     }
-    const presetTitle = homeExampleSelect.selectedOptions[0].textContent;
+    // The option's own bare title (`refreshExampleOptions`'s own
+    // `dataset.presetTitle`), not its visible `textContent` -- the
+    // latter carries a "(view YAML only)" suffix for the one example
+    // this affects, meant for the pulldown's own label, not to be
+    // echoed back inside `showExampleLoadNotice`'s own message.
+    const presetTitle = homeExampleSelect.selectedOptions[0].dataset.presetTitle;
     homeExampleSelect.value = "";
     const applied = await window.fim.applyPreset(presetId, presetTitle);
     if (applied) {

@@ -133,6 +133,48 @@ async function refreshPresetsList() {
 }
 
 /**
+ * Show a small, dismissible, non-modal note that a worked example could
+ * not be applied — `window.alert`'s blocking OS chrome is jarring
+ * mid-exploration for the one built-in example this affects today, an
+ * already-labeled (`refreshExampleOptions`, above), expected limitation
+ * rather than a real error (design doc `20260913-claude-sonnet-5-gui-
+ * worked-example-loadability-design.md`, `selby/restricted`, Option C).
+ * Shown on whichever screen is actually visible when the failure
+ * happens — `home-example-select`/`configure-example-select` are each
+ * reachable from exactly one screen, but the full `modal-presets`
+ * picker this function's other caller closes first is reachable from
+ * any of them (`fim.menu.loadExample`'s own docstring) — rather than a
+ * new, fourth-or-fifth banner element of its own. Every screen
+ * `applyPreset` can actually be reached from already has its own
+ * dedicated `showXBanner` function (`run-view-controls.js`,
+ * `screens/open-run.js`, `screens/nav-rail.js`, `screens/compare.js`)
+ * except Explore (its own banner is managed inline, not through a
+ * reusable function of its own) and Help (no banner element at all) —
+ * this dispatch table is built inside the function body, evaluated only
+ * once actually called, rather than at this script's own top-level
+ * execution: `nav-rail.js`'s own `showConfigureBanner` does not exist
+ * yet at that point, since it loads after this file
+ * (`index.html`'s own `<script>` order).
+ * @param {string} title
+ * @param {string} message
+ */
+function showExampleLoadNotice(title, message) {
+    const banners = {
+        "screen-run": showRunBanner,
+        "screen-open-run": showOpenRunBanner,
+        "screen-configure": showConfigureBanner,
+        "screen-compare": showCompareBanner,
+    };
+    const currentScreenId = document.querySelector(".screen:not([hidden])")?.id;
+    const showBanner = banners[currentScreenId];
+    if (showBanner) {
+        showBanner(`Could not load "${title}": ${message}`);
+    } else {
+        window.alert(`Could not load "${title}": ${message}`);
+    }
+}
+
+/**
  * Apply one preset's own form values, then close the picker -- the
  * identical apply path `loadInitialForm`/"Load YAML…" already use, so a
  * preset is genuinely indistinguishable from having hand-loaded the
@@ -148,7 +190,7 @@ async function applyPreset(presetId, presetTitle) {
     const result = await window.pywebview.api.get_preset_form_values(presetId);
     if (!result.ok) {
         presetsDialog.close();
-        window.alert(`Could not load this example: ${result.message}`);
+        showExampleLoadNotice(presetTitle, result.message);
         return false;
     }
     applyFormValues(result.values);
@@ -204,6 +246,12 @@ async function refreshExampleOptions(selectElement) {
     for (const example of examples) {
         const option = document.createElement("option");
         option.value = example.id;
+        // The option's own bare title, separate from its visible
+        // `textContent` below -- a caller that needs the preset's own
+        // real title (`showExampleLoadNotice`'s own message, via each
+        // `<select>`'s own `change` handler) reads this rather than the
+        // "(view YAML only)" suffix meant for the visible label alone.
+        option.dataset.presetTitle = example.title;
         // `example.loadable` is `false` for the rare built-in example
         // this form has no way to apply at all (design doc `20260913-
         // claude-sonnet-5-gui-worked-example-loadability-design.md`,

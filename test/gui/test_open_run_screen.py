@@ -998,6 +998,58 @@ def test_choosing_a_home_example_applies_it_and_opens_configure(
     assert settled["selectValue"] == ""
 
 
+def test_choosing_the_non_loadable_home_example_shows_an_inline_notice(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The one non-loadable example shows Home's own banner, not an alert,
+    and does not navigate to Configure.
+
+    Design doc `20260913-claude-sonnet-5-gui-worked-example-loadability-
+    design.md` (`selby/restricted`), Option C — the Home-screen
+    counterpart of `test_nav_rail.py`'s own identically named test for
+    Configure's own select. `home-example-select` only navigates on a
+    successful apply (`open-run.js`'s own `change` handler); staying on
+    Home here is the direct proof that branch was not taken.
+    """
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            "window.fim.showOpenRunScreen(); "
+            "setTimeout(async () => { "
+            "await new Promise((resolve) => { "
+            "const check = () => window.__fimHomeExampleOptionsReady "
+            "? resolve() : setTimeout(check, 20); "
+            "check(); "
+            "}); "
+            "const select = document.getElementById('home-example-select'); "
+            "select.selectedIndex = 5; "
+            "select.dispatchEvent(new Event('change')); "
+            "}, 0);"
+        ),
+        read=(
+            "({"
+            "bannerHidden: document.getElementById('open-run-banner').hidden, "
+            "bannerText: document.getElementById('open-run-banner').textContent, "
+            "homeVisible: !document.getElementById('screen-open-run').hidden, "
+            "configureVisible: "
+            "!document.getElementById('screen-configure').hidden"
+            "})"
+        ),
+        is_ready=lambda value: value is not None and value.get("bannerHidden") is False,
+        poll_attempts=500,
+    )
+
+    assert settled["homeVisible"] is True
+    assert settled["configureVisible"] is False
+    assert (
+        'Could not load "Per-base mutation rate across unequal locus lengths"'
+        in settled["bannerText"]
+    )
+    assert "(view YAML only)" not in settled["bannerText"]
+    assert "per-locus mu" in settled["bannerText"]
+
+
 def test_home_example_select_excludes_a_user_saved_preset(
     window: webview.Window,
 ) -> None:

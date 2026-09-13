@@ -385,3 +385,55 @@ def test_choosing_a_configure_example_applies_it_without_leaving_configure(
     # Reset to its own placeholder afterward — the control always reads
     # as an action, never as "currently showing example X."
     assert result["selectValue"] == ""
+
+
+def test_choosing_the_non_loadable_configure_example_shows_an_inline_notice(
+    window: webview.Window,
+) -> None:
+    """The one non-loadable example shows Configure's own banner, not an alert.
+
+    Design doc `20260913-claude-sonnet-5-gui-worked-example-loadability-
+    design.md` (`selby/restricted`), Option C: `window.alert`'s blocking
+    OS chrome replaced with `showExampleLoadNotice`'s own inline,
+    non-modal banner. Index 5 — "Per-base mutation rate across unequal
+    locus lengths" — is the one built-in example
+    `test_every_other_builtin_preset_loads_into_form_values`
+    (`test_app_api.py`) confirms has no form representation; picked by
+    index here for the identical reason other tests in this file pick a
+    specific example by index (a real, checked value, not an arbitrary
+    placeholder). The bare title, not the "(view YAML only)" label
+    text, must appear in the notice — a real regression found live
+    while writing this test, before `refreshExampleOptions`'s own
+    `dataset.presetTitle` existed to separate the two.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("window.fim.showConfigureScreen();")
+        poll_until(
+            "window.__fimConfigureExampleOptionsReady === true",
+            lambda value: value is True,
+        )
+        window.evaluate_js(
+            "(function(){"
+            "var select = document.getElementById('configure-example-select');"
+            "select.selectedIndex = 5;"
+            "select.dispatchEvent(new Event('change'));"
+            "})();"
+        )
+        return poll_until(
+            "({"
+            "bannerHidden: document.getElementById('configure-banner').hidden, "
+            "bannerText: document.getElementById('configure-banner').textContent, "
+            "configureVisible: !document.getElementById('screen-configure').hidden"
+            "})",
+            lambda value: value is not None and value["bannerHidden"] is False,
+        )
+
+    result = _drive(window, steps)
+    assert result["configureVisible"] is True
+    assert (
+        'Could not load "Per-base mutation rate across unequal locus lengths"'
+        in result["bannerText"]
+    )
+    assert "(view YAML only)" not in result["bannerText"]
+    assert "per-locus mu" in result["bannerText"]
