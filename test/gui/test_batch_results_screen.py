@@ -211,15 +211,17 @@ def test_batch_trajectory_domain_keeps_a_uniformly_small_samples_own_band(
 
 
 def test_a_completed_batch_renders_the_run_view() -> None:
-    """A finished two-replicate batch shows a run id, two table rows, and six stat rows.
+    """A finished two-replicate batch shows a run id, two table rows, eight stat rows.
 
-    Every one of the six named statistics gets a `.stats-table` row with
-    a confidence interval in its hover tooltip (`buildCiMeter`/
+    Every one of the six named statistics, plus the two effective-allele
+    rows derived from `H_S`/`H_T` (botanist GUI design doc §7.7,
+    `Api._effective_allele_interval_summary`), gets a `.stats-table` row
+    with a confidence interval in its hover tooltip (`buildCiMeter`/
     `buildOmittedMeter`: a statistic omitted from
     `summary.json` still renders as explicitly omitted, not blank), so
-    `#batch-results-summary-body` always has exactly six `<tr>` children
-    regardless of which, if any, statistics `replicate_summary` actually
-    defined for this particular run.
+    `#batch-results-summary-body` always has exactly eight `<tr>`
+    children regardless of which, if any, statistics `replicate_summary`
+    actually defined for this particular run.
     """
     done_event = threading.Event()
     messages: list[RunMessage | BatchMessage] = []
@@ -279,7 +281,7 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     assert settled["runId"].startswith("run-")
     # Row 0 is the p_0 baseline; rows 1 and 2 are the two replicates.
     assert settled["rowCount"] == 3
-    assert settled["ciBarCount"] == 6
+    assert settled["ciBarCount"] == 8
     # p_0 row: generation=0, outcome="initial".
     first_row = settled["firstRowCells"]
     assert first_row[0] == "0"
@@ -301,6 +303,75 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     # unconditionally hidden the way it used to be (`git blame` this
     # line for the pre-commit-2 assertion, `True`).
     assert settled["trajectoryFrameHidden"] is False
+
+
+def test_a_completed_batchs_own_effective_allele_rows_render() -> None:
+    """The batch summary's own last two rows are the effective-allele readouts.
+
+    Found from a real user's own report: these two rows (botanist GUI
+    design doc §7.7) rendered correctly for a scalar run
+    (`test_running_screen.py`'s own coverage) but were entirely absent
+    from a batch's own Results card — `renderBatchSummary` never called
+    `_effective_allele_interval_summary` at all until this fix.
+    Confirms the real payload (`Api._batch_done_payload`'s own
+    `effectiveAlleles` field, already proven correct as a plain Python
+    call by `test_app_api.py`) actually reaches and renders through the
+    page's own JavaScript, which no Python-only test can check — the
+    same "third link" `test_a_completed_batch_renders_the_run_view`'s
+    own module docstring already establishes for the six rows above
+    these two.
+    """
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                settled = window.evaluate_js(
+                    "(function() {"
+                    "var rows = document.querySelectorAll("
+                    "'#batch-results-summary-body tr');"
+                    "var within = rows[rows.length - 2];"
+                    "var total = rows[rows.length - 1];"
+                    "return {"
+                    "rowCount: rows.length, "
+                    "withinHtml: within.innerHTML, "
+                    "withinTooltip: within.title, "
+                    "totalHtml: total.innerHTML"
+                    "};"
+                    "})()"
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, (
+        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s"
+    )
+    assert settled["rowCount"] == 8
+    assert "<sup>H</sup>D<sub>S</sub>" in settled["withinHtml"]
+    assert "<sup>H</sup>D<sub>T</sub>" in settled["totalHtml"]
+    # The same cross-replicate-uncertainty caption every other batch
+    # summary row's own tooltip already states (`buildCiMeter`'s own
+    # `ciCaption`) -- these two rows are confidence intervals too, not
+    # a plain point value the way the scalar view's own identically
+    # labeled rows are.
+    assert "uncertainty across 2 independent replicates" in settled["withinTooltip"]
 
 
 def test_a_completed_batch_hides_the_reanalyze_controls() -> None:

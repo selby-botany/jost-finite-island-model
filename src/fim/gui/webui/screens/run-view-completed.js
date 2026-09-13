@@ -38,6 +38,19 @@
 
 const STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"];
 
+// The two effective-allele rows (botanist GUI design doc §7.7), shared
+// between the scalar completed view's own `renderEffectiveAlleles` and
+// the batch summary's own `renderBatchSummary` below -- one label
+// source, not two independently retyped strings that could drift apart.
+// `<sup>H</sup>D<sub>S</sub>`/`<sup>H</sup>D<sub>T</sub>` matches the
+// differentiation-measures guide's own notation (`doc/jost-
+// differentiation-measures.md`) for the effective number of alleles
+// derived from `H_S`/`H_T` via `{}^{H}D = 1/(1-H)`.
+const EFFECTIVE_ALLELE_LABELS = [
+    ["<sup>H</sup>D<sub>S</sub>", "H_S"],
+    ["<sup>H</sup>D<sub>T</sub>", "H_T"],
+];
+
 // A fixed, colorblind-safe qualitative palette (Okabe-Ito), one color
 // per named statistic — botanist GUI design doc §11.3's own "disciplined
 // statistic color language" is not otherwise built yet; this is a
@@ -221,14 +234,9 @@ function renderEffectiveAlleles(effectiveAlleles) {
         gStCautionNote.hidden = true;
         return;
     }
-    applyStatRow(
-        neSRow,
-        buildPointMeter("<sup>H</sup>D<sub>S</sub>", effectiveAlleles.H_S)
-    );
-    applyStatRow(
-        neTRow,
-        buildPointMeter("<sup>H</sup>D<sub>T</sub>", effectiveAlleles.H_T)
-    );
+    const [[withinLabel, withinKey], [totalLabel, totalKey]] = EFFECTIVE_ALLELE_LABELS;
+    applyStatRow(neSRow, buildPointMeter(withinLabel, effectiveAlleles[withinKey]));
+    applyStatRow(neTRow, buildPointMeter(totalLabel, effectiveAlleles[totalKey]));
     gStCautionNote.hidden = !effectiveAlleles.gStCaution;
 }
 
@@ -1151,15 +1159,33 @@ function renderDifferentiationQ(report) {
     drawDifferentiationQCurve(canvas, points);
 }
 
-function renderBatchSummary(summary) {
-    // `summary` defaults to `{}` rather than requiring every caller to
-    // guard it: every real push carries it (`onBatchDone`'s own
-    // payload, `_push_batch_progress`'s own `statistics` field), but a
+/**
+ * Render the batch summary's six named-statistic rows, plus the same
+ * two effective-allele rows (botanist GUI design doc §7.7) the scalar
+ * completed view's own `renderEffectiveAlleles` shows beside `H_S`/
+ * `H_T` — `effectiveAlleles`'s own two entries are already the
+ * equivalent cross-replicate confidence interval
+ * (`Api._effective_allele_interval_summary`), not a second, separately
+ * computed point value, so this reuses `buildCiMeter`/`buildOmittedMeter`
+ * exactly like the six rows above them.
+ *
+ * @param {Record<string, object>|undefined} summary
+ * @param {{H_S: object, H_T: object, gStCaution: boolean}|undefined} effectiveAlleles
+ */
+function renderBatchSummary(summary, effectiveAlleles) {
+    // `summary`/`effectiveAlleles` default to `{}` rather than requiring
+    // every caller to guard them: every real "done" push carries both
+    // (`_batch_done_payload`'s own fields), but `_push_batch_progress`'s
+    // own live-tick payload carries only `statistics` (this same
+    // transform is never computed mid-batch, mirroring the scalar run's
+    // own "only a finished run gets this readout" scope) and a
     // synthetic/partial test payload calling `onBatchProgress` directly
     // for unrelated coverage (`test_input_screen.py`'s own high-water-
-    // mark test is exactly this shape) should render every statistic
-    // as "omitted" rather than throwing trying to read `undefined[name]`.
+    // mark test is exactly this shape) supplies neither — every row
+    // renders as "omitted" rather than throwing trying to read
+    // `undefined[name]`.
     const rows = summary || {};
+    const effectiveRows = effectiveAlleles || {};
     batchResultsSummary.replaceChildren();
     for (const name of STATISTIC_NAMES) {
         const interval = rows[name];
@@ -1171,6 +1197,17 @@ function renderBatchSummary(summary) {
         applyStatRow(row, cells);
         batchResultsSummary.appendChild(row);
     }
+    for (const [label, key] of EFFECTIVE_ALLELE_LABELS) {
+        const interval = effectiveRows[key];
+        const cells =
+            interval === undefined
+                ? buildOmittedMeter(label, OMITTED_SUMMARY_TEXT)
+                : buildCiMeter(label, interval);
+        const row = document.createElement("tr");
+        applyStatRow(row, cells);
+        batchResultsSummary.appendChild(row);
+    }
+    gStCautionNote.hidden = !effectiveRows.gStCaution;
 }
 
 /**
@@ -1560,7 +1597,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     // is nothing to increment here for that branch.
     if (isBatch) {
         resultsOutcome.textContent = "";
-        renderBatchSummary(payload.summary);
+        renderBatchSummary(payload.summary, payload.effectiveAlleles);
         renderBatchTable(payload.replicates, payload.p0Statistics);
         // A batch's own completed scrubber replays the pooled scatter
         // across replicates, generation by generation

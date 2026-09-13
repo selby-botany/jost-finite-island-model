@@ -765,6 +765,23 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   derived from `H_S`/`H_T`, `1/(1-H)`. Matches this same statistics
   panel's own established convention of rendering a name's `_`-suffix
   as a real subscript rather than spelling out what a statistic means.
+  A batch's own Results card (`n_replicates` greater than one) never
+  showed these two rows at all — found immediately after the relabel,
+  from a real user's own comparison of the scalar and batch views.
+  `renderBatchSummary`'s own six-row batch summary table now carries
+  the identical two rows too, each the cross-replicate confidence
+  interval for its own statistic (`Api._effective_allele_interval_
+  summary`, the batch counterpart of the scalar transform above) rather
+  than a single point. Building this surfaced a real, previously
+  unexercised crash: `replicate_summary`'s own Student's-t interval is
+  symmetric and knows nothing about `H_S`/`H_T`'s own true `[0, 1)`
+  domain, so a small, high-variance batch (confirmed live with as few
+  as two replicates) can produce a `low`/`high` edge at or past `1.0`,
+  which `effective_allele_count` rejects outright — `Api._clamped_
+  effective_allele_count` now clamps each interval edge to that domain
+  before the transform, the identical "the true value cannot lie
+  outside a statistic's own known range" reasoning already applied
+  elsewhere in this codebase, just newly needed here.
 
 ### Removed
 

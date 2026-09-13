@@ -359,6 +359,124 @@ def _effective_allele_summary(
     }
 
 
+# `replicate_summary`'s own Student's-t interval is symmetric around the
+# sample mean and knows nothing about `H_S`/`H_T`'s own true domain
+# (`effective_allele_count`'s own docstring: a real number in `[0, 1)`,
+# never `1.0` exactly) -- a small, high-variance sample can genuinely
+# produce a `low`/`high` edge outside that domain, the identical "wild
+# band" `computeBatchTrajectoryValueDomain`'s own docstring already
+# documents for `D` (a thin-sample tail reaching `low: -2.98, high:
+# 3.54` for a statistic that never otherwise leaves roughly `[0, 1]`).
+# `effective_allele_count` raises outright rather than accepting such a
+# value — confirmed live, a real 2-replicate batch's own `H_S` interval
+# reached a `high` at or past `1.0`, crashing `_drain_batch_messages`'s
+# own background thread the first time this function was exercised
+# against a genuine batch rather than a hand-built interval. `H_S`/`H_T`
+# cannot actually lie outside `[0, 1)` regardless of what the interval's
+# own symmetric formula computed, so clamping each endpoint to that
+# domain before the transform reports the best still-honest reading
+# available for an admittedly poorly-estimated interval, not a
+# fabricated number the transform was never defined for.
+_EFFECTIVE_ALLELE_UPPER_BOUND: Final = 1.0 - 1e-9
+
+
+def _clamped_effective_allele_count(heterozygosity_value: float) -> float:
+    """`effective_allele_count`, after clamping its own input to `[0, 1)`.
+
+    See `_EFFECTIVE_ALLELE_UPPER_BOUND`'s own comment for why this
+    clamp exists. Only `_effective_allele_interval_summary`'s own
+    `low`/`high` interval edges ever need it in practice
+    (`replicate_summary`'s own interval construction is symmetric and
+    domain-unaware); a real report's own `H_S`/`H_T` — and therefore an
+    interval's own `mean`, an average of such values — is already a
+    valid heterozygosity by construction, so clamping it here too is
+    purely defensive, never expected to change the result.
+    """
+    return effective_allele_count(
+        min(max(heterozygosity_value, 0.0), _EFFECTIVE_ALLELE_UPPER_BOUND)
+    )
+
+
+def _effective_allele_interval_summary(
+    raw_summary: Mapping[str, Mapping[str, Any]], digits: int
+) -> dict[str, Any]:
+    """Return `H_S`/`H_T`'s own effective-allele-count confidence interval, batch case.
+
+    The batch counterpart to `_effective_allele_summary` immediately
+    above (a single run's own point transform): `raw_summary` is
+    `replicate_summary`'s own per-statistic cross-replicate confidence
+    interval — or `{}`, this module's own established stand-in for "too
+    few results to define one" (`_batch_done_payload`'s own docstring,
+    `summary`). `H_S`/`H_T` are always either both present or both
+    absent (`replicate_summary`'s own docstring: unlike `G_ST`, every
+    replicate's `H_S`/`H_T` are always defined floats), so checking one
+    for absence is a complete check for both.
+
+    The transform (`_clamped_effective_allele_count`, `1 / (1 - H)`
+    after clamping to `H`'s own domain — see that function's own
+    docstring for why the clamp is necessary at all) is applied directly
+    to each interval's own `mean`/`low`/`high`. Clamping aside, the
+    transform is strictly increasing over `H`'s own domain, so it
+    carries an interval's own ordering (and, for an edge that did not
+    need clamping, its own exact confidence coverage) across the
+    transform. `sample_count` is copied unchanged; `half_width`/
+    `sample_std` are deliberately not carried across the transform at
+    all — an `H`-scale plus-or-minus does not become the equivalent
+    `D`-scale plus-or-minus by simple carry-over — so `_interval_payload`
+    omits both here exactly like it already does for an interval that
+    came from `fim.engine._bootstrap_interval`.
+
+    Args:
+        raw_summary: `replicate_summary`'s own return value (or `{}`).
+        digits: The GUI's own configured display precision.
+
+    Returns:
+        `{}` if `raw_summary` has no `"H_S"` (equivalently `"H_T"`);
+        otherwise `{"H_S": <interval payload>, "H_T": <interval
+        payload>, "gStCaution": <bool>}` — the same shape
+        `_effective_allele_summary` returns for a scalar run, with each
+        readout an interval rather than a single point.
+    """
+    within_interval = raw_summary.get("H_S")
+    total_interval = raw_summary.get("H_T")
+    if within_interval is None or total_interval is None:
+        return {}
+    return {
+        "H_S": _interval_payload(
+            {
+                "mean": _clamped_effective_allele_count(
+                    cast("float", within_interval["mean"])
+                ),
+                "low": _clamped_effective_allele_count(
+                    cast("float", within_interval["low"])
+                ),
+                "high": _clamped_effective_allele_count(
+                    cast("float", within_interval["high"])
+                ),
+                "sample_count": within_interval["sample_count"],
+            },
+            digits,
+        ),
+        "H_T": _interval_payload(
+            {
+                "mean": _clamped_effective_allele_count(
+                    cast("float", total_interval["mean"])
+                ),
+                "low": _clamped_effective_allele_count(
+                    cast("float", total_interval["low"])
+                ),
+                "high": _clamped_effective_allele_count(
+                    cast("float", total_interval["high"])
+                ),
+                "sample_count": total_interval["sample_count"],
+            },
+            digits,
+        ),
+        "gStCaution": cast("float", within_interval["mean"])
+        > _EFFECTIVE_ALLELE_CAUTION_THRESHOLD,
+    }
+
+
 def _sigma_band_payload(manifest: RunManifest, digits: int) -> dict[str, Any] | None:
     """Build the trajectory panel's own client-ready within-run sigma-band payload.
 
@@ -3204,6 +3322,13 @@ def _batch_done_payload(
     something this bridge treats as a real error partway through an
     otherwise-successful batch.
 
+    `effectiveAlleles` is `_effective_allele_interval_summary`'s own
+    result — `summary`'s own `H_S`/`H_T` intervals, transformed to the
+    effective-number-of-alleles scale (design doc §7.7, the same
+    transform a scalar run's own `effectiveAlleles` payload already
+    applies to a single point) — empty (`{}`) exactly when `summary`
+    itself has no `"H_S"` entry, for the identical reason.
+
     `digits` is `_drain_batch_messages`'s own snapshot of `Api.
     _significant_digits`, taken when the batch's own background thread
     started — matching `_drain_run_messages`'s identical "started, not
@@ -3262,6 +3387,7 @@ def _batch_done_payload(
         name: _interval_payload(interval, digits)
         for name, interval in raw_summary.items()
     }
+    effective_alleles = _effective_allele_interval_summary(raw_summary, digits)
     p0_state = generate_initial_state(params)
     p0_report = report_for_state(
         p0_state,
@@ -3299,6 +3425,7 @@ def _batch_done_payload(
         ),
         "replicates": replicates,
         "summary": summary,
+        "effectiveAlleles": effective_alleles,
         "demeCount": params.d,
         "p0Statistics": p0_statistics,
         "pooledConvergenceHistories": pooled_convergence_histories_payload,

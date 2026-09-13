@@ -17,6 +17,7 @@ import webbrowser
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -790,6 +791,84 @@ def test_effective_allele_summary_caution_flag_only_above_the_threshold() -> Non
     assert above["gStCaution"] is True
 
 
+def _interval(
+    mean: float, low: float, high: float, sample_count: int = 5
+) -> dict[str, Any]:
+    """A minimal `ConfidenceInterval`-shaped mapping for the tests below.
+
+    No `half_width`/`sample_std` keys — `_effective_allele_interval_
+    summary`'s own docstring explains why the transform deliberately
+    never carries either across; a plain `dict` without them exercises
+    exactly the shape that function actually builds.
+    """
+    return {"mean": mean, "low": low, "high": high, "sample_count": sample_count}
+
+
+def test_effective_allele_interval_summary_matches_the_closed_form_directly() -> None:
+    """`mean`/`low`/`high` each equal `effective_allele_count` applied directly."""
+    raw_summary = {
+        "H_S": _interval(0.5, 0.4, 0.6),
+        "H_T": _interval(0.7, 0.6, 0.8),
+    }
+
+    summary = app_module._effective_allele_interval_summary(raw_summary, digits=6)
+
+    assert summary["H_S"]["mean"] == format_statistic(effective_allele_count(0.5), 6)
+    assert summary["H_S"]["low"] == format_statistic(effective_allele_count(0.4), 6)
+    assert summary["H_S"]["high"] == format_statistic(effective_allele_count(0.6), 6)
+    assert summary["H_S"]["sampleCount"] == 5
+    assert summary["H_T"]["mean"] == format_statistic(effective_allele_count(0.7), 6)
+    # The transform never carries a `ConfidenceInterval`'s own
+    # `halfWidth`/`sampleStd` across (an `H`-scale plus-or-minus is not
+    # the equivalent `D`-scale one) -- `_interval_payload` omits both
+    # wherever `sample_std` is absent from its input, exactly like this
+    # transform's own output.
+    assert "halfWidth" not in summary["H_S"]
+    assert "sampleStd" not in summary["H_S"]
+
+
+def test_effective_allele_interval_summary_is_empty_for_too_few_replicates() -> None:
+    """`{}` in, `{}` out — the same "omitted" stand-in `summary` itself uses."""
+    assert app_module._effective_allele_interval_summary({}, digits=3) == {}
+
+
+def test_effective_allele_interval_summary_clamps_an_out_of_range_edge() -> None:
+    """A wide, small-sample interval edge outside `H`'s own `[0, 1)` domain is
+    clamped rather than crashing `effective_allele_count`.
+
+    Found live: a real 2-replicate batch's own `H_S` interval reached a
+    `high` at or past `1.0` (`replicate_summary`'s own Student's-t
+    interval is symmetric and domain-unaware, the identical "wild band"
+    `computeBatchTrajectoryValueDomain`'s own docstring already
+    documents for `D`), crashing `_drain_batch_messages`'s own
+    background thread before `_clamped_effective_allele_count` existed.
+    """
+    raw_summary = {
+        "H_S": _interval(0.5, -0.4, 1.4),
+        "H_T": _interval(0.5, -0.4, 1.4),
+    }
+
+    summary = app_module._effective_allele_interval_summary(raw_summary, digits=6)
+
+    # `low` clamped to 0.0, `high` clamped to just under 1.0 -- both
+    # transform to a finite, if extreme, number rather than raising.
+    assert summary["H_S"]["low"] == format_statistic(effective_allele_count(0.0), 6)
+    assert float(summary["H_S"]["high"]) > 1e8
+
+
+def test_effective_allele_interval_summary_caution_flag_only_above_threshold() -> None:
+    """`gStCaution` fires only once `H_S`'s own interval mean exceeds the cutover."""
+    below = app_module._effective_allele_interval_summary(
+        {"H_S": _interval(0.5, 0.4, 0.6), "H_T": _interval(0.9, 0.8, 0.95)}, digits=3
+    )
+    above = app_module._effective_allele_interval_summary(
+        {"H_S": _interval(0.9, 0.8, 0.95), "H_T": _interval(0.95, 0.9, 0.97)}, digits=3
+    )
+
+    assert below["gStCaution"] is False
+    assert above["gStCaution"] is True
+
+
 def test_sigma_band_payload_returns_none_when_the_run_requested_no_band(
     tmp_path: Path,
 ) -> None:
@@ -1261,6 +1340,34 @@ def test_batch_done_payload_summary_matches_replicate_summary(
         # `selby/restricted`).
         assert summary[name]["halfWidth"] == format_statistic(interval["half_width"])
         assert summary[name]["sampleStd"] == format_statistic(interval["sample_std"])
+
+
+def test_batch_done_payload_effective_alleles_matches_the_interval_transform(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+    batch_results: tuple[RunResult, ...],
+) -> None:
+    """`effectiveAlleles` is `_effective_allele_interval_summary`'s own
+    result, applied to this same batch's own `replicate_summary` — not a
+    second, independently computed value.
+
+    The Results card's own batch summary table gained these two rows
+    (botanist GUI design doc §7.7) after a real user found them missing
+    for `n_replicates` greater than one — until then, the transform
+    only ever ran for a scalar run's own single point.
+    """
+    run_id = deterministic_run_id(batch_params)
+
+    payload = app_module._batch_done_payload(
+        batch_params, run_id, tmp_path, batch_results
+    )
+
+    default_digits = app_module._FORMAT_STATISTIC_DEFAULT_DIGITS
+    expected = app_module._effective_allele_interval_summary(
+        replicate_summary(batch_results), digits=default_digits
+    )
+    assert payload["effectiveAlleles"] == expected
+    assert set(expected) == {"H_S", "H_T", "gStCaution"}
 
 
 def test_batch_done_payload_pools_every_replicate_final_state(

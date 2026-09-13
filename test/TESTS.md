@@ -6372,6 +6372,58 @@ def test_effective_allele_summary_caution_flag_only_above_the_threshold(
 
 `gStCaution` fires only once H_S exceeds the documented cutover.
 
+<a id="gui.test_app_api.test_effective_allele_interval_summary_matches_the_closed_form_directly"></a>
+
+#### test\_effective\_allele\_interval\_summary\_matches\_the\_closed\_form\_directly
+
+```python
+def test_effective_allele_interval_summary_matches_the_closed_form_directly(
+) -> None
+```
+
+`mean`/`low`/`high` each equal `effective_allele_count` applied directly.
+
+<a id="gui.test_app_api.test_effective_allele_interval_summary_is_empty_for_too_few_replicates"></a>
+
+#### test\_effective\_allele\_interval\_summary\_is\_empty\_for\_too\_few\_replicates
+
+```python
+def test_effective_allele_interval_summary_is_empty_for_too_few_replicates(
+) -> None
+```
+
+`{}` in, `{}` out — the same "omitted" stand-in `summary` itself uses.
+
+<a id="gui.test_app_api.test_effective_allele_interval_summary_clamps_an_out_of_range_edge"></a>
+
+#### test\_effective\_allele\_interval\_summary\_clamps\_an\_out\_of\_range\_edge
+
+```python
+def test_effective_allele_interval_summary_clamps_an_out_of_range_edge(
+) -> None
+```
+
+A wide, small-sample interval edge outside `H`'s own `[0, 1)` domain is
+clamped rather than crashing `effective_allele_count`.
+
+Found live: a real 2-replicate batch's own `H_S` interval reached a
+`high` at or past `1.0` (`replicate_summary`'s own Student's-t
+interval is symmetric and domain-unaware, the identical "wild band"
+`computeBatchTrajectoryValueDomain`'s own docstring already
+documents for `D`), crashing `_drain_batch_messages`'s own
+background thread before `_clamped_effective_allele_count` existed.
+
+<a id="gui.test_app_api.test_effective_allele_interval_summary_caution_flag_only_above_threshold"></a>
+
+#### test\_effective\_allele\_interval\_summary\_caution\_flag\_only\_above\_threshold
+
+```python
+def test_effective_allele_interval_summary_caution_flag_only_above_threshold(
+) -> None
+```
+
+`gStCaution` fires only once `H_S`'s own interval mean exceeds the cutover.
+
 <a id="gui.test_app_api.test_sigma_band_payload_returns_none_when_the_run_requested_no_band"></a>
 
 #### test\_sigma\_band\_payload\_returns\_none\_when\_the\_run\_requested\_no\_band
@@ -6778,6 +6830,25 @@ def test_batch_done_payload_summary_matches_replicate_summary(
 The same "the client never reimplements Python's own display
 formatting" rule every other statistic this bridge sends the page
 already follows.
+
+<a id="gui.test_app_api.test_batch_done_payload_effective_alleles_matches_the_interval_transform"></a>
+
+#### test\_batch\_done\_payload\_effective\_alleles\_matches\_the\_interval\_transform
+
+```python
+def test_batch_done_payload_effective_alleles_matches_the_interval_transform(
+        tmp_path: Path, batch_params: SimulationParams,
+        batch_results: tuple[RunResult, ...]) -> None
+```
+
+`effectiveAlleles` is `_effective_allele_interval_summary`'s own
+result, applied to this same batch's own `replicate_summary` — not a
+second, independently computed value.
+
+The Results card's own batch summary table gained these two rows
+(botanist GUI design doc §7.7) after a real user found them missing
+for `n_replicates` greater than one — until then, the transform
+only ever ran for a scalar run's own single point.
 
 <a id="gui.test_app_api.test_batch_done_payload_pools_every_replicate_final_state"></a>
 
@@ -7482,15 +7553,40 @@ written to guard against a return of that regression.
 def test_a_completed_batch_renders_the_run_view() -> None
 ```
 
-A finished two-replicate batch shows a run id, two table rows, and six stat rows.
+A finished two-replicate batch shows a run id, two table rows, eight stat rows.
 
-Every one of the six named statistics gets a `.stats-table` row with
-a confidence interval in its hover tooltip (`buildCiMeter`/
+Every one of the six named statistics, plus the two effective-allele
+rows derived from `H_S`/`H_T` (botanist GUI design doc §7.7,
+`Api._effective_allele_interval_summary`), gets a `.stats-table` row
+with a confidence interval in its hover tooltip (`buildCiMeter`/
 `buildOmittedMeter`: a statistic omitted from
 `summary.json` still renders as explicitly omitted, not blank), so
-``batch`-results-summary-body` always has exactly six `<tr>` children
-regardless of which, if any, statistics `replicate_summary` actually
-defined for this particular run.
+``batch`-results-summary-body` always has exactly eight `<tr>`
+children regardless of which, if any, statistics `replicate_summary`
+actually defined for this particular run.
+
+<a id="gui.test_batch_results_screen.test_a_completed_batchs_own_effective_allele_rows_render"></a>
+
+#### test\_a\_completed\_batchs\_own\_effective\_allele\_rows\_render
+
+```python
+def test_a_completed_batchs_own_effective_allele_rows_render() -> None
+```
+
+The batch summary's own last two rows are the effective-allele readouts.
+
+Found from a real user's own report: these two rows (botanist GUI
+design doc §7.7) rendered correctly for a scalar run
+(`test_running_screen.py`'s own coverage) but were entirely absent
+from a batch's own Results card — `renderBatchSummary` never called
+`_effective_allele_interval_summary` at all until this fix.
+Confirms the real payload (`Api._batch_done_payload`'s own
+`effectiveAlleles` field, already proven correct as a plain Python
+call by `test_app_api.py`) actually reaches and renders through the
+page's own JavaScript, which no Python-only test can check — the
+same "third link" `test_a_completed_batch_renders_the_run_view`'s
+own module docstring already establishes for the six rows above
+these two.
 
 <a id="gui.test_batch_results_screen.test_a_completed_batch_hides_the_reanalyze_controls"></a>
 
