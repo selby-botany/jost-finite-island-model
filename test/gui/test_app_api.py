@@ -2723,6 +2723,13 @@ def test_get_about_info_names_the_installed_version() -> None:
     assert "AGPL" in info["license"]
     assert info["organization"] == "Marie Selby Botanical Gardens"
     assert info["organization_url"] == "https://selby.org/botany/"
+    assert info["copyright_year"] == "2026"
+    # `LICENSE.md`'s own branding-exclusion section, disclosed here
+    # rather than left for a reader to assume the whole distribution --
+    # orchid mark included -- is as freely licensed as `license` alone
+    # would suggest.
+    assert "Marie Selby Botanical Gardens" in info["branding_note"]
+    assert "not covered by this license" in info["branding_note"]
 
 
 # --- _save_dialog_path ---

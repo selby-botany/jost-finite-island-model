@@ -2838,14 +2838,34 @@ class Api:
         alongside the reserved orchid mark (`branding/selby-orchid-logo.
         jpeg`, exposed to the web UI through its `assets/` link) that
         `screens/config-modals.js`'s own `modal-about`
-        renders, not text-only attribution.
+        renders as a copyright notice, not a "built for" credit: the
+        orchid mark and the Selby name are exactly the "Branding
+        Materials" `LICENSE.md`'s own branding-exclusion section
+        reserves, all rights, separately from the AGPLv3+ code below —
+        `copyright_year` matches `LICENSE.md`'s own copyright line and
+        needs updating alongside it if that year is ever renewed.
+        `branding_note` states that exclusion plainly next to the code
+        license, rather than leaving a reader to assume the whole
+        distribution (mark included) is as freely licensed as the code
+        actually is.
+
+        `license` itself still names only the code's own license
+        (AGPLv3+, still exactly accurate for every file `LICENSE.md`'s
+        own branding exclusion does not carve out) — `branding_note` is
+        the one place that exclusion is disclosed, not a correction to
+        this field.
         """
         return {
             "version": fim_version,
             "repository": _REPOSITORY_URL,
             "license": "GNU Affero General Public License v3 or later (AGPLv3+)",
+            "branding_note": (
+                "The Marie Selby Botanical Gardens name and orchid mark are "
+                "proprietary and reserved — not covered by this license."
+            ),
             "organization": "Marie Selby Botanical Gardens",
             "organization_url": "https://selby.org/botany/",
+            "copyright_year": "2026",
         }
 
 

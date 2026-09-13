@@ -524,11 +524,20 @@ whenApiReady(wireSigmaBandSeedDefault);
  * attribute uses `target="_blank"`: an unhandled click inside this
  * pywebview window can navigate the whole application window away from
  * `index.html` rather than open a new tab.
+ *
+ * `branding_note` and `copyright_year` (below the license line and
+ * beside the organization link, respectively) disclose `LICENSE.md`'s
+ * own branding exclusion -- the Selby name and orchid mark are
+ * proprietary, separately from the AGPLv3+ code -- rather than leaving
+ * a reader to assume the whole distribution is as freely licensed as
+ * `about-license`'s own line alone would suggest.
  */
 window.fim.showAboutModal = async function showAboutModal() {
     const info = await window.pywebview.api.get_about_info();
     document.getElementById("about-version").textContent = info.version;
     document.getElementById("about-license").textContent = info.license;
+    document.getElementById("about-branding-note").textContent = info.branding_note;
+    document.getElementById("about-copyright-year").textContent = info.copyright_year;
     const organizationLink = document.getElementById("about-organization-link");
     organizationLink.textContent = info.organization;
     organizationLink.dataset.fimAboutExternal = info.organization_url;

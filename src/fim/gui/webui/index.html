@@ -1258,15 +1258,25 @@
   </dialog>
 
   <!-- "About fim" (Help menu, `fim.menu.about()`): the application
-       name/expansion, installed version, license, and attribution to
-       Marie Selby Botanical Gardens -- the institution this simulator
-       was built for -- alongside its orchid mark. `screens/config-
-       modals.js`'s own `showAboutModal` fills every `about-*` element
-       from `Api.get_about_info()` each time it opens, so a rebuilt
-       `fim` with a new `version.txt` never needs this markup touched.
-       Uses `wireModal` (app.js) like `modal-presets`, not the native-
-       form pattern `modal-save-preset` uses: nothing here is submitted,
-       only dismissed. -->
+       name/expansion, installed version, license, and a copyright
+       notice for Marie Selby Botanical Gardens -- the institution this
+       simulator was built for -- alongside its orchid mark.
+       `about-license`/`about-branding-note` between them disclose
+       `LICENSE.md`'s own two-part shape: the code is AGPLv3+, but the
+       Selby name and orchid mark are separately reserved branding
+       assets, not covered by that license -- shown as its own line
+       rather than folded into `about-license`, so a reader who only
+       skims the bold license name still sees the exception stated
+       plainly. `screens/config-modals.js`'s own `showAboutModal` fills
+       every `about-*` element from `Api.get_about_info()` each time it
+       opens, so a rebuilt `fim` with a new `version.txt` never needs
+       this markup touched. Uses `wireModal` (app.js) like `modal-
+       presets`, not the native-form pattern `modal-save-preset` uses:
+       nothing here is submitted, only dismissed. The Close button
+       carries `autofocus`: without it, `showModal()`'s own default --
+       focus the first focusable element in DOM order -- lands on the
+       organization link below, showing a focus ring around a link the
+       keyboard user never actually chose, confirmed live. -->
   <dialog class="config-modal" id="modal-about">
     <p class="brand-eyebrow">Marie Selby Botanical Gardens</p>
     <div class="about-header">
@@ -1282,9 +1292,10 @@
     </div>
     <p>Version <span id="about-version"></span></p>
     <p id="about-license"></p>
+    <p class="hint" id="about-branding-note"></p>
     <p>
-      Built for
-      <a href="#" id="about-organization-link" data-fim-about-external=""></a>.
+      © <span id="about-copyright-year"></span>
+      <a href="#" id="about-organization-link" data-fim-about-external=""></a>
     </p>
     <p>
       <a href="#" id="about-repository-link" data-fim-about-external="">
@@ -1292,7 +1303,13 @@
       </a>
     </p>
     <div class="actions">
-      <button type="button" class="modal-close" data-modal-close tabindex="0">Close</button>
+      <button
+        type="button"
+        class="modal-close"
+        data-modal-close
+        tabindex="0"
+        autofocus
+      >Close</button>
     </div>
   </dialog>
 

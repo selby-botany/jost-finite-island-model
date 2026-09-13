@@ -4335,7 +4335,22 @@ Gardens, the institution this simulator was built for — shown
 alongside the reserved orchid mark (`branding/selby-orchid-logo.
 jpeg`, exposed to the web UI through its `assets/` link) that
 `screens/config-modals.js`'s own `modal-about`
-renders, not text-only attribution.
+renders as a copyright notice, not a "built for" credit: the
+orchid mark and the Selby name are exactly the "Branding
+Materials" `LICENSE.md`'s own branding-exclusion section
+reserves, all rights, separately from the AGPLv3+ code below —
+`copyright_year` matches `LICENSE.md`'s own copyright line and
+needs updating alongside it if that year is ever renewed.
+`branding_note` states that exclusion plainly next to the code
+license, rather than leaving a reader to assume the whole
+distribution (mark included) is as freely licensed as the code
+actually is.
+
+`license` itself still names only the code's own license
+(AGPLv3+, still exactly accurate for every file `LICENSE.md`'s
+own branding exclusion does not carve out) — `branding_note` is
+the one place that exclusion is disclosed, not a correction to
+this field.
 
 <a id="fim.gui.app.in_flight_bridge_threads"></a>
 

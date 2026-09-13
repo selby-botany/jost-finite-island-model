@@ -1225,6 +1225,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   mint-branch uniformity defect above made 8-present-allele demes newly
   reachable in already-existing tests — confirmed live via a direct
   trace, not merely reasoned about.
+- The Help menu's "About fim" dialog, three things at once: opening it
+  showed a focus ring around the Selby attribution link the keyboard
+  user never actually chose (`showModal()`'s own default of focusing
+  the first focusable element in DOM order, with nothing in the dialog
+  claiming that default instead — the Close button's own new
+  `autofocus` attribute now does); the attribution itself read "Built
+  for Marie Selby Botanical Gardens," which is not what it actually is
+  — now a proper copyright line, "© 2026 Marie Selby Botanical
+  Gardens"; and the license line named only the code's own AGPLv3+
+  license, silently implying the whole distribution — orchid mark
+  included — was as freely licensed as the code, when `LICENSE.md`'s
+  own branding-exclusion section reserves the Selby name and mark
+  separately, all rights, apart from the AGPL. A new line states that
+  exclusion plainly, right beside the license itself.
 
 ---
 

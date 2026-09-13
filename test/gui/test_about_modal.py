@@ -60,13 +60,20 @@ def test_about_menu_shows_name_version_and_selby_attribution(
                 "name: document.getElementById('about-name').textContent, "
                 "version: document.getElementById('about-version').textContent, "
                 "license: document.getElementById('about-license').textContent, "
+                "brandingNote: document.getElementById("
+                "'about-branding-note').textContent, "
+                "copyrightYear: document.getElementById("
+                "'about-copyright-year').textContent, "
                 "organizationText: document.getElementById("
                 "'about-organization-link').textContent, "
                 "organizationUrl: document.getElementById("
                 "'about-organization-link').dataset.fimAboutExternal, "
                 "repositoryUrl: document.getElementById("
                 "'about-repository-link').dataset.fimAboutExternal, "
-                "logoSrc: document.querySelector('.about-logo').getAttribute('src')"
+                "logoSrc: document.querySelector('.about-logo').getAttribute('src'), "
+                "activeElementIsCloseButton: "
+                "document.activeElement === document.querySelector("
+                "'#modal-about [data-modal-close]')"
                 "})",
                 lambda value: value is not None and value["dialogOpen"] is True,
             )
@@ -81,7 +88,17 @@ def test_about_menu_shows_name_version_and_selby_attribution(
     assert settled["name"] == "FIM"
     assert settled["version"] == fim_version
     assert "AGPL" in settled["license"]
+    assert "Marie Selby Botanical Gardens" in settled["brandingNote"]
+    assert "not covered by this license" in settled["brandingNote"]
+    assert settled["copyrightYear"] == "2026"
     assert settled["organizationText"] == "Marie Selby Botanical Gardens"
     assert settled["organizationUrl"] == "https://selby.org/botany/"
     assert "selby-botany/jost-finite-island-model" in settled["repositoryUrl"]
     assert settled["logoSrc"] == "assets/selby-orchid-logo.jpeg"
+    # `showModal()`'s own default -- focus the first focusable element in
+    # DOM order -- would otherwise land on `about-organization-link`
+    # (found from a real screenshot: a focus ring around the
+    # organization link the keyboard user never actually chose). The
+    # Close button's own `autofocus` attribute claims that default
+    # instead.
+    assert settled["activeElementIsCloseButton"] is True
