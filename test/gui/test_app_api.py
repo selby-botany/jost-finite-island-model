@@ -216,13 +216,25 @@ def test_get_engine_backend_availability_follows_a_numba_less_install(
 
 
 def test_list_presets_matches_presets_module_directly() -> None:
-    """With no user presets saved, the bridge method lists only the built-ins."""
-    result = Api().list_presets()
+    """With no user presets saved, the bridge method lists only the built-ins.
+
+    `loadable` cross-checked against `get_preset_form_values` directly
+    (not hardcoded `True` for every entry) so this test does not itself
+    assume the six/one split `test_every_other_builtin_preset_loads_
+    into_form_values` exists specifically to verify.
+    """
+    api = Api()
+    result = api.list_presets()
 
     assert result["ok"] is True
     expected = presets_module.list_presets(app_module._webui_directory())
     assert result["presets"] == [
-        {"id": preset.preset_id, "title": preset.title, "builtin": True}
+        {
+            "id": preset.preset_id,
+            "title": preset.title,
+            "builtin": True,
+            "loadable": api.get_preset_form_values(preset.preset_id)["ok"],
+        }
         for preset in expected
     ]
     assert len(result["presets"]) > 0
@@ -239,7 +251,12 @@ def test_save_current_as_preset_then_list_and_load_it_back() -> None:
         preset for preset in list_result["presets"] if not preset["builtin"]
     ]
     assert user_entries == [
-        {"id": "user:My scenario", "title": "My scenario", "builtin": False}
+        {
+            "id": "user:My scenario",
+            "title": "My scenario",
+            "builtin": False,
+            "loadable": True,
+        }
     ]
 
     load_result = api.get_preset_form_values("user:My scenario")
@@ -323,7 +340,12 @@ def test_named_presets_persist_across_a_second_api(tmp_path: Path) -> None:
         preset for preset in second.list_presets()["presets"] if not preset["builtin"]
     ]
     assert user_entries == [
-        {"id": "user:Persisted", "title": "Persisted", "builtin": False}
+        {
+            "id": "user:Persisted",
+            "title": "Persisted",
+            "builtin": False,
+            "loadable": True,
+        }
     ]
 
 

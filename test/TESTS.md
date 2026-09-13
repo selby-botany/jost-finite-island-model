@@ -5859,6 +5859,11 @@ def test_list_presets_matches_presets_module_directly() -> None
 
 With no user presets saved, the bridge method lists only the built-ins.
 
+`loadable` cross-checked against `get_preset_form_values` directly
+(not hardcoded `True` for every entry) so this test does not itself
+assume the six/one split `test_every_other_builtin_preset_loads_
+into_form_values` exists specifically to verify.
+
 <a id="gui.test_app_api.test_save_current_as_preset_then_list_and_load_it_back"></a>
 
 #### test\_save\_current\_as\_preset\_then\_list\_and\_load\_it\_back

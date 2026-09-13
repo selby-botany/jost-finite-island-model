@@ -928,8 +928,11 @@ def test_home_example_select_lists_only_built_in_examples(
         is_ready=lambda value: value is not None and value.get("ready"),
     )
 
+    api = app_module.Api()
     expected_titles = [
         preset.title
+        if api.get_preset_form_values(preset.preset_id)["ok"]
+        else f"{preset.title} (view YAML only)"
         for preset in presets_module.list_presets(app_module._webui_directory())
     ]
     assert settled["labels"] == ["Try a worked example…", *expected_titles]
@@ -1040,8 +1043,11 @@ def test_home_example_select_excludes_a_user_saved_preset(
 
     assert settled is not None
     assert "Test user preset" not in settled["labels"]
+    api = app_module.Api()
     expected_titles = [
         preset.title
+        if api.get_preset_form_values(preset.preset_id)["ok"]
+        else f"{preset.title} (view YAML only)"
         for preset in presets_module.list_presets(app_module._webui_directory())
     ]
     assert settled["labels"] == ["Try a worked example…", *expected_titles]

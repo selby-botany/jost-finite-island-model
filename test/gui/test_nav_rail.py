@@ -330,8 +330,11 @@ def test_configure_example_select_lists_only_built_in_examples(
         )
 
     result = _drive(window, steps)
+    api = app_module.Api()
     expected_titles = [
         preset.title
+        if api.get_preset_form_values(preset.preset_id)["ok"]
+        else f"{preset.title} (view YAML only)"
         for preset in presets_module.list_presets(app_module._webui_directory())
     ]
     assert result["labels"] == ["Try a worked example…", *expected_titles]

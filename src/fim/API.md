@@ -3352,14 +3352,25 @@ only once the user actually picks it.
 **Returns**:
 
 - ``{"ok"` - True, "presets": [{"id": ..., "title": ...,
-- `"builtin"` - <bool>}, ...]}` — built-in presets first, in
-  `doc/usage.md`'s own document order, then user-saved presets
-  sorted by name. A built-in preset's own `id` is its bare
-  slug (`get_preset_form_values` reads it directly); a
-  user-saved preset's own `id` is `"user:<name>"`
-  (`_USER_PRESET_ID_PREFIX`), so the two id spaces can never
-  collide even if a user happens to choose a name matching a
-  built-in slug.
+- `"builtin"` - <bool>, "loadable": <bool>}, ...]}` — built-in
+  presets first, in `doc/usage.md`'s own document order, then
+  user-saved presets sorted by name. A built-in preset's own
+  `id` is its bare slug (`get_preset_form_values` reads it
+  directly); a user-saved preset's own `id` is
+  `"user:<name>"` (`_USER_PRESET_ID_PREFIX`), so the two id
+  spaces can never collide even if a user happens to choose
+  a name matching a built-in slug. `loadable` is `False`
+  exactly when `get_preset_form_values(id)["ok"]` would be
+  `False` for that same id — design doc `20260913-claude-
+  sonnet-5-gui-worked-example-loadability-design.md`
+- `(`selby/restricted`)` - computed here, once per `list_
+  presets` call, so the page can label a preset it cannot
+  actually apply *before* the user picks it, rather than
+  picking it and hitting a load failure with no advance
+  warning. A handful of already-in-memory YAML parses, not a
+  network call — cheap enough to redo on every call rather
+  than caching a result that could go stale if a preferences
+  range constraint changes.
 
 <a id="fim.gui.app.Api.get_preset_form_values"></a>
 

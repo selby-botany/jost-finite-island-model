@@ -82,7 +82,14 @@ async function refreshPresetsList() {
         const openButton = document.createElement("button");
         openButton.type = "button";
         openButton.tabIndex = 0;
-        openButton.textContent = preset.title;
+        // `home-example-select`/`configure-example-select`'s own
+        // identical "(view YAML only)" label (`refreshExampleOptions`,
+        // above) for the same reason -- a preset this form has no way
+        // to apply, labeled before it is picked rather than only
+        // discovered by picking it.
+        openButton.textContent = preset.loadable
+            ? preset.title
+            : `${preset.title} (view YAML only)`;
         openButton.addEventListener("click", () => applyPreset(preset.id, preset.title));
         item.appendChild(openButton);
         // Every preset, built-in or user-saved alike, gets a "View
@@ -197,7 +204,16 @@ async function refreshExampleOptions(selectElement) {
     for (const example of examples) {
         const option = document.createElement("option");
         option.value = example.id;
-        option.textContent = example.title;
+        // `example.loadable` is `false` for the rare built-in example
+        // this form has no way to apply at all (design doc `20260913-
+        // claude-sonnet-5-gui-worked-example-loadability-design.md`,
+        // `selby/restricted` -- today, exactly the one genuinely
+        // per-locus-`mu` worked example) -- labeled here, before the
+        // user picks it, rather than only discovered by picking it and
+        // hitting `applyPreset`'s own failure notice.
+        option.textContent = example.loadable
+            ? example.title
+            : `${example.title} (view YAML only)`;
         selectElement.appendChild(option);
     }
 }
