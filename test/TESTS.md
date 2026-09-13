@@ -5993,6 +5993,43 @@ limitation ("edit the YAML file directly"), not specific to presets
 — this proves `get_preset_form_values` surfaces that same message
 rather than crashing or silently loading a wrong value.
 
+<a id="gui.test_app_api.test_every_other_builtin_preset_loads_into_form_values"></a>
+
+#### test\_every\_other\_builtin\_preset\_loads\_into\_form\_values
+
+```python
+@pytest.mark.parametrize(
+    "preset",
+    [
+        preset
+        for preset in presets_module.list_presets(app_module._webui_directory(
+        )) if preset.preset_id != _KNOWN_UNREPRESENTABLE_PRESET_ID
+    ],
+    ids=lambda preset: preset.preset_id,
+)
+def test_every_other_builtin_preset_loads_into_form_values(
+        preset: presets_module.Preset) -> None
+```
+
+Every built-in preset but the one documented exception loads successfully.
+
+A full-coverage regression test `test_get_preset_form_values_loads_a_
+representable_preset` (above) never was: that test covers exactly one
+of the six representable presets by name, leaving the other five
+(`unequal-island-sizes-with-a-migration-hub`, `stochastic-migrant-
+counts`, `finite-length-alleles-the-k-allele-model`, `several-
+convergence-statistics`, `an-adaptive-replicate-batch-with-a-
+confidence-interval`) with no assertion that `get_preset_form_values`
+actually succeeds for them at all — found investigating a real user's
+own "examples that don't work aren't very useful" report (design doc
+`20260913-claude-sonnet-5-gui-worked-example-loadability-design.md`,
+`selby/restricted`), which needed a live check of all seven to even
+answer "how many actually work today," a question this suite could
+not otherwise answer on its own. A future preset added to `doc/
+usage.md` that happens to trip a different, new form limitation now
+fails here immediately, by name, rather than only being discovered
+live by a real user.
+
 <a id="gui.test_app_api.test_get_preset_yaml_returns_a_builtin_preset_unmodified"></a>
 
 #### test\_get\_preset\_yaml\_returns\_a\_builtin\_preset\_unmodified
