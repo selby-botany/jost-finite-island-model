@@ -11,11 +11,14 @@ merely a planned improvement. Items that are fully fixed move to
 
 ### Intermittent hang during GUI shutdown
 
-**Status:** cause identified; fixed in the test suite, mitigated in the
-application
+**Status:** cause identified; the one diagnosed cause is now settled at the
+source, in both the test suite and the application, with the deadman timer
+kept as a backstop for whatever the next undiagnosed cause turns out to be
 **Affects:** `fim gui` (all platforms)
 **First observed:** 2026-09-06, in continuous integration
 **Diagnosed:** 2026-09-07, from a captured thread dump
+**Production fix landed:** 2026-09-13 (design doc `20260912-claude-sonnet-5-
+shutdown-bridge-thread-settle-design.md`, `selby/restricted`)
 
 #### What you would see
 
@@ -79,19 +82,36 @@ pywebview delivers every `window.pywebview.api.*` call on its own
 strands that thread, and `threading._shutdown` then waits on it forever.
 
 This is the same class the suite had already fixed five times, each at its
-own call site by awaiting the call and polling a settle flag (see
-`test/gui/conftest.py`). Those fixes were correct but inherently
-per-call-site: every new screen can reintroduce the bug. `test/gui/
-conftest.py`'s `await_bridge_threads` now waits for in-flight bridge
-threads before the window is destroyed, applied once in teardown so it
-covers every test uniformly.
+own call site by awaiting the call and polling a settle flag. Those fixes
+were correct but inherently per-call-site: every new screen can reintroduce
+the bug. `in_flight_bridge_threads`/`await_bridge_threads` (`src/fim/gui/
+app.py` — moved there from `test/gui/conftest.py`, where they lived until
+2026-09-13, so production code and the test suite now share one
+implementation) wait for in-flight bridge threads to finish before a window
+is actually destroyed, applied once as a structural backstop rather than
+re-derived at every call site.
 
-Why this issue stays open: that fix is in the **test** suite. The same
-sequence is possible in the real application — a user closing the window
-while a bridge call is in flight — and there the deadman timer is the only
-protection. A structural fix in `fim.gui.app` (settling in-flight bridge
-calls before the window closes, rather than bounding the consequences) has
-not been implemented.
+That backstop now runs in the real application, not only in the test
+suite's own teardown, at both of the two ways this application can trigger
+a close: `create_window` registers it on `window.events.closing`, a real,
+synchronous hook every platform's own native close-request handler fires
+before tearing the window down (confirmed live on macOS: a slow subscriber
+measurably delayed the platform's own close call by its own full
+duration); and `_build_menu`'s own "Quit fim" action settles explicitly
+before calling `window.destroy()`, needed because `window.destroy()` does
+not fire `events.closing` at all on macOS (confirmed live — traced to
+`NSWindow.close` bypassing the `windowShouldClose_` delegate method
+entirely), so relying on the `events.closing` hook alone would have left
+the File menu's own Quit item on the most commonly used development
+platform completely unprotected.
+
+Why this issue stays open regardless: this closes the one specific,
+diagnosed, reproduced race for the two real ways this application can
+trigger a close today. It does not, and cannot, prove no other non-daemon
+thread can ever strand itself before or after this fix — the mechanism
+that produces this class of defect is a property of the libraries involved
+rather than of any single bug (see below), so the deadman stays exactly as
+it is, as the backstop for whatever the next instance turns out to be.
 
 History and its limits:
 
@@ -114,9 +134,17 @@ instance was found only after reaching a real build.
 
 Relevant code:
 
-- `_start_shutdown_deadman` in `src/fim/gui/app.py` — the production bound
-- `await_bridge_threads` in `test/gui/conftest.py` — the structural fix for
-  the diagnosed cause, in the test suite
+- `_start_shutdown_deadman` in `src/fim/gui/app.py` — the production bound,
+  the backstop for whatever this fix does not catch
+- `in_flight_bridge_threads`/`await_bridge_threads` in `src/fim/gui/app.py`
+  — the structural fix for the diagnosed cause, shared by production and
+  the test suite
+- `create_window`'s own `events.closing` registration and `_build_menu`'s
+  own "Quit fim" wrapper, both in `src/fim/gui/app.py` — the two real
+  places that fix is actually wired into the running application
+- `test/gui/test_shutdown_deadman.py` — regression tests for both wiring
+  points, and for `in_flight_bridge_threads`/`await_bridge_threads`
+  themselves
 - `pytest_unconfigure` in `test/conftest.py` — the diagnostics that
   captured it
 
