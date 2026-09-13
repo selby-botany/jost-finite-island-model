@@ -45,7 +45,7 @@ arithmetic, one step of algebra, and a single logarithm.
 
 This document is longer than the paper it summarizes, on purpose. The
 paper is eight dense pages written for population geneticists who already
-know what F<sub>ST</sub> is and have opinions about it. Most of the extra
+know what <code>F<sub><small>ST</small></sub></code> is and have opinions about it. Most of the extra
 length here is worked arithmetic that the paper states as a bare result,
 spelled out step by step.
 
@@ -70,28 +70,20 @@ place a recomputation disagrees with a printed value.
 
 ## The one-paragraph version
 
-Geneticists have two families of statistics that both get called "measures
-of differentiation," and they measure genuinely different things. The
-older family (G<sub>ST</sub>, F<sub>ST</sub>, θ) measures **how close each
-subpopulation is to having lost all its internal variation** — call it
-"nearness to fixation." The newer family (Jost's `D`, entropy
-differentiation E<sub>ST</sub>, allele-count differentiation K<sub>ST</sub>)
-measures **how few alleles the subpopulations have in common** — "allelic
-differentiation." These two quantities have no necessary relationship: one
-can sit at 1.0 while the other sits near 0.0, and not because of sampling
-error, but because of what they fundamentally are. Conservation managers
-almost always want the second family (should both populations be saved, or
-is one a near-copy of the other?), but the literature has habitually
-handed them the first. The paper shows, with worked counterexamples, that
-this substitution produces exactly backwards conservation advice — and it
-overturns a widely repeated rule of thumb along the way: under the finite
-island model (a standard model of migration between subpopulations,
-covered in a
-[companion document](finite-island-model-introduction.md)),
-the absolute number of migrants per generation, `Nm`, controls nearness
-to fixation, **not** allelic differentiation, which instead is controlled
-by m / (μ(d-1)), where μ is the mutation rate and `d` is the
-number of subpopulations.
+Geneticists have two families of statistics that both get called "measures of differentiation," and they measure
+genuinely different things. The older family (<code>G<sub><small>ST</small></sub></code>,
+<code>F<sub><small>ST</small></sub></code>, `θ`) measures **how close each subpopulation is to having lost all its
+internal variation** — call it "nearness to fixation." The newer family (Jost's `D`, entropy differentiation
+<code>E<sub><small>ST</small></sub></code>, allele-count differentiation <code>K<sub><small>ST</small></sub></code>)
+measures **how few alleles the subpopulations have in common** — "allelic differentiation." These two quantities have no
+necessary relationship: one can sit at 1.0 while the other sits near 0.0, and not because of sampling error, but because
+of what they fundamentally are. Conservation managers almost always want the second family (should both populations be
+saved, or is one a near-copy of the other?), but the literature has habitually handed them the first. The paper shows,
+with worked counterexamples, that this substitution produces exactly backwards conservation advice — and it overturns a
+widely repeated rule of thumb along the way: under the finite island model (a standard model of migration between
+subpopulations, covered in a [companion document](finite-island-model-introduction.md)), the absolute number of migrants
+per generation, `Nm`, controls nearness to fixation, **not** allelic differentiation, which instead is controlled by
+<code>m / (μ(d-1))</code>, where `μ` is the mutation rate and `d` is the number of subpopulations.
 
 ---
 
@@ -181,24 +173,21 @@ not a simplification for convenience alone: it is what keeps the statistics
 portable across markers whose underlying mutation processes and sequence
 spaces are themselves very different.
 
-**Where does the locus's length go?** It vanishes the moment alleles are
-named, and returns in exactly one place. Once the interval is fixed, each
-distinct sequence across it becomes a single categorical label, and every
-statistic in Parts II–V sees nothing but the frequencies of those labels. A
-one-character locus and a five-thousand-character locus that happen to
-produce the same frequency vector give identical values of `H`,
-G<sub>ST</sub>, `D`, E<sub>ST</sub>, and K<sub>ST</sub>.
-Length sits upstream of the statistics: it is part of how alleles are
-*individuated*, not part of any formula that consumes them.
+**Where does the locus's length go?** It vanishes the moment alleles are named, and returns in exactly one place. Once
+the interval is fixed, each distinct sequence across it becomes a single categorical label, and every statistic in Parts
+II–V sees nothing but the frequencies of those labels. A one-character locus and a five-thousand-character locus that
+happen to produce the same frequency vector give identical values of `H`, <code>G<sub><small>ST</small></sub></code>,
+`D`, <code>E<sub><small>ST</small></sub></code>, and <code>K<sub><small>ST</small></sub></code>. Length sits upstream of
+the statistics: it is part of how alleles are *individuated*, not part of any formula that consumes them.
 
 Length re-enters only in the model half (Part VI), through the mutation
 rate. A longer interval offers proportionally more sites at which a copying
-error can land, so μ ≈ μ<sub>b</sub> · L for a per-base-pair rate
-μ<sub>b</sub> and length `L` — which is the whole content of Eq. 5. The
+error can land, so <code>μ ≈ μ<sub>b</sub> · L</code> for a per-base-pair rate
+<code>μ<sub>b</sub></code> and length `L` — which is the whole content of Eq. 5. The
 consequence is sharp, and it is one more instance of the dissociation this
-paper is built around: **locus length is invisible to G<sub>ST</sub> and
+paper is built around: **locus length is invisible to <code>G<sub><small>ST</small></sub></code> and
 decisive for `D`.** Length acts only through μ, and μ cancels out
-of the equilibrium G<sub>ST</sub> (Eq. 2) whenever μ \ll m, while
+of the equilibrium <code>G<sub><small>ST</small></sub></code> (Eq. 2) whenever μ ≪ m, while
 it sits in the denominator of the equilibrium `D` (Eq. 4).
 
 Length has one further role, an assumption rather than a formula: it governs
@@ -260,7 +249,7 @@ to 1; you would be double-counting the shared characters, but neither
 vector's normalization would break.
 
 Independence across loci is a genuine requirement, but it buys something
-else entirely: the right to **combine** loci — averaging G<sub>ST</sub>
+else entirely: the right to **combine** loci — averaging <code>G<sub><small>ST</small></sub></code>
 across many markers to estimate `Nm`, taking harmonic means of `D` and
 μ, and attaching confidence intervals (all in Part VI). For that
 purpose non-overlap is necessary and nowhere near sufficient: two disjoint
@@ -279,8 +268,8 @@ machinery requires both, and more.
 
 That vector is the entire input — individual genotypes, pedigrees, and
 geography are all discarded before any of these statistics is computed. That discarding is itself one
-of the paper's arguments: F<sub>ST</sub> was *originally* defined in terms of
-pedigrees, and G<sub>ST</sub> — its allele-frequency stand-in — is therefore
+of the paper's arguments: <code>F<sub><small>ST</small></sub></code> was *originally* defined in terms of
+pedigrees, and <code>G<sub><small>ST</small></sub></code> — its allele-frequency stand-in — is therefore
 not quite measuring the same thing (Part III).
 
 ### The forces that move allele frequencies
@@ -313,9 +302,9 @@ orders of magnitude, which is central to the paper's argument:
 
 | Marker type | Rough mutation rate μ per generation |
 |---|---|
-| Single nucleotide site | 10<sup>-9</sup> – 10<sup>-8</sup> |
-| Typical protein-coding gene | 10<sup>-6</sup> – 10<sup>-5</sup> |
-| Microsatellite | 10<sup>-4</sup> – 10<sup>-3</sup> |
+| Single nucleotide site | <code>10<sup>-9</sup> – 10<sup>-8</sup></code> |
+| Typical protein-coding gene | <code>10<sup>-6</sup> – 10<sup>-5</sup></code> |
+| Microsatellite | <code>10<sup>-4</sup> – 10<sup>-3</sup></code> |
 
 **Selection** improves the survival or reproduction of some alleles over
 others. The models here assume **neutral** loci — no selection — which is
@@ -367,7 +356,7 @@ different answer.
 
 ### Expected heterozygosity
 
-Given one deme's frequency vector p = (p<sub>1</sub>, p<sub>2</sub>, …, p<sub>k</sub>), the
+Given one deme's frequency vector <code>p = (p<sub>1</sub>, p<sub>2</sub>, …, p<sub>k</sub>)</code>, the
 standard diversity statistic is **expected heterozygosity**:
 
 ```math
@@ -375,7 +364,7 @@ H = 1 - \sum_i p_i^2
 ```
 
 Interpretation: draw two gene copies at random, with replacement, from the
-deme's pool. Σ_i p<sub>i</sub>^2 is the probability they are the **same**
+deme's pool. <code>Σ<sub>i</sub> p<sub>i</sub><sup>2</sup></code> is the probability they are the **same**
 allele, so `H` is the probability they are **different**. The name comes
 from diploidy — under random mating, `H` is the fraction of individuals
 expected to be heterozygous at that locus. Statisticians will recognize it
@@ -419,17 +408,17 @@ of alleles**:
 {}^{H}D = \frac{1}{1 - H} = \frac{1}{J}
 ```
 
-Read {}^{H}D as "the number of *equally common* alleles a deme would
+Read <code><sup>H</sup>D</code> as "the number of *equally common* alleles a deme would
 need, to have this much heterozygosity." Check it: if a deme has `n`
 equally common alleles, each at frequency `1/n`, then
-J = n · (1/n)^2 = 1/n, so {}^{H}D = n exactly. The
+<code>J = n · (1/n)<sup>2</sup> = 1/n</code>, so <code><sup>H</sup>D = n</code> exactly. The
 transformation inverts perfectly on the uniform case, which is what makes
 it interpretable.
 
 Comparing the two scales on the same data makes the saturation problem
 concrete:
 
-| Deme composition | `H` | {}^{H}D (effective alleles) |
+| Deme composition | `H` | <code><sup>H</sup>D</code> (effective alleles) |
 |---|---|---|
 | 2 equally common alleles | 0.500 | 2.0 |
 | 5 equally common alleles | 0.800 | 5.0 |
@@ -437,7 +426,7 @@ concrete:
 | 40 equally common alleles | 0.975 | 40.0 |
 
 On the `H` scale, going from 20 alleles to 40 looks like a trivial change
-(0.950 → 0.975). On the {}^{H}D scale, it is what it actually is: a
+(0.950 → 0.975). On the <code><sup>H</sup>D</code> scale, it is what it actually is: a
 doubling. **Diversity doubled; heterozygosity moved by 2.5%.** Every "most
 of the diversity is within populations" claim in the conservation
 literature that was computed on the `H` scale is suspect for exactly
@@ -446,7 +435,7 @@ this reason — Part V makes that precise.
 ### Hill numbers and the order q
 
 The effective number of alleles generalizes to a one-parameter family, the
-**Hill numbers**, indexed by an order q \geq 0 that sets how much
+**Hill numbers**, indexed by an order `q` ≥ 0 that sets how much
 weight rare alleles get:
 
 ```math
@@ -463,55 +452,53 @@ in how they treat unevenness.
 | `q` | Name | What it counts | Rare alleles |
 |---|---|---|---|
 | `0` | Allele richness | Every allele present, however rare | Full weight |
-| `1` | Shannon diversity, \exp(entropy) | Alleles weighted by their frequency | Proportional weight |
+| `1` | Shannon diversity, `exp(entropy)` | Alleles weighted by their frequency | Proportional weight |
 | `2` | Effective number of alleles, `1/(1-H)` | Alleles weighted by squared frequency | Nearly ignored |
 
-`q = 2` is the heterozygosity case above — check it by substituting
-`q = 2` into the general formula:
-(Σ_i p<sub>i</sub>^2)<sup>1/(1-2)</sup> = (Σ_i p<sub>i</sub>^2)<sup>-1</sup> = 1/J. This ladder
-matters because the paper's three recommended differentiation measures are
-exactly the `q = 2`, `q = 1`, and `q = 0` members of one family (Part
-III). They are not three rival proposals — they are three settings of one
-dial, and the paper recommends reporting several precisely because the
-*disagreement between them* is informative (Part IV).
+`q = 2` is the heterozygosity case above — check it by substituting `q = 2` into the general formula:
+<code>(Σ<sub>i</sub> p<sub>i</sub><sup>2</sup>)<sup>1/(1-2)</sup> =
+(Σ<sub>i</sub> p<sub>i</sub><sup>2</sup>)<sup>-1</sup> = 1/J</code>. This ladder
+matters because the paper's three recommended differentiation measures are exactly the `q = 2`, `q = 1`, and `q = 0`
+members of one family (Part III). They are not three rival proposals — they are three settings of one dial, and the
+paper recommends reporting several precisely because the *disagreement between them* is informative (Part IV).
 
 ---
 
 ## Part III — Two groups or more: "differentiation" splits in two
 
-### The two building blocks: H<sub>S</sub> and H<sub>T</sub>
+### The two building blocks: <code>H<sub><small>S</small></sub></code> and <code>H<sub><small>T</small></sub></code>
 
 With `d` demes, two heterozygosities get computed:
 
-- H<sub>S</sub> — the mean **within-deme** heterozygosity: compute `H`
+- <code>H<sub><small>S</small></sub></code> — the mean **within-deme** heterozygosity: compute `H`
   separately for each deme, then average. "How much variation does a
   typical deme hold internally?"
-- H<sub>T</sub> — the **total** heterozygosity: pool all demes into one combined
+- <code>H<sub><small>T</small></sub></code> — the **total** heterozygosity: pool all demes into one combined
   frequency vector, then compute `H` once. "How much variation is there
   altogether?"
 
 One detail changes answers: when comparing *relative* allele frequencies,
 the paper gives **each deme equal statistical weight** — the pooled
 frequency of an allele is the unweighted mean of its per-deme frequencies,
-not a count-weighted mean. (For E<sub>ST</sub>, size weighting is available
+not a count-weighted mean. (For <code>E<sub><small>ST</small></sub></code>, size weighting is available
 and is in fact one of its selling points; see below.)
 
-Necessarily H<sub>T</sub> \geq H<sub>S</sub>: pooling different demes can only add
-variation. The gap H<sub>T</sub> - H<sub>S</sub> is the raw material both families of
-statistics work with — and the two families normalize that same gap by
-**different denominators**. That one choice of denominator is the whole
+Necessarily <code>H<sub><small>T</small></sub></code> ≥ <code>H<sub><small>S</small></sub></code>: pooling different
+demes can only add variation. The gap <code>H<sub><small>T</small></sub></code> -
+<code>H<sub><small>S</small></sub></code> is the raw material both families of statistics work with — and the two
+families normalize that same gap by **different denominators**. That one choice of denominator is the whole
 disagreement.
 
 ### Family 1: fixation measures
 
-F<sub>ST</sub> (Wright, 1943, 1965) was originally defined in pedigree terms:
+<code>F<sub><small>ST</small></sub></code> (Wright, 1943, 1965) was originally defined in pedigree terms:
 the probability that two homologous genes drawn at random from a
 subpopulation both descend from a single ancestral gene *in that
 subpopulation*. Notice what this definition mentions — ancestry within one
 deme — and what it does not mention — any other deme, or any actual
 allele identity.
 
-G<sub>ST</sub> (Nei, 1973) is the multi-allele version expressed purely in
+<code>G<sub><small>ST</small></sub></code> (Nei, 1973) is the multi-allele version expressed purely in
 allele frequencies:
 
 ```math
@@ -519,15 +506,15 @@ G_{ST} = \frac{H_T - H_S}{H_T} = 1 - \frac{H_S}{H_T}
 ```
 
 θ (Weir & Cockerham, 1984) is an unbiased *estimator* of
-F<sub>ST</sub> that corrects for finite sample size.
+<code>F<sub><small>ST</small></sub></code> that corrects for finite sample size.
 
-Because G<sub>ST</sub> is a function only of allele frequencies, the paper
+Because <code>G<sub><small>ST</small></sub></code> is a function only of allele frequencies, the paper
 notes it is **not measuring exactly the same thing as Wright's original**
-F<sub>ST</sub> — it is a frequency-based stand-in, used throughout the paper
-for analytical simplicity, on the premise that F<sub>ST</sub> and θ
+<code>F<sub><small>ST</small></sub></code> — it is a frequency-based stand-in, used throughout the paper
+for analytical simplicity, on the premise that <code>F<sub><small>ST</small></sub></code> and θ
 behave broadly similarly.
 
-Denominator: H<sub>T</sub>.
+Denominator: <code>H<sub><small>T</small></sub></code>.
 
 Wright himself, quoted in the paper, was unambiguous about what this
 family measures (Wright, 1978, p. 84):
@@ -547,8 +534,8 @@ locus equally. Nearness to fixation has that property; allelic
 differentiation does not. The older family is not a failed attempt at the
 newer one — it is a successful attempt at something else.
 
-G<sub>ST</sub> is **undefined** when all demes are fixed for the same allele,
-since then H<sub>T</sub> = 0 and the formula divides by zero — an awkwardness
+<code>G<sub><small>ST</small></sub></code> is **undefined** when all demes are fixed for the same allele,
+since then <code>H<sub><small>T</small></sub></code> = 0 and the formula divides by zero — an awkwardness
 that recurs repeatedly in the paper's examples.
 
 ### Family 2: allelic differentiation measures
@@ -569,8 +556,8 @@ D = \left[\frac{H_T - H_S}{1 - H_S}\right]\cdot\frac{d}{d-1}
   = 1 - \exp(-\mathrm{NGD})
 ```
 
-where `J` is Nei's gene identity and \mathrm{NGD} is Nei's genetic
-distance (Nei, 1972). Denominator: 1 - H<sub>S</sub>, i.e. J_{\mathrm{within}}.
+where `J` is Nei's gene identity and <span class="roman">NGD</span> is Nei's genetic
+distance (Nei, 1972). Denominator: <code>1 - H<sub><small>S</small></sub></code>, i.e. <code>J<sub>within</sub></code>.
 
 The middle form is the one that makes `D` obvious:
 
@@ -588,46 +575,46 @@ J_{\mathrm{between}} = \text{mean over deme pairs of } \sum_i p_{A,i}\,p_{B,i}
 
 In words: **draw one gene copy from each of two different demes, and ask
 how often they match — relative to how often two copies from the same
-deme match.** If demes share nothing, J_{\mathrm{between}} = 0 and
-`D = 1`. If demes are identical, `J_{\mathrm{between}} =
-J_{\mathrm{within}}` and `D = 0`. No saturation, no ceiling imported
+deme match.** If demes share nothing, <code>J<sub>between</sub> = 0</code> and
+`D = 1`. If demes are identical, <code>J<sub>between</sub> =
+J<sub>within</sub> = 0</code> and `D = 0`. No saturation, no ceiling imported
 from `H`. The `d/(d-1)` factor rescales so the maximum is exactly 1
 rather than `(d-1)/d`.
 
-**Entropy differentiation** E<sub>ST</sub>, the `q = 1` member:
+**Entropy differentiation** <code>E<sub><small>ST</small></sub></code>, the `q = 1` member:
 
 ```math
 E_{ST} = \frac{E_T - E_S}{E_w}
 ```
 
-E<sub>T</sub> is the Shannon entropy of the pooled demes, E<sub>S</sub> the mean
-within-deme entropy weighted by deme size, and E<sub>w</sub> the entropy of the
-*relative deme sizes* — E<sub>w</sub> = \ln d for **d** equally sized demes.
+<code>E<sub><small>T</small></sub></code> is the Shannon entropy of the pooled demes,
+<code>E<sub><small>S</small></sub></code> the mean within-deme entropy weighted by deme size, and
+<code>E<sub>w</sub></code> the entropy of the *relative deme sizes* — <code>E<sub>w</sub> = ln d</code> for **`d`**
+equally sized demes.
 
-Two advantages the paper claims for E<sub>ST</sub>:
+Two advantages the paper claims for <code>E<sub><small>ST</small></sub></code>:
 
-1. It handles **unequal deme sizes** natively, which **D** does not
-   (**D** gives all demes equal statistical weight by construction).
+1. It handles **unequal deme sizes** natively, which **`D`** does not
+   (**`D`** gives all demes equal statistical weight by construction).
 2. It has **stronger monotonicity**: adding a new private allele to a
-   deme *always* increases E<sub>ST</sub>. That is not true of **D** — because
-   **D** weights alleles by squared frequency, adding a rare private
+   deme *always* increases <code>E<sub><small>ST</small></sub></code>. That is not true of **`D`** — because
+   **`D`** weights alleles by squared frequency, adding a rare private
    allele slightly dilutes the squared frequencies of *common unshared*
-   alleles, and **D** can tick **down**. The paper flags this as a genuine
-   wart on **D** and a reason to prefer E<sub>ST</sub> in conservation
+   alleles, and **`D`** can tick **down**. The paper flags this as a genuine
+   wart on **`D`** and a reason to prefer <code>E<sub><small>ST</small></sub></code> in conservation
    settings, where discovering a new unique allele should never make a
    differentiation index fall.
 
-**Allele-number differentiation** K<sub>ST</sub>, the `q = 0` member:
+**Allele-number differentiation** <code>K<sub><small>ST</small></sub></code>, the `q = 0` member:
 
 ```math
 K_{ST} = 1 - \frac{K_T/K_S - d}{1 - d}
 ```
 
-K<sub>T</sub> is the total number of distinct alleles across all demes; K<sub>S</sub>
-is the unweighted mean number of alleles per deme. Frequencies are ignored
-entirely — only presence/absence counts. K<sub>ST</sub> has the **strongest**
-monotonicity of the three. Read it, roughly, as: the fraction of a typical
-deme's alleles that are unique to it.
+<code>K<sub><small>T</small></sub></code> is the total number of distinct alleles across all demes;
+<code>K<sub><small>S</small></sub></code> is the unweighted mean number of alleles per deme. Frequencies are ignored
+entirely — only presence/absence counts. <code>K<sub><small>ST</small></sub></code> has the **strongest** monotonicity
+of the three. Read it, roughly, as: the fraction of a typical deme's alleles that are unique to it.
 
 ### One formula that generates the whole family
 
@@ -639,34 +626,33 @@ similarity measure from Jost, Chao & Chazdon, 2011):
   = 1 - \frac{({}^{q}D_S / {}^{q}D_T)^{q-1} - (1/d)^{q-1}}{1 - (1/d)^{q-1}}
 ```
 
-{}^{q}D<sub>T</sub> and {}^{q}D<sub>S</sub> are the total and mean-within-deme Hill
-numbers of order **q**. Setting the dial: `q = 2` gives Jost's **D**;
-`q = 1`, taken as a limit, gives E<sub>ST</sub>; `q = 0` gives K<sub>ST</sub>.
+<code><sup>q</sup>D<sub><small>T</small></sub></code> and <code><sup>q</sup>D<sub><small>S</small></sub></code> are the
+total and mean-within-deme Hill numbers of order **`q`**. Setting the dial: `q = 2` gives Jost's **`D`**; `q = 1`, taken
+as a limit, gives <code>E<sub><small>ST</small></sub></code>; `q = 0` gives <code>K<sub><small>ST</small></sub></code>.
 
 Two notes on that formula worth keeping:
 
-- For q ≠ 0, 1, demes **must** be given equal statistical weight if
-  the goal is to compare *relative* allele frequencies between demes.
-- {}^{q}D<sub>T</sub> / {}^{q}D<sub>S</sub> is itself the **between-group diversity**
-  (beta diversity) of order **q**. Every measure in this family is that
-  beta diversity, normalized onto `[0, 1]`. Nothing exotic is being
-  introduced — the family is a rescaling of a quantity ecologists have
-  used for decades.
+- For `q ≠ 0, 1`, demes **must** be given equal statistical weight if the goal is to compare *relative* allele
+  frequencies between demes.
+- <code><sup>q</sup>D<sub><small>T</small></sub> / <sup>q</sup>D<sub><small>S</small></sub></code> is itself the
+  **between-group diversity** (beta diversity) of order **`q`**. Every measure in this family is that beta diversity,
+  normalized onto `[0, 1]`. Nothing exotic is being introduced — the family is a rescaling of a quantity ecologists
+  have used for decades.
 
 ### Side-by-side summary
 
-| | Fixation family (G<sub>ST</sub>) | Allelic differentiation family (`D`) |
+| | Fixation family (<code>G<sub><small>ST</small></sub></code>) | Allelic differentiation family (`D`) |
 |---|---|---|
-| Formula | (H<sub>T</sub> - H<sub>S</sub>)/H<sub>T</sub> | [(H<sub>T</sub>-H<sub>S</sub>)/(1-H<sub>S</sub>)]· d/(d-1) |
-| Denominator | H<sub>T</sub> | 1 - H<sub>S</sub> |
+| Formula | <code>(H<sub><small>T</small></sub> - H<sub><small>S</small></sub>)/H<sub><small>T</small></sub></code> | <code>[(H<sub><small>T</small></sub>-H<sub><small>S</small></sub>)/(1-H<sub><small>S</small></sub>)]· d/(d-1)</code> |
+| Denominator | <code>H<sub><small>T</small></sub></code> | <code>1 - H<sub><small>S</small></sub></code> |
 | Question answered | Have demes lost internal variation? | Do demes hold different alleles? |
 | `= 1` when | All demes fixed (same or different alleles) | Demes share no alleles |
 | `= 0` when | Demes identical **or** all have high `H` | Demes identical, and only then |
 | Undefined when | All demes fixed for the same allele | Never |
-| Depends on μ? | Barely, when μ \ll m | Strongly, always |
-| Equilibrium driver | `Nm` (absolute migrant count) | m/(μ(d-1)) |
-| Comparable across loci? | Yes (that is its design goal) | Only among loci with similar μ |
-| Comparable across species? | Not reliably (H<sub>T</sub> varies) | Yes |
+| Depends on `μ`? | Barely, when `μ ≪ m` | Strongly, always |
+| Equilibrium driver | `Nm` (absolute migrant count) | `m/(μ(d-1))` |
+| Comparable across loci? | Yes (that is its design goal) | Only among loci with similar `μ` |
+| Comparable across species? | Not reliably (<code>H<sub><small>T</small></sub></code> varies) | Yes |
 | Right tool for | Estimating demography, gene flow | Deciding which demes to protect |
 
 ---
@@ -678,10 +664,10 @@ the one place a recomputation disagrees with the paper's printed value).
 
 ### Ten fixed demes, three ways
 
-Three hypothetical species, each with `d = 10` demes. In every case **all
-ten demes are fixed**, so `H = 0` in each one and H<sub>S</sub> = 0
-throughout — which makes G<sub>ST</sub> = (H<sub>T</sub> - 0)/H<sub>T</sub> = 1 identically, no
-matter how the fixed alleles are distributed.
+Three hypothetical species, each with `d = 10` demes. In every case **all ten demes are fixed**, so `H = 0` in each one
+and <code>H<sub><small>S</small></sub> = 0</code> throughout — which makes <code>G<sub><small>ST</small></sub> =
+(H<sub><small>T</small></sub> - 0)/H<sub><small>T</small></sub> = 1</code> identically, no matter how the fixed alleles
+are distributed.
 
 **Nine demes fixed for allele A, one for allele B:**
 
@@ -715,21 +701,21 @@ D &= \frac{0.9}{1}\cdot\frac{10}{9} = 1.0
 \end{aligned}
 ```
 
-| Scenario | H<sub>S</sub> | H<sub>T</sub> | G<sub>ST</sub> | `D` |
+| Scenario | <code>H<sub><small>S</small></sub></code> | <code>H<sub><small>T</small></sub></code> | <code>G<sub><small>ST</small></sub></code> | `D` |
 |---|---|---|---|---|
 | 9 + 1 | 0.00 | 0.18 | **1.00** | **0.20** |
 | 5 + 5 | 0.00 | 0.50 | **1.00** | **0.5556** |
 | All different | 0.00 | 0.90 | **1.00** | **1.00** |
 
-G<sub>ST</sub> is 1.00 in all three cases and cannot distinguish them — which
+<code>G<sub><small>ST</small></sub></code> is 1.00 in all three cases and cannot distinguish them — which
 is correct, since all three are fully fixed. But the conservation
-implications differ completely. A manager acting on G<sub>ST</sub> alone would
+implications differ completely. A manager acting on <code>G<sub><small>ST</small></sub></code> alone would
 conclude every deme must be protected in every case. In fact, at this
 locus, the first scenario needs only **two demes** to capture all the
 variation there is, while the third needs **all ten**; every one is
 irreplaceable.
 
-**D** distinguishes them (0.20, 0.56, 1.00), and it has a direct,
+**`D`** distinguishes them (0.20, 0.56, 1.00), and it has a direct,
 intuitive reading. Write out all 10·9/2 = 45 pairs of demes; for
 each pair, score 0 if the two demes are fixed for the same allele and 1 if
 fixed for different alleles. In the first scenario, the one odd deme
@@ -740,17 +726,17 @@ remaining 36 pairs are between identical demes:
 \bar{d}_{\text{pairs}} = \frac{9\cdot 1 + 36\cdot 0}{45} = 0.20
 ```
 
-which matches **D** exactly. The same reading works for the other two
-scenarios (`25/45 = 0.5556` and `45/45 = 1.0`). So **D is the mean
+which matches **`D`** exactly. The same reading works for the other two
+scenarios (`25/45 = 0.5556` and `45/45 = 1.0`). So **`D` is the mean
 pairwise allelic differentiation over deme pairs** — a property worth
-remembering, since it means the same **D** value carries the same meaning
+remembering, since it means the same **`D`** value carries the same meaning
 whether it came from two demes or two hundred.
 
 ### Three species, GST near zero in all of them
 
 The complementary embarrassment. Three species, each with `d = 2` demes,
-all alleles equally frequent within a deme. Here G<sub>ST</sub> is near
-**zero** in all three, while **D** sweeps its entire possible range.
+all alleles equally frequent within a deme. Here <code>G<sub><small>ST</small></sub></code> is near
+**zero** in all three, while **`D`** sweeps its entire possible range.
 
 **Species A — both demes share the same 20 alleles at the same
 frequencies:**
@@ -786,15 +772,15 @@ D &= \frac{0.025}{0.05}\cdot 2 = 1.00
 \end{aligned}
 ```
 
-| Species | Shared alleles | H<sub>S</sub> | H<sub>T</sub> | G<sub>ST</sub> | **D** |
+| Species | Shared alleles | <code>H<sub><small>S</small></sub></code> | <code>H<sub><small>T</small></sub></code> | <code>G<sub><small>ST</small></sub></code> | **D** |
 |---|---|---|---|---|---|
 | A | all 20 | 0.950 | 0.950 | **0.000** | **0.00** |
 | B | 3 of 6 | 0.833 | 0.875 | **0.0476** | **0.50** |
 | C | **none** | 0.950 | 0.975 | **0.0256** | **1.00** |
 
 Read the last two rows against each other: **species C shares no alleles
-at all and yet has a *lower* G<sub>ST</sub> than species B, which shares half
-of them.** A manager ranking by G<sub>ST</sub> would rank species B as the
+at all and yet has a *lower* <code>G<sub><small>ST</small></sub></code> than species B, which shares half
+of them.** A manager ranking by <code>G<sub><small>ST</small></sub></code> would rank species B as the
 more structured one and, under scarce resources, would preserve both
 demes of species B while letting one deme of species C go — precisely
 backwards. Losing a deme of species C destroys half of that species'
@@ -804,10 +790,10 @@ allelic diversity irrecoverably; losing a deme of species B costs only its
 ### The "98% of diversity is within demes" trap
 
 A population with two equally large demes, each holding many low-frequency
-alleles, almost none shared. The paper reports H<sub>T</sub> = 0.97,
-H<sub>S</sub> = 0.95, with effective numbers 38.8 and 20.4. Back-solving from
-the effective numbers gives the more precise H<sub>T</sub> = 0.9742,
-H<sub>S</sub> = 0.9510; the calculation below uses those.
+alleles, almost none shared. The paper reports <code>H<sub><small>T</small></sub> = 0.97</code>,
+<code>H<sub><small>S</small></sub> = 0.95</code>, with effective numbers 38.8 and 20.4. Back-solving from
+the effective numbers gives the more precise <code>H<sub><small>T</small></sub> = 0.9742,
+H<sub><small>S</small></sub> = 0.9510</code>; the calculation below uses those.
 
 **The standard — and wrong — analysis:**
 
@@ -840,25 +826,25 @@ D = \left(1 - \frac{1}{1.902}\right)\cdot\frac{2}{1} = 0.4742\cdot 2 = 0.948 \ap
 
 | Statistic | Value | Story it tells |
 |---|---|---|
-| G<sub>ST</sub> | 0.024 | Demes are far from fixation — **true, and irrelevant** |
+| <code>G<sub><small>ST</small></sub></code> | 0.024 | Demes are far from fixation — **true, and irrelevant** |
 | "98% within-group" | — | An artifact of **H**'s ceiling — **meaningless** |
-| {}^{H}D<sub>T</sub> / {}^{H}D<sub>S</sub> | 1.90 of a max 2.00 | Demes are nearly disjoint |
+| <code><sup>H</sup>D<sub><small>T</small></sub> / <sup>H</sup>D<sub><small>S</small></sub></code> | 1.90 of a max 2.00 | Demes are nearly disjoint |
 | **D** | **0.95** | Demes are 95% allelically differentiated |
-| E<sub>ST</sub> | 0.90 | Same conclusion, frequency-weighted |
-| K<sub>ST</sub> | 0.77 | 77% of each deme's alleles are unique to it |
+| <code>E<sub><small>ST</small></sub></code> | 0.90 | Same conclusion, frequency-weighted |
+| <code>K<sub><small>ST</small></sub></code> | 0.77 | 77% of each deme's alleles are unique to it |
 
-Both demes must be protected — the G<sub>ST</sub>-driven analysis says the
-opposite. The paper also flags that the ordering `D (0.95) > E<sub>ST</sub>
-(0.90) > K<sub>ST</sub> (0.77)` is itself informative: **D** weights by squared
-frequency (dominated by the most common alleles), E<sub>ST</sub> weights by
-plain frequency (the average allele), and K<sub>ST</sub> ignores frequency
+Both demes must be protected — the <code>G<sub><small>ST</small></sub></code>-driven analysis says the
+opposite. The paper also flags that the ordering `D` (0.95) > <code>E<sub><small>ST</small></sub></code>
+(0.90) > <code>K<sub><small>ST</small></sub></code> (0.77) is itself informative: **`D`** weights by squared
+frequency (dominated by the most common alleles), <code>E<sub><small>ST</small></sub></code> weights by
+plain frequency (the average allele), and <code>K<sub><small>ST</small></sub></code> ignores frequency
 entirely (every allele counted equally). That ordering says the common
 alleles are more differentiated than the average ones, which are in turn
 more differentiated than the full allele list — the alleles the demes do
 share are all at very low frequency, a conclusion no single index could
 have delivered on its own.
 
-### Where D and K<sub>ST</sub> disagree completely
+### Where <code>D</code> and <code>K<sub><small>ST</small></sub></code> disagree completely
 
 Two demes sharing **all 11** of their alleles, but at nearly reversed
 frequencies (allele 1 at 0.95 in deme 1 and 0.005 in deme 2; allele 11 the
@@ -879,8 +865,8 @@ K_{ST} = 1 - \frac{11/11 - 2}{1 - 2} = 1 - 1 = 0
 
 | Measure | Value | What it is reporting |
 |---|---|---|
-| **D** | **0.99** | The *common* alleles are not shared at all |
-| K<sub>ST</sub> | **0.00** | Every allele is present in both demes; none is unique |
+| **`D`** | **0.99** | The *common* alleles are not shared at all |
+| <code>K<sub><small>ST</small></sub></code> | **0.00** | Every allele is present in both demes; none is unique |
 
 Neither is wrong; they answer different questions, and a manager needs
 both answers. If the goal is preserving *allelic presence*, one deme
@@ -897,8 +883,8 @@ continuous population suffers a severe bottleneck that splits it into 100
 tiny demes with zero migration between them; the demes then recover to
 `N = 10{,}000` individuals each, migration still zero. At the start, 99
 demes are fixed for one allele and one for a different allele (that one
-odd deme exists purely to keep G<sub>ST</sub> from dividing by zero). The
-locus is neutral with a high mutation rate, μ = 0.001 per
+odd deme exists purely to keep <code>G<sub><small>ST</small></sub></code> from dividing by zero). The
+locus is neutral with a high mutation rate, `μ = 0.001` per
 generation, under the infinite-alleles model — every mutation produces an
 allele never seen before.
 
@@ -911,7 +897,7 @@ of 100 demes identical) to total.
 |---|---|---|---|
 | Truth (allelic differentiation) | near zero | maximal | ↑ |
 | **D** | near 0 | → 1.00 | ↑ **correct** |
-| G<sub>ST</sub> | 1.00 | ≈ 0.02 | ↓ **backwards** |
+| <code>G<sub><small>ST</small></sub></code> | 1.00 | ≈ 0.02 | ↓ **backwards** |
 
 ```math
 D \approx \frac{1}{1 + m/[\mu(d-1)]} = \frac{1}{1+0} = 1.00 \text{ exactly}
@@ -922,14 +908,12 @@ G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1}
        = \frac{1}{0 + 1.0101\cdot 40 + 1} = \frac{1}{41.4} = 0.0242
 ```
 
-G<sub>ST</sub> **falls monotonically from unity to near zero over exactly the
-interval in which the demes become completely differentiated** — the
-opposite of what a differentiation measure should do. As a measure of
-nearness to fixation it behaves perfectly: the demes started fixed and
-ended diverse. (Hedrick's G\'_{ST}, a well-known rescaling of G<sub>ST</sub>
-by its maximum attainable value, patches this only at the high-diversity
-end; the paper notes it does not fix the equally serious failure at low
-diversity, which this example spans.)
+<code>G<sub><small>ST</small></sub></code> **falls monotonically from unity to near zero over exactly the interval in
+which the demes become completely differentiated** — the opposite of what a differentiation measure should do. As a
+measure of nearness to fixation it behaves perfectly: the demes started fixed and ended diverse. (Hedrick's
+<code>G'<sub><small>ST</small></sub></code>, a well-known rescaling of <code>G<sub><small>ST</small></sub></code> by its
+maximum attainable value, patches this only at the high-diversity end; the paper notes it does not fix the equally
+serious failure at low diversity, which this example spans.)
 
 ---
 
@@ -941,34 +925,34 @@ incorrect. Here are the steps, separately.
 
 ### The ceiling argument
 
-A short proof with large consequences. Since H<sub>T</sub> \leq 1 always,
+A short proof with large consequences. Since <code>H<sub><small>T</small></sub> ≤ 1</code> always,
 
 ```math
 G_{ST} = 1 - \frac{H_S}{H_T} \leq 1 - \frac{H_{S}}{1} = 1 - H_{S}
 ```
 
-So if within-deme heterozygosity is H<sub>S</sub> = 0.95, then G<sub>ST</sub> cannot
-exceed 0.05 — **no matter what**. The demes could share no alleles. They
-could be different species, incapable of interbreeding at all. G<sub>ST</sub>
-still cannot exceed 0.05.
+So if within-deme heterozygosity is <code>H<sub><small>S</small></sub> = 0.95</code>, then
+<code>G<sub><small>ST</small></sub></code> cannot exceed 0.05 — **no matter what**. The demes could share no alleles.
+They could be different species, incapable of interbreeding at all. <code>G<sub><small>ST</small></sub></code> still
+cannot exceed 0.05.
 
-This makes nonsense of the common habit of reading G<sub>ST</sub> against a
+This makes nonsense of the common habit of reading <code>G<sub><small>ST</small></sub></code> against a
 fixed verbal scale ("below 0.05 is negligible structure, above 0.25 is
 strong"). With high-diversity markers such as microsatellites — chosen
-*because* they are informative — the entire upper range of G<sub>ST</sub> is
+*because* they are informative — the entire upper range of <code>G<sub><small>ST</small></sub></code> is
 mathematically unreachable. At the descriptive level this behavior is, the
-paper stresses, **correct**: a population with low 1 - H<sub>S</sub> really is
-far from fixation, and G<sub>ST</sub> is a nearness-to-fixation measure. The
+paper stresses, **correct**: a population with low <code>1 - H<sub><small>S</small></sub></code> really is
+far from fixation, and <code>G<sub><small>ST</small></sub></code> is a nearness-to-fixation measure. The
 defect lies entirely in the interpretation people give it.
 
 ### Heterozygosity is subadditive
 
-The classical partition assumes H<sub>T</sub> = H<sub>S</sub> + H_{\mathrm{between}}, so
-that H<sub>T</sub> - H<sub>S</sub> is "the between-group component" and H<sub>S</sub>/H<sub>T</sub> is
-"the fraction of diversity found within demes." Shannon entropy really is
-additive this way — **heterozygosity is not**; it is subadditive. The
-correct partition into independent within- and between-group components
-(Jost, 2007), with equal deme weights, is:
+The classical partition assumes <code>H<sub><small>T</small></sub> = H<sub><small>S</small></sub> +
+H<sub>between</sub></code>, so that <code>H<sub><small>T</small></sub> -
+H<sub><small>S</small></sub></code> is "the between-group component" and
+<code>H<sub><small>S</small></sub>/H<sub><small>T</small></sub></code> is "the fraction of diversity found within
+demes." Shannon entropy really is additive this way — **heterozygosity is not**; it is subadditive. The correct
+partition into independent within- and between-group components (Jost, 2007), with equal deme weights, is:
 
 ```math
 H_{T} = H_{S} + H_{ST} - H_{S}\cdot H_{ST}
@@ -980,10 +964,10 @@ Solving for the between-group component gives:
 H_{ST} = \frac{H_{T} - H_{S}}{1 - H_{S}}
 ```
 
-which is exactly the first bracket of **D**. So: **D is nothing more
+which is exactly the first bracket of **`D`**. So: **`D` is nothing more
 than the correctly-partitioned between-group component of heterozygosity,
 normalized onto `[0, 1]`.** It is not a rival index invented to compete
-with G<sub>ST</sub> — it is what falls out of doing the partition correctly
+with <code>G<sub><small>ST</small></sub></code> — it is what falls out of doing the partition correctly
 instead of incorrectly. (The paper notes the same `D` also falls out of
 partitioning *effective number of alleles*, where the partition is
 multiplicative — two different correct routes, one destination.)
@@ -1006,21 +990,21 @@ H\text{ scale: } &H_{S} = 0.950 \to H_{T} = 0.975 \quad (\times 1.026) \quad \te
 ```
 
 Heterozygosity moved by 2.6% where the true diversity doubled. Any ratio
-taken on the **H** scale is therefore meaningless, and "98% of diversity
+taken on the **`H`** scale is therefore meaningless, and "98% of diversity
 is within demes" is an artifact of the scale rather than a fact about the
 population. This replication principle is the axiom underpinning Jost's
 whole research program across ecology, genetics, and phylogenetics.
 
-### D also has a ceiling, and that one is honest
+### `D` also has a ceiling, and that one is honest
 
-For balance: **D** has a range restriction too. **When the number of
-alleles is fewer than the number of demes, D cannot reach 1.00.** But
+For balance: **`D`** has a range restriction too. **When the number of
+alleles is fewer than the number of demes, `D` cannot reach 1.00.** But
 this is not the same kind of defect. With 3 alleles and 10 demes, the
 pigeonhole principle guarantees some demes share an allele — so they are
 *not* completely differentiated, and a measure of actual allelic
 differentiation *should* report less than 1. The constraint is a true
-fact about the data. G<sub>ST</sub>'s ceiling is different in kind: it depends
-on H<sub>S</sub>, a property of within-deme diversity that has **nothing to do
+fact about the data. <code>G<sub><small>ST</small></sub></code>'s ceiling is different in kind: it depends
+on <code>H<sub><small>S</small></sub></code>, a property of within-deme diversity that has **nothing to do
 with** how much the demes actually share.
 
 ---
@@ -1037,33 +1021,29 @@ to demography.
 
 The setting for both formulas below (fully covered in a
 [companion document](finite-island-model-introduction.md)):
-**d** demes of **N** diploid individuals each; discrete, non-overlapping
-generations; each generation, a fraction **m** of each deme's gene pool is
+**`d`** demes of **`N`** diploid individuals each; discrete, non-overlapping
+generations; each generation, a fraction **`m`** of each deme's gene pool is
 replaced by migrants drawn from the other demes; mutation creates novel
-alleles at rate μ under the infinite-alleles assumption (every
+alleles at rate `μ` under the infinite-alleles assumption (every
 mutation produces an allele never seen before — a good approximation for
-loci spanning many base pairs); reproduction resamples **2N** copies from
+loci spanning many base pairs); reproduction resamples **`2N`** copies from
 the local post-migration pool, which is where drift enters.
 
-"Finite" is not decoration. Wright's original *infinite* island model
-(Wright, 1931 — see Appendix D; Whitlock & McCauley, 1999, credit this
-specific paper, not the more commonly cited Wright 1943 "isolation by
-distance," as the origin of both the island model itself and
-`F_ST ≈ 1/(4Nm+1)`) draws migrants from an infinitely large external
-reservoir that never itself drifts, which is what makes the classical
-closed-form F<sub>ST</sub> equilibrium easy to write down. The finite version removes that fiction:
-there are only **d** demes and no reservoir, so migrants come from the
-actual, currently-drifting other demes, and the whole metapopulation is a
-closed finite system that drifts as a whole. The system settles into a
-**stochastic equilibrium**: individual allele frequencies never stop
-moving, but the *distribution* of summary statistics stabilizes.
+"Finite" is not decoration. Wright's original *infinite* island model (Wright, 1931 — see Appendix D; Whitlock &
+McCauley, 1999, credit this specific paper, not the more commonly cited Wright 1943 "isolation by distance," as the
+origin of both the island model itself and <code>F<sub></small>ST</small></sub> ≈ 1/(4Nm+1)</code>) draws migrants from
+an infinitely large external reservoir that never itself drifts, which is what makes the classical closed-form
+<code>F<sub><small>ST</small></sub></code> equilibrium easy to write down. The finite version removes that fiction:
+there are only **`d`** demes and no reservoir, so migrants come from the actual, currently-drifting other demes, and the
+whole metapopulation is a closed finite system that drifts as a whole. The system settles into a **stochastic
+equilibrium**: individual allele frequencies never stop moving, but the *distribution* of summary statistics stabilizes.
 
-Note the phrase "**d** demes of **N** diploid individuals **each**." Every
+Note the phrase "**`d`** demes of **`N`** diploid individuals **each**." Every
 deme is the same size, and that single word is carrying more weight than
 its length suggests. It is revisited below, once both equilibrium formulas
 are on the table.
 
-### Equilibrium GST: controlled by Nm
+### Equilibrium <code>G<sub><small>ST</small></sub></code>: controlled by `Nm`
 
 ```math
 G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1}
@@ -1072,11 +1052,11 @@ G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + (d/(d-1))\cdot 4N\mu + 1}
 The `(d/(d-1))²` factor multiplying the migration term is the
 finite-number-of-demes correction from Crow & Aoki (1984) — see
 Appendix D — confirmed directly against their Eq. 7/Eq. 8
-(`G_ST ≈ 1/(4Nmα+1)`, `α = [n/(n-1)]²`, their `n` this document's `d`),
+(<code>G<sub><small>ST</small></sub> ≈ 1/(4Nmα+1)</code>, `α = [n/(n-1)]²`, their `n` this document's `d`),
 not to this paper or to Wright's own original (infinite-island)
 derivation; it vanishes as `d → ∞`, recovering Wright's classical
 `1/(4Nm+1)`, exactly as Crow & Aoki's own paper notes. One boundary of
-that attribution worth being precise about: Crow & Aoki's own Eq. 7
+that attribution worth being precise about: Crow & Aoki\'s own Eq. 7
 carries **no mutation term at all** — dropping it entirely is the
 "pleasing result" their own paper highlights, valid under their stated
 `μ ≪ m, 1/N ≪ 1` approximation. The `(d/(d-1))·4Nμ` mutation term
@@ -1086,74 +1066,74 @@ references (their eq. 6, with mutation retained) instead credit
 Takahata (1983) for the general finite-`K`-allele solution and Nei's
 1975 textbook for an exact infinite-allele solution — see Appendix D.
 
-When m \gg μ — the usual case for slowly mutating loci — the
-4Nμ term is negligible and this collapses to a function of **Nm**
-and **d** alone:
+When `m ≫ μ` — the usual case for slowly mutating loci — the
+`4Nμ` term is negligible and this collapses to a function of **`Nm`**
+and **`d`** alone:
 
 ```math
 G_{ST} \approx \frac{1}{(d/(d-1))^2\cdot 4Nm + 1}
 ```
 
-Two consequences follow. First, G<sub>ST</sub> depends on the **absolute
-number of migrants per generation**, `Nm`, not on **m** and **N**
+Two consequences follow. First, <code>G<sub><small>ST</small></sub></code> depends on the **absolute
+number of migrants per generation**, `Nm`, not on **`m`** and **`N`**
 separately — ten migrants into a deme of 100 and ten into a deme of 10,000
-give the same expected G<sub>ST</sub>. Second, because μ has dropped
-out, the expected G<sub>ST</sub> is **the same for all loci** with
-μ \ll m, so estimates from many loci can legitimately be averaged
+give the same expected <code>G<sub><small>ST</small></sub></code>. Second, because `μ` has dropped
+out, the expected <code>G<sub><small>ST</small></sub></code> is **the same for all loci** with
+`μ ≪ m`, so estimates from many loci can legitimately be averaged
 and used to estimate `Nm` — provided every island-model assumption
 holds. This is Wright's design goal achieved: a statistic sensitive only
 to demography, comparable across loci.
 
-### Equilibrium D: controlled by the mutation ratio
+### Equilibrium `D`: controlled by the mutation ratio
 
 ```math
 D \approx \frac{1}{1 + m/[\mu(d-1)]}
 ```
 
-Note what is present and what is absent: **N does not appear at all.**
-The controlling quantity is m/(μ(d-1)) — a ratio of migration rate to
+Note what is present and what is absent: **`N` does not appear at all.**
+The controlling quantity is `m/(μ(d-1))` — a ratio of migration rate to
 mutation rate, scaled by deme count. The same quantity controls Nei's
 genetic distance, and `D` is a simple monotonic function of it (Jost,
 2009). Sanity checks: with no migration (`m = 0`), `D = 1`, and demes
-diverge completely; with m \gg μ(d-1), D → 0 and migration
+diverge completely; with `m ≫ μ(d-1), D → 0` and migration
 homogenizes them.
 
 ### Why this kills the standard inference
 
-| | Controlled by | Contains `N`? | Contains μ? |
+| | Controlled by | Contains `N`? | Contains `μ`? |
 |---|---|---|---|
-| G<sub>ST</sub> (nearness to fixation) | `Nm` | yes | barely, when μ \ll m |
-| `D` (allelic differentiation) | m/(μ(d-1)) | **no** | **strongly** |
+| <code>G<sub><small>ST</small></sub></code> (nearness to fixation) | `Nm` | yes | barely, when `μ ≪ m` |
+| `D` (allelic differentiation) | `m/(μ(d-1))` | **no** | **strongly** |
 
 A widely repeated rule of thumb claims: *"when mutation rate is low, the
 absolute number of migrants `Nm` determines the genetic differentiation
 between demes."* It does not. `Nm` determines **nearness to fixation**.
 Allelic differentiation is governed by an entirely different combination,
-one in which **N** plays no part and μ plays a decisive one. This
+one in which **`N`** plays no part and `μ` plays a decisive one. This
 matters practically, because the "one migrant per generation is enough"
 rule of thumb that circulates in conservation genetics rests on the
 refuted version.
 
-Since **D**'s equilibrium depends strongly on μ, and μ spans
+Since **`D`**'s equilibrium depends strongly on `μ`, and `μ` spans
 five orders of magnitude across marker types, the *same* pair of demes
-shows different **D** at a microsatellite than at a coding gene. The paper
+shows different **`D`** at a microsatellite than at a coding gene. The paper
 insists this is "a real effect, not a flaw in the differentiation
 measures" — the demes really are more differentiated at the fast-mutating
 locus. If the absolute magnitude of differentiation at a specific locus is
-what matters, measure **D** at that locus, or at loci with comparable
-μ; fast-mutating markers remain valid for *ranking* deme pairs, just
+what matters, measure **`D`** at that locus, or at loci with comparable
+`μ`; fast-mutating markers remain valid for *ranking* deme pairs, just
 not for reporting an absolute value at a locus of different interest.
 
 ### The equal-deme-size assumption
 
-Both equilibrium formulas assume every deme holds exactly **N**
+Both equilibrium formulas assume every deme holds exactly **`N`**
 individuals. This is one of the model's largest simplifications, and it is
 worth separating from a different equal-size question that Part III has
 already settled, because the two are easy to run together.
 
 - **A weighting choice** (Part III): given real data from demes of
   differing size, do you weight each deme equally or in proportion to its
-  size? **D** weights every deme equally by construction; E<sub>ST</sub>
+  size? **`D`** weights every deme equally by construction; <code>E<sub><small>ST</small></sub></code>
   weights within-deme entropy by deme size, which is precisely why the
   paper recommends it "when relative sizes of the demes differ." This is a
   decision you make, and it is available to you regardless of any model.
@@ -1163,8 +1143,8 @@ already settled, because the two are easy to run together.
 
 **What goes wrong.** Drift acts at rate `1/(2N)`, so unequal demes drift
 at unequal rates: small demes lose variation and reach fixation far faster
-than large ones, and H<sub>S</sub> becomes an average over demes with genuinely
-different equilibrium heterozygosities rather than **d** draws from one
+than large ones, and <code>H<sub><small>S</small></sub></code> becomes an average over demes with genuinely
+different equilibrium heterozygosities rather than **`d`** draws from one
 distribution. The standard result is that a subdivided population behaves
 like one whose size is closer to the **harmonic** mean of the deme sizes
 than the arithmetic mean — and the harmonic mean is dominated by the
@@ -1179,14 +1159,14 @@ The gap is not subtle. Take `d = 10`, one deme of 10,000 and nine of 100:
 ```
 
 A factor of 9.8. Feeding each into Eq. 2 with `m = 0.01` and negligible
-μ:
+`μ`:
 
-| `N` used | `4Nm` | Eq. 2 G<sub>ST</sub> |
+| `N` used | `4Nm` | Eq. 2 <code>G<sub><small>ST</small></sub></code> |
 |---|---|---|
 | 1090 (arithmetic mean) | 43.6 | 0.018 |
 | 111 (harmonic mean) | 4.44 | **0.153** |
 
-Plugging in the *average* deme size understates G<sub>ST</sub> by roughly
+Plugging in the *average* deme size understates <code>G<sub><small>ST</small></sub></code> by roughly
 **8.5-fold**. Run backwards — the direction people actually use it — the
 same error inflates the estimate of `Nm` by about the same factor, and
 "how many migrants per generation are these populations exchanging?" is
@@ -1200,25 +1180,22 @@ constant across demes is a modeling decision with no default, and "the
 absolute number of migrants per generation" quietly presumes it has been
 made.
 
-**`D` fares better, and for a structural reason.** Look again at Eq. 4:
-`N` does not appear in it at all. Allelic differentiation at equilibrium
-is set by the migration–mutation balance governing whether two lineages
-drawn from *different* demes are identical, and the deme-size dependence
-that dominates within-deme identity largely cancels in the ratio
-J<sub>between</sub>/J<sub>within</sub> on which `D` is built. For the numbers above,
-Eq. 4 returns D ≈ 0.083 whichever deme size you use, because it
-never asks. This is the same robustness the paper is pointing at when it
-calls `D` "more stable against variation in deme size."
+**`D` fares better, and for a structural reason.** Look again at Eq. 4: `N` does not appear in it at all. Allelic
+differentiation at equilibrium is set by the migration–mutation balance governing whether two lineages drawn from
+*different* demes are identical, and the deme-size dependence that dominates within-deme identity largely cancels in the
+ratio <code>J<sub>between</sub>/J<sub>within</sub></code> on which `D` is built. For the
+numbers above, Eq. 4 returns `D ≈ 0.083` whichever deme size you use, because it never asks. This is the same robustness
+the paper is pointing at when it calls `D` "more stable against variation in deme size."
 
 Do not over-read it as immunity, though. Eq. 4 still assumes demes are
 *exchangeable*, sharing one migration rate `m` and one mutation rate
-μ; unequal sizes in real metapopulations usually come with unequal
+`μ`; unequal sizes in real metapopulations usually come with unequal
 migration rates, and then `m` is not a scalar and the derivation's
-premise is gone. The ≈ is doing real work.
+premise is gone. The `≈` is doing real work.
 
 **What survives.** The reassuring structural point is that this assumption
 is quarantined. Everything in Parts II–V — the ceiling argument
-G<sub>ST</sub> \le 1 - H<sub>S</sub>, the subadditivity of heterozygosity, the
+<code>G<sub><small>ST</small></sub> ≤ 1 - H<sub><small>S</small></sub></code>, the subadditivity of heterozygosity, the
 replication principle, and every worked example in Part IV — is computed
 from allele frequency vectors alone and assumes **nothing whatever** about
 deme sizes, migration, mutation, or equilibrium. The paper's central thesis
@@ -1241,11 +1218,11 @@ Eq. 2 and Eq. 4.
 
 Having derived these equilibrium relationships, the paper immediately
 warns against leaning on them — this is not a hedge but a load-bearing
-part of the argument. **Neither G<sub>ST</sub> nor `D` should be used to
+part of the argument. **Neither <code>G<sub><small>ST</small></sub></code> nor `D` should be used to
 estimate current migration**, common practice in conservation genetics
 until recently. Present-day values reflect an accumulation of historic
 *and* recent migration and population sizes; populations that are now
-completely isolated can still show a low G<sub>ST</sub> simply because
+completely isolated can still show a low <code>G<sub><small>ST</small></sub></code> simply because
 isolation has not yet had time to leave its mark. Threatened populations
 are, by definition, not at equilibrium — they are of concern precisely
 *because* their deme numbers, sizes, and migration rates have recently
@@ -1255,10 +1232,9 @@ since it is independent of within-group diversity and therefore more
 stable against variation in deme size, but past variation in migration
 rate still leaves a mark on it too.
 
-The paper's own recommendation follows from this: work at the
-**descriptive** level, measuring present-day magnitudes of `D`,
-E<sub>ST</sub>, and K<sub>ST</sub> at the loci of actual interest, rather than
-making inferences based on unverifiable equilibrium assumptions.
+The paper's own recommendation follows from this: work at the **descriptive** level, measuring present-day magnitudes of
+`D`, <code>E<sub><small>ST</small></sub></code>, and <code>K<sub><small>ST</small></sub></code> at the loci of actual
+interest, rather than making inferences based on unverifiable equilibrium assumptions.
 
 ---
 
@@ -1269,8 +1245,8 @@ thousand — a low-diversity regime worth treating separately.
 
 **Many demes, two alleles.** The same ambiguity as the infinite-allele
 case: with ten demes, nine fixed for one base and one for the other,
-G<sub>ST</sub> = 1.00 while `D = 0.20` — numerically identical to the first
-worked example above. Split five-five and G<sub>ST</sub> is still `1.00`
+<code>G<sub><small>ST</small></sub> = 1.00</code> while `D = 0.20` — numerically identical to the first
+worked example above. Split five-five and <code>G<sub><small>ST</small></sub></code> is still `1.00`
 (all demes remain fixed), while `D = 0.5556`. Note that with two alleles
 and ten demes, `D` **cannot** reach 1.00 — and, per the ceiling
 discussion above, that is the honest answer: with fewer alleles than
@@ -1278,10 +1254,10 @@ demes, some demes necessarily share.
 
 **Two demes, two alleles — the measures converge.** This is the case
 where the distinction largely evaporates, and the paper says so plainly.
-With only two alleles, G<sub>ST</sub>'s dependence on within-group
+With only two alleles, <code>G<sub><small>ST</small></sub></code>'s dependence on within-group
 heterozygosity stops mattering much:
 
-| Configuration | G<sub>ST</sub> | `D` |
+| Configuration | <code>G<sub><small>ST</small></sub></code> | `D` |
 |---|---|---|
 | Both demes fixed, different alleles | 1.0000 | 1.0000 |
 | Identical allele frequencies (not both fixed on the same allele) | 0 | 0 |
@@ -1303,48 +1279,38 @@ hierarchical levels.
 
 ## Part VIII — What the paper recommends
 
-1. **Report both families, and label them by what they measure.**
-   Interpret G<sub>ST</sub>, F<sub>ST</sub>, and θ as **nearness to
-   fixation** (as Wright himself did), and `D`, E<sub>ST</sub>, K<sub>ST</sub>
-   as **allelic differentiation**. They are complementary, not competing.
-2. **`D` is not an estimator of F<sub>ST</sub> or G<sub>ST</sub>.** Treating it
-   as a "corrected G<sub>ST</sub>" is a category error the paper names
-   explicitly.
-3. **For conservation questions about which demes to protect, use
-   allelic differentiation measures.** In most threatened-species cases,
-   this is the information that actually bears on the decision.
-4. **Report the profile across `q`, not one index.** `D` (`q=2`),
-   E<sub>ST</sub> (`q=1`), and K<sub>ST</sub> (`q=0`) weight allele
-   frequencies differently, and their *disagreement* diagnoses the
-   frequency structure of the data (see the worked examples above). `D`
-   has the simplest connection to genetic models and is easiest to
-   estimate reliably from small samples; E<sub>ST</sub> has the most robust
-   monotonicity and partitioning properties, handles unequal deme sizes,
-   and suits hierarchical analysis; K<sub>ST</sub> has the strongest
-   monotonicity of all and answers "how many alleles are unique to this
-   deme."
-5. **Measure at the loci that matter.** For absolute magnitudes, use the
-   functional loci of interest (e.g. MHC) or loci with similar mutation
-   rates. Fast-mutating markers are valid for *ranking* deme pairs, not
-   for absolute values; run both neutral and putatively adaptive markers
-   where possible.
-6. **Interpret magnitudes and confidence intervals, not p-values.**
-   Statistical significance against an always-false null model is not the
-   question; effect size is. Relatedly, H<sub>T</sub> varies across pairwise
-   comparisons, so pairwise G<sub>ST</sub> values are not truly comparable to
-   each other, whereas the same value of `D` means the same degree of
-   allelic differentiation across deme pairs and even across species.
+1. **Report both families, and label them by what they measure.** Interpret <code>G<sub><small>ST</small></sub></code>,
+   <code>F<sub><small>ST</small></sub></code>, and `θ` as **nearness to fixation** (as Wright himself did), and `D`,
+   <code>E<sub><small>ST</small></sub></code>, <code>K<sub><small>ST</small></sub></code> as **allelic
+   differentiation**. They are complementary, not competing.
+2. **`D` is not an estimator of <code>F<sub><small>ST</small></sub></code> or
+   <code>G<sub><small>ST</small></sub></code>.** Treating it as a "corrected
+   <code>G<sub><small>ST</small></sub></code>" is a category error the paper names explicitly.
+3. **For conservation questions about which demes to protect, use allelic differentiation measures.** In most
+   threatened-species cases, this is the information that actually bears on the decision.
+4. **Report the profile across `q`, not one index.** `D` (`q=2`), <code>E<sub><small>ST</small></sub></code> (`q=1`),
+   and <code>K<sub><small>ST</small></sub></code> (`q=0`) weight allele frequencies differently, and their
+   *disagreement* diagnoses the frequency structure of the data (see the worked examples above). `D` has the simplest
+   connection to genetic models and is easiest to estimate reliably from small samples;
+   <code>E<sub><small>ST</small></sub></code> has the most robust monotonicity and partitioning properties, handles
+   unequal deme sizes, and suits hierarchical analysis; <code>K<sub><small>ST</small></sub></code> has the strongest
+   monotonicity of all and answers "how many alleles are unique to this deme."
+5. **Measure at the loci that matter.** For absolute magnitudes, use the functional loci of interest (e.g. MHC) or
+   loci with similar mutation rates. Fast-mutating markers are valid for *ranking* deme pairs, not for absolute
+   values; run both neutral and putatively adaptive markers where possible.
+6. **Interpret magnitudes and confidence intervals, not p-values.** Statistical significance against an always-false
+   null model is not the question; effect size is. Relatedly, <code>H<sub><small>T</small></sub></code> varies across
+   pairwise comparisons, so pairwise <code>G<sub><small>ST</small></sub></code> values are not truly comparable to
+   each other, whereas the same value of `D` means the same degree of allelic differentiation across deme pairs and
+   even across species.
 7. **Do not use either family to estimate current migration** (Part VI).
-8. **Convert to effective numbers before any ratio comparison.**
-   Diversity claims of the form "X% of diversity is within demes" must be
-   computed on Hill numbers, never on raw heterozygosity.
-9. **An acknowledged open problem.** The paper is explicit that "maximize
-   genetic diversity" is not yet a well-posed conservation goal, because
-   the *unit* of diversity is unsettled — SNPs, functional alleles, allele
-   pairs, or whole genotypes? Preserving genotypes has real justification
-   (crop collections do exactly this, to maintain phenotypes), but the
-   number of multi-locus combinations explodes beyond any possibility of
-   preserving them all. Left as future work.
+8. **Convert to effective numbers before any ratio comparison.** Diversity claims of the form "X% of diversity is
+   within demes" must be computed on Hill numbers, never on raw heterozygosity.
+9. **An acknowledged open problem.** The paper is explicit that "maximize genetic diversity" is not yet a well-posed
+   conservation goal, because the *unit* of diversity is unsettled — SNPs, functional alleles, allele pairs, or whole
+   genotypes? Preserving genotypes has real justification (crop collections do exactly this, to maintain phenotypes),
+   but the number of multi-locus combinations explodes beyond any possibility of preserving them all. Left as future
+   work.
 
 ---
 
@@ -1352,17 +1318,17 @@ hierarchical levels.
 
 | Common claim | Status | Where |
 |---|---|---|
-| "F<sub>ST</sub>/G<sub>ST</sub> measures how different populations are." | **False.** It measures nearness to fixation. | Part III |
-| "`D` is a corrected or standardized F<sub>ST</sub>." | **False.** Different quantity, different question. | Part III, VIII |
-| "High G<sub>ST</sub> means the demes hold different alleles." | **False.** G<sub>ST</sub>=1 when 9 of 10 demes are identical. | Part IV |
-| "Low G<sub>ST</sub> means the demes are genetically similar." | **False.** Species C shares zero alleles at G<sub>ST</sub>=0.026. | Part IV |
-| "G<sub>ST</sub> below 0.05 means negligible structure." | **Unsound.** G<sub>ST</sub>\le 1-H<sub>S</sub>, so with H<sub>S</sub>=0.95 it can never exceed 0.05. | Part V |
-| "H<sub>T</sub>-H<sub>S</sub> is the between-group diversity." | **False.** `H` is subadditive; the correct form is H<sub>T</sub>=H<sub>S</sub>+H<sub>ST</sub>-H<sub>S</sub> H<sub>ST</sub>. | Part V |
+| "<code>F<sub><small>ST</small></sub>/G<sub><small>ST</small></sub></code> measures how different populations are." | **False.** It measures nearness to fixation. | Part III |
+| "`D` is a corrected or standardized <code>F<sub><small>ST</small></sub></code>." | **False.** Different quantity, different question. | Part III, VIII |
+| "High <code>G<sub><small>ST</small></sub></code> means the demes hold different alleles." | **False.** <code>G<sub><small>ST</small></sub>=1</code> when 9 of 10 demes are identical. | Part IV |
+| "Low <code>G<sub><small>ST</small></sub></code> means the demes are genetically similar." | **False.** Species C shares zero alleles at <code>G<sub><small>ST</small></sub>=0.026</code>. | Part IV |
+| "<code>G<sub><small>ST</small></sub></code> below 0.05 means negligible structure." | **Unsound.** <code>G<sub><small>ST</small></sub> ≤ 1-H<sub><small>S</small></sub></code>, so with <code>H<sub><small>S</small></sub>=0.95</code> it can never exceed 0.05. | Part V |
+| "<code>H<sub><small>T</small></sub> - H<sub><small>S</small></sub></code> is the between-group diversity." | **False.** `H` is subadditive; the correct form is <code>H<sub><small>T</small></sub> = H<sub><small>S</small></sub> + H<sub><small>ST</small></sub> - H<sub><small>S</small></sub> H<sub><small>ST</small></sub></code>. | Part V |
 | "98% of diversity is within demes, so protect one." | **False.** Artifact of the `H` scale; on effective alleles the demes are nearly disjoint. | Part IV, V |
-| "`Nm` determines allelic differentiation when μ is low." | **False.** `Nm` determines nearness to fixation; m/(μ(d-1)) determines differentiation. | Part VI |
-| "`D` varies across loci, so it is unreliable." | **False.** That variation is a real biological effect of differing μ. | Part VI |
-| "Hedrick's G'<sub>ST</sub> fixes G<sub>ST</sub>." | **Partial at best.** Addresses only the high-heterozygosity end, not the low. | Part IV |
-| "G<sub>ST</sub> and `D` can be used to estimate current migration." | **False.** Both integrate historical demography. | Part VI |
+| "`Nm` determines allelic differentiation when `μ` is low." | **False.** `Nm` determines nearness to fixation; `m/(μ(d-1))` determines differentiation. | Part VI |
+| "`D` varies across loci, so it is unreliable." | **False.** That variation is a real biological effect of differing `μ`. | Part VI |
+| "Hedrick's <code>G'<sub><small>ST</small></sub></code> fixes <code>G<sub><small>ST</small></sub></code>." | **Partial at best.** Addresses only the high-heterozygosity end, not the low. | Part IV |
+| "<code>G<sub><small>ST</small></sub></code> and `D` can be used to estimate current migration." | **False.** Both integrate historical demography. | Part VI |
 | "These disagreements are estimation artifacts." | **False.** They hold for exact population values, with no sampling involved. | Part III |
 
 ---
@@ -1384,8 +1350,8 @@ The substitution is mechanical:
 | Locus | The variable being tabulated |
 | Deme | Group, site, sample, class |
 | Allele frequency vector | Composition of one group |
-| H<sub>S</sub>, H<sub>T</sub> | Mean within-group and pooled diversity |
-| `D`, E<sub>ST</sub>, K<sub>ST</sub> | How little the groups' repertoires overlap |
+| <code>H<sub><small>S</small></sub></code>, <code>H<sub><small>T</small></sub></code> | Mean within-group and pooled diversity |
+| `D`, <code>E<sub><small>ST</small></sub></code>, <code>K<sub><small>ST</small></sub></code> | How little the groups' repertoires overlap |
 
 ### What carries over
 
@@ -1405,8 +1371,8 @@ the high-cardinality variables — often the most informative ones.
 
 **The `q`-profile as a diagnostic.** Computing overlap at `q = 0`,
 `1`, and `2` and reading the *ordering* transfers cleanly.
-K<sub>ST</sub> \ll D says the groups share their rare categories but differ
-in their typical ones; K<sub>ST</sub> \gg D says the reverse. Neither fact is
+<code>K<sub><small>ST</small></sub> ≪ D</code> says the groups share their rare categories but differ
+in their typical ones; <code>K<sub><small>ST</small></sub> ≫ D</code> says the reverse. Neither fact is
 visible from a single number.
 
 **Name the quantity by what it measures.** The paper's central practical
@@ -1416,7 +1382,7 @@ hazard attaches to any function called `distance`, `similarity`, or
 `difference` without a statement of which of several inequivalent things
 it computes.
 
-**The relation to Jaccard and Sørensen.** K<sub>ST</sub> is the one-complement
+**The relation to Jaccard and Sørensen.** <code>K<sub><small>ST</small></sub></code> is the one-complement
 of the multiple-community Sørensen index, and the general Eq. 6 formula
 above is the one-complement of a general similarity measure (Jost, Chao &
 Chazdon, 2011) — the familiar presence/absence similarity coefficients are
@@ -1427,13 +1393,13 @@ generalization that adds frequency weighting to them.
 
 **All of Part VI.** Those formulas are properties of Wright's finite
 island model — mutation, migration, drift, discrete generations. Absent
-that generative process, there is no μ, `m`, `N`, or
+that generative process, there is no `μ`, `m`, `N`, or
 equilibrium, and none of those formulas means anything.
 
-**G<sub>ST</sub> and the whole fixation family.** "Nearness to fixation" is a
+**<code>G<sub><small>ST</small></sub></code> and the whole fixation family.** "Nearness to fixation" is a
 statement about a population losing variation over generations; it has no
 meaning for data with no generational process, and the conventional
-F<sub>ST</sub> interpretive scales should not be imported.
+<code>F<sub><small>ST</small></sub></code> interpretive scales should not be imported.
 
 **The exchangeable-labels assumption — the important caveat.** Every
 measure here treats categories as unordered and equidistant. Two alleles
@@ -1448,7 +1414,7 @@ mixed-type data, general-purpose coefficients that respect variable type
 are the right tool only for the unordered-categorical part.
 
 **Group weighting has no default.** `D` weights every group equally;
-E<sub>ST</sub> can weight by group size. Outside genetics the analogous choice
+<code>E<sub><small>ST</small></sub></code> can weight by group size. Outside genetics the analogous choice
 is usually a substantive domain decision with no obvious answer, and it
 changes results — make it explicitly and record it.
 
@@ -1463,24 +1429,24 @@ changes results — make it explicitly and record it.
 | `d` | Number of demes (subpopulations) |
 | `N` | Diploid individuals per deme (`2N` gene copies) |
 | `m` | Migration rate — fraction of a deme's gene pool replaced per generation |
-| μ | Mutation rate per locus per generation |
-| p<sub>i</sub> | Frequency of allele `i` |
+| `μ` | Mutation rate per locus per generation |
+| <code>p<sub>i</sub></code> | Frequency of allele `i` |
 | `H` | Expected heterozygosity of one deme |
-| H<sub>S</sub> | Mean within-deme heterozygosity |
-| H<sub>T</sub> | Total (pooled) heterozygosity |
-| H<sub>ST</sub> | Correctly partitioned between-group heterozygosity |
+| <code>H<sub><small>S</small></sub></code> | Mean within-deme heterozygosity |
+| <code>H<sub><small>T</small></sub></code> | Total (pooled) heterozygosity |
+| <code>H<sub><small>ST</small></sub></code> | Correctly partitioned between-group heterozygosity |
 | `J` | Nei's gene identity, `= 1 - H` |
-| {}^{q}D | Hill number of order `q` (effective number of alleles) |
-| E<sub>T</sub>, E<sub>S</sub>, E<sub>w</sub> | Total / mean-within / deme-size Shannon entropies |
-| K<sub>T</sub>, K<sub>S</sub> | Total / mean-per-deme allele counts |
+| <code><sup>q</sup>D</code> | Hill number of order `q` (effective number of alleles) |
+| <code>E<sub><small>T</small></sub></code>, <code>E<sub><small>S</small></sub></code>, <code>E<sub>w</sub></code> | Total / mean-within / deme-size Shannon entropies |
+| <code>K<sub><small>T</small></sub></code>, <code>K<sub><small>S</small></sub></code> | Total / mean-per-deme allele counts |
 | `q` | Order of a diversity measure (rare-allele weighting) |
-| \mathrm{NGD} | Nei's genetic distance |
-| D̄<sub>m</sub> | Nei's absolute mean pairwise between-deme gene diversity |
-| R<sub>ST</sub> | Nei's `D̄_m` relative to within-deme diversity, `= D̄_m/H_S` |
-| G'<sub>ST</sub> (Nei) | Nei's log-based large-differentiation `G_ST` estimator, `= g_st_log` |
-| G'<sub>ST</sub> (Hedrick) | Hedrick's standardized `G_ST`, `= g_st_prime` — a *different* quantity from Nei's own G'<sub>ST</sub> above, despite the shared name |
-| G<sub>ST</sub>(max) | Hedrick's own attainable `G_ST` ceiling given `H_S`, `= g_st_max` |
-| Gs, Gd | Ryman & Leimar's within-/between-deme gene identities (`J_0`, `J_1`), `= gs`/`gd` |
+| <span class="roman">NGD</span> | Nei's genetic distance |
+| <code>D̄<sub>m</sub></code> | Nei's absolute mean pairwise between-deme gene diversity |
+| <code>R<sub><small>ST</small></sub></code> | Nei's <code>D̄<sub>m</sub></code> relative to within-deme diversity, `= r_st` |
+| <code>G'<sub><small>ST</small></sub></code> (Nei) | Nei's log-based large-differentiation <code>G<sub><small>ST</small></sub></code> estimator, `= g_st_log` |
+| <code>G'<sub><small>ST</small></sub></code> (Hedrick) | Hedrick's standardized <code>G<sub><small>ST</small></sub></code>, `= g_st_prime` — a *different* quantity from Nei's own <code>G'<sub><small>ST</small></sub></code> above, despite the shared name |
+| <code>G<sub><small>ST</small></sub>(max)</code> | Hedrick's own attainable <code>G<sub><small>ST</small></sub></code> ceiling given <code>H<sub><small>S</small></sub></code>, `= g_st_max` |
+| <code>Gs</code>, <code>Gd</code> | Ryman & Leimar's within-/between-deme gene identities (<code>J<sub>0</sub></code>, <code>J<sub>1</sub></code>), `= gs`/`gd` |
 
 ### Within one deme
 
@@ -1494,13 +1460,12 @@ H = 1 - \sum_i p_i^2 \qquad J = \sum_i p_i^2 = 1 - H \qquad {}^{H}D = \frac{1}{1
 
 ### Across demes
 
-Ryman & Leimar (2008) work in gene identities rather than heterozygosities
-— `Gs` (their `J_0`) and `Gd` (their `J_1`) — related to `H_S`/`H_T` by
-the same complement `J = 1 - H` above, plus one correction for `Gd`
-specifically (`gs`/`gd` in `fim.statistics.differentiation`; see
-`doc/migration-conventions.md` for the with-replacement-versus-
-distinct-pair identity convention `fim` and the paper use, and the exact
-`O(1/N)` mapping between the two):
+Ryman & Leimar (2008) work in gene identities rather than heterozygosities — `Gs` (their <code>J<sub>0</sub></code>) and
+`Gd` (their <code>J<sub>1</sub></code>) — related to
+<code>H<sub><small>S</small></sub>/H<sub><small>S</small></sub></code> by the same complement `J = 1 - H` above, plus
+one correction for `Gd` specifically (`gs`/`gd` in `fim.statistics.differentiation`; see `doc/migration-conventions.md`
+for the with-replacement-versus- distinct-pair identity convention `fim` and the paper use, and the exact `O(1/N)`
+mapping between the two):
 
 ```math
 Gs = 1 - H_S, \qquad Gd = \frac{d\,(1-H_T) - (1-H_S)}{d-1}
@@ -1537,14 +1502,14 @@ E_{ST} = \frac{E_{T} - E_{S}}{E_{w}} \qquad (E_{w} = \ln d \text{ for equal deme
 K_{ST} = 1 - \frac{K_{T}/K_{S} - d}{1 - d}
 ```
 
-Nei (1973) also defines two further statistics this project implements
-(`d_m`, `r_st`, `g_st_log`) but does not otherwise discuss above: an
-*absolute*, not-`[0, 1]`-bounded pairwise diversity, its ratio to
-within-deme diversity, and a log-based alternative to `G_ST` recommended
-specifically for strong (subspecies-level) differentiation, where linear
-`G_ST` saturates. `D̄_m` and `R_ST` assume equal deme weights, the same
-restriction `D`, above, already carries and for the same reason (Nei's
-own Eq. 4 derivation assumes `w_i = 1/s`):
+Nei (1973) also defines two further statistics this project implements (<code>d<sub>m</sub></code>,
+<code>r<sub>st</sub></code>, `g_st_log`) but does not otherwise discuss above: an *absolute*, not-`[0, 1]`-bounded
+pairwise diversity, its ratio to within-deme diversity, and a log-based alternative to
+<code>G<sub><small>ST</small></sub></code> recommended specifically for strong (subspecies-level) differentiation,
+where linear <code>G<sub><small>ST</small></sub></code> saturates.
+<code>D̄<sub>m</sub></code> and <code>R<sub><small>ST</small></sub></code> assume equal deme weights, the same
+restriction `D`, above, already carries and for the same reason (Nei's own Eq. 4 derivation assumes <code>w<sub>i</sub>
+= 1/s</code>):
 
 ```math
 \bar{D}_m = \frac{d}{d-1}(H_T - H_S), \qquad R_{ST} = \frac{\bar{D}_m}{H_S}
@@ -1554,9 +1519,9 @@ own Eq. 4 derivation assumes `w_i = 1/s`):
 G'_{ST} \text{ (Nei)} = \frac{-\ln(J_T/J_S)}{-\ln J_T} = \frac{\ln(J_S/J_T)}{-\ln J_T}
 ```
 
-Hedrick (2005)'s own, differently defined `G'_ST` — Ryman & Leimar
-(2008)'s own Equations 7-8, `g_st_max`/`g_st_prime` in `fim.statistics.
-differentiation` — rescales ordinary `G_ST` by its own attainable
+Hedrick (2005)'s own, differently defined <code>G'<sub><small>ST</small></sub></code> — Ryman & Leimar
+(2008)'s own Equations 7-8, <code>g<sub>st</sub>(max) / g'<sub>st</sub></code> in `fim.statistics.
+differentiation` — rescales ordinary <code>G<sub><small>ST</small></sub></code> by its own attainable
 ceiling instead:
 
 ```math
@@ -1566,8 +1531,8 @@ G'_{ST} \text{ (Hedrick)} = \frac{G_{ST}}{G_{ST}(\max)}
 
 Ryman & Leimar's own two transition-phase/equilibrium mutation-
 negligibility conditions (Equations 9-10, `mutation_negligible_
-transition`/`mutation_negligible_equilibrium`), each at the paper's own
-published calibration factor for a 10% effect on `G_ST`:
+transition / mutation_negligible_equilibrium`), each at the paper's own
+published calibration factor for a 10% effect on <code>G<sub><small>ST</small></sub></code>:
 
 ```math
 t \ll \frac{H_S(0)}{2\mu} \text{ (one-fifth)}, \qquad
@@ -1611,12 +1576,12 @@ H_{S} = 0, \qquad H_{T} = 0.5, \qquad D = (0.5/1)\cdot(10/9) = 0.5556.
 The pairwise derivation the paper itself offers agrees: `25` differing pairs out
 of `45` gives `25/45 = 0.5556`. The printed `0.5` appears to be a rounding or
 transcription slip. Nothing in the argument depends on the exact figure — the
-point is only that `D` differs across the three scenarios while G<sub>ST</sub> does
+point is only that `D` differs across the three scenarios while <code>G<sub><small>ST</small></sub></code> does
 not.
 
 **2. Equation 5 omits `L`.** The paper gives a refinement of the `D`
 equilibrium formula for sets of loci with a roughly constant per-base-pair
-mutation rate μ<sub>b</sub> and locus length `L` (harmonic mean, in base pairs):
+mutation rate <code>μ<sub>b</sub></code> and locus length `L` (harmonic mean, in base pairs):
 
 ```math
 D \approx \frac{1}{1 + m/[(d-1)\cdot\mu_{b}\cdot L]}.
@@ -1624,11 +1589,11 @@ D \approx \frac{1}{1 + m/[(d-1)\cdot\mu_{b}\cdot L]}.
 
 As printed in the accepted article, the `L` term is missing from the denominator,
 even though the sentence immediately following the equation defines `L`.
-Substituting μ ≈ μ<sub>b</sub>· L into Eq. 4 gives the intended form above,
+Substituting <code>μ ≈ μ<sub>b</sub></code>· `L` into Eq. 4 gives the intended form above,
 which is the version used in this document and is clearly the intended reading of
 the surrounding text.
 
-**3. The discussion of "low G<sub>ST</sub> and high `m`" is a wording problem rather
+**3. The discussion of "low <code>G<sub><small>ST</small></sub></code> and high `m`" is a wording problem rather
 than a mathematical one.** In the source sentence, "high `m`" must mean "high
 inferred migration rate" rather than an actual high migration value in the
 scenario being described, because the populations in question are explicitly
@@ -1658,11 +1623,11 @@ while the corresponding contact address is `eric.archer@noaa.gov`. This is not a
 mathematical issue, but it is a genuine name mismatch and could confuse readers
 trying to reconcile the paper with the author metadata.
 
-**7. Table S1 rounding.** The text gives H<sub>T</sub> = 0.97 and H<sub>S</sub> = 0.95 but
-reports effective numbers `38.8` and `20.4`, which correspond to the more precise
-values H<sub>T</sub> = 0.9742 and H<sub>S</sub> = 0.9510. Using the rounded two-decimal figures
-gives `1/(1 - 0.97) = 33.3`, not `38.8`. Part IV.3 back-solves from the
-effective numbers, which are the relevant precise figures.
+**7. Table S1 rounding.** The text gives <code>H<sub><small>S</small></sub> = 0.97</code> and
+<code>H<sub><small>S</small></sub> = 0.95</code> but reports effective numbers `38.8` and `20.4`, which correspond to
+the more precise values <code>H<sub><small>T</small></sub> = 0.9742</code> and <code>H<sub><small>S</small></sub> =
+0.9510</code>. Using the rounded two-decimal figures gives `1/(1 - 0.97) = 33.3`, not `38.8`. Part IV.3 back-solves from
+the effective numbers, which are the relevant precise figures.
 
 ---
 
@@ -1683,21 +1648,20 @@ within- and between-group parts, and shows the classical additive partition of
 non-additive indices is invalid. This is where `D` itself is born, and it
 supplies Part V.2 directly.
 
-**The genetics polemic (2008–2009).** *G<sub>ST</sub> and its relatives do not measure
+**The genetics polemic (2008–2009).** *<code>G<sub><small>ST</small></sub></code> and its relatives do not measure
 differentiation* carries the argument into population genetics and provoked a
 sustained exchange (Heller & Siegismund 2009, Ryman & Leimar 2009, Meirmans &
 Hedrick 2011, Whitlock 2011), to which Jost (2009) is the reply.
 
-**The similarity framework (2011).** *Compositional similarity and beta
-diversity* generalises the machinery into a parametric family of similarity
-measures indexed by `q`; its Eq. 6.12 is the direct parent of this paper's
-Eq. 6, and hence of `D`, E<sub>ST</sub>, and K<sub>ST</sub> together.
+**The similarity framework (2011).** *Compositional similarity and beta diversity* generalises the machinery into a
+parametric family of similarity measures indexed by `q`; its Eq. 6.12 is the direct parent of this paper's Eq. 6, and
+hence of `D`, <code>E<sub><small>ST</small></sub></code>, and <code>K<sub><small>ST</small></sub></code> together.
 
 **The synthesis (2018).** The paper summarized here, alongside its companion
 Gaggiotti et al. (2018) in the same special issue of *Evolutionary
 Applications*, is the constructive successor to the 2008 polemic. Where the
-2008 paper argued that G<sub>ST</sub> does not measure differentiation, this one grants
-G<sub>ST</sub> a legitimate job — nearness to fixation — and argues that the two
+2008 paper argued that <code>G<sub><small>ST</small></sub></code> does not measure differentiation, this one grants
+<code>G<sub><small>ST</small></sub></code> a legitimate job — nearness to fixation — and argues that the two
 families are complementary rather than rivals. The tone has shifted from
 correction to synthesis, and the six-author list reflects a working group rather
 than a lone critic.
@@ -1727,10 +1691,10 @@ listed with full citation details for lookup.
 - Jost L (2006). Entropy and diversity. *Oikos* 113(2):363–375.
 - Jost L (2007). Partitioning diversity into independent alpha and beta
   components. *Ecology* 88(10):2427–2439.
-- Jost L (2008). G<sub>ST</sub> and its relatives do not measure differentiation.
+- Jost L (2008). <code>G<sub><small>ST</small></sub></code> and its relatives do not measure differentiation.
   *Molecular Ecology* 17(18):4015–4026.
   DOI: [10.1111/j.1365-294X.2008.03887.x](https://doi.org/10.1111/j.1365-294X.2008.03887.x)
-- Jost L (2009). `D` vs. G<sub>ST</sub>: response to Heller and Siegismund (2009) and
+- Jost L (2009). `D` vs. <code>G<sub><small>ST</small></sub></code>: response to Heller and Siegismund (2009) and
   Ryman and Leimar (2009). *Molecular Ecology* 18:2088–2091.
 - Jost L (2010). The relation between evenness and diversity. *Diversity*
   2(2):207–232.
@@ -1755,7 +1719,7 @@ listed with full citation details for lookup.
 ### Classical sources for the fixation family
 
 - Wright S (1931). Evolution in Mendelian populations. *Genetics*
-  16(2):97–159. The island model and `F_ST ≈ 1/(4Nm+1)` itself — per
+  16(2):97–159. The island model and <code>F<sub><small>ST</small></sub> ≈ 1/(4Nm+1)</code> itself — per
   Whitlock & McCauley (1999) below, not the more commonly cited Wright
   1943 paper (a different contribution, on isolation by distance). Added
   here because this document referenced "Wright's original infinite
@@ -1792,26 +1756,23 @@ listed with full citation details for lookup.
 
 ### The surrounding debate
 
-- Gerlach G, Jueterbock A, Kraemer P, Deppermann J, Harmand P (2010).
-  Calculations of population differentiation based on G<sub>ST</sub> and `D`: forget
-  G<sub>ST</sub> but not all of statistics! *Molecular Ecology* 19(18):3845–3852.
-- Gregorius HR, Roberds JH (1986). Measurement of genetical differentiation
-  among subpopulations. *Theoretical and Applied Genetics* 71:826–834.
-- Gregorius HR (2010). Linking diversity and differentiation. *Diversity*
-  2:370–394.
-- Hedrick PW (2005). A standardized genetic differentiation measure.
-  *Evolution* 59(8):1633–1638.
-- Heller R, Siegismund HR (2009). Relationship between three measures of genetic
-  differentiation G<sub>ST</sub>, D<sub>EST</sub> and G'<sub>ST</sub>: how wrong have we been?
-  *Molecular Ecology* 18(10):2080–2083.
-- Meirmans PG, Hedrick PW (2011). Assessing population structure: F<sub>ST</sub> and
+- Gerlach G, Jueterbock A, Kraemer P, Deppermann J, Harmand P (2010). Calculations of population differentiation
+  based on <code>G<sub><small>ST</small></sub></code> and `D`: forget <code>G<sub><small>ST</small></sub></code> but
+  not all of statistics! *Molecular Ecology* 19(18):3845–3852.
+- Gregorius HR, Roberds JH (1986). Measurement of genetical differentiation among subpopulations. *Theoretical and
+  Applied Genetics* 71:826–834.
+- Gregorius HR (2010). Linking diversity and differentiation. *Diversity* 2:370–394.
+- Hedrick PW (2005). A standardized genetic differentiation measure. *Evolution* 59(8):1633–1638.
+- Heller R, Siegismund HR (2009). Relationship between three measures of genetic differentiation
+  <code>G<sub><small>ST</small></sub></code>, <code>D<sub><small>EST</small></sub></code> and
+  <code>G'<sub><small>ST</small></sub></code>: how wrong have we been? *Molecular Ecology* 18(10):2080–2083.
+- Meirmans PG, Hedrick PW (2011). Assessing population structure: <code>F<sub><small>ST</small></sub></code> and
   related measures. *Molecular Ecology Resources* 11(1):5–18.
-- Wang J (2012). On the measurements of genetic differentiation among
-  populations. *Genetics Research* 94:275–289.
-- Whitlock MC (2011). G'<sub>ST</sub> and `D` do not replace F<sub>ST</sub>. *Molecular
-  Ecology* 20(6):1083–1091.
+- Wang J (2012). On the measurements of genetic differentiation among populations. *Genetics Research* 94:275–289.
+- Whitlock MC (2011). <code>G'<sub><small>ST</small></sub></code> and `D` do not replace
+  <code>F<sub><small>ST</small></sub></code>. *Molecular Ecology* 20(6):1083–1091.
 - Whitlock MC, McCauley DE (1999). Indirect measures of gene flow and migration:
-  F<sub>ST</sub> ≠ 1/(4Nm+1). *Heredity* 82:117–125.
+  <code>F<sub><small>ST</small></sub> ≠ 1/(4Nm+1)</code>. *Heredity* 82:117–125.
   DOI: [10.1046/j.1365-2540.1999.00496.x](https://doi.org/10.1046/j.1365-2540.1999.00496.x)
 
 ### Other works cited in the argument
@@ -1828,7 +1789,7 @@ listed with full citation details for lookup.
   hypothesis significance testing. *Journal of the American Academy of Child and
   Adolescent Psychiatry* 40(2):250–252. (Cited in the paper as "Gilner".)
 - Leng L, Zhang DX (2013). Time matters: some interesting properties of the
-  population differentiation measures G<sub>ST</sub> and `D` overlooked in the
+  population differentiation measures <code>G<sub><small>ST</small></sub></code> and `D` overlooked in the
   equilibrium perspective. *Journal of Systematics and Evolution* 51(1):44–60.
 - Sherwin W (2010). Entropy and information approaches to genetic diversity and
   its expression: genomic geography. *Entropy* 12(7):1765–1798.
@@ -1843,7 +1804,7 @@ listed with full citation details for lookup.
 
 ## Appendix E: the differentiation debate, 2008–2011
 
-The 2008–2011 exchange over G<sub>ST</sub> and `D` is best read not as a contest over
+The 2008–2011 exchange over <code>G<sub><small>ST</small></sub></code> and `D` is best read not as a contest over
 which formula is numerically larger on a given dataset, but as a dispute over which
 question the field was actually asking. Is the relevant question “how close are
 these demes to fixation?” or “how different are the alleles they actually carry?”
@@ -1851,21 +1812,20 @@ The classical family and the Jost family answer different questions, and the
 debate is one of the clearest instances in population genetics where a naming
 collision produced a long-running misunderstanding.
 
-**Jost's position.** In the 2008 polemic, Jost's argument was that the
-classical G<sub>ST</sub> family, and by extension many uses of F<sub>ST</sub> and θ,
-was being interpreted as if it measured absolute genetic differentiation when it
-in fact measured the opposite: the degree to which a population has moved toward
-fixation within the pooled array. The formal point was not trivial. The
-classical family normalizes by H<sub>T</sub>, while the allelic family normalizes by
-1-H<sub>S</sub>. Those are different denominators, and therefore different concepts. Once
-this is acknowledged, the apparent paradoxes in the paper's worked examples are
-no longer paradoxes at all: a population can be nearly fixed within demes and yet
-retain almost no common allele content across demes, producing a very low
-G<sub>ST</sub> and a very high `D`.
+**Jost's position.** In the 2008 polemic, Jost's argument was that the classical
+<code>G<sub><small>ST</small></sub></code> family, and by extension many uses of
+<code>F<sub><small>ST</small></sub></code> and `θ`, was being interpreted as if it measured absolute genetic
+differentiation when it in fact measured the opposite: the degree to which a population has moved toward fixation within
+the pooled array. The formal point was not trivial. The classical family normalizes by
+<code>H<sub><small>T</small></sub></code>, while the allelic family normalizes by <code>1 -
+H<sub><small>S</small></sub></code>. Those are different denominators, and therefore different concepts. Once this is
+acknowledged, the apparent paradoxes in the paper's worked examples are no longer paradoxes at all: a population can be
+nearly fixed within demes and yet retain almost no common allele content across demes, producing a very low
+<code>G<sub><small>ST</small></sub></code> and a very high `D`.
 
 **The counter-argument.** The critics were not simply defending a formula; they
 were defending a working interpretation that had become standard in a large body
-of empirical work. In that interpretive regime, F<sub>ST</sub>-type statistics were used
+of empirical work. In that interpretive regime, <code>F<sub><small>ST</small></sub></code>-type statistics were used
 as catch-all summaries of population structure, and they were often read as if
 they told a manager, “how different are these demes?” The practical objection to
 Jost was that, in many real settings, the difference between fixation-based and
@@ -1891,36 +1851,30 @@ about which demes hold unique genetic material. Neither family is a drop-in
 replacement for the other.
 
 This is why the current paper is written in a synthetic tone rather than a
-combative one. It does not say that G<sub>ST</sub> is useless. It says it is the wrong
+combative one. It does not say that <code>G<sub><small>ST</small></sub></code> is useless. It says it is the wrong
 index for a distinct question. The value of the debate is that it made that
 separation explicit. The field has not simply chosen one side and discarded the
 other; instead, it has largely accepted the more careful distinction: report the
 measurement family by what it represents, and do not read a nearness-to-fixation
 statistic as if it were a measure of absolute allelic dissimilarity.
 
-**Where the controversy remains.** The disagreement persists in application, not
-in the basic algebra. The debate is still alive when researchers ask which
-measure to lead with in a particular study, or whether a high G<sub>ST</sub> can be
-interpreted as meaningful differentiation in a management context. The paper's
-position is that such interpretations are valid only when the correct question is
-being asked. If the goal is estimating demography, G<sub>ST</sub> and F<sub>ST</sub> remain
-highly informative. If the goal is protecting allelic diversity, the Jost family
-is the more relevant object. The contemporary field largely treats these as
-complementary quantities rather than rival replacements.
+**Where the controversy remains.** The disagreement persists in application, not in the basic algebra. The debate is
+still alive when researchers ask which measure to lead with in a particular study, or whether a high
+<code>G<sub><small>ST</small></sub></code> can be interpreted as meaningful differentiation in a management context. The
+paper's position is that such interpretations are valid only when the correct question is being asked. If the goal is
+estimating demography, <code>G<sub><small>ST</small></sub></code> and <code>F<sub><small>ST</small></sub></code> remain
+highly informative. If the goal is protecting allelic diversity, the Jost family is the more relevant object. The
+contemporary field largely treats these as complementary quantities rather than rival replacements.
 
-**Real-world impact.** The largest impact of the work has been methodological,
-not regulatory: it changed the way conservation biologists frame management
-questions. Programs concerned with preserving genetic diversity, identifying
-management units, or prioritizing populations for restoration are explicitly
-advised to distinguish fixation-based statistics from measures of allelic
-turnover and unique diversity (Jost et al. 2010; Funk et al. 2012; Gaggiotti et
-al. 2018; Flanagan et al. 2017). In other words, the practical consequence is
-not that classical population-genetic tools were abandoned, but that they are now
-read more carefully: a low G<sub>ST</sub> or a low F<sub>ST</sub> does not by itself imply
-that demes are equivalent in the sense that matters for preserving unique
-alleles. That distinction matters in real conservation decisions about habitat
-fragmentation, translocation, and the prioritization of populations with
-non-overlapping genetic repertoires.
+**Real-world impact.** The largest impact of the work has been methodological, not regulatory: it changed the way
+conservation biologists frame management questions. Programs concerned with preserving genetic diversity, identifying
+management units, or prioritizing populations for restoration are explicitly advised to distinguish fixation-based
+statistics from measures of allelic turnover and unique diversity (Jost et al. 2010; Funk et al. 2012; Gaggiotti et al.
+2018; Flanagan et al. 2017). In other words, the practical consequence is not that classical population-genetic tools
+were abandoned, but that they are now read more carefully: a low <code>G<sub><small>ST</small></sub></code> or a low
+<code>F<sub><small>ST</small></sub></code> does not by itself imply that demes are equivalent in the sense that matters
+for preserving unique alleles. That distinction matters in real conservation decisions about habitat fragmentation,
+translocation, and the prioritization of populations with non-overlapping genetic repertoires.
 
 The same point appears in the more recent literature on genomic monitoring and
 adaptive variation, where authors emphasize that conservation decisions should
