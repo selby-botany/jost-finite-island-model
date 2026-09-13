@@ -9,16 +9,20 @@ than trying to provoke a real hang in-process.
 Why this exists at all: a closed window that leaves the process running
 is, to a user, an app that "won't quit" -- fixable only by Force Quit or
 Task Manager. `fim.gui.app.create_window` already carries one fix for
-that exact class (pywebview's own non-daemon HTTP handler threads) and
-`test/gui/conftest.py` records several more, each an in-flight bridge
-call or leftover thread wedging `Py_FinalizeEx`. The deadman is the
-backstop for the next one, which is why its own correctness is worth
-testing directly rather than trusting by inspection.
+that exact class (pywebview's own non-daemon HTTP handler threads);
+`in_flight_bridge_threads`/`await_bridge_threads`, tested below, are the
+structural one for in-flight bridge calls specifically -- moved here in
+full from `test/gui/conftest.py`, where they lived before design doc
+`20260912-claude-sonnet-5-shutdown-bridge-thread-settle-design.md`
+(`selby/restricted`), so production code and the test suite can share
+one implementation of the wait. The deadman is the backstop for the
+next leftover thread that fix does not catch, which is why its own
+correctness is worth testing directly rather than trusting by
+inspection.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import subprocess
 import sys
 import textwrap
@@ -26,7 +30,6 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
@@ -34,31 +37,6 @@ from fim import logging_setup
 from fim.gui import app as app_module
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent.parent
-
-
-def _load_gui_conftest() -> ModuleType:
-    """Import this package's own `conftest`, not the top-level one.
-
-    A bare `import conftest` resolves to `test/conftest.py`, since pytest
-    inserts the rootdir on `sys.path` first -- so the helper under test
-    would silently be missing rather than wrong. Loading by explicit path
-    removes the ambiguity.
-
-    Args:
-        None
-
-    Returns:
-        The imported `test/gui/conftest` module object.
-    """
-    path = Path(__file__).resolve().parent / "conftest.py"
-    spec = importlib.util.spec_from_file_location("fim_test_gui_conftest", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-gui_conftest = _load_gui_conftest()
 
 
 def test_shutdown_timeout_defaults_when_unset(
@@ -236,7 +214,7 @@ def test_in_flight_bridge_threads_identifies_a_bridge_thread() -> None:
     blocker = _make_bridge_thread(release)
     blocker.start()
     try:
-        assert gui_conftest.in_flight_bridge_threads([blocker]) == [blocker]
+        assert app_module.in_flight_bridge_threads([blocker]) == [blocker]
     finally:
         release.set()
         blocker.join(timeout=5)
@@ -252,7 +230,7 @@ def test_in_flight_bridge_threads_ignores_unrelated_threads() -> None:
     unrelated = threading.Thread(target=release.wait, name="fim-test-unrelated")
     unrelated.start()
     try:
-        assert gui_conftest.in_flight_bridge_threads([unrelated]) == []
+        assert app_module.in_flight_bridge_threads([unrelated]) == []
     finally:
         release.set()
         unrelated.join(timeout=5)
@@ -270,7 +248,7 @@ def test_in_flight_bridge_threads_ignores_a_finished_bridge_thread() -> None:
     release.set()
     finished.join(timeout=5)
 
-    assert gui_conftest.in_flight_bridge_threads([finished]) == []
+    assert app_module.in_flight_bridge_threads([finished]) == []
 
 
 def test_await_bridge_threads_waits_while_a_bridge_call_is_in_flight() -> None:
@@ -285,7 +263,7 @@ def test_await_bridge_threads_waits_while_a_bridge_call_is_in_flight() -> None:
     blocker.start()
     try:
         started = time.monotonic()
-        gui_conftest.await_bridge_threads(timeout=0.5)
+        app_module.await_bridge_threads(timeout=0.5)
         waited = time.monotonic() - started
 
         assert waited >= 0.4

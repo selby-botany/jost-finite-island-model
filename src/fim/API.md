@@ -118,6 +118,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [open\_external\_link](#fim.gui.app.Api.open_external_link)
     * [check\_for\_updates](#fim.gui.app.Api.check_for_updates)
     * [get\_about\_info](#fim.gui.app.Api.get_about_info)
+  * [in\_flight\_bridge\_threads](#fim.gui.app.in_flight_bridge_threads)
+  * [await\_bridge\_threads](#fim.gui.app.await_bridge_threads)
   * [create\_window](#fim.gui.app.create_window)
   * [shutdown\_timeout](#fim.gui.app.shutdown_timeout)
   * [main](#fim.gui.app.main)
@@ -4334,6 +4336,84 @@ alongside the reserved orchid mark (`branding/selby-orchid-logo.
 jpeg`, exposed to the web UI through its `assets/` link) that
 `screens/config-modals.js`'s own `modal-about`
 renders, not text-only attribution.
+
+<a id="fim.gui.app.in_flight_bridge_threads"></a>
+
+#### in\_flight\_bridge\_threads
+
+```python
+def in_flight_bridge_threads(
+    candidates: Iterable[threading.Thread] | None = None
+) -> list[threading.Thread]
+```
+
+Return the pywebview bridge-delivery threads that would block shutdown.
+
+Split out from `await_bridge_threads` so it can be tested against an
+explicit thread list — asserting against live interpreter state
+instead would make a test's own result depend on whichever other
+thread happens to be running in the same process at the moment,
+order-dependence this project treats as a defect rather than as
+flakiness.
+
+**Arguments**:
+
+- `candidates` - Threads to examine (default: `threading.enumerate()`).
+
+
+**Returns**:
+
+  Every candidate that is a live, non-daemon pywebview bridge thread.
+
+<a id="fim.gui.app.await_bridge_threads"></a>
+
+#### await\_bridge\_threads
+
+```python
+def await_bridge_threads(
+        timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> None
+```
+
+Wait for pywebview's own in-flight bridge-call threads to finish.
+
+pywebview delivers each `window.pywebview.api.*` call on a
+*non-daemon* thread (`js_bridge_call.<locals>._call` in `webview.
+util`). A window destroyed — or, on most platforms, closed by the
+user — while one is still in flight leaves that thread running, and
+`threading._shutdown` then waits on it forever: `ISSUES.md`'s own
+"Intermittent hang during GUI shutdown" entry, first captured in CI
+on 2026-09-07 with this exact thread named in the diagnostic dump.
+
+Originally test-only (`test/gui/conftest.py`), moved here in full —
+design doc `20260912-claude-sonnet-5-shutdown-bridge-thread-settle-
+design.md` (`selby/restricted`) — so production code and the test
+suite share one implementation of the wait rather than two that can
+drift apart. Each individual instance of this leak found before this
+function existed was fixed at its own call site instead, by awaiting
+the call and polling a settle flag (`webui/screens/open-run.js`'s own
+`window.__fimOpenRunRecentRunsLoaded`, for one) — that works but is
+per-call-site and must be repeated for every new screen; this is the
+structural backstop for the ones nobody remembered to fix, or cannot
+practically fix that way at all (a user closing the window is not a
+call site this codebase controls the timing of).
+
+Deliberately does not fail or raise on timeout. A leaked bridge
+thread is a real defect worth surfacing on its own terms — `test/
+conftest.py`'s own `pytest_unconfigure` diagnostics name the thread
+precisely, when this runs inside the test suite — but this
+function's own job is only to give a genuinely in-flight call a real
+chance to finish before whatever comes next (a window destroy, a
+test's own teardown) proceeds regardless.
+
+**Arguments**:
+
+- `timeout` - Total seconds to wait for all such threads to finish.
+
+
+**Returns**:
+
+  None. Returns as soon as no bridge thread is alive, or when
+  `timeout` elapses, whichever comes first.
 
 <a id="fim.gui.app.create_window"></a>
 

@@ -151,9 +151,8 @@ decide which of the two investigations above it continues.
 from __future__ import annotations
 
 import queue
-import threading
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -161,88 +160,21 @@ import pytest
 import webview
 
 from fim.gui import app as app_module
-from fim.gui.app import create_window
+from fim.gui.app import await_bridge_threads, create_window
 from fim.gui.preferences import GuiPreferences, save_preferences
 
 _POLL_INTERVAL_SECONDS = 0.1
 
-# How long teardown waits for pywebview's own bridge threads to finish
-# delivering an in-flight call before giving up. Generous: a bridge call
-# that is genuinely still running finishes in milliseconds, so anything
-# approaching this bound is already the leak described below.
+# This suite's own bound for `await_bridge_threads` (`fim.gui.app`,
+# moved there in full -- design doc `20260912-claude-sonnet-5-shutdown-
+# bridge-thread-settle-design.md`, `selby/restricted`), passed
+# explicitly below rather than left to that function's own default:
+# production wants a short, UI-thread-safe bound (that module's own
+# constant), while a test process is already willing to spend real
+# wall-clock time on setup/teardown and benefits from a more generous
+# one. Kept at this suite's own long-standing value so this move changes
+# no test's own timing.
 _BRIDGE_SETTLE_TIMEOUT_SECONDS = 10.0
-
-
-def in_flight_bridge_threads(
-    candidates: Iterable[threading.Thread] | None = None,
-) -> list[threading.Thread]:
-    """Return the pywebview bridge-delivery threads that would block shutdown.
-
-    Split out from `await_bridge_threads` so it can be tested against an
-    explicit thread list. Testing the waiting loop against live interpreter
-    state instead would make the result depend on whichever GUI test
-    happened to run earlier in the same worker -- the order dependence this
-    suite treats as a defect rather than as flakiness.
-
-    Args:
-        candidates: Threads to examine (default: `threading.enumerate()`).
-
-    Returns:
-        Every candidate that is a live, non-daemon pywebview bridge thread.
-    """
-    return [
-        thread
-        for thread in (
-            threading.enumerate() if candidates is None else list(candidates)
-        )
-        # Identified by target qualified name rather than by thread name:
-        # pywebview numbers these threads (`Thread-1162 (_call)`), so the
-        # number is meaningless, while the target's qualified name is
-        # stable. Matched as a suffix so nesting depth does not matter.
-        if not thread.daemon
-        and thread.is_alive()
-        and getattr(getattr(thread, "_target", None), "__qualname__", "").endswith(
-            "js_bridge_call.<locals>._call"
-        )
-    ]
-
-
-def await_bridge_threads(timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> None:
-    """Wait for pywebview's own in-flight bridge-call threads to finish.
-
-    pywebview delivers each `window.pywebview.api.*` call on a *non-daemon*
-    thread (`js_bridge_call.<locals>._call` in `webview.util`). A window
-    destroyed while one is still in flight leaves that thread running, and
-    `threading._shutdown` then waits on it forever -- the `Py_FinalizeEx`
-    hang this package's own docstring history records five separate
-    instances of, and which recurred in CI on 2026-09-07 with this exact
-    thread named in the diagnostic dump (see `ISSUES.md`).
-
-    Each individual instance was previously fixed at its own call site, by
-    awaiting the call and polling a settle flag. That works but is
-    per-call-site and must be repeated for every new screen; this is the
-    structural backstop for the ones nobody remembered to fix, applied
-    once in teardown where it covers every test uniformly.
-
-    Deliberately does not fail on timeout. A leaked bridge thread is a real
-    defect, but reporting it as a teardown error would attribute it to
-    whichever test happened to run last rather than to the one that caused
-    it. The suite-level `pytest_unconfigure` diagnostics in
-    `test/conftest.py` name the thread precisely, which is the actionable
-    signal; this function's job is only to stop it wedging the run.
-
-    Args:
-        timeout: Total seconds to wait for all such threads to finish.
-
-    Returns:
-        None. Returns as soon as no bridge thread is alive, or when
-        `timeout` elapses, whichever comes first.
-    """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not in_flight_bridge_threads():
-            return
-        time.sleep(_POLL_INTERVAL_SECONDS)
 
 
 @pytest.fixture
@@ -269,8 +201,13 @@ def window() -> Iterator[webview.Window]:
     yield built
     # Before destroying the window: let any bridge call still in flight
     # finish delivering. Destroying first is what strands pywebview's own
-    # non-daemon `_call` thread and wedges interpreter shutdown.
-    await_bridge_threads()
+    # non-daemon `_call` thread and wedges interpreter shutdown. `built.
+    # destroy()` itself now also settles first (`create_window`'s own
+    # `events.closing` registration), but this explicit call stays: a
+    # test's own `built.destroy()` call below reaches it either way, and
+    # this suite's own, more generous timeout is worth keeping rather
+    # than the shorter production default `create_window` uses.
+    await_bridge_threads(timeout=_BRIDGE_SETTLE_TIMEOUT_SECONDS)
     if built in webview.windows:
         built.destroy()
 

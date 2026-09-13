@@ -43,7 +43,7 @@ import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from math import isfinite
 from pathlib import Path
@@ -3457,6 +3457,98 @@ def _configure_macos_native_about_panel() -> None:
             image = NSImage.alloc().initWithContentsOfFile_(str(logo_path))
             if image is not None:
                 NSApplication.sharedApplication().setApplicationIconImage_(image)
+
+
+# How long `await_bridge_threads` waits for pywebview's own in-flight
+# bridge-call threads to finish delivering before giving up. Generous: a
+# bridge call that is genuinely still running finishes in milliseconds,
+# so anything approaching this bound is already the leak `await_bridge_
+# threads`'s own docstring describes. `test/gui/conftest.py`'s own
+# `window` fixture passes its own, separately-tracked timeout explicitly
+# instead of inheriting this one -- see that fixture's own comment.
+_BRIDGE_SETTLE_TIMEOUT_SECONDS: Final[float] = 10.0
+_BRIDGE_SETTLE_POLL_INTERVAL_SECONDS: Final[float] = 0.1
+
+
+def in_flight_bridge_threads(
+    candidates: Iterable[threading.Thread] | None = None,
+) -> list[threading.Thread]:
+    """Return the pywebview bridge-delivery threads that would block shutdown.
+
+    Split out from `await_bridge_threads` so it can be tested against an
+    explicit thread list — asserting against live interpreter state
+    instead would make a test's own result depend on whichever other
+    thread happens to be running in the same process at the moment,
+    order-dependence this project treats as a defect rather than as
+    flakiness.
+
+    Args:
+        candidates: Threads to examine (default: `threading.enumerate()`).
+
+    Returns:
+        Every candidate that is a live, non-daemon pywebview bridge thread.
+    """
+    return [
+        thread
+        for thread in (
+            threading.enumerate() if candidates is None else list(candidates)
+        )
+        # Identified by target qualified name rather than by thread name:
+        # pywebview numbers these threads (`Thread-1162 (_call)`), so the
+        # number is meaningless, while the target's qualified name is
+        # stable. Matched as a suffix so nesting depth does not matter.
+        if not thread.daemon
+        and thread.is_alive()
+        and getattr(getattr(thread, "_target", None), "__qualname__", "").endswith(
+            "js_bridge_call.<locals>._call"
+        )
+    ]
+
+
+def await_bridge_threads(timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> None:
+    """Wait for pywebview's own in-flight bridge-call threads to finish.
+
+    pywebview delivers each `window.pywebview.api.*` call on a
+    *non-daemon* thread (`js_bridge_call.<locals>._call` in `webview.
+    util`). A window destroyed — or, on most platforms, closed by the
+    user — while one is still in flight leaves that thread running, and
+    `threading._shutdown` then waits on it forever: `ISSUES.md`'s own
+    "Intermittent hang during GUI shutdown" entry, first captured in CI
+    on 2026-09-07 with this exact thread named in the diagnostic dump.
+
+    Originally test-only (`test/gui/conftest.py`), moved here in full —
+    design doc `20260912-claude-sonnet-5-shutdown-bridge-thread-settle-
+    design.md` (`selby/restricted`) — so production code and the test
+    suite share one implementation of the wait rather than two that can
+    drift apart. Each individual instance of this leak found before this
+    function existed was fixed at its own call site instead, by awaiting
+    the call and polling a settle flag (`webui/screens/open-run.js`'s own
+    `window.__fimOpenRunRecentRunsLoaded`, for one) — that works but is
+    per-call-site and must be repeated for every new screen; this is the
+    structural backstop for the ones nobody remembered to fix, or cannot
+    practically fix that way at all (a user closing the window is not a
+    call site this codebase controls the timing of).
+
+    Deliberately does not fail or raise on timeout. A leaked bridge
+    thread is a real defect worth surfacing on its own terms — `test/
+    conftest.py`'s own `pytest_unconfigure` diagnostics name the thread
+    precisely, when this runs inside the test suite — but this
+    function's own job is only to give a genuinely in-flight call a real
+    chance to finish before whatever comes next (a window destroy, a
+    test's own teardown) proceeds regardless.
+
+    Args:
+        timeout: Total seconds to wait for all such threads to finish.
+
+    Returns:
+        None. Returns as soon as no bridge thread is alive, or when
+        `timeout` elapses, whichever comes first.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not in_flight_bridge_threads():
+            return
+        time.sleep(_BRIDGE_SETTLE_POLL_INTERVAL_SECONDS)
 
 
 def _set_macos_application_name(name: str) -> None:

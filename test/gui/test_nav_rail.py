@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 import webview
 
-from .conftest import await_bridge_threads
+from fim.gui.app import await_bridge_threads
 
 pytestmark = pytest.mark.gui
 
