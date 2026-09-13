@@ -11,18 +11,21 @@ is, to a user, an app that "won't quit" -- fixable only by Force Quit or
 Task Manager. `fim.gui.app.create_window` already carries one fix for
 that exact class (pywebview's own non-daemon HTTP handler threads);
 `in_flight_bridge_threads`/`await_bridge_threads`, tested below, are the
-structural one for in-flight bridge calls specifically -- moved here in
-full from `test/gui/conftest.py`, where they lived before design doc
-`20260912-claude-sonnet-5-shutdown-bridge-thread-settle-design.md`
-(`selby/restricted`), so production code and the test suite can share
-one implementation of the wait. The deadman is the backstop for the
-next leftover thread that fix does not catch, which is why its own
+structural one for in-flight bridge calls specifically, wired into
+production via `create_window`'s own `events.closing` registration and
+`_build_menu`'s own "Quit fim" wrapper (design doc `20260912-claude-
+sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/restricted`
+-- these two functions lived only in `test/gui/conftest.py` before that
+document, moved here in full so production code and the test suite
+share one implementation). The deadman is the backstop for whatever
+leftover thread neither of those catches, which is why its own
 correctness is worth testing directly rather than trusting by
 inspection.
 """
 
 from __future__ import annotations
 
+import queue
 import subprocess
 import sys
 import textwrap
@@ -32,6 +35,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import webview
+from webview.menu import MenuAction
 
 from fim import logging_setup
 from fim.gui import app as app_module
@@ -363,3 +368,141 @@ def test_forced_exit_writes_traceback_to_log_file(tmp_path: Path) -> None:
     assert "shutdown deadman fired" in contents
     # ... and, crucially, why -- the stacks that name the offending thread.
     assert "Thread" in contents
+
+
+@pytest.mark.gui
+def test_the_window_close_hook_settles_an_in_flight_bridge_call_first() -> None:
+    """`create_window`'s own `events.closing` registration blocks a native
+    close until an in-flight bridge call finishes (design doc `20260912-
+    claude-sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/
+    restricted`, decision 2).
+
+    `window.events.closing.set()` — not any one platform's own internals
+    (`BrowserView.should_close`, `close_window`, `on_closing`) — is the
+    portable call every platform backend's own native close-request
+    handler makes into pywebview's own event dispatcher; calling it
+    directly here exercises the identical synchronous dispatch mechanism
+    those platform hooks all resolve to, so this test runs the same way
+    on every CI platform rather than only the one it happened to be
+    written on. Drives a window of its own (`create_window`/`webview.
+    start`), not the shared `window` fixture: this needs the real event
+    loop actually running — confirmed live, `window.events.closing.set()`
+    against a not-yet-started window raises `WebViewException("Main
+    window failed to start")`, the same "construct real widgets, drive
+    them synchronously" pattern every other real-window test here uses.
+    """
+    window = app_module.create_window(hidden=True)
+    release = threading.Event()
+    blocker = _make_bridge_thread(release)
+    outcome: queue.Queue[tuple[float, bool]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            blocker.start()
+
+            def release_soon() -> None:
+                time.sleep(0.2)
+                release.set()
+
+            threading.Thread(target=release_soon, daemon=True).start()
+
+            started = time.monotonic()
+            window.events.closing.set()
+            elapsed = time.monotonic() - started
+            outcome.put((elapsed, blocker.is_alive()))
+        finally:
+            release.set()
+            window.destroy()
+
+    webview.start(_drive)
+    try:
+        elapsed, still_alive = outcome.get(timeout=10)
+        assert elapsed >= 0.15
+        assert not still_alive
+    finally:
+        blocker.join(timeout=5)
+
+
+@pytest.mark.gui
+def test_the_window_close_hook_gives_up_after_its_own_timeout() -> None:
+    """A bridge call that never finishes does not block the close forever.
+
+    Mirrors `await_bridge_threads`'s own existing "deliberately does not
+    fail on timeout" contract — a leaked thread is a real defect, but
+    this hook's own job is only to give one a real chance to finish, not
+    to block a close indefinitely if it never does.
+    """
+    window = app_module.create_window(hidden=True)
+    release = threading.Event()  # deliberately never set
+    blocker = _make_bridge_thread(release)
+    outcome: queue.Queue[tuple[float, bool]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            blocker.start()
+            started = time.monotonic()
+            window.events.closing.set()
+            elapsed = time.monotonic() - started
+            outcome.put((elapsed, blocker.is_alive()))
+        finally:
+            release.set()
+            window.destroy()
+
+    webview.start(_drive)
+    try:
+        elapsed, still_alive = outcome.get(timeout=10)
+        # Bounded by the production timeout, not merely "eventually" --
+        # proving the hook gave up rather than the thread finishing on
+        # its own within the same window.
+        assert elapsed < app_module._BRIDGE_SETTLE_TIMEOUT_SECONDS + 2.0
+        assert still_alive
+    finally:
+        blocker.join(timeout=5)
+
+
+@pytest.mark.gui
+def test_the_quit_menu_action_settles_an_in_flight_bridge_call_first() -> None:
+    """`_build_menu`'s own "Quit fim" wrapper settles before destroying.
+
+    The one confirmed real gap `events.closing` alone does not cover
+    (design doc `20260912-claude-sonnet-5-shutdown-bridge-thread-settle-
+    design.md`, "Current state": `window.destroy()` does not fire
+    `events.closing` on macOS at all) — exercises the Quit menu's own
+    closure directly, not `window.destroy()`, since that distinction is
+    exactly what this test needs to prove matters.
+    """
+    window = app_module.create_window(hidden=True)
+    quit_now: Callable[[], None] | None = None
+    for menu in app_module._build_menu(window):
+        for item in menu.items:
+            if isinstance(item, MenuAction) and item.title == "Quit fim":
+                quit_now = item.function
+    assert quit_now is not None, "no 'Quit fim' menu item found"
+
+    release = threading.Event()
+    blocker = _make_bridge_thread(release)
+    outcome: queue.Queue[tuple[float, bool]] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        blocker.start()
+
+        def release_soon() -> None:
+            time.sleep(0.2)
+            release.set()
+
+        threading.Thread(target=release_soon, daemon=True).start()
+
+        started = time.monotonic()
+        assert quit_now is not None
+        quit_now()
+        elapsed = time.monotonic() - started
+        outcome.put((elapsed, blocker.is_alive()))
+
+    webview.start(_drive)
+    try:
+        elapsed, still_alive = outcome.get(timeout=10)
+        assert elapsed >= 0.15
+        assert not still_alive
+    finally:
+        release.set()
+        blocker.join(timeout=5)

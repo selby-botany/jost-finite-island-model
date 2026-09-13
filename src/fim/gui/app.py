@@ -3460,13 +3460,23 @@ def _configure_macos_native_about_panel() -> None:
 
 
 # How long `await_bridge_threads` waits for pywebview's own in-flight
-# bridge-call threads to finish delivering before giving up. Generous: a
-# bridge call that is genuinely still running finishes in milliseconds,
-# so anything approaching this bound is already the leak `await_bridge_
-# threads`'s own docstring describes. `test/gui/conftest.py`'s own
-# `window` fixture passes its own, separately-tracked timeout explicitly
-# instead of inheriting this one -- see that fixture's own comment.
-_BRIDGE_SETTLE_TIMEOUT_SECONDS: Final[float] = 10.0
+# bridge-call threads to finish delivering before giving up, here in
+# production (`_settle_before_close`/`_build_menu`'s own "Quit fim"
+# wrapper, both below). Deliberately short, unlike `test/gui/conftest.
+# py`'s own separately-tracked, more generous 10.0s: this runs
+# synchronously on the platform's own native UI-event thread (confirmed
+# live -- design doc `20260912-claude-sonnet-5-shutdown-bridge-thread-
+# settle-design.md`, `selby/restricted`), so a real user closing the
+# window pays this bound directly as a perceptible pause if it is ever
+# actually reached, not merely a test process's own teardown budget. A
+# bridge call that is genuinely still running finishes in well under a
+# second under ordinary load (`js_bridge_call`'s own round trip is a
+# single `Api` method invocation, never a long-running operation run
+# synchronously) -- low single digits gives real headroom over that
+# without ever reading as "the app froze" in the overwhelmingly common
+# case (nothing in flight at all), where this constant is never on the
+# critical path to begin with.
+_BRIDGE_SETTLE_TIMEOUT_SECONDS: Final[float] = 3.0
 _BRIDGE_SETTLE_POLL_INTERVAL_SECONDS: Final[float] = 0.1
 
 
@@ -3549,6 +3559,43 @@ def await_bridge_threads(timeout: float = _BRIDGE_SETTLE_TIMEOUT_SECONDS) -> Non
         if not in_flight_bridge_threads():
             return
         time.sleep(_BRIDGE_SETTLE_POLL_INTERVAL_SECONDS)
+
+
+def _settle_before_close() -> None:
+    """`window.events.closing` subscriber: let an in-flight bridge call finish.
+
+    Registered once per window (`create_window`, below) rather than
+    per-close: `events.closing` fires from the native close-request
+    handler itself, synchronously, on every platform this project ships
+    (`Event(should_lock=True)`, confirmed live against a real window —
+    design doc `20260912-claude-sonnet-5-shutdown-bridge-thread-settle-
+    design.md`, `selby/restricted`) — so running `await_bridge_threads`
+    here means the platform's own native window teardown does not begin
+    until any in-flight bridge call has had a real, bounded chance to
+    finish delivering first.
+
+    Takes no arguments deliberately, even though `pywebview`'s own
+    `Event.set()` will pass the window through to a subscriber whose own
+    signature names a `window` parameter (`webview/event.py`'s own
+    introspection): `await_bridge_threads` needs no window-specific
+    information — it enumerates every live bridge thread process-wide —
+    and an unused parameter here would be dead weight this project's own
+    lint gate (`ARG001`) already flags production code for carrying.
+
+    On macOS specifically, `window.destroy()` does not fire this event
+    at all (confirmed live — traced to `NSWindow.close` bypassing the
+    `windowShouldClose_` delegate method entirely) — `_build_menu`'s own
+    "Quit fim" action, the one direct `window.destroy()` call site in
+    this module, settles explicitly instead, independent of whether a
+    given platform's own `destroy()` happens to reach this subscriber.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
+    await_bridge_threads()
 
 
 def _set_macos_application_name(name: str) -> None:
@@ -3658,6 +3705,13 @@ def create_window(*, api: Api | None = None, hidden: bool = False) -> webview.Wi
     )
     if created is None:
         raise RuntimeError("pywebview did not create a window")
+    # Settles an in-flight bridge call before the platform's own native
+    # close proceeds — real, synchronous, and cross-platform (`_settle_
+    # before_close`'s own docstring), but not, on its own, a close from
+    # every reachable path: `_build_menu`'s own "Quit fim" action settles
+    # separately, for the one confirmed real gap this alone does not
+    # cover.
+    created.events.closing += _settle_before_close
     logger.debug("window created (hidden=%s)", hidden)
     return created
 
@@ -3695,8 +3749,18 @@ def _build_menu(window: webview.Window) -> list[Menu]:
     state a screen already tracks — a second entry point into logic
     that already exists, not new logic. Quit
     alone needs no JS round trip — `window.destroy()` is a window-level
-    call, not app state.
+    call, not app state — but does settle any in-flight bridge call
+    first (`quit_now`, below): this is the one direct `window.destroy()`
+    call site in the whole module, and `window.destroy()` does not
+    itself reach `create_window`'s own `events.closing` registration on
+    every platform (confirmed live on macOS — design doc `20260912-
+    claude-sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/
+    restricted`), so this settles explicitly rather than relying on it.
     """
+
+    def quit_now() -> None:
+        await_bridge_threads()
+        window.destroy()
 
     def dispatch(script: str) -> Callable[[], None]:
         def call_into_page() -> None:
@@ -3735,7 +3799,7 @@ def _build_menu(window: webview.Window) -> list[Menu]:
                 "Reveal output folder", dispatch("fim.menu.revealOutputFolder()")
             ),
             MenuSeparator(),
-            MenuAction("Quit fim", window.destroy),
+            MenuAction("Quit fim", quit_now),
         ],
     )
     # No "Animate" item (`doc/fim-gui-design.md` §5.1): the

@@ -12331,12 +12331,14 @@ is, to a user, an app that "won't quit" -- fixable only by Force Quit or
 Task Manager. `fim.gui.app.create_window` already carries one fix for
 that exact class (pywebview's own non-daemon HTTP handler threads);
 `in_flight_bridge_threads`/`await_bridge_threads`, tested below, are the
-structural one for in-flight bridge calls specifically -- moved here in
-full from `test/gui/conftest.py`, where they lived before design doc
-`20260912-claude-sonnet-5-shutdown-bridge-thread-settle-design.md`
-(`selby/restricted`), so production code and the test suite can share
-one implementation of the wait. The deadman is the backstop for the
-next leftover thread that fix does not catch, which is why its own
+structural one for in-flight bridge calls specifically, wired into
+production via `create_window`'s own `events.closing` registration and
+`_build_menu`'s own "Quit fim" wrapper (design doc `20260912-claude-
+sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/restricted`
+-- these two functions lived only in `test/gui/conftest.py` before that
+document, moved here in full so production code and the test suite
+share one implementation). The deadman is the backstop for whatever
+leftover thread neither of those catches, which is why its own
 correctness is worth testing directly rather than trusting by
 inspection.
 
@@ -12551,6 +12553,69 @@ deliberately discarded here, exactly as it is for a GUI started from a
 dock icon or shortcut, so anything asserted below reached the log file
 on its own merits. Without this, a recurrence would be recorded as
 "it hung" with no way to identify the thread responsible.
+
+<a id="gui.test_shutdown_deadman.test_the_window_close_hook_settles_an_in_flight_bridge_call_first"></a>
+
+#### test\_the\_window\_close\_hook\_settles\_an\_in\_flight\_bridge\_call\_first
+
+```python
+@pytest.mark.gui
+def test_the_window_close_hook_settles_an_in_flight_bridge_call_first(
+) -> None
+```
+
+`create_window`'s own `events.closing` registration blocks a native
+close until an in-flight bridge call finishes (design doc `20260912-
+claude-sonnet-5-shutdown-bridge-thread-settle-design.md`, `selby/
+restricted`, decision 2).
+
+`window.events.closing.set()` — not any one platform's own internals
+(`BrowserView.should_close`, `close_window`, `on_closing`) — is the
+portable call every platform backend's own native close-request
+handler makes into pywebview's own event dispatcher; calling it
+directly here exercises the identical synchronous dispatch mechanism
+those platform hooks all resolve to, so this test runs the same way
+on every CI platform rather than only the one it happened to be
+written on. Drives a window of its own (`create_window`/`webview.
+start`), not the shared `window` fixture: this needs the real event
+loop actually running — confirmed live, `window.events.closing.set()`
+against a not-yet-started window raises `WebViewException("Main
+window failed to start")`, the same "construct real widgets, drive
+them synchronously" pattern every other real-window test here uses.
+
+<a id="gui.test_shutdown_deadman.test_the_window_close_hook_gives_up_after_its_own_timeout"></a>
+
+#### test\_the\_window\_close\_hook\_gives\_up\_after\_its\_own\_timeout
+
+```python
+@pytest.mark.gui
+def test_the_window_close_hook_gives_up_after_its_own_timeout() -> None
+```
+
+A bridge call that never finishes does not block the close forever.
+
+Mirrors `await_bridge_threads`'s own existing "deliberately does not
+fail on timeout" contract — a leaked thread is a real defect, but
+this hook's own job is only to give one a real chance to finish, not
+to block a close indefinitely if it never does.
+
+<a id="gui.test_shutdown_deadman.test_the_quit_menu_action_settles_an_in_flight_bridge_call_first"></a>
+
+#### test\_the\_quit\_menu\_action\_settles\_an\_in\_flight\_bridge\_call\_first
+
+```python
+@pytest.mark.gui
+def test_the_quit_menu_action_settles_an_in_flight_bridge_call_first() -> None
+```
+
+`_build_menu`'s own "Quit fim" wrapper settles before destroying.
+
+The one confirmed real gap `events.closing` alone does not cover
+(design doc `20260912-claude-sonnet-5-shutdown-bridge-thread-settle-
+design.md`, "Current state": `window.destroy()` does not fire
+`events.closing` on macOS at all) — exercises the Quit menu's own
+closure directly, not `window.destroy()`, since that distinction is
+exactly what this test needs to prove matters.
 
 <a id="gui.test_store"></a>
 
