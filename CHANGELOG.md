@@ -757,6 +757,14 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a `trajectoryPath` field so the Results card knows what to re-analyze
   either way. Hidden for a batch's own `completed` view, which has no
   single trajectory of its own.
+- The Results card's two effective-allele rows relabeled from the
+  verbose "Effective alleles (within-deme)"/"Effective alleles (total)"
+  to `<sup>H</sup>D<sub>S</sub>`/`<sup>H</sup>D<sub>T</sub>` — the
+  differentiation-measures guide's own notation (`doc/jost-
+  differentiation-measures.md`) for the effective number of alleles
+  derived from `H_S`/`H_T`, `1/(1-H)`. Matches this same statistics
+  panel's own established convention of rendering a name's `_`-suffix
+  as a real subscript rather than spelling out what a statistic means.
 
 ### Removed
 

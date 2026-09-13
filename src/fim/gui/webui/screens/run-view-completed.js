@@ -223,11 +223,11 @@ function renderEffectiveAlleles(effectiveAlleles) {
     }
     applyStatRow(
         neSRow,
-        buildPointMeter("Effective alleles (within-deme)", effectiveAlleles.H_S)
+        buildPointMeter("<sup>H</sup>D<sub>S</sub>", effectiveAlleles.H_S)
     );
     applyStatRow(
         neTRow,
-        buildPointMeter("Effective alleles (total)", effectiveAlleles.H_T)
+        buildPointMeter("<sup>H</sup>D<sub>T</sub>", effectiveAlleles.H_T)
     );
     gStCautionNote.hidden = !effectiveAlleles.gStCaution;
 }
