@@ -42,6 +42,39 @@ from fim import logging_setup
 from fim.gui import app as app_module
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent.parent
+_READY_POLL_INTERVAL_SECONDS = 0.05
+_READY_POLL_ATTEMPTS = 200
+_INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
+
+
+def _wait_for_input_screen_ready(window: webview.Window) -> None:
+    """Poll until Screen 1's own async bootstrap has finished.
+
+    `run-view-initial.js`'s own `initializeRunView` does not flip
+    `window.__fimRunViewReady` to `true` until every one of its own
+    bootstrap bridge calls (`get_engine_backend_availability`,
+    `get_default_max_workers`/`loadInitialForm`, `renderInitialPreview`,
+    `maybeShowWelcome`) has already resolved — that function's own
+    comment states this explicitly: an un-awaited bridge call still in
+    flight when a window is destroyed is exactly this file's own
+    subject. The three tests below that build their own raw window
+    (not the shared `window` fixture, which already waits on nothing
+    itself but destroys through `await_bridge_threads` regardless) must
+    wait for this first, or an entirely unrelated bootstrap call can
+    still be in flight when they later destroy the window on purpose —
+    confirmed live in CI (`34732154739`): `get_engine_backend_
+    availability`'s own return-value delivery raced a deliberately
+    late `window.destroy()`, in a test that never touched that bridge
+    method at all.
+    """
+    for _ in range(_READY_POLL_ATTEMPTS):
+        if window.evaluate_js(_INPUT_SCREEN_READY):
+            return
+        time.sleep(_READY_POLL_INTERVAL_SECONDS)
+    raise AssertionError(
+        f"input screen was not ready within "
+        f"{_READY_POLL_ATTEMPTS * _READY_POLL_INTERVAL_SECONDS}s"
+    )
 
 
 def test_shutdown_timeout_defaults_when_unset(
@@ -398,6 +431,7 @@ def test_the_window_close_hook_settles_an_in_flight_bridge_call_first() -> None:
 
     def _drive() -> None:
         try:
+            _wait_for_input_screen_ready(window)
             blocker.start()
 
             def release_soon() -> None:
@@ -439,6 +473,7 @@ def test_the_window_close_hook_gives_up_after_its_own_timeout() -> None:
 
     def _drive() -> None:
         try:
+            _wait_for_input_screen_ready(window)
             blocker.start()
             started = time.monotonic()
             window.events.closing.set()
@@ -484,6 +519,7 @@ def test_the_quit_menu_action_settles_an_in_flight_bridge_call_first() -> None:
     outcome: queue.Queue[tuple[float, bool]] = queue.Queue(maxsize=1)
 
     def _drive() -> None:
+        _wait_for_input_screen_ready(window)
         blocker.start()
 
         def release_soon() -> None:
