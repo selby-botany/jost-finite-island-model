@@ -806,14 +806,29 @@ fieldset.composite > label {
  * completed-run summary text/scrubber/reason line below the plot row,
  * unrelated to this fix -- already present, in smaller degree, even in
  * the wide-window case).
+ *
+ * The `380px`/`250px` (sibling rule, below) subtrahends carry real
+ * slack, not the tightest values that happened to fit once: an
+ * earlier version of this rule (`332px`/`300px`) fit with roughly 2px
+ * to spare on macOS/Cocoa's own font metrics, measured against
+ * `#results-stats`'s own real rendered width -- and wrapped anyway in
+ * CI (`ubuntu-latest`, WebKitGTK), reproduced exactly (identical
+ * failing pixel values) in a local `ubuntu:24.04` container built to
+ * match CI's own dependency list. `.stats-table` has no explicit width
+ * of its own (intentionally -- it is sized by its own content), so a
+ * platform's own font/box-model rounding is free to shift its rendered
+ * width by a few pixels either way; a fit with no margin for that is a
+ * fit for exactly one platform, not a real one. These two values leave
+ * roughly 95px of slack at 900x700 against the widths measured in that
+ * same container, confirmed live there after the change.
  */
 @media (max-width: 1300px) {
     #run-plot-row.run-plot-row-has-trajectory .run-canvas-frame {
-        width: min(100%, 620px, calc(100vh - 332px));
+        width: min(100%, 620px, calc(100vh - 380px));
     }
 
     #run-plot-row.run-plot-row-has-trajectory #run-canvas {
-        max-height: calc(100vh - 332px);
+        max-height: calc(100vh - 380px);
     }
 }
 
@@ -898,10 +913,19 @@ fieldset.composite > label {
  * trajectory`, kept in sync with this element's own `hidden` by
  * `setTrajectoryFrameHidden`) even though `[hidden]{display:none}`
  * already makes an un-scoped width moot whenever this frame itself is
- * hidden -- explicit here rather than relying on that. */
+ * hidden -- explicit here rather than relying on that.
+ *
+ * `250px`, not the `300px` this shipped with initially: see the
+ * sibling rule's own comment for the full account -- `300px` fit with
+ * only ~2px to spare against `#results-stats`'s own real, content-sized
+ * width as rendered on macOS/Cocoa, and that margin evaporated on
+ * `ubuntu-latest`'s own WebKitGTK rendering in CI, wrapping the stats
+ * table to a second line anyway. `250px` was chosen for real slack
+ * (confirmed live in a local `ubuntu:24.04` container matching CI's own
+ * dependencies), not merely to pass once more. */
 @media (max-width: 1300px) {
     #run-plot-row.run-plot-row-has-trajectory .run-trajectory-frame {
-        width: min(100%, 300px);
+        width: min(100%, 250px);
     }
 }
 
