@@ -99,6 +99,24 @@ max_generations: 10000
 # meant the same thing that leaving it out in any other config file
 # means, until that default changed out from under it.
 n_replicates: 1
+# Explicit, not merely `PARAMETER_DEFAULTS["engine_backend"]`'s own
+# value (`"lineal"`): the desktop app's own Configure screen already
+# defaults a fresh form to `"auto"`, the choice this project's own
+# recorded cross-machine benchmark history (`params.py`'s own `DEFAULT_
+# AUTO_VECTOR_MIN_D`/`DEFAULT_AUTO_VECTOR_MAX_CAPACITY` docstrings)
+# never found `"lineal"` winning at any tested configuration -- `fim
+# init`'s own starter config is the CLI's identical "what does a new
+# user start from" moment, so it makes the same recommendation rather
+# than silently putting a terminal user on the one backend this
+# project's own evidence treats as a reference implementation, not a
+# competitive execution choice (design doc `20260911-claude-sonnet-5-
+# gui-engine-backend-selector-design.md`, `selby/restricted`, "Current
+# state"). `n_replicates: 1` above keeps this starter file itself a
+# scalar run, so `_command_run_batch`'s own synchronous engine_backend
+# guard is never actually reached from this file as shipped -- it
+# exists for the equally natural next step of bumping n_replicates from
+# here, which used to fail with a confusing, unrelated-looking error.
+engine_backend: auto
 """
 
 

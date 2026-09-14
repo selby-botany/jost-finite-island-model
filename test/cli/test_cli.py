@@ -471,6 +471,29 @@ def test_init_writes_a_config_that_runs_as_a_single_scalar_run(
     assert params.n_replicates == 1
 
 
+def test_init_writes_a_config_defaulting_to_the_recommended_auto_engine(
+    tmp_path: Path,
+) -> None:
+    """`fim init`'s starter config must pin `engine_backend: auto` explicitly.
+
+    Parity with the desktop app: Configure's own execution-engine
+    selector already defaults a fresh form to `"auto"`, the one choice
+    this project's own recorded cross-machine benchmark history never
+    found `"lineal"` beating (design doc `20260911-claude-sonnet-5-gui-
+    engine-backend-selector-design.md`, `selby/restricted`) — before
+    this, `fim init`'s own starter config relied on `PARAMETER_
+    DEFAULTS["engine_backend"]` (`"lineal"`) unstated, silently starting
+    every new CLI user on the one backend this project's own evidence
+    treats as a reference implementation, not a competitive choice.
+    """
+    output = tmp_path / "example-run.yaml"
+
+    assert cli.main(["init", "--output", str(output)]) == 0
+
+    params = cli.load_config(output)
+    assert params.engine_backend == "auto"
+
+
 def test_default_paths_use_project_results(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -753,10 +753,16 @@ def test_engine_backend_selector_defaults_to_auto(
     """An untouched selector sits on `auto`, this screen's own recommended choice.
 
     The `selected` attribute is what a botanist who never opens this
-    field actually gets. `starter_form_values()`'s own `"lineal"` (the
-    `SimulationParams` default, unchanged) only wins once a real form is
-    applied over the markup — which is why the two differ on purpose and
-    both are asserted, here and in `test_config_form.py`.
+    field sees for the instant before `loadInitialForm` applies a real
+    form over the markup — checked here in isolation (resetting
+    `selectedIndex` back to `defaultSelected` first) precisely because
+    `starter_form_values()`'s own value (`test_config_form.py`'s own
+    counterpart test) used to differ from it (`"lineal"`, a real,
+    previously-shipped inconsistency between what this markup visually
+    promised and what a fresh form's own real starting value actually
+    was) — now fixed so the two agree, but this test still checks the
+    markup's own default independently, not merely trusting that fix to
+    hold.
     """
     selected = drive(
         window,

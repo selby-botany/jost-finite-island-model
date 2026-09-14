@@ -1079,17 +1079,27 @@ def test_engine_backend_round_trips_every_legal_value(backend: str) -> None:
     assert restored.engine_backend == backend
 
 
-def test_starter_form_values_still_seeds_the_lineal_engine_backend() -> None:
-    """A fresh form keeps `SimulationParams`'s own default, unchanged by the selector.
+def test_starter_form_values_seeds_the_recommended_auto_engine_backend() -> None:
+    """A fresh form's own real, functional default now matches what it visually shows.
 
-    Adding the control changes nothing for a user who never touches it:
-    `STARTER_CONFIG` names no `engine_backend`, so the starter form
-    seeds `PARAMETER_DEFAULTS`'s own `"lineal"`. The page's own `auto`
-    default selection (`index.html`) is only what an untouched
-    `<select>` shows, and is overwritten the moment any real form —
-    starter or saved — is applied over it.
+    A real, previously-shipped inconsistency, found investigating GUI/
+    CLI parity (design doc `20260911-claude-sonnet-5-gui-engine-
+    backend-selector-design.md`, `selby/restricted`): `CHANGELOG.md`'s
+    own entry for this control claims "a brand-new form defaulting to
+    `auto`," but that was only ever true of `index.html`'s own static
+    markup, for the fraction of a second before `loadInitialForm`
+    applies `starter_form_values()` over it — `STARTER_CONFIG` named no
+    `engine_backend` at all, so that overwrite silently reverted every
+    real fresh form back to `PARAMETER_DEFAULTS`'s own `"lineal"`, the
+    one backend this project's own recorded benchmarks never found
+    fastest. `STARTER_CONFIG` now pins `engine_backend: auto` explicitly
+    — the identical fix already applied to `n_replicates` for the
+    identical reason (a field this form cares about, left to an
+    implicit library default that can silently drift under it) — so a
+    fresh form's own real, functional starting value now actually is
+    what the page has always visually claimed.
     """
-    assert config_form.starter_form_values()["engine_backend"] == "lineal"
+    assert config_form.starter_form_values()["engine_backend"] == "auto"
 
 
 def test_payload_to_yaml_text_orders_engine_backend_last() -> None:
