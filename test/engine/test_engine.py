@@ -1119,6 +1119,9 @@ def test_replicate_summary_reports_a_confidence_interval_per_statistic(
         "H_S",
         "H_T",
         "H_ST",
+        "A_CGD",
+        "Delta",
+        "MI",
         "Gs",
         "Gd",
     }
