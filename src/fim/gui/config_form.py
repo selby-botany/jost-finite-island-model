@@ -43,7 +43,14 @@ from fim.cli import STARTER_CONFIG
 from fim.model.params import SimulationParams
 
 FieldKind = Literal[
-    "int", "float", "int_list", "choice", "optional_float", "float_choice", "bool"
+    "int",
+    "float",
+    "int_list",
+    "choice",
+    "optional_float",
+    "optional_int",
+    "float_choice",
+    "bool",
 ]
 
 # The two `m` selector modes (a radio between a scalar rate
@@ -70,19 +77,24 @@ class FormField:
             deme/per-locus list are both faithfully representable by
             the same widget). "optional_float" treats an empty string
             as `None`, matching a field whose `SimulationParams`
-            default is `None` (`replicate_tolerance`). "float_choice"
-            is "choice" restricted to a fixed set of numbers rather
-            than tokens (`replicate_confidence`) — `from_mapping`
-            requires an actual `float`, not its string spelling.
-            "bool" is a plain, always-present checkbox (unlike the
-            sigma-band toggle's own `sigma_band_enabled`, which gates a
-            *second*, conditionally-present field pair and so is not a
-            plain `FormField` at all) — its text is the literal
-            `"true"`/`"false"` `collectFormValues` (`config-modals.js`)
-            always writes for a checkbox field, coerced to a real
-            Python `bool` here, matching a `SimulationParams` field
-            whose own default is already a plain boolean
-            (`track_expensive_statistics`).
+            default is `None` (`replicate_tolerance`); "optional_int"
+            is its integer counterpart (`max_concurrent_replicates`) —
+            two kinds, not one reused for both, because a bare
+            `int(text)` and `float(text)` disagree on what they accept
+            (`"3.5"` parses as a `float` but must be rejected for a
+            field `SimulationParams` itself requires to be a whole
+            number). "float_choice" is "choice" restricted to a fixed
+            set of numbers rather than tokens (`replicate_confidence`)
+            — `from_mapping` requires an actual `float`, not its string
+            spelling. "bool" is a plain, always-present checkbox
+            (unlike the sigma-band toggle's own `sigma_band_enabled`,
+            which gates a *second*, conditionally-present field pair
+            and so is not a plain `FormField` at all) — its text is the
+            literal `"true"`/`"false"` `collectFormValues`
+            (`config-modals.js`) always writes for a checkbox field,
+            coerced to a real Python `bool` here, matching a
+            `SimulationParams` field whose own default is already a
+            plain boolean (`track_expensive_statistics`).
         choices: The fixed option list for a "choice"/"float_choice"
             field; empty otherwise.
     """
@@ -218,6 +230,17 @@ BATCH_FIELDS: Final[tuple[FormField, ...]] = (
         "choice",
         choices=("lineal", "auto", "generational", "generational-vector"),
     ),
+    # `max_concurrent_replicates` is a real `SimulationParams` field
+    # (unlike `max_workers`, index.html's own comment on that field
+    # explains the distinction), ignored under `engine_backend="lineal"`
+    # (`fim.engine.run_batch`'s own docstring) exactly the way
+    # `max_workers` is ignored under every backend but `lineal` — the
+    # two are each other's mirror image, not gated against the selector
+    # here for the identical reason `max_workers` is not: both are
+    # simply documented as inert rather than hidden/disabled, matching
+    # `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`'s
+    # own §5.5 decision (`selby/restricted`).
+    FormField("max_concurrent_replicates", "max concurrent replicates", "optional_int"),
 )
 
 CONVERGENCE_STATISTIC_NAMES: Final[tuple[str, ...]] = (
@@ -437,6 +460,10 @@ def form_values_to_payload(values: Mapping[str, str]) -> dict[str, object]:
             elif field.kind == "optional_float":
                 payload[field.name] = (
                     None if not text else _parse_float_named(field.name, text)
+                )
+            elif field.kind == "optional_int":
+                payload[field.name] = (
+                    None if not text else _parse_int_named(field.name, text)
                 )
             elif field.kind == "int_list":
                 payload[field.name] = _parse_int_list_named(field.name, text)
@@ -1182,6 +1209,11 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
         # option the `<select>` happens to fall back on (design approach
         # B3's own correctness requirement).
         "engine_backend": params.engine_backend,
+        "max_concurrent_replicates": (
+            ""
+            if params.max_concurrent_replicates is None
+            else str(params.max_concurrent_replicates)
+        ),
     }
     values.update(m_from_params(params))
     values.update(mu_from_params(params))
@@ -1240,10 +1272,16 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "replicate_minimum",
     "replicate_confidence",
     "migrant_sampling",
-    # Last, matching `configuration.md`'s own section order: its
-    # "Engine backend and JIT" section follows "Analysis and execution",
-    # of which `migrant_sampling` just above is the final key.
+    # Matching `configuration.md`'s own section order: its "Engine
+    # backend and JIT" section follows "Analysis and execution", of
+    # which `migrant_sampling` just above is the final key.
+    # `jit`/`auto_vector_min_d`/`auto_vector_max_capacity` sit between
+    # `engine_backend` and `max_concurrent_replicates` in that section
+    # but are not GUI-exposed fields (`index.html`'s own "Advanced"
+    # disclosure comment) and so never appear in a payload this
+    # function orders.
     "engine_backend",
+    "max_concurrent_replicates",
 )
 
 

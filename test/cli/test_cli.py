@@ -931,6 +931,72 @@ def test_run_batch_rejects_zero_workers(
 
     assert status == 2
     assert "max_workers must be at least 1" in capsys.readouterr().err
+
+
+def test_run_batch_respects_an_explicit_max_concurrent_replicates(
+    tmp_path: Path,
+) -> None:
+    """`--max-concurrent-replicates` overrides the loaded config's own value.
+
+    `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
+    (`selby/restricted`), §5.5: the CLI's first flag to override a real
+    `SimulationParams` field, not pure execution mechanics — checked
+    here by reading the published `manifest.json`'s own `parameters`
+    back and confirming the override, not merely that the run
+    succeeded, so a version of this test that silently ignored the flag
+    (falling back to the config file's own value) would fail.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=3, engine_backend="generational")
+    output = tmp_path / "output"
+
+    status = cli.main(
+        [
+            "run",
+            str(config),
+            "-o",
+            str(output),
+            "--max-concurrent-replicates",
+            "2",
+            "--quiet",
+        ]
+    )
+
+    assert status == 0
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["parameters"]["max_concurrent_replicates"] == 2
+
+
+def test_run_rejects_a_non_positive_max_concurrent_replicates(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--max-concurrent-replicates 0` reaches `SimulationParams`'s own validation.
+
+    `replace` re-runs `__post_init__`, so this is the same rejection a
+    config file setting `max_concurrent_replicates: 0` directly would
+    already get — the CLI override is validated identically, not
+    accepted and left to fail confusingly somewhere downstream.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=3, engine_backend="generational")
+    output = tmp_path / "output"
+
+    status = cli.main(
+        [
+            "run",
+            str(config),
+            "-o",
+            str(output),
+            "--max-concurrent-replicates",
+            "0",
+            "--quiet",
+        ]
+    )
+
+    assert status == 2
+    assert "max_concurrent_replicates must be at least 1" in capsys.readouterr().err
+    assert not output.exists()
     assert not output.exists()
 
 

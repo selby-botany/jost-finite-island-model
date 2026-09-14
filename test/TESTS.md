@@ -2106,6 +2106,41 @@ the CPU-count default.
 default; only a genuinely unset `--workers` (`None`) should fall
 back to `_cpu_count()`.
 
+<a id="cli.test_cli.test_run_batch_respects_an_explicit_max_concurrent_replicates"></a>
+
+#### test\_run\_batch\_respects\_an\_explicit\_max\_concurrent\_replicates
+
+```python
+def test_run_batch_respects_an_explicit_max_concurrent_replicates(
+        tmp_path: Path) -> None
+```
+
+`--max-concurrent-replicates` overrides the loaded config's own value.
+
+`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
+(`selby/restricted`), §5.5: the CLI's first flag to override a real
+`SimulationParams` field, not pure execution mechanics — checked
+here by reading the published `manifest.json`'s own `parameters`
+back and confirming the override, not merely that the run
+succeeded, so a version of this test that silently ignored the flag
+(falling back to the config file's own value) would fail.
+
+<a id="cli.test_cli.test_run_rejects_a_non_positive_max_concurrent_replicates"></a>
+
+#### test\_run\_rejects\_a\_non\_positive\_max\_concurrent\_replicates
+
+```python
+def test_run_rejects_a_non_positive_max_concurrent_replicates(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`--max-concurrent-replicates 0` reaches `SimulationParams`'s own validation.
+
+`replace` re-runs `__post_init__`, so this is the same rejection a
+config file setting `max_concurrent_replicates: 0` directly would
+already get — the CLI override is validated identically, not
+accepted and left to fail confusingly somewhere downstream.
+
 <a id="cli.test_cli.test_run_batch_succeeds_under_a_non_lineal_engine_backend"></a>
 
 #### test\_run\_batch\_succeeds\_under\_a\_non\_lineal\_engine\_backend
@@ -8789,6 +8824,70 @@ def test_form_values_to_payload_converts_replicate_confidence_to_a_float(
 ```
 
 `replicate_confidence`'s "float_choice" kind submits a float, not a string.
+
+<a id="gui.test_config_form.test_form_values_to_payload_treats_max_concurrent_replicates_empty_as_unset"></a>
+
+#### test\_form\_values\_to\_payload\_treats\_max\_concurrent\_replicates\_empty\_as\_unset
+
+```python
+def test_form_values_to_payload_treats_max_concurrent_replicates_empty_as_unset(
+) -> (None)
+```
+
+An empty `max_concurrent_replicates` field submits `None`, not an error.
+
+The "optional_int" counterpart to `replicate_tolerance`'s own
+"optional_float" test, above — `20260914-claude-sonnet-5-non-lineal-
+batch-execution-design.md` (`selby/restricted`), §5.5.
+
+<a id="gui.test_config_form.test_form_values_to_payload_parses_a_set_max_concurrent_replicates"></a>
+
+#### test\_form\_values\_to\_payload\_parses\_a\_set\_max\_concurrent\_replicates
+
+```python
+def test_form_values_to_payload_parses_a_set_max_concurrent_replicates(
+) -> None
+```
+
+A non-empty `max_concurrent_replicates` field parses as an int, not a float.
+
+<a id="gui.test_config_form.test_form_values_to_payload_rejects_a_non_integer_max_concurrent_replicates"></a>
+
+#### test\_form\_values\_to\_payload\_rejects\_a\_non\_integer\_max\_concurrent\_replicates
+
+```python
+def test_form_values_to_payload_rejects_a_non_integer_max_concurrent_replicates(
+) -> (None)
+```
+
+`"optional_int"` rejects `"3.5"` — `int("3.5")` itself already would.
+
+The one behavior `"optional_float"` could not give this field:
+`SimulationParams.max_concurrent_replicates` must be a whole number,
+so this field's own kind must reject a fractional value at the form
+layer rather than silently truncating or deferring to a less clear
+error further down the validation chain.
+
+<a id="gui.test_config_form.test_params_to_form_values_round_trips_max_concurrent_replicates"></a>
+
+#### test\_params\_to\_form\_values\_round\_trips\_max\_concurrent\_replicates
+
+```python
+def test_params_to_form_values_round_trips_max_concurrent_replicates() -> None
+```
+
+A real `max_concurrent_replicates` value survives params -> form -> payload.
+
+<a id="gui.test_config_form.test_starter_form_values_leaves_max_concurrent_replicates_unset"></a>
+
+#### test\_starter\_form\_values\_leaves\_max\_concurrent\_replicates\_unset
+
+```python
+def test_starter_form_values_leaves_max_concurrent_replicates_unset() -> None
+```
+
+The starter config never sets `max_concurrent_replicates` — a fresh form
+shows it blank, matching `SimulationParams`'s own `None` default.
 
 <a id="gui.test_config_form.test_mu_to_payload_mu_mode_returns_a_bare_mu_key"></a>
 

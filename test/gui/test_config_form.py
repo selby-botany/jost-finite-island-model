@@ -9,6 +9,7 @@ equivalent `SimulationParams`.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 import yaml
@@ -56,6 +57,7 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "replicate_minimum",
         "replicate_confidence",
         "engine_backend",
+        "max_concurrent_replicates",
     }
     # `m`, `mu`/`mu_b`, `loci`/`locus_lengths`, `convergence_statistic`,
     # and `p_0` are all composite mode selectors — never plain
@@ -331,6 +333,77 @@ def test_form_values_to_payload_converts_replicate_confidence_to_a_float() -> No
 
     assert payload["replicate_confidence"] == pytest.approx(0.99)
     assert isinstance(payload["replicate_confidence"], float)
+
+
+def test_form_values_to_payload_treats_max_concurrent_replicates_empty_as_unset() -> (
+    None
+):
+    """An empty `max_concurrent_replicates` field submits `None`, not an error.
+
+    The "optional_int" counterpart to `replicate_tolerance`'s own
+    "optional_float" test, above — `20260914-claude-sonnet-5-non-lineal-
+    batch-execution-design.md` (`selby/restricted`), §5.5.
+    """
+    values = dict(config_form.starter_form_values())
+    values["max_concurrent_replicates"] = ""
+
+    payload = config_form.form_values_to_payload(values)
+
+    assert payload["max_concurrent_replicates"] is None
+
+
+def test_form_values_to_payload_parses_a_set_max_concurrent_replicates() -> None:
+    """A non-empty `max_concurrent_replicates` field parses as an int, not a float."""
+    values = dict(config_form.starter_form_values())
+    values["max_concurrent_replicates"] = "4"
+
+    payload = config_form.form_values_to_payload(values)
+
+    assert payload["max_concurrent_replicates"] == 4
+    assert isinstance(payload["max_concurrent_replicates"], int)
+
+
+def test_form_values_to_payload_rejects_a_non_integer_max_concurrent_replicates() -> (
+    None
+):
+    """`"optional_int"` rejects `"3.5"` — `int("3.5")` itself already would.
+
+    The one behavior `"optional_float"` could not give this field:
+    `SimulationParams.max_concurrent_replicates` must be a whole number,
+    so this field's own kind must reject a fractional value at the form
+    layer rather than silently truncating or deferring to a less clear
+    error further down the validation chain.
+    """
+    values = dict(config_form.starter_form_values())
+    values["max_concurrent_replicates"] = "3.5"
+
+    with pytest.raises(
+        ValueError, match="max_concurrent_replicates must be an integer"
+    ):
+        config_form.form_values_to_payload(values)
+
+
+def test_params_to_form_values_round_trips_max_concurrent_replicates() -> None:
+    """A real `max_concurrent_replicates` value survives params -> form -> payload."""
+    params = replace(
+        SimulationParams.from_mapping(yaml.safe_load(STARTER_CONFIG)),
+        n_replicates=5,
+        max_concurrent_replicates=3,
+    )
+
+    values = config_form.params_to_form_values(params)
+
+    assert values["max_concurrent_replicates"] == "3"
+    payload = config_form.form_values_to_payload(values)
+    assert payload["max_concurrent_replicates"] == 3
+    restored = SimulationParams.from_mapping(payload)
+    assert restored.max_concurrent_replicates == 3
+
+
+def test_starter_form_values_leaves_max_concurrent_replicates_unset() -> None:
+    """The starter config never sets `max_concurrent_replicates` — a fresh form
+    shows it blank, matching `SimulationParams`'s own `None` default."""
+    assert config_form.starter_form_values()["max_concurrent_replicates"] == ""
 
 
 def test_mu_to_payload_mu_mode_returns_a_bare_mu_key() -> None:

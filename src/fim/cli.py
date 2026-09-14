@@ -271,6 +271,28 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
     """
     logger.debug("loading config: %s", arguments.config)
     params = load_config(arguments.config)
+    if arguments.max_concurrent_replicates is not None:
+        # The one CLI flag that overrides a real `SimulationParams` field
+        # rather than pure execution mechanics (`--workers`/`--sequential`
+        # size or disable a process pool that is not part of `params` at
+        # all) -- deliberate, not a precedent for overriding scientific
+        # parameters (`N`/`m`/`mu`/etc.) from the command line, which
+        # stays config-file-only. `max_concurrent_replicates` is a
+        # concurrency/memory-tuning knob for the `"generational"`/
+        # `"generational-vector"` batch path
+        # (`fim.engine.run_batch`'s own docstring), the closest analogue
+        # `--workers` has outside `"lineal"` -- exposing it only as a
+        # config-file field while `--workers` got a CLI flag years ago
+        # would be the real inconsistency
+        # (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+        # `selby/restricted`, §5.5). `replace` re-runs `SimulationParams.
+        # __post_init__`, so this override is validated (rejects a
+        # non-positive count, clamps down to `n_replicates` if given
+        # larger) exactly like the same field loaded from a config file
+        # would be.
+        params = replace(
+            params, max_concurrent_replicates=arguments.max_concurrent_replicates
+        )
     output_directory = (
         Path(arguments.output)
         if arguments.output is not None
@@ -892,6 +914,19 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "run a batch's replicates one at a time instead of in parallel, "
             "engine_backend='lineal' only"
+        ),
+    )
+    run_parser.add_argument(
+        "--max-concurrent-replicates",
+        type=int,
+        metavar="N",
+        help=(
+            "cap how many replicate lanes are advanced at once under "
+            "engine_backend='generational'/'generational-vector' (default: "
+            "every requested replicate at once; ignored for a scalar run "
+            "or under 'lineal', which has no such lane concept — see "
+            "max_concurrent_replicates in doc/configuration.md); "
+            "overrides the loaded config's own value for this run only"
         ),
     )
 

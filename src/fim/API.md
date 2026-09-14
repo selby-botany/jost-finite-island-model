@@ -4793,19 +4793,24 @@ One model-input screen field's config key, label, and value kind.
   deme/per-locus list are both faithfully representable by
   the same widget). "optional_float" treats an empty string
   as `None`, matching a field whose `SimulationParams`
-  default is `None` (`replicate_tolerance`). "float_choice"
-  is "choice" restricted to a fixed set of numbers rather
-  than tokens (`replicate_confidence`) — `from_mapping`
-  requires an actual `float`, not its string spelling.
-  "bool" is a plain, always-present checkbox (unlike the
-  sigma-band toggle's own `sigma_band_enabled`, which gates a
-  *second*, conditionally-present field pair and so is not a
-  plain `FormField` at all) — its text is the literal
-  `"true"`/`"false"` `collectFormValues` (`config-modals.js`)
-  always writes for a checkbox field, coerced to a real
-  Python `bool` here, matching a `SimulationParams` field
-  whose own default is already a plain boolean
-  (`track_expensive_statistics`).
+  default is `None` (`replicate_tolerance`); "optional_int"
+  is its integer counterpart (`max_concurrent_replicates`) —
+  two kinds, not one reused for both, because a bare
+  `int(text)` and `float(text)` disagree on what they accept
+  (`"3.5"` parses as a `float` but must be rejected for a
+  field `SimulationParams` itself requires to be a whole
+  number). "float_choice" is "choice" restricted to a fixed
+  set of numbers rather than tokens (`replicate_confidence`)
+  — `from_mapping` requires an actual `float`, not its string
+  spelling. "bool" is a plain, always-present checkbox
+  (unlike the sigma-band toggle's own `sigma_band_enabled`,
+  which gates a *second*, conditionally-present field pair
+  and so is not a plain `FormField` at all) — its text is the
+  literal `"true"`/`"false"` `collectFormValues`
+  (`config-modals.js`) always writes for a checkbox field,
+  coerced to a real Python `bool` here, matching a
+  `SimulationParams` field whose own default is already a
+  plain boolean (`track_expensive_statistics`).
 - `choices` - The fixed option list for a "choice"/"float_choice"
   field; empty otherwise.
 

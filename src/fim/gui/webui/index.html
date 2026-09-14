@@ -714,18 +714,24 @@
        `jit`, `auto_vector_min_d`, `auto_vector_max_capacity`,
        `max_concurrent_replicates`) is still only partly built.
 
-       Its first and only field, `engine_backend`, now ships as a plain
-       `<select>` in the Structure panel below (GUI engine-backend
-       selector design doc `20260911-claude-sonnet-5-gui-engine-backend-
-       selector-design.md`, approaches B3/C) -- new surface rather than
-       a relocation, since none of these five fields ever had a GUI
-       control to move. The other four stay unexposed at their
-       `SimulationParams` defaults, on purpose rather than pending:
-       `jit`/`auto_vector_min_d`/`auto_vector_max_capacity` are
-       machine-specific benchmark artifacts meant to be re-measured with
-       `dev/bin/benchmark-engines`, a developer workflow this screen's
-       own audience has no business being handed, and `"auto"`'s own
-       resolution needs none of them set by hand. -->
+       `engine_backend` ships as a plain `<select>` in the Structure
+       panel below (GUI engine-backend selector design doc
+       `20260911-claude-sonnet-5-gui-engine-backend-selector-design.md`,
+       approaches B3/C); `max_concurrent_replicates` ships beside
+       `max_workers` in `batch-only-fields`
+       (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+       `selby/restricted`, §5.5) -- both new surface rather than a
+       relocation, since neither field ever had a GUI control to move.
+       `jit`/`auto_vector_min_d`/`auto_vector_max_capacity` stay
+       unexposed at their `SimulationParams` defaults, on purpose rather
+       than pending: they are machine-specific benchmark artifacts meant
+       to be re-measured with `dev/bin/benchmark-engines`, a developer
+       workflow this screen's own audience has no business being
+       handed, and `"auto"`'s own resolution needs none of them set by
+       hand -- a justification that never actually applied to
+       `max_concurrent_replicates`, a plain concurrency/memory control,
+       not a benchmark artifact, which this same comment used to group
+       in with the other three regardless. -->
   <section id="screen-configure" class="screen" hidden>
     <div id="configure-banner" class="banner" hidden></div>
     <!-- "Back," the same contract `screen-help`/`screen-explore`/
@@ -1081,6 +1087,16 @@
             <input type="text" id="field-max_workers" name="max_workers" form="input-form">
             <p class="hint">Not a `SimulationParams` field — the batch's own worker-process
             count (design §0.5, H5). Defaults to this machine's own CPU count.</p>
+          </div>
+          <div class="field">
+            <label for="field-max_concurrent_replicates">max concurrent replicates (blank = unset)</label>
+            <input type="text" id="field-max_concurrent_replicates" name="max_concurrent_replicates" form="input-form">
+            <p class="hint">A real `SimulationParams` field (unlike parallel workers, above)
+            — caps how many replicate lanes run at once under the generational/
+            generational-vector engines; blank means every requested replicate at
+            once. Has no effect under the lineal engine, which has no such lane
+            concept (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+            `selby/restricted`).</p>
           </div>
         </div>
 

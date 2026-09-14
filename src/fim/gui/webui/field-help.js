@@ -134,6 +134,11 @@ const FIELD_HELP = {
         "interval reported once a batch finishes.",
     max_workers: "How many replicates run in parallel. Not a model " +
         "parameter — defaults to this machine's own CPU count.",
+    max_concurrent_replicates: "Caps how many replicate lanes run at once " +
+        "under the generational/generational-vector engines. Unlike " +
+        "parallel workers, this is a real model parameter, and has no " +
+        "effect under lineal. Blank means every requested replicate at " +
+        "once.",
     significant_digits: "How many digits every displayed statistic rounds " +
         "to. Cosmetic only — saved files always keep full precision.",
     dark_mode_override: "Follow system matches your OS's own light/dark " +
