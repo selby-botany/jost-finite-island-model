@@ -174,7 +174,50 @@ fim run stepping-stone.yaml --output results/stepping-stone --quiet
 ```
 
 Converges at generation 10 with D \sim 0.124. Swap `topology: ring` for
-`linear` to remove the wrap-around edge between deme 1 and deme 6.
+`linear` to remove the wrap-around edge between deme 1 and deme 6. In
+the GUI, the completed-run Literature visualizations panel includes an
+isolation-by-distance plot whenever the migration graph has at least two
+distance classes.
+
+### Literature distance statistics from an explicit founder split
+
+Three demes start fixed for three different alleles. This is a deliberately
+small, deterministic demonstration of the supplemental statistics added from
+the differentiation literature: Caballero-García-Dorado allelic distance
+A<sub>CGD</sub>, Gregorius δ, and Sherwin mutual information `MI`.
+
+```yaml
+N: 200
+d: 3
+m: 0.0
+mu: 0.0
+seed: 20260914
+loci:
+  - locus_id: 1
+    length: 100
+p_0:
+  - - 0: 1.0
+  - - 1: 1.0
+  - - 2: 1.0
+convergence_statistic: D
+convergence_window: 2
+convergence_tolerance: 0.000001
+max_generations: 1
+n_replicates: 1   # a single scalar run; the default (200) would batch
+```
+
+```console
+fim run literature-distance-statistics.yaml \
+  --output results/literature-distance-statistics --quiet
+```
+
+Converges at generation 1 with D = G<sub>ST</sub> = E<sub>ST</sub> =
+K<sub>ST</sub> = 1, A<sub>CGD</sub> = 1, Gregorius δ = 1, and
+`MI = log(3) ≈ 1.099`. The equal values are not a claim that these
+statistics are interchangeable; they are the easiest possible sanity check
+for a complete three-way split. Change one deme's `p_0` cell to
+`0:0.5,1:0.5` to see the distance-oriented statistics respond directly to
+shared alleles.
 
 ### Stochastic migrant counts
 
@@ -242,10 +285,81 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run finite-alleles.yaml --output results/finite-alleles --quiet
 ```
 
-Converges at generation 12 with D \sim 0.207. See
+Converges at generation 10 with D \sim 0.190. This is the Kimura-Crow
+finite-allele setting in miniature: `length: 3` gives 64 possible allele
+states, so recurrent mutation is visible enough for the completed-run
+frequency spectrum to be useful. See
 [configuration.md](configuration.md#mutation_model) for how this differs
 from a distance-based (stepwise) mutation model, which `fim` does not
 implement.
+
+### Wright-Takahata finite-deme correction
+
+Wright's finite-island model and Takahata's multiallelic identity treatment
+carry an explicit finite-`d` correction. This example keeps `d` small enough
+that the correction matters; increasing `d` while holding `N`, `m`, and `mu`
+fixed moves G<sub>ST</sub> toward the infinite-island approximation.
+
+```yaml
+N: 500
+d: 8
+m: 0.003
+mu: 0.0002
+seed: 20260914
+loci:
+  - locus_id: 1
+    length: 100
+convergence_statistic: G_ST
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 500
+n_replicates: 1   # a single scalar run; the default (200) would batch
+```
+
+```console
+fim run finite-deme-correction.yaml \
+  --output results/finite-deme-correction --quiet
+```
+
+Converges at generation 9 with G<sub>ST</sub> \sim 0.161 and
+D \sim 0.161. The closed-form finite-deme prediction for these parameters
+is about 0.141, below the corresponding infinite-island approximation of
+about 0.238 because the `d / (d - 1)` correction is retained.
+
+### Kimura-Weiss isolation by distance
+
+A 20-deme ring gives enough graph-distance classes for the GUI's
+isolation-by-distance panel to show the short-distance decay pattern from
+Kimura and Weiss. The run is still small enough for an interactive example,
+but large enough that distances 1 through 10 exist on the ring.
+
+```yaml
+N: 200
+d: 20
+m:
+  topology: ring
+  rate: 0.05
+mu: 0.001
+seed: 20260914
+loci:
+  - locus_id: 1
+    length: 100
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 120
+n_replicates: 1   # a single scalar run; the default (200) would batch
+```
+
+```console
+fim run kimura-weiss-isolation-by-distance.yaml \
+  --output results/kimura-weiss-isolation-by-distance --quiet
+```
+
+Converges at generation 11 with D \sim 0.090 and G<sub>ST</sub> \sim 0.095.
+Open the result in `fim-gui` and inspect the Literature visualizations panel:
+the identity-decay plot groups deme pairs by shortest-path distance over the
+non-zero migration edges and overlays a log-linear fit.
 
 ### Per-base mutation rate across unequal locus lengths
 

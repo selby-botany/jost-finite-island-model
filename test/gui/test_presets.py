@@ -17,7 +17,7 @@ _REAL_WEBUI_DIRECTORY = (
     Path(__file__).resolve().parents[2] / "src" / "fim" / "gui" / "webui"
 )
 
-# The seven "Worked examples" titles `doc/usage.md` documents today, in
+# The ten "Worked examples" titles `doc/usage.md` documents today, in
 # order — a snapshot, not a re-derivation: if a future edit adds,
 # removes, or renames an example (and regenerates `usage.html` to
 # match, `dev/bin/generate-help-html`'s own job), this list is meant to
@@ -27,8 +27,11 @@ _REAL_WEBUI_DIRECTORY = (
 _EXPECTED_TITLES = (
     "Unequal island sizes with a migration hub",
     "Stepping-stone (spatial) migration",
+    "Literature distance statistics from an explicit founder split",
     "Stochastic migrant counts",
     "Finite-length alleles (the K-allele model)",
+    "Wright-Takahata finite-deme correction",
+    "Kimura-Weiss isolation by distance",
     "Per-base mutation rate across unequal locus lengths",
     "Several convergence statistics",
     "An adaptive replicate batch with a confidence interval",
@@ -37,7 +40,7 @@ _EXPECTED_TITLES = (
 _REAL_PRESETS = list_presets(_REAL_WEBUI_DIRECTORY)
 
 
-def test_list_presets_returns_the_seven_worked_examples() -> None:
+def test_list_presets_returns_the_ten_worked_examples() -> None:
     """Every `doc/usage.md` worked example is found, in its own document order.
 
     Reads the real, committed `webui/help/usage.html` directly — this

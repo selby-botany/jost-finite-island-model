@@ -11923,12 +11923,12 @@ Unit tests for `fim.gui.presets` (no display, no `gui` marker).
 `list_presets`/`get_preset` only ever read a plain HTML file from disk —
 none of the pywebview machinery this package's other tests need.
 
-<a id="gui.test_presets.test_list_presets_returns_the_seven_worked_examples"></a>
+<a id="gui.test_presets.test_list_presets_returns_the_ten_worked_examples"></a>
 
-#### test\_list\_presets\_returns\_the\_seven\_worked\_examples
+#### test\_list\_presets\_returns\_the\_ten\_worked\_examples
 
 ```python
-def test_list_presets_returns_the_seven_worked_examples() -> None
+def test_list_presets_returns_the_ten_worked_examples() -> None
 ```
 
 Every `doc/usage.md` worked example is found, in its own document order.
