@@ -364,6 +364,33 @@
           <canvas id="results-differentiation-q-canvas"></canvas>
           <div id="results-differentiation-q-lines"></div>
         </div>
+        <section id="literature-visuals-panel" class="literature-visuals-panel" hidden>
+          <h3>Literature visualizations</h3>
+          <div class="literature-visuals-grid">
+            <article class="literature-visual-card">
+              <h4>Supplemental statistics</h4>
+              <table class="stats-table supplemental-stats-table">
+                <tbody id="literature-stats-body"></tbody>
+              </table>
+            </article>
+            <article class="literature-visual-card">
+              <h4 id="structure-bars-title">STRUCTURE-style allele composition</h4>
+              <canvas id="structure-bars-canvas"></canvas>
+              <div id="structure-bars-legend" class="literature-legend"></div>
+              <p id="structure-bars-note" class="hint"></p>
+            </article>
+            <article class="literature-visual-card">
+              <h4 id="frequency-spectrum-title">Allele-frequency spectrum</h4>
+              <canvas id="frequency-spectrum-canvas"></canvas>
+              <p id="frequency-spectrum-note" class="hint"></p>
+            </article>
+            <article class="literature-visual-card" id="ibd-card">
+              <h4 id="ibd-title">Isolation-by-distance identity decay</h4>
+              <canvas id="ibd-canvas"></canvas>
+              <p id="ibd-note" class="hint"></p>
+            </article>
+          </div>
+        </section>
       </div>
     </div>
     <!-- Batch `completed`-only: the replicate table, full width below

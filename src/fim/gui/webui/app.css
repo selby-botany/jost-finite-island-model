@@ -1087,6 +1087,69 @@ fieldset.composite > label {
     margin-bottom: 0.5rem;
 }
 
+.literature-visuals-panel {
+    width: min(100%, 1100px);
+    margin-top: 1rem;
+}
+
+.literature-visuals-panel h3 {
+    margin: 0 0 0.75rem;
+    color: var(--fim-accent);
+    font-size: 1rem;
+}
+
+.literature-visuals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.literature-visual-card {
+    border: 1px solid var(--fim-border);
+    border-radius: 8px;
+    padding: 0.8rem;
+    background: var(--fim-background);
+}
+
+.literature-visual-card h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.9rem;
+}
+
+.literature-visual-card canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    background: var(--fim-background);
+}
+
+.supplemental-stats-table {
+    margin-top: 0;
+}
+
+.literature-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.7rem;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+}
+
+.literature-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.literature-legend .swatch {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 2px;
+}
+
 .batch-results-table {
     width: 100%;
     border-collapse: collapse;

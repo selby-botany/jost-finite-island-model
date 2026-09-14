@@ -121,6 +121,12 @@ def test_a_completed_run_renders_the_run_view(
             "const stat = document.getElementById('stat-G_ST');"
             "return stat ? stat.title : null;"
             "})(), "
+            "literatureHidden: "
+            "document.getElementById('literature-visuals-panel').hidden, "
+            "literatureRows: "
+            "document.getElementById('literature-stats-body').children.length, "
+            "structureLegend: "
+            "document.getElementById('structure-bars-legend').textContent, "
             "scrubberHidden: document.getElementById('scrubber-controls').hidden, "
             "scrubberPlayDisabled: "
             "document.getElementById('scrubber-play-button').disabled, "
@@ -147,6 +153,7 @@ def test_a_completed_run_renders_the_run_view(
             and value.get("statDTitle") is not None
             and value.get("statGSTLabel") is not None
             and value.get("statGSTTrackTitle") is not None
+            and value.get("literatureRows") == 3
         ),
         poll_attempts=_POLL_ATTEMPTS,
     )
@@ -164,6 +171,9 @@ def test_a_completed_run_renders_the_run_view(
     # The row title for G_ST is "GST = <value>" (strip-tag form used in
     # `buildPointMeter`'s own title construction).
     assert settled["statGSTTrackTitle"].startswith("GST = ")
+    assert settled["literatureHidden"] is False
+    assert "Allele" in settled["structureLegend"]
+    assert settled["literatureRows"] == 3
     # `tiny_params`-scale runs always persist more than one generation
     # (`convergence_window`'s own minimum of 2 forces at least one step
     # past generation 0 before stability can first be evaluated), so the
