@@ -272,6 +272,65 @@ Relevant code:
 - `test/gui/test_input_screen.py` and `test/gui/test_batch_runner.py` —
   regression tests for both layers of the mitigation
 
+### One built-in worked example has no GUI form representation
+
+**Status:** the one confirmed-affected example is now labeled and fails
+gracefully; a real editor for the underlying construct is designed but not
+scheduled
+**Affects:** `fim gui`'s "Try a worked example…" pulldowns (Home,
+Configure) and the full "Load example…" picker
+**First observed:** 2026-09-13, from a real user's own "examples that
+don't work aren't very useful" report
+
+#### What you would see
+
+Six of the seven built-in worked examples load into the Configure form and
+run normally. The seventh, "Per-base mutation rate across unequal locus
+lengths," is now labeled "(view YAML only)" everywhere it can be picked
+from; picking it anyway shows a small inline notice explaining why,
+instead of failing silently or (before 2026-09-13) a blocking native
+alert box.
+
+#### Why it happens
+
+That one example's own `mu` is genuinely per-locus (two different rates
+across its two loci) — `config_form.mu_from_params` has no representation
+for a per-locus `mu` at all, by deliberate, documented scope (`doc/fim-gui-
+design.md` §6.2 names this "the one remaining widget-unfriendly
+construct"), the same limitation a hand-loaded YAML file with the same
+shape already hits via `load_yaml`. This is not a bug in the six that work
+— confirmed live, one preset at a time, and covered by a parametrized
+regression test (`test_every_other_builtin_preset_loads_into_form_values`,
+`test/gui/test_app_api.py`) so a *different* future preset that trips some
+new limitation fails immediately rather than waiting for another live
+report.
+
+#### What would close this
+
+A real per-locus-`mu` editor (a fourth `mu_mode`, mirroring the `m`/
+`loci`/`p_0` matrix/grid precedent already shipped for the same class of
+upgrade) — design doc `20260913-claude-sonnet-5-gui-worked-example-
+loadability-design.md` (`selby/restricted`), "Mechanics: Option A," has
+the concrete shape and a deliberately-unresolved open question (how to
+display the `mu_b`-derived provenance a grid would otherwise flatten
+away) that should be settled before scheduling this. Once shipped: update
+`doc/fim-gui-design.md` §6.2 (its "one remaining" framing becomes false),
+and retire this one preset's own "(view YAML only)" label — the labeling
+mechanism itself stays, ready for whatever preset needs it next.
+
+Relevant code:
+
+- `config_form.mu_from_params`, `src/fim/gui/config_form.py` — the exact
+  rejection point, and its own docstring, which already names this
+  example
+- `Api.list_presets`'s own new `loadable` field and `Api.get_preset_
+  form_values`, both `src/fim/gui/app.py` — how the rejection surfaces to
+  the page
+- `refreshExampleOptions`/`showExampleLoadNotice`, `src/fim/gui/webui/
+  screens/presets.js` — the label and the inline notice
+- `test/gui/test_app_api.py`'s own `test_every_other_builtin_preset_
+  loads_into_form_values` — the full-coverage regression test
+
 ### Linux build image is pinned to an end-of-life Debian release
 
 **Status:** stopgap applied; durable fix not started
