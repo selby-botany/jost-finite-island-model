@@ -151,7 +151,11 @@ from fim.model.vectorized import (
     vectorized_state_to_rows,
 )
 from fim.persistence.manifest import CURRENT_SCHEMA_VERSION, RunManifest
-from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryStore
+from fim.persistence.store import (
+    InMemoryTrajectoryStore,
+    ReplicateFanoutStore,
+    TrajectoryStore,
+)
 from fim.statistics.differentiation import (
     DifferentiationReport,
     _g_st_from_demes,
@@ -1440,15 +1444,36 @@ class GenerationalBackend:
     class itself changing at all.
     """
 
-    def __init__(self, advancer: Advancer | None = None) -> None:
+    def __init__(
+        self,
+        advancer: Advancer | None = None,
+        *,
+        store_factory: Callable[[str], TrajectoryStore] | None = None,
+    ) -> None:
         """Configure which `Advancer` drives this backend's own batches.
 
         Args:
             advancer: Defaults to `SequentialAdvancer()` — no new
                 concurrency, matching `LinealBackend`'s own trajectories
                 exactly for the same seed.
+            store_factory: See `fim()`'s own docstring. Unlike
+                `LinealBackend`, this backend never needs a process
+                pool to use one — `run_batch` already writes every
+                replicate's own rows through one shared `store`
+                argument, keyed by that replicate's own `run_id`
+                (`fim.persistence.store.TrajectoryStore`'s own
+                contract), so wrapping `store_factory` in a
+                `ReplicateFanoutStore` (below) and handing *that* to
+                `run_batch` as its one `store` gives every replicate a
+                real, independent file — the same outcome
+                `LinealBackend`'s own `store_factory` path already
+                produces — with no change to `run_batch`, `ReplicaLane`,
+                or any `Advancer` implementation at all
+                (`20260914-claude-sonnet-5-non-lineal-batch-execution-
+                design.md`, `selby/restricted`, §5.1-§5.2).
         """
         self._advancer = advancer if advancer is not None else SequentialAdvancer()
+        self._store_factory = store_factory
 
     def run(
         self,
@@ -1458,7 +1483,13 @@ class GenerationalBackend:
         clock: Clock,
     ) -> SimulationOutput:
         """Run `params`'s own replicate(s); see `fim()`'s own docstring."""
-        trajectory_store = store if store is not None else InMemoryTrajectoryStore()
+        if store is not None and self._store_factory is not None:
+            raise ValueError("store and store_factory are mutually exclusive")
+        trajectory_store = (
+            ReplicateFanoutStore(self._store_factory)
+            if self._store_factory is not None
+            else (store if store is not None else InMemoryTrajectoryStore())
+        )
         results = run_batch(params, trajectory_store, run_id, clock, self._advancer)
         if params.n_replicates == 1:
             return results[0]
@@ -1626,10 +1657,22 @@ def build_engine_backend(
             reference every other backend's own parity tests are checked
             against (see its own docstring).
         max_workers: `LinealBackend`-only; ignored by every other
-            backend. `ThreadedAdvancer`'s own thread count is a separate,
-            not-yet-publicly-reachable knob — see its own docstring for
-            why this name is not reused for it here.
-        store_factory: `LinealBackend`-only; ignored by every other backend.
+            backend, since there is no process pool anywhere else for it
+            to size — `ThreadedAdvancer`'s own thread count is a
+            separate, not-yet-publicly-reachable knob (see its own
+            docstring for why this name is not reused for it there);
+            `run_batch`'s own `max_concurrent_replicates` is the
+            `"generational"`/`"generational-vector"` equivalent
+            concurrency/memory-bounding control, a real `SimulationParams`
+            field rather than a `build_engine_backend` argument.
+        store_factory: Every backend accepts this the same way now — one
+            real, independent store per replicate, keyed by that
+            replicate's own run id. `LinealBackend` uses it directly (a
+            worker process needs its own store; nothing else could be
+            shared across a process boundary). `GenerationalBackend`
+            wraps it in a `ReplicateFanoutStore` instead
+            (`GenerationalBackend`'s own docstring) — no process pool
+            involved, but the same one-store-per-replicate outcome.
         params: The run this backend is actually being built for —
             required, and only actually read, when `engine_backend ==
             "auto"`, to look at `params.d`/`params.mutation_model`/
@@ -1702,7 +1745,9 @@ def build_engine_backend(
             )
         return LinealBackend(max_workers=max_workers, store_factory=store_factory)
     if engine_backend == "generational":
-        return GenerationalBackend(ThreadedAdvancer(jit=jit))
+        return GenerationalBackend(
+            ThreadedAdvancer(jit=jit), store_factory=store_factory
+        )
     if engine_backend == "generational-vector":
         if jit != "off":
             raise ValueError(
@@ -1764,7 +1809,7 @@ def build_engine_backend(
                     "that size actually needs is available, or choose a "
                     "different engine_backend"
                 )
-        return GenerationalBackend(VectorizedAdvancer())
+        return GenerationalBackend(VectorizedAdvancer(), store_factory=store_factory)
     raise ValueError(f"unknown engine backend: {engine_backend!r}")
 
 
@@ -2013,12 +2058,13 @@ def fim(
     Raises:
         ValueError: If the named arguments disagree with ``params``,
             `store` and `store_factory` are both given, `max_workers` is
-            combined with a non-``None`` `store`, `max_workers`/
-            `store_factory` are given alongside a non-``"lineal"``
-            `engine_backend`, or `jit` is anything but ``"off"`` under
-            `engine_backend="lineal"` (or under `"generational-vector"`,
-            including when `"auto"` resolves to it — see
-            `build_engine_backend`'s own docstring).
+            combined with a non-``None`` `store`, `max_workers` is given
+            alongside a non-``"lineal"`` `engine_backend` (there is no
+            process pool anywhere else for it to size — see
+            `build_engine_backend`'s own `max_workers` Args entry), or
+            `jit` is anything but ``"off"`` under `engine_backend="lineal"`
+            (or under `"generational-vector"`, including when `"auto"`
+            resolves to it — see `build_engine_backend`'s own docstring).
     """
     _validate_public_signature(N, m, mu, d, params)
     # An explicit argument always wins; otherwise fall back to `params`'s
@@ -2037,12 +2083,20 @@ def fim(
         auto_vector_min_d = params.auto_vector_min_d
     if auto_vector_max_capacity is None:
         auto_vector_max_capacity = params.auto_vector_max_capacity
-    if engine_backend != "lineal" and (
-        max_workers is not None or store_factory is not None
-    ):
+    # `store_factory` alone needs no rejection here any more
+    # (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+    # `selby/restricted`, §5.3): every backend now gives each replicate
+    # its own store when one is supplied (`GenerationalBackend` via
+    # `ReplicateFanoutStore`, `LinealBackend` directly). `max_workers`
+    # stays lineal-only — it sizes a `ProcessPoolExecutor` that only
+    # `LinealBackend` ever builds; no other backend has a process pool
+    # for this argument to mean anything about.
+    if engine_backend != "lineal" and max_workers is not None:
         raise ValueError(
-            "max_workers/store_factory are lineal-backend-only; they have "
-            f"no effect under engine_backend={engine_backend!r}"
+            "max_workers is lineal-backend-only; it has no effect under "
+            f"engine_backend={engine_backend!r} — see max_concurrent_"
+            "replicates for the generational/generational-vector "
+            "equivalent concurrency control"
         )
     run_clock = clock if clock is not None else _utc_now
     # The *resolved* backend choice — never the literal string "auto" —

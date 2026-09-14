@@ -1867,7 +1867,10 @@ class itself changing at all.
 #### \_\_init\_\_
 
 ```python
-def __init__(advancer: Advancer | None = None) -> None
+def __init__(
+        advancer: Advancer | None = None,
+        *,
+        store_factory: Callable[[str], TrajectoryStore] | None = None) -> None
 ```
 
 Configure which `Advancer` drives this backend's own batches.
@@ -1877,6 +1880,21 @@ Configure which `Advancer` drives this backend's own batches.
 - `advancer` - Defaults to `SequentialAdvancer()` — no new
   concurrency, matching `LinealBackend`'s own trajectories
   exactly for the same seed.
+- `store_factory` - See `fim()`'s own docstring. Unlike
+  `LinealBackend`, this backend never needs a process
+  pool to use one — `run_batch` already writes every
+  replicate's own rows through one shared `store`
+  argument, keyed by that replicate's own `run_id`
+  (`fim.persistence.store.TrajectoryStore`'s own
+  contract), so wrapping `store_factory` in a
+  `ReplicateFanoutStore` (below) and handing *that* to
+  `run_batch` as its one `store` gives every replicate a
+  real, independent file — the same outcome
+  `LinealBackend`'s own `store_factory` path already
+  produces — with no change to `run_batch`, `ReplicaLane`,
+  or any `Advancer` implementation at all
+  (`20260914-claude-sonnet-5-non-lineal-batch-execution-
+  design.md`, `selby/restricted`, §5.1-§5.2).
 
 <a id="fim.engine.GenerationalBackend.run"></a>
 
@@ -1972,10 +1990,22 @@ class tree to maintain.
   reference every other backend's own parity tests are checked
   against (see its own docstring).
 - `max_workers` - `LinealBackend`-only; ignored by every other
-  backend. `ThreadedAdvancer`'s own thread count is a separate,
-  not-yet-publicly-reachable knob — see its own docstring for
-  why this name is not reused for it here.
-- `store_factory` - `LinealBackend`-only; ignored by every other backend.
+  backend, since there is no process pool anywhere else for it
+  to size — `ThreadedAdvancer`'s own thread count is a
+  separate, not-yet-publicly-reachable knob (see its own
+  docstring for why this name is not reused for it there);
+  `run_batch`'s own `max_concurrent_replicates` is the
+  `"generational"`/`"generational-vector"` equivalent
+  concurrency/memory-bounding control, a real `SimulationParams`
+  field rather than a `build_engine_backend` argument.
+- `store_factory` - Every backend accepts this the same way now — one
+  real, independent store per replicate, keyed by that
+  replicate's own run id. `LinealBackend` uses it directly (a
+  worker process needs its own store; nothing else could be
+  shared across a process boundary). `GenerationalBackend`
+  wraps it in a `ReplicateFanoutStore` instead
+  (`GenerationalBackend`'s own docstring) — no process pool
+  involved, but the same one-store-per-replicate outcome.
 - `params` - The run this backend is actually being built for —
   required, and only actually read, when `engine_backend ==
   "auto"`, to look at `params.d`/`params.mutation_model`/
@@ -2284,12 +2314,13 @@ silently disagree.
 
 - `ValueError` - If the named arguments disagree with ``params``,
   `store` and `store_factory` are both given, `max_workers` is
-  combined with a non-``None`` `store`, `max_workers`/
-  `store_factory` are given alongside a non-``"lineal"``
-  `engine_backend`, or `jit` is anything but ``"off"`` under
-  `engine_backend="lineal"` (or under `"generational-vector"`,
-  including when `"auto"` resolves to it — see
-  `build_engine_backend`'s own docstring).
+  combined with a non-``None`` `store`, `max_workers` is given
+  alongside a non-``"lineal"`` `engine_backend` (there is no
+  process pool anywhere else for it to size — see
+  `build_engine_backend`'s own `max_workers` Args entry), or
+  `jit` is anything but ``"off"`` under `engine_backend="lineal"`
+  (or under `"generational-vector"`, including when `"auto"`
+  resolves to it — see `build_engine_backend`'s own docstring).
 
 <a id="fim.engine.deterministic_run_id"></a>
 

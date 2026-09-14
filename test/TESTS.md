@@ -3441,6 +3441,47 @@ def test_max_workers_uses_store_factory_per_replicate() -> None
 
 Each worker gets its own store, built by `store_factory` in-process.
 
+<a id="engine.test_engine.test_non_lineal_batch_uses_store_factory_per_replicate"></a>
+
+#### test\_non\_lineal\_batch\_uses\_store\_factory\_per\_replicate
+
+```python
+@pytest.mark.parametrize("engine_backend",
+                         ["generational", "generational-vector"])
+def test_non_lineal_batch_uses_store_factory_per_replicate(
+        engine_backend: str, tmp_path: Path) -> None
+```
+
+A batch under a non-`lineal` backend now honors `store_factory` too.
+
+`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
+(`selby/restricted`), §5.2: `GenerationalBackend` wraps a given
+`store_factory` in a `ReplicateFanoutStore`, so every replicate ends
+up with its own real, independent store — the same outcome
+`LinealBackend`'s own `store_factory` path already produces
+(`test_store_factory_gives_every_sequential_replicate_its_own_store`,
+above), closing the one real gap that made a CLI/GUI batch under any
+backend but `lineal` unreachable.
+
+<a id="engine.test_engine.test_non_lineal_single_replicate_run_uses_store_factory"></a>
+
+#### test\_non\_lineal\_single\_replicate\_run\_uses\_store\_factory
+
+```python
+def test_non_lineal_single_replicate_run_uses_store_factory(
+        tmp_path: Path) -> None
+```
+
+A scalar run under a non-`lineal` backend also honors `store_factory`.
+
+`GenerationalBackend.run` always calls `run_batch`, even for
+`n_replicates == 1` — no separate scalar fast path the way
+`LinealBackend` has — so this is really the same code path as the
+batch case above, checked directly for `n_replicates == 1` too
+since `LinealBackend`'s own analogous scalar/store_factory
+interaction was a real, previously-shipped bug (FIM-05,
+`test_single_replicate_run_uses_store_factory`, above).
+
 <a id="engine.test_engine.test_replicate_summary_requires_at_least_two_results"></a>
 
 #### test\_replicate\_summary\_requires\_at\_least\_two\_results
@@ -4171,16 +4212,23 @@ def test_fim_rejects_jit_on_lineal(tiny_params: SimulationParams) -> None
 
 `jit` is never offered on the lineal backend — a permanent restriction.
 
-<a id="engine.test_engine.test_fim_rejects_lineal_only_args_on_other_backends"></a>
+<a id="engine.test_engine.test_fim_rejects_max_workers_on_other_backends"></a>
 
-#### test\_fim\_rejects\_lineal\_only\_args\_on\_other\_backends
+#### test\_fim\_rejects\_max\_workers\_on\_other\_backends
 
 ```python
-def test_fim_rejects_lineal_only_args_on_other_backends(
+def test_fim_rejects_max_workers_on_other_backends(
         tiny_params: SimulationParams) -> None
 ```
 
-`max_workers`/`store_factory` are lineal-only — never a silent no-op.
+`max_workers` is lineal-only — never a silent no-op.
+
+`store_factory` used to be rejected here too; it no longer is
+(`test_non_lineal_batch_uses_store_factory_per_replicate`, above) —
+only `max_workers` still means "size a `ProcessPoolExecutor`," which
+only `LinealBackend` ever builds
+(`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+`selby/restricted`, §5.3).
 
 <a id="engine.test_engine.test_fim_generational_vector_rejects_infinite_alleles"></a>
 
