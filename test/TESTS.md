@@ -6788,6 +6788,70 @@ def test_api_seeds_dark_mode_override_from_a_saved_preference(
 
 A fresh `Api` prefers a saved `dark_mode_override` over the default.
 
+<a id="gui.test_app_api.test_api_starts_with_restore_startup_behavior"></a>
+
+#### test\_api\_starts\_with\_restore\_startup\_behavior
+
+```python
+def test_api_starts_with_restore_startup_behavior() -> None
+```
+
+A fresh `Api()` preserves the existing restore-on-launch behavior.
+
+<a id="gui.test_app_api.test_set_startup_behavior_changes_what_get_startup_behavior_returns"></a>
+
+#### test\_set\_startup\_behavior\_changes\_what\_get\_startup\_behavior\_returns
+
+```python
+@pytest.mark.parametrize("value", ["restart", "restore"])
+def test_set_startup_behavior_changes_what_get_startup_behavior_returns(
+        value: str) -> None
+```
+
+A valid startup behavior is accepted and immediately reflected back.
+
+<a id="gui.test_app_api.test_set_startup_behavior_rejects_an_unrecognized_value"></a>
+
+#### test\_set\_startup\_behavior\_rejects\_an\_unrecognized\_value
+
+```python
+def test_set_startup_behavior_rejects_an_unrecognized_value() -> None
+```
+
+Anything other than "restart"/"restore" is a caller-side bug.
+
+<a id="gui.test_app_api.test_set_startup_behavior_persists_across_a_second_api"></a>
+
+#### test\_set\_startup\_behavior\_persists\_across\_a\_second\_api
+
+```python
+def test_set_startup_behavior_persists_across_a_second_api(
+        tmp_path: Path) -> None
+```
+
+A valid startup behavior survives to a second `Api` instance.
+
+<a id="gui.test_app_api.test_restart_startup_behavior_ignores_a_saved_form"></a>
+
+#### test\_restart\_startup\_behavior\_ignores\_a\_saved\_form
+
+```python
+def test_restart_startup_behavior_ignores_a_saved_form(tmp_path: Path) -> None
+```
+
+Restart mode uses starter values even when a valid saved form exists.
+
+<a id="gui.test_app_api.test_restore_startup_behavior_uses_a_valid_saved_form"></a>
+
+#### test\_restore\_startup\_behavior\_uses\_a\_valid\_saved\_form
+
+```python
+def test_restore_startup_behavior_uses_a_valid_saved_form(
+        tmp_path: Path) -> None
+```
+
+Restore mode reuses the last valid submitted form.
+
 <a id="gui.test_app_api.test_api_starts_with_the_welcome_panel_not_dismissed"></a>
 
 #### test\_api\_starts\_with\_the\_welcome\_panel\_not\_dismissed
@@ -10886,6 +10950,17 @@ def test_rail_has_the_six_destinations_plus_help_in_order(
 
 The rail's own seven buttons match design §3.1's own destination list.
 
+<a id="gui.test_nav_rail.test_card_navigation_buttons_have_directional_icons"></a>
+
+#### test\_card\_navigation\_buttons\_have\_directional\_icons
+
+```python
+def test_card_navigation_buttons_have_directional_icons(
+        window: webview.Window) -> None
+```
+
+Back/forward card-navigation controls carry explicit arrow icons.
+
 <a id="gui.test_nav_rail.test_home_is_the_default_highlighted_destination"></a>
 
 #### test\_home\_is\_the\_default\_highlighted\_destination
@@ -10900,6 +10975,39 @@ def test_home_is_the_default_highlighted_destination(
 Botanist GUI design doc §9: "Home replaces the current 'Open a run'
 screen with a richer landing destination" -- a fresh launch shows
 Home, not Run, and the rail agrees.
+
+<a id="gui.test_nav_rail.test_home_back_button_is_disabled_on_launch"></a>
+
+#### test\_home\_back\_button\_is\_disabled\_on\_launch
+
+```python
+def test_home_back_button_is_disabled_on_launch(
+        window: webview.Window) -> None
+```
+
+Home is the startup screen, so its Back button has no destination yet.
+
+<a id="gui.test_nav_rail.test_top_strip_back_and_forward_walk_screen_history"></a>
+
+#### test\_top\_strip\_back\_and\_forward\_walk\_screen\_history
+
+```python
+def test_top_strip_back_and_forward_walk_screen_history(
+        window: webview.Window) -> None
+```
+
+The shared Back/Forward controls follow browser-style screen history.
+
+<a id="gui.test_nav_rail.test_home_back_button_returns_to_the_screen_that_opened_home"></a>
+
+#### test\_home\_back\_button\_returns\_to\_the\_screen\_that\_opened\_home
+
+```python
+def test_home_back_button_returns_to_the_screen_that_opened_home(
+        window: webview.Window) -> None
+```
+
+Home's Back button is enabled only after Home has a real return target.
 
 <a id="gui.test_nav_rail.test_parameter_strip_shows_the_starter_configuration_on_launch"></a>
 
@@ -11679,6 +11787,16 @@ def test_to_dict_omits_unset_fields() -> None
 
 A field never saved is simply absent, not a literal JSON `null` for every one.
 
+<a id="gui.test_preferences.test_startup_behavior_default_is_restore_and_omitted_from_disk"></a>
+
+#### test\_startup\_behavior\_default\_is\_restore\_and\_omitted\_from\_disk
+
+```python
+def test_startup_behavior_default_is_restore_and_omitted_from_disk() -> None
+```
+
+The default preserves existing launch behavior without extra JSON.
+
 <a id="gui.test_preferences.test_with_form_values_leaves_other_fields_untouched"></a>
 
 #### test\_with\_form\_values\_leaves\_other\_fields\_untouched
@@ -11740,6 +11858,16 @@ def test_with_welcome_dismissed_leaves_other_fields_untouched() -> None
 
 `with_welcome_dismissed` updates only `welcome_dismissed`.
 
+<a id="gui.test_preferences.test_with_startup_behavior_leaves_other_fields_untouched"></a>
+
+#### test\_with\_startup\_behavior\_leaves\_other\_fields\_untouched
+
+```python
+def test_with_startup_behavior_leaves_other_fields_untouched() -> None
+```
+
+`with_startup_behavior` updates only the startup behavior.
+
 <a id="gui.test_preferences.test_welcome_dismissed_round_trips_through_save_and_load"></a>
 
 #### test\_welcome\_dismissed\_round\_trips\_through\_save\_and\_load
@@ -11758,6 +11886,17 @@ from the non-default value specifically so a real wiring bug (the
 field never actually being written or read) cannot hide behind that
 coincidence, the same reason `test_dark_mode_override_round_trips_
 through_save_and_load` above picks a non-default value too.
+
+<a id="gui.test_preferences.test_startup_behavior_round_trips_through_save_and_load"></a>
+
+#### test\_startup\_behavior\_round\_trips\_through\_save\_and\_load
+
+```python
+def test_startup_behavior_round_trips_through_save_and_load(
+        tmp_path: Path) -> None
+```
+
+A saved-and-reloaded `GuiPreferences` preserves `startup_behavior`.
 
 <a id="gui.test_preferences.test_welcome_dismissed_true_is_written_to_disk"></a>
 
@@ -11784,6 +11923,16 @@ def test_malformed_dark_mode_override_is_quarantined(tmp_path: Path) -> None
 ```
 
 A `dark_mode_override` outside `{"light", "dark"}` is rejected, not coerced.
+
+<a id="gui.test_preferences.test_malformed_startup_behavior_is_quarantined"></a>
+
+#### test\_malformed\_startup\_behavior\_is\_quarantined
+
+```python
+def test_malformed_startup_behavior_is_quarantined(tmp_path: Path) -> None
+```
+
+A startup behavior outside `{"restart", "restore"}` is rejected.
 
 <a id="gui.test_preferences.test_with_named_preset_adds_and_overwrites_by_name"></a>
 

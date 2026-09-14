@@ -63,15 +63,6 @@ function showConfigureBanner(message) {
     configureBanner.textContent = message;
 }
 
-// Configure is reachable from nearly everywhere (the rail, the
-// parameter strip, Home's own "Configure a new run"/worked-example
-// shortcuts, the File menu) -- `showConfigureScreen`, below, records
-// whichever screen was actually showing right before it every time it
-// is called, the same `exploreReturnScreen` pattern `screens/explore.js`
-// already established, rather than a single fixed "Back" destination
-// that would be wrong whenever Configure was opened from somewhere else.
-let configureReturnScreen = "screen-open-run";
-
 // Set once `refreshConfigureExampleOptions`'s own bridge call has
 // settled and the dropdown genuinely lists this visit's own built-in
 // examples -- the same `window.__fimHomeExampleOptionsReady` precedent
@@ -206,18 +197,10 @@ async function refreshConfigureExampleOptions() {
  * field" routing to reach later if it chooses to; unused outside this
  * file for now.
  *
- * Records whichever screen was showing right before this call (unless
- * that screen is already Configure itself -- calling this a second time
- * while already on Configure must not overwrite the real return screen
- * with Configure) so `configure-back-button`, below, returns there, the
- * same `exploreReturnScreen` bookkeeping `screens/explore.js`'s own
- * `showExplore` already established.
+ * Screen history is owned centrally by `window.fim.showScreen`, so this
+ * entry point only shows Configure and refreshes its example dropdown.
  */
 async function showConfigureScreen() {
-    const currentlyVisible = document.querySelector(".screen:not([hidden])");
-    if (currentlyVisible !== null && currentlyVisible.id !== "screen-configure") {
-        configureReturnScreen = currentlyVisible.id;
-    }
     window.fim.showScreen("screen-configure");
     await refreshConfigureExampleOptions();
 }
@@ -295,7 +278,7 @@ function wireNavRail() {
         .getElementById("configure-explore-button")
         .addEventListener("click", () => window.fim.menu.explore());
     configureBackButton.addEventListener("click", () => {
-        window.fim.showScreen(configureReturnScreen);
+        window.fim.navigateBack();
     });
     // A plain, immediately-acting pulldown, the identical "jump-start"
     // shortcut Home's own `home-example-select` offers

@@ -86,12 +86,6 @@ const _COMPARE_RUN_COLORS = [
 // has nothing stale to redraw against.
 let currentCompareRuns = null;
 
-// The screen shown before Compare was opened, so "Back" returns there
-// -- the same contract `explore.js`'s own `exploreReturnScreen`
-// already established, mirrored here rather than shared, since the two
-// screens' own return targets are otherwise independent.
-let compareReturnScreen = "screen-run";
-
 function showCompareBanner(message) {
     if (!message) {
         compareBanner.hidden = true;
@@ -425,14 +419,10 @@ compareRunButton.addEventListener("click", async () => {
 });
 
 compareBackButton.addEventListener("click", () => {
-    window.fim.showScreen(compareReturnScreen);
+    window.fim.navigateBack();
 });
 
 window.fim.menu.compareRuns = function compareRuns() {
-    const currentlyVisible = document.querySelector(".screen:not([hidden])");
-    if (currentlyVisible !== null && currentlyVisible.id !== "screen-compare") {
-        compareReturnScreen = currentlyVisible.id;
-    }
     showCompareBanner("");
     compareResults.hidden = true;
     // A fresh visit starts with no stale comparison to redraw against

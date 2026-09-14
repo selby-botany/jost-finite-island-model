@@ -45,12 +45,40 @@ let completedOutputDirectory = null;
 // established immediately above.
 let completedTrajectoryPath = null;
 
+let screenHistory = ["screen-open-run"];
+let screenHistoryIndex = 0;
+
+/**
+ * Enable/disable every screen-history control from the shared history
+ * cursor. Buttons can live in the always-visible strip or inside a
+ * specific screen; they all expose the same operation.
+ */
+function syncHistoryControls() {
+    const canGoBack = screenHistoryIndex > 0;
+    const canGoForward = screenHistoryIndex < screenHistory.length - 1;
+    for (const button of document.querySelectorAll("[data-history-back]")) {
+        button.disabled = !canGoBack;
+    }
+    for (const button of document.querySelectorAll("[data-history-forward]")) {
+        button.disabled = !canGoForward;
+    }
+}
+
 const fim = {
     /**
      * Show exactly one top-level `.screen` section, hiding the rest.
      * @param {string} screenId
      */
-    showScreen(screenId) {
+    showScreen(screenId, options = {}) {
+        const recordHistory = options.recordHistory !== false;
+        const currentlyVisible = document.querySelector(".screen:not([hidden])");
+        const currentScreenId =
+            currentlyVisible === null ? null : currentlyVisible.id;
+        if (recordHistory && currentScreenId !== screenId) {
+            screenHistory = screenHistory.slice(0, screenHistoryIndex + 1);
+            screenHistory.push(screenId);
+            screenHistoryIndex = screenHistory.length - 1;
+        }
         for (const section of document.querySelectorAll(".screen")) {
             section.hidden = section.id !== screenId;
         }
@@ -64,6 +92,27 @@ const fim = {
         if (typeof window.fim.updateRailHighlight === "function") {
             window.fim.updateRailHighlight(screenId);
         }
+        syncHistoryControls();
+    },
+
+    navigateBack() {
+        if (screenHistoryIndex === 0) {
+            return;
+        }
+        screenHistoryIndex -= 1;
+        window.fim.showScreen(screenHistory[screenHistoryIndex], {
+            recordHistory: false,
+        });
+    },
+
+    navigateForward() {
+        if (screenHistoryIndex >= screenHistory.length - 1) {
+            return;
+        }
+        screenHistoryIndex += 1;
+        window.fim.showScreen(screenHistory[screenHistoryIndex], {
+            recordHistory: false,
+        });
     },
 
     /** @returns {"initial"|"running"|"completed"} */
@@ -349,6 +398,14 @@ const fim = {
 };
 
 window.fim = fim;
+
+document
+    .getElementById("history-back-button")
+    .addEventListener("click", () => window.fim.navigateBack());
+document
+    .getElementById("history-forward-button")
+    .addEventListener("click", () => window.fim.navigateForward());
+syncHistoryControls();
 
 async function connectBridge() {
     const status = document.getElementById("bridge-status");

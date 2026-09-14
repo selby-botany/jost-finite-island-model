@@ -306,6 +306,7 @@ textarea::placeholder {
  * control, since none of these are editable in place. */
 #parameter-strip {
     display: flex;
+    align-items: center;
     gap: 1.25rem;
     padding: 0.5rem 1rem;
     border-bottom: 1px solid var(--fim-border);
@@ -337,6 +338,36 @@ textarea::placeholder {
 
 .parameter-strip-value {
     font-variant-numeric: tabular-nums;
+}
+
+.parameter-strip-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.strip-icon-button {
+    display: inline-flex;
+    align-items: center;
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--fim-border);
+    border-radius: 6px;
+    background: var(--fim-background);
+    color: var(--fim-foreground);
+    cursor: pointer;
+}
+
+.strip-icon-button:hover:not(:disabled) {
+    border-color: var(--fim-action);
+    background: var(--fim-surface-soft);
+}
+
+.strip-icon-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 #content-area {

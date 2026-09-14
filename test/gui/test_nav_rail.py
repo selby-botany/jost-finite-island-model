@@ -102,6 +102,49 @@ def test_rail_has_the_six_destinations_plus_help_in_order(
     ]
 
 
+def test_card_navigation_buttons_have_directional_icons(
+    window: webview.Window,
+) -> None:
+    """Back/forward card-navigation controls carry explicit arrow icons."""
+    icons = _drive(
+        window,
+        lambda _poll_until: window.evaluate_js(
+            "({"
+            "backButtons: ["
+            "'history-back-button', "
+            "'results-back-button', "
+            "'open-run-back-button', "
+            "'help-back-button', "
+            "'explore-back-button', "
+            "'compare-back-button', "
+            "'configure-back-button'"
+            "].map(id => document.getElementById(id)"
+            ".querySelector('use')?.getAttribute('href')), "
+            "forwardButtons: ["
+            "'history-forward-button', "
+            "'home-new-run-button'"
+            "].map(id => document.getElementById(id)"
+            ".querySelector('use')?.getAttribute('href'))"
+            "})"
+        ),
+    )
+    assert icons == {
+        "backButtons": [
+            "icons/fim-icons.svg#icon-back",
+            "icons/fim-icons.svg#icon-back",
+            "icons/fim-icons.svg#icon-back",
+            "icons/fim-icons.svg#icon-back",
+            "icons/fim-icons.svg#icon-back",
+            "icons/fim-icons.svg#icon-back",
+            "icons/fim-icons.svg#icon-back",
+        ],
+        "forwardButtons": [
+            "icons/fim-icons.svg#icon-forward",
+            "icons/fim-icons.svg#icon-forward",
+        ],
+    }
+
+
 def test_home_is_the_default_highlighted_destination(window: webview.Window) -> None:
     """`screen-open-run` (Home) is the default-visible screen on launch.
 
@@ -127,6 +170,95 @@ def test_home_is_the_default_highlighted_destination(window: webview.Window) -> 
         "runCurrent": "false",
         "homeVisible": True,
         "runVisible": False,
+    }
+
+
+def test_home_back_button_is_disabled_on_launch(window: webview.Window) -> None:
+    """Home is the startup screen, so its Back button has no destination yet."""
+    disabled = _drive(
+        window,
+        lambda _poll_until: window.evaluate_js(
+            "({"
+            "homeBack: document.getElementById('open-run-back-button').disabled, "
+            "stripBack: document.getElementById('history-back-button').disabled, "
+            "stripForward: document.getElementById('history-forward-button').disabled"
+            "})"
+        ),
+    )
+    assert disabled == {"homeBack": True, "stripBack": True, "stripForward": True}
+
+
+def test_top_strip_back_and_forward_walk_screen_history(
+    window: webview.Window,
+) -> None:
+    """The shared Back/Forward controls follow browser-style screen history."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("window.fim.showConfigureScreen();")
+        poll_until(
+            "!document.getElementById('screen-configure').hidden",
+            lambda value: value is True,
+        )
+        window.evaluate_js("window.fim.showExplore();")
+        poll_until(
+            "!document.getElementById('screen-explore').hidden",
+            lambda value: value is True,
+        )
+        window.evaluate_js("document.getElementById('history-back-button').click();")
+        poll_until(
+            "!document.getElementById('screen-configure').hidden",
+            lambda value: value is True,
+        )
+        window.evaluate_js("document.getElementById('history-forward-button').click();")
+        return poll_until(
+            "({"
+            "exploreVisible: !document.getElementById('screen-explore').hidden, "
+            "backDisabled: document.getElementById('history-back-button').disabled, "
+            "forwardDisabled: "
+            "document.getElementById('history-forward-button').disabled"
+            "})",
+            lambda value: value is not None and value["exploreVisible"] is True,
+        )
+
+    result = _drive(window, steps)
+    assert result == {
+        "exploreVisible": True,
+        "backDisabled": False,
+        "forwardDisabled": True,
+    }
+
+
+def test_home_back_button_returns_to_the_screen_that_opened_home(
+    window: webview.Window,
+) -> None:
+    """Home's Back button is enabled only after Home has a real return target."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("window.fim.showConfigureScreen();")
+        poll_until(
+            "!document.getElementById('screen-configure').hidden",
+            lambda value: value is True,
+        )
+        window.evaluate_js("window.fim.showOpenRunScreen();")
+        poll_until(
+            "!document.getElementById('screen-open-run').hidden",
+            lambda value: value is True,
+        )
+        window.evaluate_js("document.getElementById('open-run-back-button').click();")
+        return poll_until(
+            "({"
+            "backDisabled: document.getElementById('open-run-back-button').disabled, "
+            "configureVisible: !document.getElementById('screen-configure').hidden, "
+            "homeVisible: !document.getElementById('screen-open-run').hidden"
+            "})",
+            lambda value: value is not None and value["configureVisible"] is True,
+        )
+
+    result = _drive(window, steps)
+    assert result == {
+        "backDisabled": False,
+        "configureVisible": True,
+        "homeVisible": False,
     }
 
 

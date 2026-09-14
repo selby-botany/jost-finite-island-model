@@ -737,7 +737,7 @@ openButton.addEventListener("click", async () => {
 });
 
 openRunBackButton.addEventListener("click", () => {
-    window.fim.showScreen("screen-run");
+    window.fim.navigateBack();
 });
 
 window.fim.showOpenRunScreen = async function showOpenRunScreen() {

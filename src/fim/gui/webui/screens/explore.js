@@ -5,9 +5,8 @@
  * predictions from `(N, m, mu, d)` alone, computed directly from `fim.
  * statistics`'s own equilibrium/identity-recovery family
  * (`Api.get_equilibrium_predictions`/`get_equilibrium_sweep`). Reachable
- * from any screen via the File menu (`fim.menu.explore`, `app.js`),
- * returning to whichever screen was showing before it -- the same
- * "Back" contract `help.js` already established for `screen-help`.
+ * from any screen via the File menu (`fim.menu.explore`, `app.js`);
+ * shared screen history owns Back/Forward behavior.
  *
  * Every field commits on `change` (blur, or Enter), not on every
  * keystroke -- the same "recompute once the value is actually settled"
@@ -27,7 +26,6 @@ const exploreCanvas = document.getElementById("explore-canvas");
 const exploreLegend = document.getElementById("explore-legend");
 const explorePredictions = document.getElementById("explore-predictions");
 
-let exploreReturnScreen = "screen-run";
 let exploreSeeded = false;
 let _currentSweep = null;
 
@@ -369,22 +367,17 @@ for (const field of [exploreN, exploreD, exploreM, exploreMu, exploreAxis]) {
 }
 
 exploreBackButton.addEventListener("click", () => {
-    window.fim.showScreen(exploreReturnScreen);
+    window.fim.navigateBack();
 });
 
 /**
- * Show Explore, recording the screen shown before it so "Back" returns
- * there. The four fields are seeded once per launch, from the same
- * `get_starter_form` values a brand-new Configure form starts with
+ * Show Explore. The four fields are seeded once per launch, from the
+ * same `get_starter_form` values a brand-new Configure form starts with
  * (`N`/`d`/`m_rate`/`mu_value`) — not hardcoded here a second time,
  * so the two can never quietly drift apart — and are left exactly as
  * the user set them on every subsequent visit within this launch.
  */
 window.fim.showExplore = async function showExplore() {
-    const currentlyVisible = document.querySelector(".screen:not([hidden])");
-    if (currentlyVisible !== null && currentlyVisible.id !== "screen-explore") {
-        exploreReturnScreen = currentlyVisible.id;
-    }
     if (!exploreSeeded) {
         exploreSeeded = true;
         const starter = await window.pywebview.api.get_starter_form();

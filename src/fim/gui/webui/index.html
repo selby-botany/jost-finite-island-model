@@ -123,6 +123,32 @@
         <span class="parameter-strip-label">μ</span>
         <span class="parameter-strip-value" id="parameter-strip-mu"></span>
       </button>
+      <div class="parameter-strip-actions" aria-label="Navigation and settings">
+        <button
+          type="button"
+          id="history-back-button"
+          class="strip-icon-button"
+          data-history-back
+          disabled
+        >
+          <svg class="button-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-back"></use>
+          </svg>
+          Back
+        </button>
+        <button
+          type="button"
+          id="history-forward-button"
+          class="strip-icon-button"
+          data-history-forward
+          disabled
+        >
+          Forward
+          <svg class="button-icon button-icon-trailing" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-forward"></use>
+          </svg>
+        </button>
+      </div>
     </div>
 
   <div id="content-area">
@@ -186,7 +212,12 @@
         <!-- `completed`-only: return to the `initial` state (and p_0
              preview) without starting a new run. Hidden in `initial`/
              `running`; `run-view-completed.js` shows and wires it. -->
-        <button type="button" id="results-back-button" hidden>Back</button>
+        <button type="button" id="results-back-button" hidden>
+          <svg class="button-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-back"></use>
+          </svg>
+          Back
+        </button>
       </div>
     </div>
 
@@ -493,6 +524,9 @@
         <div class="actions">
           <button type="button" id="home-new-run-button" class="primary-action">
             Configure a new run
+            <svg class="button-icon button-icon-trailing" aria-hidden="true">
+              <use href="icons/fim-icons.svg#icon-forward"></use>
+            </svg>
           </button>
           <select id="home-example-select" aria-label="Try a worked example">
             <option value="" selected>Try a worked example…</option>
@@ -556,7 +590,12 @@
          changed choice re-renders the same run in place rather than
          requiring "guess the right settings, then open." -->
     <div class="actions">
-      <button type="button" id="open-run-back-button">Back</button>
+      <button type="button" id="open-run-back-button" data-history-back disabled>
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-back"></use>
+        </svg>
+        Back
+      </button>
       <button type="button" id="open-run-open-button" disabled>
         Open
         <svg class="button-icon button-icon-trailing" aria-hidden="true">
@@ -568,7 +607,12 @@
 
   <section id="screen-help" class="screen" hidden>
     <div class="actions">
-      <button type="button" id="help-back-button">Back</button>
+      <button type="button" id="help-back-button" data-history-back disabled>
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-back"></use>
+        </svg>
+        Back
+      </button>
     </div>
     <div id="help-content" class="help-content"></div>
   </section>
@@ -577,14 +621,17 @@
        redesign.md` §5): no-simulation-needed theoretical predictions
        from `(N, m, mu, d)` alone, straight from `fim.statistics`'s own
        equilibrium/identity-recovery family. Reachable from any screen
-       (File menu, `fim.menu.explore`), returning to whichever screen
-       was showing before it -- the same "Back" contract `screen-help`
-       already established (`help.js`'s own `returnScreen`), not a
-       fixed target. -->
+       (File menu, `fim.menu.explore`), with Back/Forward handled by
+       the shared screen-history controls rather than a fixed target. -->
   <section id="screen-explore" class="screen" hidden>
     <div id="explore-banner" class="banner" hidden></div>
     <div class="actions">
-      <button type="button" id="explore-back-button">Back</button>
+      <button type="button" id="explore-back-button" data-history-back disabled>
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-back"></use>
+        </svg>
+        Back
+      </button>
     </div>
     <div class="explore-fields">
       <div class="field">
@@ -646,9 +693,8 @@
        this section of the design doc also describes has no underlying
        curve anywhere in this GUI yet, so it is not part of this first
        slice). Reachable from any screen (File menu,
-       `fim.menu.compareRuns`), returning to whichever screen was
-       showing before it, the same "Back" contract `screen-explore`
-       already established. -->
+       `fim.menu.compareRuns`), with Back/Forward handled by the shared
+       screen-history controls rather than a fixed target. -->
   <section id="screen-compare" class="screen" hidden>
     <div id="compare-banner" class="banner" hidden></div>
     <p>Select two or more runs to compare (results/*/manifest.json):</p>
@@ -664,7 +710,12 @@
       <tbody id="compare-recent-runs-body"></tbody>
     </table>
     <div class="actions">
-      <button type="button" id="compare-back-button">Back</button>
+      <button type="button" id="compare-back-button" data-history-back disabled>
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-back"></use>
+        </svg>
+        Back
+      </button>
       <button type="button" id="compare-run-button" disabled>
         Compare
         <svg class="button-icon button-icon-trailing" aria-hidden="true">
@@ -761,17 +812,19 @@
        in with the other three regardless. -->
   <section id="screen-configure" class="screen" hidden>
     <div id="configure-banner" class="banner" hidden></div>
-    <!-- "Back," the same contract `screen-help`/`screen-explore`/
-         `screen-compare` already established (`nav-rail.js`'s own
-         `configureReturnScreen`, mirroring `explore.js`'s own
-         `exploreReturnScreen`): returns to whichever screen was showing
-         right before Configure was opened, not a fixed destination --
-         Configure is reachable from nearly everywhere (the rail, the
-         parameter strip, Home's own "Configure a new run" and worked-
-         example shortcuts, the File menu), so a fixed "Back to Home"
-         would be wrong every time it was opened from somewhere else. -->
+    <!-- Back uses the shared screen-history controls, not a fixed
+         destination. Configure is reachable from nearly everywhere
+         (the rail, the parameter strip, Home's own "Configure a new
+         run" and worked-example shortcuts, the File menu), so a fixed
+         "Back to Home" would be wrong every time it was opened from
+         somewhere else. -->
     <div class="actions">
-      <button type="button" id="configure-back-button">Back</button>
+      <button type="button" id="configure-back-button" data-history-back disabled>
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-back"></use>
+        </svg>
+        Back
+      </button>
     </div>
     <div class="configure-layout">
       <div class="configure-panel" id="configure-panel-fim-parameters">

@@ -18,20 +18,13 @@
 const helpContent = document.getElementById("help-content");
 const helpBackButton = document.getElementById("help-back-button");
 
-let returnScreen = "screen-run";
-
 /**
- * Show one embedded doc's rendered HTML, recording the screen shown
- * before this call so "Back" can return to it.
+ * Show one embedded doc's rendered HTML.
  *
  * @param {string} topic - `"usage"` or `"configuration"`.
  * @param {string} [anchor] - A heading id to scroll to once rendered.
  */
 window.fim.showHelp = async function showHelp(topic, anchor) {
-    const currentlyVisible = document.querySelector(".screen:not([hidden])");
-    if (currentlyVisible !== null && currentlyVisible.id !== "screen-help") {
-        returnScreen = currentlyVisible.id;
-    }
     const response = await fetch(`help/${topic}.html`);
     helpContent.innerHTML = await response.text();
     window.fim.showScreen("screen-help");
@@ -44,7 +37,7 @@ window.fim.showHelp = async function showHelp(topic, anchor) {
 };
 
 helpBackButton.addEventListener("click", () => {
-    window.fim.showScreen(returnScreen);
+    window.fim.navigateBack();
 });
 
 // Every link in the fragment already carries `href="#"` plus a

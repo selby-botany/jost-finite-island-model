@@ -79,6 +79,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [open\_output\_folder](#fim.gui.app.Api.open_output_folder)
     * [get\_starter\_form](#fim.gui.app.Api.get_starter_form)
     * [get\_initial\_form](#fim.gui.app.Api.get_initial_form)
+    * [get\_startup\_behavior](#fim.gui.app.Api.get_startup_behavior)
+    * [set\_startup\_behavior](#fim.gui.app.Api.set_startup_behavior)
     * [validate\_form](#fim.gui.app.Api.validate_form)
     * [get\_initial\_state\_panels](#fim.gui.app.Api.get_initial_state_panels)
     * [get\_initial\_state\_deme\_pair\_panel](#fim.gui.app.Api.get_initial_state_deme_pair_panel)
@@ -167,6 +169,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [with\_significant\_digits](#fim.gui.preferences.GuiPreferences.with_significant_digits)
     * [with\_dark\_mode\_override](#fim.gui.preferences.GuiPreferences.with_dark_mode_override)
     * [with\_welcome\_dismissed](#fim.gui.preferences.GuiPreferences.with_welcome_dismissed)
+    * [with\_startup\_behavior](#fim.gui.preferences.GuiPreferences.with_startup_behavior)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
   * [save\_preferences](#fim.gui.preferences.save_preferences)
@@ -3160,18 +3163,48 @@ def get_initial_form() -> dict[str, str]
 
 Return the values a fresh app launch's own Input screen should show.
 
-Prefers the last successfully submitted form
-(`GuiPreferences.form_values`, saved by `start_run` below) over
-`get_starter_form`'s own true starter values — the confirmed gap
-P1 item 4 of the 2026-09-06 open-issues doc names directly
-("form values... remain process-local"). Re-validated through
-the exact same `form_values_to_payload`/`SimulationParams.
-from_mapping` path `start_run` itself uses: a saved form that no
-longer validates (a hand-edited file, or a `config_form` field
-set that changed since it was saved) is discarded wholesale
-rather than applied partially — `starter_form_values()` is
-exactly as safe a fallback here as it is for a first-ever launch
-with nothing saved at all.
+Honors the user's startup behavior setting. `"restore"` prefers
+the last successfully submitted form (`GuiPreferences.form_
+values`, saved by `start_run` below) over `get_starter_form`'s
+own true starter values. `"restart"` ignores the saved form and
+starts from the starter values. A restored form is re-validated
+through the exact same `form_values_to_payload`/
+`SimulationParams.from_mapping` path `start_run` itself uses: a
+saved form that no longer validates is discarded wholesale
+rather than applied partially.
+
+<a id="fim.gui.app.Api.get_startup_behavior"></a>
+
+#### get\_startup\_behavior
+
+```python
+@_log_bridge_call
+def get_startup_behavior() -> str
+```
+
+Return how a fresh launch chooses its initial form values.
+
+<a id="fim.gui.app.Api.set_startup_behavior"></a>
+
+#### set\_startup\_behavior
+
+```python
+@_log_bridge_call
+def set_startup_behavior(value: str) -> dict[str, Any]
+```
+
+Set how a fresh launch chooses its initial form values.
+
+**Arguments**:
+
+- `value` - `"restore"` to reuse the last valid form at startup,
+  or `"restart"` to start from the starter form.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "value": value}` on success; otherwise
+- ``{"ok"` - False, "message": ...}`.
 
 <a id="fim.gui.app.Api.validate_form"></a>
 
@@ -5591,6 +5624,12 @@ default," not a fourth digit count. Purely additive again: an older
 file with no `"dark_mode_override"` key loads exactly as it already
 did, with the field simply `None`.
 
+A fifth GUI field — `startup_behavior` — chooses whether a fresh launch
+restores the last valid submitted form (`"restore"`, the default and
+the historic behavior) or restarts from the built-in starter form
+(`"restart"`). It affects only the next launch's initial form values,
+never any saved run artifact.
+
 Deliberately excludes a "default deme pair for the next run": `Api.
 _start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
 at the start of every run on purpose ("a fresh run never inherits a
@@ -5651,6 +5690,8 @@ One loaded (or default) snapshot of the GUI's own preferences.
   ("no run has ever completed"): a user who dismisses the
   panel via "Start from scratch" without ever running anything
   must not see it again on the next launch either.
+- `startup_behavior` - `"restore"` to load the last valid submitted
+  form at startup, or `"restart"` to use the starter form.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
@@ -5771,6 +5812,21 @@ first-launch welcome panel a second time, so there is no
 `without_welcome_dismissed`/parameterized setter the way
 `dark_mode_override` needs one to support returning to "follow
 the OS."
+
+<a id="fim.gui.preferences.GuiPreferences.with_startup_behavior"></a>
+
+#### with\_startup\_behavior
+
+```python
+def with_startup_behavior(startup_behavior: str) -> GuiPreferences
+```
+
+Return a copy with `startup_behavior` replaced.
+
+**Arguments**:
+
+- `startup_behavior` - `"restore"` to reuse the last valid form at
+  startup, or `"restart"` to start from the starter form.
 
 <a id="fim.gui.preferences.load_preferences"></a>
 
