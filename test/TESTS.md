@@ -2106,30 +2106,53 @@ the CPU-count default.
 default; only a genuinely unset `--workers` (`None`) should fall
 back to `_cpu_count()`.
 
-<a id="cli.test_cli.test_run_batch_rejects_a_non_lineal_engine_backend"></a>
+<a id="cli.test_cli.test_run_batch_succeeds_under_a_non_lineal_engine_backend"></a>
 
-#### test\_run\_batch\_rejects\_a\_non\_lineal\_engine\_backend
+#### test\_run\_batch\_succeeds\_under\_a\_non\_lineal\_engine\_backend
 
 ```python
-def test_run_batch_rejects_a_non_lineal_engine_backend(
-        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+def test_run_batch_succeeds_under_a_non_lineal_engine_backend(
+        tmp_path: Path) -> None
 ```
 
-A batch under any backend but `lineal` fails synchronously, with a
-clear, actionable message — not `fim.engine.fim`'s own deep, generic
-`max_workers/store_factory are lineal-backend-only` raised from
-inside `_command_run_batch` with no hint that `n_replicates` and
-`engine_backend` were the actual conflict.
+A batch under `engine_backend="auto"` now runs and writes real artifacts.
 
-Found from a real user's own first-run report on a fresh packaged
-GUI build (`ISSUES.md`'s own "Batch runs are lineal-backend-only"
-entry) — confirmed live to reproduce identically on the CLI, since
-`_command_run_batch` calls `fim()` the identical way `fim.gui.
-batch_runner._batch_worker` does. `fim.gui.batch_runner.start_
-batch_run` already carries this exact guard for the GUI; this is
-its CLI counterpart, so a config that fails one front end this way
-fails the other with the same clear message rather than crashing on
-whichever one nobody happened to gate yet.
+Until `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
+(`selby/restricted`) closed the gap this replaces
+(`test_run_batch_rejects_a_non_lineal_engine_backend`, this
+function's own former self), a batch under any backend but `lineal`
+either crashed with `fim.engine.fim`'s own deep, generic
+`max_workers/store_factory are lineal-backend-only` error, or — this
+session's own brief, intermediate fix — failed synchronously with a
+clearer but still overly broad rejection of the backend choice
+itself. `GenerationalBackend` now honors `store_factory` (via
+`ReplicateFanoutStore`), so this produces exactly the same
+`replicate-NNN/` + `manifest.json` + `summary.json` shape
+`test_run_batch_produces_replicate_and_summary_artifacts` already
+proves for `lineal`.
+
+<a id="cli.test_cli.test_run_batch_rejects_workers_flags_combined_with_a_non_lineal_engine_backend"></a>
+
+#### test\_run\_batch\_rejects\_workers\_flags\_combined\_with\_a\_non\_lineal\_engine\_backend
+
+```python
+@pytest.mark.parametrize("flag", [["--workers", "2"], ["--sequential"]])
+def test_run_batch_rejects_workers_flags_combined_with_a_non_lineal_engine_backend(
+        flag: list[str], tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`--workers`/`--sequential` mean nothing once no process pool exists.
+
+Both flags size or disable `LinealBackend`'s own `ProcessPoolExecutor`
+— meaningless for `"generational"`/`"generational-vector"`/`"auto"`,
+which run through `fim.engine.run_batch` instead
+(`max_concurrent_replicates` is that path's own equivalent
+concurrency control). A `parser.error` exit, not a silently ignored
+flag or a run that proceeds as if the flag had been honored — the
+same "usage: ...\nfim: error: ..." shape
+`test_run_rejects_workers_combined_with_sequential` already proves
+for `--workers`/`--sequential` combined with *each other*.
 
 <a id="cli.test_cli.test_run_rejects_workers_combined_with_sequential"></a>
 

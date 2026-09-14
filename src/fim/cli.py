@@ -111,11 +111,12 @@ n_replicates: 1
 # project's own evidence treats as a reference implementation, not a
 # competitive execution choice (design doc `20260911-claude-sonnet-5-
 # gui-engine-backend-selector-design.md`, `selby/restricted`, "Current
-# state"). `n_replicates: 1` above keeps this starter file itself a
-# scalar run, so `_command_run_batch`'s own synchronous engine_backend
-# guard is never actually reached from this file as shipped -- it
-# exists for the equally natural next step of bumping n_replicates from
-# here, which used to fail with a confusing, unrelated-looking error.
+# state"). A batch (n_replicates above 1) under this same `auto` choice
+# now runs correctly too, for the equally natural next step of bumping
+# n_replicates from here (`20260914-claude-sonnet-5-non-lineal-batch-
+# execution-design.md`, `selby/restricted`) -- it once failed with a
+# confusing, unrelated-looking error, and briefly failed with a clearer
+# but still overly broad one before that gap was actually closed.
 engine_backend: auto
 """
 
@@ -199,7 +200,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if arguments.command == "init":
             return _command_init(arguments)
         if arguments.command == "run":
-            return _command_run(arguments)
+            return _command_run(arguments, parser)
         if arguments.command == "stats":
             return _command_stats(arguments)
         if arguments.command == "update":
@@ -243,7 +244,7 @@ def _command_init(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def _command_run(arguments: argparse.Namespace) -> int:
+def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     """Execute one config and write its documented artifacts.
 
     `fim run CONFIG` — the dispatcher for this project's own two shapes
@@ -253,6 +254,20 @@ def _command_run(arguments: argparse.Namespace) -> int:
     seeded repeats (`_command_run_batch`) whenever it is set higher than
     that — see `fim.engine`'s own docstring for why running several
     repeats of the same configuration is useful in the first place.
+
+    `parser` is threaded through to `_command_run_batch` only to reach
+    `parser.error` for a CLI-flag-level mistake (`--workers`/
+    `--sequential` combined with a non-`lineal` `engine_backend`) — the
+    same "usage: ...\\nfim: error: ..." shape `argparse`'s own built-in
+    mutual-exclusion check already gives `--workers`/`--sequential`
+    combined with *each other*, rather than the plain `ValueError` this
+    module's own `main` already turns into a one-line `fim: error: ...`
+    for a *configuration file's* own invalid content (e.g. the
+    `n_replicates`/`engine_backend` batch conflict `_command_run_batch`
+    itself still raises `ValueError` for). Both land as a clear,
+    single-line, non-traceback message and exit status 2 either way;
+    which mechanism is used follows whether the mistake is in a
+    command-line flag or in the loaded config's own data.
     """
     logger.debug("loading config: %s", arguments.config)
     params = load_config(arguments.config)
@@ -274,7 +289,7 @@ def _command_run(arguments: argparse.Namespace) -> int:
     )
     if params.n_replicates == 1:
         return _command_run_scalar(params, output_directory, arguments.quiet)
-    return _command_run_batch(params, output_directory, arguments)
+    return _command_run_batch(params, output_directory, arguments, parser)
 
 
 def _command_run_scalar(
@@ -361,6 +376,7 @@ def _command_run_batch(
     params: SimulationParams,
     output_directory: Path,
     arguments: argparse.Namespace,
+    parser: argparse.ArgumentParser,
 ) -> int:
     """Execute a multi-replicate batch and write its documented artifacts.
 
@@ -392,37 +408,46 @@ def _command_run_batch(
     such directory before publishing, so the published `replicate-*` set
     always equals `manifest.json`'s `replicate_run_ids` exactly.
 
+    `--workers`/`--sequential` only ever mean anything under
+    `engine_backend="lineal"` — they size (or disable) the
+    `ProcessPoolExecutor` only `LinealBackend` ever builds
+    (`fim.engine.fim`'s own `max_workers` docstring). A
+    `"generational"`/`"generational-vector"`/`"auto"` batch runs via
+    `fim.engine.run_batch` instead, whose own concurrency/memory control
+    is `max_concurrent_replicates` (`--max-concurrent-replicates`,
+    below), a genuinely different knob. Given either flag under a
+    non-`"lineal"` `engine_backend`, this command exits through
+    `parser.error` rather than silently ignoring the flag or running as
+    if it had been honored — the same "usage: ...\\nfim: error: ..."
+    shape `--workers`/`--sequential`'s own mutual exclusion already uses
+    when combined with each other
+    (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+    `selby/restricted`, §5.4). This replaces this function's own earlier
+    outright rejection of every non-`"lineal"` batch (`e238699`): the
+    underlying capability now exists (`GenerationalBackend`'s own
+    `store_factory` support, previous commits in this sequence), so the
+    only thing left to guard against is a command-line flag that no
+    longer means anything under the chosen backend, not the backend
+    choice itself.
+
     Raises:
-        ValueError: If `params.engine_backend` is not `"lineal"` — this
-            function always calls `fim.engine.fim(..., max_workers=N,
-            store_factory=...)` below, the one calling convention
-            `fim()` itself accepts only for `engine_backend="lineal"`
-            (confirmed live: a real batch under `engine_backend="auto"`
-            raised `max_workers/store_factory are lineal-backend-only`
-            from deep inside this function, on a fresh terminal with no
-            hint that `n_replicates` and `engine_backend` were the
-            actual conflict). Checked here, before any output directory
-            is touched, the identical guard `fim.gui.batch_runner.
-            start_batch_run` already carries for the GUI's own version
-            of this exact call — this project's own two front ends
-            (`fim run`, the desktop app) share the one real batch
-            execution model underneath, so a config that fails one this
-            way must fail the other the same clear way, not crash on
-            whichever front end nobody happened to gate yet. See
-            `ISSUES.md`'s own "Batch runs are lineal-backend-only" entry
-            for the underlying, still-open architectural gap this
-            checks for rather than fixes.
+        SystemExit: Via `parser.error`, if `--workers` or `--sequential`
+            is given alongside a non-`"lineal"` `engine_backend`.
     """
-    if params.engine_backend != "lineal":
-        raise ValueError(
-            "batch runs (n_replicates greater than 1) currently support only "
-            f"the lineal execution engine, not {params.engine_backend!r} — set "
-            "engine_backend to 'lineal', or reduce n_replicates to 1"
+    if params.engine_backend != "lineal" and (
+        arguments.workers is not None or arguments.sequential
+    ):
+        given = "--sequential" if arguments.sequential else "--workers"
+        parser.error(
+            f"{given} applies only to engine_backend='lineal' (this run "
+            f"uses {params.engine_backend!r}) — see "
+            "--max-concurrent-replicates for the generational/"
+            "generational-vector equivalent concurrency control"
         )
     run_id = deterministic_run_id(params)
     max_workers = (
         None
-        if arguments.sequential
+        if params.engine_backend != "lineal" or arguments.sequential
         else (arguments.workers if arguments.workers is not None else _cpu_count())
     )
     logger.info(
@@ -556,17 +581,28 @@ def _command_update(
 
 
 def _batch_description(params: SimulationParams, max_workers: int | None) -> str:
-    """Return the batch-run progress line's parameter summary."""
+    """Return the batch-run progress line's parameter summary.
+
+    The bracketed concurrency tag only ever describes `LinealBackend`'s
+    own `max_workers`/sequential-loop choice — meaningless under any
+    other `engine_backend`, which names its own backend instead
+    (`max_concurrent_replicates`, `run_batch`'s own real concurrency
+    control there, has no CLI-level default worth summarizing the same
+    way `_cpu_count()` does for `max_workers`).
+    """
     adaptive = (
         f", replicate_tolerance={params.replicate_tolerance}"
         if params.replicate_tolerance is not None
         else ""
     )
-    workers = "sequential" if max_workers is None else f"{max_workers} workers"
+    if params.engine_backend == "lineal":
+        concurrency = "sequential" if max_workers is None else f"{max_workers} workers"
+    else:
+        concurrency = f"engine_backend={params.engine_backend!r}"
     return (
         f"(N={params.N}, d={params.d}, m={params.m}, mu={params.mu}, "
         f"seed={params.seed}, n_replicates={params.n_replicates}{adaptive}) "
-        f"[{workers}]"
+        f"[{concurrency}]"
     )
 
 
@@ -846,14 +882,17 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         metavar="N",
         help=(
-            "batch (n_replicates > 1) worker-process count "
-            "(default: the CPU count; ignored for a scalar run)"
+            "batch (n_replicates > 1) worker-process count, engine_backend="
+            "'lineal' only (default: the CPU count; ignored for a scalar run)"
         ),
     )
     workers_group.add_argument(
         "--sequential",
         action="store_true",
-        help="run a batch's replicates one at a time instead of in parallel",
+        help=(
+            "run a batch's replicates one at a time instead of in parallel, "
+            "engine_backend='lineal' only"
+        ),
     )
 
     stats_parser = subcommands.add_parser(
