@@ -2085,6 +2085,31 @@ the CPU-count default.
 default; only a genuinely unset `--workers` (`None`) should fall
 back to `_cpu_count()`.
 
+<a id="cli.test_cli.test_run_batch_rejects_a_non_lineal_engine_backend"></a>
+
+#### test\_run\_batch\_rejects\_a\_non\_lineal\_engine\_backend
+
+```python
+def test_run_batch_rejects_a_non_lineal_engine_backend(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A batch under any backend but `lineal` fails synchronously, with a
+clear, actionable message — not `fim.engine.fim`'s own deep, generic
+`max_workers/store_factory are lineal-backend-only` raised from
+inside `_command_run_batch` with no hint that `n_replicates` and
+`engine_backend` were the actual conflict.
+
+Found from a real user's own first-run report on a fresh packaged
+GUI build (`ISSUES.md`'s own "Batch runs are lineal-backend-only"
+entry) — confirmed live to reproduce identically on the CLI, since
+`_command_run_batch` calls `fim()` the identical way `fim.gui.
+batch_runner._batch_worker` does. `fim.gui.batch_runner.start_
+batch_run` already carries this exact guard for the GUI; this is
+its CLI counterpart, so a config that fails one front end this way
+fails the other with the same clear message rather than crashing on
+whichever one nobody happened to gate yet.
+
 <a id="cli.test_cli.test_run_rejects_workers_combined_with_sequential"></a>
 
 #### test\_run\_rejects\_workers\_combined\_with\_sequential
@@ -9328,22 +9353,33 @@ itself — the starter config's own single 200-base locus is replaced
 rather than supplemented, since `loci` and `locus_lengths` cannot
 both be given.
 
-<a id="gui.test_config_form.test_starter_form_values_still_seeds_the_lineal_engine_backend"></a>
+<a id="gui.test_config_form.test_starter_form_values_seeds_the_recommended_auto_engine_backend"></a>
 
-#### test\_starter\_form\_values\_still\_seeds\_the\_lineal\_engine\_backend
+#### test\_starter\_form\_values\_seeds\_the\_recommended\_auto\_engine\_backend
 
 ```python
-def test_starter_form_values_still_seeds_the_lineal_engine_backend() -> None
+def test_starter_form_values_seeds_the_recommended_auto_engine_backend(
+) -> None
 ```
 
-A fresh form keeps `SimulationParams`'s own default, unchanged by the selector.
+A fresh form's own real, functional default now matches what it visually shows.
 
-Adding the control changes nothing for a user who never touches it:
-`STARTER_CONFIG` names no `engine_backend`, so the starter form
-seeds `PARAMETER_DEFAULTS`'s own `"lineal"`. The page's own `auto`
-default selection (`index.html`) is only what an untouched
-`<select>` shows, and is overwritten the moment any real form —
-starter or saved — is applied over it.
+A real, previously-shipped inconsistency, found investigating GUI/
+CLI parity (design doc `20260911-claude-sonnet-5-gui-engine-
+backend-selector-design.md`, `selby/restricted`): `CHANGELOG.md`'s
+own entry for this control claims "a brand-new form defaulting to
+`auto`," but that was only ever true of `index.html`'s own static
+markup, for the fraction of a second before `loadInitialForm`
+applies `starter_form_values()` over it — `STARTER_CONFIG` named no
+`engine_backend` at all, so that overwrite silently reverted every
+real fresh form back to `PARAMETER_DEFAULTS`'s own `"lineal"`, the
+one backend this project's own recorded benchmarks never found
+fastest. `STARTER_CONFIG` now pins `engine_backend: auto` explicitly
+— the identical fix already applied to `n_replicates` for the
+identical reason (a field this form cares about, left to an
+implicit library default that can silently drift under it) — so a
+fresh form's own real, functional starting value now actually is
+what the page has always visually claimed.
 
 <a id="gui.test_config_form.test_payload_to_yaml_text_orders_engine_backend_last"></a>
 
@@ -10326,10 +10362,16 @@ def test_engine_backend_selector_defaults_to_auto(
 An untouched selector sits on `auto`, this screen's own recommended choice.
 
 The `selected` attribute is what a botanist who never opens this
-field actually gets. `starter_form_values()`'s own `"lineal"` (the
-`SimulationParams` default, unchanged) only wins once a real form is
-applied over the markup — which is why the two differ on purpose and
-both are asserted, here and in `test_config_form.py`.
+field sees for the instant before `loadInitialForm` applies a real
+form over the markup — checked here in isolation (resetting
+`selectedIndex` back to `defaultSelected` first) precisely because
+`starter_form_values()`'s own value (`test_config_form.py`'s own
+counterpart test) used to differ from it (`"lineal"`, a real,
+previously-shipped inconsistency between what this markup visually
+promised and what a fresh form's own real starting value actually
+was) — now fixed so the two agree, but this test still checks the
+markup's own default independently, not merely trusting that fix to
+hold.
 
 <a id="gui.test_input_screen.test_engine_backend_selector_accepts_every_legal_value"></a>
 

@@ -911,6 +911,38 @@ def test_run_batch_rejects_zero_workers(
     assert not output.exists()
 
 
+def test_run_batch_rejects_a_non_lineal_engine_backend(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A batch under any backend but `lineal` fails synchronously, with a
+    clear, actionable message — not `fim.engine.fim`'s own deep, generic
+    `max_workers/store_factory are lineal-backend-only` raised from
+    inside `_command_run_batch` with no hint that `n_replicates` and
+    `engine_backend` were the actual conflict.
+
+    Found from a real user's own first-run report on a fresh packaged
+    GUI build (`ISSUES.md`'s own "Batch runs are lineal-backend-only"
+    entry) — confirmed live to reproduce identically on the CLI, since
+    `_command_run_batch` calls `fim()` the identical way `fim.gui.
+    batch_runner._batch_worker` does. `fim.gui.batch_runner.start_
+    batch_run` already carries this exact guard for the GUI; this is
+    its CLI counterpart, so a config that fails one front end this way
+    fails the other with the same clear message rather than crashing on
+    whichever one nobody happened to gate yet.
+    """
+    config = tmp_path / "run.yaml"
+    _write_config(config, n_replicates=2, engine_backend="auto")
+    output = tmp_path / "output"
+
+    status = cli.main(["run", str(config), "-o", str(output), "--quiet"])
+
+    assert status == 2
+    err = capsys.readouterr().err
+    assert "lineal execution engine" in err
+    assert not output.exists()
+
+
 def test_run_rejects_workers_combined_with_sequential(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

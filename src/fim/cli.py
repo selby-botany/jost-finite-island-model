@@ -373,7 +373,34 @@ def _command_run_batch(
     stop was decided. `_prune_orphan_replicate_directories` removes any
     such directory before publishing, so the published `replicate-*` set
     always equals `manifest.json`'s `replicate_run_ids` exactly.
+
+    Raises:
+        ValueError: If `params.engine_backend` is not `"lineal"` — this
+            function always calls `fim.engine.fim(..., max_workers=N,
+            store_factory=...)` below, the one calling convention
+            `fim()` itself accepts only for `engine_backend="lineal"`
+            (confirmed live: a real batch under `engine_backend="auto"`
+            raised `max_workers/store_factory are lineal-backend-only`
+            from deep inside this function, on a fresh terminal with no
+            hint that `n_replicates` and `engine_backend` were the
+            actual conflict). Checked here, before any output directory
+            is touched, the identical guard `fim.gui.batch_runner.
+            start_batch_run` already carries for the GUI's own version
+            of this exact call — this project's own two front ends
+            (`fim run`, the desktop app) share the one real batch
+            execution model underneath, so a config that fails one this
+            way must fail the other the same clear way, not crash on
+            whichever front end nobody happened to gate yet. See
+            `ISSUES.md`'s own "Batch runs are lineal-backend-only" entry
+            for the underlying, still-open architectural gap this
+            checks for rather than fixes.
     """
+    if params.engine_backend != "lineal":
+        raise ValueError(
+            "batch runs (n_replicates greater than 1) currently support only "
+            f"the lineal execution engine, not {params.engine_backend!r} — set "
+            "engine_backend to 'lineal', or reduce n_replicates to 1"
+        )
     run_id = deterministic_run_id(params)
     max_workers = (
         None
