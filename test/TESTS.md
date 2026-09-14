@@ -7962,36 +7962,28 @@ def test_start_batch_run_raises_when_output_directory_already_exists(
 
 The pre-existing-target guard fires synchronously, before any thread.
 
-<a id="gui.test_batch_runner.test_start_batch_run_raises_a_clear_error_for_a_non_lineal_engine_backend"></a>
+<a id="gui.test_batch_runner.test_start_batch_run_succeeds_for_a_non_lineal_engine_backend"></a>
 
-#### test\_start\_batch\_run\_raises\_a\_clear\_error\_for\_a\_non\_lineal\_engine\_backend
+#### test\_start\_batch\_run\_succeeds\_for\_a\_non\_lineal\_engine\_backend
 
 ```python
-def test_start_batch_run_raises_a_clear_error_for_a_non_lineal_engine_backend(
+def test_start_batch_run_succeeds_for_a_non_lineal_engine_backend(
         tmp_path: Path, batch_params: SimulationParams) -> None
 ```
 
-A batch under any backend but `lineal` fails synchronously, with a
-clear, actionable message — not a confusing crash surfacing from
-`fim()` deep inside a background thread once "Run simulation" has
-already appeared to do nothing.
+A batch under `engine_backend="generational"` now runs and publishes.
 
-Found from a real user's own first-run report on a fresh packaged
-build: this module's own `_batch_worker` always calls `fim.engine.
-fim(..., max_workers=N, store_factory=...)`, the one calling
-convention `fim()` itself accepts only for `engine_backend="lineal"`
-— confirmed live before this fix, a real batch with `engine_
-backend="auto"` (the execution-engine selector's own recommended
-default) raised `ValueError: max_workers/store_factory are lineal-
-backend-only; they have no effect under engine_backend='auto'` from
-inside `_batch_worker`'s own background thread. `config-modals.js`'s
-own `syncConditionalVisibility` now locks the GUI's own selector to
-`lineal` whenever a batch is configured, so this is the defense-in-
-depth backstop for whatever still reaches this function with the two
-paired regardless (a loaded YAML predating that lock, or a directly
-crafted bridge call) — checked here, before any thread starts or
-output directory is touched, the same way the pre-existing-target
-guard above already is.
+Until `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
+(`selby/restricted`) closed the underlying gap, this raised
+synchronously (`test_start_batch_run_raises_a_clear_error_for_a_non_
+lineal_engine_backend`, this test's own former self): `_batch_worker`
+always called `fim.engine.fim(..., max_workers=N, store_factory=...)`,
+a calling convention `fim()` accepted only for `engine_backend=
+"lineal"`. `GenerationalBackend` now honors `store_factory` too
+(`ReplicateFanoutStore`), and `_batch_worker` omits `max_workers`
+for any backend but `lineal` — so this produces exactly the same
+artifact tree `test_start_batch_run_writes_every_replicate_and_
+batch_artifact_on_success` already proves for `lineal`.
 
 <a id="gui.test_batch_runner.test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success"></a>
 
@@ -10502,71 +10494,49 @@ legal value must stay selectable for approach B3's own round trip,
 so the honesty lives in the label, not in a disabled or removed
 option.
 
-<a id="gui.test_input_screen.test_engine_backend_selector_locks_to_lineal_once_a_batch_is_configured"></a>
+<a id="gui.test_input_screen.test_engine_backend_selector_stays_enabled_once_a_batch_is_configured"></a>
 
-#### test\_engine\_backend\_selector\_locks\_to\_lineal\_once\_a\_batch\_is\_configured
+#### test\_engine\_backend\_selector\_stays\_enabled\_once\_a\_batch\_is\_configured
 
 ```python
-def test_engine_backend_selector_locks_to_lineal_once_a_batch_is_configured(
+def test_engine_backend_selector_stays_enabled_once_a_batch_is_configured(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Picking a batch (n_replicates greater than 1) forces `lineal`, locking the field.
+A batch (n_replicates greater than 1) never forces or disables the field.
 
-Found from a real user's own first-run report: `fim.gui.batch_
-runner`'s own real-parallel batch execution always calls `fim.engine.
-fim(..., max_workers=N, store_factory=...)`, the one calling
-convention `fim()` itself accepts only for `engine_backend="lineal"`
-— confirmed live, a real batch with the selector's own recommended
-`"auto"` default raised `ValueError: max_workers/store_factory are
-lineal-backend-only`. `auto` is picked first here specifically to
-prove the lock actually *changes* the field rather than merely
-matching an already-`lineal` value by coincidence.
+Until `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
+(`selby/restricted`) closed the underlying gap, this selector locked
+to `"lineal"` and disabled itself the moment a batch was configured
+(`fim.gui.batch_runner`'s own real-parallel batch execution used to
+always call `fim.engine.fim(..., max_workers=N, store_factory=...)`,
+a calling convention `fim()` accepted only for `engine_backend=
+"lineal"`). `GenerationalBackend` now honors `store_factory` too
+(`ReplicateFanoutStore`), so every value this selector offers is a
+real, working choice for a batch, exactly as it already was for a
+scalar run — `"auto"` is picked here specifically to prove the field
+is genuinely unaffected, not merely coincidentally already `lineal`.
 
-<a id="gui.test_input_screen.test_engine_backend_selector_unlocks_after_leaving_batch_mode"></a>
+<a id="gui.test_input_screen.test_run_simulation_submits_the_chosen_engine_backend_for_a_batch"></a>
 
-#### test\_engine\_backend\_selector\_unlocks\_after\_leaving\_batch\_mode
+#### test\_run\_simulation\_submits\_the\_chosen\_engine\_backend\_for\_a\_batch
 
 ```python
-def test_engine_backend_selector_unlocks_after_leaving_batch_mode(
+def test_run_simulation_submits_the_chosen_engine_backend_for_a_batch(
         window: webview.Window, drive: Callable[..., Any]) -> None
 ```
 
-Reducing n_replicates back to 1 re-enables the selector.
+A batch submits whichever `engine_backend` was actually chosen.
 
-The reverse of the lock above — confirms this is a live, two-way
-sync driven by `n_replicates`'s own current value on every change,
-not a one-time, one-directional lock a user could never undo short
-of reloading the whole form. Starting from `"auto"` (not the
-starter default `"lineal"`) and recording the field's own state
-*while* still in batch mode, before leaving it, is deliberate: the
-starter default is already `"lineal"` and never disabled, so a
-version of this test that only inspected the final, post-batch
-state would pass identically whether or not the lock (and its
-later release) ever actually fired.
-
-<a id="gui.test_input_screen.test_run_simulation_submits_lineal_while_the_selector_is_locked"></a>
-
-#### test\_run\_simulation\_submits\_lineal\_while\_the\_selector\_is\_locked
-
-```python
-def test_run_simulation_submits_lineal_while_the_selector_is_locked(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-A locked (disabled) selector still submits `"lineal"`, not nothing.
-
-A disabled `<select>` is excluded from `FormData` outright — the
-same reason the sigma-band checkboxes already need their own
-fallback in `collectFormValues`. Exercised through the real "Run
-simulation" path (`run-view-controls.js`'s own `collectFormValues()`
-call, immediately before `window.pywebview.api.start_run`), stubbed
-the same way `test_engine_backend_options_are_relabeled_without_
-numba` stubs a different bridge method, so this proves the actual
-submission payload rather than `collectFormValues` in isolation.
-Starting from `"auto"` (not the starter default `"lineal"`) is
-deliberate: submitting `"lineal"` from an unchanged starter value
-would pass identically whether or not the lock ever fired at all.
+Exercised through the real "Run simulation" path
+(`run-view-controls.js`'s own `collectFormValues()` call, immediately
+before `window.pywebview.api.start_run`), stubbed the same way
+`test_engine_backend_options_are_relabeled_without_numba` stubs a
+different bridge method, so this proves the actual submission
+payload rather than `collectFormValues` in isolation — the direct,
+positive counterpart to the old lock this replaces: a batch used to
+always submit `"lineal"` regardless of the selector's own value;
+now it submits the real choice.
 
 <a id="gui.test_loci_grid_screen"></a>
 

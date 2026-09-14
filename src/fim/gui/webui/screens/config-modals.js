@@ -89,15 +89,17 @@ function collectFormValues() {
     values.track_expensive_statistics = data.has("track_expensive_statistics")
         ? "true"
         : "false";
-    // `engine_backend` is disabled (not merely hidden) while a batch is
-    // configured (`syncConditionalVisibility`'s own comment on that
-    // field has the full reasoning) -- a disabled `<select>` is excluded
-    // from `FormData` outright, the same reason the checkboxes above
-    // need their own fallback, so this reads the field directly rather
-    // than trusting `FormData` to have it. `form_values_to_payload`'s
-    // own generic dispatch loop (`config_form.py`) reads this key
-    // unconditionally for every `all_fields()` entry, so it must always
-    // be present too.
+    // `engine_backend` is read directly rather than trusted to `FormData`
+    // for the same robustness reason the checkboxes above have their own
+    // fallback: nothing about this field's own disabled-ness should ever
+    // silently drop it from the submitted payload, even though nothing
+    // in this screen disables it today (it once did, while a batch was
+    // configured -- removed once a batch under any engine_backend became
+    // a real, working combination, `20260914-claude-sonnet-5-non-lineal-
+    // batch-execution-design.md`, `selby/restricted`). `form_values_to_
+    // payload`'s own generic dispatch loop (`config_form.py`) reads this
+    // key unconditionally for every `all_fields()` entry, so it must
+    // always be present.
     values.engine_backend = form.elements.namedItem("engine_backend").value;
     return values;
 }
@@ -143,35 +145,16 @@ function syncConditionalVisibility() {
     const nReplicatesField = form.elements.namedItem("n_replicates");
     const isBatch = parseInt(nReplicatesField.value, 10) > 1;
     document.getElementById("batch-only-fields").hidden = !isBatch;
-
-    // `fim.engine._batch_worker`'s own call into `fim()` always supplies
-    // a concrete `max_workers`/`store_factory` -- the real-parallel
-    // execution model only `engine_backend="lineal"` has an implementation
-    // for today. `fim()` itself rejects those two arguments outright for
-    // any other backend (confirmed live: a real batch with `engine_
-    // backend="auto"` raises `max_workers/store_factory are lineal-
-    // backend-only`), so a batch run picked together with any other
-    // engine silently reaches that error only once "Run simulation" is
-    // clicked -- discovered from a real user's own first-run report, not
-    // caught by this feature's own original test plan, which never
-    // exercised "auto" (the selector's own recommended default) together
-    // with a batch (`n_replicates` greater than 1, itself the library's
-    // own default). Locked to `lineal` first, then disabled -- the same
-    // "force the safe value before disabling, so a stale unsafe value can
-    // never submit" order this screen's own `sigma-band-selector` gating
-    // already established -- rather than merely hidden, so `Run
-    // simulation` cannot be reached with an incompatible pair selected at
-    // all. `collectFormValues`'s own fallback below is what actually
-    // keeps `engine_backend` present in the submitted payload while this
-    // field is disabled (a disabled `<select>` is excluded from
-    // `FormData` outright, the same reason `sigma_band_enabled`'s own
-    // checkbox needs its own explicit fallback there).
-    const engineBackendField = form.elements.namedItem("engine_backend");
-    if (isBatch) {
-        engineBackendField.value = "lineal";
-    }
-    engineBackendField.disabled = isBatch;
-    document.getElementById("engine-backend-batch-note").hidden = !isBatch;
+    // `engine_backend` used to lock to `"lineal"` and disable itself
+    // whenever a batch was configured -- `fim.engine._batch_worker`'s own
+    // call into `fim()` used to always supply a concrete `max_workers`/
+    // `store_factory`, a calling convention `fim()` itself accepted only
+    // for `engine_backend="lineal"`. Every value this selector offers is
+    // now a real, working choice for a batch, exactly as it already was
+    // for a scalar run (`GenerationalBackend`'s own `store_factory`
+    // support via `ReplicateFanoutStore`, `20260914-claude-sonnet-5-
+    // non-lineal-batch-execution-design.md`, `selby/restricted`), so
+    // nothing here needs to gate it any more.
 }
 
 function clearTabErrorDots() {

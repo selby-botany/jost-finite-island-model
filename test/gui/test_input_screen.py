@@ -852,20 +852,22 @@ def test_engine_backend_options_are_relabeled_without_numba(
     assert "numba" not in labels["generational"]
 
 
-def test_engine_backend_selector_locks_to_lineal_once_a_batch_is_configured(
+def test_engine_backend_selector_stays_enabled_once_a_batch_is_configured(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """Picking a batch (n_replicates greater than 1) forces `lineal`, locking the field.
+    """A batch (n_replicates greater than 1) never forces or disables the field.
 
-    Found from a real user's own first-run report: `fim.gui.batch_
-    runner`'s own real-parallel batch execution always calls `fim.engine.
-    fim(..., max_workers=N, store_factory=...)`, the one calling
-    convention `fim()` itself accepts only for `engine_backend="lineal"`
-    — confirmed live, a real batch with the selector's own recommended
-    `"auto"` default raised `ValueError: max_workers/store_factory are
-    lineal-backend-only`. `auto` is picked first here specifically to
-    prove the lock actually *changes* the field rather than merely
-    matching an already-`lineal` value by coincidence.
+    Until `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
+    (`selby/restricted`) closed the underlying gap, this selector locked
+    to `"lineal"` and disabled itself the moment a batch was configured
+    (`fim.gui.batch_runner`'s own real-parallel batch execution used to
+    always call `fim.engine.fim(..., max_workers=N, store_factory=...)`,
+    a calling convention `fim()` accepted only for `engine_backend=
+    "lineal"`). `GenerationalBackend` now honors `store_factory` too
+    (`ReplicateFanoutStore`), so every value this selector offers is a
+    real, working choice for a batch, exactly as it already was for a
+    scalar run — `"auto"` is picked here specifically to prove the field
+    is genuinely unaffected, not merely coincidentally already `lineal`.
     """
     settled = drive(
         window,
@@ -881,84 +883,30 @@ def test_engine_backend_selector_locks_to_lineal_once_a_batch_is_configured(
         read=(
             "({"
             "value: document.getElementById('field-engine_backend').value, "
-            "disabled: document.getElementById('field-engine_backend').disabled, "
-            "noteHidden: "
-            "document.getElementById('engine-backend-batch-note').hidden"
+            "disabled: document.getElementById('field-engine_backend').disabled"
             "})"
         ),
-        is_ready=lambda value: value is not None and value["disabled"] is True,
+        is_ready=lambda value: value is not None,
     )
 
-    assert settled["value"] == "lineal"
-    assert settled["disabled"] is True
-    assert settled["noteHidden"] is False
-
-
-def test_engine_backend_selector_unlocks_after_leaving_batch_mode(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """Reducing n_replicates back to 1 re-enables the selector.
-
-    The reverse of the lock above — confirms this is a live, two-way
-    sync driven by `n_replicates`'s own current value on every change,
-    not a one-time, one-directional lock a user could never undo short
-    of reloading the whole form. Starting from `"auto"` (not the
-    starter default `"lineal"`) and recording the field's own state
-    *while* still in batch mode, before leaving it, is deliberate: the
-    starter default is already `"lineal"` and never disabled, so a
-    version of this test that only inspected the final, post-batch
-    state would pass identically whether or not the lock (and its
-    later release) ever actually fired.
-    """
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "var backend = document.getElementById('field-engine_backend');"
-            "backend.value = 'auto';"
-            "backend.dispatchEvent(new Event('change', {bubbles: true}));"
-            "var n = document.getElementById('field-n_replicates');"
-            "n.value = '20';"
-            "n.dispatchEvent(new Event('input', {bubbles: true}));"
-            "window.__lockedValue = backend.value;"
-            "window.__lockedDisabled = backend.disabled;"
-            "n.value = '1';"
-            "n.dispatchEvent(new Event('input', {bubbles: true}));"
-        ),
-        read=(
-            "({"
-            "lockedValue: window.__lockedValue, "
-            "lockedDisabled: window.__lockedDisabled, "
-            "disabled: document.getElementById('field-engine_backend').disabled, "
-            "noteHidden: "
-            "document.getElementById('engine-backend-batch-note').hidden"
-            "})"
-        ),
-        is_ready=lambda value: value is not None and value["disabled"] is False,
-    )
-
-    assert settled["lockedValue"] == "lineal"
-    assert settled["lockedDisabled"] is True
+    assert settled["value"] == "auto"
     assert settled["disabled"] is False
-    assert settled["noteHidden"] is True
 
 
-def test_run_simulation_submits_lineal_while_the_selector_is_locked(
+def test_run_simulation_submits_the_chosen_engine_backend_for_a_batch(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:
-    """A locked (disabled) selector still submits `"lineal"`, not nothing.
+    """A batch submits whichever `engine_backend` was actually chosen.
 
-    A disabled `<select>` is excluded from `FormData` outright — the
-    same reason the sigma-band checkboxes already need their own
-    fallback in `collectFormValues`. Exercised through the real "Run
-    simulation" path (`run-view-controls.js`'s own `collectFormValues()`
-    call, immediately before `window.pywebview.api.start_run`), stubbed
-    the same way `test_engine_backend_options_are_relabeled_without_
-    numba` stubs a different bridge method, so this proves the actual
-    submission payload rather than `collectFormValues` in isolation.
-    Starting from `"auto"` (not the starter default `"lineal"`) is
-    deliberate: submitting `"lineal"` from an unchanged starter value
-    would pass identically whether or not the lock ever fired at all.
+    Exercised through the real "Run simulation" path
+    (`run-view-controls.js`'s own `collectFormValues()` call, immediately
+    before `window.pywebview.api.start_run`), stubbed the same way
+    `test_engine_backend_options_are_relabeled_without_numba` stubs a
+    different bridge method, so this proves the actual submission
+    payload rather than `collectFormValues` in isolation — the direct,
+    positive counterpart to the old lock this replaces: a batch used to
+    always submit `"lineal"` regardless of the selector's own value;
+    now it submits the real choice.
     """
     settled = drive(
         window,
@@ -981,4 +929,4 @@ def test_run_simulation_submits_lineal_while_the_selector_is_locked(
         is_ready=lambda value: value is not None,
     )
 
-    assert settled == "lineal"
+    assert settled == "auto"

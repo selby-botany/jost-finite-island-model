@@ -1,13 +1,18 @@
 """Background-thread batch-run orchestration (`doc/fim-gui-design.md` §7.2).
 
-Runs a multi-replicate batch in parallel, as real OS processes, via
-`fim.engine.fim(..., max_workers=N, store_factory=...)` — the same call
-shape `cli._command_run_batch`'s own default (non-`--sequential`) path
-already makes. This reverses the Tk-era design's "sequential-only,
-deliberately" decision: that constraint belonged to `GuiProgressStore`'s
-in-process `threading.Event`/callback pair, which cannot cross a process
-boundary — not to the engine, which has supported real parallel replicate
-execution since before any GUI existed.
+Under `engine_backend="lineal"`, runs a multi-replicate batch in
+parallel, as real OS processes, via `fim.engine.fim(..., max_workers=N,
+store_factory=...)` — the same call shape `cli._command_run_batch`'s own
+default (non-`--sequential`) path already makes. This reverses the
+Tk-era design's "sequential-only, deliberately" decision: that
+constraint belonged to `GuiProgressStore`'s in-process
+`threading.Event`/callback pair, which cannot cross a process boundary —
+not to the engine, which has supported real parallel replicate execution
+since before any GUI existed. Under any other `engine_backend`,
+`max_workers` is never passed (there is no process pool for it to size);
+`store_factory` alone drives every backend's own batch execution now
+(`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+`selby/restricted`).
 
 Progress and cancellation for this parallel path are entirely
 file-mediated (`fim.gui.store.LiveProgressStore`), not posted through
@@ -160,54 +165,23 @@ def start_batch_run(
             the CLI's own default), a deliberate divergence from the
             engine's convention worth stating explicitly rather than
             leaving implicit, since batch execution is parallel by
-            default here.
+            default here. Only meaningful under `params.engine_backend
+            == "lineal"` — `_batch_worker`'s own call to `fim()` omits
+            it entirely for any other backend, which runs through
+            `fim.engine.run_batch`'s own concurrency model instead
+            (`max_concurrent_replicates`, not this argument); the
+            resolved worker count computed here is still logged either
+            way, since it is a real GUI-level default independent of
+            whether this particular batch ends up using it.
 
     Returns:
         The started (not yet joined) worker thread.
 
     Raises:
         FileExistsError: If `output_directory` already exists.
-        ValueError: If `params.engine_backend` is not `"lineal"`. This
-            module's own real-parallel batch execution model (`_batch_
-            worker`, below) always calls `fim.engine.fim(..., max_
-            workers=N, store_factory=...)` — the one calling convention
-            `fim()` itself accepts only for the `"lineal"` backend (it
-            raises this exact `ValueError` from inside a background
-            thread otherwise, confirmed live against a real batch:
-            `"max_workers/store_factory are lineal-backend-only; they
-            have no effect under engine_backend='auto'"`). Checked here,
-            synchronously, before any thread starts or output directory
-            is touched, so the GUI's own `Api._start_batch_run` can
-            report one clear, actionable message the same way it already
-            does for `FileExistsError`, rather than that confusing
-            engine-level message surfacing from a background thread
-            after "Run simulation" has already appeared to do nothing —
-            found from a real user's own first-run report (a batch,
-            n_replicates greater than 1, paired with the execution-
-            engine selector's own recommended `"auto"` default): the
-            GUI's own Configure screen now separately locks `engine_
-            backend` to `"lineal"` whenever a batch is configured
-            (`config-modals.js`'s own `syncConditionalVisibility`), so
-            this exists as the defense-in-depth backstop for whatever
-            reaches this function with the two still paired regardless —
-            a directly crafted bridge call, or a future regression in
-            that client-side gate. `"auto"` never resolves to `"lineal"`
-            (`fim.engine._resolve_auto_engine_backend`'s own documented
-            contract), so checking the raw, unresolved value here is a
-            complete substitute for resolving it first. No real,
-            working execution path exists yet for a batch under any
-            other backend — see `ISSUES.md`'s own "Batch runs are
-            lineal-backend-only" entry for this project's own record of
-            the gap.
     """
     if output_directory.exists():
         raise FileExistsError(f"output directory already exists: {output_directory}")
-    if params.engine_backend != "lineal":
-        raise ValueError(
-            "batch runs (n_replicates greater than 1) currently support only "
-            f"the lineal execution engine, not {params.engine_backend!r} — set "
-            "engine_backend to 'lineal', or reduce n_replicates to 1"
-        )
     run_id = deterministic_run_id(params)
     resolved_workers = max_workers if max_workers is not None else default_max_workers()
     thread = threading.Thread(
@@ -248,6 +222,14 @@ def _batch_worker(
     `atomic_directory` discards the whole temporary tree — no
     partial-batch save point exists to preserve, matching "Cancel batch"
     stopping the batch, not one replicate.
+
+    `max_workers` (this function's own argument) only reaches `fim()`
+    under `params.engine_backend == "lineal"` — the one backend with a
+    `ProcessPoolExecutor` for it to size. Any other backend runs through
+    `fim.engine.run_batch`'s own concurrency model instead, driven by
+    `store_factory` alone (`GenerationalBackend`'s own `ReplicateFanoutStore`
+    support, `20260914-claude-sonnet-5-non-lineal-batch-execution-
+    design.md`, `selby/restricted`, §5.2).
     """
     control_directory = Path(tempfile.mkdtemp(prefix="fim-batch-control-"))
     cancel_path = control_directory / "cancel"
@@ -291,7 +273,7 @@ def _batch_worker(
                 params.d,
                 params=params,
                 run_id=run_id,
-                max_workers=max_workers,
+                max_workers=max_workers if params.engine_backend == "lineal" else None,
                 store_factory=functools.partial(
                     _replicate_store_factory, working_directory, run_id, cancel_path
                 ),

@@ -69,40 +69,43 @@ def test_start_batch_run_raises_when_output_directory_already_exists(
         )
 
 
-def test_start_batch_run_raises_a_clear_error_for_a_non_lineal_engine_backend(
+def test_start_batch_run_succeeds_for_a_non_lineal_engine_backend(
     tmp_path: Path,
     batch_params: SimulationParams,
 ) -> None:
-    """A batch under any backend but `lineal` fails synchronously, with a
-    clear, actionable message — not a confusing crash surfacing from
-    `fim()` deep inside a background thread once "Run simulation" has
-    already appeared to do nothing.
+    """A batch under `engine_backend="generational"` now runs and publishes.
 
-    Found from a real user's own first-run report on a fresh packaged
-    build: this module's own `_batch_worker` always calls `fim.engine.
-    fim(..., max_workers=N, store_factory=...)`, the one calling
-    convention `fim()` itself accepts only for `engine_backend="lineal"`
-    — confirmed live before this fix, a real batch with `engine_
-    backend="auto"` (the execution-engine selector's own recommended
-    default) raised `ValueError: max_workers/store_factory are lineal-
-    backend-only; they have no effect under engine_backend='auto'` from
-    inside `_batch_worker`'s own background thread. `config-modals.js`'s
-    own `syncConditionalVisibility` now locks the GUI's own selector to
-    `lineal` whenever a batch is configured, so this is the defense-in-
-    depth backstop for whatever still reaches this function with the two
-    paired regardless (a loaded YAML predating that lock, or a directly
-    crafted bridge call) — checked here, before any thread starts or
-    output directory is touched, the same way the pre-existing-target
-    guard above already is.
+    Until `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
+    (`selby/restricted`) closed the underlying gap, this raised
+    synchronously (`test_start_batch_run_raises_a_clear_error_for_a_non_
+    lineal_engine_backend`, this test's own former self): `_batch_worker`
+    always called `fim.engine.fim(..., max_workers=N, store_factory=...)`,
+    a calling convention `fim()` accepted only for `engine_backend=
+    "lineal"`. `GenerationalBackend` now honors `store_factory` too
+    (`ReplicateFanoutStore`), and `_batch_worker` omits `max_workers`
+    for any backend but `lineal` — so this produces exactly the same
+    artifact tree `test_start_batch_run_writes_every_replicate_and_
+    batch_artifact_on_success` already proves for `lineal`.
     """
-    params = replace(batch_params, engine_backend="auto")
+    params = replace(batch_params, engine_backend="generational")
     output_directory = tmp_path / "batch"
+    message_queue: queue.Queue[batch_runner.BatchMessage] = queue.Queue()
 
-    with pytest.raises(ValueError, match="lineal execution engine"):
-        batch_runner.start_batch_run(
-            params, output_directory, queue.Queue(), threading.Event()
-        )
-    assert not output_directory.exists()
+    thread = batch_runner.start_batch_run(
+        params, output_directory, message_queue, threading.Event()
+    )
+    thread.join(timeout=30)
+
+    assert not thread.is_alive()
+    assert {path.name for path in output_directory.iterdir()} == {
+        "replicate-001",
+        "replicate-002",
+        "replicate-003",
+        "summary.json",
+        "manifest.json",
+    }
+    messages = _drain(message_queue)
+    assert messages[-1][0] == "done"
 
 
 def test_start_batch_run_writes_every_replicate_and_batch_artifact_on_success(
