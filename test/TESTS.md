@@ -11047,16 +11047,16 @@ The one non-loadable example shows Configure's own banner, not an alert.
 Design doc `20260913-claude-sonnet-5-gui-worked-example-loadability-
 design.md` (`selby/restricted`), Option C: `window.alert`'s blocking
 OS chrome replaced with `showExampleLoadNotice`'s own inline,
-non-modal banner. Index 5 — "Per-base mutation rate across unequal
-locus lengths" — is the one built-in example
+non-modal banner. "Per-base mutation rate across unequal locus
+lengths" is the one built-in example
 `test_every_other_builtin_preset_loads_into_form_values`
 (`test_app_api.py`) confirms has no form representation; picked by
-index here for the identical reason other tests in this file pick a
-specific example by index (a real, checked value, not an arbitrary
-placeholder). The bare title, not the "(view YAML only)" label
-text, must appear in the notice — a real regression found live
-while writing this test, before `refreshExampleOptions`'s own
-`dataset.presetTitle` existed to separate the two.
+stable preset id rather than index so adding another worked example
+cannot quietly turn this into a loadable-example test. The bare
+title, not the "(view YAML only)" label text, must appear in the
+notice — a real regression found live while writing this test,
+before `refreshExampleOptions`'s own `dataset.presetTitle` existed
+to separate the two.
 
 <a id="gui.test_open_run_screen"></a>
 

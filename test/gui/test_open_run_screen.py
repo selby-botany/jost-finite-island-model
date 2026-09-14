@@ -1023,7 +1023,8 @@ def test_choosing_the_non_loadable_home_example_shows_an_inline_notice(
             "check(); "
             "}); "
             "const select = document.getElementById('home-example-select'); "
-            "select.selectedIndex = 5; "
+            "select.value = "
+            "'per-base-mutation-rate-across-unequal-locus-lengths'; "
             "select.dispatchEvent(new Event('change')); "
             "}, 0);"
         ),
