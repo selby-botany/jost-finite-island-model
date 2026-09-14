@@ -86,6 +86,7 @@ from fim.persistence.store import InMemoryTrajectoryStore, TrajectoryRow
 from fim.statistics import (
     ConfidenceInterval,
     confidence_interval,
+    effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
     equilibrium_shannon_differentiation,
@@ -1264,6 +1265,174 @@ def _symmetric_island_matrix(d: int, m: float) -> tuple[tuple[float, ...], ...]:
         tuple(retained if row == col else shared for col in range(d))
         for row in range(d)
     )
+
+
+def _kimura_crow_finite_allele_homozygosity(
+    *,
+    population_size: int,
+    mu: float,
+    allele_count: int,
+) -> float:
+    """Return Kimura-Crow's finite-K neutral equilibrium homozygosity.
+
+    The original paper writes the scaled mutation term as ``4 * Ne * u`` for
+    diploid individuals. This project uses a gene-copy count directly, so the
+    same term is ``2 * N * mu``.
+    """
+    theta = 2.0 * population_size * mu
+    return (1.0 + theta / (allele_count - 1)) / (
+        1.0 + theta * allele_count / (allele_count - 1)
+    )
+
+
+def _short_ring_identity_decay(
+    *,
+    population_size: int,
+    m: float,
+    mu: float,
+    d: int = 20,
+    max_distance: int = 5,
+) -> tuple[float, float]:
+    """Return ``(slope, r2)`` for log identity decay on a short ring arc."""
+    matrix = dense_matrix_from_neighbors(
+        stepping_stone_neighbors(d, topology="ring", rate=m),
+        d,
+    )
+    identity = _pairwise_identity_fixed_point(
+        population_size=population_size,
+        migration_matrix=matrix,
+        mu=mu,
+    )
+    distances: list[float] = []
+    mean_identities: list[float] = []
+    for distance in range(1, max_distance + 1):
+        identities = [float(identity[deme, (deme + distance) % d]) for deme in range(d)]
+        distances.append(float(distance))
+        mean_identities.append(float(np.mean(identities)))
+
+    x = np.asarray(distances, dtype=np.float64)
+    y = np.log(np.asarray(mean_identities, dtype=np.float64))
+    slope, intercept = np.polyfit(x, y, 1)
+    predicted = slope * x + intercept
+    residual = float(np.sum((y - predicted) ** 2))
+    total = float(np.sum((y - np.mean(y)) ** 2))
+    return float(slope), 1.0 - residual / total
+
+
+@pytest.mark.parametrize(
+    ("population_size", "mu", "allele_count"),
+    [
+        (100, 0.001, 2),
+        (100, 0.001, 4),
+        (100, 0.001, 64),
+        (500, 0.0005, 8),
+    ],
+)
+def test_kimura_crow_finite_allele_homozygosity_matches_limits(
+    population_size: int,
+    mu: float,
+    allele_count: int,
+) -> None:
+    """Kimura-Crow's finite-K oracle approaches the infinite-allele limit.
+
+    Kimura and Crow (1964) give the finite-allele homozygosity formula as the
+    neutral baseline behind the effective number of maintained alleles. This
+    deterministic test pins the finite-K expression and verifies its limiting
+    connection to the infinite-alleles effective count already exposed by
+    `fim.statistics.effective_allele_count`.
+    """
+    homozygosity = _kimura_crow_finite_allele_homozygosity(
+        population_size=population_size,
+        mu=mu,
+        allele_count=allele_count,
+    )
+    infinite_allele_homozygosity = 1.0 / (1.0 + 2.0 * population_size * mu)
+
+    assert 0.0 < homozygosity <= 1.0
+    assert homozygosity >= infinite_allele_homozygosity
+
+    if allele_count == 64:
+        effective_count = effective_allele_count(1.0 - homozygosity)
+        assert effective_count == pytest.approx(
+            1.0 + 2.0 * population_size * mu,
+            rel=0.02,
+        )
+
+
+@pytest.mark.parametrize(
+    ("population_size", "m", "mu", "d"),
+    [
+        (100, 0.01, 0.005, 4),
+        (500, 0.003, 0.0002, 8),
+        (2000, 0.001, 0.0001, 20),
+    ],
+)
+def test_wright_takahata_finite_deme_correction_is_explicit(
+    population_size: int,
+    m: float,
+    mu: float,
+    d: int,
+) -> None:
+    """The finite-deme correction in equilibrium G_ST is tested directly.
+
+    Wright (1943) writes the model with a finite number of subgroups, and
+    Takahata (1983) carries that finite-island correction into the multiallelic
+    identity framework. The public helper must therefore keep the
+    ``(d / (d - 1))`` terms rather than silently falling back to the infinite
+    island approximation.
+    """
+    finite_factor = d / (d - 1)
+    expected = 1.0 / (
+        finite_factor**2 * 2.0 * population_size * m
+        + finite_factor * 2.0 * population_size * mu
+        + 1.0
+    )
+    infinite_deme_approximation = 1.0 / (
+        2.0 * population_size * m + 2.0 * population_size * mu + 1.0
+    )
+
+    assert equilibrium_g_st(population_size, m, mu, d) == pytest.approx(expected)
+    assert equilibrium_g_st(population_size, m, mu, d) < infinite_deme_approximation
+
+
+def test_kimura_weiss_ring_identity_decay_is_log_linear_near_the_origin() -> None:
+    """A short ring arc follows Kimura-Weiss's 1D exponential decay pattern.
+
+    Kimura and Weiss (1964) predict exponential decay of genetic correlation
+    with stepping-stone distance in one dimension. A finite ring flattens near
+    half the circumference because paths wrap from both directions, so this
+    deterministic check fits only distances 1..5 on a 20-deme ring.
+    """
+    slope, r_squared = _short_ring_identity_decay(
+        population_size=200,
+        m=0.05,
+        mu=0.001,
+    )
+
+    assert slope < 0.0
+    assert r_squared > 0.99
+
+
+def test_kimura_weiss_distance_decay_responds_to_migration_and_mutation() -> None:
+    """Distance decay steepens with mutation and flattens with migration."""
+    baseline_slope, _baseline_r_squared = _short_ring_identity_decay(
+        population_size=200,
+        m=0.05,
+        mu=0.001,
+    )
+    higher_mutation_slope, _mutation_r_squared = _short_ring_identity_decay(
+        population_size=200,
+        m=0.05,
+        mu=0.002,
+    )
+    higher_migration_slope, _migration_r_squared = _short_ring_identity_decay(
+        population_size=200,
+        m=0.2,
+        mu=0.001,
+    )
+
+    assert abs(higher_mutation_slope) > abs(baseline_slope)
+    assert abs(higher_migration_slope) < abs(baseline_slope)
 
 
 @pytest.mark.parametrize(

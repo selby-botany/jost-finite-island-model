@@ -21131,6 +21131,84 @@ fixed point agrees with the closed-form equilibria to ``O(1/N)`` and with
 the published Dear-Nolan values. It is a cross-check, not a substitute for
 running the simulator (done in the tests below).
 
+<a id="validation.test_simulator_equilibrium.test_kimura_crow_finite_allele_homozygosity_matches_limits"></a>
+
+#### test\_kimura\_crow\_finite\_allele\_homozygosity\_matches\_limits
+
+```python
+@pytest.mark.parametrize(
+    ("population_size", "mu", "allele_count"),
+    [
+        (100, 0.001, 2),
+        (100, 0.001, 4),
+        (100, 0.001, 64),
+        (500, 0.0005, 8),
+    ],
+)
+def test_kimura_crow_finite_allele_homozygosity_matches_limits(
+        population_size: int, mu: float, allele_count: int) -> None
+```
+
+Kimura-Crow's finite-K oracle approaches the infinite-allele limit.
+
+Kimura and Crow (1964) give the finite-allele homozygosity formula as the
+neutral baseline behind the effective number of maintained alleles. This
+deterministic test pins the finite-K expression and verifies its limiting
+connection to the infinite-alleles effective count already exposed by
+`fim.statistics.effective_allele_count`.
+
+<a id="validation.test_simulator_equilibrium.test_wright_takahata_finite_deme_correction_is_explicit"></a>
+
+#### test\_wright\_takahata\_finite\_deme\_correction\_is\_explicit
+
+```python
+@pytest.mark.parametrize(
+    ("population_size", "m", "mu", "d"),
+    [
+        (100, 0.01, 0.005, 4),
+        (500, 0.003, 0.0002, 8),
+        (2000, 0.001, 0.0001, 20),
+    ],
+)
+def test_wright_takahata_finite_deme_correction_is_explicit(
+        population_size: int, m: float, mu: float, d: int) -> None
+```
+
+The finite-deme correction in equilibrium G_ST is tested directly.
+
+Wright (1943) writes the model with a finite number of subgroups, and
+Takahata (1983) carries that finite-island correction into the multiallelic
+identity framework. The public helper must therefore keep the
+``(d / (d - 1))`` terms rather than silently falling back to the infinite
+island approximation.
+
+<a id="validation.test_simulator_equilibrium.test_kimura_weiss_ring_identity_decay_is_log_linear_near_the_origin"></a>
+
+#### test\_kimura\_weiss\_ring\_identity\_decay\_is\_log\_linear\_near\_the\_origin
+
+```python
+def test_kimura_weiss_ring_identity_decay_is_log_linear_near_the_origin(
+) -> None
+```
+
+A short ring arc follows Kimura-Weiss's 1D exponential decay pattern.
+
+Kimura and Weiss (1964) predict exponential decay of genetic correlation
+with stepping-stone distance in one dimension. A finite ring flattens near
+half the circumference because paths wrap from both directions, so this
+deterministic check fits only distances 1..5 on a 20-deme ring.
+
+<a id="validation.test_simulator_equilibrium.test_kimura_weiss_distance_decay_responds_to_migration_and_mutation"></a>
+
+#### test\_kimura\_weiss\_distance\_decay\_responds\_to\_migration\_and\_mutation
+
+```python
+def test_kimura_weiss_distance_decay_responds_to_migration_and_mutation(
+) -> None
+```
+
+Distance decay steepens with mutation and flattens with migration.
+
 <a id="validation.test_simulator_equilibrium.test_pairwise_identity_recursion_matches_the_island_model_oracle"></a>
 
 #### test\_pairwise\_identity\_recursion\_matches\_the\_island\_model\_oracle
