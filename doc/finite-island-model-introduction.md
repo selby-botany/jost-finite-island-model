@@ -118,10 +118,17 @@ fiction: it makes it possible to write a simple, closed-form formula for the
 equilibrium value of F<sub>ST</sub> (the classic "differentiation" statistic),
 precisely because the migrant source never changes.
 
-The **finite island model** removes that fiction. There are only a *finite*
-number of islands, `D`, each of finite size `N`, and no infinite
-external reservoir standing behind them. Migrants in generation `t` are
-drawn from the actual, finite, currently-drifting collection of all the
+Wright also analyzed the finite subgroup case directly. In *Isolation by
+Distance* (1943), he wrote the model with `K` subgroups of size `N` and
+derived the finite-deme sampling correction before giving the familiar
+large-`N`, small-`m` approximation. Later finite-island work did not invent
+the finite deme count from scratch; it extended Wright's setup to multiple
+alleles, mutation models, and higher moments.
+
+The **finite island model** used here is that finite-subgroup version. There
+are only a *finite* number of islands, `D`, each of finite size `N`, and no
+infinite external reservoir standing behind them. Migrants in generation `t`
+are drawn from the actual, finite, currently-drifting collection of all the
 *other* islands' current frequencies. Three consequences follow:
 
 - The whole set of islands together forms a **finite, closed system** with
@@ -294,11 +301,16 @@ many times over, once per location.
   model is the special case where every rate is the same.
 - **Selection.** Not part of the base model, which assumes every allele is
   *neutral* — meaning no allele carries any survival or reproductive
-  advantage over another. Differentiation-statistic research, including
-  Jost's, deliberately targets neutral genetic markers, precisely so that
-  observed differentiation reflects only demography (migration and drift)
-  and not natural selection. Where selection is added, an extra step
-  reweighting frequencies by fitness is inserted before drift.
+  advantage over another. Neutral markers remain the cleanest way to make
+  observed differentiation reflect demography (migration and drift) rather
+  than natural selection. Modern conservation-genomics studies also compute
+  these statistics on candidate adaptive loci, often by contrasting those
+  loci against a neutral genomic background. In that use, selection is not a
+  nuisance to hide; it is the signal being sought. Balancing selection can
+  also mask demographic fragmentation by holding differentiation low at a
+  functional locus even when neutral loci have diverged. Where selection is
+  added to the model itself, an extra step reweighting frequencies by
+  fitness is inserted before drift.
 
 ---
 

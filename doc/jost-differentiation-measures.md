@@ -83,7 +83,10 @@ with worked counterexamples, that this substitution produces exactly backwards c
 widely repeated rule of thumb along the way: under the finite island model (a standard model of migration between
 subpopulations, covered in a [companion document](finite-island-model-introduction.md)), the absolute number of migrants
 per generation, `Nm`, controls nearness to fixation, **not** allelic differentiation, which instead is controlled by
-<code>m / (μ(d-1))</code>, where `μ` is the mutation rate and `d` is the number of subpopulations.
+<code>m / (μ(d-1))</code>, where `μ` is the mutation rate and `d` is the number of subpopulations, at the
+infinite-time mutation-migration-drift equilibrium under the paper's mutation-model assumptions. Away from that
+asymptotic setting — especially for finite-allele markers or short conservation timescales where new mutation is
+negligible — `N`, elapsed generation count, and the marker's allele model matter directly.
 
 ---
 
