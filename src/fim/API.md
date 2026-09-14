@@ -367,6 +367,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [jost\_d](#fim.statistics.differentiation.jost_d)
   * [e\_st](#fim.statistics.differentiation.e_st)
   * [k\_st](#fim.statistics.differentiation.k_st)
+  * [allelic\_distance](#fim.statistics.differentiation.allelic_distance)
+  * [gregorius\_delta](#fim.statistics.differentiation.gregorius_delta)
+  * [mutual\_information](#fim.statistics.differentiation.mutual_information)
   * [differentiation\_q](#fim.statistics.differentiation.differentiation_q)
   * [equilibrium\_d](#fim.statistics.differentiation.equilibrium_d)
   * [equilibrium\_g\_st](#fim.statistics.differentiation.equilibrium_g_st)
@@ -11780,6 +11783,59 @@ ignores frequency entirely, `K_ST` responds to even the rarest,
 single-copy private allele exactly as strongly as it would to a
 common one — the strongest sensitivity to rare, private variation of
 any measure in this module.
+
+<a id="fim.statistics.differentiation.allelic_distance"></a>
+
+#### allelic\_distance
+
+```python
+def allelic_distance(table: FrequencyTable) -> float
+```
+
+Return Caballero-Garcia-Dorado mean pairwise allelic distance.
+
+Caballero and Garcia-Dorado (2013), Eq. 5, count an allele as
+contributing to the distance between two subpopulations when it is
+present in exactly one of them. This is intentionally a
+presence/absence statistic: allele frequencies matter only in deciding
+whether an allele exists in a deme at all, not in how common it is once
+present. The returned value is the arithmetic mean across distinct
+unordered deme pairs.
+
+<a id="fim.statistics.differentiation.gregorius_delta"></a>
+
+#### gregorius\_delta
+
+```python
+def gregorius_delta(table: FrequencyTable,
+                    deme_weights: DemeWeights = None) -> float
+```
+
+Return Gregorius's distance-oriented differentiation ``delta``.
+
+Gregorius's measure compares each deme with the weighted mixture of all
+*other* demes using total variation distance, then averages those
+per-deme distances. Unlike diversity-ratio measures such as ``G_ST`` or
+Jost's ``D``, this is a direct distance between allele-frequency
+distributions. With two equally weighted demes it is exactly one half
+of the Manhattan distance between their frequency vectors.
+
+<a id="fim.statistics.differentiation.mutual_information"></a>
+
+#### mutual\_information
+
+```python
+def mutual_information(table: FrequencyTable,
+                       deme_weights: DemeWeights = None) -> float
+```
+
+Return Sherwin's allele-by-deme mutual information.
+
+The statistic is the Shannon-entropy gain from knowing deme membership:
+total entropy after pooling demes, minus the weighted mean entropy within
+demes. Equivalently, it is the Kullback-Leibler divergence between the
+observed allele-by-deme contingency table and the table expected if
+allele identity and deme membership were independent.
 
 <a id="fim.statistics.differentiation.differentiation_q"></a>
 

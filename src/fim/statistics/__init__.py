@@ -30,6 +30,7 @@ by its own name directly.
 
 from .differentiation import (
     DifferentiationReport,
+    allelic_distance,
     d_m,
     differentiation_q,
     e_st,
@@ -46,6 +47,7 @@ from .differentiation import (
     g_st_max,
     g_st_prime,
     gd,
+    gregorius_delta,
     gs,
     h_s,
     h_st,
@@ -61,6 +63,7 @@ from .differentiation import (
     k_st,
     mutation_negligible_equilibrium,
     mutation_negligible_transition,
+    mutual_information,
     r_st,
     statistics_report,
     total_hill_number,
@@ -71,6 +74,7 @@ from .interval import ConfidenceInterval, confidence_interval, student_t_critica
 __all__ = [
     "ConfidenceInterval",
     "DifferentiationReport",
+    "allelic_distance",
     "confidence_interval",
     "d_m",
     "differentiation_q",
@@ -88,6 +92,7 @@ __all__ = [
     "g_st_max",
     "g_st_prime",
     "gd",
+    "gregorius_delta",
     "gs",
     "h_s",
     "h_st",
@@ -103,6 +108,7 @@ __all__ = [
     "k_st",
     "mutation_negligible_equilibrium",
     "mutation_negligible_transition",
+    "mutual_information",
     "r_st",
     "statistics_report",
     "student_t_critical_value",

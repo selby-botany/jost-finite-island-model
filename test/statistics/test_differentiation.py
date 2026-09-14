@@ -11,6 +11,7 @@ from typing import Any, cast, get_args
 from unittest.mock import patch
 
 from fim.statistics import (
+    allelic_distance,
     d_m,
     differentiation,
     differentiation_q,
@@ -23,6 +24,7 @@ from fim.statistics import (
     g_st_max,
     g_st_prime,
     gd,
+    gregorius_delta,
     gs,
     h_s,
     h_st,
@@ -38,6 +40,7 @@ from fim.statistics import (
     k_st,
     mutation_negligible_equilibrium,
     mutation_negligible_transition,
+    mutual_information,
     r_st,
     statistics_report,
     total_hill_number,
@@ -740,6 +743,46 @@ class DifferentiationStatisticsTests(unittest.TestCase):
         assert actual_r_st is not None
         self.assertAlmostEqual(actual_r_st, d_m(table) / h_s(table))
         self.assertIsNone(r_st([{0: 1.0}, {1: 1.0}]))
+
+    def test_allelic_distance_counts_alleles_present_in_exactly_one_deme(
+        self,
+    ) -> None:
+        """Caballero-Garcia-Dorado distance ignores frequency once present."""
+        table = [
+            {0: 0.7, 1: 0.3},
+            {1: 0.2, 2: 0.8},
+            {0: 0.5, 2: 0.5},
+        ]
+
+        self.assertAlmostEqual(allelic_distance(table), 1.0)
+        self.assertAlmostEqual(allelic_distance([{0: 1.0}, {1: 1.0}]), 1.0)
+        self.assertAlmostEqual(allelic_distance([{0: 1.0}, {0: 1.0}]), 0.0)
+
+    def test_gregorius_delta_is_mean_total_variation_from_the_rest(self) -> None:
+        """Gregorius delta matches hand-computed two- and three-deme cases."""
+        two_demes = [{0: 0.75, 1: 0.25}, {0: 0.25, 1: 0.75}]
+        self.assertAlmostEqual(gregorius_delta(two_demes), 0.5)
+
+        three_demes = [{0: 1.0}, {1: 1.0}, {0: 0.5, 1: 0.5}]
+        self.assertAlmostEqual(gregorius_delta(three_demes), 0.5)
+
+    def test_mutual_information_is_entropy_gain_from_deme_membership(self) -> None:
+        """Sherwin's MI equals H_T minus the weighted mean within entropy."""
+        self.assertAlmostEqual(
+            mutual_information([{0: 1.0}, {1: 1.0}]),
+            math.log(2),
+        )
+        self.assertAlmostEqual(
+            mutual_information([{0: 0.5, 1: 0.5}, {0: 0.5, 1: 0.5}]),
+            0.0,
+        )
+
+        weighted = mutual_information(
+            [{0: 1.0}, {1: 1.0}],
+            [3.0, 1.0],
+        )
+        expected = -(0.75 * math.log(0.75) + 0.25 * math.log(0.25))
+        self.assertAlmostEqual(weighted, expected)
 
     def test_g_st_log_matches_a_hand_worked_value(self) -> None:
         """The log-based large-differentiation G_ST estimator, by hand.

@@ -135,6 +135,11 @@ class DifferentiationReport(TypedDict):
     Gd: float
 
 
+def _alleles_present(deme: Mapping[int, float]) -> set[int]:
+    """Return allele IDs with strictly positive frequency in one deme."""
+    return {allele_id for allele_id, frequency in deme.items() if frequency > 0.0}
+
+
 def _bounded(value: float, name: str) -> float:
     """Return a unit-interval value, tolerating floating-point roundoff.
 
@@ -1073,6 +1078,97 @@ def k_st(table: FrequencyTable) -> float:
     demes = _validate_table(table)
     _require_multiple_demes(demes)
     return _k_st_from_demes(demes)
+
+
+def allelic_distance(table: FrequencyTable) -> float:
+    """Return Caballero-Garcia-Dorado mean pairwise allelic distance.
+
+    Caballero and Garcia-Dorado (2013), Eq. 5, count an allele as
+    contributing to the distance between two subpopulations when it is
+    present in exactly one of them. This is intentionally a
+    presence/absence statistic: allele frequencies matter only in deciding
+    whether an allele exists in a deme at all, not in how common it is once
+    present. The returned value is the arithmetic mean across distinct
+    unordered deme pairs.
+    """
+    demes = _validate_table(table)
+    _require_multiple_demes(demes)
+    present = [_alleles_present(deme) for deme in demes]
+    pair_count = 0
+    total = 0.0
+    for left_index, left in enumerate(present[:-1]):
+        for right in present[left_index + 1 :]:
+            pair_count += 1
+            total += len(left.symmetric_difference(right)) / 2.0
+    return total / pair_count
+
+
+def gregorius_delta(
+    table: FrequencyTable,
+    deme_weights: DemeWeights = None,
+) -> float:
+    """Return Gregorius's distance-oriented differentiation ``delta``.
+
+    Gregorius's measure compares each deme with the weighted mixture of all
+    *other* demes using total variation distance, then averages those
+    per-deme distances. Unlike diversity-ratio measures such as ``G_ST`` or
+    Jost's ``D``, this is a direct distance between allele-frequency
+    distributions. With two equally weighted demes it is exactly one half
+    of the Manhattan distance between their frequency vectors.
+    """
+    demes = _validate_table(table)
+    _require_multiple_demes(demes)
+    weights = _validate_weights(len(demes), deme_weights)
+    allele_ids = {allele_id for deme in demes for allele_id in deme}
+    value = 0.0
+    for index, (deme, weight) in enumerate(zip(demes, weights, strict=True)):
+        other_weight = 1.0 - weight
+        if other_weight <= 0.0:
+            message = "at least two demes must have positive weight"
+            raise ValueError(message)
+        rest = {
+            allele_id: fsum(
+                weights[other_index] * other_deme.get(allele_id, 0.0)
+                for other_index, other_deme in enumerate(demes)
+                if other_index != index
+            )
+            / other_weight
+            for allele_id in allele_ids
+        }
+        distance = 0.5 * fsum(
+            abs(deme.get(allele_id, 0.0) - rest[allele_id]) for allele_id in allele_ids
+        )
+        value += weight * distance
+    return _bounded(value, "Gregorius delta")
+
+
+def mutual_information(
+    table: FrequencyTable,
+    deme_weights: DemeWeights = None,
+) -> float:
+    """Return Sherwin's allele-by-deme mutual information.
+
+    The statistic is the Shannon-entropy gain from knowing deme membership:
+    total entropy after pooling demes, minus the weighted mean entropy within
+    demes. Equivalently, it is the Kullback-Leibler divergence between the
+    observed allele-by-deme contingency table and the table expected if
+    allele identity and deme membership were independent.
+    """
+    demes = _validate_table(table)
+    _require_multiple_demes(demes)
+    weights = _validate_weights(len(demes), deme_weights)
+    total_entropy = _entropy(_pooled(demes, weights))
+    within_entropy = fsum(
+        weight * _entropy(deme) for deme, weight in zip(demes, weights, strict=True)
+    )
+    value = total_entropy - within_entropy
+    if value < 0.0 and value >= -_TOLERANCE:
+        return 0.0
+    if value < 0.0:
+        raise ArithmeticError(
+            f"mutual information is negative beyond floating-point tolerance: {value!r}"
+        )
+    return value
 
 
 def differentiation_q(

@@ -18703,6 +18703,36 @@ def test_r_st_is_d_m_over_h_s_and_none_at_zero_within_deme_diversity() -> None
 
 Nei's R_ST (Eq. 11) is D_m/H_S, undefined when H_S is zero.
 
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_allelic_distance_counts_alleles_present_in_exactly_one_deme"></a>
+
+#### test\_allelic\_distance\_counts\_alleles\_present\_in\_exactly\_one\_deme
+
+```python
+def test_allelic_distance_counts_alleles_present_in_exactly_one_deme() -> None
+```
+
+Caballero-Garcia-Dorado distance ignores frequency once present.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_gregorius_delta_is_mean_total_variation_from_the_rest"></a>
+
+#### test\_gregorius\_delta\_is\_mean\_total\_variation\_from\_the\_rest
+
+```python
+def test_gregorius_delta_is_mean_total_variation_from_the_rest() -> None
+```
+
+Gregorius delta matches hand-computed two- and three-deme cases.
+
+<a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_mutual_information_is_entropy_gain_from_deme_membership"></a>
+
+#### test\_mutual\_information\_is\_entropy\_gain\_from\_deme\_membership
+
+```python
+def test_mutual_information_is_entropy_gain_from_deme_membership() -> None
+```
+
+Sherwin's MI equals H_T minus the weighted mean within entropy.
+
 <a id="statistics.test_differentiation.DifferentiationStatisticsTests.test_g_st_log_matches_a_hand_worked_value"></a>
 
 #### test\_g\_st\_log\_matches\_a\_hand\_worked\_value
