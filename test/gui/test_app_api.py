@@ -1125,6 +1125,76 @@ def test_api_seeds_dark_mode_override_from_a_saved_preference(tmp_path: Path) ->
     assert api.get_dark_mode_override() == "light"
 
 
+def test_api_starts_with_restore_startup_behavior() -> None:
+    """A fresh `Api()` preserves the existing restore-on-launch behavior."""
+    assert Api().get_startup_behavior() == "restore"
+
+
+@pytest.mark.parametrize("value", ["restart", "restore"])
+def test_set_startup_behavior_changes_what_get_startup_behavior_returns(
+    value: str,
+) -> None:
+    """A valid startup behavior is accepted and immediately reflected back."""
+    api = Api()
+
+    result = api.set_startup_behavior(value)
+
+    assert result == {"ok": True, "value": value}
+    assert api.get_startup_behavior() == value
+
+
+def test_set_startup_behavior_rejects_an_unrecognized_value() -> None:
+    """Anything other than "restart"/"restore" is a caller-side bug."""
+    api = Api()
+
+    result = api.set_startup_behavior("resume")
+
+    assert result["ok"] is False
+    assert "message" in result
+    assert api.get_startup_behavior() == "restore"
+
+
+def test_set_startup_behavior_persists_across_a_second_api(tmp_path: Path) -> None:
+    """A valid startup behavior survives to a second `Api` instance."""
+    preferences_path = tmp_path / "preferences.json"
+    first = Api(preferences_path=preferences_path)
+
+    first.set_startup_behavior("restart")
+
+    second = Api(preferences_path=preferences_path)
+    assert second.get_startup_behavior() == "restart"
+
+
+def test_restart_startup_behavior_ignores_a_saved_form(tmp_path: Path) -> None:
+    """Restart mode uses starter values even when a valid saved form exists."""
+    preferences_path = tmp_path / "preferences.json"
+    saved_values = dict(starter_form_values())
+    saved_values["N"] = "999"
+    save_preferences(
+        preferences_path,
+        GuiPreferences(form_values=saved_values, startup_behavior="restart"),
+    )
+
+    api = Api(preferences_path=preferences_path)
+
+    assert api.get_initial_form()["N"] == starter_form_values()["N"]
+
+
+def test_restore_startup_behavior_uses_a_valid_saved_form(tmp_path: Path) -> None:
+    """Restore mode reuses the last valid submitted form."""
+    preferences_path = tmp_path / "preferences.json"
+    saved_values = dict(starter_form_values())
+    saved_values["N"] = "999"
+    save_preferences(
+        preferences_path,
+        GuiPreferences(form_values=saved_values, startup_behavior="restore"),
+    )
+
+    api = Api(preferences_path=preferences_path)
+
+    assert api.get_initial_form()["N"] == "999"
+
+
 def test_api_starts_with_the_welcome_panel_not_dismissed(tmp_path: Path) -> None:
     """A genuinely first launch (no preferences file at all) has never shown it.
 

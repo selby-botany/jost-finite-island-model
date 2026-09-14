@@ -1328,19 +1328,18 @@ class Api:
     def get_initial_form(self) -> dict[str, str]:
         """Return the values a fresh app launch's own Input screen should show.
 
-        Prefers the last successfully submitted form
-        (`GuiPreferences.form_values`, saved by `start_run` below) over
-        `get_starter_form`'s own true starter values — the confirmed gap
-        P1 item 4 of the 2026-09-06 open-issues doc names directly
-        ("form values... remain process-local"). Re-validated through
-        the exact same `form_values_to_payload`/`SimulationParams.
-        from_mapping` path `start_run` itself uses: a saved form that no
-        longer validates (a hand-edited file, or a `config_form` field
-        set that changed since it was saved) is discarded wholesale
-        rather than applied partially — `starter_form_values()` is
-        exactly as safe a fallback here as it is for a first-ever launch
-        with nothing saved at all.
+        Honors the user's startup behavior setting. `"restore"` prefers
+        the last successfully submitted form (`GuiPreferences.form_
+        values`, saved by `start_run` below) over `get_starter_form`'s
+        own true starter values. `"restart"` ignores the saved form and
+        starts from the starter values. A restored form is re-validated
+        through the exact same `form_values_to_payload`/
+        `SimulationParams.from_mapping` path `start_run` itself uses: a
+        saved form that no longer validates is discarded wholesale
+        rather than applied partially.
         """
+        if self._preferences.startup_behavior == "restart":
+            return starter_form_values()
         values = self._preferences.form_values
         if values is None:
             return starter_form_values()
@@ -1349,6 +1348,34 @@ class Api:
         except ValueError:
             return starter_form_values()
         return values
+
+    @_log_bridge_call
+    def get_startup_behavior(self) -> str:
+        """Return how a fresh launch chooses its initial form values."""
+        return self._preferences.startup_behavior
+
+    @_log_bridge_call
+    def set_startup_behavior(self, value: str) -> dict[str, Any]:
+        """Set how a fresh launch chooses its initial form values.
+
+        Args:
+            value: `"restore"` to reuse the last valid form at startup,
+                or `"restart"` to start from the starter form.
+
+        Returns:
+            `{"ok": True, "value": value}` on success; otherwise
+            `{"ok": False, "message": ...}`.
+        """
+        if value not in ("restart", "restore"):
+            return {
+                "ok": False,
+                "message": (
+                    f"startup behavior must be 'restart' or 'restore': {value!r}"
+                ),
+            }
+        self._preferences = self._preferences.with_startup_behavior(value)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "value": value}
 
     @_log_bridge_call
     def validate_form(self, values: dict[str, str]) -> dict[str, Any]:

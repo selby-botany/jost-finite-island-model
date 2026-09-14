@@ -28,6 +28,7 @@ def test_round_trip_preserves_every_field(tmp_path: Path) -> None:
     original = GuiPreferences(
         significant_digits=5,
         form_values={"N": "500", "m": "0.01"},
+        startup_behavior="restart",
     )
     save_preferences(path, original)
     loaded, warning = load_preferences(path)
@@ -123,6 +124,14 @@ def test_to_dict_omits_unset_fields() -> None:
     assert "form" not in data
 
 
+def test_startup_behavior_default_is_restore_and_omitted_from_disk() -> None:
+    """The default preserves existing launch behavior without extra JSON."""
+    preferences = GuiPreferences()
+
+    assert preferences.startup_behavior == "restore"
+    assert "startup_behavior" not in preferences.to_dict()["gui"]
+
+
 def test_with_form_values_leaves_other_fields_untouched() -> None:
     """`with_form_values` updates only `form_values`."""
     original = GuiPreferences(significant_digits=7)
@@ -174,6 +183,16 @@ def test_with_welcome_dismissed_leaves_other_fields_untouched() -> None:
     assert updated.welcome_dismissed is True
 
 
+def test_with_startup_behavior_leaves_other_fields_untouched() -> None:
+    """`with_startup_behavior` updates only the startup behavior."""
+    original = GuiPreferences(significant_digits=7, startup_behavior="restore")
+
+    updated = original.with_startup_behavior("restart")
+
+    assert updated.significant_digits == 7
+    assert updated.startup_behavior == "restart"
+
+
 def test_welcome_dismissed_round_trips_through_save_and_load(tmp_path: Path) -> None:
     """A saved-and-reloaded `GuiPreferences` preserves `welcome_dismissed=True`.
 
@@ -193,6 +212,18 @@ def test_welcome_dismissed_round_trips_through_save_and_load(tmp_path: Path) -> 
 
     assert warning is None
     assert loaded == original
+
+
+def test_startup_behavior_round_trips_through_save_and_load(tmp_path: Path) -> None:
+    """A saved-and-reloaded `GuiPreferences` preserves `startup_behavior`."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences(startup_behavior="restart")
+
+    save_preferences(path, original)
+    loaded, warning = load_preferences(path)
+
+    assert warning is None
+    assert loaded.startup_behavior == "restart"
 
 
 def test_welcome_dismissed_true_is_written_to_disk(tmp_path: Path) -> None:
@@ -220,6 +251,25 @@ def test_malformed_dark_mode_override_is_quarantined(tmp_path: Path) -> None:
             {
                 "schema_version": CURRENT_SCHEMA_VERSION,
                 "gui": {"dark_mode_override": "blue"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded, warning = load_preferences(path)
+
+    assert warning is not None
+    assert loaded == GuiPreferences()
+
+
+def test_malformed_startup_behavior_is_quarantined(tmp_path: Path) -> None:
+    """A startup behavior outside `{"restart", "restore"}` is rejected."""
+    path = tmp_path / "preferences.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {"startup_behavior": "resume"},
             }
         ),
         encoding="utf-8",

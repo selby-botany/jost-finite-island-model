@@ -228,6 +228,36 @@ def test_top_strip_back_and_forward_walk_screen_history(
     }
 
 
+def test_settings_dialog_controls_startup_behavior(
+    window: webview.Window,
+) -> None:
+    """The top-strip settings button persists the startup behavior choice."""
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("document.getElementById('settings-button').click();")
+        poll_until(
+            "document.getElementById('modal-settings').open",
+            lambda value: value is True,
+        )
+        window.evaluate_js(
+            "window.__fimStartupBehaviorAfterChange = null;"
+            "document.getElementById('settings-startup-behavior').value = 'restart';"
+            "document.getElementById('settings-startup-behavior')"
+            ".dispatchEvent(new Event('change', {bubbles: true}));"
+            "(async () => {"
+            "await new Promise((resolve) => setTimeout(resolve, 50));"
+            "window.__fimStartupBehaviorAfterChange = "
+            "await window.pywebview.api.get_startup_behavior();"
+            "})();"
+        )
+        return poll_until(
+            "window.__fimStartupBehaviorAfterChange",
+            lambda value: value == "restart",
+        )
+
+    assert _drive(window, steps) == "restart"
+
+
 def test_home_back_button_returns_to_the_screen_that_opened_home(
     window: webview.Window,
 ) -> None:

@@ -10998,6 +10998,17 @@ def test_top_strip_back_and_forward_walk_screen_history(
 
 The shared Back/Forward controls follow browser-style screen history.
 
+<a id="gui.test_nav_rail.test_settings_dialog_controls_startup_behavior"></a>
+
+#### test\_settings\_dialog\_controls\_startup\_behavior
+
+```python
+def test_settings_dialog_controls_startup_behavior(
+        window: webview.Window) -> None
+```
+
+The top-strip settings button persists the startup behavior choice.
+
 <a id="gui.test_nav_rail.test_home_back_button_returns_to_the_screen_that_opened_home"></a>
 
 #### test\_home\_back\_button\_returns\_to\_the\_screen\_that\_opened\_home

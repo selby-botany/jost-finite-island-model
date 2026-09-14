@@ -39,6 +39,12 @@ default," not a fourth digit count. Purely additive again: an older
 file with no `"dark_mode_override"` key loads exactly as it already
 did, with the field simply `None`.
 
+A fifth GUI field — `startup_behavior` — chooses whether a fresh launch
+restores the last valid submitted form (`"restore"`, the default and
+the historic behavior) or restarts from the built-in starter form
+(`"restart"`). It affects only the next launch's initial form values,
+never any saved run artifact.
+
 Deliberately excludes a "default deme pair for the next run": `Api.
 _start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
 at the start of every run on purpose ("a fresh run never inherits a
@@ -120,6 +126,8 @@ class GuiPreferences:
             ("no run has ever completed"): a user who dismisses the
             panel via "Start from scratch" without ever running anything
             must not see it again on the next launch either.
+        startup_behavior: `"restore"` to load the last valid submitted
+            form at startup, or `"restart"` to use the starter form.
     """
 
     significant_digits: int | None = None
@@ -127,6 +135,7 @@ class GuiPreferences:
     named_presets: dict[str, dict[str, str]] | None = None
     dark_mode_override: str | None = None
     welcome_dismissed: bool = False
+    startup_behavior: str = "restore"
 
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
@@ -137,6 +146,8 @@ class GuiPreferences:
             gui["dark_mode_override"] = self.dark_mode_override
         if self.welcome_dismissed:
             gui["welcome_dismissed"] = True
+        if self.startup_behavior != "restore":
+            gui["startup_behavior"] = self.startup_behavior
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
         if self.form_values is not None:
             result["form"] = dict(self.form_values)
@@ -174,6 +185,11 @@ class GuiPreferences:
             raise ValueError(
                 "preferences 'gui.dark_mode_override' must be 'light' or 'dark'"
             )
+        startup_behavior = gui.get("startup_behavior", "restore")
+        if startup_behavior not in ("restart", "restore"):
+            raise ValueError(
+                "preferences 'gui.startup_behavior' must be 'restart' or 'restore'"
+            )
         form_values = data.get("form")
         if form_values is not None:
             if not isinstance(form_values, Mapping) or not all(
@@ -205,6 +221,7 @@ class GuiPreferences:
             named_presets=named_presets,
             dark_mode_override=dark_mode_override,
             welcome_dismissed=bool(gui.get("welcome_dismissed", False)),
+            startup_behavior=startup_behavior,
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -271,6 +288,15 @@ class GuiPreferences:
         the OS."
         """
         return replace(self, welcome_dismissed=True)
+
+    def with_startup_behavior(self, startup_behavior: str) -> GuiPreferences:
+        """Return a copy with `startup_behavior` replaced.
+
+        Args:
+            startup_behavior: `"restore"` to reuse the last valid form at
+                startup, or `"restart"` to start from the starter form.
+        """
+        return replace(self, startup_behavior=startup_behavior)
 
 
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:

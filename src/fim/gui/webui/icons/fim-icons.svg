@@ -42,4 +42,15 @@
     <path d="M5 12h14"/>
     <path d="m12 5 7 7-7 7"/>
   </symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M12 2.5v3"/>
+    <path d="M12 18.5v3"/>
+    <path d="M4.2 4.2l2.1 2.1"/>
+    <path d="M17.7 17.7l2.1 2.1"/>
+    <path d="M2.5 12h3"/>
+    <path d="M18.5 12h3"/>
+    <path d="M4.2 19.8l2.1-2.1"/>
+    <path d="M17.7 6.3l2.1-2.1"/>
+  </symbol>
 </svg>

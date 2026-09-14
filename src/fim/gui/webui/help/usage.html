@@ -434,16 +434,18 @@ described in the table below (a run in progress shows through either one,
 a finished run's own summary too — splitting them into two genuinely
 distinct layouts is still on this project's own GUI roadmap). A read-only
 parameter strip beneath the title bar always shows the current N/d/m/mu;
-clicking any of the four jumps straight to Configure. A native File/Run/Help
-menu bar duplicates the everyday actions a mouse-and-rail user already has,
-for keyboard-shortcut users: File covers configuration/run file-system
-actions (New/Open/Save configuration, Open run…, Reveal output folder,
-Quit); Run covers the simulation lifecycle (Run simulation, Cancel run);
-Help covers this guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>
-(rendered in-app — see the Help screen row below), a link to the full
-documentation on GitHub, Check for updates, and About. Every menu item
-reuses the exact same action the matching on-screen control already
-performs.</p>
+clicking any of the four jumps straight to Configure. The same strip also
+has Back, Forward, and Settings controls at its right edge. Back and Forward
+walk through the screen history like a web browser; on a fresh startup there
+is no previous screen, so Back is disabled. A native File/Run/Help menu bar
+duplicates the everyday actions a mouse-and-rail user already has, for
+keyboard-shortcut users: File covers configuration/run file-system actions
+(New/Open/Save configuration, Open run…, Reveal output folder, Quit); Run
+covers the simulation lifecycle (Run simulation, Cancel run); Help covers
+this guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> (rendered
+in-app — see the Help screen row below), a link to the full documentation on
+GitHub, Check for updates, and About. Every menu item reuses the exact same
+action the matching on-screen control already performs.</p>
 <table>
 <thead>
 <tr>
@@ -475,17 +477,17 @@ performs.</p>
 </tr>
 <tr>
 <td>Explore</td>
-<td>Four fields (N, d, m, mu) and a theoretical-prediction table (D, G<sub>ST</sub>, E<sub>ST</sub>, and Whitlock's identity-recovery half-life) that update the instant a field is committed — no simulation ever runs, so this never takes measurable time regardless of N or d. A sweep curve plots the selected field's predicted D/G<sub>ST</sub> across a fixed range, with the current configuration marked. Reachable from the rail's own Explore button, or &quot;🔮 Explore&quot; on Configure, from any screen; &quot;Back&quot; returns to whichever screen was showing, not a fixed default</td>
+<td>Four fields (N, d, m, mu) and a theoretical-prediction table (D, G<sub>ST</sub>, E<sub>ST</sub>, and Whitlock's identity-recovery half-life) that update the instant a field is committed — no simulation ever runs, so this never takes measurable time regardless of N or d. A sweep curve plots the selected field's predicted D/G<sub>ST</sub> across a fixed range, with the current configuration marked. Reachable from the rail's own Explore button, or &quot;🔮 Explore&quot; on Configure, from any screen; Back/Forward use the shared screen history</td>
 <td>No CLI equivalent — a direct <code>fim.statistics</code> call from Python or a script is the closest terminal equivalent</td>
 </tr>
 <tr>
 <td>Compare</td>
-<td>Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection, plus a trajectory-over-generations overlay (one statistic at a time, one color per run, selectable from the same six named statistics) — &quot;how does the conclusion change as I vary this one knob,&quot; on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; &quot;Back&quot; returns to whichever screen was showing</td>
+<td>Pick two or more previously completed runs from a recent-runs list, then overlay their final-state scatter panels as small multiples with a legend naming whichever configuration field(s) actually differ across the selection, plus a trajectory-over-generations overlay (one statistic at a time, one color per run, selectable from the same six named statistics) — &quot;how does the conclusion change as I vary this one knob,&quot; on real simulated runs, no re-run needed. Reachable from the rail's own Compare button from any screen; Back/Forward use the shared screen history</td>
 <td>No CLI equivalent — comparing several <code>trajectory.jsonl</code>/<code>report.json</code> files by hand is the closest terminal equivalent</td>
 </tr>
 <tr>
 <td>Help</td>
-<td>This guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>, rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the rail's own Help button, or the Help menu, from any screen; &quot;Back&quot; returns to whichever screen was showing, not a fixed default</td>
+<td>This guide and the <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a>, rendered in-app with working cross-links; every other doc opens on GitHub in the OS default browser instead. Reachable from the rail's own Help button, or the Help menu, from any screen; Back/Forward use the shared screen history</td>
 <td>No CLI equivalent — the terminal reads these same two files directly</td>
 </tr>
 </tbody>
@@ -528,12 +530,15 @@ the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
 <pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 </code></pre>
 <h3 id="saved-preferences">Saved preferences</h3>
-<p>The GUI remembers four things between launches: Configure's own Significant
+<p>The GUI remembers five things between launches: Configure's own Significant
 digits setting, the light/dark override (absent/<code>null</code> means &quot;follow the
 OS,&quot; the default), whether the first-launch welcome panel has already been
-dismissed, and the last configuration you successfully clicked &quot;Run
-simulation&quot; with — a fresh launch's own Run view starts from that
-configuration rather than from the built-in starter values, and a genuinely
+dismissed, the startup behavior selected in Settings, and the last
+configuration you successfully clicked &quot;Run simulation&quot; with. In Settings,
+&quot;Restore the last submitted configuration&quot; keeps the existing behavior: a
+fresh launch's own Run view starts from that saved configuration rather than
+from the built-in starter values. &quot;Restart from the starter configuration&quot;
+uses the built-in starter values on the next launch instead. A genuinely
 first launch (welcome not yet dismissed) shows the welcome panel offering
 &quot;Try a worked example…&quot; or &quot;Start from scratch.&quot; File menu → &quot;New
 configuration&quot; always resets to the built-in starter values regardless of

@@ -148,6 +148,17 @@
             <use href="icons/fim-icons.svg#icon-forward"></use>
           </svg>
         </button>
+        <button
+          type="button"
+          id="settings-button"
+          class="strip-icon-button"
+          aria-label="Settings"
+        >
+          <svg class="button-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-settings"></use>
+          </svg>
+          Settings
+        </button>
       </div>
     </div>
 
@@ -1374,6 +1385,27 @@
     </form>
   </dialog>
 
+  <dialog class="config-modal" id="modal-settings">
+    <h2>Settings</h2>
+    <div id="settings-banner" class="banner" hidden></div>
+    <div class="field">
+      <label for="settings-startup-behavior">At startup</label>
+      <select id="settings-startup-behavior">
+        <option value="restore">Restore the last submitted configuration</option>
+        <option value="restart">Restart from the starter configuration</option>
+      </select>
+      <p class="hint">
+        This controls the configuration loaded on the next launch. It does not
+        change saved run results.
+      </p>
+    </div>
+    <div class="actions">
+      <button type="button" class="modal-close" data-modal-close tabindex="0">
+        Close
+      </button>
+    </div>
+  </dialog>
+
   <!-- "About fim" (Help menu, `fim.menu.about()`): the application
        name/expansion, installed version, license, and a copyright
        notice for Marie Selby Botanical Gardens -- the institution this
@@ -1458,6 +1490,7 @@
 <script src="screens/explore.js"></script>
 <script src="screens/compare.js"></script>
 <script src="screens/presets.js"></script>
+<script src="screens/settings.js"></script>
 <script src="screens/welcome.js"></script>
 <script src="screens/nav-rail.js"></script>
 <script src="field-help.js"></script>
