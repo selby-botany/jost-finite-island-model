@@ -151,6 +151,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
+* [fim.gui.literature\_visuals](#fim.gui.literature_visuals)
+  * [LiteratureVisualPayload](#fim.gui.literature_visuals.LiteratureVisualPayload)
+  * [literature\_visual\_payload](#fim.gui.literature_visuals.literature_visual_payload)
+  * [structure\_barplot\_payload](#fim.gui.literature_visuals.structure_barplot_payload)
+  * [frequency\_spectrum\_payload](#fim.gui.literature_visuals.frequency_spectrum_payload)
+  * [isolation\_by\_distance\_payload](#fim.gui.literature_visuals.isolation_by_distance_payload)
 * [fim.gui.preferences](#fim.gui.preferences)
   * [GuiPreferences](#fim.gui.preferences.GuiPreferences)
     * [to\_dict](#fim.gui.preferences.GuiPreferences.to_dict)
@@ -1244,7 +1250,7 @@ Fields:
         reason the run stopped (e.g. "statistic converged" or "hit
         the cap") — meant to be read directly by a person looking at
         a results table, not parsed by code.
-    G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The seven differentiation/
+    G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The core differentiation/
         heterozygosity measures this project reports (see this
         module's own docstring for what each name means, in outline,
         and the linked
@@ -1268,6 +1274,10 @@ Fields:
         averaging across loci or replicates never needs a ratio-of-
         means-versus-mean-of-ratios decision; there is only one
         answer.
+    A_CGD, Delta, MI: Literature-derived supplemental statistics
+        added for Phase 4 GUI visual interpretation: Caballero-
+        Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
+        mutual information.
 
 <a id="fim.engine.RunResult"></a>
 
@@ -2390,8 +2400,9 @@ that produced it, not a whole run in progress.
 
   A `FinalReport`: the run's own bookkeeping (id, generation,
   whether/why it stopped where it did) plus every named
-  differentiation/heterozygosity statistic, each already averaged
-  across every genetic locus the run tracked.
+  differentiation/heterozygosity and supplemental literature
+  statistic, each already averaged across every genetic locus the
+  run tracked.
 
 <a id="fim.engine.reports_summary"></a>
 
@@ -2448,7 +2459,8 @@ at all" case too.
 
   One `ConfidenceInterval` per statistic name in `FinalReport`
   (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
-  ``Gs``, ``Gd``) with at least two defined values across
+  ``A_CGD``, ``Delta``, ``MI``, ``Gs``, ``Gd``) with at least two
+  defined values across
   `reports`; a statistic short of that (including every statistic,
   given fewer than two reports overall) is omitted entirely.
   `Gs`/`Gd` are both linear in `H_S`/`H_T` (`fim.statistics.
@@ -5419,6 +5431,120 @@ Serialize a validated payload as an `fim run`/`fim init`-compatible YAML doc.
   `_YAML_KEY_ORDER` (none exist today; a defensive fallback
   against this list drifting out of sync with a future field) is
   appended afterward rather than silently dropped.
+
+<a id="fim.gui.literature_visuals"></a>
+
+# fim.gui.literature\_visuals
+
+Literature-derived completed-run visualization payloads for fim-gui.
+
+<a id="fim.gui.literature_visuals.LiteratureVisualPayload"></a>
+
+## LiteratureVisualPayload Objects
+
+```python
+class LiteratureVisualPayload(TypedDict)
+```
+
+Client-ready payload for the literature visualization panel.
+
+<a id="fim.gui.literature_visuals.literature_visual_payload"></a>
+
+#### literature\_visual\_payload
+
+```python
+def literature_visual_payload(
+        state: ModelState,
+        params: SimulationParams) -> LiteratureVisualPayload
+```
+
+Return all Phase 4 literature visualization payloads for one state.
+
+**Arguments**:
+
+- `state` - The completed or reanalyzed population state to display.
+- `params` - The state run's validated simulation parameters.
+
+
+**Returns**:
+
+  A JSON-ready object with STRUCTURE-style bars, an empirical
+  allele-frequency spectrum with a Wright beta overlay when scalar
+  assumptions are available, and an isolation-by-distance summary
+  when migration edges define at least one deme distance class.
+
+<a id="fim.gui.literature_visuals.structure_barplot_payload"></a>
+
+#### structure\_barplot\_payload
+
+```python
+def structure_barplot_payload(
+        state: ModelState,
+        max_alleles: int = _MAX_STRUCTURE_ALLELES) -> dict[str, Any]
+```
+
+Return a STRUCTURE-style stacked barplot payload for one state.
+
+**Arguments**:
+
+- `state` - The population state to summarize.
+- `max_alleles` - Maximum globally common alleles shown explicitly.
+
+
+**Returns**:
+
+  A JSON-ready mapping with ordered allele legend entries and one
+  stacked-frequency segment list per deme. Frequencies are averaged
+  over loci, so every deme bar sums to one.
+
+<a id="fim.gui.literature_visuals.frequency_spectrum_payload"></a>
+
+#### frequency\_spectrum\_payload
+
+```python
+def frequency_spectrum_payload(
+        state: ModelState,
+        params: SimulationParams,
+        bin_count: int = _HISTOGRAM_BIN_COUNT) -> dict[str, Any]
+```
+
+Return an empirical frequency spectrum and optional Wright beta overlay.
+
+**Arguments**:
+
+- `state` - The population state to summarize.
+- `params` - Parameters used to decide whether a scalar Wright beta
+  approximation is available.
+- `bin_count` - Number of equal-width bins over ``[0, 1]``.
+
+
+**Returns**:
+
+  A JSON-ready mapping with bin counts, overlay points, and a note
+  naming the overlay assumptions.
+
+<a id="fim.gui.literature_visuals.isolation_by_distance_payload"></a>
+
+#### isolation\_by\_distance\_payload
+
+```python
+def isolation_by_distance_payload(
+        state: ModelState, params: SimulationParams) -> dict[str, Any] | None
+```
+
+Return pairwise identity decay by migration-graph distance.
+
+**Arguments**:
+
+- `state` - The population state to summarize.
+- `params` - Parameters carrying either scalar or matrix migration.
+
+
+**Returns**:
+
+  ``None`` when every deme pair has the same graph distance. Otherwise
+  a JSON-ready object with mean identity by distance and a log-linear
+  decay fit when at least two positive distance classes are available.
 
 <a id="fim.gui.preferences"></a>
 
@@ -11377,7 +11503,14 @@ and between-deme gene identities `H_S`/`H_T`/`G_ST`/`D` are all
 themselves derived from, exposed directly rather than leaving every
 consumer to re-derive them from `H_S`/`H_T` independently.
 
-`E_ST`/`K_ST`/`Gs`/`Gd` may instead hold `math.nan` — a deliberate
+`A_CGD` is Caballero-Garcia-Dorado allelic distance, `Delta` is
+Gregorius's distance-oriented differentiation, and `MI` is Sherwin's
+mutual information. These are exposed in the same report because the
+GUI's literature-visualization panel and JSON consumers need one
+authoritative engine/API surface for literature-derived statistics.
+
+`E_ST`/`K_ST`/`A_CGD`/`Delta`/`MI`/`Gs`/`Gd` may instead hold
+`math.nan` — a deliberate
 placeholder, never a real measurement — whenever `statistics_report`
 was called with an explicit `statistics` argument that excludes that
 field's own name; see that parameter's own docstring for the full
@@ -12630,7 +12763,7 @@ def statistics_report(
 
 Return the scalar statistics block consumed by an engine report.
 
-The one function that computes all seven statistics for one
+The one function that computes every reported statistic for one
 frequency table at once — everywhere this project reports "the
 statistics" for a single locus, this is the function that produced
 them (see `fim.engine.report_for_state`, which calls this once per
@@ -12682,8 +12815,9 @@ redundant re-validation *through this function* is gone.
   only re-confirm one, on every locus, every generation.
 - `statistics` - `None` (the default — every existing caller,
   unaffected) computes every field, exactly as before. Given a
-  collection of field names instead, `E_ST`/`K_ST`/`Gs`/`Gd`
-  are each computed only when its own name appears in
+  collection of field names instead, `E_ST`/`K_ST`/`A_CGD`/
+  `Delta`/`MI`/`Gs`/`Gd` are each computed only when its own
+  name appears in
   `statistics`; the rest hold `math.nan` (see
   `DifferentiationReport`'s own docstring for the placeholder
   contract this relies on). `H_S`/`H_T`/`H_ST`/`G_ST`/`D` are

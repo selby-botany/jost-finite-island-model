@@ -113,7 +113,14 @@ class DifferentiationReport(TypedDict):
     themselves derived from, exposed directly rather than leaving every
     consumer to re-derive them from `H_S`/`H_T` independently.
 
-    `E_ST`/`K_ST`/`Gs`/`Gd` may instead hold `math.nan` — a deliberate
+    `A_CGD` is Caballero-Garcia-Dorado allelic distance, `Delta` is
+    Gregorius's distance-oriented differentiation, and `MI` is Sherwin's
+    mutual information. These are exposed in the same report because the
+    GUI's literature-visualization panel and JSON consumers need one
+    authoritative engine/API surface for literature-derived statistics.
+
+    `E_ST`/`K_ST`/`A_CGD`/`Delta`/`MI`/`Gs`/`Gd` may instead hold
+    `math.nan` — a deliberate
     placeholder, never a real measurement — whenever `statistics_report`
     was called with an explicit `statistics` argument that excludes that
     field's own name; see that parameter's own docstring for the full
@@ -131,6 +138,9 @@ class DifferentiationReport(TypedDict):
     D: float
     E_ST: float
     K_ST: float
+    A_CGD: float
+    Delta: float
+    MI: float
     Gs: float
     Gd: float
 
@@ -138,6 +148,18 @@ class DifferentiationReport(TypedDict):
 def _alleles_present(deme: Mapping[int, float]) -> set[int]:
     """Return allele IDs with strictly positive frequency in one deme."""
     return {allele_id for allele_id, frequency in deme.items() if frequency > 0.0}
+
+
+def _allelic_distance_from_demes(demes: Sequence[Mapping[int, float]]) -> float:
+    """Return Caballero-Garcia-Dorado distance for already validated demes."""
+    present = [_alleles_present(deme) for deme in demes]
+    pair_count = 0
+    total = 0.0
+    for left_index, left in enumerate(present[:-1]):
+        for right in present[left_index + 1 :]:
+            pair_count += 1
+            total += len(left.symmetric_difference(right)) / 2.0
+    return total / pair_count
 
 
 def _bounded(value: float, name: str) -> float:
@@ -1093,32 +1115,13 @@ def allelic_distance(table: FrequencyTable) -> float:
     """
     demes = _validate_table(table)
     _require_multiple_demes(demes)
-    present = [_alleles_present(deme) for deme in demes]
-    pair_count = 0
-    total = 0.0
-    for left_index, left in enumerate(present[:-1]):
-        for right in present[left_index + 1 :]:
-            pair_count += 1
-            total += len(left.symmetric_difference(right)) / 2.0
-    return total / pair_count
+    return _allelic_distance_from_demes(demes)
 
 
-def gregorius_delta(
-    table: FrequencyTable,
-    deme_weights: DemeWeights = None,
+def _gregorius_delta_from_demes(
+    demes: Sequence[Mapping[int, float]], weights: Sequence[float]
 ) -> float:
-    """Return Gregorius's distance-oriented differentiation ``delta``.
-
-    Gregorius's measure compares each deme with the weighted mixture of all
-    *other* demes using total variation distance, then averages those
-    per-deme distances. Unlike diversity-ratio measures such as ``G_ST`` or
-    Jost's ``D``, this is a direct distance between allele-frequency
-    distributions. With two equally weighted demes it is exactly one half
-    of the Manhattan distance between their frequency vectors.
-    """
-    demes = _validate_table(table)
-    _require_multiple_demes(demes)
-    weights = _validate_weights(len(demes), deme_weights)
+    """Return Gregorius delta for already validated demes and weights."""
     allele_ids = {allele_id for deme in demes for allele_id in deme}
     value = 0.0
     for index, (deme, weight) in enumerate(zip(demes, weights, strict=True)):
@@ -1142,6 +1145,43 @@ def gregorius_delta(
     return _bounded(value, "Gregorius delta")
 
 
+def gregorius_delta(
+    table: FrequencyTable,
+    deme_weights: DemeWeights = None,
+) -> float:
+    """Return Gregorius's distance-oriented differentiation ``delta``.
+
+    Gregorius's measure compares each deme with the weighted mixture of all
+    *other* demes using total variation distance, then averages those
+    per-deme distances. Unlike diversity-ratio measures such as ``G_ST`` or
+    Jost's ``D``, this is a direct distance between allele-frequency
+    distributions. With two equally weighted demes it is exactly one half
+    of the Manhattan distance between their frequency vectors.
+    """
+    demes = _validate_table(table)
+    _require_multiple_demes(demes)
+    weights = _validate_weights(len(demes), deme_weights)
+    return _gregorius_delta_from_demes(demes, weights)
+
+
+def _mutual_information_from_demes(
+    demes: Sequence[Mapping[int, float]], weights: Sequence[float]
+) -> float:
+    """Return Sherwin mutual information for already validated inputs."""
+    total_entropy = _entropy(_pooled(demes, weights))
+    within_entropy = fsum(
+        weight * _entropy(deme) for deme, weight in zip(demes, weights, strict=True)
+    )
+    value = total_entropy - within_entropy
+    if value < 0.0 and value >= -_TOLERANCE:
+        return 0.0
+    if value < 0.0:
+        raise ArithmeticError(
+            f"mutual information is negative beyond floating-point tolerance: {value!r}"
+        )
+    return value
+
+
 def mutual_information(
     table: FrequencyTable,
     deme_weights: DemeWeights = None,
@@ -1157,18 +1197,7 @@ def mutual_information(
     demes = _validate_table(table)
     _require_multiple_demes(demes)
     weights = _validate_weights(len(demes), deme_weights)
-    total_entropy = _entropy(_pooled(demes, weights))
-    within_entropy = fsum(
-        weight * _entropy(deme) for deme, weight in zip(demes, weights, strict=True)
-    )
-    value = total_entropy - within_entropy
-    if value < 0.0 and value >= -_TOLERANCE:
-        return 0.0
-    if value < 0.0:
-        raise ArithmeticError(
-            f"mutual information is negative beyond floating-point tolerance: {value!r}"
-        )
-    return value
+    return _mutual_information_from_demes(demes, weights)
 
 
 def differentiation_q(
@@ -1979,7 +2008,7 @@ def statistics_report(
 ) -> DifferentiationReport:
     """Return the scalar statistics block consumed by an engine report.
 
-    The one function that computes all seven statistics for one
+    The one function that computes every reported statistic for one
     frequency table at once — everywhere this project reports "the
     statistics" for a single locus, this is the function that produced
     them (see `fim.engine.report_for_state`, which calls this once per
@@ -2030,8 +2059,9 @@ def statistics_report(
             only re-confirm one, on every locus, every generation.
         statistics: `None` (the default — every existing caller,
             unaffected) computes every field, exactly as before. Given a
-            collection of field names instead, `E_ST`/`K_ST`/`Gs`/`Gd`
-            are each computed only when its own name appears in
+            collection of field names instead, `E_ST`/`K_ST`/`A_CGD`/
+            `Delta`/`MI`/`Gs`/`Gd` are each computed only when its own
+            name appears in
             `statistics`; the rest hold `math.nan` (see
             `DifferentiationReport`'s own docstring for the placeholder
             contract this relies on). `H_S`/`H_T`/`H_ST`/`G_ST`/`D` are
@@ -2069,8 +2099,18 @@ def statistics_report(
     total = _h_t_from_demes(demes, equal_weights)
     wants_e_st = statistics is None or "E_ST" in statistics
     wants_k_st = statistics is None or "K_ST" in statistics
+    wants_a_cgd = statistics is None or "A_CGD" in statistics
+    wants_delta = statistics is None or "Delta" in statistics
+    wants_mi = statistics is None or "MI" in statistics
     wants_gs = statistics is None or "Gs" in statistics
     wants_gd = statistics is None or "Gd" in statistics
+    delta_weights: Sequence[float] | None = None
+    if wants_delta or wants_mi:
+        delta_weights = (
+            equal_weights
+            if deme_weights is None
+            else _validate_weights(len(demes), deme_weights)
+        )
     if wants_e_st:
         entropy_weights = (
             equal_weights
@@ -2088,6 +2128,17 @@ def statistics_report(
         "D": _jost_d_from_within_and_total(len(demes), within, total),
         "E_ST": e_st,
         "K_ST": _k_st_from_demes(demes) if wants_k_st else nan,
+        "A_CGD": _allelic_distance_from_demes(demes) if wants_a_cgd else nan,
+        "Delta": (
+            _gregorius_delta_from_demes(demes, delta_weights)
+            if wants_delta and delta_weights is not None
+            else nan
+        ),
+        "MI": (
+            _mutual_information_from_demes(demes, delta_weights)
+            if wants_mi and delta_weights is not None
+            else nan
+        ),
         "Gs": (1.0 - within) if wants_gs else nan,
         "Gd": _gd_from_within_and_total(within, total, len(demes)) if wants_gd else nan,
     }

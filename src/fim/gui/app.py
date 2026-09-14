@@ -78,6 +78,7 @@ from fim.gui.config_form import (
     starter_form_values,
     tab_for_error,
 )
+from fim.gui.literature_visuals import literature_visual_payload
 from fim.gui.preferences import (
     GuiPreferences,
     load_preferences,
@@ -200,6 +201,7 @@ _BATCH_POLL_INTERVAL_SECONDS: Final = 0.5
 # `H_ST`, added after that view was first built; G3 names exactly
 # these six, so `H_ST` stays out of it.
 _RESULT_STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T")
+_LITERATURE_STATISTIC_NAMES: Final = ("A_CGD", "Delta", "MI")
 
 # Distinguishes a user-saved preset's own id (`Api.save_current_as_
 # preset`) from a built-in worked-example's bare slug (`fim.gui.
@@ -356,6 +358,28 @@ def _effective_allele_summary(
         "H_T": format_statistic(total, digits),
         "gStCaution": cast("float", report["H_S"])
         > _EFFECTIVE_ALLELE_CAUTION_THRESHOLD,
+    }
+
+
+def _literature_statistic_summary(
+    report: Mapping[str, Any], digits: int
+) -> dict[str, str]:
+    """Return the literature-derived statistics as formatted GUI values.
+
+    Args:
+        report: A finished run's own `FinalReport`, including the
+            literature-derived statistics added after the original six-row
+            meter table.
+        digits: The GUI's own configured display precision.
+
+    Returns:
+        A mapping keyed by the report's stable statistic names, with each
+        value preformatted using the same Python-side formatting rule as
+        the core results table.
+    """
+    return {
+        name: format_statistic(cast("float | None", report.get(name)), digits)
+        for name in _LITERATURE_STATISTIC_NAMES
     }
 
 
@@ -2394,6 +2418,12 @@ class Api:
             "effectiveAlleles": _effective_allele_summary(
                 report, self._significant_digits
             ),
+            "literatureStatistics": _literature_statistic_summary(
+                report, self._significant_digits
+            ),
+            "literatureVisuals": literature_visual_payload(
+                reanalyzed.state, reanalyzed.params
+            ),
             "outputDirectory": str(trajectory_path.parent),
             "trajectoryPath": str(trajectory_path),
             "generationCount": reanalyzed.manifest.generation_count,
@@ -3013,6 +3043,12 @@ def _drain_run_messages(
                     for name in _RESULT_STATISTIC_NAMES
                 },
                 "effectiveAlleles": _effective_allele_summary(result.report, digits),
+                "literatureStatistics": _literature_statistic_summary(
+                    result.report, digits
+                ),
+                "literatureVisuals": literature_visual_payload(
+                    result.final_state, result.params
+                ),
                 "outputDirectory": str(output_directory),
                 # The Results card's own re-analysis controls (Home/results
                 # design item 6: "Generation"/"Differentiation-q sweep,"

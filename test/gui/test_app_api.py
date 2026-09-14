@@ -2033,6 +2033,15 @@ def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> 
     assert result["outputDirectory"] == str(output)
     assert result["generationCount"] == manifest.generation_count
     assert set(result["statistics"]) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
+    assert set(result["literatureStatistics"]) == {"A_CGD", "Delta", "MI"}
+    assert {"A_CGD", "Delta", "MI"} <= set(result["report"])
+    literature_visuals = result["literatureVisuals"]
+    assert isinstance(literature_visuals, dict)
+    assert set(literature_visuals) == {
+        "structureBars",
+        "frequencySpectrum",
+        "isolationByDistance",
+    }
     assert isinstance(result["panels"], list)
 
 

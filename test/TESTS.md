@@ -47,6 +47,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_fixed_per_deme_screen`](#gui.test_fixed_per_deme_screen)
   - [`test_help_screen`](#gui.test_help_screen)
   - [`test_input_screen`](#gui.test_input_screen)
+  - [`test_literature_visuals`](#gui.test_literature_visuals)
   - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
   - [`test_migration_matrix_screen`](#gui.test_migration_matrix_screen)
   - [`test_n_per_deme_screen`](#gui.test_n_per_deme_screen)
@@ -10636,6 +10637,33 @@ payload rather than `collectFormValues` in isolation — the direct,
 positive counterpart to the old lock this replaces: a batch used to
 always submit `"lineal"` regardless of the selector's own value;
 now it submits the real choice.
+
+<a id="gui.test_literature_visuals"></a>
+
+# gui.test\_literature\_visuals
+
+Unit tests for literature-derived GUI visualization payloads.
+
+<a id="gui.test_literature_visuals.test_literature_visual_payload_carries_structure_and_spectrum"></a>
+
+#### test\_literature\_visual\_payload\_carries\_structure\_and\_spectrum
+
+```python
+def test_literature_visual_payload_carries_structure_and_spectrum() -> None
+```
+
+Scalar runs expose stacked composition and a Wright beta overlay.
+
+<a id="gui.test_literature_visuals.test_literature_visual_payload_groups_identity_by_stepping_stone_distance"></a>
+
+#### test\_literature\_visual\_payload\_groups\_identity\_by\_stepping\_stone\_distance
+
+```python
+def test_literature_visual_payload_groups_identity_by_stepping_stone_distance(
+) -> None
+```
+
+A topology-expanded migration matrix still yields IBD distance classes.
 
 <a id="gui.test_loci_grid_screen"></a>
 

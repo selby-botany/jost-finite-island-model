@@ -213,7 +213,7 @@ class FinalReport(TypedDict):
             reason the run stopped (e.g. "statistic converged" or "hit
             the cap") — meant to be read directly by a person looking at
             a results table, not parsed by code.
-        G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The seven differentiation/
+        G_ST, D, E_ST, K_ST, H_S, H_T, H_ST: The core differentiation/
             heterozygosity measures this project reports (see this
             module's own docstring for what each name means, in outline,
             and the linked
@@ -237,6 +237,10 @@ class FinalReport(TypedDict):
             averaging across loci or replicates never needs a ratio-of-
             means-versus-mean-of-ratios decision; there is only one
             answer.
+        A_CGD, Delta, MI: Literature-derived supplemental statistics
+            added for Phase 4 GUI visual interpretation: Caballero-
+            Garcia-Dorado allelic distance, Gregorius delta, and Sherwin
+            mutual information.
     """
 
     run_id: str
@@ -251,6 +255,9 @@ class FinalReport(TypedDict):
     H_S: float
     H_T: float
     H_ST: float
+    A_CGD: float
+    Delta: float
+    MI: float
     Gs: float
     Gd: float
 
@@ -2225,8 +2232,9 @@ def report_for_state(
     Returns:
         A `FinalReport`: the run's own bookkeeping (id, generation,
         whether/why it stopped where it did) plus every named
-        differentiation/heterozygosity statistic, each already averaged
-        across every genetic locus the run tracked.
+        differentiation/heterozygosity and supplemental literature
+        statistic, each already averaged across every genetic locus the
+        run tracked.
     """
     locus_reports = tuple(
         _statistics_for_locus(state, params, locus_index)
@@ -2258,6 +2266,9 @@ def report_for_state(
         "H_S": mean_h_s,
         "H_T": mean_h_t,
         "H_ST": _mean(tuple(report["H_ST"] for report in locus_reports)),
+        "A_CGD": _mean(tuple(report["A_CGD"] for report in locus_reports)),
+        "Delta": _mean(tuple(report["Delta"] for report in locus_reports)),
+        "MI": _mean(tuple(report["MI"] for report in locus_reports)),
         "Gs": 1.0 - mean_h_s,
         "Gd": _gd_from_within_and_total(mean_h_s, mean_h_t, state.deme_count),
     }
@@ -2310,7 +2321,8 @@ def reports_summary(
     Returns:
         One `ConfidenceInterval` per statistic name in `FinalReport`
         (``D``, ``G_ST``, ``E_ST``, ``K_ST``, ``H_S``, ``H_T``, ``H_ST``,
-        ``Gs``, ``Gd``) with at least two defined values across
+        ``A_CGD``, ``Delta``, ``MI``, ``Gs``, ``Gd``) with at least two
+        defined values across
         `reports`; a statistic short of that (including every statistic,
         given fewer than two reports overall) is omitted entirely.
         `Gs`/`Gd` are both linear in `H_S`/`H_T` (`fim.statistics.
@@ -2323,7 +2335,20 @@ def reports_summary(
         placeholder standing in for one.
     """
     summary: dict[str, ConfidenceInterval] = {}
-    for statistic in ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST", "Gs", "Gd"):
+    for statistic in (
+        "D",
+        "G_ST",
+        "E_ST",
+        "K_ST",
+        "H_S",
+        "H_T",
+        "H_ST",
+        "A_CGD",
+        "Delta",
+        "MI",
+        "Gs",
+        "Gd",
+    ):
         values = [
             value
             for report in reports
@@ -3662,6 +3687,9 @@ def _final_report_statistic(report: FinalReport, statistic: str) -> float | None
         "H_S": report["H_S"],
         "H_T": report["H_T"],
         "H_ST": report["H_ST"],
+        "A_CGD": report["A_CGD"],
+        "Delta": report["Delta"],
+        "MI": report["MI"],
         "Gs": report["Gs"],
         "Gd": report["Gd"],
     }

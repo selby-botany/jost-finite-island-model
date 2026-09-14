@@ -177,12 +177,15 @@ The one entry point everything else in this project ultimately calls.
   migration off (see `engine_backend`'s own entry above for what
   "statistically" means the rest of the time, including every
   multi-locus case).
-- **`FinalReport`** (a `TypedDict`) — the seven scalar numbers a finished
+- **`FinalReport`** (a `TypedDict`) — the scalar numbers a finished
   run reports, averaged across every tracked locus: `run_id`,
   `generation`, `converged`, `converged_on`, `reason`, and the six
   differentiation/heterozygosity measures `G_ST` (`None` when every
   tracked locus has fixed, since the statistic is undefined with no
-  variation left), `D`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`.
+  variation left), `D`, `E_ST`, `K_ST`, `H_S`, `H_T`, `H_ST`, plus the
+  literature-derived supplemental statistics `A_CGD` (Caballero-
+  García-Dorado allelic distance), `Delta` (Gregorius δ), and `MI`
+  (Sherwin mutual information).
 - **`RunResult`** (a frozen dataclass) — everything one finished run
   produced: `run_id`, `params`, `final_state` (a `ModelState`, every
   deme's allele frequencies at every locus at the last generation),
@@ -291,7 +294,7 @@ equilibrium, not what value it settles to:* `identity_recovery_rate`,
 `ConfidenceInterval`, `confidence_interval`, `student_t_critical_value`.
 
 `DifferentiationReport` is the `TypedDict` `statistics_report` returns —
-the same seven fields `FinalReport` (§1) reports per run, computed
+the same scalar statistics `FinalReport` (§1) reports per run, computed
 directly from a frequency table instead of from a live simulation.
 
 ## 5. `fim.convergence` — deciding when a run is done

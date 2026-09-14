@@ -628,7 +628,10 @@ The final report contains:
   own does not blank out the others — it is dropped and the remaining,
   genuinely polymorphic loci are averaged);
 - Jost's `D`, entropy differentiation E<sub>ST</sub>, and allele-number
-  differentiation K<sub>ST</sub>.
+  differentiation K<sub>ST</sub>;
+- literature-derived supplemental statistics:
+  Caballero-García-Dorado allelic distance A<sub>CGD</sub>, Gregorius
+  δ, and Sherwin mutual information `MI`.
 
 Multiple loci are independent repeats. H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, E<sub>ST</sub>,
 and K<sub>ST</sub> are always each locus's own arithmetic mean. `D` and G<sub>ST</sub>
@@ -681,7 +684,8 @@ Written only for n<sub>replicates</sub> greater than one, alongside the
 files above.
 
 `summary.json` maps each reported statistic name (`D`, G<sub>ST</sub>, E<sub>ST</sub>,
-K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>, G<sub>s</sub>, G<sub>d</sub>) to its across-replicate
+K<sub>ST</sub>, H<sub>S</sub>, H<sub>T</sub>, H<sub>ST</sub>,
+A<sub>CGD</sub>, Gregorius δ, `MI`, G<sub>s</sub>, G<sub>d</sub>) to its across-replicate
 confidence interval:
 
 ```json
