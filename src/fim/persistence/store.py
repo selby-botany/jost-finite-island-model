@@ -38,7 +38,7 @@ the same proof.
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import Any, Protocol, TypedDict, cast
 
 from fim.model.identifiers import parse_bounded_frequency
@@ -221,6 +221,98 @@ class InMemoryTrajectoryStore:
         """
         with self._lock:
             self._rows = [row for row in self._rows if row["run_id"] != run_id]
+
+
+class ReplicateFanoutStore:
+    """Route each ``run_id`` to its own store, built lazily on first use.
+
+    Gives a caller with only one `store_factory` (one replicate's own
+    fresh store, built by `run_id` — `LinealBackend`'s own long-standing
+    shape, `fim()`'s own docstring) a single object satisfying
+    `TrajectoryStore` that a *generation-first* batch (`fim.engine.
+    run_batch`, driving `GenerationalBackend`) can pass around as its one
+    shared `store` argument without ever needing to know several
+    replicates are behind it. `run_batch`/`ReplicaLane`/every `Advancer`
+    implementation already treats `store` as opaque and keys every call
+    by `run_id` — this class is the only thing that changed to let a
+    `generational`/`generational-vector` batch produce one real,
+    independent file per replicate the same way `LinealBackend`'s own
+    `store_factory` path already does, rather than a new execution model
+    (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+    `selby/restricted`, §5.1).
+
+    Thread-safe at the one point it needs to be: `_lock` guards only the
+    lazy get-or-create step below. Once a child store exists for a given
+    `run_id`, every further call for that `run_id` delegates straight to
+    it, and each concrete `TrajectoryStore` implementation
+    (`JSONLTrajectoryStore`, `InMemoryTrajectoryStore`) is already safe
+    under concurrent `write_generation` calls in its own right
+    (`ThreadedAdvancer`'s own docstring) — this class adds no new
+    contention beyond the one-time creation, and never itself calls two
+    child stores' methods at once.
+    """
+
+    def __init__(self, store_factory: Callable[[str], TrajectoryStore]) -> None:
+        """Wrap a per-replicate store factory as one shared `TrajectoryStore`.
+
+        Args:
+            store_factory: Builds one replicate's own real store, given
+                that replicate's own `run_id` — the same shape `fim()`'s
+                own `store_factory` argument already has.
+        """
+        self._store_factory = store_factory
+        self._stores: dict[str, TrajectoryStore] = {}
+        self._lock = threading.Lock()
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Drop `_lock` before pickling — see `InMemoryTrajectoryStore`'s
+        own identical method for why."""
+        state = self.__dict__.copy()
+        del state["_lock"]
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore everything but `_lock`, then rebuild a fresh one."""
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
+
+    def _store_for(self, run_id: str) -> TrajectoryStore:
+        """Return `run_id`'s own child store, building it on first use."""
+        with self._lock:
+            store = self._stores.get(run_id)
+            if store is None:
+                store = self._store_factory(run_id)
+                self._stores[run_id] = store
+            return store
+
+    def write_generation(
+        self,
+        run_id: str,
+        generation: int,
+        rows: Iterable[Mapping[str, Any]],
+        *,
+        validate: bool = True,
+    ) -> None:
+        """Delegate to `run_id`'s own child store; see `TrajectoryStore`."""
+        self._store_for(run_id).write_generation(
+            run_id, generation, rows, validate=validate
+        )
+
+    def read(self, run_id: str) -> Iterator[TrajectoryRow]:
+        """Delegate to `run_id`'s own child store; see `TrajectoryStore`."""
+        return self._store_for(run_id).read(run_id)
+
+    def discard(self, run_id: str) -> None:
+        """Discard `run_id`'s own rows; a no-op if no child store exists.
+
+        Matches `TrajectoryStore.discard`'s own "no rows, no error"
+        contract exactly: a `run_id` this store never saw (an adaptive
+        stop's own abandoned lane, `run_batch`'s own docstring) has no
+        child store to create just to immediately discard from.
+        """
+        store = self._stores.get(run_id)
+        if store is not None:
+            store.discard(run_id)
 
 
 def normalize_row(

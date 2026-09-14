@@ -338,6 +338,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [write\_generation](#fim.persistence.store.InMemoryTrajectoryStore.write_generation)
     * [read](#fim.persistence.store.InMemoryTrajectoryStore.read)
     * [discard](#fim.persistence.store.InMemoryTrajectoryStore.discard)
+  * [ReplicateFanoutStore](#fim.persistence.store.ReplicateFanoutStore)
+    * [\_\_init\_\_](#fim.persistence.store.ReplicateFanoutStore.__init__)
+    * [\_\_getstate\_\_](#fim.persistence.store.ReplicateFanoutStore.__getstate__)
+    * [\_\_setstate\_\_](#fim.persistence.store.ReplicateFanoutStore.__setstate__)
+    * [write\_generation](#fim.persistence.store.ReplicateFanoutStore.write_generation)
+    * [read](#fim.persistence.store.ReplicateFanoutStore.read)
+    * [discard](#fim.persistence.store.ReplicateFanoutStore.discard)
   * [normalize\_row](#fim.persistence.store.normalize_row)
 * [fim.reanalyze](#fim.reanalyze)
   * [ReanalyzedGeneration](#fim.reanalyze.ReanalyzedGeneration)
@@ -10915,6 +10922,117 @@ See `TrajectoryStore.discard`'s own docstring for why this
 exists at all. Held under `_lock`, the same guard `write_
 generation`/`read` already use, so a concurrent write from
 another thread can never interleave with this rebuild of `_rows`.
+
+<a id="fim.persistence.store.ReplicateFanoutStore"></a>
+
+## ReplicateFanoutStore Objects
+
+```python
+class ReplicateFanoutStore()
+```
+
+Route each ``run_id`` to its own store, built lazily on first use.
+
+Gives a caller with only one `store_factory` (one replicate's own
+fresh store, built by `run_id` — `LinealBackend`'s own long-standing
+shape, `fim()`'s own docstring) a single object satisfying
+`TrajectoryStore` that a *generation-first* batch (`fim.engine.
+run_batch`, driving `GenerationalBackend`) can pass around as its one
+shared `store` argument without ever needing to know several
+replicates are behind it. `run_batch`/`ReplicaLane`/every `Advancer`
+implementation already treats `store` as opaque and keys every call
+by `run_id` — this class is the only thing that changed to let a
+`generational`/`generational-vector` batch produce one real,
+independent file per replicate the same way `LinealBackend`'s own
+`store_factory` path already does, rather than a new execution model
+(`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+`selby/restricted`, §5.1).
+
+Thread-safe at the one point it needs to be: `_lock` guards only the
+lazy get-or-create step below. Once a child store exists for a given
+`run_id`, every further call for that `run_id` delegates straight to
+it, and each concrete `TrajectoryStore` implementation
+(`JSONLTrajectoryStore`, `InMemoryTrajectoryStore`) is already safe
+under concurrent `write_generation` calls in its own right
+(`ThreadedAdvancer`'s own docstring) — this class adds no new
+contention beyond the one-time creation, and never itself calls two
+child stores' methods at once.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.__init__"></a>
+
+#### \_\_init\_\_
+
+```python
+def __init__(store_factory: Callable[[str], TrajectoryStore]) -> None
+```
+
+Wrap a per-replicate store factory as one shared `TrajectoryStore`.
+
+**Arguments**:
+
+- `store_factory` - Builds one replicate's own real store, given
+  that replicate's own `run_id` — the same shape `fim()`'s
+  own `store_factory` argument already has.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.__getstate__"></a>
+
+#### \_\_getstate\_\_
+
+```python
+def __getstate__() -> dict[str, Any]
+```
+
+Drop `_lock` before pickling — see `InMemoryTrajectoryStore`'s
+own identical method for why.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.__setstate__"></a>
+
+#### \_\_setstate\_\_
+
+```python
+def __setstate__(state: dict[str, Any]) -> None
+```
+
+Restore everything but `_lock`, then rebuild a fresh one.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.write_generation"></a>
+
+#### write\_generation
+
+```python
+def write_generation(run_id: str,
+                     generation: int,
+                     rows: Iterable[Mapping[str, Any]],
+                     *,
+                     validate: bool = True) -> None
+```
+
+Delegate to `run_id`'s own child store; see `TrajectoryStore`.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.read"></a>
+
+#### read
+
+```python
+def read(run_id: str) -> Iterator[TrajectoryRow]
+```
+
+Delegate to `run_id`'s own child store; see `TrajectoryStore`.
+
+<a id="fim.persistence.store.ReplicateFanoutStore.discard"></a>
+
+#### discard
+
+```python
+def discard(run_id: str) -> None
+```
+
+Discard `run_id`'s own rows; a no-op if no child store exists.
+
+Matches `TrajectoryStore.discard`'s own "no rows, no error"
+contract exactly: a `run_id` this store never saw (an adaptive
+stop's own abandoned lane, `run_batch`'s own docstring) has no
+child store to create just to immediately discard from.
 
 <a id="fim.persistence.store.normalize_row"></a>
 

@@ -9,7 +9,7 @@ from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import RunManifest, read_manifest, write_manifest
-from fim.persistence.store import InMemoryTrajectoryStore
+from fim.persistence.store import InMemoryTrajectoryStore, ReplicateFanoutStore
 
 
 def _state(generation: int) -> ModelState:
@@ -175,6 +175,136 @@ def test_jsonl_store_write_generation_is_thread_safe(tmp_path: Path) -> None:
     rows = list(store.read("run-a"))
     assert len(rows) == generation_count * 3
     assert {row["generation"] for row in rows} == set(range(generation_count))
+
+
+def test_replicate_fanout_store_routes_each_run_id_to_its_own_store() -> None:
+    """Two run_ids' own rows land in two separate, independent stores.
+
+    The whole point of `ReplicateFanoutStore`
+    (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+    `selby/restricted`, §5.1): a `generational`/`generational-vector`
+    batch's own `run_batch` writes every replicate through this one
+    object, but each replicate's own rows must end up in that
+    replicate's own real store, not interleaved into one shared store
+    the way a bare `InMemoryTrajectoryStore` would.
+    """
+    built: dict[str, InMemoryTrajectoryStore] = {}
+
+    def factory(run_id: str) -> InMemoryTrajectoryStore:
+        store = InMemoryTrajectoryStore()
+        built[run_id] = store
+        return store
+
+    fanout = ReplicateFanoutStore(factory)
+    fanout.write_generation("run-a", 0, _state(0).to_rows("run-a"))
+    fanout.write_generation("run-b", 0, _state(0).to_rows("run-b"))
+
+    assert list(fanout.read("run-a")) == list(built["run-a"].read("run-a"))
+    assert list(fanout.read("run-b")) == list(built["run-b"].read("run-b"))
+    assert list(built["run-a"].read("run-b")) == []
+    assert list(built["run-b"].read("run-a")) == []
+
+
+def test_replicate_fanout_store_builds_each_child_store_only_once() -> None:
+    """`store_factory` is called exactly once per distinct run_id.
+
+    Several generations of the same replicate must not each rebuild a
+    fresh, empty child store — that would silently drop every
+    generation but the last one written.
+    """
+    call_count = 0
+
+    def factory(run_id: str) -> InMemoryTrajectoryStore:
+        nonlocal call_count
+        call_count += 1
+        return InMemoryTrajectoryStore()
+
+    fanout = ReplicateFanoutStore(factory)
+    for generation in range(3):
+        fanout.write_generation(
+            "run-a", generation, _state(generation).to_rows("run-a")
+        )
+    fanout.write_generation("run-b", 0, _state(0).to_rows("run-b"))
+
+    assert call_count == 2
+    assert {row["generation"] for row in fanout.read("run-a")} == {0, 1, 2}
+
+
+def test_replicate_fanout_store_discard_delegates_to_the_correct_child() -> None:
+    """Discarding one run_id never touches another run_id's own child store."""
+    fanout = ReplicateFanoutStore(lambda _run_id: InMemoryTrajectoryStore())
+    fanout.write_generation("run-a", 0, _state(0).to_rows("run-a"))
+    fanout.write_generation("run-b", 0, _state(0).to_rows("run-b"))
+
+    fanout.discard("run-a")
+
+    assert list(fanout.read("run-a")) == []
+    assert len(list(fanout.read("run-b"))) == 3  # 3 nonzero-frequency rows
+
+
+def test_replicate_fanout_store_discard_is_a_no_op_for_an_unseen_run() -> None:
+    """Discarding a run_id this store never wrote builds no child store at all.
+
+    Matches `TrajectoryStore.discard`'s own documented "no rows, no
+    error" contract — an adaptive stop's own abandoned lane
+    (`fim.engine.run_batch`'s own docstring) may never have written a
+    single row before its own discard call arrives.
+    """
+    built = 0
+
+    def factory(run_id: str) -> InMemoryTrajectoryStore:
+        nonlocal built
+        built += 1
+        return InMemoryTrajectoryStore()
+
+    fanout = ReplicateFanoutStore(factory)
+
+    fanout.discard("run-never-written")
+
+    assert built == 0
+
+
+def test_replicate_fanout_store_is_thread_safe_across_concurrent_run_ids() -> None:
+    """Concurrent first writes to distinct run_ids never race on child creation.
+
+    The worst case for `ReplicateFanoutStore._store_for`'s own lazy
+    get-or-create: several threads each writing a *different*
+    replicate's own generation zero at once, the way
+    `fim.engine.ThreadedAdvancer` fans a batch's own lanes out across
+    threads. Without `_lock`, two threads racing on the same run_id
+    could each build and register their own child store, silently
+    losing whichever write lost the race.
+    """
+    run_count = 20
+    built: dict[str, InMemoryTrajectoryStore] = {}
+    build_lock = threading.Lock()
+
+    def factory(run_id: str) -> InMemoryTrajectoryStore:
+        store = InMemoryTrajectoryStore()
+        with build_lock:
+            built[run_id] = store
+        return store
+
+    fanout = ReplicateFanoutStore(factory)
+    barrier = threading.Barrier(run_count)
+
+    def _write(index: int) -> None:
+        run_id = f"run-{index}"
+        barrier.wait()
+        fanout.write_generation(run_id, 0, _state(0).to_rows(run_id))
+
+    threads = [
+        threading.Thread(target=_write, args=(index,)) for index in range(run_count)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(built) == run_count
+    for index in range(run_count):
+        run_id = f"run-{index}"
+        assert len(list(fanout.read(run_id))) == 3  # 3 nonzero-frequency rows
 
 
 def test_jsonl_store_appends_generations_and_ignores_partial_tail(

@@ -17666,6 +17666,83 @@ calls on the same file descriptor could interleave mid-line,
 producing a line that is not valid JSON at all (a real corruption,
 not just a lost row).
 
+<a id="persistence.test_store.test_replicate_fanout_store_routes_each_run_id_to_its_own_store"></a>
+
+#### test\_replicate\_fanout\_store\_routes\_each\_run\_id\_to\_its\_own\_store
+
+```python
+def test_replicate_fanout_store_routes_each_run_id_to_its_own_store() -> None
+```
+
+Two run_ids' own rows land in two separate, independent stores.
+
+The whole point of `ReplicateFanoutStore`
+(`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+`selby/restricted`, §5.1): a `generational`/`generational-vector`
+batch's own `run_batch` writes every replicate through this one
+object, but each replicate's own rows must end up in that
+replicate's own real store, not interleaved into one shared store
+the way a bare `InMemoryTrajectoryStore` would.
+
+<a id="persistence.test_store.test_replicate_fanout_store_builds_each_child_store_only_once"></a>
+
+#### test\_replicate\_fanout\_store\_builds\_each\_child\_store\_only\_once
+
+```python
+def test_replicate_fanout_store_builds_each_child_store_only_once() -> None
+```
+
+`store_factory` is called exactly once per distinct run_id.
+
+Several generations of the same replicate must not each rebuild a
+fresh, empty child store — that would silently drop every
+generation but the last one written.
+
+<a id="persistence.test_store.test_replicate_fanout_store_discard_delegates_to_the_correct_child"></a>
+
+#### test\_replicate\_fanout\_store\_discard\_delegates\_to\_the\_correct\_child
+
+```python
+def test_replicate_fanout_store_discard_delegates_to_the_correct_child(
+) -> None
+```
+
+Discarding one run_id never touches another run_id's own child store.
+
+<a id="persistence.test_store.test_replicate_fanout_store_discard_is_a_no_op_for_an_unseen_run"></a>
+
+#### test\_replicate\_fanout\_store\_discard\_is\_a\_no\_op\_for\_an\_unseen\_run
+
+```python
+def test_replicate_fanout_store_discard_is_a_no_op_for_an_unseen_run() -> None
+```
+
+Discarding a run_id this store never wrote builds no child store at all.
+
+Matches `TrajectoryStore.discard`'s own documented "no rows, no
+error" contract — an adaptive stop's own abandoned lane
+(`fim.engine.run_batch`'s own docstring) may never have written a
+single row before its own discard call arrives.
+
+<a id="persistence.test_store.test_replicate_fanout_store_is_thread_safe_across_concurrent_run_ids"></a>
+
+#### test\_replicate\_fanout\_store\_is\_thread\_safe\_across\_concurrent\_run\_ids
+
+```python
+def test_replicate_fanout_store_is_thread_safe_across_concurrent_run_ids(
+) -> None
+```
+
+Concurrent first writes to distinct run_ids never race on child creation.
+
+The worst case for `ReplicateFanoutStore._store_for`'s own lazy
+get-or-create: several threads each writing a *different*
+replicate's own generation zero at once, the way
+`fim.engine.ThreadedAdvancer` fans a batch's own lanes out across
+threads. Without `_lock`, two threads racing on the same run_id
+could each build and register their own child store, silently
+losing whichever write lost the race.
+
 <a id="persistence.test_store.test_jsonl_store_appends_generations_and_ignores_partial_tail"></a>
 
 #### test\_jsonl\_store\_appends\_generations\_and\_ignores\_partial\_tail
