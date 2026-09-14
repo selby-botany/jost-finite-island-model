@@ -780,6 +780,12 @@ otherwise-identical configs that differ only in
 <code>max_concurrent_replicates</code> get different auto-generated run ids (the
 same is already true of <code>engine_backend</code>, <code>jit</code>, and every other field
 on this page).</p>
+<p><strong>On the command line:</strong> <code>fim run --max-concurrent-replicates N</code>
+overrides this field for one invocation, without editing the config
+file — see <a href="#" data-fim-help="usage" data-fim-anchor="run-a-simulation">usage.md</a>. <strong>In the desktop
+app:</strong> a &quot;max concurrent replicates (blank = unset)&quot; field sits beside
+&quot;parallel workers&quot; in Configure's Structure panel, once a batch is
+configured.</p>
 <h2 id="validation-summary">Validation summary</h2>
 <table>
 <thead>

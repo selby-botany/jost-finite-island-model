@@ -33,7 +33,7 @@ unless `--force` is present.
 
 ```console
 fim run CONFIG [-o DIRECTORY | --output DIRECTORY] [--quiet]
-    [--workers N] [--sequential]
+    [--workers N] [--sequential] [--max-concurrent-replicates N]
 ```
 
 `CONFIG` is a YAML file described in
@@ -70,11 +70,27 @@ scalar behavior this guide describes states `n_replicates: 1` explicitly,
 the same way [`fim init`](#create-a-configuration)'s own starter
 configuration does.
 
-Batch replicates run in parallel by default, one worker per processor.
-`--workers N` sets an explicit worker count; `--sequential` runs replicates
-one at a time. Every replicate's trajectory, report, and statistics are
-identical to running it alone with the same seed, so the worker count
-affects only how long the batch takes.
+A batch runs under any [engine_backend](configuration.md#engine_backend),
+not only `lineal`; every backend writes the same `replicate-NNN/` +
+`manifest.json` + `summary.json` layout. Whether a replicate's own
+trajectory is bit-identical across backends for the same seed follows
+`engine_backend`'s own documented parity rules (bit-for-bit with no
+migration; statistically equivalent otherwise for
+`generational-vector`) — running the same batch under a different
+backend is not a way to reproduce one replicate's own exact trajectory
+a different backend already produced, only its statistical behavior.
+
+Under `engine_backend: lineal` (the only backend with a worker-process
+pool), batch replicates run in parallel by default, one worker per
+processor. `--workers N` sets an explicit worker count; `--sequential`
+runs replicates one at a time — the worker count affects only how long the
+batch takes, never its result. Both flags are rejected with a
+usage error under any other `engine_backend`, which has no process pool
+for them to mean anything about; use
+[max_concurrent_replicates](configuration.md#max_concurrent_replicates)
+instead (also settable for this run only via `--max-concurrent-replicates
+N`, without editing the config file), the `generational`/
+`generational-vector` path's own concurrency/memory-bounding control.
 
 With replicate_tolerance unset in the config, exactly n<sub>replicates</sub>
 replicates run. With it set, the batch can stop earlier, once every watched

@@ -25,7 +25,7 @@ path is <code>project-root/results/example-run.yaml</code>. Existing files are p
 unless <code>--force</code> is present.</p>
 <h2 id="run-a-simulation">Run a simulation</h2>
 <pre><code class="language-console">fim run CONFIG [-o DIRECTORY | --output DIRECTORY] [--quiet]
-    [--workers N] [--sequential]
+    [--workers N] [--sequential] [--max-concurrent-replicates N]
 </code></pre>
 <p><code>CONFIG</code> is a YAML file described in
 <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration.md</a>. Without <code>--output</code>, a timestamped
@@ -57,11 +57,25 @@ point estimate) but it means every config below that wants the plain
 scalar behavior this guide describes states <code>n_replicates: 1</code> explicitly,
 the same way <a href="#create-a-configuration"><code>fim init</code></a>'s own starter
 configuration does.</p>
-<p>Batch replicates run in parallel by default, one worker per processor.
-<code>--workers N</code> sets an explicit worker count; <code>--sequential</code> runs replicates
-one at a time. Every replicate's trajectory, report, and statistics are
-identical to running it alone with the same seed, so the worker count
-affects only how long the batch takes.</p>
+<p>A batch runs under any <a href="#" data-fim-help="configuration" data-fim-anchor="engine_backend">engine_backend</a>,
+not only <code>lineal</code>; every backend writes the same <code>replicate-NNN/</code> +
+<code>manifest.json</code> + <code>summary.json</code> layout. Whether a replicate's own
+trajectory is bit-identical across backends for the same seed follows
+<code>engine_backend</code>'s own documented parity rules (bit-for-bit with no
+migration; statistically equivalent otherwise for
+<code>generational-vector</code>) — running the same batch under a different
+backend is not a way to reproduce one replicate's own exact trajectory
+a different backend already produced, only its statistical behavior.</p>
+<p>Under <code>engine_backend: lineal</code> (the only backend with a worker-process
+pool), batch replicates run in parallel by default, one worker per
+processor. <code>--workers N</code> sets an explicit worker count; <code>--sequential</code>
+runs replicates one at a time — the worker count affects only how long the
+batch takes, never its result. Both flags are rejected with a
+usage error under any other <code>engine_backend</code>, which has no process pool
+for them to mean anything about; use
+<a href="#" data-fim-help="configuration" data-fim-anchor="max_concurrent_replicates">max_concurrent_replicates</a>
+instead (also settable for this run only via <code>--max-concurrent-replicates N</code>, without editing the config file), the <code>generational</code>/
+<code>generational-vector</code> path's own concurrency/memory-bounding control.</p>
 <p>With replicate_tolerance unset in the config, exactly n<sub>replicates</sub>
 replicates run. With it set, the batch can stop earlier, once every watched
 statistic's across-replicate confidence interval has tightened enough (see

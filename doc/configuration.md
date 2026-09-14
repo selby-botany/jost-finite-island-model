@@ -895,6 +895,13 @@ otherwise-identical configs that differ only in
 same is already true of `engine_backend`, `jit`, and every other field
 on this page).
 
+**On the command line:** `fim run --max-concurrent-replicates N`
+overrides this field for one invocation, without editing the config
+file — see [usage.md](usage.md#run-a-simulation). **In the desktop
+app:** a "max concurrent replicates (blank = unset)" field sits beside
+"parallel workers" in Configure's Structure panel, once a batch is
+configured.
+
 ## Validation summary
 
 | Condition | Result |

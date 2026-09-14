@@ -1292,15 +1292,47 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   through `SimulationParams.from_mapping`). `mutation_model` stays at
   its own `infinite_alleles` default in this file, so `auto` resolves to
   plain `generational` here — no `numba` dependency risk from this
-  change. The CLI's own `_command_run_batch` also gained the identical
-  synchronous `engine_backend != "lineal"` guard the GUI's `start_batch_
-  run` already had (see "Batch runs are lineal-backend-only" in
-  `ISSUES.md`) — reachable for the first time from this same starter
-  file, by simply raising `n_replicates` above 1 — so hitting that
-  combination from the CLI now fails with a clear `fim: error: ...`
-  message naming the fix, rather than the confusing internal
-  `max_workers/store_factory are lineal-backend-only` error a batch run
-  under `auto` produced before.
+  change. Raising `n_replicates` above 1 from this same starter file
+  (a batch under `auto`) is now a genuinely working combination under
+  every engine backend — see the batch-execution entry below.
+- A batch (`n_replicates` above 1) now runs under any `engine_backend`
+  — `lineal`, `generational`, `generational-vector`, and `auto` — from
+  both `fim run` and the desktop app, not `lineal` alone. Until now,
+  choosing a batch together with any other backend (including `auto`,
+  the recommended default in both front ends) either crashed with
+  `fim.engine.fim`'s own deep, generic `max_workers/store_factory are
+  lineal-backend-only` error, or — a same-cycle, intermediate fix this
+  entry replaces — was refused outright by a synchronous guard added to
+  both front ends, matching one restriction to the other's instead of
+  building the missing capability (`ISSUES.md`'s former "Batch runs are
+  lineal-backend-only" entry, now closed rather than merely updated: the
+  underlying gap it described no longer exists). A new
+  `ReplicateFanoutStore` (`fim.persistence.store`) is the whole fix:
+  it wraps the same `store_factory` shape `LinealBackend` already used
+  and routes each replicate's own rows to a real, independent store,
+  built lazily on first use — `GenerationalBackend` (driving both
+  `generational` and `generational-vector`) now accepts one the
+  identical way `LinealBackend` already did, needing no change at all
+  to `fim.engine.run_batch`, `ReplicaLane`, or any `Advancer`
+  implementation, since every one of them already treats a store as
+  opaque and keys every call by replicate id. A batch under any backend
+  now produces the exact same `replicate-NNN/` + `manifest.json` +
+  `summary.json` artifact layout, so every existing consumer (the
+  Results screen, the batch trajectory panel, `fim stats`) needed no
+  changes either. `max_workers`/`--workers`/`--sequential` stay
+  `lineal`-only — sizing or disabling a `ProcessPoolExecutor` no other
+  backend ever builds — now enforced by the CLI as a `parser.error`
+  (`--workers`/`--sequential` combined with a non-`lineal` backend) and
+  by simply never reaching the GUI's own equivalent path; both front
+  ends also gain a new, matching control for
+  `max_concurrent_replicates` — the `generational`/`generational-vector`
+  path's own real concurrency/memory-bounding knob, already a validated
+  `SimulationParams` field with no control in either front end before
+  now — `--max-concurrent-replicates` on the CLI (the CLI's first flag
+  to override a real config field rather than pure execution mechanics)
+  and a matching Configure-screen field in the GUI
+  (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
+  `selby/restricted`).
 - The unified run view's trajectory panel and six-row statistics table
   at the app's own default window size (`create_window`'s own
   `width=900, height=700`): a completed scalar (or batch) run's scatter
