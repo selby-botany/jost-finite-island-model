@@ -1276,6 +1276,31 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   own branding-exclusion section reserves the Selby name and mark
   separately, all rights, apart from the AGPL. A new line states that
   exclusion plainly, right beside the license itself.
+- `fim init`'s starter configuration now sets `engine_backend: auto`
+  explicitly, matching the desktop app's own fresh-form default instead
+  of silently falling back to `lineal` — this project's own recorded
+  benchmark history never found `lineal` fastest at any tested
+  configuration, and the earlier entry above claiming the app's
+  brand-new form "defaults to `auto`, the recommended choice" was only
+  true of `index.html`'s static markup for a fraction of a second: the
+  GUI's own `starter_form_values()` immediately overwrote it with
+  `lineal`, since `STARTER_CONFIG` never set the field and
+  `PARAMETER_DEFAULTS["engine_backend"]` is `lineal`. Both a fresh `fim
+  init` file and a fresh GUI form now genuinely start at `auto`, closing
+  that gap for both front ends at once (`STARTER_CONFIG` is the shared
+  source `fim.gui.config_form.starter_form_values()` itself loads
+  through `SimulationParams.from_mapping`). `mutation_model` stays at
+  its own `infinite_alleles` default in this file, so `auto` resolves to
+  plain `generational` here — no `numba` dependency risk from this
+  change. The CLI's own `_command_run_batch` also gained the identical
+  synchronous `engine_backend != "lineal"` guard the GUI's `start_batch_
+  run` already had (see "Batch runs are lineal-backend-only" in
+  `ISSUES.md`) — reachable for the first time from this same starter
+  file, by simply raising `n_replicates` above 1 — so hitting that
+  combination from the CLI now fails with a clear `fim: error: ...`
+  message naming the fix, rather than the confusing internal
+  `max_workers/store_factory are lineal-backend-only` error a batch run
+  under `auto` produced before.
 - The unified run view's trajectory panel and six-row statistics table
   at the app's own default window size (`create_window`'s own
   `width=900, height=700`): a completed scalar (or batch) run's scatter
@@ -1305,7 +1330,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   window (1400x900). New regression tests in `test/gui/test_results_
   screen.py`: `test_run_view_fits_the_default_window_without_excess_
   scrolling` and `test_run_view_initial_state_canvas_is_unaffected_by_
-  the_trajectory_fix`.
+  the_trajectory_fix`. That fix's own two shrink targets had only about
+  2px of margin, verified solely on macOS/Cocoa: CI's `ubuntu-latest`/
+  WebKitGTK job failed the same test on both Python versions with the
+  stats table landing 410px past its 30px budget, from that platform's
+  own slightly different font-metric rounding tipping a near-zero
+  margin over. Reproduced byte-for-byte in a local `ubuntu:24.04`
+  Docker container matching CI's exact package list, then fixed with
+  real margin instead — the canvas formula's height-subtrahend
+  `332px→380px`, the trajectory frame's fixed-width cap `300px→250px`
+  — giving roughly 95px of headroom rather than 2px.
 
 ---
 

@@ -32,6 +32,7 @@ convergence_window: 50
 convergence_tolerance: 0.01
 max_generations: 10000
 n_replicates: 1   # opt-in single scalar run; the library default is 200
+engine_backend: auto   # recommended choice; the library default is lineal
 </code></pre>
 <h2 id="required-model-keys">Required model keys</h2>
 <h3 id="n"><code>N</code></h3>
@@ -676,6 +677,12 @@ run stays exactly as reproducible as one where you named an engine
 yourself. Loading a configuration file shows whatever that file
 says, including <code>generational</code> or <code>generational-vector</code>; saving it again
 writes the same value back unchanged.</p>
+<p><strong>In <code>fim init</code>'s starter config:</strong> the file the CLI writes for a
+first-time user makes the same recommendation as the desktop app's
+fresh form — its <code>engine_backend: auto</code> line is explicit, not merely
+the field's absence falling through to the <code>lineal</code> default above. Delete
+the line (or set it to <code>lineal</code> yourself) to opt back into the reference
+implementation.</p>
 <p>If the app or checkout you are using does not have the optional <code>numba</code>
 software installed, the two options that need it (<code>auto</code> and
 <code>generational-vector</code>) say so in their own labels. They stay selectable

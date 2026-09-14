@@ -223,8 +223,23 @@ combination can no longer be selected from the GUI. `fim.gui.batch_runner
 .start_batch_run` also now rejects any other `engine_backend` synchronously,
 before starting a background thread or touching the output directory,
 rather than letting the failure surface later and asynchronously from
-inside that thread. Both changes only prevent the combination from being
-submitted; neither adds an execution path that does not already exist.
+inside that thread.
+
+As of 2026-09-14, the CLI got the identical synchronous guard: `_command
+_run_batch` (`src/fim/cli.py`) now raises a clear `ValueError` — caught by
+`main()` and reported as a normal `fim: error: ...` exit, not a traceback —
+before calling `deterministic_run_id`, for the same `n_replicates > 1` and
+`engine_backend != "lineal"` combination the GUI already refused. This
+closed the CLI's own copy of the underlying gap, which `fim init`'s starter
+config had otherwise been about to make newly reachable: that same commit
+also changed the starter config to set `engine_backend: auto` explicitly
+(matching the desktop app's own fresh-form default), so a first-time CLI
+user bumping `n_replicates` above 1 in their own starter file would
+otherwise have hit this exact failure with no selector to have locked it
+out in the first place.
+
+All three changes only prevent the combination from being submitted;
+none adds an execution path that does not already exist.
 
 #### Technical detail
 
@@ -264,13 +279,18 @@ Relevant code:
   ⇄ `engine_backend` guard that raises the error above
 - `syncConditionalVisibility`, `src/fim/gui/webui/screens/config-modals.js`
   — the GUI-level lock
-- `start_batch_run`, `src/fim/gui/batch_runner.py` — the synchronous,
+- `start_batch_run`, `src/fim/gui/batch_runner.py` — the GUI's synchronous,
   defense-in-depth check (covers a loaded configuration file predating the
   GUI lock, or a directly crafted bridge call)
+- `_command_run_batch`, `src/fim/cli.py` — the CLI's own equivalent
+  synchronous check, added 2026-09-14
 - `_batch_worker` (`src/fim/gui/batch_runner.py`) and `_command_run_batch`
-  (`src/fim/cli.py`) — the two call sites with no non-lineal execution path
+  (`src/fim/cli.py`) — the two call sites with no non-lineal execution path,
+  both now guarded against being reached with one
 - `test/gui/test_input_screen.py` and `test/gui/test_batch_runner.py` —
-  regression tests for both layers of the mitigation
+  regression tests for both layers of the GUI mitigation;
+  `test/cli/test_cli.py::test_run_batch_rejects_a_non_lineal_engine_backend`
+  for the CLI one
 
 ### One built-in worked example has no GUI form representation
 
