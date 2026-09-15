@@ -198,7 +198,15 @@ _BATCH_POLL_INTERVAL_SECONDS: Final = 0.5
 
 # The differentiation/statistics set shown by the Results view and
 # Compare summary. `H_ST` joined the engine after the first GUI milestone
-# and is now shown with the other bounded statistics.
+# and is now shown with the other bounded statistics; `A_CGD`/`Delta`/
+# `MI` (the literature-derived supplemental measurements) joined here
+# too once `track_expensive_statistics` started tracking them
+# per-generation like `E_ST`/`K_ST` (`fim.engine._EXPENSIVE_OPT_IN_
+# STATISTICS`) — they retired the separate "Supplemental statistics"
+# panel/payload (`_literature_statistic_summary`, removed) that used to
+# show them final-report-only, since they now flow through the exact
+# same live/trajectory pipeline as every other watched-or-tracked
+# statistic.
 _RESULT_STATISTIC_NAMES: Final = (
     "D",
     "G_ST",
@@ -207,8 +215,10 @@ _RESULT_STATISTIC_NAMES: Final = (
     "H_S",
     "H_T",
     "H_ST",
+    "A_CGD",
+    "Delta",
+    "MI",
 )
-_LITERATURE_STATISTIC_NAMES: Final = ("A_CGD", "Delta", "MI")
 
 # Distinguishes a user-saved preset's own id (`Api.save_current_as_
 # preset`) from a built-in worked-example's bare slug (`fim.gui.
@@ -365,28 +375,6 @@ def _effective_allele_summary(
         "H_T": format_statistic(total, digits),
         "gStCaution": cast("float", report["H_S"])
         > _EFFECTIVE_ALLELE_CAUTION_THRESHOLD,
-    }
-
-
-def _literature_statistic_summary(
-    report: Mapping[str, Any], digits: int
-) -> dict[str, str]:
-    """Return the literature-derived statistics as formatted GUI values.
-
-    Args:
-        report: A finished run's own `FinalReport`, including the
-            literature-derived statistics added after the original six-row
-            meter table.
-        digits: The GUI's own configured display precision.
-
-    Returns:
-        A mapping keyed by the report's stable statistic names, with each
-        value preformatted using the same Python-side formatting rule as
-        the core results table.
-    """
-    return {
-        name: format_statistic(cast("float | None", report.get(name)), digits)
-        for name in _LITERATURE_STATISTIC_NAMES
     }
 
 
@@ -2452,9 +2440,6 @@ class Api:
             "effectiveAlleles": _effective_allele_summary(
                 report, self._significant_digits
             ),
-            "literatureStatistics": _literature_statistic_summary(
-                report, self._significant_digits
-            ),
             "literatureVisuals": literature_visual_payload(
                 reanalyzed.state, reanalyzed.params
             ),
@@ -3077,9 +3062,6 @@ def _drain_run_messages(
                     for name in _RESULT_STATISTIC_NAMES
                 },
                 "effectiveAlleles": _effective_allele_summary(result.report, digits),
-                "literatureStatistics": _literature_statistic_summary(
-                    result.report, digits
-                ),
                 "literatureVisuals": literature_visual_payload(
                     result.final_state, result.params
                 ),

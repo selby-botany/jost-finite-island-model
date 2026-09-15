@@ -4031,11 +4031,15 @@ def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
 `track_expensive_statistics=True` reaches the three literature statistics too.
 
 The `A_CGD`/`Delta`/`MI` counterpart to `test_track_expensive_
-statistics_computes_e_st_and_k_st_even_when_unwatched`, above — these
-three are never watchable at all (`test_convergence_statistic_
-rejects_the_expensive_bonus_measurements`, `test_params.py`), so
-unlike `E_ST`/`K_ST` this is the *only* way they are ever reached
-from `_convergence_values`.
+statistics_computes_e_st_and_k_st_even_when_unwatched`, above --
+proves the opt-in-but-unwatched path reaches all three, exactly
+like it already does for `E_ST`/`K_ST`. They are also watchable
+(`test_convergence_statistic_accepts_the_expensive_bonus_
+measurements`, `test_params.py`) since a real, reported request
+reversed this session's own earlier "display-only bonus
+measurement" choice — this test's own `convergence_statistic`
+stays unwatched (`D`, below) specifically to isolate the opt-in
+path from the watched one.
 
 <a id="engine.test_engine.test_run_result_convergence_histories_include_always_tracked_statistics"></a>
 
@@ -7830,15 +7834,16 @@ written to guard against a return of that regression.
 def test_a_completed_batch_renders_the_run_view() -> None
 ```
 
-A finished two-replicate batch shows a run id, two table rows, eight stat rows.
+A finished two-replicate batch shows a run id, two table rows, twelve stat rows.
 
-Every one of the six named statistics, plus the two effective-allele
-rows derived from `H_S`/`H_T` (botanist GUI design doc §7.7,
-`Api._effective_allele_interval_summary`), gets a `.stats-table` row
-with a confidence interval in its hover tooltip (`buildCiMeter`/
-`buildOmittedMeter`: a statistic omitted from
+Every one of the ten named statistics (the original seven plus the
+expensive, opt-in "bonus" measurements A_CGD/Delta/MI), plus the two
+effective-allele rows derived from `H_S`/`H_T` (botanist GUI design
+doc §7.7, `Api._effective_allele_interval_summary`), gets a
+`.stats-table` row with a confidence interval in its hover tooltip
+(`buildCiMeter`/`buildOmittedMeter`: a statistic omitted from
 `summary.json` still renders as explicitly omitted, not blank), so
-``batch`-results-summary-body` always has exactly eight `<tr>`
+``batch`-results-summary-body` always has exactly twelve `<tr>`
 children regardless of which, if any, statistics `replicate_summary`
 actually defined for this particular run.
 
@@ -10727,15 +10732,39 @@ now it submits the real choice.
 
 Unit tests for literature-derived GUI visualization payloads.
 
-<a id="gui.test_literature_visuals.test_literature_visual_payload_carries_structure_and_spectrum"></a>
+<a id="gui.test_literature_visuals.test_literature_visual_payload_carries_a_wright_beta_overlay"></a>
 
-#### test\_literature\_visual\_payload\_carries\_structure\_and\_spectrum
+#### test\_literature\_visual\_payload\_carries\_a\_wright\_beta\_overlay
 
 ```python
-def test_literature_visual_payload_carries_structure_and_spectrum() -> None
+def test_literature_visual_payload_carries_a_wright_beta_overlay() -> None
 ```
 
-Scalar runs expose stacked composition and a Wright beta overlay.
+A scalar run's frequency spectrum carries a Wright beta overlay.
+
+<a id="gui.test_literature_visuals.test_literature_visual_payload_remaps_allele_composition_legend_labels"></a>
+
+#### test\_literature\_visual\_payload\_remaps\_allele\_composition\_legend\_labels
+
+```python
+def test_literature_visual_payload_remaps_allele_composition_legend_labels(
+) -> None
+```
+
+The allele-composition legend shows a dense 1-based order, not raw ids.
+
+Regression test for a real, reported confusion: the barplot (for one
+interval this session called "STRUCTURE-style allele composition"
+and removed outright over a misreading of the request to drop that
+name) used to label each legend entry with the underlying minted-
+and-retired internal allele id directly (`f"Allele {allele_id}"`),
+which is sparse — a reader had no way to tell whether a low id was
+simply not common enough to make the legend's own top-`max_alleles`
+cut, or never existed at all ("where did all the missing ones go?").
+`_gradient_state`'s own two alleles are `AlleleId(0)`/`AlleleId(1)`
+— already dense — so this test uses a state with a gap (allele id
+`5`, no `2`/`3`/`4`) to actually distinguish "dense display order"
+from "raw id" behavior.
 
 <a id="gui.test_literature_visuals.test_literature_visual_payload_groups_identity_by_stepping_stone_distance"></a>
 
@@ -15932,25 +15961,24 @@ include it, so a run could not actually watch it for convergence —
 the one statistic reportable but not watchable, with no principled
 reason behind the gap.
 
-<a id="model.test_params.test_convergence_statistic_rejects_the_expensive_bonus_measurements"></a>
+<a id="model.test_params.test_convergence_statistic_accepts_the_expensive_bonus_measurements"></a>
 
-#### test\_convergence\_statistic\_rejects\_the\_expensive\_bonus\_measurements
+#### test\_convergence\_statistic\_accepts\_the\_expensive\_bonus\_measurements
 
 ```python
-def test_convergence_statistic_rejects_the_expensive_bonus_measurements(
+def test_convergence_statistic_accepts_the_expensive_bonus_measurements(
 ) -> None
 ```
 
-`A_CGD`/`Delta`/`MI` are never watchable — display-only "bonus" measurements.
+`A_CGD`/`Delta`/`MI` are watchable, exactly like `E_ST`/`K_ST`.
 
-The reverse of `test_convergence_statistic_accepts_h_st`, above:
-unlike `E_ST`/`K_ST`, which are both watchable *and* an opt-in
-display-only extra (`track_expensive_statistics`), the three
-literature-derived supplemental statistics are deliberately excluded
-from `_CONVERGENCE_STATISTICS` — stopping a run because a
-supplemental measurement settled is not a claim this project makes.
-`fim.engine._report_statistic`'s own docstring documents this same
-asymmetry from the per-generation lookup side.
+They joined `_CONVERGENCE_STATISTICS` on a real, reported request,
+reversing this same session's own earlier choice to exclude them as
+display-only "bonus" measurements with no convergence claim
+attached — same real, generation-scale compute cost either way
+(`fim.engine._EXPENSIVE_OPT_IN_STATISTICS`'s own docstring), so
+watching one of them for convergence, not merely opting into its
+display, is a choice this project leaves to the caller.
 
 <a id="model.test_params.test_migrant_sampling_defaults_to_continuous_and_round_trips"></a>
 

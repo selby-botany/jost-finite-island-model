@@ -2762,11 +2762,15 @@ def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
     """`track_expensive_statistics=True` reaches the three literature statistics too.
 
     The `A_CGD`/`Delta`/`MI` counterpart to `test_track_expensive_
-    statistics_computes_e_st_and_k_st_even_when_unwatched`, above — these
-    three are never watchable at all (`test_convergence_statistic_
-    rejects_the_expensive_bonus_measurements`, `test_params.py`), so
-    unlike `E_ST`/`K_ST` this is the *only* way they are ever reached
-    from `_convergence_values`.
+    statistics_computes_e_st_and_k_st_even_when_unwatched`, above --
+    proves the opt-in-but-unwatched path reaches all three, exactly
+    like it already does for `E_ST`/`K_ST`. They are also watchable
+    (`test_convergence_statistic_accepts_the_expensive_bonus_
+    measurements`, `test_params.py`) since a real, reported request
+    reversed this session's own earlier "display-only bonus
+    measurement" choice — this test's own `convergence_statistic`
+    stays unwatched (`D`, below) specifically to isolate the opt-in
+    path from the watched one.
     """
     state = _two_locus_state_with_divergent_per_locus_estimates()
     params = SimulationParams(

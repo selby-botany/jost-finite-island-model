@@ -36,7 +36,27 @@
  * answer yet.
  */
 
-const STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"];
+// `A_CGD`/`Delta`/`MI` (the literature-derived supplemental
+// measurements) joined this list once `track_expensive_statistics`
+// started tracking them per-generation like `E_ST`/`K_ST`
+// (`fim.engine._EXPENSIVE_OPT_IN_STATISTICS`) -- they retired the
+// separate "Supplemental statistics" panel that used to show them
+// final-report-only (`LITERATURE_STATISTIC_LABELS`, removed), since
+// every function below that iterates this list already handles a
+// statistic that is `"undefined"` this run (unwatched, not opted in)
+// exactly like it already does for `E_ST`/`K_ST`.
+const STATISTIC_NAMES = [
+    "D",
+    "G_ST",
+    "E_ST",
+    "K_ST",
+    "H_S",
+    "H_T",
+    "H_ST",
+    "A_CGD",
+    "Delta",
+    "MI",
+];
 
 // The two effective-allele rows (botanist GUI design doc §7.7), shared
 // between the scalar completed view's own `renderEffectiveAlleles` and
@@ -51,17 +71,15 @@ const EFFECTIVE_ALLELE_LABELS = [
     ["<sup>H</sup>D<sub>T</sub>", "H_T"],
 ];
 
-const LITERATURE_STATISTIC_LABELS = [
-    ["A<sub>CGD</sub>", "A_CGD"],
-    ["δ<sub>G</sub>", "Delta"],
-    ["I", "MI"],
-];
-
 // A fixed, colorblind-safe qualitative palette (Okabe-Ito), one color
 // per named statistic — botanist GUI design doc §11.3's own "disciplined
 // statistic color language" is not otherwise built yet; this is a
 // narrow, self-contained first use of the same idea, scoped to this one
-// legend/curve rather than a page-wide system.
+// legend/curve rather than a page-wide system. `A_CGD` takes the
+// palette's own eighth and last color (`#f0e442`, yellow); `Delta`/`MI`
+// exhaust it, so both borrow two further hues (ColorBrewer's Dark2/
+// Tableau10 sets) chosen only for staying visually distinct from every
+// color already used here, not for membership in any one named palette.
 const STATISTIC_TRAJECTORY_COLORS = {
     D: "#0072b2",
     G_ST: "#d55e00",
@@ -70,6 +88,9 @@ const STATISTIC_TRAJECTORY_COLORS = {
     H_S: "#e69f00",
     H_T: "#56b4e9",
     H_ST: "#000000",
+    A_CGD: "#f0e442",
+    Delta: "#8c564b",
+    MI: "#7570b3",
 };
 
 // See `wireCompletedScrubber`'s own comment: counts its own in-flight
@@ -156,12 +177,12 @@ const resultsDifferentiationOrdersInput = document.getElementById(
 );
 const resultsReanalyzeButton = document.getElementById("results-reanalyze-button");
 const gStCautionNote = document.getElementById("g-st-caution-note");
-const literatureVisualsPanel = document.getElementById("literature-visuals-panel");
-const literatureStatsBody = document.getElementById("literature-stats-body");
-const structureBarsTitle = document.getElementById("structure-bars-title");
-const structureBarsCanvas = document.getElementById("structure-bars-canvas");
-const structureBarsLegend = document.getElementById("structure-bars-legend");
-const structureBarsNote = document.getElementById("structure-bars-note");
+const alleleCompositionCard = document.getElementById("allele-composition-card");
+const alleleCompositionTitle = document.getElementById("allele-composition-title");
+const alleleCompositionCanvas = document.getElementById("allele-composition-canvas");
+const alleleCompositionLegend = document.getElementById("allele-composition-legend");
+const alleleCompositionNote = document.getElementById("allele-composition-note");
+const frequencySpectrumCard = document.getElementById("frequency-spectrum-card");
 const frequencySpectrumTitle = document.getElementById("frequency-spectrum-title");
 const frequencySpectrumCanvas = document.getElementById("frequency-spectrum-canvas");
 const frequencySpectrumNote = document.getElementById("frequency-spectrum-note");
@@ -1174,7 +1195,15 @@ function renderDifferentiationQ(report) {
     drawDifferentiationQCurve(canvas, points);
 }
 
-function drawStructureBars(canvas, payload) {
+/**
+ * Draw the per-deme stacked allele-composition barplot
+ * (`fim.gui.literature_visuals.allele_composition_payload`'s own
+ * docstring has the full "why a dense 1-based legend, not the raw
+ * internal allele id" account -- `payload.alleles`/`payload.demes`
+ * already carry that remapped, display-ready shape, so this function
+ * only draws what it is given.
+ */
+function drawAlleleComposition(canvas, payload) {
     const context = canvas.getContext("2d");
     canvas.width = canvas.clientWidth || canvas.width;
     canvas.height = canvas.clientHeight || canvas.height;
@@ -1342,38 +1371,56 @@ function drawIbdCurve(canvas, payload) {
     context.fillText("migration-graph distance", (plotLeft + plotRight) / 2, height - 12);
 }
 
-function renderLiteratureVisuals(statistics, visuals, isBatch) {
-    literatureVisualsPanel.hidden = isBatch || !visuals;
-    literatureStatsBody.replaceChildren();
-    if (literatureVisualsPanel.hidden) {
+/**
+ * Render the three remaining literature-derived supplemental graphs
+ * (`index.html`'s own `#allele-composition-card`/`#frequency-spectrum-
+ * card`/`#ibd-card` comment has the full "why here, why these three,
+ * why not a separate row" account of what retired alongside them --
+ * "Supplemental statistics," folded into the ordinary stats table).
+ * The stacked allele-composition barplot was, for one interval this
+ * session, dropped outright over a misreading of "the STRUCTURE-style
+ * [...] should be removed" as "remove the chart" rather than "remove
+ * that name for it" -- it is restored here under its own descriptive
+ * title (`fim.gui.literature_visuals.allele_composition_payload`'s own
+ * docstring). Scalar-only, the same restriction the old standalone
+ * panel already had (a batch's own `completed` view is a pooled
+ * final-state scatter across replicates with no one state's own
+ * deme-frequency table to draw any of the three from) -- `visuals`
+ * itself is `undefined`/`null` for exactly that case, `_batch_done_
+ * payload`'s own docstring, so a single "nothing to show" check covers
+ * both `isBatch` and "no visuals sent at all" (a reopened run
+ * predating this payload key) uniformly. Each card is hidden
+ * independently, not through one shared wrapper (all three sit
+ * directly in `.run-visual-panels`'s own flex-wrap row, alongside the
+ * scatter/trajectory frames), matching `ibdCard`'s own already-
+ * independent "no distance classes to plot" hide below.
+ *
+ * @param {{alleleComposition: object, frequencySpectrum: object, isolationByDistance: object|null}|undefined} visuals
+ */
+function renderSupplementalPanels(visuals) {
+    alleleCompositionCard.hidden = !visuals;
+    frequencySpectrumCard.hidden = !visuals;
+    ibdCard.hidden = !visuals || !visuals.isolationByDistance;
+    if (!visuals) {
         return;
     }
-    for (const [label, key] of LITERATURE_STATISTIC_LABELS) {
-        const row = document.createElement("tr");
-        const value = statistics ? statistics[key] : "undefined";
-        const cells = buildStatCells(label, value);
-        cells.tooltip = `${label.replace(/<[^>]*>/g, "")} = ${value}`;
-        applyStatRow(row, cells);
-        literatureStatsBody.appendChild(row);
-    }
-    structureBarsTitle.textContent = visuals.structureBars.title;
-    structureBarsNote.textContent = visuals.structureBars.note;
-    structureBarsLegend.replaceChildren();
-    for (const allele of visuals.structureBars.alleles) {
+    alleleCompositionTitle.textContent = visuals.alleleComposition.title;
+    alleleCompositionNote.textContent = visuals.alleleComposition.note;
+    alleleCompositionLegend.replaceChildren();
+    for (const allele of visuals.alleleComposition.alleles) {
         const item = document.createElement("span");
-        item.className = "literature-legend-item";
+        item.className = "run-supplemental-legend-item";
         const swatch = document.createElement("span");
         swatch.className = "swatch";
         swatch.style.background = allele.color;
         item.appendChild(swatch);
         item.append(allele.label);
-        structureBarsLegend.appendChild(item);
+        alleleCompositionLegend.appendChild(item);
     }
-    drawStructureBars(structureBarsCanvas, visuals.structureBars);
+    drawAlleleComposition(alleleCompositionCanvas, visuals.alleleComposition);
     frequencySpectrumTitle.textContent = visuals.frequencySpectrum.title;
     frequencySpectrumNote.textContent = visuals.frequencySpectrum.note;
     drawFrequencySpectrum(frequencySpectrumCanvas, visuals.frequencySpectrum);
-    ibdCard.hidden = !visuals.isolationByDistance;
     if (visuals.isolationByDistance) {
         ibdTitle.textContent = visuals.isolationByDistance.title;
         ibdNote.textContent = visuals.isolationByDistance.note;
@@ -1902,11 +1949,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         wireCompletedScrubber(payload.outputDirectory, payload.generationCount);
     }
 
-    renderLiteratureVisuals(
-        payload.literatureStatistics,
-        payload.literatureVisuals,
-        isBatch
-    );
+    renderSupplementalPanels(payload.literatureVisuals);
     const panels = payload.panels;
     drawCompletedOverview(panels);
     runDemePairSelector.hidden = !panels || payload.demeCount < 2;

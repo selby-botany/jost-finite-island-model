@@ -321,6 +321,70 @@
                    hard generation cap without converging. -->
               <ul id="run-trajectory-sigma-band-caption" class="hint" hidden></ul>
             </div>
+
+            <!-- Scalar `completed`-only: the three remaining literature-
+                 derived supplemental graphs (`fim.gui.literature_visuals`)
+                 -- direct flex siblings of the scatter/trajectory frames
+                 above, in this same `.run-visual-panels` row-wrapping
+                 container, not a separate section/row of their own
+                 (an earlier version of this change put them in one below
+                 `.run-visual-panels` and above the scrubber; a real,
+                 reported regression -- the whole `.run-visual-column`
+                 grew tall enough that everything from partway through
+                 the stats table down sat below the default 900x700
+                 window's own fold, and the graphs were easy to miss as
+                 a result, exactly what `#run-plot-row`'s own narrow-
+                 width shrink rules, below, exist to prevent for the
+                 scatter/trajectory pair already). Folding them into this
+                 one shared flex-wrap row instead keeps every graph
+                 (scatter, trajectory, allele composition, frequency
+                 spectrum, isolation-by-distance -- five total) and the
+                 stats table beside them one coherent block again, the
+                 same "stats on the right of the graphs" arrangement
+                 `.run-plot-row`'s own comment already establishes, not
+                 two arrangements stacked on top of each other. Listed in
+                 this DOM order (the allele-composition card first, i.e.
+                 leftmost once the row wraps to a second line at the
+                 app's own default window width) on a real, reported
+                 request to keep that graph's own position where a
+                 pre-this-session layout already had it. Replaces the old
+                 standalone "Literature visualizations" panel/section
+                 (below `#run-completed`, now retired) once that panel's
+                 fourth card went away too: "Supplemental statistics"
+                 (its three statistics, `A_CGD`/`Delta`/`MI`, joined the
+                 ordinary stats table beside the plots instead, tracked
+                 the same "expensive, opt-in" way as `E_ST`/`K_ST` --
+                 `results-stats`, above). The allele-composition card
+                 itself was, for one interval this session, dropped
+                 outright over a misreading of "the STRUCTURE-style
+                 [...] should be removed" as "remove the chart" rather
+                 than "remove that name for it" -- restored here under
+                 its own descriptive title, `fim.gui.literature_visuals.
+                 allele_composition_payload`'s own docstring has the
+                 full account, including why its legend now remaps
+                 shown alleles to a dense 1-based display order instead
+                 of the raw, sparse internal allele id. Each card is
+                 hidden independently (not one shared wrapper), matching
+                 `run-trajectory-frame`'s own scalar-only, hidden-by-
+                 default pattern above -- `renderSupplementalPanels`
+                 (`run-view-completed.js`) shows and populates all
+                 three. -->
+            <div class="run-supplemental-panel" id="allele-composition-card" hidden>
+              <h4 id="allele-composition-title">Allele composition by deme</h4>
+              <canvas id="allele-composition-canvas"></canvas>
+              <div id="allele-composition-legend" class="run-supplemental-legend"></div>
+              <p id="allele-composition-note" class="hint"></p>
+            </div>
+            <div class="run-supplemental-panel" id="frequency-spectrum-card" hidden>
+              <h4 id="frequency-spectrum-title">Allele-frequency spectrum</h4>
+              <canvas id="frequency-spectrum-canvas"></canvas>
+              <p id="frequency-spectrum-note" class="hint"></p>
+            </div>
+            <div class="run-supplemental-panel" id="ibd-card" hidden>
+              <h4 id="ibd-title">Isolation-by-distance identity decay</h4>
+              <canvas id="ibd-canvas"></canvas>
+              <p id="ibd-note" class="hint"></p>
+            </div>
           </div>
 
           <!-- `completed`-only this phase (design §3.2.4: no separate
@@ -359,6 +423,14 @@
             <tr data-stat="H_S"></tr>
             <tr data-stat="H_T"></tr>
             <tr data-stat="H_ST"></tr>
+            <!-- Expensive, opt-in "bonus" measurements
+                 (`track_expensive_statistics`) -- same treatment as
+                 `E_ST`/`K_ST` above, including being watchable
+                 (`SimulationParams._CONVERGENCE_STATISTICS`,
+                 `#cs-selector`'s own checkboxes, above). -->
+            <tr data-stat="A_CGD"></tr>
+            <tr data-stat="Delta"></tr>
+            <tr data-stat="MI"></tr>
           </tbody>
         </table>
         <!-- Scalar `completed`-only: same shape as `initial-stats`,
@@ -373,6 +445,9 @@
             <tr id="stat-H_S"></tr>
             <tr id="stat-H_T"></tr>
             <tr id="stat-H_ST"></tr>
+            <tr id="stat-A_CGD"></tr>
+            <tr id="stat-Delta"></tr>
+            <tr id="stat-MI"></tr>
             <!-- The order-2 Hill number's own closed form, `1 / (1 - H)`
                  (botanist GUI design doc §7.7) -- shown beside H_S/H_T,
                  not instead of them, per Jost's own foundational
@@ -449,33 +524,6 @@
           <canvas id="results-differentiation-q-canvas"></canvas>
           <div id="results-differentiation-q-lines"></div>
         </div>
-        <section id="literature-visuals-panel" class="literature-visuals-panel" hidden>
-          <h3>Literature visualizations</h3>
-          <div class="literature-visuals-grid">
-            <article class="literature-visual-card">
-              <h4>Supplemental statistics</h4>
-              <table class="stats-table supplemental-stats-table">
-                <tbody id="literature-stats-body"></tbody>
-              </table>
-            </article>
-            <article class="literature-visual-card">
-              <h4 id="structure-bars-title">STRUCTURE-style allele composition</h4>
-              <canvas id="structure-bars-canvas"></canvas>
-              <div id="structure-bars-legend" class="literature-legend"></div>
-              <p id="structure-bars-note" class="hint"></p>
-            </article>
-            <article class="literature-visual-card">
-              <h4 id="frequency-spectrum-title">Allele-frequency spectrum</h4>
-              <canvas id="frequency-spectrum-canvas"></canvas>
-              <p id="frequency-spectrum-note" class="hint"></p>
-            </article>
-            <article class="literature-visual-card" id="ibd-card">
-              <h4 id="ibd-title">Isolation-by-distance identity decay</h4>
-              <canvas id="ibd-canvas"></canvas>
-              <p id="ibd-note" class="hint"></p>
-            </article>
-          </div>
-        </section>
       </div>
     </div>
     <!-- Batch `completed`-only: the replicate table, full width below
@@ -493,6 +541,9 @@
           <th>H<sub>S</sub></th>
           <th>H<sub>T</sub></th>
           <th>H<sub>ST</sub></th>
+          <th>A<sub>CGD</sub></th>
+          <th>δ<sub>G</sub></th>
+          <th>I</th>
           <th></th>
         </tr>
       </thead>
@@ -1081,6 +1132,13 @@
           <label><input type="checkbox" name="cs_K_ST" value="true" form="input-form"> K<sub>ST</sub></label>
           <label><input type="checkbox" name="cs_H_S" value="true" form="input-form"> H<sub>S</sub></label>
           <label><input type="checkbox" name="cs_H_T" value="true" form="input-form"> H<sub>T</sub></label>
+          <!-- Expensive, opt-in "bonus" measurements
+               (`track_expensive_statistics`) -- watchable exactly like
+               `E_ST`/`K_ST` above, on a real, reported request
+               (`SimulationParams._CONVERGENCE_STATISTICS`). -->
+          <label><input type="checkbox" name="cs_A_CGD" value="true" form="input-form"> A<sub>CGD</sub></label>
+          <label><input type="checkbox" name="cs_Delta" value="true" form="input-form"> &delta;<sub>G</sub></label>
+          <label><input type="checkbox" name="cs_MI" value="true" form="input-form"> I</label>
         </fieldset>
         <div class="field" id="combinator-field" hidden>
           <label for="field-convergence_combinator">combinator</label>
@@ -1098,7 +1156,7 @@
           <input type="text" id="field-convergence_tolerance" name="convergence_tolerance" form="input-form">
         </div>
         <div class="field">
-          <label for="field-track_expensive_statistics">track E<sub>ST</sub>/K<sub>ST</sub> for display</label>
+          <label for="field-track_expensive_statistics">track E<sub>ST</sub>/K<sub>ST</sub>/A<sub>CGD</sub>/&delta;<sub>G</sub>/I for display</label>
           <input type="checkbox" id="field-track_expensive_statistics" name="track_expensive_statistics" form="input-form">
         </div>
         <div class="field">

@@ -133,6 +133,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.config\_form](#fim.gui.config_form)
   * [FormField](#fim.gui.config_form.FormField)
   * [TabSpec](#fim.gui.config_form.TabSpec)
+  * [CONVERGENCE\_STATISTIC\_NAMES](#fim.gui.config_form.CONVERGENCE_STATISTIC_NAMES)
   * [all\_fields](#fim.gui.config_form.all_fields)
   * [tab\_for\_field](#fim.gui.config_form.tab_for_field)
   * [tab\_for\_error](#fim.gui.config_form.tab_for_error)
@@ -156,7 +157,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.literature\_visuals](#fim.gui.literature_visuals)
   * [LiteratureVisualPayload](#fim.gui.literature_visuals.LiteratureVisualPayload)
   * [literature\_visual\_payload](#fim.gui.literature_visuals.literature_visual_payload)
-  * [structure\_barplot\_payload](#fim.gui.literature_visuals.structure_barplot_payload)
+  * [allele\_composition\_payload](#fim.gui.literature_visuals.allele_composition_payload)
   * [frequency\_spectrum\_payload](#fim.gui.literature_visuals.frequency_spectrum_payload)
   * [isolation\_by\_distance\_payload](#fim.gui.literature_visuals.isolation_by_distance_payload)
 * [fim.gui.preferences](#fim.gui.preferences)
@@ -4875,6 +4876,18 @@ its own composite widget (a mode radio plus one or two sub-fields,
 §4.1) — and so is marshaled by the dedicated `m_*` functions below
 instead of appearing in any `TabSpec.fields` tuple.
 
+<a id="fim.gui.config_form.CONVERGENCE_STATISTIC_NAMES"></a>
+
+#### CONVERGENCE\_STATISTIC\_NAMES
+
+Every checkbox the Structure panel's "convergence statistic(s)" group
+offers. `H_ST` is a real, legal `SimulationParams.convergence_statistic`
+choice (`fim.model.params._CONVERGENCE_STATISTICS`) with no checkbox
+here — a separate, pre-existing gap, found but not fixed alongside
+`A_CGD`/`Delta`/`MI` joining this tuple on a real, reported request
+(they too are legal `_CONVERGENCE_STATISTICS` members with no checkbox
+until now).
+
 <a id="fim.gui.config_form.all_fields"></a>
 
 #### all\_fields
@@ -5479,7 +5492,7 @@ Literature-derived completed-run visualization payloads for fim-gui.
 class LiteratureVisualPayload(TypedDict)
 ```
 
-Client-ready payload for the literature visualization panel.
+Client-ready payload for the run view's own supplemental panels.
 
 <a id="fim.gui.literature_visuals.literature_visual_payload"></a>
 
@@ -5491,7 +5504,7 @@ def literature_visual_payload(
         params: SimulationParams) -> LiteratureVisualPayload
 ```
 
-Return all Phase 4 literature visualization payloads for one state.
+Return the run view's three supplemental visualization payloads for one state.
 
 **Arguments**:
 
@@ -5501,22 +5514,37 @@ Return all Phase 4 literature visualization payloads for one state.
 
 **Returns**:
 
-  A JSON-ready object with STRUCTURE-style bars, an empirical
-  allele-frequency spectrum with a Wright beta overlay when scalar
-  assumptions are available, and an isolation-by-distance summary
-  when migration edges define at least one deme distance class.
+  A JSON-ready object with a per-deme stacked allele-composition
+  barplot, an empirical allele-frequency spectrum (with a Wright
+  beta overlay when scalar assumptions are available), and an
+  isolation-by-distance summary when migration edges define at
+  least one deme distance class. The barplot was, for one
+  interval this session, called "STRUCTURE-style allele
+  composition" and then removed outright over a misreading of
+  the request to drop that name — the actual ask was only that
+  the *label* go, since "STRUCTURE-style" names an external tool
+  this project has nothing to do with and describes nothing
+  about what the chart shows; `allele_composition_payload` is
+  the restored barplot under its own descriptive title instead.
+  Its legend used to show each bar segment's raw internal allele
+  id directly (`f"Allele {allele_id}"`, this project's own
+  minted-and-retired numbering, not a compact, gap-free display
+  order a reader could make sense of at a glance — "where did
+  all the missing ones go?"); `allele_composition_payload` now
+  remaps the shown alleles to a dense 1-based display order
+  instead.
 
-<a id="fim.gui.literature_visuals.structure_barplot_payload"></a>
+<a id="fim.gui.literature_visuals.allele_composition_payload"></a>
 
-#### structure\_barplot\_payload
+#### allele\_composition\_payload
 
 ```python
-def structure_barplot_payload(
+def allele_composition_payload(
         state: ModelState,
-        max_alleles: int = _MAX_STRUCTURE_ALLELES) -> dict[str, Any]
+        max_alleles: int = _MAX_COMPOSITION_ALLELES) -> dict[str, Any]
 ```
 
-Return a STRUCTURE-style stacked barplot payload for one state.
+Return a per-deme stacked allele-composition barplot payload.
 
 **Arguments**:
 
@@ -5528,7 +5556,14 @@ Return a STRUCTURE-style stacked barplot payload for one state.
 
   A JSON-ready mapping with ordered allele legend entries and one
   stacked-frequency segment list per deme. Frequencies are averaged
-  over loci, so every deme bar sums to one.
+  over loci, so every deme bar sums to one. Legend labels are a
+  dense 1-based display order ("Allele 1", "Allele 2", ...), not
+  the underlying minted-and-retired internal allele id: those ids
+  are sparse (mutation retires old ids and mints new ones, so a
+  run's surviving alleles carry ids like 3, 47, 132, ...), and
+  showing them raw in a legend of only the top `max_alleles` left
+  a reader with no way to tell whether a low id was simply not
+  common enough to make the cut or never existed at all.
 
 <a id="fim.gui.literature_visuals.frequency_spectrum_payload"></a>
 
@@ -8668,15 +8703,17 @@ functions that actually use each one.
   roughly a 38% reduction in per-generation convergence-check
   cost at a many-alleles reference configuration; turning this
   on pays that same cost back for all five, deliberately, in
-  exchange for the display value. Unlike `E_ST`/`K_ST`,
-  `A_CGD`/`Delta`/`MI` are never legal `convergence_statistic`
-  choices at all (`_CONVERGENCE_STATISTICS`, below) — genuine
-  "bonus" measurements from the differentiation literature,
-  not a criterion this project treats as a reason to stop a
-  simulation. `False` by default — an unconfigured run costs
-  exactly what it always has. A statistic already named in
-  `convergence_statistic` is computed regardless of this
-  flag, watched or not, exactly as before this field existed.
+  exchange for the display value. `A_CGD`/`Delta`/`MI` are
+  legal `convergence_statistic` choices exactly like `E_ST`/
+  `K_ST` (`_CONVERGENCE_STATISTICS`, below) — genuine "bonus"
+  measurements from the differentiation literature, but a
+  real, reported request confirmed watching one of them for
+  convergence is a choice this project leaves to the caller,
+  not one it forecloses. `False` by default — an unconfigured
+  run costs exactly what it always has. A statistic already
+  named in `convergence_statistic` is computed regardless of
+  this flag, watched or not, exactly as before this field
+  existed.
 - `max_generations` - Hard generation safety cap.
 - `n_replicates` - Number of independently seeded runs — the hard cap
   a replicate batch runs up to. Defaults to

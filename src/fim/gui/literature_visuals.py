@@ -12,10 +12,10 @@ from fim.model.state import ModelState
 from fim.statistics import equilibrium_g_st
 
 _HISTOGRAM_BIN_COUNT: Final = 20
-_MAX_STRUCTURE_ALLELES: Final = 8
 _MAX_BETA_COMPONENTS: Final = 64
+_MAX_COMPOSITION_ALLELES: Final = 8
 _MINIMUM_DECAY_CLASSES: Final = 2
-_STRUCTURE_COLORS: Final = (
+_COMPOSITION_COLORS: Final = (
     "#0072b2",
     "#d55e00",
     "#009e73",
@@ -29,9 +29,9 @@ _STRUCTURE_COLORS: Final = (
 
 
 class LiteratureVisualPayload(TypedDict):
-    """Client-ready payload for the literature visualization panel."""
+    """Client-ready payload for the run view's own supplemental panels."""
 
-    structureBars: dict[str, Any]
+    alleleComposition: dict[str, Any]
     frequencySpectrum: dict[str, Any]
     isolationByDistance: dict[str, Any] | None
 
@@ -39,29 +39,44 @@ class LiteratureVisualPayload(TypedDict):
 def literature_visual_payload(
     state: ModelState, params: SimulationParams
 ) -> LiteratureVisualPayload:
-    """Return all Phase 4 literature visualization payloads for one state.
+    """Return the run view's three supplemental visualization payloads for one state.
 
     Args:
         state: The completed or reanalyzed population state to display.
         params: The state run's validated simulation parameters.
 
     Returns:
-        A JSON-ready object with STRUCTURE-style bars, an empirical
-        allele-frequency spectrum with a Wright beta overlay when scalar
-        assumptions are available, and an isolation-by-distance summary
-        when migration edges define at least one deme distance class.
+        A JSON-ready object with a per-deme stacked allele-composition
+        barplot, an empirical allele-frequency spectrum (with a Wright
+        beta overlay when scalar assumptions are available), and an
+        isolation-by-distance summary when migration edges define at
+        least one deme distance class. The barplot was, for one
+        interval this session, called "STRUCTURE-style allele
+        composition" and then removed outright over a misreading of
+        the request to drop that name — the actual ask was only that
+        the *label* go, since "STRUCTURE-style" names an external tool
+        this project has nothing to do with and describes nothing
+        about what the chart shows; `allele_composition_payload` is
+        the restored barplot under its own descriptive title instead.
+        Its legend used to show each bar segment's raw internal allele
+        id directly (`f"Allele {allele_id}"`, this project's own
+        minted-and-retired numbering, not a compact, gap-free display
+        order a reader could make sense of at a glance — "where did
+        all the missing ones go?"); `allele_composition_payload` now
+        remaps the shown alleles to a dense 1-based display order
+        instead.
     """
     return {
-        "structureBars": structure_barplot_payload(state),
+        "alleleComposition": allele_composition_payload(state),
         "frequencySpectrum": frequency_spectrum_payload(state, params),
         "isolationByDistance": isolation_by_distance_payload(state, params),
     }
 
 
-def structure_barplot_payload(
-    state: ModelState, max_alleles: int = _MAX_STRUCTURE_ALLELES
+def allele_composition_payload(
+    state: ModelState, max_alleles: int = _MAX_COMPOSITION_ALLELES
 ) -> dict[str, Any]:
-    """Return a STRUCTURE-style stacked barplot payload for one state.
+    """Return a per-deme stacked allele-composition barplot payload.
 
     Args:
         state: The population state to summarize.
@@ -70,7 +85,14 @@ def structure_barplot_payload(
     Returns:
         A JSON-ready mapping with ordered allele legend entries and one
         stacked-frequency segment list per deme. Frequencies are averaged
-        over loci, so every deme bar sums to one.
+        over loci, so every deme bar sums to one. Legend labels are a
+        dense 1-based display order ("Allele 1", "Allele 2", ...), not
+        the underlying minted-and-retired internal allele id: those ids
+        are sparse (mutation retires old ids and mints new ones, so a
+        run's surviving alleles carry ids like 3, 47, 132, ...), and
+        showing them raw in a legend of only the top `max_alleles` left
+        a reader with no way to tell whether a low id was simply not
+        common enough to make the cut or never existed at all.
     """
     allele_totals = _aggregate_frequencies_by_allele(state)
     top_alleles = tuple(
@@ -83,16 +105,18 @@ def structure_barplot_payload(
     legend = [
         {
             "key": key,
-            "label": f"Allele {key}",
-            "color": _STRUCTURE_COLORS[index % len(_STRUCTURE_COLORS)],
+            "label": f"Allele {display_index}",
+            "color": _COMPOSITION_COLORS[index % len(_COMPOSITION_COLORS)],
         }
-        for index, key in enumerate(allele_keys)
+        for index, (display_index, key) in enumerate(
+            zip(range(1, len(allele_keys) + 1), allele_keys, strict=True)
+        )
     ]
     legend.append(
         {
             "key": "other",
             "label": "Other alleles",
-            "color": _STRUCTURE_COLORS[-1],
+            "color": _COMPOSITION_COLORS[-1],
         }
     )
 
@@ -111,7 +135,7 @@ def structure_barplot_payload(
         demes.append({"deme": deme_index + 1, "segments": segments})
 
     return {
-        "title": "STRUCTURE-style allele composition",
+        "title": "Allele composition by deme",
         "alleles": legend,
         "demes": demes,
         "note": "Allele frequencies are averaged across loci within each deme.",

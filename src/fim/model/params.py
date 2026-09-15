@@ -306,7 +306,7 @@ _CONFIG_KEYS: Final = frozenset(
 )
 
 _CONVERGENCE_STATISTICS: Final = frozenset(
-    {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"}
+    {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST", "A_CGD", "Delta", "MI"}
 )
 """Every statistic name `convergence_statistic` may watch.
 
@@ -316,6 +316,17 @@ review, 2026-09-04 (`FIM-51`/finding Gemini M-03/finding Grok P3-1):
 alongside every other differentiation measure, but a caller could not
 actually *watch* it for convergence — the one statistic reportable but
 not watchable, an inconsistency with no principled reason behind it.
+
+`A_CGD`/`Delta`/`MI` (the Caballero-García-Dorado allelic distance,
+Gregorius's delta, and Sherwin mutual information) joined this set on a
+real, reported request, reversing this same session's own earlier
+choice to keep them display-only "bonus" measurements with no
+convergence claim attached. They still cost the same real, generation-
+scale compute either way (`fim.engine._EXPENSIVE_OPT_IN_STATISTICS`'s
+own docstring) — watching one for convergence, not merely opting into
+its display, forces that cost on every generation of the run, exactly
+as watching `E_ST`/`K_ST` already does.
+
 `fim.engine._report_statistic` is this set's own convergence-time
 counterpart; keep both in sync.
 """
@@ -432,15 +443,17 @@ class SimulationParams:
             roughly a 38% reduction in per-generation convergence-check
             cost at a many-alleles reference configuration; turning this
             on pays that same cost back for all five, deliberately, in
-            exchange for the display value. Unlike `E_ST`/`K_ST`,
-            `A_CGD`/`Delta`/`MI` are never legal `convergence_statistic`
-            choices at all (`_CONVERGENCE_STATISTICS`, below) — genuine
-            "bonus" measurements from the differentiation literature,
-            not a criterion this project treats as a reason to stop a
-            simulation. `False` by default — an unconfigured run costs
-            exactly what it always has. A statistic already named in
-            `convergence_statistic` is computed regardless of this
-            flag, watched or not, exactly as before this field existed.
+            exchange for the display value. `A_CGD`/`Delta`/`MI` are
+            legal `convergence_statistic` choices exactly like `E_ST`/
+            `K_ST` (`_CONVERGENCE_STATISTICS`, below) — genuine "bonus"
+            measurements from the differentiation literature, but a
+            real, reported request confirmed watching one of them for
+            convergence is a choice this project leaves to the caller,
+            not one it forecloses. `False` by default — an unconfigured
+            run costs exactly what it always has. A statistic already
+            named in `convergence_statistic` is computed regardless of
+            this flag, watched or not, exactly as before this field
+            existed.
         max_generations: Hard generation safety cap.
         n_replicates: Number of independently seeded runs — the hard cap
             a replicate batch runs up to. Defaults to

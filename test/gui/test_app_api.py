@@ -2110,13 +2110,15 @@ def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> 
         "H_S",
         "H_T",
         "H_ST",
+        "A_CGD",
+        "Delta",
+        "MI",
     }
-    assert set(result["literatureStatistics"]) == {"A_CGD", "Delta", "MI"}
     assert {"A_CGD", "Delta", "MI"} <= set(result["report"])
     literature_visuals = result["literatureVisuals"]
     assert isinstance(literature_visuals, dict)
     assert set(literature_visuals) == {
-        "structureBars",
+        "alleleComposition",
         "frequencySpectrum",
         "isolationByDistance",
     }
@@ -2330,6 +2332,9 @@ def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
             "H_S",
             "H_T",
             "H_ST",
+            "A_CGD",
+            "Delta",
+            "MI",
         }
         assert run["configSummary"]["N"] == "20"
         assert run["configSummary"]["m"] == "0.1"
@@ -2341,6 +2346,9 @@ def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
             "H_S",
             "H_T",
             "H_ST",
+            "A_CGD",
+            "Delta",
+            "MI",
         }
         assert len(run["generations"]) > 0
         for name, values in run["histories"].items():
@@ -2595,6 +2603,9 @@ def test_get_batch_replicate_summary_lists_every_replicate(tmp_path: Path) -> No
             "H_S",
             "H_T",
             "H_ST",
+            "A_CGD",
+            "Delta",
+            "MI",
         }
 
 

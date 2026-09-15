@@ -392,13 +392,16 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> No
     assert settled["canvasWidth"] > 0
     rows_by_name = {row["name"]: row for row in settled["statisticRows"]}
     assert sorted(rows_by_name) == [
+        "A_CGD",
         "D",
+        "Delta",
         "E_ST",
         "G_ST",
         "H_S",
         "H_ST",
         "H_T",
         "K_ST",
+        "MI",
     ]
     for row in rows_by_name.values():
         assert row["ariaPressed"] == "true"
@@ -629,13 +632,16 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
     assert settled["runViewState"] == "running"
     assert settled["frameHidden"] is False
     assert sorted(settled["statisticRows"]) == [
+        "A_CGD",
         "D",
+        "Delta",
         "E_ST",
         "G_ST",
         "H_S",
         "H_ST",
         "H_T",
         "K_ST",
+        "MI",
     ]
     assert settled["overlayLegendNames"] == [
         "f₀ (identity recovery, theoretical founder event)"

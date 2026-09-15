@@ -121,12 +121,12 @@ def test_a_completed_run_renders_the_run_view(
             "const stat = document.getElementById('stat-G_ST');"
             "return stat ? stat.title : null;"
             "})(), "
-            "literatureHidden: "
-            "document.getElementById('literature-visuals-panel').hidden, "
-            "literatureRows: "
-            "document.getElementById('literature-stats-body').children.length, "
-            "structureLegend: "
-            "document.getElementById('structure-bars-legend').textContent, "
+            "supplementalHidden: "
+            "document.getElementById('frequency-spectrum-card').hidden, "
+            "statACgdTitle: (() => {"
+            "const stat = document.getElementById('stat-A_CGD');"
+            "return stat ? stat.title : null;"
+            "})(), "
             "scrubberHidden: document.getElementById('scrubber-controls').hidden, "
             "scrubberPlayDisabled: "
             "document.getElementById('scrubber-play-button').disabled, "
@@ -163,7 +163,7 @@ def test_a_completed_run_renders_the_run_view(
             and value.get("statDTitle") is not None
             and value.get("statGSTLabel") is not None
             and value.get("statGSTTrackTitle") is not None
-            and value.get("literatureRows") == 3
+            and value.get("statACgdTitle") is not None
         ),
         poll_attempts=_POLL_ATTEMPTS,
     )
@@ -181,9 +181,14 @@ def test_a_completed_run_renders_the_run_view(
     # The row title for G_ST is "GST = <value>" (strip-tag form used in
     # `buildPointMeter`'s own title construction).
     assert settled["statGSTTrackTitle"].startswith("GST = ")
-    assert settled["literatureHidden"] is False
-    assert "Allele" in settled["structureLegend"]
-    assert settled["literatureRows"] == 3
+    # `A_CGD` -- one of the three expensive, opt-in "bonus" measurements
+    # (`SimulationParams.track_expensive_statistics`) -- now renders as an
+    # ordinary stats-table row exactly like every other statistic, no
+    # longer a separate "Supplemental statistics" table of its own; its
+    # tag-stripped tooltip name is "ACGD" (`formatStatisticLabel`'s own
+    # generic `X_YZ` split of "A_CGD", tags stripped), not "A_CGD".
+    assert settled["statACgdTitle"].startswith("ACGD = ")
+    assert settled["supplementalHidden"] is False
     # `tiny_params`-scale runs always persist more than one generation
     # (`convergence_window`'s own minimum of 2 forces at least one step
     # past generation 0 before stability can first be evaluated), so the
@@ -193,6 +198,11 @@ def test_a_completed_run_renders_the_run_view(
     assert settled["scrubberHidden"] is False
     assert settled["scrubberPlayDisabled"] is False
     assert settled["scrubberParentClass"] == "run-visual-column"
+    # `.run-visual-panels` -- now the shared flex-wrap row holding all
+    # four graphs (scatter, trajectory, and the two supplemental graphs
+    # folded in alongside them, replacing the old standalone "Literature
+    # visualizations" panel/section) -- still sits immediately above the
+    # scrubber, unchanged from before that panel existed at all.
     assert settled["scrubberPreviousClass"] == "run-visual-panels"
     assert settled["trajectoryParentClass"] == "run-visual-panels"
     assert settled["resultsHistoryBackHidden"] is False

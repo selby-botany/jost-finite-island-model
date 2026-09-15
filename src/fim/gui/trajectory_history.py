@@ -45,7 +45,28 @@ from fim.reanalyze import group_rows_by_generation
 # parameter would not, forcing a `cast` at every access instead — this
 # module has exactly one caller and one fixed statistic set, so a
 # parameter buys no real flexibility to trade that precision away for).
-STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST")
+# Keep this tuple's own contents in sync with `_RESULT_STATISTIC_NAMES`
+# (`fim.gui.app`) — the two drifting apart is exactly the bug `A_CGD`/
+# `Delta`/`MI` joining one but not the other caused (confirmed live: a
+# real `Api.compare_runs` call raised `KeyError: 'A_CGD'` reading
+# `history.histories[name]` for a name this tuple did not yet have).
+# `report_for_state` (below) already computes all ten unconditionally
+# for any persisted trajectory, `track_expensive_statistics` or not —
+# unlike a live run's own `convergence_histories`, this module always
+# re-derives every statistic fresh from the persisted rows, unaffected
+# by what the *original* run happened to opt into.
+STATISTIC_NAMES: Final = (
+    "D",
+    "G_ST",
+    "E_ST",
+    "K_ST",
+    "H_S",
+    "H_T",
+    "H_ST",
+    "A_CGD",
+    "Delta",
+    "MI",
+)
 
 
 @dataclass(frozen=True, slots=True)

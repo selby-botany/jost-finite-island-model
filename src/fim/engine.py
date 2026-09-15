@@ -3378,21 +3378,22 @@ _EXPENSIVE_OPT_IN_STATISTICS: Final[frozenset[str]] = frozenset(
 )
 """Statistics `params.track_expensive_statistics` opts into computing.
 
-`E_ST`/`K_ST` are genuinely expensive per-generation (an O(total allele
-entries) pass each) and watchable — `_CONVERGENCE_STATISTICS`
-(`fim.model.params`) includes them, so a run can also stop *on* one of
-them, not merely display it. `A_CGD`/`Delta`/`MI` are also genuinely
-expensive at generation scale (`A_CGD`: O(deme pairs); `Delta`: O(deme
-pairs*alleles); `MI`: pools every deme's own frequencies, an extra
-full pass `D`/`G_ST` never pay) but never watchable at all —
-`_CONVERGENCE_STATISTICS` deliberately excludes them, since stopping a
-run because a supplemental literature statistic settled is not a
-scientific claim this project makes; they are display-only "bonus"
-measurements once opted into, exactly like `E_ST`/`K_ST` already are
-when neither is the chosen `convergence_statistic`. `D`/`G_ST`/`H_S`/
-`H_T`/`H_ST` are never in this set — always computed regardless
-(`_ALWAYS_TRACKED_STATISTICS`'s own docstring), since none of them costs
-anything extra.
+All five are genuinely expensive per-generation and watchable —
+`_CONVERGENCE_STATISTICS` (`fim.model.params`) includes every one of
+them, so a run can also stop *on* one, not merely display it. `E_ST`/
+`K_ST` are each an O(total allele entries) pass. `A_CGD`/`Delta`/`MI`
+(Caballero-García-Dorado allelic distance, Gregorius's delta, Sherwin
+mutual information) are similarly real, generation-scale costs
+(`A_CGD`: O(deme pairs); `Delta`: O(deme pairs*alleles); `MI`: pools
+every deme's own frequencies, an extra full pass `D`/`G_ST` never
+pay) — genuine "bonus" measurements from the differentiation
+literature, opt-in the same way `E_ST`/`K_ST` already are, and
+watchable the same way too on a real, reported request (an earlier
+version of this set's own docstring said they were never legal
+`convergence_statistic` choices; that restriction did not survive
+contact with an actual user). `D`/`G_ST`/`H_S`/`H_T`/`H_ST` are never
+in this set — always computed regardless (`_ALWAYS_TRACKED_
+STATISTICS`'s own docstring), since none of them costs anything extra.
 """
 
 
@@ -4175,15 +4176,13 @@ def _report_statistic(
     missing from this lookup until this project's own multi-model engine
     review, 2026-09-04 (`FIM-51`) — `fim.model.params.
     _CONVERGENCE_STATISTICS` is this function's own config-time
-    counterpart for the seven watchable names; `A_CGD`/`Delta`/`MI`
-    (below) are never watchable at all — `_CONVERGENCE_STATISTICS`
-    deliberately excludes them, the same "expensive, opt-in, display-
-    only bonus measurement, never a convergence criterion" treatment
-    `track_expensive_statistics` already gives `E_ST`/`K_ST` when
-    neither is actually watched. They reach this function only as
-    `_extra_tracked_statistics`'s own opt-in extras, so this function's
-    own field set is a strict superset of `_CONVERGENCE_STATISTICS`,
-    not a 1:1 mirror of it.
+    counterpart, and this field set is kept a 1:1 mirror of it: all ten
+    named statistics are watchable, so every name reaching this function
+    as a watched `convergence_statistic` is also one of this dict's own
+    keys. `A_CGD`/`Delta`/`MI` reach this function either way, watched
+    or only opted into for display via `track_expensive_statistics`
+    (`_extra_tracked_statistics`'s own opt-in extras) — the same path
+    `E_ST`/`K_ST` already take when neither is actually watched.
     """
     fields: Mapping[str, float | None] = {
         "D": report["D"],

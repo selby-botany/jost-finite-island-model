@@ -30,19 +30,38 @@ function formatToTwoDigits(formattedValue) {
     return Number.isFinite(parsed) ? parsed.toFixed(2) : String(formattedValue);
 }
 
+// Two of the literature-derived supplemental statistics
+// (`fim.engine._EXPENSIVE_OPT_IN_STATISTICS`) do not follow the plain
+// `X_YZ` subscript shape `formatStatisticLabel` otherwise handles
+// generically -- their own report field names ("Delta", "MI") are not
+// what the differentiation literature actually calls them (Gregorius's
+// own δ, conventionally subscripted "G" for "Gregorius" to distinguish
+// it from any other δ; Sherwin's own mutual information, conventionally
+// "I"). `A_CGD` needs no entry here -- `A<sub>CGD</sub>`, the generic
+// split, already matches its own literature notation exactly.
+const STATISTIC_LABEL_OVERRIDES = {
+    Delta: "δ<sub>G</sub>",
+    MI: "I",
+};
+
 /**
  * Render a statistic name's own `_`-suffix as a real subscript -- `"G_ST"`
  * becomes `G<sub>ST</sub>` (TeX's own `_` subscript convention, not a
  * literal underscore character on screen), `"D"` (no `_`) is returned
- * unchanged. Every statistic name reaching this function comes from a
- * fixed, hardcoded set (`results.js`'s/`batch-results.js`'s own
- * `STATISTIC_NAMES`), never user input, so returning HTML for a caller
- * to assign via `innerHTML` is safe here.
+ * unchanged. `STATISTIC_LABEL_OVERRIDES` (above) takes precedence for the
+ * two names that generic splitting gets wrong. Every statistic name
+ * reaching this function comes from a fixed, hardcoded set
+ * (`results.js`'s/`batch-results.js`'s own `STATISTIC_NAMES`), never
+ * user input, so returning HTML for a caller to assign via `innerHTML`
+ * is safe here.
  *
  * @param {string} name
  * @returns {string}
  */
 function formatStatisticLabel(name) {
+    if (name in STATISTIC_LABEL_OVERRIDES) {
+        return STATISTIC_LABEL_OVERRIDES[name];
+    }
     const underscoreIndex = name.indexOf("_");
     if (underscoreIndex === -1) {
         return name;

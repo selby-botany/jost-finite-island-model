@@ -983,7 +983,8 @@ fieldset.composite > label {
  * (confirmed live in a local `ubuntu:24.04` container matching CI's own
  * dependencies), not merely to pass once more. */
 @media (max-width: 1300px) {
-    #run-plot-row.run-plot-row-has-trajectory .run-trajectory-frame {
+    #run-plot-row.run-plot-row-has-trajectory .run-trajectory-frame,
+    #run-plot-row.run-plot-row-has-trajectory .run-supplemental-panel {
         width: min(100%, 250px);
     }
 }
@@ -1021,9 +1022,8 @@ fieldset.composite > label {
  * the stats table itself, not here -- `.stat-plot-toggle-row`/
  * `.stat-plot-hidden` (below), driven by `run-view-completed.js`'s own
  * `toggleTrajectoryStatistic`. What actually lives in this legend is
- * the identity-recovery closed-form curve's own entry (built once,
- * separately, after that per-statistic loop) and the literature panel's
- * own swatches (`.literature-legend-item`) -- `.legend-item` styles
+ * the identity-recovery closed-form curve's own entry, built once,
+ * separately, after that per-statistic loop -- `.legend-item` styles
  * that entry's hover/focus affordance. */
 .run-trajectory-legend .legend-item {
     cursor: pointer;
@@ -1158,36 +1158,36 @@ fieldset.composite > label {
     margin-bottom: 0.5rem;
 }
 
-.literature-visuals-panel {
-    width: min(100%, 1100px);
-    margin-top: 1rem;
-}
-
-.literature-visuals-panel h3 {
-    margin: 0 0 0.75rem;
-    color: var(--fim-accent);
-    font-size: 1rem;
-}
-
-.literature-visuals-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1rem;
-}
-
-.literature-visual-card {
+/* The three remaining literature-derived supplemental graphs
+ * (`fim.gui.literature_visuals`'s own `allele_composition_payload`/
+ * `frequency_spectrum_payload`/`isolation_by_distance_payload`) --
+ * direct flex items in `.run-visual-panels` alongside `.run-canvas-
+ * frame`/`.run-trajectory-frame` (`index.html`'s own comment there has
+ * the full "why here, why these three, why not a separate row"
+ * account). Sized like `.run-trajectory-frame` (same `min(100%,
+ * 480px)`/`flex: 0 0 auto` shape, shrunk the same way at narrow widths
+ * below) rather than the much wider `minmax(240px, 1fr)` grid cell an
+ * earlier version of this used: that wider version, in its own
+ * separate full-width row, was a real, reported regression (index.
+ * html's comment has the full account) -- matching the trajectory
+ * frame's own modest width instead keeps all five graphs' combined
+ * footprint in the same rough range `#run-plot-row`'s own narrow-width
+ * shrink rules, below, already budget for. */
+.run-supplemental-panel {
     border: 1px solid var(--fim-border);
     border-radius: 8px;
     padding: 0.8rem;
     background: var(--fim-background);
+    width: min(100%, 480px);
+    flex: 0 0 auto;
 }
 
-.literature-visual-card h4 {
+.run-supplemental-panel h4 {
     margin: 0 0 0.5rem;
     font-size: 0.9rem;
 }
 
-.literature-visual-card canvas {
+.run-supplemental-panel canvas {
     display: block;
     width: 100%;
     aspect-ratio: 4 / 3;
@@ -1196,26 +1196,27 @@ fieldset.composite > label {
     background: var(--fim-background);
 }
 
-.supplemental-stats-table {
-    margin-top: 0;
-}
-
-.literature-legend {
+/* The allele-composition barplot's own legend -- same swatch-plus-
+ * label shape as `.run-trajectory-legend` (above), scoped separately
+ * since this legend lives in a `.run-supplemental-panel`, not a
+ * trajectory frame. */
+.run-supplemental-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem 0.7rem;
-    margin-top: 0.5rem;
-    font-size: 0.8rem;
+    gap: 0.5rem 0.75rem;
+    font-size: 0.75rem;
     color: var(--fim-muted);
+    margin-top: 0.4rem;
 }
 
-.literature-legend-item {
+.run-supplemental-legend-item {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.3rem;
 }
 
-.literature-legend .swatch {
+.run-supplemental-legend-item .swatch {
+    display: inline-block;
     width: 0.7rem;
     height: 0.7rem;
     border-radius: 2px;

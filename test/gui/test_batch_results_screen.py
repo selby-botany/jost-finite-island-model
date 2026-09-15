@@ -211,15 +211,16 @@ def test_batch_trajectory_domain_keeps_a_uniformly_small_samples_own_band(
 
 
 def test_a_completed_batch_renders_the_run_view() -> None:
-    """A finished two-replicate batch shows a run id, two table rows, eight stat rows.
+    """A finished two-replicate batch shows a run id, two table rows, twelve stat rows.
 
-    Every one of the six named statistics, plus the two effective-allele
-    rows derived from `H_S`/`H_T` (botanist GUI design doc §7.7,
-    `Api._effective_allele_interval_summary`), gets a `.stats-table` row
-    with a confidence interval in its hover tooltip (`buildCiMeter`/
-    `buildOmittedMeter`: a statistic omitted from
+    Every one of the ten named statistics (the original seven plus the
+    expensive, opt-in "bonus" measurements A_CGD/Delta/MI), plus the two
+    effective-allele rows derived from `H_S`/`H_T` (botanist GUI design
+    doc §7.7, `Api._effective_allele_interval_summary`), gets a
+    `.stats-table` row with a confidence interval in its hover tooltip
+    (`buildCiMeter`/`buildOmittedMeter`: a statistic omitted from
     `summary.json` still renders as explicitly omitted, not blank), so
-    `#batch-results-summary-body` always has exactly eight `<tr>`
+    `#batch-results-summary-body` always has exactly twelve `<tr>`
     children regardless of which, if any, statistics `replicate_summary`
     actually defined for this particular run.
     """
@@ -281,7 +282,7 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     assert settled["runId"].startswith("run-")
     # Row 0 is the p_0 baseline; rows 1 and 2 are the two replicates.
     assert settled["rowCount"] == 3
-    assert settled["ciBarCount"] == 9
+    assert settled["ciBarCount"] == 12
     # p_0 row: generation=0, outcome="initial".
     first_row = settled["firstRowCells"]
     assert first_row[0] == "0"
@@ -363,7 +364,7 @@ def test_a_completed_batchs_own_effective_allele_rows_render() -> None:
     assert settled is not None, (
         f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s"
     )
-    assert settled["rowCount"] == 9
+    assert settled["rowCount"] == 12
     assert "<sup>H</sup>D<sub>S</sub>" in settled["withinHtml"]
     assert "<sup>H</sup>D<sub>T</sub>" in settled["totalHtml"]
     # The same cross-replicate-uncertainty caption every other batch
@@ -491,13 +492,16 @@ def test_a_completed_batchs_own_pooled_trajectory_renders() -> None:
     assert settled["runViewState"] == "completed"
     assert settled["frameHidden"] is False
     assert sorted(settled["statisticRows"]) == [
+        "A_CGD",
         "D",
+        "Delta",
         "E_ST",
         "G_ST",
         "H_S",
         "H_ST",
         "H_T",
         "K_ST",
+        "MI",
     ]
     assert settled["canvasNonBlank"] > 0
 

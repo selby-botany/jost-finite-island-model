@@ -250,7 +250,17 @@ CONVERGENCE_STATISTIC_NAMES: Final[tuple[str, ...]] = (
     "K_ST",
     "H_S",
     "H_T",
+    "A_CGD",
+    "Delta",
+    "MI",
 )
+"""Every checkbox the Structure panel's "convergence statistic(s)" group
+offers. `H_ST` is a real, legal `SimulationParams.convergence_statistic`
+choice (`fim.model.params._CONVERGENCE_STATISTICS`) with no checkbox
+here — a separate, pre-existing gap, found but not fixed alongside
+`A_CGD`/`Delta`/`MI` joining this tuple on a real, reported request
+(they too are legal `_CONVERGENCE_STATISTICS` members with no checkbox
+until now)."""
 
 TABS: Final[tuple[TabSpec, ...]] = (
     TabSpec("population", "Population", POPULATION_FIELDS),

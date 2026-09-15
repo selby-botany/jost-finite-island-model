@@ -287,11 +287,12 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
 
     assert settled is not None, "never saw a progress push with statistics in time"
     assert settled["frameHidden"] is False
-    # All seven report statistics, matching the scalar live trajectory's
-    # own default (design §6.2: "all report statistics... each
-    # watched or not"), not only whichever is being watched for
-    # convergence.
-    assert settled["statisticRowCount"] == 7
+    # All ten report statistics (the original seven plus the expensive,
+    # opt-in "bonus" measurements A_CGD/Delta/MI, which joined the live
+    # table unconditionally), matching the scalar live trajectory's own
+    # default (design §6.2: "all report statistics... each watched or
+    # not"), not only whichever is being watched for convergence.
+    assert settled["statisticRowCount"] == 10
 
 
 def test_a_live_batch_trajectory_row_toggle_works_mid_run() -> None:

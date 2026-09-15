@@ -95,8 +95,12 @@ const FIELD_HELP = {
     convergence_tolerance: "The run is considered converged once the " +
         "trailing window's two half-means differ by at most this much.",
     track_expensive_statistics: "D/G_ST/H_S/H_T always display live for " +
-        "free. This also tracks E_ST/K_ST for display, at roughly a 38% " +
-        "higher per-generation convergence-check cost.",
+        "free. This also tracks E_ST/K_ST plus three literature-derived " +
+        "\"bonus\" measurements (A_CGD, Gregorius delta, Sherwin mutual " +
+        "information) for display, at a real, generation-scale extra " +
+        "cost -- checking one of the five above as a convergence " +
+        "statistic also tracks it for display, at the same cost, " +
+        "regardless of this checkbox.",
     max_generations: "Hard cap on generations. Reaching it without " +
         "converging is still reported as a valid, non-converged outcome.",
     sigma_band_group: "Once converged, continue for a further window and " +
