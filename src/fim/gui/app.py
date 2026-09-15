@@ -1705,12 +1705,14 @@ class Api:
             )
 
         points = []
+        swept_values: list[float | int] = []
         for raw_value in swept:
             value = value_at(raw_value)
             sweep_n = int(value) if axis == "N" else n_value
             sweep_d = int(value) if axis == "d" else d_value
             sweep_m = float(value) if axis == "m" else m_value
             sweep_mu = float(value) if axis == "mu" else mu_value
+            swept_values.append(value)
             points.append(
                 {
                     "x": value,
@@ -1729,9 +1731,14 @@ class Api:
         # "snap to the nearest sampled position" rule `run-view-
         # completed.js`'s own `nearestGeneration` uses for the
         # trajectory scrubber.
+        #
+        # Read from `swept_values` rather than back out of `points`: a
+        # point also carries the predictions, several of which are
+        # legitimately `None` or `bool`, so the merged mapping's value
+        # type no longer says that `"x"` in particular is a number.
         current_index = min(
-            range(len(points)),
-            key=lambda index: abs(float(points[index]["x"]) - float(current)),
+            range(len(swept_values)),
+            key=lambda index: abs(swept_values[index] - current),
         )
 
         return {
