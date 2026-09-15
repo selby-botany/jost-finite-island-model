@@ -61,10 +61,15 @@ from fim.statistics import (
     effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
+    equilibrium_heterozygosity_isolated,
+    equilibrium_heterozygosity_total,
     equilibrium_shannon_differentiation,
+    equilibrium_shannon_entropy_subpopulation,
+    equilibrium_shannon_entropy_total,
     identity_recovery_equilibrium,
     identity_recovery_half_life,
     identity_recovery_rate,
+    mutation_negligible_equilibrium,
 )
 from fim.viz.scatter import frequency_points, pooled_scatter_panels
 
@@ -558,6 +563,28 @@ def test_get_equilibrium_predictions_matches_the_statistics_functions_directly()
     assert result["predictions"]["identity_recovery_half_life"] == format_statistic(
         identity_recovery_half_life(450, 0.001), 3
     )
+    assert result["predictions"]["H_S"] == format_statistic(
+        equilibrium_heterozygosity_isolated(450, 0.00003), 3
+    )
+    assert result["predictions"]["H_T"] == format_statistic(
+        equilibrium_heterozygosity_total(450, 0.001, 0.00003, 20), 3
+    )
+    assert result["predictions"]["S_S"] == format_statistic(
+        equilibrium_shannon_entropy_subpopulation(450, 0.001, 0.00003, 20), 3
+    )
+    assert result["predictions"]["S_T"] == format_statistic(
+        equilibrium_shannon_entropy_total(450, 0.001, 0.00003, 20), 3
+    )
+    assert result["predictions"]["identity_recovery_rate"] == format_statistic(
+        identity_recovery_rate(450, 0.001), 3
+    )
+    assert result["predictions"]["identity_recovery_equilibrium"] == format_statistic(
+        identity_recovery_equilibrium(450, 0.001), 3
+    )
+    assert result["predictions"]["mutation_negligible_equilibrium"] is (
+        mutation_negligible_equilibrium(0.001, 0.00003, 450)
+    )
+    assert result["qualifications"]["S_S"].startswith("Approximate")
 
 
 def test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_zero() -> None:
@@ -567,6 +594,12 @@ def test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_zero() -> None
     assert result["ok"] is True
     assert result["predictions"]["D"] == "undefined"
     assert result["predictions"]["G_ST"] != "undefined"
+    assert result["predictions"]["H_S"] == "undefined"
+    assert result["predictions"]["H_T"] == "undefined"
+    assert result["predictions"]["S_S"] == "undefined"
+    assert result["predictions"]["S_T"] == "undefined"
+    assert result["predictions"]["A_S"] == "undefined"
+    assert result["predictions"]["A_T"] == "undefined"
     assert result["predictions"]["identity_recovery_half_life"] != "undefined"
 
 

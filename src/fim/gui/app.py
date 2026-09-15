@@ -45,7 +45,7 @@ import time
 import webbrowser
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
-from math import isfinite
+from math import exp, isfinite
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from typing import Any, Final, Protocol, TextIO, cast
@@ -96,10 +96,15 @@ from fim.statistics import (
     effective_allele_count,
     equilibrium_d,
     equilibrium_g_st,
+    equilibrium_heterozygosity_isolated,
+    equilibrium_heterozygosity_total,
     equilibrium_shannon_differentiation,
+    equilibrium_shannon_entropy_subpopulation,
+    equilibrium_shannon_entropy_total,
     identity_recovery_equilibrium,
     identity_recovery_half_life,
     identity_recovery_rate,
+    mutation_negligible_equilibrium,
 )
 from fim.viz.scatter import (
     deme_pair_panel,
@@ -590,6 +595,58 @@ def _equilibrium_reference(
         "G_ST": predict(equilibrium_g_st, n, m, mu, d),
         "E_ST": predict(equilibrium_shannon_differentiation, n, m, mu, d),
     }
+
+
+def _equilibrium_prediction_payload(
+    n: int, m: float, mu: float, d: int, digits: int
+) -> tuple[dict[str, str | bool], dict[str, str]]:
+    """Build Explore's complete analytical prediction payload.
+
+    Args:
+        n: Population size in gene copies per deme.
+        m: Symmetric migration rate.
+        mu: Infinite-alleles mutation rate.
+        d: Number of equal demes.
+        digits: GUI display precision.
+
+    Returns:
+        Formatted predictions and qualification messages. Formula-specific
+        ``ValueError`` results become the existing ``"undefined"`` value.
+    """
+
+    def predict(function: Callable[..., float], *args: float | int) -> str:
+        try:
+            return format_statistic(function(*args), digits)
+        except ValueError:
+            return format_statistic(None, digits)
+
+    s_s = predict(equilibrium_shannon_entropy_subpopulation, n, m, mu, d)
+    s_t = predict(equilibrium_shannon_entropy_total, n, m, mu, d)
+    predictions: dict[str, str | bool] = {
+        **_equilibrium_reference(n, m, mu, d, digits),
+        "H_S": predict(equilibrium_heterozygosity_isolated, n, mu),
+        "H_T": predict(equilibrium_heterozygosity_total, n, m, mu, d),
+        "S_S": s_s,
+        "S_T": s_t,
+        "A_S": format_statistic(exp(float(s_s)), digits)
+        if s_s != "undefined"
+        else "undefined",
+        "A_T": format_statistic(exp(float(s_t)), digits)
+        if s_t != "undefined"
+        else "undefined",
+        "identity_recovery_half_life": predict(identity_recovery_half_life, n, m),
+        "identity_recovery_rate": predict(identity_recovery_rate, n, m),
+        "identity_recovery_equilibrium": predict(identity_recovery_equilibrium, n, m),
+        "mutation_negligible_equilibrium": mutation_negligible_equilibrium(m, mu, n),
+    }
+    qualifications = {
+        "S_S": (
+            "Approximate; less reliable when d = 2"
+            if d == _MINIMUM_EQUILIBRIUM_DEMES
+            else "Approximate equilibrium subpopulation entropy"
+        )
+    }
+    return predictions, qualifications
 
 
 def _equilibrium_reference_payload(
@@ -1504,12 +1561,11 @@ class Api:
             d: Deme count, as typed.
 
         Returns:
-            `{"ok": True, "predictions": {"D": ..., "G_ST": ...,
-            "E_ST": ..., "identity_recovery_half_life": ...}}`, each
-            value a string already formatted by `format_statistic`
-            (including its own `"undefined"` convention where a
-            prediction has no defined value for these inputs — `D` when
-            `mu` is exactly `0`, for instance); `{"ok": False,
+            `{"ok": True, "predictions": {...}, "qualifications": {...}}`;
+            numeric values are strings already formatted by
+            `format_statistic`, while the regime diagnostic is a boolean.
+            Formula-specific undefined values use `"undefined"`;
+            `{"ok": False,
             "message": ...}` if `n`/`d`/`m`/`mu` do not even parse as
             numbers, or if a value parses but is out of range (that
             `ValueError`'s own message, verbatim, from whichever
@@ -1522,27 +1578,14 @@ class Api:
 
         digits = self._significant_digits
 
-        def predict(function: Callable[..., float], *args: float | int) -> str:
-            try:
-                return format_statistic(function(*args), digits)
-            except ValueError:
-                return format_statistic(None, digits)
-
-        # `_parse_equilibrium_inputs` already rejected every out-of-range
-        # input above; the only `ValueError` `_equilibrium_reference`'s own
-        # `predict` calls (for "D"/"G_ST"/"E_ST") or the `predict` call just
-        # below (for "identity_recovery_half_life") can still raise is
-        # `equilibrium_d`'s own `mu == 0` case (a legitimately in-range
-        # input that leaves *that one* prediction undefined), which each
-        # function's own inner try/except already turns into `"undefined"`
-        # rather than failing the whole call.
-        predictions = {
-            **_equilibrium_reference(n_value, m_value, mu_value, d_value, digits),
-            "identity_recovery_half_life": predict(
-                identity_recovery_half_life, n_value, m_value
-            ),
+        predictions, qualifications = _equilibrium_prediction_payload(
+            n_value, m_value, mu_value, d_value, digits
+        )
+        return {
+            "ok": True,
+            "predictions": predictions,
+            "qualifications": qualifications,
         }
-        return {"ok": True, "predictions": predictions}
 
     @_log_bridge_call
     def get_equilibrium_sweep(

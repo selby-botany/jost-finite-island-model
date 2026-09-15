@@ -3333,12 +3333,11 @@ of how large `N`/`d` are.
 
 **Returns**:
 
-- ``{"ok"` - True, "predictions": {"D": ..., "G_ST": ...,
-- `"E_ST"` - ..., "identity_recovery_half_life": ...}}`, each
-  value a string already formatted by `format_statistic`
-  (including its own `"undefined"` convention where a
-  prediction has no defined value for these inputs — `D` when
-  `mu` is exactly `0`, for instance); `{"ok": False,
+- ``{"ok"` - True, "predictions": {...}, "qualifications": {...}}`;
+  numeric values are strings already formatted by
+  `format_statistic`, while the regime diagnostic is a boolean.
+  Formula-specific undefined values use `"undefined"`;
+- ``{"ok"` - False,
 - `"message"` - ...}` if `n`/`d`/`m`/`mu` do not even parse as
   numbers, or if a value parses but is out of range (that
   `ValueError`'s own message, verbatim, from whichever
