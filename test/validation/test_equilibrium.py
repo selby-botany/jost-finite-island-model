@@ -7,6 +7,8 @@ import pytest
 from fim.statistics import (
     equilibrium_d,
     equilibrium_g_st,
+    equilibrium_heterozygosity_isolated,
+    equilibrium_heterozygosity_total,
     equilibrium_shannon_differentiation,
     equilibrium_shannon_entropy_isolated,
     equilibrium_shannon_entropy_isolated_smm,
@@ -123,6 +125,28 @@ def test_equilibrium_shannon_entropy_isolated_matches_harmonic_numbers(
     assert equilibrium_shannon_entropy_isolated(population_size, mu) == pytest.approx(
         expected, abs=1e-8
     )
+
+
+def test_equilibrium_heterozygosity_matches_entropy_theta_relationship() -> None:
+    """The isolated and pooled formulas use the same effective theta values."""
+    isolated = equilibrium_heterozygosity_isolated(100, 0.001)
+    pooled = equilibrium_heterozygosity_total(100, 0.01, 0.001, 4)
+    isolated_entropy = equilibrium_shannon_entropy_isolated(100, 0.001)
+    pooled_entropy = equilibrium_shannon_entropy_total(100, 0.01, 0.001, 4)
+
+    assert 0.0 < isolated < 1.0
+    assert 0.0 < pooled < 1.0
+    assert isolated == pytest.approx(1.0 - 1.0 / (1.0 + 2.0 * 100 * 0.001))
+    assert pooled > isolated
+    assert pooled_entropy > isolated_entropy
+
+
+def test_equilibrium_heterozygosity_rejects_zero_mutation() -> None:
+    """Zero mutation has no polymorphic equilibrium for these formulas."""
+    with pytest.raises(ValueError, match="mu greater than 0"):
+        equilibrium_heterozygosity_isolated(100, 0.0)
+    with pytest.raises(ValueError, match="mu greater than 0"):
+        equilibrium_heterozygosity_total(100, 0.01, 0.0, 4)
 
 
 def test_equilibrium_shannon_entropy_is_increasing_in_mutation() -> None:

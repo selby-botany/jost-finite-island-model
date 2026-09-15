@@ -20418,6 +20418,27 @@ a clean closed form independent of any digamma-table lookup, unlike
 test does not reuse, so the two together do not share a single
 point of failure).
 
+<a id="validation.test_equilibrium.test_equilibrium_heterozygosity_matches_entropy_theta_relationship"></a>
+
+#### test\_equilibrium\_heterozygosity\_matches\_entropy\_theta\_relationship
+
+```python
+def test_equilibrium_heterozygosity_matches_entropy_theta_relationship(
+) -> None
+```
+
+The isolated and pooled formulas use the same effective theta values.
+
+<a id="validation.test_equilibrium.test_equilibrium_heterozygosity_rejects_zero_mutation"></a>
+
+#### test\_equilibrium\_heterozygosity\_rejects\_zero\_mutation
+
+```python
+def test_equilibrium_heterozygosity_rejects_zero_mutation() -> None
+```
+
+Zero mutation has no polymorphic equilibrium for these formulas.
+
 <a id="validation.test_equilibrium.test_equilibrium_shannon_entropy_is_increasing_in_mutation"></a>
 
 #### test\_equilibrium\_shannon\_entropy\_is\_increasing\_in\_mutation

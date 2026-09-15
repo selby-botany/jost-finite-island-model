@@ -1770,6 +1770,31 @@ def equilibrium_shannon_entropy_isolated(population_size: int, mu: float) -> flo
     return _digamma(theta + 1.0) + _EULER_GAMMA
 
 
+def equilibrium_heterozygosity_isolated(population_size: int, mu: float) -> float:
+    """Return the isolated-deme equilibrium expected heterozygosity.
+
+    Under the infinite-alleles model, the equilibrium heterozygosity is
+    ``theta / (theta + 1)`` with ``theta = 2*N*mu`` in this project's
+    gene-copy convention. This is the heterozygosity counterpart to
+    `equilibrium_shannon_entropy_isolated`.
+
+    Args:
+        population_size: Gene-copy count ``N``.
+        mu: Infinite-alleles mutation rate.
+
+    Returns:
+        The equilibrium probability that two gene copies differ.
+
+    Raises:
+        ValueError: If an input is invalid or ``mu`` is zero.
+    """
+    _validate_isolated_equilibrium_inputs(population_size=population_size, mu=mu)
+    if mu == 0.0:
+        raise ValueError("equilibrium heterozygosity requires mu greater than 0")
+    theta = 2.0 * population_size * mu
+    return theta / (theta + 1.0)
+
+
 def equilibrium_shannon_entropy_isolated_smm(population_size: int, mu: float) -> float:
     """Return the equilibrium expected Shannon entropy of one isolated deme (SMM).
 
@@ -1869,6 +1894,38 @@ def equilibrium_shannon_entropy_total(
         raise ValueError("equilibrium Shannon entropy requires mu greater than 0")
     theta_total = _theta_total_iam(population_size, m, mu, d)
     return _digamma(theta_total + 1.0) + _EULER_GAMMA
+
+
+def equilibrium_heterozygosity_total(
+    population_size: int,
+    m: float,
+    mu: float,
+    d: int,
+) -> float:
+    """Return the finite-island equilibrium pooled heterozygosity.
+
+    The total-population effective ``theta`` is the same one used by
+    `equilibrium_shannon_entropy_total`; converting it with
+    ``theta / (theta + 1)`` gives the corresponding expected pooled
+    heterozygosity.
+
+    Args:
+        population_size: Gene-copy count ``N`` per equal deme.
+        m: Symmetric per-generation migration rate.
+        mu: Infinite-alleles mutation rate.
+        d: Number of equal demes.
+
+    Returns:
+        The equilibrium probability that two pooled gene copies differ.
+
+    Raises:
+        ValueError: If an input is invalid or ``mu`` is zero.
+    """
+    _validate_equilibrium_inputs(population_size=population_size, m=m, mu=mu, d=d)
+    if mu == 0.0:
+        raise ValueError("equilibrium heterozygosity requires mu greater than 0")
+    theta_total = _theta_total_iam(population_size, m, mu, d)
+    return theta_total / (theta_total + 1.0)
 
 
 def _theta_total_iam(population_size: int, m: float, mu: float, d: int) -> float:

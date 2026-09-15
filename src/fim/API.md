@@ -397,8 +397,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [mutation\_negligible\_transition](#fim.statistics.differentiation.mutation_negligible_transition)
   * [mutation\_negligible\_equilibrium](#fim.statistics.differentiation.mutation_negligible_equilibrium)
   * [equilibrium\_shannon\_entropy\_isolated](#fim.statistics.differentiation.equilibrium_shannon_entropy_isolated)
+  * [equilibrium\_heterozygosity\_isolated](#fim.statistics.differentiation.equilibrium_heterozygosity_isolated)
   * [equilibrium\_shannon\_entropy\_isolated\_smm](#fim.statistics.differentiation.equilibrium_shannon_entropy_isolated_smm)
   * [equilibrium\_shannon\_entropy\_total](#fim.statistics.differentiation.equilibrium_shannon_entropy_total)
+  * [equilibrium\_heterozygosity\_total](#fim.statistics.differentiation.equilibrium_heterozygosity_total)
   * [equilibrium\_shannon\_entropy\_subpopulation](#fim.statistics.differentiation.equilibrium_shannon_entropy_subpopulation)
   * [equilibrium\_shannon\_differentiation](#fim.statistics.differentiation.equilibrium_shannon_differentiation)
   * [statistics\_report](#fim.statistics.differentiation.statistics_report)
@@ -12641,6 +12643,37 @@ exactly, since `within_hill_number` itself already returns
 - `ValueError` - If `population_size` or `mu` is invalid, or `mu` is
   exactly 0.
 
+<a id="fim.statistics.differentiation.equilibrium_heterozygosity_isolated"></a>
+
+#### equilibrium\_heterozygosity\_isolated
+
+```python
+def equilibrium_heterozygosity_isolated(population_size: int,
+                                        mu: float) -> float
+```
+
+Return the isolated-deme equilibrium expected heterozygosity.
+
+Under the infinite-alleles model, the equilibrium heterozygosity is
+``theta / (theta + 1)`` with ``theta = 2*N*mu`` in this project's
+gene-copy convention. This is the heterozygosity counterpart to
+`equilibrium_shannon_entropy_isolated`.
+
+**Arguments**:
+
+- `population_size` - Gene-copy count ``N``.
+- `mu` - Infinite-alleles mutation rate.
+
+
+**Returns**:
+
+  The equilibrium probability that two gene copies differ.
+
+
+**Raises**:
+
+- `ValueError` - If an input is invalid or ``mu`` is zero.
+
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_isolated_smm"></a>
 
 #### equilibrium\_shannon\_entropy\_isolated\_smm
@@ -12747,6 +12780,39 @@ Unbounded above, the same as `equilibrium_shannon_entropy_isolated`
 **Raises**:
 
 - `ValueError` - If any input is invalid, or `mu` is exactly 0.
+
+<a id="fim.statistics.differentiation.equilibrium_heterozygosity_total"></a>
+
+#### equilibrium\_heterozygosity\_total
+
+```python
+def equilibrium_heterozygosity_total(population_size: int, m: float, mu: float,
+                                     d: int) -> float
+```
+
+Return the finite-island equilibrium pooled heterozygosity.
+
+The total-population effective ``theta`` is the same one used by
+`equilibrium_shannon_entropy_total`; converting it with
+``theta / (theta + 1)`` gives the corresponding expected pooled
+heterozygosity.
+
+**Arguments**:
+
+- `population_size` - Gene-copy count ``N`` per equal deme.
+- `m` - Symmetric per-generation migration rate.
+- `mu` - Infinite-alleles mutation rate.
+- `d` - Number of equal demes.
+
+
+**Returns**:
+
+  The equilibrium probability that two pooled gene copies differ.
+
+
+**Raises**:
+
+- `ValueError` - If an input is invalid or ``mu`` is zero.
 
 <a id="fim.statistics.differentiation.equilibrium_shannon_entropy_subpopulation"></a>
 
