@@ -2692,7 +2692,17 @@ def test_track_expensive_statistics_computes_e_st_and_k_st_even_when_unwatched(
 
     assert e_st_calls > 0
     assert k_st_calls > 0
-    assert set(values) == {"D", "G_ST", "H_S", "H_T", "E_ST", "K_ST"}
+    assert set(values) == {
+        "D",
+        "G_ST",
+        "H_S",
+        "H_T",
+        "E_ST",
+        "K_ST",
+        "A_CGD",
+        "Delta",
+        "MI",
+    }
 
 
 def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
@@ -2733,7 +2743,84 @@ def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
 
     assert e_st_calls > 0
     assert k_st_calls > 0
-    assert set(values) == {"D", "G_ST", "H_S", "H_T", "E_ST", "K_ST"}
+    assert set(values) == {
+        "D",
+        "G_ST",
+        "H_S",
+        "H_T",
+        "E_ST",
+        "K_ST",
+        "A_CGD",
+        "Delta",
+        "MI",
+    }
+
+
+def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`track_expensive_statistics=True` reaches the three literature statistics too.
+
+    The `A_CGD`/`Delta`/`MI` counterpart to `test_track_expensive_
+    statistics_computes_e_st_and_k_st_even_when_unwatched`, above — these
+    three are never watchable at all (`test_convergence_statistic_
+    rejects_the_expensive_bonus_measurements`, `test_params.py`), so
+    unlike `E_ST`/`K_ST` this is the *only* way they are ever reached
+    from `_convergence_values`.
+    """
+    state = _two_locus_state_with_divergent_per_locus_estimates()
+    params = SimulationParams(
+        N=10,
+        m=0.1,
+        mu=0.0,
+        d=2,
+        seed=7,
+        loci=state.loci,
+        convergence_statistic="D",
+        track_expensive_statistics=True,
+    )
+    a_cgd_calls = 0
+    delta_calls = 0
+    mi_calls = 0
+    original_a_cgd = differentiation._allelic_distance_from_demes
+    original_delta = differentiation._gregorius_delta_from_demes
+    original_mi = differentiation._mutual_information_from_demes
+
+    def counting_a_cgd(*args: object, **kwargs: object) -> float:
+        nonlocal a_cgd_calls
+        a_cgd_calls += 1
+        return original_a_cgd(*args, **kwargs)  # type: ignore[arg-type]
+
+    def counting_delta(*args: object, **kwargs: object) -> float:
+        nonlocal delta_calls
+        delta_calls += 1
+        return original_delta(*args, **kwargs)  # type: ignore[arg-type]
+
+    def counting_mi(*args: object, **kwargs: object) -> float:
+        nonlocal mi_calls
+        mi_calls += 1
+        return original_mi(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(differentiation, "_allelic_distance_from_demes", counting_a_cgd)
+    monkeypatch.setattr(differentiation, "_gregorius_delta_from_demes", counting_delta)
+    monkeypatch.setattr(differentiation, "_mutual_information_from_demes", counting_mi)
+
+    values = _convergence_values(state, params)
+
+    assert a_cgd_calls > 0
+    assert delta_calls > 0
+    assert mi_calls > 0
+    assert set(values) == {
+        "D",
+        "G_ST",
+        "H_S",
+        "H_T",
+        "E_ST",
+        "K_ST",
+        "A_CGD",
+        "Delta",
+        "MI",
+    }
 
 
 def test_run_result_convergence_histories_include_always_tracked_statistics() -> None:
@@ -2803,8 +2890,11 @@ def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in() -> N
         "H_T",
         "E_ST",
         "K_ST",
+        "A_CGD",
+        "Delta",
+        "MI",
     }
-    for name in ("G_ST", "H_S", "H_T", "E_ST", "K_ST"):
+    for name in ("G_ST", "H_S", "H_T", "E_ST", "K_ST", "A_CGD", "Delta", "MI"):
         assert len(result.convergence_histories[name]) == len(
             result.convergence_generations
         )

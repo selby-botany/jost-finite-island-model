@@ -4019,6 +4019,24 @@ def test_track_expensive_statistics_vectorized_computes_e_st_and_k_st(
 
 The array-native path gets the identical opt-in fix.
 
+<a id="engine.test_engine.test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched"></a>
+
+#### test\_track\_expensive\_statistics\_computes\_a\_cgd\_delta\_mi\_even\_when\_unwatched
+
+```python
+def test_track_expensive_statistics_computes_a_cgd_delta_mi_even_when_unwatched(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`track_expensive_statistics=True` reaches the three literature statistics too.
+
+The `A_CGD`/`Delta`/`MI` counterpart to `test_track_expensive_
+statistics_computes_e_st_and_k_st_even_when_unwatched`, above — these
+three are never watchable at all (`test_convergence_statistic_
+rejects_the_expensive_bonus_measurements`, `test_params.py`), so
+unlike `E_ST`/`K_ST` this is the *only* way they are ever reached
+from `_convergence_values`.
+
 <a id="engine.test_engine.test_run_result_convergence_histories_include_always_tracked_statistics"></a>
 
 #### test\_run\_result\_convergence\_histories\_include\_always\_tracked\_statistics
@@ -15913,6 +15931,26 @@ differentiation measure, but `_CONVERGENCE_STATISTICS` did not
 include it, so a run could not actually watch it for convergence —
 the one statistic reportable but not watchable, with no principled
 reason behind the gap.
+
+<a id="model.test_params.test_convergence_statistic_rejects_the_expensive_bonus_measurements"></a>
+
+#### test\_convergence\_statistic\_rejects\_the\_expensive\_bonus\_measurements
+
+```python
+def test_convergence_statistic_rejects_the_expensive_bonus_measurements(
+) -> None
+```
+
+`A_CGD`/`Delta`/`MI` are never watchable — display-only "bonus" measurements.
+
+The reverse of `test_convergence_statistic_accepts_h_st`, above:
+unlike `E_ST`/`K_ST`, which are both watchable *and* an opt-in
+display-only extra (`track_expensive_statistics`), the three
+literature-derived supplemental statistics are deliberately excluded
+from `_CONVERGENCE_STATISTICS` — stopping a run because a
+supplemental measurement settled is not a claim this project makes.
+`fim.engine._report_statistic`'s own docstring documents this same
+asymmetry from the per-generation lookup side.
 
 <a id="model.test_params.test_migrant_sampling_defaults_to_continuous_and_round_trips"></a>
 

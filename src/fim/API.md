@@ -8641,31 +8641,40 @@ functions that actually use each one.
 - `convergence_window` - Trailing stability-window length.
 - `convergence_tolerance` - Maximum half-window mean difference.
 - `track_expensive_statistics` - Whether the per-generation
-  convergence check also computes `E_ST`/`K_ST` even when
-  neither is actually watched — the display-only opt-in a
-  GUI trajectory panel/live statistics table uses to show
-  real, continuously updated values for those two instead of
-  "not known this generation", at a real, recurring
-  performance cost (never a correctness change: a run's own
-  convergence decision, and every other statistic, are
-  completely unaffected by this flag either way).
-  `D`/`G_ST`/`H_S`/`H_T` need no such flag and are always
-  computed and returned for free regardless — each is either
-  the shared `H_S`/`H_T` input every other field derives
-  from, or an O(1) step once those are known
+  convergence check also computes `E_ST`/`K_ST`/`A_CGD`/
+  `Delta`/`MI` even when none is actually watched — the
+  display-only opt-in a GUI trajectory panel/live statistics
+  table uses to show real, continuously updated values for
+  those five instead of "not known this generation", at a
+  real, recurring performance cost (never a correctness
+- `change` - a run's own convergence decision, and every other
+  statistic, are completely unaffected by this flag either
+  way). `D`/`G_ST`/`H_S`/`H_T` need no such flag and are
+  always computed and returned for free regardless — each is
+  either the shared `H_S`/`H_T` input every other field
+  derives from, or an O(1) step once those are known
   (`fim.statistics.differentiation.statistics_report`'s own
   `statistics` parameter). `E_ST` (an entropy pass over the
-  pooled table plus one per deme) and `K_ST` (a set union
-  across every deme's own alleles) are each a real,
-  independent O(total allele entries) pass over every
-  locus's own frequency table, *every generation of the run*
-  — commit `b12679b` (`FIM-24`/`FIM-32`) measured skipping
-  both, when neither is watched, at roughly a 38% reduction
-  in per-generation convergence-check cost at a many-alleles
-  reference configuration; turning this on pays that same
-  cost back, deliberately, in exchange for the display value.
-  `False` by default — an unconfigured run costs exactly what
-  it always has. A statistic already named in
+  pooled table plus one per deme), `K_ST` (a set union across
+  every deme's own alleles), `A_CGD` (Caballero-García-Dorado
+  allelic distance, an O(deme pairs) pass), `Delta` (Gregorius
+  δ, O(deme pairs*alleles) — the most expensive of the
+  five), and `MI` (Sherwin mutual information, an entropy pass
+  over the pooled table plus one per deme, the same shape as
+  `E_ST`) are each a real, independent, non-trivial pass over
+  every locus's own frequency table, *every generation of the
+  run* — commit `b12679b` (`FIM-24`/`FIM-32`) measured
+  skipping `E_ST`/`K_ST` alone, when neither is watched, at
+  roughly a 38% reduction in per-generation convergence-check
+  cost at a many-alleles reference configuration; turning this
+  on pays that same cost back for all five, deliberately, in
+  exchange for the display value. Unlike `E_ST`/`K_ST`,
+  `A_CGD`/`Delta`/`MI` are never legal `convergence_statistic`
+  choices at all (`_CONVERGENCE_STATISTICS`, below) — genuine
+  "bonus" measurements from the differentiation literature,
+  not a criterion this project treats as a reason to stop a
+  simulation. `False` by default — an unconfigured run costs
+  exactly what it always has. A statistic already named in
   `convergence_statistic` is computed regardless of this
   flag, watched or not, exactly as before this field existed.
 - `max_generations` - Hard generation safety cap.

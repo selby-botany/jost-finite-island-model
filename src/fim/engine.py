@@ -3373,28 +3373,52 @@ for those two as well (see `_statistics_to_compute`, below).
 """
 
 
+_EXPENSIVE_OPT_IN_STATISTICS: Final[frozenset[str]] = frozenset(
+    {"E_ST", "K_ST", "A_CGD", "Delta", "MI"}
+)
+"""Statistics `params.track_expensive_statistics` opts into computing.
+
+`E_ST`/`K_ST` are genuinely expensive per-generation (an O(total allele
+entries) pass each) and watchable — `_CONVERGENCE_STATISTICS`
+(`fim.model.params`) includes them, so a run can also stop *on* one of
+them, not merely display it. `A_CGD`/`Delta`/`MI` are also genuinely
+expensive at generation scale (`A_CGD`: O(deme pairs); `Delta`: O(deme
+pairs*alleles); `MI`: pools every deme's own frequencies, an extra
+full pass `D`/`G_ST` never pay) but never watchable at all —
+`_CONVERGENCE_STATISTICS` deliberately excludes them, since stopping a
+run because a supplemental literature statistic settled is not a
+scientific claim this project makes; they are display-only "bonus"
+measurements once opted into, exactly like `E_ST`/`K_ST` already are
+when neither is the chosen `convergence_statistic`. `D`/`G_ST`/`H_S`/
+`H_T`/`H_ST` are never in this set — always computed regardless
+(`_ALWAYS_TRACKED_STATISTICS`'s own docstring), since none of them costs
+anything extra.
+"""
+
+
 def _statistics_to_compute(params: SimulationParams) -> frozenset[str]:
     """Return every statistic name this generation's convergence check must compute.
 
     Forwarded to `_statistics_for_locus`/`_statistics_for_locus_
     vectorized`'s own `statistics` parameter, which controls only whether
-    `E_ST`/`K_ST` (the two genuinely expensive fields) are computed at all
-    this call, or left `math.nan` — `D`/`G_ST`/`H_S`/`H_T`/`H_ST` are
-    always computed by `statistics_report` regardless of what this
-    returns (`_ALWAYS_TRACKED_STATISTICS`'s own docstring), so this
-    function only ever needs to decide `E_ST`/`K_ST`'s own fate.
+    the genuinely expensive fields (`_EXPENSIVE_OPT_IN_STATISTICS`) are
+    computed at all this call, or left `math.nan` — `D`/`G_ST`/`H_S`/
+    `H_T`/`H_ST` are always computed by `statistics_report` regardless of
+    what this returns (`_ALWAYS_TRACKED_STATISTICS`'s own docstring), so
+    this function only ever needs to decide the expensive fields' own
+    fate.
 
     Always includes `params.convergence_statistics` (a watched `E_ST`/
     `K_ST` must be computed for real regardless of the opt-in below, or
     the run could never detect it converging); additionally includes
-    `E_ST`/`K_ST` whenever `params.track_expensive_statistics` is set,
-    even if neither is actually watched — the display-only opt-in
-    `SimulationParams.track_expensive_statistics`'s own docstring
-    describes.
+    every `_EXPENSIVE_OPT_IN_STATISTICS` name whenever `params.track_
+    expensive_statistics` is set, even if none is actually watched — the
+    display-only opt-in `SimulationParams.track_expensive_statistics`'s
+    own docstring describes.
     """
     statistics = set(params.convergence_statistics)
     if params.track_expensive_statistics:
-        statistics |= {"E_ST", "K_ST"}
+        statistics |= _EXPENSIVE_OPT_IN_STATISTICS
     return frozenset(statistics)
 
 
@@ -3405,18 +3429,19 @@ def _extra_tracked_statistics(params: SimulationParams) -> tuple[str, ...]:
     `ConvergenceMonitor` with `statistics=params.convergence_statistics`
     (the subset that actually gates stopping) — this returns every other
     name `_watched_statistic_values` can hand that monitor's own
-    `record()` this run (`_ALWAYS_TRACKED_STATISTICS`, always; `E_ST`/
-    `K_ST` too, when `params.track_expensive_statistics` opts in), minus
-    whichever of those are already in `statistics` (a name cannot appear
-    in both — `ConvergenceMonitor.__init__` rejects a repeat). Kept as
-    its own function, not inlined at each of those two call sites, so the
-    two can never independently drift out of sync with `_watched_
-    statistic_values`'s own actual return keys.
+    `record()` this run (`_ALWAYS_TRACKED_STATISTICS`, always;
+    `_EXPENSIVE_OPT_IN_STATISTICS` too, when `params.track_expensive_
+    statistics` opts in), minus whichever of those are already in
+    `statistics` (a name cannot appear in both — `ConvergenceMonitor.
+    __init__` rejects a repeat). Kept as its own function, not inlined at
+    each of those two call sites, so the two can never independently
+    drift out of sync with `_watched_statistic_values`'s own actual
+    return keys.
     """
     watched = set(params.convergence_statistics)
     universe = set(_ALWAYS_TRACKED_STATISTICS)
     if params.track_expensive_statistics:
-        universe |= {"E_ST", "K_ST"}
+        universe |= _EXPENSIVE_OPT_IN_STATISTICS
     return tuple(sorted(universe - watched))
 
 
@@ -4150,7 +4175,15 @@ def _report_statistic(
     missing from this lookup until this project's own multi-model engine
     review, 2026-09-04 (`FIM-51`) — `fim.model.params.
     _CONVERGENCE_STATISTICS` is this function's own config-time
-    counterpart; keep both in sync.
+    counterpart for the seven watchable names; `A_CGD`/`Delta`/`MI`
+    (below) are never watchable at all — `_CONVERGENCE_STATISTICS`
+    deliberately excludes them, the same "expensive, opt-in, display-
+    only bonus measurement, never a convergence criterion" treatment
+    `track_expensive_statistics` already gives `E_ST`/`K_ST` when
+    neither is actually watched. They reach this function only as
+    `_extra_tracked_statistics`'s own opt-in extras, so this function's
+    own field set is a strict superset of `_CONVERGENCE_STATISTICS`,
+    not a 1:1 mirror of it.
     """
     fields: Mapping[str, float | None] = {
         "D": report["D"],
@@ -4160,6 +4193,9 @@ def _report_statistic(
         "H_S": report["H_S"],
         "H_T": report["H_T"],
         "H_ST": report["H_ST"],
+        "A_CGD": report["A_CGD"],
+        "Delta": report["Delta"],
+        "MI": report["MI"],
     }
     if statistic not in fields:
         raise ValueError(f"unsupported convergence statistic: {statistic}")

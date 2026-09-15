@@ -283,6 +283,25 @@ def test_convergence_statistic_accepts_h_st() -> None:
     assert params.convergence_statistics == ("H_ST",)
 
 
+def test_convergence_statistic_rejects_the_expensive_bonus_measurements() -> None:
+    """`A_CGD`/`Delta`/`MI` are never watchable — display-only "bonus" measurements.
+
+    The reverse of `test_convergence_statistic_accepts_h_st`, above:
+    unlike `E_ST`/`K_ST`, which are both watchable *and* an opt-in
+    display-only extra (`track_expensive_statistics`), the three
+    literature-derived supplemental statistics are deliberately excluded
+    from `_CONVERGENCE_STATISTICS` — stopping a run because a
+    supplemental measurement settled is not a claim this project makes.
+    `fim.engine._report_statistic`'s own docstring documents this same
+    asymmetry from the per-generation lookup side.
+    """
+    for statistic in ("A_CGD", "Delta", "MI"):
+        with pytest.raises(ValueError, match="convergence_statistic must be one of"):
+            SimulationParams.from_mapping(
+                {**_valid_config(), "convergence_statistic": statistic}
+            )
+
+
 def test_migrant_sampling_defaults_to_continuous_and_round_trips() -> None:
     """The opt-in stochastic migrant-count model stays off unless requested.
 
