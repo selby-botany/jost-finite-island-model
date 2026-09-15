@@ -254,6 +254,7 @@ let completedEquilibrium = null;
 let completedIdentityRecovery = null;
 let completedGenerationCount = null;
 let completedFinalStatistics = null;
+let completedFinalLiteratureVisuals = null;
 
 /**
  * Add or refresh one statistic row's plot color tile and display-toggle
@@ -1398,29 +1399,33 @@ function drawIbdCurve(canvas, payload) {
  * @param {{alleleComposition: object, frequencySpectrum: object, isolationByDistance: object|null}|undefined} visuals
  */
 function renderSupplementalPanels(visuals) {
-    alleleCompositionCard.hidden = !visuals;
-    frequencySpectrumCard.hidden = !visuals;
+    alleleCompositionCard.hidden = !visuals || !visuals.alleleComposition;
+    frequencySpectrumCard.hidden = !visuals || !visuals.frequencySpectrum;
     ibdCard.hidden = !visuals || !visuals.isolationByDistance;
     if (!visuals) {
         return;
     }
-    alleleCompositionTitle.textContent = visuals.alleleComposition.title;
-    alleleCompositionNote.textContent = visuals.alleleComposition.note;
-    alleleCompositionLegend.replaceChildren();
-    for (const allele of visuals.alleleComposition.alleles) {
-        const item = document.createElement("span");
-        item.className = "run-supplemental-legend-item";
-        const swatch = document.createElement("span");
-        swatch.className = "swatch";
-        swatch.style.background = allele.color;
-        item.appendChild(swatch);
-        item.append(allele.label);
-        alleleCompositionLegend.appendChild(item);
+    if (visuals.alleleComposition) {
+        alleleCompositionTitle.textContent = visuals.alleleComposition.title;
+        alleleCompositionNote.textContent = visuals.alleleComposition.note;
+        alleleCompositionLegend.replaceChildren();
+        for (const allele of visuals.alleleComposition.alleles) {
+            const item = document.createElement("span");
+            item.className = "run-supplemental-legend-item";
+            const swatch = document.createElement("span");
+            swatch.className = "swatch";
+            swatch.style.background = allele.color;
+            item.appendChild(swatch);
+            item.append(allele.label);
+            alleleCompositionLegend.appendChild(item);
+        }
+        drawAlleleComposition(alleleCompositionCanvas, visuals.alleleComposition);
     }
-    drawAlleleComposition(alleleCompositionCanvas, visuals.alleleComposition);
-    frequencySpectrumTitle.textContent = visuals.frequencySpectrum.title;
-    frequencySpectrumNote.textContent = visuals.frequencySpectrum.note;
-    drawFrequencySpectrum(frequencySpectrumCanvas, visuals.frequencySpectrum);
+    if (visuals.frequencySpectrum) {
+        frequencySpectrumTitle.textContent = visuals.frequencySpectrum.title;
+        frequencySpectrumNote.textContent = visuals.frequencySpectrum.note;
+        drawFrequencySpectrum(frequencySpectrumCanvas, visuals.frequencySpectrum);
+    }
     if (visuals.isolationByDistance) {
         ibdTitle.textContent = visuals.isolationByDistance.title;
         ibdNote.textContent = visuals.isolationByDistance.note;
@@ -1759,8 +1764,14 @@ async function wireCompletedScrubber(outputDirectory, generationCount) {
         }
         scrubberControls.hidden = false;
         window.fim.setScrubberFrames(result.frames, (frame, index) => {
+            const isFinal = index === result.frames.length - 1;
             drawCompletedOverview(frame.panels);
-            updateScrubbedTrajectory(frame.generation, index === result.frames.length - 1);
+            updateScrubbedTrajectory(frame.generation, isFinal);
+            if (isFinal && completedFinalLiteratureVisuals) {
+                renderSupplementalPanels(completedFinalLiteratureVisuals);
+            } else if (frame.literatureVisuals) {
+                renderSupplementalPanels(frame.literatureVisuals);
+            }
         });
     } finally {
         window.__fimScrubberPending -= 1;
@@ -1896,6 +1907,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedIdentityRecovery = null;
         completedGenerationCount = null;
         completedFinalStatistics = null;
+        completedFinalLiteratureVisuals = null;
         renderBatchTrajectory(payload.pooledConvergenceHistories);
     } else {
         // A different run just opened (or a live run just finished) --
@@ -1938,6 +1950,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
         completedIdentityRecovery = payload.identityRecovery || null;
         completedGenerationCount = payload.generationCount;
         completedFinalStatistics = payload.statistics;
+        completedFinalLiteratureVisuals = payload.literatureVisuals || null;
         renderTrajectory(
             payload.convergenceGenerations,
             payload.convergenceHistories,

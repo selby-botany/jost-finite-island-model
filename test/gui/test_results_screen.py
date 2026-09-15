@@ -776,3 +776,53 @@ def test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix() -> 
     # the (wrongly) shrunk formula this test guards against would put it
     # at roughly 157px. 300px is comfortably between the two.
     assert settled["canvasWidth"] > 300
+
+
+def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """Stepping the completed scrubber updates allele composition & spectrum."""
+    settled = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger=(
+            _SET_TINY_FIELDS
+            + "document.getElementById('run-button').click(); "
+            + "const pollScrubber = () => { "
+            + "if (window.fim.getRunViewState() === 'completed' && "
+            + "window.__fimScrubberPending === 0) { "
+            + "const range = document.getElementById('scrubber-range'); "
+            + "range.value = '0'; "
+            + "range.dispatchEvent(new Event('input', {bubbles: true})); "
+            + "window.__fimScrubbedToZero = true; "
+            + "return; "
+            + "} "
+            + "setTimeout(pollScrubber, 50); "
+            + "}; "
+            + "setTimeout(pollScrubber, 50);"
+        ),
+        read=(
+            "({"
+            "runViewState: window.fim.getRunViewState(), "
+            "scrubberPending: window.__fimScrubberPending, "
+            "scrubbedToZero: !!window.__fimScrubbedToZero, "
+            "alleleCompositionHidden: "
+            "document.getElementById('allele-composition-card').hidden, "
+            "frequencySpectrumHidden: "
+            "document.getElementById('frequency-spectrum-card').hidden, "
+            "scrubberLabel: document.getElementById('scrubber-label').textContent"
+            "})"
+        ),
+        is_ready=lambda value: (
+            value is not None
+            and value.get("runViewState") == "completed"
+            and value.get("scrubberPending") == 0
+            and value.get("scrubbedToZero") is True
+        ),
+        poll_attempts=_POLL_ATTEMPTS,
+    )
+
+    assert settled["runViewState"] == "completed"
+    assert settled["alleleCompositionHidden"] is False
+    assert settled["frequencySpectrumHidden"] is False
+    assert "Generation 0" in settled["scrubberLabel"]

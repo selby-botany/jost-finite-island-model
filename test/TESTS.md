@@ -12688,6 +12688,17 @@ gate (applying the shrunk widths unconditionally) measurably shrinks
 ``run`-canvas` in this exact state even though nothing here ever
 overflowed the window in the first place.
 
+<a id="gui.test_results_screen.test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks"></a>
+
+#### test\_completed\_scrubber\_updates\_supplemental\_panels\_on\_scrub\_ticks
+
+```python
+def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+Stepping the completed scrubber updates allele composition & spectrum.
+
 <a id="gui.test_runner"></a>
 
 # gui.test\_runner
