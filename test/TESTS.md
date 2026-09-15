@@ -9945,6 +9945,24 @@ something was actually painted there (a canvas starts fully
 transparent) -- not by trying to read the text back out of raster
 pixels, which no test in this package attempts.
 
+<a id="gui.test_explore_screen.test_clicking_a_prediction_row_plots_it_and_switches_unit_family"></a>
+
+#### test\_clicking\_a\_prediction\_row\_plots\_it\_and\_switches\_unit\_family
+
+```python
+def test_clicking_a_prediction_row_plots_it_and_switches_unit_family(
+        window: webview.Window) -> None
+```
+
+Every statistic is plottable; picking one switches the chart's unit family.
+
+Explore opens on the three differentiation statistics, but no
+statistic is privileged -- each is a closed-form function of the same
+four parameters, so each has a real curve on each of the four sweep
+axes. Clicking a row in another unit family (here the half-life, in
+generations) moves the chart to that family rather than overlaying an
+unbounded generation count on the proportion axis.
+
 <a id="gui.test_field_help"></a>
 
 # gui.test\_field\_help

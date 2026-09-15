@@ -297,3 +297,71 @@ def test_sweep_curve_draws_axis_titles(window: webview.Window) -> None:
 
     assert result["xTitleNonBlankPixels"] > 0
     assert result["yTitleNonBlankPixels"] > 0
+
+
+def test_clicking_a_prediction_row_plots_it_and_switches_unit_family(
+    window: webview.Window,
+) -> None:
+    """Every statistic is plottable; picking one switches the chart's unit family.
+
+    Explore opens on the three differentiation statistics, but no
+    statistic is privileged -- each is a closed-form function of the same
+    four parameters, so each has a real curve on each of the four sweep
+    axes. Clicking a row in another unit family (here the half-life, in
+    generations) moves the chart to that family rather than overlaying an
+    unbounded generation count on the proportion axis.
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
+            _poll_until(
+                "window.__fimExploreReady === true", lambda value: value is True
+            )
+            before = window.evaluate_js(
+                "({family: exploreUnitFamily, "
+                "legend: Array.from("
+                "document.getElementById('explore-legend').children"
+                ").map((span) => span.textContent)})"
+            )
+            window.evaluate_js(
+                "document.getElementById("
+                "'explore-stat-identity_recovery_half_life'"
+                ").click()"
+            )
+            after = window.evaluate_js(
+                "({family: exploreUnitFamily, "
+                "legend: Array.from("
+                "document.getElementById('explore-legend').children"
+                ").map((span) => span.textContent), "
+                "pressed: document.getElementById("
+                "'explore-stat-identity_recovery_half_life'"
+                ").getAttribute('aria-pressed'), "
+                "dimmedD: document.getElementById('explore-stat-D')"
+                ".classList.contains('stat-plot-hidden')})"
+            )
+            outcome.put({"before": before, "after": after})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    assert result["before"]["family"] == "proportion"
+    assert result["before"]["legend"] == ["D", "G_ST", "E_ST"]
+    assert result["after"]["family"] == "generations"
+    assert result["after"]["legend"] == ["identity_recovery_half_life"]
+    assert result["after"]["pressed"] == "true"
+    # The proportion series are no longer plotted, and say so.
+    assert result["after"]["dimmedD"] is True

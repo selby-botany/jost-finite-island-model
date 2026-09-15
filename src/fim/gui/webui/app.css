@@ -1476,6 +1476,16 @@ fieldset.composite > label {
     text-align: left;
 }
 
+/* Names the prediction table's own click-to-plot affordance beneath the
+   legend. `.stat-plot-toggle-row`/`.stat-plot-hidden` (above) already
+   supply the per-row cursor and dimmed-when-unplotted treatment, shared
+   with the completed-run trajectory panel's identical toggles. */
+.explore-hint {
+    margin: 0.35rem 0 0;
+    color: var(--fim-muted);
+    font-size: 0.8rem;
+}
+
 /* The Presets picker (`modal-presets`) -- one worked example per row,
  * each a plain button filling its own `<li>` so the whole row is
  * clickable and keyboard-focusable, not only a smaller text link inside

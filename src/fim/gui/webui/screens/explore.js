@@ -51,19 +51,129 @@ const EXPLORE_PREDICTION_LABELS = {
     mutation_negligible_equilibrium: "Mutation negligible at equilibrium",
 };
 
-// The sweep curve's own three plotted series, in draw/legend order --
-// `E_ST` (`equilibrium_shannon_differentiation`) joins `D`/`G_ST` here
-// (`Api.get_equilibrium_sweep`'s own docstring has the "why now, not
-// before" reasoning) since it shares their identical `[0, 1]`
-// differentiation domain. Colored from `run-view-completed.js`'s own
-// module-scope `STATISTIC_TRAJECTORY_COLORS` (loaded before this file,
-// index.html's own <script> order) rather than a second, independently
-// chosen palette -- botanist GUI design doc §11.3's own "disciplined
-// statistic color language" names this exact reuse ("the axis label on
-// Explore") as part of the same one statistic-color contract every
-// other screen already honors: a color learned as "D" on Results reads
-// as "D" here too, with no separate legend to re-learn.
-const EXPLORE_SWEEP_SERIES = ["D", "G_ST", "E_ST"];
+// Which unit family each predicted quantity lives in. Every statistic
+// can be drawn against every one of the four sweep axes -- each is a
+// closed-form function of `(N, m, mu, d)` -- but they are not all
+// measured in the same thing, and overlaying nats on proportions would
+// make the y-axis mean nothing. So the chart plots one family at a
+// time: picking a statistic from another family switches the chart to
+// that family rather than silently mixing incomparable scales onto one
+// axis.
+const EXPLORE_STATISTIC_UNITS = {
+    D: "proportion",
+    G_ST: "proportion",
+    E_ST: "proportion",
+    H_S: "proportion",
+    H_T: "proportion",
+    identity_recovery_rate: "proportion",
+    identity_recovery_equilibrium: "proportion",
+    S_S: "nats",
+    S_T: "nats",
+    A_S: "alleles",
+    A_T: "alleles",
+    identity_recovery_half_life: "generations",
+    mutation_negligible_equilibrium: "flag",
+};
+
+// Per-family y-axis presentation. `fixed` families keep a meaningful
+// absolute scale (a proportion is always readable against [0, 1], and
+// reading one at a zoomed-in auto-fit scale would exaggerate a trivial
+// difference into a dramatic-looking curve); the rest have no natural
+// ceiling -- entropy, effective allele count, and a half-life in
+// generations are all unbounded above -- so those fit their axis to
+// whatever the sweep actually produced.
+const EXPLORE_UNIT_FAMILIES = {
+    proportion: { title: "Differentiation / diversity (proportion)", fixed: true },
+    nats: { title: "Entropy (nats)", fixed: false },
+    alleles: { title: "Effective alleles", fixed: false },
+    generations: { title: "Generations", fixed: false },
+    flag: { title: "Mutation negligible (1 = yes)", fixed: true },
+};
+
+// Line color per series. `STATISTIC_TRAJECTORY_COLORS` (run-view-
+// completed.js, loaded first -- index.html's own <script> order) is the
+// project's one statistic-color language: a color learned as "D" on
+// Results reads as "D" here too. Names it does not cover (the entropy,
+// effective-allele, and identity-recovery predictions, none of which
+// are `FinalReport` statistics) draw from the same Okabe-Ito palette.
+// Colors need only be distinct *within* a unit family, since only one
+// family is ever on the canvas at once.
+const EXPLORE_EXTRA_SERIES_COLORS = {
+    S_S: "#0072b2",
+    S_T: "#d55e00",
+    A_S: "#0072b2",
+    A_T: "#d55e00",
+    identity_recovery_rate: "#cc79a7",
+    identity_recovery_equilibrium: "#8c564b",
+    identity_recovery_half_life: "#009e73",
+    mutation_negligible_equilibrium: "#7570b3",
+};
+
+// The family on the canvas now, and which of its members are drawn.
+// Opens on the three differentiation statistics Explore has always
+// charted, so the default view is unchanged; every other statistic is
+// one click away on its own table row.
+let exploreUnitFamily = "proportion";
+let exploreVisibleSeries = new Set(["D", "G_ST", "E_ST"]);
+
+// Where the dashed marker sits, as an index into `sweep.points`, or
+// `null` while it tracks the committed configuration. Owned by the
+// axis scrubber below.
+let exploreScrubIndex = null;
+
+/**
+ * Index into `sweep.points` the dashed marker is currently on.
+ * @param {{current_index: number, points: Array<object>}} sweep
+ * @returns {number}
+ */
+function exploreMarkerIndex(sweep) {
+    if (exploreScrubIndex === null) {
+        return sweep.current_index ?? 0;
+    }
+    return Math.min(Math.max(exploreScrubIndex, 0), sweep.points.length - 1);
+}
+
+/**
+ * Line color for one plotted series.
+ * @param {string} name
+ * @returns {string}
+ */
+function exploreSeriesColor(name) {
+    return STATISTIC_TRAJECTORY_COLORS[name] ?? EXPLORE_EXTRA_SERIES_COLORS[name] ?? "#666666";
+}
+
+/**
+ * The currently plotted series, in `EXPLORE_PREDICTION_LABELS` order so
+ * the legend and the table agree on ordering.
+ * @returns {string[]}
+ */
+function exploreSeriesInPlot() {
+    return Object.keys(EXPLORE_PREDICTION_LABELS).filter((name) =>
+        exploreVisibleSeries.has(name)
+    );
+}
+
+/**
+ * Read one statistic at one swept point as a plain number.
+ *
+ * `mutation_negligible_equilibrium` is a predicate rather than a
+ * measurement; it plots as a 0/1 step line so that "where does mutation
+ * stop mattering along this axis" is visible as a position on the axis
+ * rather than only as a yes/no in the table.
+ *
+ * @param {object} point
+ * @param {string} name
+ * @returns {number|null} `null` where the prediction is undefined at
+ *     this point -- a gap in the line, never a zero.
+ */
+function exploreSeriesValue(point, name) {
+    const value = point[name];
+    if (value === null || value === undefined) {
+        return null;
+    }
+    return typeof value === "boolean" ? (value ? 1 : 0) : value;
+}
+
 
 /**
  * Read the four field values as the plain strings the bridge expects.
@@ -114,29 +224,93 @@ function syncExploreCanvasSize() {
 new ResizeObserver(syncExploreCanvasSize).observe(exploreCanvas);
 
 /**
- * Build the sweep curve's own legend -- one swatch per
- * `EXPLORE_SWEEP_SERIES` entry, the same "swatch span plus a text node"
- * shape `run-view-completed.js`'s own `renderTrajectory` already builds
- * its legend from. Unlike that legend, `EXPLORE_SWEEP_SERIES` never
- * varies from one redraw to the next (always exactly `D`/`G_ST`/`E_ST`,
- * whether or not a given point's own value is defined at this
- * configuration -- a gap in the line, not an absent series), so this
- * runs once at module load rather than being rebuilt on every
- * `refreshExplore`.
+ * Rebuild the sweep curve's own legend -- one swatch per plotted series,
+ * the same "swatch span plus a text node" shape `run-view-completed.js`'s
+ * own `renderTrajectory` already builds its legend from. Unlike that
+ * screen's, this legend does change between redraws (toggling a table
+ * row adds or removes a series, and picking one from another unit family
+ * replaces the whole set), so it is rebuilt on every draw rather than
+ * once at module load.
  */
 function renderExploreLegend() {
     exploreLegend.replaceChildren();
-    for (const name of EXPLORE_SWEEP_SERIES) {
+    for (const name of exploreSeriesInPlot()) {
         const item = document.createElement("span");
         const swatch = document.createElement("span");
         swatch.className = "swatch";
-        swatch.style.backgroundColor = STATISTIC_TRAJECTORY_COLORS[name];
+        swatch.style.backgroundColor = exploreSeriesColor(name);
         item.appendChild(swatch);
         item.appendChild(document.createTextNode(name));
         exploreLegend.appendChild(item);
     }
 }
-renderExploreLegend();
+
+/**
+ * Choose readable axis ticks spanning `[minValue, maxValue]`.
+ *
+ * Steps are rounded to a 1/2/5 multiple of a power of ten so an
+ * unbounded family (entropy in nats, effective alleles, a half-life in
+ * generations) still gets labels a reader can hold in their head.
+ *
+ * @param {number} minValue
+ * @param {number} maxValue
+ * @param {number} targetCount Approximate number of ticks wanted.
+ * @returns {number[]} At least two ticks, ascending.
+ */
+function exploreAxisTicks(minValue, maxValue, targetCount) {
+    let low = minValue;
+    let high = maxValue;
+    if (!(high > low)) {
+        // A series that does not vary on this axis -- `D` against `N`,
+        // or the identity-recovery family against `mu`. A flat line is
+        // the most informative thing on the screen here, so give it
+        // room either side rather than collapsing the axis onto it.
+        const magnitude = Math.abs(high) > 0 ? Math.abs(high) * 0.5 : 1;
+        low = high - magnitude;
+        high = high + magnitude;
+    }
+    const rawStep = (high - low) / Math.max(targetCount - 1, 1);
+    const power = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const normalized = rawStep / power;
+    const niceMultiple = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    const step = niceMultiple * power;
+    const first = Math.floor(low / step) * step;
+    const last = Math.ceil(high / step) * step;
+    const ticks = [];
+    for (let value = first; value <= last + step * 1e-9; value += step) {
+        ticks.push(value);
+    }
+    return ticks.length >= 2 ? ticks : [low, high];
+}
+
+/**
+ * Y-axis ticks for the current unit family over `points`.
+ *
+ * A `fixed` family keeps its absolute scale ([0, 1]); the rest fit the
+ * axis to the values this sweep actually produced.
+ *
+ * @param {Array<object>} points
+ * @returns {number[]}
+ */
+function exploreValueTicks(points) {
+    if (EXPLORE_UNIT_FAMILIES[exploreUnitFamily].fixed) {
+        return PROBABILITY_TICK_VALUES;
+    }
+    const values = [];
+    for (const point of points) {
+        for (const name of exploreSeriesInPlot()) {
+            const value = exploreSeriesValue(point, name);
+            if (value !== null && Number.isFinite(value)) {
+                values.push(value);
+            }
+        }
+    }
+    if (values.length === 0) {
+        return PROBABILITY_TICK_VALUES;
+    }
+    return exploreAxisTicks(Math.min(...values), Math.max(...values), 6);
+}
+
 
 /**
  * Return `#explore-axis`'s own `<option>` label text for `axisKey` --
@@ -156,35 +330,33 @@ function exploreAxisLabel(axisKey) {
 }
 
 /**
- * Draw the swept prediction curve: `D`, `G_ST`, and `E_ST`
- * (`EXPLORE_SWEEP_SERIES`) as three lines against `sweep.points`' own
- * `x`, on a fixed `[0, 1]` y-domain (`PROBABILITY_TICK_VALUES`, declared
- * in `scatter.js` — every plotted statistic lives on the same
- * differentiation scale a frequency scatter panel's own axes already
- * use), an x-domain fit to the swept range itself, log-scaled for
- * `m`/`mu` (both span several orders of magnitude, the same reason
+ * Draw the swept prediction curve: every currently selected series
+ * (`exploreSeriesInPlot`) as a line against `sweep.points`' own `x`, on
+ * a y-domain set by the active unit family (`exploreValueTicks` -- a
+ * fixed `[0, 1]` for proportions, auto-fit for the unbounded families),
+ * an x-domain fit to the swept range itself, log-scaled for `m`/`mu`
+ * (both span several orders of magnitude, the same reason
  * `_geometric_sweep` spaces them geometrically rather than linearly
- * server-side), a dashed vertical marker at the configuration's own
- * current value, and axis titles naming both what is swept (the x-axis,
- * `exploreAxisLabel`) and what the shared y-domain means -- see
- * `EXPLORE_SWEEP_SERIES`'s own comment for the legend those three lines
- * share, drawn separately into `#explore-legend`, not on the canvas.
+ * server-side), a dashed vertical marker at the scrubber's own current
+ * position, and axis titles naming both what is swept (the x-axis,
+ * `exploreAxisLabel`) and what the y-domain measures.
  *
- * `identity_recovery_half_life` (generations, unbounded) deliberately
- * has no line here: it does not share this `[0, 1]` domain --
- * `Api.get_equilibrium_sweep`'s own docstring has the fuller "why not
- * plotted, and why that is a deliberate, deferred follow-up" reasoning.
+ * Any statistic may be plotted on any of the four axes; several are
+ * constant along some of them, and those flat lines carry the point
+ * rather than failing to make one -- `equilibrium_d` has no `N` term,
+ * so `D` level beneath a falling `G_ST` across two orders of magnitude
+ * of population size is this project's central claim, drawn.
  *
  * @param {HTMLCanvasElement} canvas
- * @param {{axis: string, current: number,
- *     points: Array<{x: number, D: number|null, G_ST: number|null,
- *     E_ST: number|null}>}} sweep
+ * @param {{axis: string, current: number, current_index: number,
+ *     points: Array<object>}} sweep
  */
 function drawSweepCurve(canvas, sweep) {
     const context = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
     context.clearRect(0, 0, width, height);
+    renderExploreLegend();
     if (!sweep.points || sweep.points.length === 0) {
         return;
     }
@@ -204,6 +376,10 @@ function drawSweepCurve(canvas, sweep) {
     const domainMin = logScale ? Math.log10(minX) : minX;
     const domainMax = logScale ? Math.log10(maxX) : maxX;
 
+    const valueTicks = exploreValueTicks(sweep.points);
+    const valueMin = valueTicks[0];
+    const valueMax = valueTicks[valueTicks.length - 1];
+
     function xToPixel(x) {
         const value = logScale ? Math.log10(x) : x;
         const fraction = domainMax === domainMin ? 0 : (value - domainMin) / (domainMax - domainMin);
@@ -211,7 +387,9 @@ function drawSweepCurve(canvas, sweep) {
     }
 
     function yToPixel(y) {
-        return plotBottom - y * (plotBottom - plotTop);
+        const span = valueMax - valueMin;
+        const fraction = span === 0 ? 0.5 : (y - valueMin) / span;
+        return plotBottom - fraction * (plotBottom - plotTop);
     }
 
     const style = getComputedStyle(document.documentElement);
@@ -227,14 +405,13 @@ function drawSweepCurve(canvas, sweep) {
     context.lineTo(plotRight, plotBottom);
     context.stroke();
 
-    // Y-axis ticks: the same fixed [0, 1] probability scale a frequency
-    // scatter panel's own axes use (`PROBABILITY_TICK_VALUES`, scatter.js).
+    // Y-axis ticks: the active unit family's own scale.
     context.fillStyle = mutedColor;
     context.font = "10px sans-serif";
     context.textAlign = "right";
     context.textBaseline = "middle";
-    for (const tick of PROBABILITY_TICK_VALUES) {
-        context.fillText(tick.toFixed(1), plotLeft - 6, yToPixel(tick));
+    for (const tick of valueTicks) {
+        context.fillText(formatExploreTick(tick), plotLeft - 6, yToPixel(tick));
     }
 
     // X-axis ticks: first, middle, and last swept value only -- a
@@ -260,23 +437,21 @@ function drawSweepCurve(canvas, sweep) {
     context.textBaseline = "bottom";
     context.fillText(exploreAxisLabel(sweep.axis), (plotLeft + plotRight) / 2, height - 2);
 
-    // Y-axis title: every plotted series (`EXPLORE_SWEEP_SERIES`) shares
-    // this one `[0, 1]` differentiation scale -- `differentiation.py`'s
-    // own module docstring frames `D`/`G_ST`/`E_ST` alike as "some way
-    // of asking how much bigger H_T is than H_S, relative to some
-    // baseline," so one shared title names the whole family rather than
-    // any one line's own name (already distinguished by color in
-    // `#explore-legend`, not repeated here).
+    // Y-axis title: what the plotted family measures. Only one unit
+    // family is ever on the canvas at a time, so this single title is
+    // always accurate for every line currently drawn -- which is the
+    // whole reason the chart groups by family instead of overlaying
+    // proportions, nats, and generations on one meaningless axis.
     context.save();
     context.translate(12, (plotTop + plotBottom) / 2);
     context.rotate(-Math.PI / 2);
     context.textAlign = "center";
     context.textBaseline = "alphabetic";
-    context.fillText("Differentiation", 0, 0);
+    context.fillText(EXPLORE_UNIT_FAMILIES[exploreUnitFamily].title, 0, 0);
     context.restore();
 
     /**
-     * @param {"D"|"G_ST"|"E_ST"} key
+     * @param {string} key
      * @param {string} color
      */
     function drawLine(key, color) {
@@ -285,8 +460,8 @@ function drawSweepCurve(canvas, sweep) {
         context.beginPath();
         let started = false;
         for (const point of sweep.points) {
-            const value = point[key];
-            if (value === null || value === undefined) {
+            const value = exploreSeriesValue(point, key);
+            if (value === null || !Number.isFinite(value)) {
                 // A gap in the underlying prediction (e.g. `D` at
                 // `mu == 0`) breaks the line rather than interpolating
                 // across an undefined value.
@@ -294,7 +469,7 @@ function drawSweepCurve(canvas, sweep) {
                 continue;
             }
             const x = xToPixel(point.x);
-            const y = yToPixel(Math.min(1, Math.max(0, value)));
+            const y = yToPixel(Math.min(valueMax, Math.max(valueMin, value)));
             if (started) {
                 context.lineTo(x, y);
             } else {
@@ -304,20 +479,83 @@ function drawSweepCurve(canvas, sweep) {
         }
         context.stroke();
     }
-    for (const name of EXPLORE_SWEEP_SERIES) {
-        drawLine(name, STATISTIC_TRAJECTORY_COLORS[name]);
+    for (const name of exploreSeriesInPlot()) {
+        drawLine(name, exploreSeriesColor(name));
     }
 
-    // The configuration's own current value on this axis.
+    // The scrubber's own position on this axis -- the committed
+    // configuration's value until the slider is moved off it.
     context.setLineDash([4, 3]);
     context.strokeStyle = mutedColor;
     context.lineWidth = 1;
-    const currentX = xToPixel(sweep.current);
+    const markerPoint = sweep.points[exploreMarkerIndex(sweep)];
+    const currentX = xToPixel(markerPoint.x);
     context.beginPath();
     context.moveTo(currentX, plotTop);
     context.lineTo(currentX, plotBottom);
     context.stroke();
     context.setLineDash([]);
+}
+
+/**
+ * Add or remove one statistic from the plot.
+ *
+ * Picking a statistic whose unit family is not the one on the canvas
+ * switches the chart to that family and starts it with just that
+ * statistic, rather than overlaying (say) a half-life in generations on
+ * a proportion axis. Within a family, toggling is additive, so any
+ * combination of comparable series can be compared directly.
+ *
+ * @param {string} name
+ */
+function toggleExploreSeries(name) {
+    const family = EXPLORE_STATISTIC_UNITS[name];
+    if (family === undefined) {
+        return;
+    }
+    if (family !== exploreUnitFamily) {
+        exploreUnitFamily = family;
+        exploreVisibleSeries = new Set([name]);
+    } else if (exploreVisibleSeries.has(name)) {
+        exploreVisibleSeries.delete(name);
+    } else {
+        exploreVisibleSeries.add(name);
+    }
+    refreshExploreRowStates();
+    if (_currentSweep) {
+        drawSweepCurve(exploreCanvas, _currentSweep);
+    }
+}
+
+/**
+ * Apply the plot-toggle affordance and pressed state to one table row --
+ * the same `stat-plot-toggle-row`/`stat-plot-hidden` pair, and the same
+ * ARIA treatment, `run-view-completed.js` already gives the trajectory
+ * panel's own per-statistic toggles, so the interaction is learned once
+ * and works on both screens.
+ *
+ * @param {HTMLTableRowElement} row
+ * @param {string} name
+ */
+function updateExploreRowState(row, name) {
+    const plotted = exploreVisibleSeries.has(name);
+    row.classList.add("stat-plot-toggle-row");
+    row.classList.toggle("stat-plot-hidden", !plotted);
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.setAttribute("aria-pressed", String(plotted));
+}
+
+/**
+ * Re-apply every prediction row's own plot-toggle state.
+ */
+function refreshExploreRowStates() {
+    for (const name of Object.keys(EXPLORE_PREDICTION_LABELS)) {
+        const row = document.getElementById(`explore-stat-${name}`);
+        if (row !== null) {
+            updateExploreRowState(row, name);
+        }
+    }
 }
 
 /**
@@ -360,6 +598,7 @@ async function refreshExplore() {
             }
         }
     }
+    refreshExploreRowStates();
 
     const sweepResult = await window.pywebview.api.get_equilibrium_sweep(
         exploreAxis.value,
@@ -379,7 +618,28 @@ async function refreshExplore() {
 for (const field of [exploreN, exploreD, exploreM, exploreMu, exploreAxis]) {
     field.addEventListener("change", () => {
         window.__fimExploreReady = false;
+        // A changed configuration (or a changed axis) invalidates any
+        // scrubbed position: the marker returns to the newly committed
+        // value rather than staying parked at a stale point index.
+        exploreScrubIndex = null;
         refreshExplore();
+    });
+}
+
+// Prediction rows double as plot toggles. Registered once at module
+// load: `applyStatRow` replaces a row's children on every refresh, but
+// never the `<tr>` itself, so these listeners survive each redraw.
+for (const name of Object.keys(EXPLORE_PREDICTION_LABELS)) {
+    const row = document.getElementById(`explore-stat-${name}`);
+    if (row === null) {
+        continue;
+    }
+    row.addEventListener("click", () => toggleExploreSeries(name));
+    row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleExploreSeries(name);
+        }
     });
 }
 
