@@ -1468,6 +1468,14 @@ fieldset.composite > label {
     align-items: flex-start;
 }
 
+.explore-stat-group th {
+    padding-top: 0.75rem;
+    color: var(--fim-muted);
+    font-size: 0.8rem;
+    font-weight: normal;
+    text-align: left;
+}
+
 /* The Presets picker (`modal-presets`) -- one worked example per row,
  * each a plain button filling its own `<li>` so the whole row is
  * clickable and keyboard-focusable, not only a smaller text link inside

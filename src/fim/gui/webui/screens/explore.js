@@ -39,7 +39,16 @@ const EXPLORE_PREDICTION_LABELS = {
     D: "D",
     G_ST: "G_ST",
     E_ST: "E_ST",
+    H_S: "H_S (within-deme heterozygosity)",
+    H_T: "H_T (pooled heterozygosity)",
+    S_S: "S_S (within-deme entropy, nats)",
+    S_T: "S_T (pooled entropy, nats)",
+    A_S: "A_S (effective alleles/deme)",
+    A_T: "A_T (effective alleles pooled)",
     identity_recovery_half_life: "Half-life (generations)",
+    identity_recovery_rate: "Identity retention rate",
+    identity_recovery_equilibrium: "Equilibrium identity",
+    mutation_negligible_equilibrium: "Mutation negligible at equilibrium",
 };
 
 // The sweep curve's own three plotted series, in draw/legend order --
@@ -340,7 +349,15 @@ async function refreshExplore() {
     for (const [name, label] of Object.entries(EXPLORE_PREDICTION_LABELS)) {
         const row = document.getElementById(`explore-stat-${name}`);
         if (row !== null) {
-            applyStatRow(row, buildPointMeter(label, predictionsResult.predictions[name]));
+            const rawValue = predictionsResult.predictions[name];
+            const value = typeof rawValue === "boolean"
+                ? (rawValue ? "yes" : "no")
+                : rawValue;
+            applyStatRow(row, buildPointMeter(label, value));
+            const qualification = predictionsResult.qualifications?.[name];
+            if (qualification) {
+                row.title = `${row.title}; ${qualification}`;
+            }
         }
     }
 

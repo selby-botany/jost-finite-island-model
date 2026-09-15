@@ -63,6 +63,10 @@ def test_menu_explore_shows_predictions_and_back_returns_to_the_prior_screen(
                 "exploreVisible: !document.getElementById('screen-explore').hidden, "
                 "exploreReady: window.__fimExploreReady === true, "
                 "dValue: document.getElementById('explore-stat-D').textContent, "
+                "hSValue: document.getElementById('explore-stat-H_S').textContent, "
+                "identityValue: document.getElementById("
+                "'explore-stat-identity_recovery_rate'"
+                ").textContent, "
                 "canvasWidth: document.getElementById('explore-canvas').width"
                 "})",
                 lambda value: (
@@ -88,6 +92,8 @@ def test_menu_explore_shows_predictions_and_back_returns_to_the_prior_screen(
                 {
                     "exploreVisible": settled["exploreVisible"],
                     "dValue": settled["dValue"],
+                    "hSValue": settled["hSValue"],
+                    "identityValue": settled["identityValue"],
                     "canvasWidth": settled["canvasWidth"],
                     "backVisible": back_visible,
                 }
@@ -100,6 +106,8 @@ def test_menu_explore_shows_predictions_and_back_returns_to_the_prior_screen(
 
     assert result["exploreVisible"] is True
     assert result["dValue"] != ""
+    assert result["hSValue"] != ""
+    assert result["identityValue"] != ""
     assert result["canvasWidth"] > 0
     assert result["backVisible"] is True
 
