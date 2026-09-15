@@ -423,12 +423,22 @@ before giving up for real.
 trajectory, evenly spaced across the run's persisted range and always
 including generation 0 and the final generation. Each sampled
 generation produces a plain coordinate array
-(`fim.viz.scatter.frequency_points`), not a rendered Matplotlib
-`Figure`: the scrubber ships the whole sampled set to the page once and
-drives play/pause/scrub entirely with client-side Canvas redraws, so
-nothing on this path needs to render anything at all — pre-computation
-itself is cheaper too, since building coordinate arrays costs a
-fraction of what building the same number of Matplotlib figures did.
+(`fim.viz.scatter.frequency_points`) along with supplemental
+literature visualization payloads (`allele_composition_payload`,
+`frequency_spectrum_payload`), not a rendered Matplotlib `Figure`: the
+scrubber ships the whole sampled set to the page once and drives
+play/pause/scrub entirely with client-side Canvas redraws across the
+main scatter canvas and supplemental cards, so nothing on this path
+needs to render anything at all — pre-computation itself is cheaper too,
+since building coordinate arrays costs a fraction of what building the
+same number of Matplotlib figures did.
+
+The scrubber (`webui/scrubber.js`) functions in dual modes: during a
+live scalar run, it operates in `"live"` mode, pinning by default to the
+most recent generation arriving via progress pushes while permitting
+the user to drag the slider back to inspect previous generations
+without interrupting execution; in `"replay"` mode (`completed` state),
+it plays back or scrubs through the sampled trajectory frames.
 
 Animation frames are only ever requested for a trajectory whose
 integrity has already been verified — by the run that just completed
@@ -619,5 +629,19 @@ generator-version: Claude Sonnet 5
 generator-model-token: claude-sonnet-5
 generator-provider: Anthropic
 generation-date: 2026-09-11
+generator-responsibility: revision
+```
+
+Updated §8 (Animation): documented dual-mode time scrubber (live-tracking
+with historical inspection during runs, replay in completed state) and
+supplemental literature visual payload sampling (`allele_composition`,
+`frequency_spectrum`) on animation frames.
+
+```text
+generator-name: Claude Code
+generator-version: Claude Sonnet 5
+generator-model-token: claude-sonnet-5
+generator-provider: Anthropic
+generation-date: 2026-09-15
 generator-responsibility: revision
 ```
