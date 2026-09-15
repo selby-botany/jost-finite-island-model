@@ -1,21 +1,16 @@
 "use strict";
 
-/* Shared player mechanics (unified-run-view design §3.7, §8 Phase E) --
- * play/pause/scrub through an array of "frames," given a caller-
- * supplied way to draw one. Promoted out of the old, animation-specific
- * Screen 5 (`animation.js`, retired this phase, folded into `screens/
- * run-view-completed.js`) so the same component can back `completed`'s
- * own scrubber here and, design §8 Phase F, `running`'s own live,
- * growing one too -- this module knows the generic shape (an index into
- * an array, a "Generation N" label, play/pause/scrub) and nothing about
- * panels, canvases, or where frames come from; `window.fim.
- * setScrubberFrames`'s own `drawFrame` callback owns all of that.
+/* Shared player mechanics (unified-run-view design §3.7, §8 Phase E,
+ * and live supplemental animation design 20260915-claude-sonnet-5-
+ * live-animation-scrubber-design.md) -- play/pause/scrub through an
+ * array of frames across both completed-run replay and live running
+ * states.
  *
- * A singleton, not a class/factory -- there is only ever one scrubber
- * visible at a time (the same "one screen" reality every other shared
- * component in this app, `wireDemePairSelector` included, already
- * assumes), so module-level state is simpler than instance state with
- * nothing to gain from the extra generality.
+ * Supports two operational modes:
+ * 1. "replay" (completed run): time slider over sampled trajectory frames.
+ * 2. "live" (running simulation): dynamically growing frame buffer with
+ *    "live-tracking" by default (pinning to the latest reported generation)
+ *    and "inspecting" mode when dragged back to a historical generation.
  */
 
 // A watchable cadence: fast enough to read as motion rather than a
@@ -37,6 +32,8 @@ let frames = [];
 let currentIndex = 0;
 let playIntervalId = null;
 let onFrame = null;
+let scrubberMode = "replay";
+let isLiveTracking = true;
 
 function stopScrubber() {
     if (playIntervalId !== null) {
@@ -46,27 +43,53 @@ function stopScrubber() {
     scrubberPlayButton.textContent = "Play";
 }
 
-function showCurrentFrame() {
+function showCurrentFrame(isLiveHead = false) {
     const frame = frames[currentIndex];
+    if (!frame) {
+        return;
+    }
     scrubberRange.value = String(currentIndex);
-    scrubberLabel.textContent =
-        `Generation ${frame.generation} (frame ${currentIndex + 1} / ${frames.length})`;
+    if (scrubberMode === "live" && isLiveTracking) {
+        scrubberLabel.textContent =
+            `Generation ${frame.generation} (live, frame ${currentIndex + 1} / ${frames.length})`;
+    } else if (scrubberMode === "live") {
+        scrubberLabel.textContent =
+            `Generation ${frame.generation} (inspecting, frame ${currentIndex + 1} / ${frames.length})`;
+    } else {
+        scrubberLabel.textContent =
+            `Generation ${frame.generation} (frame ${currentIndex + 1} / ${frames.length})`;
+    }
     if (onFrame !== null) {
-        onFrame(frame, currentIndex);
+        onFrame(frame, currentIndex, isLiveHead);
     }
 }
 
-function setCurrentIndex(index) {
+function setCurrentIndex(index, userInitiated = false) {
+    if (frames.length === 0) {
+        return;
+    }
     currentIndex = Math.min(Math.max(index, 0), frames.length - 1);
-    showCurrentFrame();
+    if (userInitiated && scrubberMode === "live") {
+        isLiveTracking = currentIndex === frames.length - 1;
+    }
+    showCurrentFrame(scrubberMode === "live" && isLiveTracking);
 }
 
 function stepForward() {
     if (currentIndex >= frames.length - 1) {
         stopScrubber();
+        if (scrubberMode === "live") {
+            isLiveTracking = true;
+            showCurrentFrame(true);
+        }
         return;
     }
-    setCurrentIndex(currentIndex + 1);
+    setCurrentIndex(currentIndex + 1, false);
+    if (scrubberMode === "live" && currentIndex === frames.length - 1) {
+        isLiveTracking = true;
+        stopScrubber();
+        showCurrentFrame(true);
+    }
 }
 
 scrubberPlayButton.addEventListener("click", () => {
@@ -75,7 +98,10 @@ scrubberPlayButton.addEventListener("click", () => {
         return;
     }
     if (currentIndex >= frames.length - 1) {
-        setCurrentIndex(0);
+        setCurrentIndex(0, false);
+    }
+    if (scrubberMode === "live") {
+        isLiveTracking = false;
     }
     scrubberPlayButton.textContent = "Pause";
     playIntervalId = setInterval(stepForward, STEP_INTERVAL_MS);
@@ -83,15 +109,53 @@ scrubberPlayButton.addEventListener("click", () => {
 
 scrubberRange.addEventListener("input", () => {
     stopScrubber();
-    setCurrentIndex(Number(scrubberRange.value));
+    setCurrentIndex(Number(scrubberRange.value), true);
 });
 
 /**
+ * Set the operational mode of the scrubber ("live" | "replay").
+ *
+ * @param {"live"|"replay"} mode
+ */
+window.fim.setScrubberMode = function setScrubberMode(mode) {
+    scrubberMode = mode;
+    if (mode === "live") {
+        isLiveTracking = true;
+    }
+};
+
+/**
+ * Append one live frame during an active simulation run and update the
+ * controls. If `isLiveTracking` is true, automatically advances the
+ * cursor to the newest frame and repaints the view.
+ *
+ * @param {object} frame
+ * @param {(frame: object, index: number, isLiveHead: boolean) => void} drawFrame
+ */
+window.fim.appendLiveFrame = function appendLiveFrame(frame, drawFrame) {
+    scrubberMode = "live";
+    onFrame = drawFrame;
+    frames.push(frame);
+    const canAnimate = frames.length >= MINIMUM_FRAMES_TO_ANIMATE;
+    scrubberPlayButton.disabled = !canAnimate;
+    scrubberRange.disabled = !canAnimate;
+    scrubberRange.max = String(Math.max(frames.length - 1, 0));
+    if (isLiveTracking) {
+        currentIndex = frames.length - 1;
+        showCurrentFrame(true);
+    } else {
+        scrubberRange.value = String(currentIndex);
+        const curFrame = frames[currentIndex];
+        if (curFrame) {
+            scrubberLabel.textContent =
+                `Generation ${curFrame.generation} (inspecting, frame ${currentIndex + 1} / ${frames.length})`;
+        }
+    }
+};
+
+/**
  * Load a fresh set of frames and (re)enable/disable the controls to
- * match -- the one entry point every caller uses (`run-view-
- * completed.js` today; `run-view-running.js`, design §8 Phase F,
- * calling it again on each new tick with a longer array is how a
- * "live, growing ceiling" scrubber works, with no change needed here).
+ * match -- the entry point for completed-run playback.
  *
  * @param {Array<{generation: number}>} newFrames
  * @param {(frame: object, index: number) => void} drawFrame - Called
@@ -101,16 +165,8 @@ scrubberRange.addEventListener("input", () => {
  */
 window.fim.setScrubberFrames = function setScrubberFrames(newFrames, drawFrame) {
     stopScrubber();
-    // `onFrame` stays null through the rest of this call -- loading a
-    // frame set (typically an async `get_animation_frames` reply
-    // landing well after `completed` is already on screen) must never
-    // itself repaint the canvas. Whatever the caller is currently
-    // showing (the run's own final state, or a chosen deme pair) has
-    // to stay put until the visitor actually scrubs or presses Play;
-    // otherwise this call races the deme-pair selector and the "Show
-    // overview"/"Show pair" buttons and can silently overwrite
-    // whichever of them last drew, depending on when the bridge call
-    // happens to resolve.
+    scrubberMode = "replay";
+    isLiveTracking = false;
     onFrame = null;
     frames = newFrames;
     currentIndex = 0;
@@ -138,9 +194,12 @@ window.fim.resetScrubber = function resetScrubber() {
     onFrame = null;
     frames = [];
     currentIndex = 0;
+    scrubberMode = "replay";
+    isLiveTracking = true;
     scrubberPlayButton.disabled = true;
     scrubberRange.disabled = true;
     scrubberRange.max = "0";
     scrubberRange.value = "0";
     scrubberLabel.textContent = "";
 };
+

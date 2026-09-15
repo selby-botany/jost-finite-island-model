@@ -648,6 +648,81 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
     ]
 
 
+def test_live_run_updates_scrubber_and_supplemental_panels() -> None:
+    """The scrubber & supplemental cards are live during a run & support scrubbing."""
+    started_event = threading.Event()
+    cancelled_event = threading.Event()
+    progress_count = 0
+
+    def on_run_started() -> None:
+        started_event.set()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        nonlocal progress_count
+        if message[0] == "progress":
+            progress_count += 1
+        elif message[0] == "cancelled":
+            cancelled_event.set()
+
+    api = Api(on_run_started=on_run_started, on_message=on_message)
+    window = create_window(api=api, hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_UNREACHABLE_CONVERGENCE
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                for _ in range(_READY_POLL_ATTEMPTS):
+                    if progress_count >= 3:
+                        break
+                    time.sleep(_READY_POLL_INTERVAL_SECONDS)
+                settled = window.evaluate_js(
+                    "({"
+                    "runViewState: window.fim.getRunViewState(), "
+                    "scrubberHidden: "
+                    "document.getElementById('scrubber-controls').hidden, "
+                    "alleleCompHidden: "
+                    "document.getElementById('allele-composition-card').hidden, "
+                    "freqSpecHidden: "
+                    "document.getElementById('frequency-spectrum-card').hidden, "
+                    "ibdHidden: document.getElementById('ibd-card').hidden, "
+                    "liveLabel: document.getElementById('scrubber-label').textContent, "
+                    "scrubbedLabel: (() => {"
+                    "const range = document.getElementById('scrubber-range');"
+                    "range.value = '0';"
+                    "range.dispatchEvent(new Event('input', {bubbles: true}));"
+                    "return document.getElementById('scrubber-label').textContent;"
+                    "})()"
+                    "})"
+                )
+                window.evaluate_js(
+                    "document.getElementById('cancel-run-button').click();"
+                )
+                cancelled_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
+                _wait_for_cancel_run_settled(window)
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["runViewState"] == "running"
+    assert settled["scrubberHidden"] is False
+    assert settled["alleleCompHidden"] is False
+    assert settled["freqSpecHidden"] is False
+    assert settled["ibdHidden"] is True
+    assert "live" in settled["liveLabel"]
+    assert "inspecting" in settled["scrubbedLabel"]
+    assert "Generation 0" in settled["scrubbedLabel"]
+
+
 # Selects the "equilibrium split" radio (`config-modals.js`'s own
 # `initial_conditions_mode` selector) and fills its three fields with
 # values chosen to converge almost immediately — a loose tolerance

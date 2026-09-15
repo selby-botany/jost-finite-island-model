@@ -216,7 +216,10 @@ function enterRunningState(isBatch = false) {
     }
     runCompleted.hidden = true;
     batchResultsTable.hidden = true;
-    scrubberControls.hidden = true;
+    scrubberControls.hidden = isBatch;
+    alleleCompositionCard.hidden = isBatch;
+    frequencySpectrumCard.hidden = isBatch;
+    ibdCard.hidden = true;
     runDemePairSelector.hidden = true;
     cancelButton.disabled = false;
     openFolderButton.hidden = true;
@@ -224,6 +227,9 @@ function enterRunningState(isBatch = false) {
     resultsHistoryBackButton.hidden = true;
     resultsHistoryForwardButton.hidden = true;
     window.fim.resetScrubber();
+    if (!isBatch) {
+        window.fim.setScrubberMode("live");
+    }
     clearRunCanvas();
 }
 
@@ -479,19 +485,34 @@ window.fim.onRunProgress = function onRunProgress(payload) {
         wireLiveDemePairSelector(payload.demeCount);
         liveDemeSelectorWired = true;
     }
-    renderLiveStatistics(payload.statistics);
     accumulateLiveTrajectory(payload.generation, payload.statistics);
-    if (typeof renderTrajectory === "function") {
-        renderTrajectory(
-            liveTrajectoryGenerations,
-            liveTrajectoryHistories,
-            undefined,
-            undefined,
-            liveEquilibriumReference,
-            liveIdentityRecoveryReference
-        );
-    }
-    drawProgressPanels(payload);
+
+    const liveFrame = {
+        generation: payload.generation,
+        panels: payload.panels,
+        pairPanel: payload.pairPanel,
+        statistics: payload.statistics,
+        literatureVisuals: payload.literatureVisuals,
+    };
+
+    window.fim.appendLiveFrame(liveFrame, (f, _index, isLiveHead) => {
+        renderLiveStatistics(f.statistics);
+        if (typeof renderTrajectory === "function") {
+            renderTrajectory(
+                liveTrajectoryGenerations,
+                liveTrajectoryHistories,
+                undefined,
+                undefined,
+                liveEquilibriumReference,
+                liveIdentityRecoveryReference,
+                isLiveHead ? null : f.generation
+            );
+        }
+        drawProgressPanels(f);
+        if (typeof renderSupplementalPanels === "function" && f.literatureVisuals) {
+            renderSupplementalPanels(f.literatureVisuals);
+        }
+    });
 };
 
 window.fim.onRunDone = function onRunDone(payload) {

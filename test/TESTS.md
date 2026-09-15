@@ -13025,6 +13025,16 @@ predictable statistics (`D`/`G_ST`/`E_ST`) each also draw a second,
 distinctly-labeled predicted-equilibrium entry (design §6.2's own
 closing paragraph) — nine legend entries total, not six.
 
+<a id="gui.test_running_screen.test_live_run_updates_scrubber_and_supplemental_panels"></a>
+
+#### test\_live\_run\_updates\_scrubber\_and\_supplemental\_panels
+
+```python
+def test_live_run_updates_scrubber_and_supplemental_panels() -> None
+```
+
+The scrubber & supplemental cards are live during a run & support scrubbing.
+
 <a id="gui.test_running_screen.test_run_button_starts_a_real_equilibrium_split_run"></a>
 
 #### test\_run\_button\_starts\_a\_real\_equilibrium\_split\_run

@@ -38,9 +38,239 @@ const progressLabel = document.getElementById("progress-generation-label");
 // the meter markup.
 const initialStats = document.getElementById("initial-stats");
 
+const alleleCompositionCard = document.getElementById("allele-composition-card");
+const alleleCompositionTitle = document.getElementById("allele-composition-title");
+const alleleCompositionCanvas = document.getElementById("allele-composition-canvas");
+const alleleCompositionLegend = document.getElementById("allele-composition-legend");
+const alleleCompositionNote = document.getElementById("allele-composition-note");
+const frequencySpectrumCard = document.getElementById("frequency-spectrum-card");
+const frequencySpectrumTitle = document.getElementById("frequency-spectrum-title");
+const frequencySpectrumCanvas = document.getElementById("frequency-spectrum-canvas");
+const frequencySpectrumNote = document.getElementById("frequency-spectrum-note");
+const ibdCard = document.getElementById("ibd-card");
+const ibdTitle = document.getElementById("ibd-title");
+const ibdCanvas = document.getElementById("ibd-canvas");
+const ibdNote = document.getElementById("ibd-note");
+
 function clearRunCanvas() {
     _currentPanel = null;
     runCanvas.getContext("2d").clearRect(0, 0, runCanvas.width, runCanvas.height);
+}
+
+/**
+ * Draw the per-deme stacked allele-composition barplot
+ * (`fim.gui.literature_visuals.allele_composition_payload`'s own
+ * docstring has the full "why a dense 1-based legend, not the raw
+ * internal allele id" account -- `payload.alleles`/`payload.demes`
+ * already carry that remapped, display-ready shape, so this function
+ * only draws what it is given.
+ */
+function drawAlleleComposition(canvas, payload) {
+    const context = canvas.getContext("2d");
+    canvas.width = canvas.clientWidth || canvas.width;
+    canvas.height = canvas.clientHeight || canvas.height;
+    const width = canvas.width;
+    const height = canvas.height;
+    context.clearRect(0, 0, width, height);
+    if (!payload || !payload.demes || payload.demes.length === 0) {
+        return;
+    }
+    const colors = Object.fromEntries(
+        (payload.alleles || []).map((allele) => [allele.key, allele.color])
+    );
+    const plotLeft = 36;
+    const plotRight = width - 12;
+    const plotTop = 12;
+    const plotBottom = height - 28;
+    const barGap = 4;
+    const barWidth =
+        (plotRight - plotLeft - barGap * (payload.demes.length - 1)) /
+        payload.demes.length;
+    const style = getComputedStyle(document.documentElement);
+    const borderColor = style.getPropertyValue("--fim-border").trim();
+    const mutedColor = style.getPropertyValue("--fim-muted").trim();
+
+    context.strokeStyle = borderColor;
+    context.strokeRect(plotLeft, plotTop, plotRight - plotLeft, plotBottom - plotTop);
+    context.font = "10px sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "top";
+    for (const [index, deme] of payload.demes.entries()) {
+        const left = plotLeft + index * (barWidth + barGap);
+        let top = plotBottom;
+        for (const segment of deme.segments) {
+            const segmentHeight = segment.value * (plotBottom - plotTop);
+            top -= segmentHeight;
+            context.fillStyle = colors[segment.key] || colors.other || "#999999";
+            context.fillRect(left, top, barWidth, segmentHeight);
+        }
+        context.fillStyle = mutedColor;
+        context.fillText(String(deme.deme), left + barWidth / 2, plotBottom + 5);
+    }
+}
+
+function drawFrequencySpectrum(canvas, payload) {
+    const context = canvas.getContext("2d");
+    canvas.width = canvas.clientWidth || canvas.width;
+    canvas.height = canvas.clientHeight || canvas.height;
+    const width = canvas.width;
+    const height = canvas.height;
+    context.clearRect(0, 0, width, height);
+    const bins = payload ? payload.bins || [] : [];
+    if (bins.length === 0) {
+        return;
+    }
+    const plotLeft = 36;
+    const plotRight = width - 12;
+    const plotTop = 12;
+    const plotBottom = height - 28;
+    const overlay = payload.betaOverlay || [];
+    const maxCount = Math.max(
+        1,
+        ...bins.map((bin) => bin.count),
+        ...overlay.map((point) => point.expectedCount)
+    );
+    const style = getComputedStyle(document.documentElement);
+    const borderColor = style.getPropertyValue("--fim-border").trim();
+    const accentColor = style.getPropertyValue("--fim-accent").trim();
+    const mutedColor = style.getPropertyValue("--fim-muted").trim();
+
+    context.strokeStyle = borderColor;
+    context.strokeRect(plotLeft, plotTop, plotRight - plotLeft, plotBottom - plotTop);
+    context.fillStyle = accentColor;
+    bins.forEach((bin, index) => {
+        const left = plotLeft + (index / bins.length) * (plotRight - plotLeft);
+        const right = plotLeft + ((index + 1) / bins.length) * (plotRight - plotLeft);
+        const barHeight = (bin.count / maxCount) * (plotBottom - plotTop);
+        context.fillRect(left + 1, plotBottom - barHeight, right - left - 2, barHeight);
+    });
+    if (overlay.length > 0) {
+        context.strokeStyle = "#d55e00";
+        context.lineWidth = 2;
+        context.beginPath();
+        overlay.forEach((point, index) => {
+            const x = plotLeft + point.x * (plotRight - plotLeft);
+            const y =
+                plotBottom -
+                (point.expectedCount / maxCount) * (plotBottom - plotTop);
+            if (index === 0) {
+                context.moveTo(x, y);
+            } else {
+                context.lineTo(x, y);
+            }
+        });
+        context.stroke();
+    }
+    context.fillStyle = mutedColor;
+    context.font = "10px sans-serif";
+    context.textAlign = "center";
+    context.fillText("0", plotLeft, plotBottom + 5);
+    context.fillText("1", plotRight, plotBottom + 5);
+}
+
+function drawIbdCurve(canvas, payload) {
+    const context = canvas.getContext("2d");
+    canvas.width = canvas.clientWidth || canvas.width;
+    canvas.height = canvas.clientHeight || canvas.height;
+    const width = canvas.width;
+    const height = canvas.height;
+    context.clearRect(0, 0, width, height);
+    const points = payload ? payload.points || [] : [];
+    if (points.length === 0) {
+        return;
+    }
+    const plotLeft = 42;
+    const plotRight = width - 12;
+    const plotTop = 12;
+    const plotBottom = height - 28;
+    const maxDistance = Math.max(...points.map((point) => point.distance));
+    const maxIdentity = Math.max(1, ...points.map((point) => point.meanIdentity));
+    const style = getComputedStyle(document.documentElement);
+    const borderColor = style.getPropertyValue("--fim-border").trim();
+    const accentColor = style.getPropertyValue("--fim-accent").trim();
+    const mutedColor = style.getPropertyValue("--fim-muted").trim();
+
+    function xToPixel(distance) {
+        return plotLeft + (distance / maxDistance) * (plotRight - plotLeft);
+    }
+    function yToPixel(value) {
+        return plotBottom - (value / maxIdentity) * (plotBottom - plotTop);
+    }
+
+    context.strokeStyle = borderColor;
+    context.strokeRect(plotLeft, plotTop, plotRight - plotLeft, plotBottom - plotTop);
+    if (payload.fit && payload.fit.points) {
+        context.strokeStyle = "#d55e00";
+        context.setLineDash([4, 4]);
+        context.beginPath();
+        payload.fit.points.forEach((point, index) => {
+            const x = xToPixel(point.distance);
+            const y = yToPixel(point.meanIdentity);
+            if (index === 0) {
+                context.moveTo(x, y);
+            } else {
+                context.lineTo(x, y);
+            }
+        });
+        context.stroke();
+        context.setLineDash([]);
+    }
+    context.fillStyle = accentColor;
+    for (const point of points) {
+        context.beginPath();
+        context.arc(
+            xToPixel(point.distance),
+            yToPixel(point.meanIdentity),
+            4,
+            0,
+            2 * Math.PI
+        );
+        context.fill();
+    }
+    context.fillStyle = mutedColor;
+    context.font = "10px sans-serif";
+    context.textAlign = "center";
+    context.fillText("migration-graph distance", (plotLeft + plotRight) / 2, height - 12);
+}
+
+/**
+ * Render the three literature-derived supplemental graphs.
+ *
+ * @param {{alleleComposition: object, frequencySpectrum: object, isolationByDistance: object|null}|undefined} visuals
+ */
+function renderSupplementalPanels(visuals) {
+    alleleCompositionCard.hidden = !visuals || !visuals.alleleComposition;
+    frequencySpectrumCard.hidden = !visuals || !visuals.frequencySpectrum;
+    ibdCard.hidden = !visuals || !visuals.isolationByDistance;
+    if (!visuals) {
+        return;
+    }
+    if (visuals.alleleComposition) {
+        alleleCompositionTitle.textContent = visuals.alleleComposition.title;
+        alleleCompositionNote.textContent = visuals.alleleComposition.note;
+        alleleCompositionLegend.replaceChildren();
+        for (const allele of visuals.alleleComposition.alleles) {
+            const item = document.createElement("span");
+            item.className = "run-supplemental-legend-item";
+            const swatch = document.createElement("span");
+            swatch.className = "swatch";
+            swatch.style.background = allele.color;
+            item.appendChild(swatch);
+            item.append(allele.label);
+            alleleCompositionLegend.appendChild(item);
+        }
+        drawAlleleComposition(alleleCompositionCanvas, visuals.alleleComposition);
+    }
+    if (visuals.frequencySpectrum) {
+        frequencySpectrumTitle.textContent = visuals.frequencySpectrum.title;
+        frequencySpectrumNote.textContent = visuals.frequencySpectrum.note;
+        drawFrequencySpectrum(frequencySpectrumCanvas, visuals.frequencySpectrum);
+    }
+    if (visuals.isolationByDistance) {
+        ibdTitle.textContent = visuals.isolationByDistance.title;
+        ibdNote.textContent = visuals.isolationByDistance.note;
+        drawIbdCurve(ibdCanvas, visuals.isolationByDistance);
+    }
 }
 
 /**
@@ -158,6 +388,9 @@ function enterInitialState(renderPreview = true) {
     if (initialStats) {
         initialStats.hidden = true;
     }
+    alleleCompositionCard.hidden = true;
+    frequencySpectrumCard.hidden = true;
+    ibdCard.hidden = true;
     // Hides a previous run's own live/completed trajectory panel
     // (`run-view-completed.js`'s own `renderTrajectory`, guarded the
     // same "declared in a file that loads after this one" way as
