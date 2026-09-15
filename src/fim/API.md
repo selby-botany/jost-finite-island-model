@@ -3353,19 +3353,27 @@ def get_equilibrium_sweep(axis: str, n: str, m: str, mu: str,
                           d: str) -> dict[str, Any]
 ```
 
-Sweep one of N/d/m/mu and return predicted D/G_ST/E_ST across it.
+Sweep one of N/d/m/mu and return every prediction across it.
 
 Explore's own curve (design doc
 `20260907-claude-sonnet-5-botanist-gui-redesign.md` §5.2):
 `axis` sweeps across `_EQUILIBRIUM_SWEEP_DOMAINS[axis]`, a fixed
 display range independent of the other three fields' current
 values, which are held fixed at whatever `get_equilibrium_
-predictions` was just called with. `E_ST` (`equilibrium_shannon_
-differentiation`) joins `D`/`G_ST` here rather than staying
-computed-but-unplotted the way `get_equilibrium_predictions`
-alone left it — it shares the identical `[0, 1]` differentiation
-domain those two already plot on, so the same axes and the same
-gap-handling client-side `drawLine` cover it with no new chart.
+predictions` was just called with.
+
+Every quantity `_equilibrium_numeric_predictions` knows about is
+evaluated at every swept point, not the `D`/`G_ST`/`E_ST` subset
+that shares a `[0, 1]` domain. No statistic is privileged: each
+one is a closed-form function of `(N, m, mu, d)`, so each one has
+a real curve along each of the four axes, and the differing units
+(proportion, nats, effective alleles, generations) are a charting
+concern the client resolves by grouping series into unit families
+-- not a reason to withhold the numbers here.
+
+Carrying all of them also makes Explore's axis scrubber free: the
+client re-reads the prediction table straight out of `points` as
+the marker moves, with no extra bridge round trip per tick.
 
 **Arguments**:
 
@@ -3380,21 +3388,16 @@ gap-handling client-side `drawLine` cover it with no new chart.
 **Returns**:
 
 - ``{"ok"` - True, "axis": axis, "current": <parsed current value
-  of axis>, "points": [{"x": ..., "D": ..., "G_ST": ...,
-- `"E_ST"` - ...}, ...]}` — `D`/`G_ST`/`E_ST` are `None` (not a
-  formatted string — plotting reads these as numbers) wherever
-  that point's own configuration makes the prediction
-  undefined, e.g. `D`/`E_ST` at `mu == 0`; `{"ok": False,
-- `"message"` - ...}` if `axis` is not one of the four names
-  above, or if `n`/`d`/`m`/`mu` do not parse.
-
-  `identity_recovery_half_life` (generations, unbounded) is
-  deliberately not part of this sweep: it shares no `[0, 1]`
-  domain with `D`/`G_ST`/`E_ST` (`get_equilibrium_predictions`
-  already surfaces it as Explore's own single-number
-  prediction instead) — a second sweep/chart for it against
-  `N`/`m` (the only two axes it depends on) is a reasonable,
-  deliberately deferred follow-up, not built here.
+  of axis>, "current_index": <index into points nearest that
+  value>, "series": [<statistic name>, ...], "points": [{"x":
+  ..., <statistic name>: ..., ...}, ...]}`. Every statistic is
+  a plain number (plotting reads these as numbers, not
+  formatted strings), a bool for `mutation_negligible_
+  equilibrium`, or `None` wherever that point's own
+  configuration leaves it undefined -- every mutation-dependent
+  entry at `mu == 0`, for instance. `{"ok": False, "message":
+  ...}` if `axis` is not one of the four names above, or if
+  `n`/`d`/`m`/`mu` do not parse.
 
 <a id="fim.gui.app.Api.load_yaml"></a>
 

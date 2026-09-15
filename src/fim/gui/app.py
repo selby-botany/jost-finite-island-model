@@ -597,6 +597,73 @@ def _equilibrium_reference(
     }
 
 
+def _equilibrium_numeric_predictions(
+    n: int, m: float, mu: float, d: int
+) -> dict[str, float | bool | None]:
+    """Evaluate every Explore prediction at one `(N, m, mu, d)` point.
+
+    The single source of truth for *which* analytical quantities Explore
+    knows about. Both presentations read from here: `_equilibrium_
+    prediction_payload` formats these for the table, and `Api.get_
+    equilibrium_sweep` collects one of these per swept point for the
+    chart. Neither maintains its own second list of statistic names, so
+    a quantity added here appears in both places at once.
+
+    Every one of these is a closed-form function of `(N, m, mu, d)`
+    alone, so every one of them is defined along every one of the four
+    sweep axes. Several do not depend on every parameter -- `D` has no
+    `N` term at all (`equilibrium_d`'s own docstring: only the
+    migration-to-mutation ratio sets where it settles), `H_S` depends on
+    `N` and `mu` only, and the whole Whitlock identity-recovery family
+    depends on `N` and `m` only. Swept against a parameter they do not
+    contain, those produce a flat line. That flat line is the point, not
+    a degenerate case to suppress: `D` level across two orders of
+    magnitude of `N` while `G_ST` falls away beneath it is this
+    project's central claim, drawn rather than asserted.
+
+    Args:
+        n: Population size in gene copies per deme.
+        m: Symmetric migration rate.
+        mu: Infinite-alleles mutation rate.
+        d: Number of equal demes.
+
+    Returns:
+        One entry per predicted quantity, as a plain number (or, for
+        `mutation_negligible_equilibrium`, a bool). `None` marks a
+        quantity this particular configuration leaves undefined -- every
+        mutation-dependent entry at `mu == 0`, for instance. Callers
+        plotting these must break the line at a `None` rather than
+        reading it as a zero.
+    """
+
+    def value_of(function: Callable[..., float], *args: float | int) -> float | None:
+        try:
+            return function(*args)
+        except ValueError:
+            return None
+
+    s_s_value = value_of(equilibrium_shannon_entropy_subpopulation, n, m, mu, d)
+    s_t_value = value_of(equilibrium_shannon_entropy_total, n, m, mu, d)
+    return {
+        "D": value_of(equilibrium_d, m, mu, d),
+        "G_ST": value_of(equilibrium_g_st, n, m, mu, d),
+        "E_ST": value_of(equilibrium_shannon_differentiation, n, m, mu, d),
+        "H_S": value_of(equilibrium_heterozygosity_isolated, n, mu),
+        "H_T": value_of(equilibrium_heterozygosity_total, n, m, mu, d),
+        "S_S": s_s_value,
+        "S_T": s_t_value,
+        # `exp` of the full-precision entropy, never of an already
+        # display-rounded one -- `format_statistic` is applied to this
+        # result, not to its input.
+        "A_S": exp(s_s_value) if s_s_value is not None else None,
+        "A_T": exp(s_t_value) if s_t_value is not None else None,
+        "identity_recovery_rate": value_of(identity_recovery_rate, n, m),
+        "identity_recovery_equilibrium": value_of(identity_recovery_equilibrium, n, m),
+        "identity_recovery_half_life": value_of(identity_recovery_half_life, n, m),
+        "mutation_negligible_equilibrium": mutation_negligible_equilibrium(m, mu, n),
+    }
+
+
 def _equilibrium_prediction_payload(
     n: int, m: float, mu: float, d: int, digits: int
 ) -> tuple[dict[str, str | bool], dict[str, str]]:
@@ -613,41 +680,10 @@ def _equilibrium_prediction_payload(
         Formatted predictions and qualification messages. Formula-specific
         ``ValueError`` results become the existing ``"undefined"`` value.
     """
-
-    def predict(function: Callable[..., float], *args: float | int) -> str:
-        try:
-            return format_statistic(function(*args), digits)
-        except ValueError:
-            return format_statistic(None, digits)
-
-    def predict_number(
-        function: Callable[..., float], *args: float | int
-    ) -> float | None:
-        try:
-            return function(*args)
-        except ValueError:
-            return None
-
-    s_s_value = predict_number(equilibrium_shannon_entropy_subpopulation, n, m, mu, d)
-    s_t_value = predict_number(equilibrium_shannon_entropy_total, n, m, mu, d)
-    s_s = format_statistic(s_s_value, digits) if s_s_value is not None else "undefined"
-    s_t = format_statistic(s_t_value, digits) if s_t_value is not None else "undefined"
+    values = _equilibrium_numeric_predictions(n, m, mu, d)
     predictions: dict[str, str | bool] = {
-        **_equilibrium_reference(n, m, mu, d, digits),
-        "H_S": predict(equilibrium_heterozygosity_isolated, n, mu),
-        "H_T": predict(equilibrium_heterozygosity_total, n, m, mu, d),
-        "S_S": s_s,
-        "S_T": s_t,
-        "A_S": format_statistic(exp(s_s_value), digits)
-        if s_s_value is not None
-        else "undefined",
-        "A_T": format_statistic(exp(s_t_value), digits)
-        if s_t_value is not None
-        else "undefined",
-        "identity_recovery_half_life": predict(identity_recovery_half_life, n, m),
-        "identity_recovery_rate": predict(identity_recovery_rate, n, m),
-        "identity_recovery_equilibrium": predict(identity_recovery_equilibrium, n, m),
-        "mutation_negligible_equilibrium": mutation_negligible_equilibrium(m, mu, n),
+        name: value if isinstance(value, bool) else format_statistic(value, digits)
+        for name, value in values.items()
     }
     qualifications = {
         "S_S": (
@@ -1601,19 +1637,27 @@ class Api:
     def get_equilibrium_sweep(
         self, axis: str, n: str, m: str, mu: str, d: str
     ) -> dict[str, Any]:
-        """Sweep one of N/d/m/mu and return predicted D/G_ST/E_ST across it.
+        """Sweep one of N/d/m/mu and return every prediction across it.
 
         Explore's own curve (design doc
         `20260907-claude-sonnet-5-botanist-gui-redesign.md` §5.2):
         `axis` sweeps across `_EQUILIBRIUM_SWEEP_DOMAINS[axis]`, a fixed
         display range independent of the other three fields' current
         values, which are held fixed at whatever `get_equilibrium_
-        predictions` was just called with. `E_ST` (`equilibrium_shannon_
-        differentiation`) joins `D`/`G_ST` here rather than staying
-        computed-but-unplotted the way `get_equilibrium_predictions`
-        alone left it — it shares the identical `[0, 1]` differentiation
-        domain those two already plot on, so the same axes and the same
-        gap-handling client-side `drawLine` cover it with no new chart.
+        predictions` was just called with.
+
+        Every quantity `_equilibrium_numeric_predictions` knows about is
+        evaluated at every swept point, not the `D`/`G_ST`/`E_ST` subset
+        that shares a `[0, 1]` domain. No statistic is privileged: each
+        one is a closed-form function of `(N, m, mu, d)`, so each one has
+        a real curve along each of the four axes, and the differing units
+        (proportion, nats, effective alleles, generations) are a charting
+        concern the client resolves by grouping series into unit families
+        -- not a reason to withhold the numbers here.
+
+        Carrying all of them also makes Explore's axis scrubber free: the
+        client re-reads the prediction table straight out of `points` as
+        the marker moves, with no extra bridge round trip per tick.
 
         Args:
             axis: Which field to sweep — one of `"N"`, `"d"`, `"m"`,
@@ -1625,21 +1669,16 @@ class Api:
 
         Returns:
             `{"ok": True, "axis": axis, "current": <parsed current value
-            of axis>, "points": [{"x": ..., "D": ..., "G_ST": ...,
-            "E_ST": ...}, ...]}` — `D`/`G_ST`/`E_ST` are `None` (not a
-            formatted string — plotting reads these as numbers) wherever
-            that point's own configuration makes the prediction
-            undefined, e.g. `D`/`E_ST` at `mu == 0`; `{"ok": False,
-            "message": ...}` if `axis` is not one of the four names
-            above, or if `n`/`d`/`m`/`mu` do not parse.
-
-            `identity_recovery_half_life` (generations, unbounded) is
-            deliberately not part of this sweep: it shares no `[0, 1]`
-            domain with `D`/`G_ST`/`E_ST` (`get_equilibrium_predictions`
-            already surfaces it as Explore's own single-number
-            prediction instead) — a second sweep/chart for it against
-            `N`/`m` (the only two axes it depends on) is a reasonable,
-            deliberately deferred follow-up, not built here.
+            of axis>, "current_index": <index into points nearest that
+            value>, "series": [<statistic name>, ...], "points": [{"x":
+            ..., <statistic name>: ..., ...}, ...]}`. Every statistic is
+            a plain number (plotting reads these as numbers, not
+            formatted strings), a bool for `mutation_negligible_
+            equilibrium`, or `None` wherever that point's own
+            configuration leaves it undefined -- every mutation-dependent
+            entry at `mu == 0`, for instance. `{"ok": False, "message":
+            ...}` if `axis` is not one of the four names above, or if
+            `n`/`d`/`m`/`mu` do not parse.
         """
         if axis not in _EQUILIBRIUM_SWEEP_DOMAINS:
             return {
@@ -1672,32 +1711,37 @@ class Api:
             sweep_d = int(value) if axis == "d" else d_value
             sweep_m = float(value) if axis == "m" else m_value
             sweep_mu = float(value) if axis == "mu" else mu_value
-            try:
-                predicted_d: float | None = equilibrium_d(sweep_m, sweep_mu, sweep_d)
-            except ValueError:
-                predicted_d = None
-            try:
-                predicted_g_st: float | None = equilibrium_g_st(
-                    sweep_n, sweep_m, sweep_mu, sweep_d
-                )
-            except ValueError:
-                predicted_g_st = None
-            try:
-                predicted_e_st: float | None = equilibrium_shannon_differentiation(
-                    sweep_n, sweep_m, sweep_mu, sweep_d
-                )
-            except ValueError:
-                predicted_e_st = None
             points.append(
                 {
                     "x": value,
-                    "D": predicted_d,
-                    "G_ST": predicted_g_st,
-                    "E_ST": predicted_e_st,
+                    **_equilibrium_numeric_predictions(
+                        sweep_n, sweep_m, sweep_mu, sweep_d
+                    ),
                 }
             )
 
-        return {"ok": True, "axis": axis, "current": current, "points": points}
+        # Where the scrubber's marker starts: the swept point closest to
+        # the configuration's own committed value on this axis. The
+        # sweep spans a fixed display range that need not contain that
+        # value exactly (`_geometric_sweep` lands on its own points, and
+        # a committed value can even sit outside the domain), so this is
+        # a nearest match rather than an exact lookup -- the same
+        # "snap to the nearest sampled position" rule `run-view-
+        # completed.js`'s own `nearestGeneration` uses for the
+        # trajectory scrubber.
+        current_index = min(
+            range(len(points)),
+            key=lambda index: abs(float(points[index]["x"]) - float(current)),
+        )
+
+        return {
+            "ok": True,
+            "axis": axis,
+            "current": current,
+            "current_index": current_index,
+            "series": [name for name in points[0] if name != "x"],
+            "points": points,
+        }
 
     @_log_bridge_call
     def load_yaml(self) -> dict[str, Any]:

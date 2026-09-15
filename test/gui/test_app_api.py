@@ -12,6 +12,7 @@ dialog) and are covered instead in `test/gui/test_app.py`, marked `gui`.
 from __future__ import annotations
 
 import json
+import math
 import queue
 import webbrowser
 from collections.abc import Sequence
@@ -842,6 +843,113 @@ def test_get_equilibrium_sweep_rounds_integer_axes() -> None:
     assert result["ok"] is True
     for point in result["points"]:
         assert point["x"] == int(point["x"])
+
+
+@pytest.mark.parametrize("axis", ["N", "d", "m", "mu"])
+def test_get_equilibrium_sweep_carries_every_statistic_on_every_axis(
+    axis: str,
+) -> None:
+    """No statistic is special: all four axes carry the whole prediction set.
+
+    Every Explore prediction is a closed-form function of `(N, m, mu, d)`,
+    so every one of them is defined along every one of the four sweep
+    axes. The chart's unit-family grouping is a presentation concern; the
+    bridge withholds nothing.
+    """
+    expected = set(app_module._equilibrium_numeric_predictions(450, 0.001, 3e-05, 20))
+
+    result = Api().get_equilibrium_sweep(
+        axis=axis, n="450", m="0.001", mu="0.00003", d="20"
+    )
+
+    assert result["ok"] is True
+    assert set(result["series"]) == expected
+    for point in result["points"]:
+        assert set(point) == expected | {"x"}
+
+
+def test_get_equilibrium_sweep_matches_the_statistics_functions_directly() -> None:
+    """Each swept point equals the underlying formula at that point's own value."""
+    result = Api().get_equilibrium_sweep(
+        axis="m", n="450", m="0.001", mu="0.00003", d="20"
+    )
+
+    assert result["ok"] is True
+    for point in result["points"]:
+        swept_m = point["x"]
+        assert point["D"] == pytest.approx(equilibrium_d(swept_m, 0.00003, 20))
+        assert point["H_S"] == pytest.approx(
+            equilibrium_heterozygosity_isolated(450, 0.00003)
+        )
+        assert point["H_T"] == pytest.approx(
+            equilibrium_heterozygosity_total(450, swept_m, 0.00003, 20)
+        )
+        assert point["S_T"] == pytest.approx(
+            equilibrium_shannon_entropy_total(450, swept_m, 0.00003, 20)
+        )
+        assert point["A_T"] == pytest.approx(math.exp(point["S_T"]))
+        assert point["identity_recovery_half_life"] == pytest.approx(
+            identity_recovery_half_life(450, swept_m)
+        )
+        assert point["identity_recovery_equilibrium"] == pytest.approx(
+            identity_recovery_equilibrium(450, swept_m)
+        )
+
+
+def test_get_equilibrium_sweep_shows_d_flat_across_population_size() -> None:
+    """`D` swept against `N` is a horizontal line -- the project's core claim.
+
+    `equilibrium_d` has no `N` term at all: only the migration-to-mutation
+    ratio sets where it settles. Drawing that flat line beside a falling
+    `G_ST` is precisely why the sweep carries every statistic rather than
+    hiding the ones that do not vary on a given axis.
+    """
+    result = Api().get_equilibrium_sweep(
+        axis="N", n="450", m="0.001", mu="0.00003", d="20"
+    )
+
+    assert result["ok"] is True
+    predicted_d = {point["D"] for point in result["points"]}
+    assert len(predicted_d) == 1
+    # G_ST, by contrast, must actually move across the same sweep.
+    g_st_values = [point["G_ST"] for point in result["points"]]
+    assert min(g_st_values) < max(g_st_values)
+
+
+@pytest.mark.parametrize("axis", ["d", "mu"])
+def test_get_equilibrium_sweep_shows_identity_recovery_flat_off_its_axes(
+    axis: str,
+) -> None:
+    """Whitlock's recovery family depends on `N` and `m` only.
+
+    Swept against deme count or mutation rate it is flat, which states the
+    model boundary (zero-mutation, infinite-island) far more plainly than
+    a tooltip does.
+    """
+    result = Api().get_equilibrium_sweep(
+        axis=axis, n="450", m="0.001", mu="0.00003", d="20"
+    )
+
+    assert result["ok"] is True
+    for name in (
+        "identity_recovery_rate",
+        "identity_recovery_equilibrium",
+        "identity_recovery_half_life",
+    ):
+        assert len({point[name] for point in result["points"]}) == 1
+
+
+def test_get_equilibrium_sweep_reports_the_nearest_point_to_the_current_value() -> None:
+    """`current_index` seeds the scrubber at the committed configuration."""
+    result = Api().get_equilibrium_sweep(
+        axis="m", n="450", m="0.001", mu="0.00003", d="20"
+    )
+
+    assert result["ok"] is True
+    index = result["current_index"]
+    assert 0 <= index < len(result["points"])
+    distances = [abs(point["x"] - result["current"]) for point in result["points"]]
+    assert distances[index] == pytest.approx(min(distances))
 
 
 def test_get_equilibrium_sweep_rejects_an_unknown_axis() -> None:
