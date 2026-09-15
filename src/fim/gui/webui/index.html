@@ -220,6 +220,30 @@
         <button type="button" id="run-button" disabled>Run simulation</button>
         <button type="button" id="cancel-run-button" disabled>Cancel</button>
         <button type="button" id="open-folder-button" hidden>Open output folder</button>
+        <button
+          type="button"
+          id="results-history-back-button"
+          data-history-back
+          hidden
+          disabled
+        >
+          <svg class="button-icon" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-back"></use>
+          </svg>
+          Back
+        </button>
+        <button
+          type="button"
+          id="results-history-forward-button"
+          data-history-forward
+          hidden
+          disabled
+        >
+          Forward
+          <svg class="button-icon button-icon-right" aria-hidden="true">
+            <use href="icons/fim-icons.svg#icon-forward"></use>
+          </svg>
+        </button>
         <!-- `completed`-only: return to the `initial` state (and p_0
              preview) without starting a new run. Hidden in `initial`/
              `running`; `run-view-completed.js` shows and wires it. -->

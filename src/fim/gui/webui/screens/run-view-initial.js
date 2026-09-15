@@ -143,6 +143,12 @@ function enterInitialState(renderPreview = true) {
     if (typeof resultsBackButton !== "undefined") {
         resultsBackButton.hidden = true;
     }
+    if (typeof resultsHistoryBackButton !== "undefined") {
+        resultsHistoryBackButton.hidden = true;
+    }
+    if (typeof resultsHistoryForwardButton !== "undefined") {
+        resultsHistoryForwardButton.hidden = true;
+    }
     if (typeof resultsStats !== "undefined") {
         resultsStats.hidden = true;
     }

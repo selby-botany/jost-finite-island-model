@@ -115,6 +115,8 @@ const fim = {
         });
     },
 
+    syncHistoryControls,
+
     /** @returns {"initial"|"running"|"completed"} */
     getRunViewState() {
         return runViewState;

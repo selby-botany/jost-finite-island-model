@@ -112,6 +112,7 @@ def test_card_navigation_buttons_have_directional_icons(
             "({"
             "backButtons: ["
             "'history-back-button', "
+            "'results-history-back-button', "
             "'results-back-button', "
             "'open-run-back-button', "
             "'help-back-button', "
@@ -122,6 +123,7 @@ def test_card_navigation_buttons_have_directional_icons(
             ".querySelector('use')?.getAttribute('href')), "
             "forwardButtons: ["
             "'history-forward-button', "
+            "'results-history-forward-button', "
             "'home-new-run-button'"
             "].map(id => document.getElementById(id)"
             ".querySelector('use')?.getAttribute('href'))"
@@ -137,8 +139,10 @@ def test_card_navigation_buttons_have_directional_icons(
             "icons/fim-icons.svg#icon-back",
             "icons/fim-icons.svg#icon-back",
             "icons/fim-icons.svg#icon-back",
+            "icons/fim-icons.svg#icon-back",
         ],
         "forwardButtons": [
+            "icons/fim-icons.svg#icon-forward",
             "icons/fim-icons.svg#icon-forward",
             "icons/fim-icons.svg#icon-forward",
         ],

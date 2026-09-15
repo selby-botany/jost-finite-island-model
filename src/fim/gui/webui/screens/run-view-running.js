@@ -221,6 +221,8 @@ function enterRunningState(isBatch = false) {
     cancelButton.disabled = false;
     openFolderButton.hidden = true;
     resultsBackButton.hidden = true;
+    resultsHistoryBackButton.hidden = true;
+    resultsHistoryForwardButton.hidden = true;
     window.fim.resetScrubber();
     clearRunCanvas();
 }

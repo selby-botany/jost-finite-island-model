@@ -176,6 +176,10 @@ const batchResultsTableEl = document.getElementById("batch-results-summary");
 const batchResultsSummary = document.getElementById("batch-results-summary-body");
 const batchResultsTableBody = document.getElementById("batch-results-table-body");
 const resultsBackButton = document.getElementById("results-back-button");
+const resultsHistoryBackButton = document.getElementById("results-history-back-button");
+const resultsHistoryForwardButton = document.getElementById(
+    "results-history-forward-button"
+);
 
 // Design §4.4's own "a statistic omitted from summary.json still
 // renders as explicitly omitted, not blank" -- `_batch_done_payload`
@@ -1824,6 +1828,11 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     cancelButton.disabled = true;
     openFolderButton.hidden = false;
     resultsBackButton.hidden = false;
+    resultsHistoryBackButton.hidden = false;
+    resultsHistoryForwardButton.hidden = false;
+    if (typeof window.fim.syncHistoryControls === "function") {
+        window.fim.syncHistoryControls();
+    }
     resultsStats.hidden = isBatch;
     batchResultsTableEl.hidden = !isBatch;
     batchResultsTable.hidden = !isBatch;

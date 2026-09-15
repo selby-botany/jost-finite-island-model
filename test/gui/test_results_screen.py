@@ -130,6 +130,10 @@ def test_a_completed_run_renders_the_run_view(
             "scrubberHidden: document.getElementById('scrubber-controls').hidden, "
             "scrubberPlayDisabled: "
             "document.getElementById('scrubber-play-button').disabled, "
+            "resultsHistoryBackHidden: "
+            "document.getElementById('results-history-back-button').hidden, "
+            "resultsHistoryForwardHidden: "
+            "document.getElementById('results-history-forward-button').hidden, "
             "scrubberPending: window.__fimScrubberPending"
             "})"
         ),
@@ -182,6 +186,8 @@ def test_a_completed_run_renders_the_run_view(
     # enabled here, not just present.
     assert settled["scrubberHidden"] is False
     assert settled["scrubberPlayDisabled"] is False
+    assert settled["resultsHistoryBackHidden"] is False
+    assert settled["resultsHistoryForwardHidden"] is False
 
 
 def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
