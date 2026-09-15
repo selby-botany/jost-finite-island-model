@@ -1803,8 +1803,12 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     report = report_for_state(
         state, params, run_id="run-1", converged=False, reason="in progress"
     )
+    visuals: dict[str, Any] = {
+        "alleleComposition": {"demes": []},
+        "frequencySpectrum": {"bins": []},
+    }
     message_queue: queue.Queue[runner_module.RunMessage] = queue.Queue()
-    message_queue.put(("progress", 3, [], points, report))
+    message_queue.put(("progress", 3, [], points, report, visuals))
     # A terminal message right behind it: `_drain_run_messages`'s own
     # `while True` loop only returns once it sees one, and this test
     # cares only about the "progress" push's own first `evaluate_js`
@@ -1825,6 +1829,7 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     pair_panel = progress_payload["pairPanel"]
     assert pair_panel["x_label"] == "Deme 1"
     assert pair_panel["y_label"] == "Deme 3"
+    assert progress_payload["literatureVisuals"] == visuals
 
 
 def _write_run(tmp_path: Path, **overrides: object) -> Path:

@@ -129,6 +129,9 @@ def test_start_run_writes_the_four_documented_artifacts_on_success(
             # show before the run itself finishes.
             report = message[4]
             assert {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"} <= report.keys()
+            visuals = message[5]
+            assert "alleleComposition" in visuals
+            assert "frequencySpectrum" in visuals
             checked += 1
     assert checked == len(progress_messages)
 

@@ -49,6 +49,10 @@ from fim.engine import (
     fim,
     report_for_state,
 )
+from fim.gui.literature_visuals import (
+    allele_composition_payload,
+    frequency_spectrum_payload,
+)
 from fim.gui.store import GuiProgressStore, RunCancelledError
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
@@ -80,7 +84,12 @@ _EXPECTED_ENGINE_ERRORS: Final = (
 )
 
 ProgressMessage = tuple[
-    Literal["progress"], int, list[dict[str, object]], FloatArray, FinalReport
+    Literal["progress"],
+    int,
+    list[dict[str, object]],
+    FloatArray,
+    FinalReport,
+    dict[str, Any],
 ]
 DoneMessage = tuple[Literal["done"], RunResult]
 CancelledMessage = tuple[Literal["cancelled"], int]
@@ -240,7 +249,11 @@ def _run_worker(
             report = report_for_state(
                 state, params, run_id=run_id, converged=False, reason="in progress"
             )
-            message_queue.put(("progress", generation, panels, points, report))
+            visuals = {
+                "alleleComposition": allele_composition_payload(state),
+                "frequencySpectrum": frequency_spectrum_payload(state, params),
+            }
+            message_queue.put(("progress", generation, panels, points, report, visuals))
 
     try:
         with paths.atomic_directory(output_directory) as working_directory:

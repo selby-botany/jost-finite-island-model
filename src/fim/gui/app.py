@@ -3035,6 +3035,7 @@ def _drain_run_messages(
                     name: format_statistic(message[4][name], digits)
                     for name in _RESULT_STATISTIC_NAMES
                 },
+                "literatureVisuals": message[5],
             }
             pair = live_deme_pair()
             if pair is not None:
