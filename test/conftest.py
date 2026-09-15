@@ -58,6 +58,20 @@ settings.load_profile("deterministic")
 _SHUTDOWN_TIMEOUT_SECONDS = float(os.environ.get("FIM_TEST_SHUTDOWN_TIMEOUT", "120"))
 
 
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Keep GUI tests on one xdist worker during parallel CI runs.
+
+    Args:
+        items: Test items collected for the current pytest session.
+
+    Returns:
+        None
+    """
+    for item in items:
+        if "gui" in item.keywords:
+            item.add_marker(pytest.mark.xdist_group("gui"))
+
+
 def live_non_daemon_threads() -> list[threading.Thread]:
     """Return every non-daemon thread other than the main one.
 

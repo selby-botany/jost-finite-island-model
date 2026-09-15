@@ -190,17 +190,14 @@ if "${run_test}"; then
         # excluded -- the same reasoning R17 itself established, now
         # applied to one deliberately-named exception rather than none.
         #
-        # Deliberately no `-n auto` here, unlike the two pytest
-        # invocations above/below: this is the one marker set that
-        # includes `gui`, and running several real `pywebview` windows
-        # concurrently across xdist worker processes has not been
-        # verified safe (`pyproject.toml`'s own default `addopts` has
-        # the full reasoning). Revisit once that is checked for real,
-        # ideally against a real `--ci` run under `xvfb-run`.
+        # `--dist=loadgroup` keeps all GUI tests on one worker while
+        # allowing non-GUI tests to use the remaining workers. The
+        # collection hook in test/conftest.py adds the shared group;
+        # concurrent pywebview windows remain unsupported.
         pytest_marker_args=(-m 'not slow and not packaging')
         "${ci}" && pytest_marker_args=(-m 'not slow')
         run "${python}" -m pytest -o addopts= --strict-config \
-            --strict-markers "${pytest_marker_args[@]}" \
+            --strict-markers -n auto --dist=loadgroup "${pytest_marker_args[@]}" \
             --cov=fim --cov-branch --cov-report=term-missing \
             --cov-fail-under=90
     else

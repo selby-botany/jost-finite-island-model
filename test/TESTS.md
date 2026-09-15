@@ -8,6 +8,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
 
 - [`test/`](#group-test)
   - [`conftest`](#test.conftest)
+  - [`test_build_ci_parallel`](#test.test_build_ci_parallel)
   - [`test_hypothesis_profile`](#test.test_hypothesis_profile)
   - [`test_launcher`](#test.test_launcher)
   - [`test_logging_setup`](#test.test_logging_setup)
@@ -138,6 +139,25 @@ never reached at all -- the first version of this file hung a child
 interpreter with completely empty stderr. `pytest_unconfigure` runs at
 the end of the session while the interpreter is still fully alive, which
 is the last moment ordinary Python code is guaranteed to run.
+
+<a id="test.conftest.pytest_collection_modifyitems"></a>
+
+#### pytest\_collection\_modifyitems
+
+```python
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None
+```
+
+Keep GUI tests on one xdist worker during parallel CI runs.
+
+**Arguments**:
+
+- `items` - Test items collected for the current pytest session.
+  
+
+**Returns**:
+
+  None
 
 <a id="test.conftest.live_non_daemon_threads"></a>
 
@@ -327,6 +347,23 @@ with its own thin autouse wrapper depending on this fixture:
 `test/cli/conftest.py` (scoped to `test/cli/`), `test/test_
 launcher.py` (no subdirectory of its own to scope a conftest.py
 to), and `test/gui/conftest.py` (`doc/fim-logging-design.md` §12).
+
+<a id="test.test_build_ci_parallel"></a>
+
+# test.test\_build\_ci\_parallel
+
+Regression tests for parallel CI test scheduling.
+
+<a id="test.test_build_ci_parallel.test_ci_build_uses_xdist_loadgroup_for_parallel_gui_safe_execution"></a>
+
+#### test\_ci\_build\_uses\_xdist\_loadgroup\_for\_parallel\_gui\_safe\_execution
+
+```python
+def test_ci_build_uses_xdist_loadgroup_for_parallel_gui_safe_execution(
+) -> None
+```
+
+`--ci` parallelizes tests while assigning GUI tests to one worker.
 
 <a id="test.test_hypothesis_profile"></a>
 
