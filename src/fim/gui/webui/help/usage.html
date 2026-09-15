@@ -477,7 +477,7 @@ action the matching on-screen control already performs.</p>
 </tr>
 <tr>
 <td>Explore</td>
-<td>Four fields (N, d, m, mu) and a theoretical-prediction table (D, G<sub>ST</sub>, E<sub>ST</sub>, and Whitlock's identity-recovery half-life) that update the instant a field is committed — no simulation ever runs, so this never takes measurable time regardless of N or d. A sweep curve plots the selected field's predicted D/G<sub>ST</sub> across a fixed range, with the current configuration marked. Reachable from the rail's own Explore button, or &quot;🔮 Explore&quot; on Configure, from any screen; Back/Forward use the shared screen history</td>
+<td>Four fields (N, d, m, mu) and a theoretical-prediction table covering differentiation (D, G<sub>ST</sub>, E<sub>ST</sub>), equilibrium diversity (within-deme and pooled heterozygosity, Shannon entropy, and effective allele counts), and Whitlock identity-recovery metrics. The table also reports whether mutation is negligible at equilibrium and marks the typical-deme entropy as approximate, especially at d = 2. Values update when a field is committed — no simulation ever runs, so this remains immediate regardless of N or d. A sweep curve plots the selected field's predicted D/G<sub>ST</sub>/E<sub>ST</sub> across a fixed range, with the current configuration marked. Reachable from the rail's own Explore button, or &quot;🔮 Explore&quot; on Configure, from any screen; Back/Forward use the shared screen history</td>
 <td>No CLI equivalent — a direct <code>fim.statistics</code> call from Python or a script is the closest terminal equivalent</td>
 </tr>
 <tr>

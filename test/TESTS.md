@@ -6317,6 +6317,16 @@ def test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_zero(
 
 `equilibrium_d` alone requires `mu > 0`; the other three do not.
 
+<a id="gui.test_app_api.test_get_equilibrium_predictions_qualifies_two_deme_entropy"></a>
+
+#### test\_get\_equilibrium\_predictions\_qualifies\_two\_deme\_entropy
+
+```python
+def test_get_equilibrium_predictions_qualifies_two_deme_entropy() -> None
+```
+
+The published subpopulation-entropy approximation is weak at d=2.
+
 <a id="gui.test_app_api.test_get_equilibrium_predictions_rejects_invalid_input"></a>
 
 #### test\_get\_equilibrium\_predictions\_rejects\_invalid\_input

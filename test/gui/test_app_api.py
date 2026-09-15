@@ -600,6 +600,14 @@ def test_get_equilibrium_predictions_reports_d_as_undefined_at_mu_zero() -> None
     assert result["predictions"]["S_T"] == "undefined"
     assert result["predictions"]["A_S"] == "undefined"
     assert result["predictions"]["A_T"] == "undefined"
+
+
+def test_get_equilibrium_predictions_qualifies_two_deme_entropy() -> None:
+    """The published subpopulation-entropy approximation is weak at d=2."""
+    result = Api().get_equilibrium_predictions(n="450", m="0.001", mu="0.00003", d="2")
+
+    assert result["ok"] is True
+    assert result["qualifications"]["S_S"] == ("Approximate; less reliable when d = 2")
     assert result["predictions"]["identity_recovery_half_life"] != "undefined"
 
 

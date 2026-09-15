@@ -620,19 +620,29 @@ def _equilibrium_prediction_payload(
         except ValueError:
             return format_statistic(None, digits)
 
-    s_s = predict(equilibrium_shannon_entropy_subpopulation, n, m, mu, d)
-    s_t = predict(equilibrium_shannon_entropy_total, n, m, mu, d)
+    def predict_number(
+        function: Callable[..., float], *args: float | int
+    ) -> float | None:
+        try:
+            return function(*args)
+        except ValueError:
+            return None
+
+    s_s_value = predict_number(equilibrium_shannon_entropy_subpopulation, n, m, mu, d)
+    s_t_value = predict_number(equilibrium_shannon_entropy_total, n, m, mu, d)
+    s_s = format_statistic(s_s_value, digits) if s_s_value is not None else "undefined"
+    s_t = format_statistic(s_t_value, digits) if s_t_value is not None else "undefined"
     predictions: dict[str, str | bool] = {
         **_equilibrium_reference(n, m, mu, d, digits),
         "H_S": predict(equilibrium_heterozygosity_isolated, n, mu),
         "H_T": predict(equilibrium_heterozygosity_total, n, m, mu, d),
         "S_S": s_s,
         "S_T": s_t,
-        "A_S": format_statistic(exp(float(s_s)), digits)
-        if s_s != "undefined"
+        "A_S": format_statistic(exp(s_s_value), digits)
+        if s_s_value is not None
         else "undefined",
-        "A_T": format_statistic(exp(float(s_t)), digits)
-        if s_t != "undefined"
+        "A_T": format_statistic(exp(s_t_value), digits)
+        if s_t_value is not None
         else "undefined",
         "identity_recovery_half_life": predict(identity_recovery_half_life, n, m),
         "identity_recovery_rate": predict(identity_recovery_rate, n, m),
