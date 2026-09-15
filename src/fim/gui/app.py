@@ -1739,6 +1739,12 @@ class Api:
             "axis": axis,
             "current": current,
             "current_index": current_index,
+            # The client formats scrubbed values itself, straight out of
+            # `points`, so it needs the same display precision the
+            # committed table was formatted with -- otherwise moving the
+            # scrubber onto the committed value would silently change how
+            # many digits every row shows.
+            "digits": self._significant_digits,
             "series": [name for name in points[0] if name != "x"],
             "points": points,
         }

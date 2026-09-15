@@ -9963,6 +9963,24 @@ axes. Clicking a row in another unit family (here the half-life, in
 generations) moves the chart to that family rather than overlaying an
 unbounded generation count on the proportion axis.
 
+<a id="gui.test_explore_screen.test_axis_scrubber_moves_the_marker_and_repredicts"></a>
+
+#### test\_axis\_scrubber\_moves\_the\_marker\_and\_repredicts
+
+```python
+def test_axis_scrubber_moves_the_marker_and_repredicts(
+        window: webview.Window) -> None
+```
+
+Dragging the axis scrubber re-reads the whole table at the swept value.
+
+Explore drew a dashed marker at the committed value with no way to
+move it -- the one screen with that marker and no scrubber, while the
+completed-run view has had exactly this instrument over generations
+since `scrubber.js`. Moving it must change the predictions, mark the
+table as showing something other than the typed configuration, and
+come back to the committed numbers on reset.
+
 <a id="gui.test_field_help"></a>
 
 # gui.test\_field\_help

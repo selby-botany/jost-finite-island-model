@@ -1476,6 +1476,37 @@ fieldset.composite > label {
     text-align: left;
 }
 
+/* The Explore axis scrubber: a range input spanning the chart width,
+   with the value it currently sits on named beside it and a control to
+   return to the committed configuration. */
+.explore-scrubber {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+}
+
+.explore-scrubber input[type="range"] {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.explore-scrub-label {
+    flex: 0 0 auto;
+    color: var(--fim-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+/* While scrubbed, the prediction table is showing a parameter value
+   other than the one typed into the four fields. Marking it keeps that
+   difference visible, so the numbers are never mistaken for the
+   committed configuration's own. */
+#explore-predictions.explore-scrubbed {
+    border-left: 3px solid var(--fim-muted);
+    padding-left: 0.5rem;
+}
+
 /* Names the prediction table's own click-to-plot affordance beneath the
    legend. `.stat-plot-toggle-row`/`.stat-plot-hidden` (above) already
    supply the per-row cursor and dimmed-when-unplotted treatment, shared

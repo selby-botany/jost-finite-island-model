@@ -365,3 +365,92 @@ def test_clicking_a_prediction_row_plots_it_and_switches_unit_family(
     assert result["after"]["pressed"] == "true"
     # The proportion series are no longer plotted, and say so.
     assert result["after"]["dimmedD"] is True
+
+
+def test_axis_scrubber_moves_the_marker_and_repredicts(
+    window: webview.Window,
+) -> None:
+    """Dragging the axis scrubber re-reads the whole table at the swept value.
+
+    Explore drew a dashed marker at the committed value with no way to
+    move it -- the one screen with that marker and no scrubber, while the
+    completed-run view has had exactly this instrument over generations
+    since `scrubber.js`. Moving it must change the predictions, mark the
+    table as showing something other than the typed configuration, and
+    come back to the committed numbers on reset.
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    snapshot_script = (
+        "({d: document.getElementById('explore-stat-D').textContent, "
+        "halfLife: document.getElementById("
+        "'explore-stat-identity_recovery_half_life').textContent, "
+        "label: document.getElementById('explore-scrub-label').textContent, "
+        "scrubbed: document.getElementById('explore-predictions')"
+        ".classList.contains('explore-scrubbed'), "
+        "resetDisabled: document.getElementById('explore-scrub-reset').disabled})"
+    )
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("setTimeout(() => { window.fim.menu.explore(); }, 0);")
+            _poll_until(
+                "window.__fimExploreReady === true", lambda value: value is True
+            )
+            committed = window.evaluate_js(snapshot_script)
+            # Drag to the far end of the swept range: the widest possible
+            # change from wherever the committed value sits.
+            window.evaluate_js(
+                "(() => {"
+                "var r = document.getElementById('explore-scrub-range');"
+                "r.value = r.max;"
+                "r.dispatchEvent(new Event('input'));"
+                "})()"
+            )
+            scrubbed = window.evaluate_js(snapshot_script)
+            window.evaluate_js("document.getElementById('explore-scrub-reset').click()")
+            restored = window.evaluate_js(snapshot_script)
+            outcome.put(
+                {
+                    "committed": committed,
+                    "scrubbed": scrubbed,
+                    "restored": restored,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    committed = result["committed"]
+    scrubbed = result["scrubbed"]
+    restored = result["restored"]
+
+    # The committed view is not marked as scrubbed and has nothing to reset.
+    assert committed["scrubbed"] is False
+    assert committed["resetDisabled"] is True
+    assert "(current)" in committed["label"]
+
+    # Scrubbing moves to a different swept value and repredicts there.
+    assert scrubbed["scrubbed"] is True
+    assert scrubbed["resetDisabled"] is False
+    assert "(exploring)" in scrubbed["label"]
+    assert scrubbed["label"] != committed["label"]
+    assert scrubbed["d"] != committed["d"]
+    # Statistics that are not plotted update too -- the scrubber drives
+    # the whole table, not only the charted series.
+    assert scrubbed["halfLife"] != committed["halfLife"]
+
+    # Reset restores the committed configuration's own numbers exactly.
+    assert restored == committed

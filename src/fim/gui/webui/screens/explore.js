@@ -24,10 +24,16 @@ const exploreMu = document.getElementById("explore-mu");
 const exploreAxis = document.getElementById("explore-axis");
 const exploreCanvas = document.getElementById("explore-canvas");
 const exploreLegend = document.getElementById("explore-legend");
+const exploreScrubRange = document.getElementById("explore-scrub-range");
+const exploreScrubLabel = document.getElementById("explore-scrub-label");
+const exploreScrubReset = document.getElementById("explore-scrub-reset");
 const explorePredictions = document.getElementById("explore-predictions");
 
 let exploreSeeded = false;
 let _currentSweep = null;
+// The committed configuration's own prediction payload, kept so the
+// table can be restored exactly when the scrubber returns to it.
+let _committedPredictions = null;
 
 // Display label for each predicted quantity's own table row --
 // `meters.js`'s `formatStatisticLabel` only special-cases the `X_YZ`
@@ -559,6 +565,124 @@ function refreshExploreRowStates() {
 }
 
 /**
+ * Fill the prediction table from one set of already-formatted values.
+ *
+ * @param {Object<string, string|boolean>} predictions
+ * @param {Object<string, string>} [qualifications]
+ */
+function renderExplorePredictionRows(predictions, qualifications) {
+    for (const [name, label] of Object.entries(EXPLORE_PREDICTION_LABELS)) {
+        const row = document.getElementById(`explore-stat-${name}`);
+        if (row !== null) {
+            const rawValue = predictions[name];
+            const value = typeof rawValue === "boolean"
+                ? (rawValue ? "yes" : "no")
+                : rawValue;
+            applyStatRow(row, buildPointMeter(label, value));
+            const qualification = qualifications?.[name];
+            if (qualification) {
+                row.title = `${row.title}; ${qualification}`;
+            }
+        }
+    }
+    refreshExploreRowStates();
+}
+
+/**
+ * Format one raw swept value the way the bridge's own `format_statistic`
+ * would have, so a scrubbed row and a committed row show the same number
+ * of digits for the same quantity.
+ *
+ * @param {number|boolean|null} value
+ * @param {number} digits Significant digits, from the sweep payload.
+ * @returns {string|boolean}
+ */
+function formatExploreSweepValue(value, digits) {
+    if (typeof value === "boolean") {
+        return value;
+    }
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+        return "undefined";
+    }
+    return String(Number(value.toPrecision(digits)));
+}
+
+/**
+ * Redraw the prediction table for wherever the scrubber currently sits.
+ *
+ * Reads straight out of the sweep payload rather than calling the bridge
+ * again: `get_equilibrium_sweep` already carries every statistic at
+ * every point, so dragging the slider costs no round trip at all.
+ * With the scrubber parked at the committed configuration, this falls
+ * back to the committed payload so the two presentations agree exactly.
+ */
+function renderExploreScrubbedPredictions() {
+    if (_currentSweep === null) {
+        return;
+    }
+    if (exploreScrubIndex === null) {
+        if (_committedPredictions !== null) {
+            renderExplorePredictionRows(
+                _committedPredictions.predictions,
+                _committedPredictions.qualifications
+            );
+        }
+        return;
+    }
+    const point = _currentSweep.points[exploreMarkerIndex(_currentSweep)];
+    const digits = _currentSweep.digits ?? 4;
+    const predictions = {};
+    for (const name of Object.keys(EXPLORE_PREDICTION_LABELS)) {
+        predictions[name] = formatExploreSweepValue(point[name], digits);
+    }
+    renderExplorePredictionRows(predictions, _committedPredictions?.qualifications);
+}
+
+/**
+ * Point the scrubber's controls at the current sweep and marker
+ * position, and say in words which parameter value is being shown --
+ * the scrubbed state has to be legible as *not* the committed
+ * configuration, or the table silently lies about what was typed into
+ * the four fields.
+ */
+function syncExploreScrubber() {
+    if (_currentSweep === null) {
+        exploreScrubRange.disabled = true;
+        exploreScrubReset.disabled = true;
+        exploreScrubLabel.textContent = "";
+        return;
+    }
+    const index = exploreMarkerIndex(_currentSweep);
+    exploreScrubRange.disabled = false;
+    exploreScrubRange.max = String(_currentSweep.points.length - 1);
+    exploreScrubRange.value = String(index);
+    exploreScrubReset.disabled = exploreScrubIndex === null;
+    const shown = formatExploreTick(_currentSweep.points[index].x);
+    const axisName = exploreAxisLabel(_currentSweep.axis);
+    exploreScrubLabel.textContent =
+        exploreScrubIndex === null
+            ? `${axisName} = ${shown} (current)`
+            : `${axisName} = ${shown} (exploring)`;
+    explorePredictions.classList.toggle(
+        "explore-scrubbed",
+        exploreScrubIndex !== null
+    );
+}
+
+/**
+ * Move the marker to `index` and update everything that follows from it.
+ * @param {number|null} index `null` returns to the committed value.
+ */
+function setExploreScrubIndex(index) {
+    exploreScrubIndex = index;
+    if (_currentSweep) {
+        drawSweepCurve(exploreCanvas, _currentSweep);
+    }
+    syncExploreScrubber();
+    renderExploreScrubbedPredictions();
+}
+
+/**
  * Recompute and redraw everything Explore shows, from the four fields'
  * current values: the predictions table, then the sweep curve for
  * whichever axis is selected. An invalid field (non-numeric, or out of
@@ -578,27 +702,19 @@ async function refreshExplore() {
         exploreBanner.hidden = false;
         explorePredictions.hidden = true;
         _currentSweep = null;
+        _committedPredictions = null;
+        syncExploreScrubber();
         exploreCanvas.getContext("2d").clearRect(0, 0, exploreCanvas.width, exploreCanvas.height);
         window.__fimExploreReady = true;
         return;
     }
     exploreBanner.hidden = true;
     explorePredictions.hidden = false;
-    for (const [name, label] of Object.entries(EXPLORE_PREDICTION_LABELS)) {
-        const row = document.getElementById(`explore-stat-${name}`);
-        if (row !== null) {
-            const rawValue = predictionsResult.predictions[name];
-            const value = typeof rawValue === "boolean"
-                ? (rawValue ? "yes" : "no")
-                : rawValue;
-            applyStatRow(row, buildPointMeter(label, value));
-            const qualification = predictionsResult.qualifications?.[name];
-            if (qualification) {
-                row.title = `${row.title}; ${qualification}`;
-            }
-        }
-    }
-    refreshExploreRowStates();
+    _committedPredictions = predictionsResult;
+    renderExplorePredictionRows(
+        predictionsResult.predictions,
+        predictionsResult.qualifications
+    );
 
     const sweepResult = await window.pywebview.api.get_equilibrium_sweep(
         exploreAxis.value,
@@ -612,8 +728,17 @@ async function refreshExplore() {
     if (!sweepResult.ok) {
         exploreCanvas.getContext("2d").clearRect(0, 0, exploreCanvas.width, exploreCanvas.height);
     }
+    syncExploreScrubber();
     window.__fimExploreReady = true;
 }
+
+exploreScrubRange.addEventListener("input", () => {
+    setExploreScrubIndex(Number(exploreScrubRange.value));
+});
+
+exploreScrubReset.addEventListener("click", () => {
+    setExploreScrubIndex(null);
+});
 
 for (const field of [exploreN, exploreD, exploreM, exploreMu, exploreAxis]) {
     field.addEventListener("change", () => {

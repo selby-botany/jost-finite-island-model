@@ -750,6 +750,20 @@
           </select>
         </div>
         <canvas id="explore-canvas"></canvas>
+        <!-- Axis scrubber: drags the chart's dashed marker along the
+             swept parameter and re-reads the whole prediction table at
+             that value. The same instrument the completed-run view
+             already has over generations (`scrubber.js`), here over a
+             parameter instead of over time -- Explore previously drew
+             the marker with no way to move it. -->
+        <div class="explore-scrubber">
+          <input type="range" id="explore-scrub-range" min="0" max="0" value="0"
+                 aria-label="Swept parameter value">
+          <span id="explore-scrub-label" class="explore-scrub-label"></span>
+          <button type="button" id="explore-scrub-reset" disabled>
+            Back to current
+          </button>
+        </div>
         <!-- Reuses `run-view-completed.js`'s own `.run-trajectory-legend`/
              `.swatch` classes unmodified -- one canvas plus a swatch-per-
              series legend beneath it, the identical shape
