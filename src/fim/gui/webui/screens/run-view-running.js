@@ -333,6 +333,9 @@ function renderLiveStatistics(statistics) {
     for (const name of STATISTIC_NAMES) {
         const element = document.getElementById(`stat-${name}`);
         applyStatRow(element, buildPointMeter(name, statistics[name]));
+        if (typeof decorateTrajectoryStatisticRow === "function") {
+            decorateTrajectoryStatisticRow(element, name);
+        }
     }
 }
 

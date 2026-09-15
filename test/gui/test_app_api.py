@@ -2102,7 +2102,15 @@ def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> 
     assert result["report"]["reason"] == manifest.stop_reason
     assert result["outputDirectory"] == str(output)
     assert result["generationCount"] == manifest.generation_count
-    assert set(result["statistics"]) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
+    assert set(result["statistics"]) == {
+        "D",
+        "G_ST",
+        "E_ST",
+        "K_ST",
+        "H_S",
+        "H_T",
+        "H_ST",
+    }
     assert set(result["literatureStatistics"]) == {"A_CGD", "Delta", "MI"}
     assert {"A_CGD", "Delta", "MI"} <= set(result["report"])
     literature_visuals = result["literatureVisuals"]
@@ -2314,10 +2322,26 @@ def test_compare_runs_overlays_two_runs_and_names_the_differing_field(
     assert result["differingFields"] == ["seed"]
     for run in result["runs"]:
         assert isinstance(run["panel"], dict)
-        assert set(run["statistics"]) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
+        assert set(run["statistics"]) == {
+            "D",
+            "G_ST",
+            "E_ST",
+            "K_ST",
+            "H_S",
+            "H_T",
+            "H_ST",
+        }
         assert run["configSummary"]["N"] == "20"
         assert run["configSummary"]["m"] == "0.1"
-        assert set(run["histories"]) == {"D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"}
+        assert set(run["histories"]) == {
+            "D",
+            "G_ST",
+            "E_ST",
+            "K_ST",
+            "H_S",
+            "H_T",
+            "H_ST",
+        }
         assert len(run["generations"]) > 0
         for name, values in run["histories"].items():
             assert len(values) == len(run["generations"])
@@ -2570,6 +2594,7 @@ def test_get_batch_replicate_summary_lists_every_replicate(tmp_path: Path) -> No
             "K_ST",
             "H_S",
             "H_T",
+            "H_ST",
         }
 
 

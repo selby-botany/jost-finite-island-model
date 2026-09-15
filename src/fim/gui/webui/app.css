@@ -760,16 +760,31 @@ fieldset.composite > label {
     max-width: 640px;
 }
 
+.run-visual-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.run-visual-panels {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
 .run-canvas-frame {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: 2.75rem minmax(0, 1fr);
     /* A third row for `.self-comparison-note` (design doc `20260907-
      * claude-sonnet-5-botanist-gui-redesign.md` §7.3's own "changes the
      * plot's own caption to name what is being shown" -- a full
      * sentence, not the short badge the row 2 empty corner cell it used
      * to occupy could ever fit). */
     grid-template-rows: minmax(0, 1fr) auto auto;
-    column-gap: 0.5rem;
+    column-gap: 0.35rem;
     row-gap: 0.35rem;
     width: min(100%, 760px, calc(100vh - 220px));
 }
@@ -885,7 +900,7 @@ fieldset.composite > label {
 .axis-selector-y {
     grid-column: 1;
     grid-row: 1;
-    justify-self: center;
+    justify-self: end;
     align-self: center;
 }
 
@@ -917,7 +932,7 @@ fieldset.composite > label {
 }
 
 /* The trajectory frame (botanist GUI design doc §6.2) sits beside
- * `.run-canvas-frame` in the same `.run-plot-row`, below -- narrower
+ * `.run-canvas-frame` in the same `.run-visual-panels`, below -- narrower
  * than the scatter frame's own 760px cap (a time-series line chart
  * reads fine landscape-oriented at a more modest width; it does not
  * need the scatter panel's own strict 1:1 aspect ratio). */
@@ -926,6 +941,7 @@ fieldset.composite > label {
     flex-direction: column;
     gap: 0.35rem;
     width: min(100%, 480px);
+    flex: 0 0 auto;
 }
 
 /* Paired with `#run-plot-row.run-plot-row-has-trajectory .run-canvas-
@@ -1086,6 +1102,33 @@ fieldset.composite > label {
 
 .stats-table tr:hover td {
     background: var(--fim-border);
+}
+
+.stats-table tr.stat-plot-toggle-row {
+    cursor: pointer;
+}
+
+.stats-table tr.stat-plot-toggle-row .stat-name,
+.stats-table tr.stat-plot-toggle-row .stat-value {
+    cursor: pointer;
+}
+
+.stats-table tr.stat-plot-toggle-row.stat-plot-hidden {
+    opacity: 0.55;
+}
+
+.stat-plot-toggle {
+    width: 1.25rem;
+    text-align: center;
+}
+
+.stat-plot-swatch {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 2px;
+    border: 1px solid var(--fim-border);
+    vertical-align: -0.08rem;
 }
 
 .stat-name {

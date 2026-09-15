@@ -363,8 +363,16 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> No
                     "document.getElementById('run-trajectory-frame').hidden, "
                     "canvasWidth: "
                     "document.getElementById('run-trajectory-canvas').width, "
-                    "legendNames: Array.from("
-                    "document.querySelectorAll('#run-trajectory-legend span'))"
+                    "statisticRows: Array.from(document.querySelectorAll("
+                    "'#results-stats tr[data-trajectory-statistic]')).map((row) => ({"
+                    "name: row.dataset.trajectoryStatistic, "
+                    "ariaPressed: row.getAttribute('aria-pressed'), "
+                    "cellClasses: Array.from(row.children).map("
+                    "(cell) => cell.className"
+                    ")"
+                    "})), "
+                    "overlayLegendNames: Array.from("
+                    "document.querySelectorAll('#run-trajectory-legend .legend-item'))"
                     ".map((span) => span.textContent).filter((text) => text)"
                     "})"
                 )
@@ -382,47 +390,42 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> No
     )
     assert settled["frameHidden"] is False
     assert settled["canvasWidth"] > 0
-    # The starter form's own default `convergence_statistic` is `D`
-    # alone (`config_form.starter_form_values`) — `_SET_TINY_FIELDS`
-    # never overrides it. `D`/`G_ST`/`H_S`/`H_T` still all show a real
-    # "(simulated)" entry regardless of what is actually watched
-    # (`fim.engine._ALWAYS_TRACKED_STATISTICS`) — only `E_ST`/`K_ST`
-    # would need either being watched or `track_expensive_statistics`
-    # opted in, neither true here. `_SET_TINY_FIELDS`'s own `N`/`m_rate`/
-    # `mu_value` are all plain scalars, so `D`'s and `G_ST`'s own
-    # predicted-equilibrium overlays (design §6.2) draw too, each a
-    # second, distinctly-labeled entry — `_equilibrium_reference_
-    # payload`'s own docstring; `E_ST`'s own equilibrium prediction
-    # exists too but is not drawn, since `E_ST` itself is not one of the
-    # panel's own plotted statistics here (`renderTrajectory`'s own
-    # `equilibriumScopeNames`) — and the identity-recovery curve overlay
-    # (`_identity_recovery_reference_payload`'s own docstring), a final,
-    # unconditional entry not scoped to any one statistic, draws whenever
-    # `N`/`m` alone are plain scalars, which they are here too.
-    assert settled["legendNames"] == [
-        "D (simulated)",
-        "G_ST (simulated)",
-        "H_S (simulated)",
-        "H_T (simulated)",
-        "D (predicted equilibrium)",
-        "G_ST (predicted equilibrium)",
-        "f₀ (identity recovery, theoretical founder event)",
+    rows_by_name = {row["name"]: row for row in settled["statisticRows"]}
+    assert sorted(rows_by_name) == [
+        "D",
+        "E_ST",
+        "G_ST",
+        "H_S",
+        "H_ST",
+        "H_T",
+        "K_ST",
+    ]
+    for row in rows_by_name.values():
+        assert row["ariaPressed"] == "true"
+        assert row["cellClasses"][:3] == [
+            "stat-name",
+            "stat-plot-toggle",
+            "stat-value",
+        ]
+    assert settled["overlayLegendNames"] == [
+        "f₀ (identity recovery, theoretical founder event)"
     ]
 
 
-def test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels() -> None:
-    """Clicking a legend entry actually hides that statistic's own drawn pixels.
+def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels() -> None:
+    """Clicking a statistic row hides that statistic's own drawn pixels.
 
-    Botanist GUI design doc §6.2's own legend-toggle: display-only, so
+    Botanist GUI design doc §6.2's own display-only toggle, now hosted
+    by the statistics panel instead of a separate color key, so
     this proves the *canvas* changes (`run-view-completed.js`'s own
-    `buildTrajectoryLegendItem`/`hiddenTrajectoryStatistics`), not just
+    `hiddenTrajectoryStatistics`), not just
     that a CSS class toggled — the same "count non-blank pixels" idiom
     `test_open_run_screen.py`'s own sigma-band test already established.
-    Clicking "G_ST (simulated)" must also hide its own "G_ST (predicted
+    Clicking "G_ST" must also hide its own "G_ST (predicted
     equilibrium)" companion (this feature's own scope), while every
-    other statistic's own entry (including the identity-recovery curve,
+    other statistic's own row (including the identity-recovery curve,
     which this feature does not toggle at all — it is not one of the six
-    report statistics the legend-toggle scopes to) stays untouched;
+    report statistics the row toggle scopes to) stays untouched;
     clicking it again must restore the exact original pixel count,
     proving the toggle is purely a display filter, never a re-request or
     a loss of the underlying data.
@@ -454,11 +457,12 @@ def test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels() -> No
         "return count;"
         "})()"
     )
-    legend_state_script = (
-        "Array.from(document.querySelectorAll('#run-trajectory-legend .legend-item'))"
+    row_state_script = (
+        "Array.from(document.querySelectorAll("
+        "'#results-stats tr[data-trajectory-statistic]'))"
         ".map((el) => ({"
-        "text: el.textContent, "
-        "hiddenClass: el.classList.contains('legend-item-hidden'), "
+        "text: el.dataset.trajectoryStatistic, "
+        "hiddenClass: el.classList.contains('stat-plot-hidden'), "
         "ariaPressed: el.getAttribute('aria-pressed')"
         "}))"
     )
@@ -473,18 +477,16 @@ def test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels() -> No
                 outcome.put(None)
                 return
             before_pixels = window.evaluate_js(non_blank_pixel_count_script)
-            legend_before = window.evaluate_js(legend_state_script)
+            row_before = window.evaluate_js(row_state_script)
             window.evaluate_js(
-                "Array.from(document.querySelectorAll("
-                "'#run-trajectory-legend .legend-item'))"
-                ".find((el) => el.textContent === 'G_ST (simulated)').click();"
+                "document.querySelector("
+                "'#results-stats tr[data-trajectory-statistic=\"G_ST\"]').click();"
             )
             after_hide_pixels = window.evaluate_js(non_blank_pixel_count_script)
-            legend_after_hide = window.evaluate_js(legend_state_script)
+            row_after_hide = window.evaluate_js(row_state_script)
             window.evaluate_js(
-                "Array.from(document.querySelectorAll("
-                "'#run-trajectory-legend .legend-item'))"
-                ".find((el) => el.textContent === 'G_ST (simulated)').click();"
+                "document.querySelector("
+                "'#results-stats tr[data-trajectory-statistic=\"G_ST\"]').click();"
             )
             after_restore_pixels = window.evaluate_js(non_blank_pixel_count_script)
             outcome.put(
@@ -492,8 +494,8 @@ def test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels() -> No
                     "before_pixels": before_pixels,
                     "after_hide_pixels": after_hide_pixels,
                     "after_restore_pixels": after_restore_pixels,
-                    "legend_before": legend_before,
-                    "legend_after_hide": legend_after_hide,
+                    "row_before": row_before,
+                    "row_after_hide": row_after_hide,
                 }
             )
         finally:
@@ -514,28 +516,16 @@ def test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels() -> No
     def _entry(entries: list[dict[str, Any]], text: str) -> dict[str, Any]:
         return next(entry for entry in entries if entry["text"] == text)
 
-    before_g_st = _entry(settled["legend_before"], "G_ST (simulated)")
+    before_g_st = _entry(settled["row_before"], "G_ST")
     assert before_g_st["hiddenClass"] is False
     assert before_g_st["ariaPressed"] == "true"
 
-    after_g_st = _entry(settled["legend_after_hide"], "G_ST (simulated)")
+    after_g_st = _entry(settled["row_after_hide"], "G_ST")
     assert after_g_st["hiddenClass"] is True
     assert after_g_st["ariaPressed"] == "false"
-    # The "G_ST (predicted equilibrium)" companion entry is hidden too,
-    # by the same click -- one toggle for both entries sharing a name.
-    after_g_st_equilibrium = _entry(
-        settled["legend_after_hide"], "G_ST (predicted equilibrium)"
-    )
-    assert after_g_st_equilibrium["hiddenClass"] is True
-    assert after_g_st_equilibrium["ariaPressed"] == "false"
     # Every other statistic's own entry is untouched by this one click.
-    for text in (
-        "D (simulated)",
-        "H_S (simulated)",
-        "H_T (simulated)",
-        "D (predicted equilibrium)",
-    ):
-        entry = _entry(settled["legend_after_hide"], text)
+    for text in ("D", "E_ST", "H_S", "H_T", "K_ST"):
+        entry = _entry(settled["row_after_hide"], text)
         assert entry["hiddenClass"] is False
         assert entry["ariaPressed"] == "true"
 
@@ -610,8 +600,11 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
                     "runViewState: window.fim.getRunViewState(), "
                     "frameHidden: "
                     "document.getElementById('run-trajectory-frame').hidden, "
-                    "legendNames: Array.from("
-                    "document.querySelectorAll('#run-trajectory-legend span'))"
+                    "statisticRows: Array.from(document.querySelectorAll("
+                    "'#results-stats tr[data-trajectory-statistic]'))"
+                    ".map((row) => row.dataset.trajectoryStatistic), "
+                    "overlayLegendNames: Array.from("
+                    "document.querySelectorAll('#run-trajectory-legend .legend-item'))"
                     ".map((span) => span.textContent).filter((text) => text)"
                     "})"
                 )
@@ -635,20 +628,18 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
     assert settled["frameHiddenBeforeStart"] is True
     assert settled["runViewState"] == "running"
     assert settled["frameHidden"] is False
-    assert sorted(settled["legendNames"]) == sorted(
-        [
-            "D (predicted equilibrium)",
-            "D (simulated)",
-            "E_ST (predicted equilibrium)",
-            "E_ST (simulated)",
-            "G_ST (predicted equilibrium)",
-            "G_ST (simulated)",
-            "H_S (simulated)",
-            "H_T (simulated)",
-            "K_ST (simulated)",
-            "f₀ (identity recovery, theoretical founder event)",
-        ]
-    )
+    assert sorted(settled["statisticRows"]) == [
+        "D",
+        "E_ST",
+        "G_ST",
+        "H_S",
+        "H_ST",
+        "H_T",
+        "K_ST",
+    ]
+    assert settled["overlayLegendNames"] == [
+        "f₀ (identity recovery, theoretical founder event)"
+    ]
 
 
 # Selects the "equilibrium split" radio (`config-modals.js`'s own

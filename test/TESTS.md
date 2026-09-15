@@ -8352,26 +8352,26 @@ so it does not, `_SET_UNREACHABLE_BATCH_CONVERGENCE`) -- the same
 "Cancel ends the test" precedent `test_running_screen.py`'s own
 Cancel-button test already established.
 
-<a id="gui.test_batch_running.test_a_live_batch_trajectory_legend_toggle_works_mid_run"></a>
+<a id="gui.test_batch_running.test_a_live_batch_trajectory_row_toggle_works_mid_run"></a>
 
-#### test\_a\_live\_batch\_trajectory\_legend\_toggle\_works\_mid\_run
+#### test\_a\_live\_batch\_trajectory\_row\_toggle\_works\_mid\_run
 
 ```python
-def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None
+def test_a_live_batch_trajectory_row_toggle_works_mid_run() -> None
 ```
 
-A legend click during a still-running batch re-renders, not crashes.
+A statistic-row click during a still-running batch re-renders.
 
 Batch trajectory panel design `20260912-claude-sonnet-5-batch-
 trajectory-panel-design.md` (`selby/restricted`), commit 3: the
 live view's own accumulator (`run-view-running.js`'s own
-`liveBatchTrajectory`) now feeds the same `renderBatchTrajectory`/
-`buildBatchTrajectoryLegendItem` a completed batch's own trajectory
+`liveBatchTrajectory`) now feeds the same `renderBatchTrajectory`
+machinery a completed batch's own trajectory
 already uses (`test/gui/test_batch_results_screen.py`'s own
 `test_a_completed_batchs_own_pooled_trajectory_renders` proves that
 machinery draws correctly in the completed case) -- this test's own
 job is narrower: prove the *live* wiring reaches it too, by
-actually clicking a legend item while the batch is still `running`
+actually clicking a statistic row while the batch is still `running`
 and confirming its own `aria-pressed`/class flip without an
 unhandled exception breaking the next real progress push.
 
@@ -11559,13 +11559,9 @@ region.
 
 `_write_run_with_sigma_band`'s own `N`/`m`/`mu` (`20`/`0.1`/`0.01`)
 are all plain scalars, and its sigma band covers `D` (the config's
-own unset-so-default `convergence_statistic`) — botanist GUI design
-doc §6.2's own predicted-equilibrium overlay draws against that same
-trailing window even with no curve of its own to sit beside
-(`run-view-completed.js`'s own `renderTrajectory`: an equilibrium
-reference line is scoped to whatever the panel is already showing
-something for — a real curve, or, lacking one, the sigma band), so
-the legend is not fully empty either: one dashed entry, not zero.
+own unset-so-default `convergence_statistic`). The separate
+statistic-color key is intentionally absent; only non-statistic
+overlays keep their own caption-style legend entries.
 
 <a id="gui.test_open_run_screen.test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel"></a>
 
@@ -12906,27 +12902,28 @@ actually renders something, not only that `Api`'s own Python-level
 `RunResult` already carries the data (`test_app_api.py`'s own
 coverage of that).
 
-<a id="gui.test_running_screen.test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels"></a>
+<a id="gui.test_running_screen.test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels"></a>
 
-#### test\_trajectory\_legend\_toggle\_hides\_and\_restores\_a\_curves\_own\_pixels
+#### test\_trajectory\_row\_toggle\_hides\_and\_restores\_a\_curves\_own\_pixels
 
 ```python
-def test_trajectory_legend_toggle_hides_and_restores_a_curves_own_pixels(
+def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
 ) -> None
 ```
 
-Clicking a legend entry actually hides that statistic's own drawn pixels.
+Clicking a statistic row hides that statistic's own drawn pixels.
 
-Botanist GUI design doc §6.2's own legend-toggle: display-only, so
+Botanist GUI design doc §6.2's own display-only toggle, now hosted
+by the statistics panel instead of a separate color key, so
 this proves the *canvas* changes (`run-view-completed.js`'s own
-`buildTrajectoryLegendItem`/`hiddenTrajectoryStatistics`), not just
+`hiddenTrajectoryStatistics`), not just
 that a CSS class toggled — the same "count non-blank pixels" idiom
 `test_open_run_screen.py`'s own sigma-band test already established.
-Clicking "G_ST (simulated)" must also hide its own "G_ST (predicted
+Clicking "G_ST" must also hide its own "G_ST (predicted
 equilibrium)" companion (this feature's own scope), while every
-other statistic's own entry (including the identity-recovery curve,
+other statistic's own row (including the identity-recovery curve,
 which this feature does not toggle at all — it is not one of the six
-report statistics the legend-toggle scopes to) stays untouched;
+report statistics the row toggle scopes to) stays untouched;
 clicking it again must restore the exact original pixel count,
 proving the toggle is purely a display filter, never a re-request or
 a loss of the underlying data.

@@ -56,7 +56,7 @@ const compareTrajectoryStatistic = document.getElementById(
 const compareTrajectoryCanvas = document.getElementById("compare-trajectory-canvas");
 const compareTrajectoryLegend = document.getElementById("compare-trajectory-legend");
 
-const _COMPARE_STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"];
+const _COMPARE_STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"];
 const _COMPARE_MINIMUM_RUNS = 2;
 
 // A fixed, colorblind-safe qualitative palette (Okabe-Ito, the same

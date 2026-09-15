@@ -1182,13 +1182,9 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
 
     `_write_run_with_sigma_band`'s own `N`/`m`/`mu` (`20`/`0.1`/`0.01`)
     are all plain scalars, and its sigma band covers `D` (the config's
-    own unset-so-default `convergence_statistic`) — botanist GUI design
-    doc §6.2's own predicted-equilibrium overlay draws against that same
-    trailing window even with no curve of its own to sit beside
-    (`run-view-completed.js`'s own `renderTrajectory`: an equilibrium
-    reference line is scoped to whatever the panel is already showing
-    something for — a real curve, or, lacking one, the sigma band), so
-    the legend is not fully empty either: one dashed entry, not zero.
+    own unset-so-default `convergence_statistic`). The separate
+    statistic-color key is intentionally absent; only non-statistic
+    overlays keep their own caption-style legend entries.
     """
     _write_run_with_sigma_band(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
@@ -1252,16 +1248,11 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
     assert "3\u03c3" in settled["captionText"]
     assert "5 generations" in settled["captionText"]
     # No curve was ever drawn (`Api.open_run` carries no `convergence*`
-    # history at all), so there is no "D (simulated)" entry — but `D`'s
-    # own predicted-equilibrium overlay still draws against the sigma
-    # band's own trailing window (this test's own docstring), so the
-    # legend is not empty either. The identity-recovery curve overlay
-    # (`_identity_recovery_reference_payload`) draws unconditionally
-    # whenever `N`/`m` alone are plain scalars (they are here too, and it
-    # is not scoped to the sigma band's own statistics the way the
-    # equilibrium entry is), so it appears as a third entry.
+    # history at all), so there is no statistic-color key. The
+    # identity-recovery curve overlay (`_identity_recovery_reference_
+    # payload`) draws unconditionally whenever `N`/`m` alone are plain
+    # scalars, so it remains as a non-statistic overlay entry.
     assert settled["legendNames"] == [
-        "D (predicted equilibrium)",
         "f₀ (identity recovery, theoretical founder event)",
     ]
     assert settled["canvasNonBlankPixelCount"] > 0

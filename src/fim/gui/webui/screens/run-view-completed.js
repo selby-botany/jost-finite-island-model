@@ -36,7 +36,7 @@
  * answer yet.
  */
 
-const STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"];
+const STATISTIC_NAMES = ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"];
 
 // The two effective-allele rows (botanist GUI design doc §7.7), shared
 // between the scalar completed view's own `renderEffectiveAlleles` and
@@ -69,6 +69,7 @@ const STATISTIC_TRAJECTORY_COLORS = {
     K_ST: "#cc79a7",
     H_S: "#e69f00",
     H_T: "#56b4e9",
+    H_ST: "#000000",
 };
 
 // See `wireCompletedScrubber`'s own comment: counts its own in-flight
@@ -114,6 +115,7 @@ let lastTrajectoryRenderArgs = null;
 // of the two views ever shows at once, so there is no risk of one
 // view's own toggle silently fighting the other's).
 let lastPooledConvergenceHistories = null;
+let activeTrajectoryRenderMode = null;
 
 /**
  * Reset the trajectory legend's own hidden-statistic set to "everything
@@ -231,6 +233,91 @@ let completedEquilibrium = null;
 let completedIdentityRecovery = null;
 let completedGenerationCount = null;
 let completedFinalStatistics = null;
+
+/**
+ * Add or refresh one statistic row's plot color tile and display-toggle
+ * behavior. The statistic value cells are still rebuilt by `applyStatRow`
+ * on every progress/completed/scrub update; this only attaches the row
+ * to the trajectory visibility state.
+ *
+ * @param {HTMLTableRowElement} row
+ * @param {string} name
+ * @returns {HTMLTableRowElement}
+ */
+function decorateTrajectoryStatisticRow(row, name) {
+    if (row.dataset.trajectoryStatistic !== name) {
+        row.dataset.trajectoryStatistic = name;
+        row.addEventListener("click", () => toggleTrajectoryStatistic(name));
+        row.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleTrajectoryStatistic(name);
+            }
+        });
+    }
+    let toggleCell = row.querySelector(".stat-plot-toggle");
+    if (toggleCell === null) {
+        toggleCell = document.createElement("td");
+        toggleCell.className = "stat-plot-toggle";
+        const valueCell = row.querySelector(".stat-value");
+        row.insertBefore(toggleCell, valueCell);
+    }
+    toggleCell.replaceChildren();
+    const swatch = document.createElement("span");
+    swatch.className = "stat-plot-swatch";
+    swatch.style.backgroundColor =
+        STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
+    toggleCell.appendChild(swatch);
+    updateTrajectoryStatisticRowState(row, name);
+    return row;
+}
+
+/**
+ * Repaint every plot-toggle row's pressed/hidden state from the shared
+ * visibility set.
+ */
+function refreshTrajectoryStatisticRowStates() {
+    for (const row of document.querySelectorAll("[data-trajectory-statistic]")) {
+        updateTrajectoryStatisticRowState(row, row.dataset.trajectoryStatistic);
+    }
+}
+
+/**
+ * Toggle a statistic curve from any statistic table row and redraw the
+ * active trajectory panel. The table values stay present and continue
+ * updating because only the canvas inputs are filtered.
+ *
+ * @param {string} name
+ */
+function toggleTrajectoryStatistic(name) {
+    if (hiddenTrajectoryStatistics.has(name)) {
+        hiddenTrajectoryStatistics.delete(name);
+    } else {
+        hiddenTrajectoryStatistics.add(name);
+    }
+    if (activeTrajectoryRenderMode === "scalar" && lastTrajectoryRenderArgs) {
+        renderTrajectory(...lastTrajectoryRenderArgs);
+    }
+    if (activeTrajectoryRenderMode === "batch" && lastPooledConvergenceHistories) {
+        renderBatchTrajectory(lastPooledConvergenceHistories);
+    }
+    refreshTrajectoryStatisticRowStates();
+}
+
+/**
+ * Apply ARIA/CSS state for one plot-toggle row.
+ *
+ * @param {HTMLTableRowElement} row
+ * @param {string} name
+ */
+function updateTrajectoryStatisticRowState(row, name) {
+    const visible = !hiddenTrajectoryStatistics.has(name);
+    row.classList.add("stat-plot-toggle-row");
+    row.classList.toggle("stat-plot-hidden", !visible);
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.setAttribute("aria-pressed", String(visible));
+}
 
 /**
  * Render the two effective-allele-count rows (botanist GUI design doc
@@ -704,12 +791,14 @@ function renderTrajectory(
     ];
     const hasCurve = generations && histories && generations.length > 0;
     if (!hasCurve && !sigmaBand) {
+        activeTrajectoryRenderMode = null;
         setTrajectoryFrameHidden(true);
         runTrajectoryLegend.replaceChildren();
         runTrajectorySigmaBandCaption.hidden = true;
         runTrajectorySigmaBandCaption.replaceChildren();
         return;
     }
+    activeTrajectoryRenderMode = "scalar";
     const effectiveGenerations = hasCurve
         ? generations
         : [Math.max(0, generationCount - sigmaBand.window), generationCount];
@@ -795,31 +884,8 @@ function renderTrajectory(
     }
     runTrajectorySigmaBandCaption.hidden =
         runTrajectorySigmaBandCaption.children.length === 0;
+    refreshTrajectoryStatisticRowStates();
     runTrajectoryLegend.replaceChildren();
-    for (const name of Object.keys(plottable)) {
-        runTrajectoryLegend.appendChild(
-            buildTrajectoryLegendItem(name, `${name} (simulated)`, "swatch")
-        );
-    }
-    // A second, dashed-swatch legend entry per statistic actually drawn
-    // as a predicted-equilibrium line (design §6.2's own mockup text:
-    // "┈┈┈┈ predicted equilibrium" vs. "— D (simulated)") -- distinct
-    // enough from the solid-swatch entries above that "predicted" and
-    // "simulated" are never visually confusable, per design principle 5
-    // ("a plot's legend is a contract"). Toggled by the identical name's
-    // own legend entry above, not a second, independent toggle -- hiding
-    // "D (simulated)" hides its own "D (predicted equilibrium)" companion
-    // too (`buildTrajectoryLegendItem`'s own shared `hiddenTrajectory
-    // Statistics` set).
-    for (const name of Object.keys(plottableEquilibrium)) {
-        runTrajectoryLegend.appendChild(
-            buildTrajectoryLegendItem(
-                name,
-                `${name} (predicted equilibrium)`,
-                "swatch swatch-dashed"
-            )
-        );
-    }
     // The identity-recovery closed-form curve's own legend entry (see
     // `drawTrajectoryCurve`'s own `identityRecovery` parameter doc for
     // the full "what this is and why it is not called D" explanation) —
@@ -830,6 +896,7 @@ function renderTrajectory(
     // curve is not any one of the six report statistics.
     if (identityRecovery) {
         const item = document.createElement("span");
+        item.className = "legend-item";
         const swatch = document.createElement("span");
         swatch.className = "swatch swatch-dotted";
         swatch.style.borderColor = "var(--fim-accent)";
@@ -841,58 +908,6 @@ function renderTrajectory(
         );
         runTrajectoryLegend.appendChild(item);
     }
-}
-
-/**
- * Build one clickable/keyboard-focusable trajectory-legend entry, wired
- * to toggle `name`'s own visibility in `hiddenTrajectoryStatistics` and
- * re-render the panel in place (design §6.2's own legend-toggle: display
- * only, never touching what is recorded or requested). Shared by both
- * the "(simulated)" and "(predicted equilibrium)" legend loops in
- * `renderTrajectory` above -- the same statistic name drives both, so
- * one click hides both entries for that name together, not two
- * independent toggles a user could get out of sync.
- *
- * @param {string} name a tracked statistic name (`STATISTIC_NAMES`).
- * @param {string} label the full text shown beside the swatch.
- * @param {string} swatchClassName `"swatch"` (solid) or `"swatch
- *     swatch-dashed"` (the predicted-equilibrium overlay's own style).
- * @returns {HTMLSpanElement}
- */
-function buildTrajectoryLegendItem(name, label, swatchClassName) {
-    const hidden = hiddenTrajectoryStatistics.has(name);
-    const item = document.createElement("span");
-    item.className = hidden ? "legend-item legend-item-hidden" : "legend-item";
-    item.tabIndex = 0;
-    item.setAttribute("role", "button");
-    item.setAttribute("aria-pressed", String(!hidden));
-    const swatch = document.createElement("span");
-    swatch.className = swatchClassName;
-    if (swatchClassName === "swatch") {
-        swatch.style.backgroundColor = STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
-    } else {
-        swatch.style.borderColor = STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
-    }
-    item.appendChild(swatch);
-    item.appendChild(document.createTextNode(label));
-    const toggle = () => {
-        if (hiddenTrajectoryStatistics.has(name)) {
-            hiddenTrajectoryStatistics.delete(name);
-        } else {
-            hiddenTrajectoryStatistics.add(name);
-        }
-        if (lastTrajectoryRenderArgs) {
-            renderTrajectory(...lastTrajectoryRenderArgs);
-        }
-    };
-    item.addEventListener("click", toggle);
-    item.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            toggle();
-        }
-    });
-    return item;
 }
 
 // A confidence interval computed from only 2 or 3 independent replicates
@@ -1107,10 +1122,12 @@ function renderBatchTrajectory(pooledConvergenceHistories) {
     lastPooledConvergenceHistories = pooledConvergenceHistories;
     const names = pooledConvergenceHistories ? Object.keys(pooledConvergenceHistories) : [];
     if (names.length === 0) {
+        activeTrajectoryRenderMode = null;
         setTrajectoryFrameHidden(true);
         runTrajectoryLegend.replaceChildren();
         return;
     }
+    activeTrajectoryRenderMode = "batch";
     setTrajectoryFrameHidden(false);
     const canvas = runTrajectoryCanvas;
     canvas.width = canvas.clientWidth || canvas.width;
@@ -1121,56 +1138,8 @@ function renderBatchTrajectory(pooledConvergenceHistories) {
             .map((name) => [name, pooledConvergenceHistories[name]])
     );
     drawBatchTrajectoryCurve(canvas, visiblePooled);
+    refreshTrajectoryStatisticRowStates();
     runTrajectoryLegend.replaceChildren();
-    for (const name of names) {
-        runTrajectoryLegend.appendChild(
-            buildBatchTrajectoryLegendItem(name, `${name} (pooled across replicates)`)
-        );
-    }
-}
-
-/**
- * The batch counterpart to `buildTrajectoryLegendItem` -- identical in
- * every way except which render function a toggle click re-invokes
- * (`renderBatchTrajectory`, via `lastPooledConvergenceHistories`,
- * rather than `renderTrajectory`). Kept as a separate function, not a
- * shared one taking a callback, so each stays a plain, directly
- * readable "build this legend item" function -- the one real
- * difference between them is small enough that threading a callback
- * through would read as more indirection than the two call sites
- * actually save.
- * @param {string} name a tracked statistic name (`STATISTIC_NAMES`).
- * @param {string} label the full text shown beside the swatch.
- * @returns {HTMLSpanElement}
- */
-function buildBatchTrajectoryLegendItem(name, label) {
-    const hidden = hiddenTrajectoryStatistics.has(name);
-    const item = document.createElement("span");
-    item.className = hidden ? "legend-item legend-item-hidden" : "legend-item";
-    item.tabIndex = 0;
-    item.setAttribute("role", "button");
-    item.setAttribute("aria-pressed", String(!hidden));
-    const swatch = document.createElement("span");
-    swatch.className = "swatch";
-    swatch.style.backgroundColor = STATISTIC_TRAJECTORY_COLORS[name] || "var(--fim-muted)";
-    item.appendChild(swatch);
-    item.appendChild(document.createTextNode(label));
-    const toggle = () => {
-        if (hiddenTrajectoryStatistics.has(name)) {
-            hiddenTrajectoryStatistics.delete(name);
-        } else {
-            hiddenTrajectoryStatistics.add(name);
-        }
-        renderBatchTrajectory(lastPooledConvergenceHistories);
-    };
-    item.addEventListener("click", toggle);
-    item.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            toggle();
-        }
-    });
-    return item;
 }
 
 function renderDifferentiationQ(report) {
@@ -1448,6 +1417,7 @@ function renderBatchSummary(summary, effectiveAlleles) {
                 : buildCiMeter(name, interval);
         const row = document.createElement("tr");
         applyStatRow(row, cells);
+        decorateTrajectoryStatisticRow(row, name);
         batchResultsSummary.appendChild(row);
     }
     for (const [label, key] of EFFECTIVE_ALLELE_LABELS) {
@@ -1648,6 +1618,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         for (const name of STATISTIC_NAMES) {
             const element = document.getElementById(`stat-${name}`);
             applyStatRow(element, buildPointMeter(name, completedFinalStatistics[name]));
+            decorateTrajectoryStatisticRow(element, name);
         }
         renderTrajectory(
             completedTrajectoryGenerations,
@@ -1687,6 +1658,7 @@ function updateScrubbedTrajectory(frameGeneration, isFinalFrame) {
         } else {
             applyStatRow(element, buildOmittedMeter(name, OMITTED_SCRUB_TEXT));
         }
+        decorateTrajectoryStatisticRow(element, name);
     }
     renderTrajectory(
         completedTrajectoryGenerations,
@@ -1898,6 +1870,7 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
             const value = payload.statistics[name];
             const element = document.getElementById(`stat-${name}`);
             applyStatRow(element, buildPointMeter(name, value));
+            decorateTrajectoryStatisticRow(element, name);
         }
         renderEffectiveAlleles(payload.effectiveAlleles);
         renderDifferentiationQ(report);

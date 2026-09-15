@@ -37,15 +37,15 @@ from fim.persistence.manifest import (
 )
 from fim.reanalyze import group_rows_by_generation
 
-# The six statistics `Api.compare_runs`'s own `_RESULT_STATISTIC_NAMES`
-# already reports for a single generation — declared again here, not
+# The statistics `Api.compare_runs`'s own `_RESULT_STATISTIC_NAMES`
+# reports for a single generation — declared again here, not
 # imported, so `report[name]` below stays a plain literal-key `FinalReport`
 # access (mypy narrows a `for name in <this exact Final tuple>` loop
 # variable to the matching literal union; a generic `Sequence[str]`
 # parameter would not, forcing a `cast` at every access instead — this
 # module has exactly one caller and one fixed statistic set, so a
 # parameter buys no real flexibility to trade that precision away for).
-STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T")
+STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST")
 
 
 @dataclass(frozen=True, slots=True)

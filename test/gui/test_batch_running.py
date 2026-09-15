@@ -271,9 +271,9 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
                     "({"
                     "frameHidden: "
                     "document.getElementById('run-trajectory-frame').hidden, "
-                    "legendChildCount: "
-                    "document.getElementById('run-trajectory-legend').children"
-                    ".length"
+                    "statisticRowCount: document.querySelectorAll("
+                    "'#batch-results-summary tr[data-trajectory-statistic]'"
+                    ").length"
                     "})"
                 )
             window.evaluate_js("document.getElementById('cancel-run-button').click();")
@@ -287,26 +287,26 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
 
     assert settled is not None, "never saw a progress push with statistics in time"
     assert settled["frameHidden"] is False
-    # All six report statistics, matching the scalar live trajectory's
-    # own default (design §6.2: "all six report statistics... each
+    # All seven report statistics, matching the scalar live trajectory's
+    # own default (design §6.2: "all report statistics... each
     # watched or not"), not only whichever is being watched for
     # convergence.
-    assert settled["legendChildCount"] == 6
+    assert settled["statisticRowCount"] == 7
 
 
-def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None:
-    """A legend click during a still-running batch re-renders, not crashes.
+def test_a_live_batch_trajectory_row_toggle_works_mid_run() -> None:
+    """A statistic-row click during a still-running batch re-renders.
 
     Batch trajectory panel design `20260912-claude-sonnet-5-batch-
     trajectory-panel-design.md` (`selby/restricted`), commit 3: the
     live view's own accumulator (`run-view-running.js`'s own
-    `liveBatchTrajectory`) now feeds the same `renderBatchTrajectory`/
-    `buildBatchTrajectoryLegendItem` a completed batch's own trajectory
+    `liveBatchTrajectory`) now feeds the same `renderBatchTrajectory`
+    machinery a completed batch's own trajectory
     already uses (`test/gui/test_batch_results_screen.py`'s own
     `test_a_completed_batchs_own_pooled_trajectory_renders` proves that
     machinery draws correctly in the completed case) -- this test's own
     job is narrower: prove the *live* wiring reaches it too, by
-    actually clicking a legend item while the batch is still `running`
+    actually clicking a statistic row while the batch is still `running`
     and confirming its own `aria-pressed`/class flip without an
     unhandled exception breaking the next real progress push.
 
@@ -346,20 +346,21 @@ def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None:
                 progress_queue, _EVENT_WAIT_TIMEOUT_SECONDS
             ):
                 before = window.evaluate_js(
-                    "document.querySelector('#run-trajectory-legend .legend-item')"
+                    "document.querySelector("
+                    "'#batch-results-summary tr[data-trajectory-statistic]')"
                     ".getAttribute('aria-pressed')"
                 )
                 window.evaluate_js(
                     "document.querySelector("
-                    "'#run-trajectory-legend .legend-item').click();"
+                    "'#batch-results-summary tr[data-trajectory-statistic]').click();"
                 )
                 after_click = window.evaluate_js(
                     "({"
                     "ariaPressed: document.querySelector("
-                    "'#run-trajectory-legend .legend-item')"
+                    "'#batch-results-summary tr[data-trajectory-statistic]')"
                     ".getAttribute('aria-pressed'), "
                     "className: document.querySelector("
-                    "'#run-trajectory-legend .legend-item').className"
+                    "'#batch-results-summary tr[data-trajectory-statistic]').className"
                     "})"
                 )
                 # A real, later progress tick must still land cleanly --
@@ -394,7 +395,7 @@ def test_a_live_batch_trajectory_legend_toggle_works_mid_run() -> None:
     assert settled is not None, "never saw a progress push with statistics in time"
     assert settled["before"] == "true"
     assert settled["afterClick"]["ariaPressed"] == "false"
-    assert "legend-item-hidden" in settled["afterClick"]["className"]
+    assert "stat-plot-hidden" in settled["afterClick"]["className"]
     assert settled["stillRunning"] == "running"
 
 

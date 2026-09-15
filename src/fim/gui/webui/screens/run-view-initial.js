@@ -67,10 +67,10 @@ async function renderInitialPreview() {
     progressBar.value = 0;
     progressLabel.textContent = `0 / ${result.maxGenerations}`;
 
-    // Six statistics for p_0.
+    // Statistics for p_0.
     if (initialStats) {
         initialStats.hidden = false;
-        for (const name of ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T"]) {
+        for (const name of ["D", "G_ST", "E_ST", "K_ST", "H_S", "H_T", "H_ST"]) {
             const value = result.statistics[name];
             const slot = initialStats.querySelector(`[data-stat="${name}"]`);
             if (slot) {

@@ -130,6 +130,12 @@ def test_a_completed_run_renders_the_run_view(
             "scrubberHidden: document.getElementById('scrubber-controls').hidden, "
             "scrubberPlayDisabled: "
             "document.getElementById('scrubber-play-button').disabled, "
+            "scrubberParentClass: "
+            "document.getElementById('scrubber-controls').parentElement.className, "
+            "scrubberPreviousClass: document.getElementById("
+            "'scrubber-controls').previousElementSibling.className, "
+            "trajectoryParentClass: document.getElementById("
+            "'run-trajectory-frame').parentElement.className, "
             "resultsHistoryBackHidden: "
             "document.getElementById('results-history-back-button').hidden, "
             "resultsHistoryForwardHidden: "
@@ -186,6 +192,9 @@ def test_a_completed_run_renders_the_run_view(
     # enabled here, not just present.
     assert settled["scrubberHidden"] is False
     assert settled["scrubberPlayDisabled"] is False
+    assert settled["scrubberParentClass"] == "run-visual-column"
+    assert settled["scrubberPreviousClass"] == "run-visual-panels"
+    assert settled["trajectoryParentClass"] == "run-visual-panels"
     assert settled["resultsHistoryBackHidden"] is False
     assert settled["resultsHistoryForwardHidden"] is False
 

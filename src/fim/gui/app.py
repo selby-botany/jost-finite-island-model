@@ -196,11 +196,18 @@ class _EvaluatesJs(Protocol):
 # that grows with both replicate count and how far each has run.
 _BATCH_POLL_INTERVAL_SECONDS: Final = 0.5
 
-# The six named statistics Milestone G3 (`doc/fim-gui-design.md` §13)
-# established for the results view — `FinalReport` also carries
-# `H_ST`, added after that view was first built; G3 names exactly
-# these six, so `H_ST` stays out of it.
-_RESULT_STATISTIC_NAMES: Final = ("D", "G_ST", "E_ST", "K_ST", "H_S", "H_T")
+# The differentiation/statistics set shown by the Results view and
+# Compare summary. `H_ST` joined the engine after the first GUI milestone
+# and is now shown with the other bounded statistics.
+_RESULT_STATISTIC_NAMES: Final = (
+    "D",
+    "G_ST",
+    "E_ST",
+    "K_ST",
+    "H_S",
+    "H_T",
+    "H_ST",
+)
 _LITERATURE_STATISTIC_NAMES: Final = ("A_CGD", "Delta", "MI")
 
 # Distinguishes a user-saved preset's own id (`Api.save_current_as_

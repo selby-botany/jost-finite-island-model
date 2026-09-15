@@ -251,7 +251,7 @@
           <svg class="button-icon" aria-hidden="true">
             <use href="icons/fim-icons.svg#icon-back"></use>
           </svg>
-          Back
+          Initial conditions
         </button>
       </div>
     </div>
@@ -275,54 +275,71 @@
            the single-hideable-child precedent `.run-body` already
            established for the canvas itself. -->
       <div class="run-plot-row" id="run-plot-row">
-        <div class="run-canvas-frame">
-          <div id="run-deme-pair-selector" class="run-axis-selectors" hidden>
-            <label for="run-y-deme" class="axis-selector axis-selector-y">
-              <select id="run-y-deme" aria-label="Y deme selector"></select>
-            </label>
-            <label for="run-x-deme" class="axis-selector axis-selector-x">
-              <select id="run-x-deme" aria-label="X deme selector"></select>
-            </label>
-            <!-- Shown only while the two selectors above name the same
-                 deme (`app.js`'s own `wireDemePairSelector`) -- P1 item
-                 6 of the 2026-09-06 open-issues doc permits this as a
-                 deliberate diagonal-baseline self-comparison rather
-                 than forcing the selectors apart. -->
-            <span id="run-deme-pair-self-note" class="self-comparison-note" hidden
-              >Self-comparison</span
-            >
-          </div>
-        <!-- Shared across all three states: `running`/`completed` draw
-             into it; `initial` now draws the p_0 scatter (Phase F).
-             No width/height attributes -- sized entirely by CSS so the
-             plot fills the available space and resizes with the window. -->
-          <canvas id="run-canvas"></canvas>
-        </div>
+        <div class="run-visual-column">
+          <div class="run-visual-panels">
+            <div class="run-canvas-frame">
+              <div id="run-deme-pair-selector" class="run-axis-selectors" hidden>
+                <label for="run-y-deme" class="axis-selector axis-selector-y">
+                  <select id="run-y-deme" aria-label="Y deme selector"></select>
+                </label>
+                <label for="run-x-deme" class="axis-selector axis-selector-x">
+                  <select id="run-x-deme" aria-label="X deme selector"></select>
+                </label>
+                <!-- Shown only while the two selectors above name the
+                     same deme (`app.js`'s own `wireDemePairSelector`) --
+                     P1 item 6 of the 2026-09-06 open-issues doc permits
+                     this as a deliberate diagonal-baseline self-
+                     comparison rather than forcing the selectors apart. -->
+                <span id="run-deme-pair-self-note" class="self-comparison-note" hidden
+                  >Self-comparison</span
+                >
+              </div>
+            <!-- Shared across all three states: `running`/`completed`
+                 draw into it; `initial` now draws the p_0 scatter
+                 (Phase F). No width/height attributes -- sized entirely
+                 by CSS so the plot fills the available space and
+                 resizes with the window. -->
+              <canvas id="run-canvas"></canvas>
+            </div>
 
-        <!-- Scalar `completed`-only (botanist GUI design doc
-             `20260907-claude-sonnet-5-botanist-gui-redesign.md` §6.2):
-             the statistic-vs-generation trajectory, side by side with
-             the scatter panel above -- "how it got here," not just
-             "what it looks like now." First slice only: the currently-
-             watched statistic(s) (`Api.start_run`'s own live `RunResult.
-             convergence_generations`/`convergence_histories`, already
-             computed, never before sent to this page at all) for a
-             just-completed live run; `Api.open_run`'s own payload
-             carries neither field yet, so this frame stays hidden for
-             a re-analyzed run (`run-view-completed.js`'s own
-             `renderTrajectory`). -->
-        <div id="run-trajectory-frame" class="run-trajectory-frame" hidden>
-          <canvas id="run-trajectory-canvas"></canvas>
-          <div id="run-trajectory-legend" class="run-trajectory-legend"></div>
-          <!-- Within-run sigma band (design §7.2, `20260910-claude-
-               sonnet-5-gui-sigma-band-design.md`'s own approach C1):
-               the shaded region itself is drawn directly on the canvas
-               above, behind the tail of whichever statistic's own
-               curve it belongs to; this is the supplementary caption
-               with the exact numbers, one line per statistic that has
-               a band -- empty and hidden whenever the run requested
-               none, or hit the hard generation cap without converging. -->
-          <ul id="run-trajectory-sigma-band-caption" class="hint" hidden></ul>
+            <!-- Scalar `completed`-only (botanist GUI design doc
+                 `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+                 §6.2): the statistic-vs-generation trajectory, tied to
+                 the scatter panel beside it as the "how it got here"
+                 companion plot. -->
+            <div id="run-trajectory-frame" class="run-trajectory-frame" hidden>
+              <canvas id="run-trajectory-canvas"></canvas>
+              <div id="run-trajectory-legend" class="run-trajectory-legend"></div>
+              <!-- Within-run sigma band (design §7.2,
+                   `20260910-claude-sonnet-5-gui-sigma-band-design.md`'s
+                   own approach C1): the shaded region itself is drawn
+                   directly on the canvas above, behind the tail of
+                   whichever statistic's own curve it belongs to; this
+                   is the supplementary caption with the exact numbers,
+                   one line per statistic that has a band -- empty and
+                   hidden whenever the run requested none, or hit the
+                   hard generation cap without converging. -->
+              <ul id="run-trajectory-sigma-band-caption" class="hint" hidden></ul>
+            </div>
+          </div>
+
+          <!-- `completed`-only this phase (design §3.2.4: no separate
+               "Animate" button anywhere -- the scrubber is simply part
+               of `completed`'s own view), placed directly beneath the
+               scatter/trajectory plot pair it controls. -->
+          <div class="scrubber-controls" id="scrubber-controls" hidden>
+            <button type="button" id="scrubber-play-button" disabled>Play</button>
+            <input
+              type="range"
+              id="scrubber-range"
+              min="0"
+              max="0"
+              value="0"
+              step="1"
+              disabled
+            >
+            <span id="scrubber-label"></span>
+          </div>
         </div>
 
         <!-- `initial`-only: p_0 statistics shown before any run starts
@@ -341,6 +358,7 @@
             <tr data-stat="K_ST"></tr>
             <tr data-stat="H_S"></tr>
             <tr data-stat="H_T"></tr>
+            <tr data-stat="H_ST"></tr>
           </tbody>
         </table>
         <!-- Scalar `completed`-only: same shape as `initial-stats`,
@@ -354,6 +372,7 @@
             <tr id="stat-K_ST"></tr>
             <tr id="stat-H_S"></tr>
             <tr id="stat-H_T"></tr>
+            <tr id="stat-H_ST"></tr>
             <!-- The order-2 Hill number's own closed form, `1 / (1 - H)`
                  (botanist GUI design doc §7.7) -- shown beside H_S/H_T,
                  not instead of them, per Jost's own foundational
@@ -473,30 +492,12 @@
           <th>K<sub>ST</sub></th>
           <th>H<sub>S</sub></th>
           <th>H<sub>T</sub></th>
+          <th>H<sub>ST</sub></th>
           <th></th>
         </tr>
       </thead>
       <tbody id="batch-results-table-body"></tbody>
     </table>
-
-    <!-- `completed`-only this phase (design §3.2.4: no separate
-         "Animate" button anywhere -- the scrubber is simply part of
-         `completed`'s own view). Design §8 Phase F extends this same
-         element to `running` too, pointed at a live/growing ceiling
-         (§3.3) instead of a fixed one. -->
-    <div class="scrubber-controls" id="scrubber-controls" hidden>
-      <button type="button" id="scrubber-play-button" disabled>Play</button>
-      <input
-        type="range"
-        id="scrubber-range"
-        min="0"
-        max="0"
-        value="0"
-        step="1"
-        disabled
-      >
-      <span id="scrubber-label"></span>
-    </div>
 
     <!-- Always present, regardless of state (design §3.1.4). -->
     <p id="run-reason" class="reason"></p>
@@ -783,6 +784,7 @@
             <option value="K_ST">K_ST</option>
             <option value="H_S">H_S</option>
             <option value="H_T">H_T</option>
+            <option value="H_ST">H_ST</option>
           </select>
         </div>
         <canvas id="compare-trajectory-canvas"></canvas>

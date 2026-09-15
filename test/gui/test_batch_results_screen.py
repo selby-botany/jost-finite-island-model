@@ -281,7 +281,7 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     assert settled["runId"].startswith("run-")
     # Row 0 is the p_0 baseline; rows 1 and 2 are the two replicates.
     assert settled["rowCount"] == 3
-    assert settled["ciBarCount"] == 8
+    assert settled["ciBarCount"] == 9
     # p_0 row: generation=0, outcome="initial".
     first_row = settled["firstRowCells"]
     assert first_row[0] == "0"
@@ -363,7 +363,7 @@ def test_a_completed_batchs_own_effective_allele_rows_render() -> None:
     assert settled is not None, (
         f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s"
     )
-    assert settled["rowCount"] == 8
+    assert settled["rowCount"] == 9
     assert "<sup>H</sup>D<sub>S</sub>" in settled["withinHtml"]
     assert "<sup>H</sup>D<sub>T</sub>" in settled["totalHtml"]
     # The same cross-replicate-uncertainty caption every other batch
@@ -465,9 +465,9 @@ def test_a_completed_batchs_own_pooled_trajectory_renders() -> None:
                     "runViewState: window.fim.getRunViewState(), "
                     "frameHidden: "
                     "document.getElementById('run-trajectory-frame').hidden, "
-                    "legendTexts: Array.from(document.querySelectorAll("
-                    "'#run-trajectory-legend .legend-item')"
-                    ").map((el) => el.textContent), "
+                    "statisticRows: Array.from(document.querySelectorAll("
+                    "'#batch-results-summary tr[data-trajectory-statistic]'"
+                    ")).map((row) => row.dataset.trajectoryStatistic), "
                     "canvasNonBlank: (function() {"
                     "  var c = document.getElementById('run-trajectory-canvas');"
                     "  var ctx = c.getContext('2d');"
@@ -490,16 +490,14 @@ def test_a_completed_batchs_own_pooled_trajectory_renders() -> None:
     assert settled is not None, "batch never reached done within the wait budget"
     assert settled["runViewState"] == "completed"
     assert settled["frameHidden"] is False
-    # The always-tracked four (`track_expensive_statistics` is not set
-    # by `_SET_STAGGERED_BATCH_FIELDS`, so `E_ST`/`K_ST` never get a
-    # per-generation history at all -- `pooled_convergence_histories`'s
-    # own docstring, and `test_pooled_convergence_histories_shrinks_
-    # as_replicates_stop`'s identical assertion for this same case).
-    assert sorted(text.split(" ")[0] for text in settled["legendTexts"]) == [
+    assert sorted(settled["statisticRows"]) == [
         "D",
+        "E_ST",
         "G_ST",
         "H_S",
+        "H_ST",
         "H_T",
+        "K_ST",
     ]
     assert settled["canvasNonBlank"] > 0
 
