@@ -2613,6 +2613,12 @@ class Api:
                 {
                     "generation": frame.generation,
                     "panels": panels_from_points(frame.points, params.d),
+                    "literatureVisuals": {
+                        "alleleComposition": frame.allele_composition,
+                        "frequencySpectrum": frame.frequency_spectrum,
+                    }
+                    if frame.allele_composition is not None
+                    else None,
                 }
                 for frame in frames
             ],

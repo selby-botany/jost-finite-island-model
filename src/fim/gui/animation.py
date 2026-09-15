@@ -33,8 +33,12 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
+from fim.gui.literature_visuals import (
+    allele_composition_payload,
+    frequency_spectrum_payload,
+)
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
 from fim.persistence.store import TrajectoryRow
@@ -48,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class AnimationFrame:
-    """One sampled animation frame's raw scatter coordinates.
+    """One sampled animation frame's raw scatter coordinates and supplemental payloads.
 
     Args:
         generation: The persisted generation this frame represents.
@@ -60,10 +64,16 @@ class AnimationFrame:
             `panels_from_points` itself handles) and for the
             client-side Canvas draw itself; this module never touches
             either.
+        allele_composition: Per-deme stacked allele-composition barplot
+            payload, or ``None`` when unavailable (e.g. pooled batch frames).
+        frequency_spectrum: Empirical allele-frequency spectrum payload,
+            or ``None`` when unavailable.
     """
 
     generation: int
     points: FloatArray
+    allele_composition: dict[str, Any] | None = None
+    frequency_spectrum: dict[str, Any] | None = None
 
 
 def pre_render_frames(
@@ -94,7 +104,14 @@ def pre_render_frames(
     for generation in sampled:
         state = ModelState.from_rows(grouped[generation], params.loci)
         points = frequency_points(state)
-        frames.append(AnimationFrame(generation=generation, points=points))
+        frames.append(
+            AnimationFrame(
+                generation=generation,
+                points=points,
+                allele_composition=allele_composition_payload(state),
+                frequency_spectrum=frequency_spectrum_payload(state, params),
+            )
+        )
     logger.debug(
         "pre-rendered %d animation frame(s) from %d persisted generation(s) in %s",
         len(frames),

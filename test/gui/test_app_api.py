@@ -2417,6 +2417,9 @@ def test_get_animation_frames_ships_client_ready_panels(tmp_path: Path) -> None:
         assert isinstance(panels, list)
         assert len(panels) == 1
         assert panels[0]["x_label"] == "Deme 1"
+        assert frame["literatureVisuals"] is not None
+        assert "alleleComposition" in frame["literatureVisuals"]
+        assert "frequencySpectrum" in frame["literatureVisuals"]
 
 
 def test_get_animation_frames_reports_a_missing_run_without_raising(

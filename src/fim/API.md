@@ -2764,7 +2764,7 @@ the caller, rather than re-verifying it a second time.
 class AnimationFrame()
 ```
 
-One sampled animation frame's raw scatter coordinates.
+One sampled animation frame's raw scatter coordinates and supplemental payloads.
 
 **Arguments**:
 
@@ -2777,6 +2777,10 @@ One sampled animation frame's raw scatter coordinates.
   `panels_from_points` itself handles) and for the
   client-side Canvas draw itself; this module never touches
   either.
+- `allele_composition` - Per-deme stacked allele-composition barplot
+  payload, or ``None`` when unavailable (e.g. pooled batch frames).
+- `frequency_spectrum` - Empirical allele-frequency spectrum payload,
+  or ``None`` when unavailable.
 
 <a id="fim.gui.animation.pre_render_frames"></a>
 

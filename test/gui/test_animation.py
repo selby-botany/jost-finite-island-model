@@ -149,6 +149,12 @@ def test_pre_render_frames_matches_select_sample_generations(tmp_path: Path) -> 
         # (one persisted locus/allele pair is always present).
         assert frame.points.shape[1] == 2
         assert frame.points.shape[0] >= 1
+        assert frame.allele_composition is not None
+        assert frame.allele_composition["title"] == "Allele composition by deme"
+        assert len(frame.allele_composition["demes"]) == 2
+        assert frame.frequency_spectrum is not None
+        assert frame.frequency_spectrum["title"] == "Allele-frequency spectrum"
+        assert len(frame.frequency_spectrum["bins"]) == 20
 
 
 def test_pre_render_frames_are_sorted_ascending_by_generation(tmp_path: Path) -> None:
