@@ -869,12 +869,24 @@ fieldset.composite > label {
  * same container, confirmed live there after the change.
  */
 @media (max-width: 1300px) {
+    #run-plot-row.run-plot-row-has-trajectory {
+        flex-wrap: nowrap;
+    }
+
+    #run-plot-row.run-plot-row-has-trajectory .run-visual-column {
+        flex: 0 1 auto;
+    }
+
     #run-plot-row.run-plot-row-has-trajectory .run-canvas-frame {
         width: min(100%, 620px, calc(100vh - 380px));
     }
 
     #run-plot-row.run-plot-row-has-trajectory #run-canvas {
         max-height: calc(100vh - 380px);
+    }
+
+    #run-plot-row.run-plot-row-has-trajectory .stats-table {
+        flex: 0 0 auto;
     }
 }
 
