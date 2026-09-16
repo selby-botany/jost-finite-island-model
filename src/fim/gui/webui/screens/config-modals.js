@@ -411,73 +411,12 @@ async function applyEngineBackendAvailability() {
 
 window.fim.applyEngineBackendAvailability = applyEngineBackendAvailability;
 
-/**
- * Significant digits (design §4.2 -- moved out of the native View
- * menu's own quick-toggle submenu into an ordinary Configure field).
- * Not a `SimulationParams` field: no `name`/`form="input-form"`, no
- * `collectFormValues()`/`revalidate()` involvement, wired directly to
- * the same `Api.set_significant_digits` bridge call the old menu items
- * made. `Api.get_significant_digits` seeds the select's own initial
- * value once, on launch -- this setting is process-local (`Api.__init__`
- * 's own docstring), never part of a saved/loaded configuration, so
- * there is nothing to re-sync on `applyFormValues`/`resetInputForm`.
- */
-async function wireSignificantDigitsField() {
-    const select = document.getElementById("field-significant_digits");
-    select.value = String(await window.pywebview.api.get_significant_digits());
-    // `fim.menu.setSignificantDigits` (`app.js`) already has the
-    // bridge-call-plus-alert-on-failure logic this needs -- the same
-    // method the native View menu's own items used to call, reused
-    // rather than duplicated now that this field is that menu's
-    // replacement.
-    select.addEventListener("change", () => {
-        window.fim.menu.setSignificantDigits(Number(select.value));
-    });
-}
-
-/**
- * Apply a dark-mode override to the page itself, immediately -- design
- * §11.2/§12: an explicit choice takes effect right away, not only on
- * the next launch. `""`/`null` clears the attribute entirely, letting
- * `app.css`'s own `@media (prefers-color-scheme: dark)` block (guarded
- * `:not([data-theme="light"])`) take back over, following the OS again.
- * @param {string|null} value - `"light"`, `"dark"`, or `""`/`null` for
- *     "follow the OS."
- */
-function applyDarkModeOverride(value) {
-    if (value) {
-        document.documentElement.dataset.theme = value;
-    } else {
-        delete document.documentElement.dataset.theme;
-    }
-}
-
-window.fim.applyDarkModeOverride = applyDarkModeOverride;
-
-/**
- * Dark mode override (design §11.2, §12) -- the same shape as
- * `wireSignificantDigitsField` just above, applied here to `Api.get_
- * dark_mode_override`/`set_dark_mode_override` instead. The select's
- * own empty-string "Follow system" option is sent to the bridge as
- * `null`, matching `GuiPreferences.dark_mode_override`'s own "`None`
- * means follow the OS" contract -- an HTML `<select>` has no native
- * `null` value of its own, only strings.
- */
-async function wireDarkModeOverrideField() {
-    const select = document.getElementById("field-dark_mode_override");
-    const saved = await window.pywebview.api.get_dark_mode_override();
-    select.value = saved || "";
-    applyDarkModeOverride(saved);
-    select.addEventListener("change", async () => {
-        const value = select.value || null;
-        const result = await window.pywebview.api.set_dark_mode_override(value);
-        if (!result.ok) {
-            window.alert(`Could not change appearance: ${result.message}`);
-            return;
-        }
-        applyDarkModeOverride(value);
-    });
-}
+// Significant digits/dark-mode override used to be wired here, as
+// ordinary Configure fields. Both relocated into `screens/settings.js`
+// on a real, reported request -- neither is a `SimulationParams` field,
+// so neither ever needed `config-modals.js`'s own per-run form logic;
+// `index.html`'s own comment above `#modal-settings` has the full
+// account.
 
 /**
  * Seed the within-run σ band's own window field with a sensible
@@ -505,8 +444,6 @@ function wireSigmaBandSeedDefault() {
 }
 
 whenApiReady(wireConfigModalEvents);
-whenApiReady(wireSignificantDigitsField);
-whenApiReady(wireDarkModeOverrideField);
 whenApiReady(wireSigmaBandSeedDefault);
 
 /**

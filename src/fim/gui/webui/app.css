@@ -448,6 +448,20 @@ textarea::placeholder {
     box-shadow: 0 12px 32px var(--fim-shadow);
 }
 
+/* Settings grew from one field ("At startup") to ~17 (execution engine/
+ * n_replicates/the convergence-selection group joined significant
+ * digits/appearance, relocated wholesale from Configure -- `index.html`'s
+ * own comment above `#modal-settings` has the full account) -- wider and
+ * taller than the shared `.config-modal` sizing above (which still fits
+ * every other modal, so this overrides by id rather than widening that
+ * shared rule for all of them), scrollable rather than clipped or
+ * overflowing the viewport on a short window. */
+#modal-settings {
+    max-width: 34rem;
+    max-height: min(80vh, 640px);
+    overflow-y: auto;
+}
+
 .config-modal::backdrop {
     background: rgba(0, 0, 0, 0.4);
 }

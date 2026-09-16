@@ -1156,6 +1156,17 @@
           </div>
         </fieldset>
 
+        <!-- This group (convergence statistic(s) through tolerance,
+             below) and `engine_backend`/`n_replicates`, further down,
+             each have a second, independent copy in the Settings
+             dialog (`#modal-settings`) now too -- a real, reported
+             request to let these act as global defaults, "applicable
+             pretty universally," while this per-run copy stays exactly
+             what it always was: editing it here overrides the default
+             for this one run only, no different from editing any other
+             field on this form. `track_expensive_statistics`/the
+             sigma-band fieldset, below, stay Configure-only -- judged
+             scientific/per-run choices, not administrative defaults. -->
         <fieldset class="composite" id="cs-selector">
           <legend data-field-help="cs_group">convergence statistic(s)</legend>
           <label><input type="checkbox" name="cs_D" value="true" checked form="input-form"> D</label>
@@ -1307,48 +1318,15 @@
           </div>
         </div>
 
-        <!-- Significant digits (design §4.2: "moves into Configure as
-             an ordinary field, per the gap analysis's own
-             recommendation"), replacing the native View menu's own
-             quick-toggle submenu -- not a `SimulationParams` field, so
-             not `form="input-form"`/collected by `collectFormValues`;
-             wired directly to `Api.set_significant_digits` the same
-             call the old menu items made
-             (`screens/config-modals.js`'s own `wireSignificantDigits
-             Field`). Purely cosmetic and forward-looking, per that
-             method's own docstring: nothing on disk changes, and an
-             already-showing `completed` view is not retroactively
-             reformatted, only the next run's own results. -->
-        <div class="field">
-          <label for="field-significant_digits">significant digits</label>
-          <select id="field-significant_digits">
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="8">8</option>
-          </select>
-        </div>
-
-        <!-- Dark mode (design §11.2, §12): "the app follows the OS-
-             level light/dark preference by default, with an explicit
-             override in Configure's own general settings." Not a
-             `SimulationParams` field either -- same shape as
-             significant digits just above, wired to `Api.get_dark_
-             mode_override`/`set_dark_mode_override`
-             (`screens/config-modals.js`'s own `wireDarkModeOverride
-             Field`), which also applies the choice immediately
-             (`document.documentElement`'s own `data-theme` attribute,
-             `app.css`'s own token blocks), not only on the next launch. -->
-        <div class="field">
-          <label for="field-dark_mode_override">appearance</label>
-          <select id="field-dark_mode_override">
-            <option value="">Follow system</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </div>
+        <!-- Significant digits and appearance (dark-mode override) used
+             to live here as ordinary Configure fields (design §4.2).
+             Both moved into the Settings dialog instead, on a real,
+             reported request -- neither is a `SimulationParams` field,
+             so neither ever needed to sit beside the model's own
+             per-run parameters in the first place; `#modal-settings`'s
+             own comment has the full account, including why
+             `engine_backend`/`n_replicates`/the convergence-selection
+             group stay here too, unlike these two. -->
       </div>
     </div>
 
@@ -1501,6 +1479,40 @@
     </form>
   </dialog>
 
+  <!-- Settings (top-right of the top menu bar): used to hold only "At
+       startup," below. Grew to also hold execution engine/n_replicates/
+       the convergence-selection group as global defaults, on a real,
+       reported request ("the defaults can be applicable pretty
+       universally, while a run config can still override them") --
+       significant digits and appearance (dark-mode override) moved in
+       too, relocated wholesale from Configure's own Structure panel
+       (neither is a `SimulationParams` field, so neither ever had a
+       real reason to live beside the model's own per-run parameters).
+
+       `engine_backend`/`n_replicates`/the convergence-selection fields
+       below (`settings-*` ids) are a second, independent set of
+       controls from Configure's own identically-named-in-spirit fields
+       -- deliberately not `form="input-form"`/`name="..."`, so
+       `collectFormValues`'s `FormData` scan of `#input-form` never sees
+       them. They seed/persist via `Api.get_default_run_settings`/
+       `set_default_run_settings` (`config_form.
+       DEFAULT_RUN_SETTING_FIELD_NAMES` is the one place the exact field
+       set is named), applied on Save rather than per-field `change` --
+       unlike startup behavior/significant digits/appearance, which stay
+       on their own established "one scalar value, immediate `change`"
+       precedent below, this is ~14 fields collected together into one
+       bridge call. `track_expensive_statistics`/the sigma-band pair
+       stay Configure-only -- judged scientific/per-run choices, not
+       administrative defaults, so no counterpart exists here.
+
+       Both a real tooltip (`field-help.js`'s own `wireAllFieldTooltips`,
+       extended to also cover this dialog) and a brief inline
+       `<p class="hint">` are used for the fields below that need more
+       explanation than a one-line label -- some of these carry enough
+       nuance (`engine_backend`'s own four-way tradeoff, the convergence
+       criterion's own semantics) that a hover-only tooltip inside a
+       modal a user may dismiss quickly did not seem like enough on its
+       own. -->
   <dialog class="config-modal" id="modal-settings">
     <h2>Settings</h2>
     <div id="settings-banner" class="banner" hidden></div>
@@ -1515,7 +1527,94 @@
         change saved run results.
       </p>
     </div>
+
+    <div class="field">
+      <label for="settings-significant_digits" data-field-help="significant_digits">significant digits</label>
+      <select id="settings-significant_digits">
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="8">8</option>
+      </select>
+      <p class="hint">
+        Display-rounding precision only -- every saved run keeps full
+        float precision regardless of this value.
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="settings-dark_mode_override" data-field-help="dark_mode_override">appearance</label>
+      <select id="settings-dark_mode_override">
+        <option value="">Follow system</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+
+    <fieldset class="composite">
+      <legend>Execution defaults</legend>
+      <p class="hint">
+        Seeds every new configuration; a run's own Configure form can
+        still change either field for that one run.
+      </p>
+      <div class="field">
+        <label for="settings-engine_backend" data-field-help="engine_backend">execution engine</label>
+        <select id="settings-engine_backend">
+          <option value="lineal">lineal (reference &mdash; single-threaded, exact)</option>
+          <option value="auto">auto (recommended &mdash; fastest for this configuration)</option>
+          <option value="generational">generational (thread-parallel, exact)</option>
+          <option value="generational-vector">generational-vector (array-native, fastest for large configurations)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="settings-n_replicates" data-field-help="n_replicates">n_replicates</label>
+        <input type="text" id="settings-n_replicates">
+      </div>
+    </fieldset>
+
+    <fieldset class="composite">
+      <legend>Convergence defaults</legend>
+      <p class="hint">
+        The shipped defaults already run statistics to convergence with
+        confidence intervals -- there is generally no reason to change
+        these; a run's own Configure form can still override any of
+        them for that one run.
+      </p>
+      <fieldset class="composite" id="settings-cs-selector">
+        <legend data-field-help="cs_group">convergence statistic(s)</legend>
+        <label><input type="checkbox" id="settings-cs_D" checked> D</label>
+        <label><input type="checkbox" id="settings-cs_G_ST"> G<sub>ST</sub></label>
+        <label><input type="checkbox" id="settings-cs_E_ST"> E<sub>ST</sub></label>
+        <label><input type="checkbox" id="settings-cs_K_ST"> K<sub>ST</sub></label>
+        <label><input type="checkbox" id="settings-cs_H_S"> H<sub>S</sub></label>
+        <label><input type="checkbox" id="settings-cs_H_T"> H<sub>T</sub></label>
+        <label><input type="checkbox" id="settings-cs_A_CGD"> A<sub>CGD</sub></label>
+        <label><input type="checkbox" id="settings-cs_Delta"> &delta;<sub>G</sub></label>
+        <label><input type="checkbox" id="settings-cs_MI"> I</label>
+      </fieldset>
+      <div class="field" id="settings-combinator-field" hidden>
+        <label for="settings-convergence_combinator" data-field-help="convergence_combinator">combinator</label>
+        <select id="settings-convergence_combinator">
+          <option value="any">any</option>
+          <option value="all">all</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="settings-convergence_window" data-field-help="convergence_window">convergence window</label>
+        <input type="text" id="settings-convergence_window">
+      </div>
+      <div class="field">
+        <label for="settings-convergence_tolerance" data-field-help="convergence_tolerance">tolerance</label>
+        <input type="text" id="settings-convergence_tolerance">
+      </div>
+    </fieldset>
+
     <div class="actions">
+      <button type="button" id="settings-save-button" class="primary-action" tabindex="0">
+        Save
+      </button>
       <button type="button" class="modal-close" data-modal-close tabindex="0">
         Close
       </button>

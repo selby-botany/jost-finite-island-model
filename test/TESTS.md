@@ -62,6 +62,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_results_screen`](#gui.test_results_screen)
   - [`test_runner`](#gui.test_runner)
   - [`test_running_screen`](#gui.test_running_screen)
+  - [`test_settings_modal`](#gui.test_settings_modal)
   - [`test_shutdown_deadman`](#gui.test_shutdown_deadman)
   - [`test_store`](#gui.test_store)
   - [`test_trajectory_history`](#gui.test_trajectory_history)
@@ -9956,17 +9957,26 @@ count, not only by a missing `tabindex`.
 
 # gui.test\_dark\_mode\_screen
 
-Headless functional tests for the Configure workspace's dark-mode
-override field (botanist GUI design doc `20260907-claude-sonnet-5-
-botanist-gui-redesign.md` §11.2, §12).
+Headless functional tests for the Settings dialog's dark-mode override
+field (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §11.2, §12) -- relocated from Configure into ``modal`-
+settings` on a real, reported request (`index.html`'s own comment above
+that dialog has the full account); this field's own behavior is
+unaffected by the move.
 
-Real DOM-driven proof that `webui/screens/config-modals.js`'s
+Real DOM-driven proof that `webui/screens/settings.js`'s own
 `wireDarkModeOverrideField`/`applyDarkModeOverride` actually apply and
 persist a choice -- `test/gui/test_app_api.py` already proves the bridge
 methods themselves are correct as plain Python calls; these tests prove
 the page's own JavaScript calls them at the right moments and updates
 `document.documentElement`'s own `data-theme` attribute, which no
-Python-only test can check.
+Python-only test can check. Reads/writes the field directly via
+`getElementById`, not through ``modal`-settings`'s own `showModal()` --
+these listeners are wired at module load regardless of the dialog's
+open/closed state (closed-`<dialog>` children are still real,
+script-reachable DOM nodes, just unrendered), the same "seed/react
+immediately, not gated behind the dialog opening" design `appearance`
+already needed before this file's own fields ever moved here.
 
 <a id="gui.test_dark_mode_screen.test_starts_with_no_theme_override_and_the_select_showing_follow_system"></a>
 
@@ -10147,20 +10157,21 @@ Static-analysis guard over the inline field tooltips (botanist GUI
 design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
 Configure, plus the Results card's own two re-analysis controls
 (``results`-reanalyze-controls`, inside ``screen`-run` -- design item 6)
-that share the same mechanism outside that section's own Configure-only
-scope.
+and the Settings dialog's own execution/convergence-selection defaults
+(``modal`-settings`) that share the same mechanism outside that section's
+own Configure-only scope.
 
 `webui/field-help.js`'s own `FIELD_HELP` object is the single content
 source every tooltip draws from -- these tests check both directions of
 the one invariant that keeps it honest: every key names a real field or
-mode-selector group one of these two screens actually has, and every such
-field or group either screen actually has is named by a real key. Static,
-not DOM-driven (`test_config_modal_dialogs.py`'s own precedent): both
-`index.html` and `field-help.js` are plain text on disk, so this answers
-"did someone add a field without a tooltip, or leave a stale tooltip for
-a field that no longer exists" in milliseconds, with no window and no
-simulation run required, rather than only failing much later inside a
-real hover/focus session.
+mode-selector group one of these three screens/dialogs actually has, and
+every such field or group any of them actually has is named by a real
+key. Static, not DOM-driven (`test_config_modal_dialogs.py`'s own
+precedent): both `index.html` and `field-help.js` are plain text on disk,
+so this answers "did someone add a field without a tooltip, or leave a
+stale tooltip for a field that no longer exists" in milliseconds, with no
+window and no simulation run required, rather than only failing much
+later inside a real hover/focus session.
 
 <a id="gui.test_field_help.test_screen_configure_exists_exactly_once"></a>
 
@@ -10185,6 +10196,16 @@ def test_screen_run_exists_exactly_once() -> None
 ```
 
 `_section_html`'s own slicing assumption holds for `screen-run`.
+
+<a id="gui.test_field_help.test_modal_settings_exists_exactly_once"></a>
+
+#### test\_modal\_settings\_exists\_exactly\_once
+
+```python
+def test_modal_settings_exists_exactly_once() -> None
+```
+
+`_section_html`'s own slicing assumption holds for `modal-settings`.
 
 <a id="gui.test_field_help.test_every_field_help_key_names_a_real_field_or_group"></a>
 
@@ -10222,6 +10243,22 @@ def test_every_screen_run_field_and_group_has_a_tooltip() -> None
 ```
 
 Every `screen-run` field/group has a `FIELD_HELP` entry -- none forgotten.
+
+<a id="gui.test_field_help.test_every_modal_settings_field_and_group_has_a_tooltip"></a>
+
+#### test\_every\_modal\_settings\_field\_and\_group\_has\_a\_tooltip
+
+```python
+def test_every_modal_settings_field_and_group_has_a_tooltip() -> None
+```
+
+Every `modal-settings` field/group has a `FIELD_HELP` entry -- none forgotten.
+
+Not every Settings field opts into a tooltip (`appearance`/`at
+startup` carry only a brief inline hint) -- this only checks that
+whichever fields *do* carry `data-field-help` name a real
+`FIELD_HELP` key, the same "no dangling reference" direction the
+other two tests above already check for their own screens.
 
 <a id="gui.test_field_help_screen"></a>
 
@@ -10694,26 +10731,6 @@ A saved form that no longer validates is discarded, never applied partially.
 docstring) -- a hand-edited or stale file that fails it falls all
 the way back to `starter_form_values()`, the same as a first-ever
 launch with nothing saved at all.
-
-<a id="gui.test_input_screen.test_significant_digits_field_loads_and_changes_the_real_value"></a>
-
-#### test\_significant\_digits\_field\_loads\_and\_changes\_the\_real\_value
-
-```python
-def test_significant_digits_field_loads_and_changes_the_real_value(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-The Configure field (design §4.2) round-trips through the real bridge.
-
-Not a `SimulationParams` field (`field-significant_digits` carries
-no `name`/`form="input-form"`), so its own coverage lives here
-rather than in `config_form`'s tests: `wireSignificantDigitsField`
-(`config-modals.js`) seeds the select from `Api.get_significant_
-digits` on load, and a `change` event calls `fim.menu.
-setSignificantDigits` — the same method the native View menu's own
-now-removed quick-toggle submenu used to call, confirmed by reading
-the value back through a second `Api` call on the very same window.
 
 <a id="gui.test_input_screen.test_checking_a_second_convergence_statistic_reveals_the_combinator"></a>
 
@@ -13473,6 +13490,123 @@ A selected pair can legitimately have the same rendered coordinates
 as the default pair at a particular stochastic generation. This test
 therefore proves that the requested pair reaches the bridge state;
 visual rendering is exercised separately with fixed panel data.
+
+<a id="gui.test_settings_modal"></a>
+
+# gui.test\_settings\_modal
+
+Headless functional tests for the Settings dialog's own execution/
+convergence-selection defaults and significant-digits field (botanist
+GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
+§4.2/§11.2/§12, extended on a real, reported request to also hold
+execution engine/`n_replicates`/the convergence-selection group as
+global defaults -- `index.html`'s own comment above ``modal`-settings`
+has the full account).
+
+Real DOM-driven proof that `webui/screens/settings.js` actually seeds,
+collects, and saves these fields through the real `Api.get_default_run_
+settings`/`set_default_run_settings` bridge methods -- `test/gui/
+test_app_api.py`/`test_preferences.py`/`test_config_form.py` already
+prove the Python side (storage, overlay, validation) is correct as
+plain calls; these tests prove the page's own JavaScript actually wires
+them at the right moments, which no Python-only test can check.
+
+Dark-mode-override's own "applies the theme live" coverage stays in
+`test_dark_mode_screen.py` (a genuinely different concern -- this file
+only proves seed/collect/save/validate, not the immediate-apply side
+effect); "at startup" stays covered by `test_nav_rail.py`'s own
+pre-existing `test_settings_dialog_controls_startup_behavior`, unaffected
+by this dialog's growth. `test_field_help.py` covers every field's own
+tooltip presence statically; this file does not re-check that
+DOM-side.
+
+<a id="gui.test_settings_modal.test_significant_digits_field_loads_and_changes_the_real_value"></a>
+
+#### test\_significant\_digits\_field\_loads\_and\_changes\_the\_real\_value
+
+```python
+def test_significant_digits_field_loads_and_changes_the_real_value(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The Settings field round-trips through the real bridge.
+
+Not a `SimulationParams` field (`settings-significant_digits`
+carries no `name`/`form="input-form"`), so its own coverage lives
+here rather than in `config_form`'s tests: `wireSignificantDigits
+Field` (`screens/settings.js`) seeds the select from `Api.get_
+significant_digits` on load -- wired at module load, not gated
+behind the dialog opening, so this needs no `settings-button` click
+first -- and a `change` event calls `fim.menu.setSignificantDigits`,
+confirmed by reading the value back through a second `Api` call on
+the very same window.
+
+<a id="gui.test_settings_modal.test_settings_dialog_seeds_execution_and_convergence_defaults_from_starter"></a>
+
+#### test\_settings\_dialog\_seeds\_execution\_and\_convergence\_defaults\_from\_starter
+
+```python
+def test_settings_dialog_seeds_execution_and_convergence_defaults_from_starter(
+        window: webview.Window) -> None
+```
+
+With nothing saved, opening Settings shows the true starter values.
+
+<a id="gui.test_settings_modal.test_settings_dialog_seeds_execution_and_convergence_defaults_from_saved"></a>
+
+#### test\_settings\_dialog\_seeds\_execution\_and\_convergence\_defaults\_from\_saved
+
+```python
+def test_settings_dialog_seeds_execution_and_convergence_defaults_from_saved(
+        _isolate_gui_preferences: Path) -> None
+```
+
+A saved default is shown instead of the true starter values on open.
+
+<a id="gui.test_settings_modal.test_settings_save_button_persists_execution_and_convergence_defaults"></a>
+
+#### test\_settings\_save\_button\_persists\_execution\_and\_convergence\_defaults
+
+```python
+def test_settings_save_button_persists_execution_and_convergence_defaults(
+        window: webview.Window) -> None
+```
+
+Changing a field and clicking Save is reflected back by the bridge itself.
+
+The trigger script itself retries the readback (bounded, up to 2.5s)
+rather than trusting one fixed delay before reading back: `Save`'s
+own `click` handler is `async` (collects the 14 fields, awaits a
+real `set_default_run_settings` bridge round trip, then updates the
+banner), so a single fixed sleep before reading back raced that
+round trip under real parallel-test load and failed intermittently
+-- exactly the non-deterministic-test defect this project's own
+testing discipline forbids tolerating. Polling until the readback
+actually reflects the just-saved value converges to the same
+correct result regardless of how long the real bridge call takes,
+rather than gambling that a guessed delay was enough.
+
+<a id="gui.test_settings_modal.test_settings_save_button_shows_the_banner_on_an_invalid_value"></a>
+
+#### test\_settings\_save\_button\_shows\_the\_banner\_on\_an\_invalid\_value
+
+```python
+def test_settings_save_button_shows_the_banner_on_an_invalid_value(
+        window: webview.Window) -> None
+```
+
+An unparseable value is rejected, surfaced in the banner, not silently saved.
+
+<a id="gui.test_settings_modal.test_settings_checking_a_second_convergence_statistic_reveals_the_combinator"></a>
+
+#### test\_settings\_checking\_a\_second\_convergence\_statistic\_reveals\_the\_combinator
+
+```python
+def test_settings_checking_a_second_convergence_statistic_reveals_the_combinator(
+        window: webview.Window) -> None
+```
+
+Settings' own combinator field follows the identical rule Configure's does.
 
 <a id="gui.test_shutdown_deadman"></a>
 

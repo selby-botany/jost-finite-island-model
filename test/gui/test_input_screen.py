@@ -367,48 +367,6 @@ def test_initial_launch_falls_back_to_starter_values_for_an_invalid_saved_form(
     assert field_n == starter_form_values()["N"]
 
 
-def test_significant_digits_field_loads_and_changes_the_real_value(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """The Configure field (design §4.2) round-trips through the real bridge.
-
-    Not a `SimulationParams` field (`field-significant_digits` carries
-    no `name`/`form="input-form"`), so its own coverage lives here
-    rather than in `config_form`'s tests: `wireSignificantDigitsField`
-    (`config-modals.js`) seeds the select from `Api.get_significant_
-    digits` on load, and a `change` event calls `fim.menu.
-    setSignificantDigits` — the same method the native View menu's own
-    now-removed quick-toggle submenu used to call, confirmed by reading
-    the value back through a second `Api` call on the very same window.
-    """
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        # A plain, synchronous statement that only *starts* the async
-        # IIFE and returns immediately -- `evaluate_js` itself never
-        # awaits anything (`conftest.py`'s own `drive_and_read` docstring
-        # on why an async *trigger* whose own completion `evaluate_js`
-        # would have to wait for deadlocks; this is the safe shape that
-        # docstring also describes: fire-and-forget, then poll a
-        # separate `read`).
-        trigger=(
-            "window.__fimSignificantDigitsResult = null; "
-            "(async () => { "
-            "document.getElementById('field-significant_digits').value = '6'; "
-            "document.getElementById('field-significant_digits')"
-            ".dispatchEvent(new Event('change', {bubbles: true})); "
-            "await new Promise((resolve) => setTimeout(resolve, 50)); "
-            "window.__fimSignificantDigitsResult = "
-            "await window.pywebview.api.get_significant_digits(); "
-            "})();"
-        ),
-        read="window.__fimSignificantDigitsResult",
-        is_ready=lambda value: value is not None,
-    )
-
-    assert settled == 6
-
-
 def test_checking_a_second_convergence_statistic_reveals_the_combinator(
     window: webview.Window, drive: Callable[..., Any]
 ) -> None:

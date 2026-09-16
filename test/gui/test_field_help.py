@@ -2,20 +2,21 @@
 design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.6) on
 Configure, plus the Results card's own two re-analysis controls
 (`#results-reanalyze-controls`, inside `#screen-run` -- design item 6)
-that share the same mechanism outside that section's own Configure-only
-scope.
+and the Settings dialog's own execution/convergence-selection defaults
+(`#modal-settings`) that share the same mechanism outside that section's
+own Configure-only scope.
 
 `webui/field-help.js`'s own `FIELD_HELP` object is the single content
 source every tooltip draws from -- these tests check both directions of
 the one invariant that keeps it honest: every key names a real field or
-mode-selector group one of these two screens actually has, and every such
-field or group either screen actually has is named by a real key. Static,
-not DOM-driven (`test_config_modal_dialogs.py`'s own precedent): both
-`index.html` and `field-help.js` are plain text on disk, so this answers
-"did someone add a field without a tooltip, or leave a stale tooltip for
-a field that no longer exists" in milliseconds, with no window and no
-simulation run required, rather than only failing much later inside a
-real hover/focus session.
+mode-selector group one of these three screens/dialogs actually has, and
+every such field or group any of them actually has is named by a real
+key. Static, not DOM-driven (`test_config_modal_dialogs.py`'s own
+precedent): both `index.html` and `field-help.js` are plain text on disk,
+so this answers "did someone add a field without a tooltip, or leave a
+stale tooltip for a field that no longer exists" in milliseconds, with no
+window and no simulation run required, rather than only failing much
+later inside a real hover/focus session.
 """
 
 from __future__ import annotations
@@ -46,6 +47,14 @@ _CONFIGURE_SECTION_START = '<section id="screen-configure"'
 _SCREEN_RUN_SECTION_START = '<section id="screen-run"'
 _SECTION_END = "</section>"
 
+# `#modal-settings` is a `<dialog>`, not a `<section>` -- its own close
+# tag is `</dialog>`, and `index.html` has exactly one of each (confirmed
+# by `test_modal_settings_exists_exactly_once`, below), the identical
+# "plain slice between one open tag and the next matching close tag"
+# assumption the two `<section>`-scoped helpers already make.
+_MODAL_SETTINGS_START = '<dialog class="config-modal" id="modal-settings"'
+_DIALOG_END = "</dialog>"
+
 _FIELD_LABEL = re.compile(r'<label for="field-([a-zA-Z0-9_]+)"')
 _GROUP_LEGEND = re.compile(r'<legend data-field-help="([a-zA-Z0-9_]+)"')
 _DATA_FIELD_HELP_LABEL = re.compile(r'<label\s[^>]*data-field-help="([a-zA-Z0-9_]+)"')
@@ -58,10 +67,10 @@ _DATA_FIELD_HELP_LABEL = re.compile(r'<label\s[^>]*data-field-help="([a-zA-Z0-9_
 _FIELD_HELP_KEY = re.compile(r'^\s{4}([a-zA-Z0-9_]+):\s*"', re.MULTILINE)
 
 
-def _section_html(start_marker: str) -> str:
+def _section_html(start_marker: str, end_marker: str = _SECTION_END) -> str:
     html = _INDEX_HTML.read_text(encoding="utf-8")
     start = html.index(start_marker)
-    end = html.index(_SECTION_END, start)
+    end = html.index(end_marker, start)
     return html[start:end]
 
 
@@ -74,6 +83,14 @@ def _configure_field_and_group_keys() -> set[str]:
 def _screen_run_field_and_group_keys() -> set[str]:
     """Every `data-field-help="<key>"` label and legend key on `screen-run`."""
     section = _section_html(_SCREEN_RUN_SECTION_START)
+    return set(_DATA_FIELD_HELP_LABEL.findall(section)) | set(
+        _GROUP_LEGEND.findall(section)
+    )
+
+
+def _modal_settings_field_and_group_keys() -> set[str]:
+    """Every `data-field-help="<key>"` label and legend key on `modal-settings`."""
+    section = _section_html(_MODAL_SETTINGS_START, _DIALOG_END)
     return set(_DATA_FIELD_HELP_LABEL.findall(section)) | set(
         _GROUP_LEGEND.findall(section)
     )
@@ -100,13 +117,23 @@ def test_screen_run_exists_exactly_once() -> None:
     assert html.count(_SCREEN_RUN_SECTION_START) == 1
 
 
+def test_modal_settings_exists_exactly_once() -> None:
+    """`_section_html`'s own slicing assumption holds for `modal-settings`."""
+    html = _INDEX_HTML.read_text(encoding="utf-8")
+    assert html.count(_MODAL_SETTINGS_START) == 1
+
+
 def test_every_field_help_key_names_a_real_field_or_group() -> None:
     """No `FIELD_HELP` entry is stale -- every key matches a real field/group.
 
     Catches a field renamed or removed after its own tooltip was
     written, left behind as a key nothing ever looks up.
     """
-    real_keys = _configure_field_and_group_keys() | _screen_run_field_and_group_keys()
+    real_keys = (
+        _configure_field_and_group_keys()
+        | _screen_run_field_and_group_keys()
+        | _modal_settings_field_and_group_keys()
+    )
     stale_keys = _field_help_keys() - real_keys
 
     assert stale_keys == set(), (
@@ -135,4 +162,21 @@ def test_every_screen_run_field_and_group_has_a_tooltip() -> None:
 
     assert missing_keys == set(), (
         f"screen-run has fields/groups with no FIELD_HELP entry: {sorted(missing_keys)}"
+    )
+
+
+def test_every_modal_settings_field_and_group_has_a_tooltip() -> None:
+    """Every `modal-settings` field/group has a `FIELD_HELP` entry -- none forgotten.
+
+    Not every Settings field opts into a tooltip (`appearance`/`at
+    startup` carry only a brief inline hint) -- this only checks that
+    whichever fields *do* carry `data-field-help` name a real
+    `FIELD_HELP` key, the same "no dangling reference" direction the
+    other two tests above already check for their own screens.
+    """
+    missing_keys = _modal_settings_field_and_group_keys() - _field_help_keys()
+
+    assert missing_keys == set(), (
+        "modal-settings has fields/groups with no FIELD_HELP entry: "
+        f"{sorted(missing_keys)}"
     )

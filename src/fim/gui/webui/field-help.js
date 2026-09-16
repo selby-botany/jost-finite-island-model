@@ -256,25 +256,31 @@ function wireGroupTooltip(legendElement, key) {
  * Wire every field label and `[data-field-help]` legend inside Configure,
  * plus the Results card's own two re-analysis controls (generation mode,
  * differentiation-q sweep, `#results-reanalyze-controls` inside `#screen-
- * run`). Called once, at parse time -- unlike almost everything else this
- * page wires, this markup is static HTML present from first load, not
- * built by a later bridge call, so there is nothing to wait for.
+ * run`), plus the Settings dialog's own execution/convergence-selection
+ * defaults (`#modal-settings`). Called once, at parse time -- unlike
+ * almost everything else this page wires, this markup is static HTML
+ * present from first load, not built by a later bridge call, so there is
+ * nothing to wait for.
  *
  * Configure's own labels use the `field-<key>` id convention, so their
- * `FIELD_HELP` key is derived by slicing that prefix off; the two re-
- * analysis controls don't share that id convention (`results-generation-
- * value`, `results-differentiation-orders` -- ids borrowed from the Tk-
- * era screen's own naming, only the `open-run-` prefix ever changed, when
- * these moved off the open-run screen entirely, design item 6), so they
- * carry an explicit `data-field-help="<key>"` on the `<label>` itself
- * instead, the same opt-in mechanism a composite `<fieldset>`'s own
- * `<legend>` already used for its group-level tooltip. Scoped to
- * `#screen-run` rather than the tighter `#results-reanalyze-controls`
- * itself only because that's this file's own established per-screen
- * scoping granularity (`#screen-configure`, above) -- `#screen-run` has
- * no other `[data-field-help]`/`label[for^="field-"]` element today
+ * `FIELD_HELP` key is derived by slicing that prefix off; the re-
+ * analysis controls and Settings' own fields don't share that id
+ * convention (`results-generation-value`/`results-differentiation-
+ * orders` -- ids borrowed from the Tk-era screen's own naming, only the
+ * `open-run-` prefix ever changed, when these moved off the open-run
+ * screen entirely, design item 6; `settings-*` -- a second, independent
+ * set of controls from Configure's own identically-named-in-spirit
+ * fields, `index.html`'s own comment above `#modal-settings` has the
+ * full account), so they carry an explicit `data-field-help="<key>"` on
+ * the `<label>` itself instead, the same opt-in mechanism a composite
+ * `<fieldset>`'s own `<legend>` already used for its group-level
+ * tooltip. Scoped to `#screen-run`/`#modal-settings` rather than the
+ * tighter `#results-reanalyze-controls`/individual-fieldset scope only
+ * because that's this file's own established per-screen/per-dialog
+ * scoping granularity (`#screen-configure`, above) -- neither has any
+ * other `[data-field-help]`/`label[for^="field-"]` element today
  * (`test/gui/test_field_help.py`'s own static check enforces this stays
- * true), so the wider scope catches everything the tighter one would.
+ * true), so the wider scope catches everything a tighter one would.
  */
 function wireAllFieldTooltips() {
     document
@@ -285,13 +291,17 @@ function wireAllFieldTooltips() {
     document
         .querySelectorAll(
             "#screen-configure legend[data-field-help], " +
-                "#screen-run legend[data-field-help]"
+                "#screen-run legend[data-field-help], " +
+                "#modal-settings legend[data-field-help]"
         )
         .forEach((legend) => {
             wireGroupTooltip(legend, legend.dataset.fieldHelp);
         });
     document
-        .querySelectorAll("#screen-run label[data-field-help]")
+        .querySelectorAll(
+            "#screen-run label[data-field-help], " +
+                "#modal-settings label[data-field-help]"
+        )
         .forEach((label) => {
             wireFieldTooltip(label, label.dataset.fieldHelp);
         });

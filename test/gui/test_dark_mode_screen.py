@@ -1,14 +1,23 @@
-"""Headless functional tests for the Configure workspace's dark-mode
-override field (botanist GUI design doc `20260907-claude-sonnet-5-
-botanist-gui-redesign.md` §11.2, §12).
+"""Headless functional tests for the Settings dialog's dark-mode override
+field (botanist GUI design doc `20260907-claude-sonnet-5-botanist-gui-
+redesign.md` §11.2, §12) -- relocated from Configure into `#modal-
+settings` on a real, reported request (`index.html`'s own comment above
+that dialog has the full account); this field's own behavior is
+unaffected by the move.
 
-Real DOM-driven proof that `webui/screens/config-modals.js`'s
+Real DOM-driven proof that `webui/screens/settings.js`'s own
 `wireDarkModeOverrideField`/`applyDarkModeOverride` actually apply and
 persist a choice -- `test/gui/test_app_api.py` already proves the bridge
 methods themselves are correct as plain Python calls; these tests prove
 the page's own JavaScript calls them at the right moments and updates
 `document.documentElement`'s own `data-theme` attribute, which no
-Python-only test can check.
+Python-only test can check. Reads/writes the field directly via
+`getElementById`, not through `#modal-settings`'s own `showModal()` --
+these listeners are wired at module load regardless of the dialog's
+open/closed state (closed-`<dialog>` children are still real,
+script-reachable DOM nodes, just unrendered), the same "seed/react
+immediately, not gated behind the dialog opening" design `appearance`
+already needed before this file's own fields ever moved here.
 """
 
 from __future__ import annotations
@@ -39,7 +48,7 @@ def test_starts_with_no_theme_override_and_the_select_showing_follow_system(
         read=(
             "({"
             "themeAttr: document.documentElement.dataset.theme || null, "
-            "selectValue: document.getElementById('field-dark_mode_override').value"
+            "selectValue: document.getElementById('settings-dark_mode_override').value"
             "})"
         ),
         is_ready=lambda value: value is not None,
@@ -58,7 +67,7 @@ def test_choosing_dark_applies_the_theme_attribute_immediately(
         ready=_INPUT_SCREEN_READY,
         trigger=(
             "(function(){"
-            "var select = document.getElementById('field-dark_mode_override');"
+            "var select = document.getElementById('settings-dark_mode_override');"
             "select.value = 'dark';"
             "select.dispatchEvent(new Event('change'));"
             "})();"
@@ -99,7 +108,7 @@ def test_choosing_dark_then_follow_system_clears_the_theme_attribute(
             _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
             window.evaluate_js(
                 "(function(){"
-                "var select = document.getElementById('field-dark_mode_override');"
+                "var select = document.getElementById('settings-dark_mode_override');"
                 "select.value = 'dark';"
                 "select.dispatchEvent(new Event('change'));"
                 "})();"
@@ -110,7 +119,7 @@ def test_choosing_dark_then_follow_system_clears_the_theme_attribute(
             )
             window.evaluate_js(
                 "(function(){"
-                "var select = document.getElementById('field-dark_mode_override');"
+                "var select = document.getElementById('settings-dark_mode_override');"
                 "select.value = '';"
                 "select.dispatchEvent(new Event('change'));"
                 "})();"
