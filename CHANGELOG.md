@@ -617,6 +617,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The desktop app's Settings dialog (top-right of the top menu bar) now
+  holds execution engine, `n_replicates`, and the convergence-selection
+  group (which statistic(s) to watch, the combinator, window, and
+  tolerance) as global defaults every new configuration starts from —
+  Configure's own Structure panel keeps an identical, independent copy
+  of each field for overriding any of them on one particular run, so
+  nothing about a per-run configuration's own flexibility is lost.
+  Significant digits and appearance (dark-mode override) relocated into
+  Settings too, from Configure's Structure panel, where they had never
+  really belonged (neither is a `SimulationParams` field). A real,
+  reported request: "the defaults can be applicable pretty universally,
+  while a run config can still override them." `track_expensive_
+  statistics` and the within-run σ band stayed in Configure, judged
+  scientific/per-run choices rather than administrative defaults.
 - `fim.statistics.differentiation`'s `FrequencyTable` type alias narrowed
   from `Sequence[Mapping[Any, Any]]` to `Sequence[Mapping[Any, float]]`,
   and `DemeWeights` from `Sequence[Any] | None` to

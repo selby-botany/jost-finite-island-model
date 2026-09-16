@@ -774,14 +774,19 @@ migrant_sampling: continuous
 **In the desktop app:** this is the only one of this section's five
 settings with a control of its own. You will find it as **execution
 engine** in Configure's Structure panel, offering the same four values
-in the order `lineal`, `auto`, `generational`, `generational-vector`.
-The app defaults a brand-new, untouched form to `auto`, which is the
-recommended choice — it picks whichever engine measured fastest for your
-configuration, and the run records the engine it actually chose, so the
-run stays exactly as reproducible as one where you named an engine
-yourself. Loading a configuration file shows whatever that file
-says, including `generational` or `generational-vector`; saving it again
-writes the same value back unchanged.
+in the order `lineal`, `auto`, `generational`, `generational-vector`; a
+second, identical control lives in the Settings dialog (top-right of the
+top menu bar) as the *default* every new configuration starts from —
+change it there once, and every fresh form picks it up from then on,
+while Configure's own copy still lets you override it for one particular
+run without touching the default. The app's own built-in starting point
+for that default is `auto`, the recommended choice: it picks whichever
+engine measured fastest for your configuration, and the run records the
+engine it actually chose, so the run stays exactly as reproducible as
+one where you named an engine yourself. Loading a configuration file
+shows whatever that file says, including `generational` or
+`generational-vector`, in Configure's own field; saving it again writes
+the same value back unchanged.
 
 **In `fim init`'s starter config:** the file the CLI writes for a
 first-time user makes the same recommendation as the desktop app's

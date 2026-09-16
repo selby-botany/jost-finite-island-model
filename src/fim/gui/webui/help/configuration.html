@@ -671,14 +671,19 @@ migrant_sampling: continuous
 <p><strong>In the desktop app:</strong> this is the only one of this section's five
 settings with a control of its own. You will find it as <strong>execution
 engine</strong> in Configure's Structure panel, offering the same four values
-in the order <code>lineal</code>, <code>auto</code>, <code>generational</code>, <code>generational-vector</code>.
-The app defaults a brand-new, untouched form to <code>auto</code>, which is the
-recommended choice — it picks whichever engine measured fastest for your
-configuration, and the run records the engine it actually chose, so the
-run stays exactly as reproducible as one where you named an engine
-yourself. Loading a configuration file shows whatever that file
-says, including <code>generational</code> or <code>generational-vector</code>; saving it again
-writes the same value back unchanged.</p>
+in the order <code>lineal</code>, <code>auto</code>, <code>generational</code>, <code>generational-vector</code>; a
+second, identical control lives in the Settings dialog (top-right of the
+top menu bar) as the <em>default</em> every new configuration starts from —
+change it there once, and every fresh form picks it up from then on,
+while Configure's own copy still lets you override it for one particular
+run without touching the default. The app's own built-in starting point
+for that default is <code>auto</code>, the recommended choice: it picks whichever
+engine measured fastest for your configuration, and the run records the
+engine it actually chose, so the run stays exactly as reproducible as
+one where you named an engine yourself. Loading a configuration file
+shows whatever that file says, including <code>generational</code> or
+<code>generational-vector</code>, in Configure's own field; saving it again writes
+the same value back unchanged.</p>
 <p><strong>In <code>fim init</code>'s starter config:</strong> the file the CLI writes for a
 first-time user makes the same recommendation as the desktop app's
 fresh form — its <code>engine_backend: auto</code> line is explicit, not merely
