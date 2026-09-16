@@ -8799,6 +8799,52 @@ def test_starter_form_values_reflects_the_cli_starter_config() -> None
 
 `starter_form_values` matches `fim.cli.STARTER_CONFIG`'s own values.
 
+<a id="gui.test_config_form.test_starter_form_values_with_no_overrides_is_unchanged"></a>
+
+#### test\_starter\_form\_values\_with\_no\_overrides\_is\_unchanged
+
+```python
+def test_starter_form_values_with_no_overrides_is_unchanged() -> None
+```
+
+`overrides=None` (the default) matches the pre-`overrides` behavior.
+
+<a id="gui.test_config_form.test_starter_form_values_applies_a_valid_overlay"></a>
+
+#### test\_starter\_form\_values\_applies\_a\_valid\_overlay
+
+```python
+def test_starter_form_values_applies_a_valid_overlay() -> None
+```
+
+A valid overlay replaces just its own keys; every other value is untouched.
+
+<a id="gui.test_config_form.test_starter_form_values_rejects_an_invalid_overlay"></a>
+
+#### test\_starter\_form\_values\_rejects\_an\_invalid\_overlay
+
+```python
+def test_starter_form_values_rejects_an_invalid_overlay() -> None
+```
+
+An overlay that does not validate raises, like any other bad submission.
+
+<a id="gui.test_config_form.test_default_run_setting_field_names_excludes_scientific_per_run_fields"></a>
+
+#### test\_default\_run\_setting\_field\_names\_excludes\_scientific\_per\_run\_fields
+
+```python
+def test_default_run_setting_field_names_excludes_scientific_per_run_fields(
+) -> None
+```
+
+`track_expensive_statistics`/the sigma-band pair are deliberately excluded.
+
+A real, reported design decision: those three are scientific/
+per-run choices, not administrative defaults, and stay Configure-
+only -- unlike `engine_backend`/`n_replicates`/the convergence-
+selection group, which this tuple does cover.
+
 <a id="gui.test_config_form.test_all_fields_covers_every_tabs_plain_fields"></a>
 
 #### test\_all\_fields\_covers\_every\_tabs\_plain\_fields

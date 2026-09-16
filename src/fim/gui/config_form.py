@@ -1234,17 +1234,63 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
     return values
 
 
-def starter_form_values() -> dict[str, str]:
+DEFAULT_RUN_SETTING_FIELD_NAMES: Final[tuple[str, ...]] = (
+    "engine_backend",
+    "n_replicates",
+    "convergence_combinator",
+    "convergence_window",
+    "convergence_tolerance",
+    *(f"cs_{name}" for name in CONVERGENCE_STATISTIC_NAMES),
+)
+"""Every form-value key the Settings dialog's own execution/convergence-
+selection defaults cover (`fim.gui.preferences.GuiPreferences.
+default_run_settings`) — the single source of truth `Api.get_default_
+run_settings`/`set_default_run_settings` and the Settings modal's own
+JS both read, so the set of fields Settings covers can only ever change
+in one place. A real, reported request to move fields judged
+"applicable pretty universally" out of the per-run Configure form and
+into one global-default home — deliberately excludes
+`track_expensive_statistics` and the sigma-band pair
+(`sigma_band_enabled`/`sigma_band_multiplier`/`sigma_band_window`),
+judged scientific/per-run choices rather than administrative defaults,
+and left in Configure untouched."""
+
+
+def starter_form_values(overrides: Mapping[str, str] | None = None) -> dict[str, str]:
     """Return the form's default values, from the CLI's own starter config.
+
+    Args:
+        overrides: A partial dict of field name -> string value,
+            overlaid on top of the starter config's own expansion
+            before validation — `GuiPreferences.default_run_settings`,
+            when a caller has one. Re-validated through the same
+            `form_values_to_payload`/`SimulationParams.from_mapping`
+            path any other form submission goes through: there is no
+            way to validate a partial subset of fields in isolation
+            (`form_values_to_payload` needs every `all_fields()` key
+            present), so this validates the *merged whole* and returns
+            it entirely, not just the overridden keys.
 
     Returns:
         The same values `params_to_form_values` would compute for
-        `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults",
-        so a fresh form and `fim init` can never
-        drift apart into two documented starting scenarios.
+        `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults" —
+        merged with `overrides`, when given, so a fresh form and `fim
+        init` can never drift apart into two documented starting
+        scenarios for every field `overrides` does not touch.
+
+    Raises:
+        ValueError: If `overrides` is given and the merged whole does
+            not validate — the identical error `form_values_to_payload`
+            already raises for any other invalid form submission.
     """
     starter_params = SimulationParams.from_mapping(yaml.safe_load(STARTER_CONFIG))
-    return params_to_form_values(starter_params)
+    starter_values = params_to_form_values(starter_params)
+    if not overrides:
+        return starter_values
+    merged = {**starter_values, **overrides}
+    payload = form_values_to_payload(merged)
+    SimulationParams.from_mapping(payload)
+    return merged
 
 
 # `configuration.md`'s own section order (§3.6: "same key order as

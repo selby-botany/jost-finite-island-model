@@ -152,6 +152,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [sigma\_band\_to\_payload](#fim.gui.config_form.sigma_band_to_payload)
   * [sigma\_band\_from\_params](#fim.gui.config_form.sigma_band_from_params)
   * [params\_to\_form\_values](#fim.gui.config_form.params_to_form_values)
+  * [DEFAULT\_RUN\_SETTING\_FIELD\_NAMES](#fim.gui.config_form.DEFAULT_RUN_SETTING_FIELD_NAMES)
   * [starter\_form\_values](#fim.gui.config_form.starter_form_values)
   * [payload\_to\_yaml\_text](#fim.gui.config_form.payload_to_yaml_text)
 * [fim.gui.literature\_visuals](#fim.gui.literature_visuals)
@@ -5446,22 +5447,62 @@ Render a validated `SimulationParams` back into the form's fields.
   longer trigger this, `loci_from_params` below now renders
   those as a real, editable grid instead).
 
+<a id="fim.gui.config_form.DEFAULT_RUN_SETTING_FIELD_NAMES"></a>
+
+#### DEFAULT\_RUN\_SETTING\_FIELD\_NAMES
+
+Every form-value key the Settings dialog's own execution/convergence-
+selection defaults cover (`fim.gui.preferences.GuiPreferences.
+default_run_settings`) — the single source of truth `Api.get_default_
+run_settings`/`set_default_run_settings` and the Settings modal's own
+JS both read, so the set of fields Settings covers can only ever change
+in one place. A real, reported request to move fields judged
+"applicable pretty universally" out of the per-run Configure form and
+into one global-default home — deliberately excludes
+`track_expensive_statistics` and the sigma-band pair
+(`sigma_band_enabled`/`sigma_band_multiplier`/`sigma_band_window`),
+judged scientific/per-run choices rather than administrative defaults,
+and left in Configure untouched.
+
 <a id="fim.gui.config_form.starter_form_values"></a>
 
 #### starter\_form\_values
 
 ```python
-def starter_form_values() -> dict[str, str]
+def starter_form_values(
+        overrides: Mapping[str, str] | None = None) -> dict[str, str]
 ```
 
 Return the form's default values, from the CLI's own starter config.
 
+**Arguments**:
+
+- `overrides` - A partial dict of field name -> string value,
+  overlaid on top of the starter config's own expansion
+  before validation — `GuiPreferences.default_run_settings`,
+  when a caller has one. Re-validated through the same
+  `form_values_to_payload`/`SimulationParams.from_mapping`
+  path any other form submission goes through: there is no
+  way to validate a partial subset of fields in isolation
+  (`form_values_to_payload` needs every `all_fields()` key
+  present), so this validates the *merged whole* and returns
+  it entirely, not just the overridden keys.
+
+
 **Returns**:
 
   The same values `params_to_form_values` would compute for
-  `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults",
-  so a fresh form and `fim init` can never
-  drift apart into two documented starting scenarios.
+  `fim.cli.STARTER_CONFIG` — the single source of "GUI defaults" —
+  merged with `overrides`, when given, so a fresh form and `fim
+  init` can never drift apart into two documented starting
+  scenarios for every field `overrides` does not touch.
+
+
+**Raises**:
+
+- `ValueError` - If `overrides` is given and the merged whole does
+  not validate — the identical error `form_values_to_payload`
+  already raises for any other invalid form submission.
 
 <a id="fim.gui.config_form.payload_to_yaml_text"></a>
 
