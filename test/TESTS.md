@@ -5944,7 +5944,72 @@ dialog) and are covered instead in `test/gui/test_app.py`, marked `gui`.
 def test_get_starter_form_matches_config_form_directly() -> None
 ```
 
-The bridge method adds no logic of its own beyond `starter_form_values`.
+With nothing saved, the bridge method matches `starter_form_values` exactly.
+
+<a id="gui.test_app_api.test_get_starter_form_applies_saved_default_run_settings"></a>
+
+#### test\_get\_starter\_form\_applies\_saved\_default\_run\_settings
+
+```python
+def test_get_starter_form_applies_saved_default_run_settings(
+        tmp_path: Path) -> None
+```
+
+A saved Settings default overlays the true starter values.
+
+<a id="gui.test_app_api.test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid"></a>
+
+#### test\_get\_starter\_form\_falls\_back\_when\_saved\_default\_run\_settings\_is\_invalid
+
+```python
+def test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid(
+        tmp_path: Path) -> None
+```
+
+A saved overlay that no longer validates is discarded wholesale.
+
+<a id="gui.test_app_api.test_get_default_run_settings_falls_back_to_starter_subset_when_unsaved"></a>
+
+#### test\_get\_default\_run\_settings\_falls\_back\_to\_starter\_subset\_when\_unsaved
+
+```python
+def test_get_default_run_settings_falls_back_to_starter_subset_when_unsaved(
+) -> None
+```
+
+With nothing saved, Settings seeds itself from the true starter values.
+
+<a id="gui.test_app_api.test_set_default_run_settings_changes_what_get_default_run_settings_returns"></a>
+
+#### test\_set\_default\_run\_settings\_changes\_what\_get\_default\_run\_settings\_returns
+
+```python
+def test_set_default_run_settings_changes_what_get_default_run_settings_returns(
+) -> (None)
+```
+
+A valid change is accepted and immediately reflected back.
+
+<a id="gui.test_app_api.test_set_default_run_settings_rejects_an_invalid_value"></a>
+
+#### test\_set\_default\_run\_settings\_rejects\_an\_invalid\_value
+
+```python
+def test_set_default_run_settings_rejects_an_invalid_value() -> None
+```
+
+An unparseable value is rejected, not silently coerced or saved.
+
+<a id="gui.test_app_api.test_set_default_run_settings_persists_across_a_second_api"></a>
+
+#### test\_set\_default\_run\_settings\_persists\_across\_a\_second\_api
+
+```python
+def test_set_default_run_settings_persists_across_a_second_api(
+        tmp_path: Path) -> None
+```
+
+A valid change survives to a second `Api` sharing the same preferences file.
 
 <a id="gui.test_app_api.test_interval_payload_states_the_symmetric_summary_for_a_t_interval"></a>
 

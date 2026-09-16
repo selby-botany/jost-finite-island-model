@@ -44,6 +44,7 @@ from fim.gui import runner as runner_module
 from fim.gui.app import Api, _save_dialog_path, format_statistic
 from fim.gui.batch_runner import default_max_workers
 from fim.gui.config_form import (
+    DEFAULT_RUN_SETTING_FIELD_NAMES,
     form_values_to_payload,
     payload_to_yaml_text,
     starter_form_values,
@@ -76,8 +77,89 @@ from fim.viz.scatter import frequency_points, pooled_scatter_panels
 
 
 def test_get_starter_form_matches_config_form_directly() -> None:
-    """The bridge method adds no logic of its own beyond `starter_form_values`."""
+    """With nothing saved, the bridge method matches `starter_form_values` exactly."""
     assert Api().get_starter_form() == starter_form_values()
+
+
+def test_get_starter_form_applies_saved_default_run_settings(tmp_path: Path) -> None:
+    """A saved Settings default overlays the true starter values."""
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(
+        preferences_path,
+        GuiPreferences(
+            default_run_settings={
+                "engine_backend": "generational",
+                "n_replicates": "16",
+            }
+        ),
+    )
+
+    result = Api(preferences_path=preferences_path).get_starter_form()
+
+    assert result["engine_backend"] == "generational"
+    assert result["n_replicates"] == "16"
+    # Untouched by the overlay -- still the true starter value.
+    assert result["N"] == starter_form_values()["N"]
+
+
+def test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid(
+    tmp_path: Path,
+) -> None:
+    """A saved overlay that no longer validates is discarded wholesale."""
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(
+        preferences_path,
+        GuiPreferences(default_run_settings={"n_replicates": "not a number"}),
+    )
+
+    result = Api(preferences_path=preferences_path).get_starter_form()
+
+    assert result == starter_form_values()
+
+
+def test_get_default_run_settings_falls_back_to_starter_subset_when_unsaved() -> None:
+    """With nothing saved, Settings seeds itself from the true starter values."""
+    result = Api().get_default_run_settings()
+
+    starter = starter_form_values()
+    assert result == {key: starter[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+
+
+def test_set_default_run_settings_changes_what_get_default_run_settings_returns() -> (
+    None
+):
+    """A valid change is accepted and immediately reflected back."""
+    api = Api()
+
+    result = api.set_default_run_settings(
+        {"engine_backend": "generational", "n_replicates": "16"}
+    )
+
+    assert result == {"ok": True}
+    assert api.get_default_run_settings()["engine_backend"] == "generational"
+    assert api.get_default_run_settings()["n_replicates"] == "16"
+
+
+def test_set_default_run_settings_rejects_an_invalid_value() -> None:
+    """An unparseable value is rejected, not silently coerced or saved."""
+    api = Api()
+
+    result = api.set_default_run_settings({"n_replicates": "not a number"})
+
+    assert result["ok"] is False
+    assert "n_replicates" in result["message"]
+
+
+def test_set_default_run_settings_persists_across_a_second_api(tmp_path: Path) -> None:
+    """A valid change survives to a second `Api` sharing the same preferences file."""
+    preferences_path = tmp_path / "preferences.json"
+    first = Api(preferences_path=preferences_path)
+
+    first.set_default_run_settings({"engine_backend": "auto", "n_replicates": "16"})
+
+    second = Api(preferences_path=preferences_path)
+    assert second.get_default_run_settings()["engine_backend"] == "auto"
+    assert second.get_default_run_settings()["n_replicates"] == "16"
 
 
 def test_interval_payload_states_the_symmetric_summary_for_a_t_interval() -> None:

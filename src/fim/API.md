@@ -99,6 +99,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [set\_significant\_digits](#fim.gui.app.Api.set_significant_digits)
     * [get\_dark\_mode\_override](#fim.gui.app.Api.get_dark_mode_override)
     * [set\_dark\_mode\_override](#fim.gui.app.Api.set_dark_mode_override)
+    * [get\_default\_run\_settings](#fim.gui.app.Api.get_default_run_settings)
+    * [set\_default\_run\_settings](#fim.gui.app.Api.set_default_run_settings)
     * [get\_welcome\_dismissed](#fim.gui.app.Api.get_welcome_dismissed)
     * [dismiss\_welcome](#fim.gui.app.Api.dismiss_welcome)
     * [get\_startup\_warnings](#fim.gui.app.Api.get_startup_warnings)
@@ -3156,10 +3158,14 @@ Return a fresh form's default values.
 
 `config_form.starter_form_values` is the single source of "GUI
 defaults" — the identical values `fim.cli.STARTER_CONFIG` itself
-expands to — so this bridge method adds no logic of its own
-beyond calling it. `fim.menu.newConfiguration`'s own explicit,
-unconditional reset — distinct from `get_initial_form`, just
-below, which a fresh app launch calls instead.
+expands to — overlaid with any saved Settings-dialog defaults
+(`_starter_form_values_for_this_session`) for exactly the field
+set the user has moved there (execution engine, `n_replicates`,
+the convergence-selection group — a real, reported request:
+"the defaults can be applicable pretty universally"). `fim.menu.
+newConfiguration`'s own explicit, unconditional reset — distinct
+from `get_initial_form`, just below, which a fresh app launch
+calls instead.
 
 <a id="fim.gui.app.Api.get_initial_form"></a>
 
@@ -3175,12 +3181,17 @@ Return the values a fresh app launch's own Input screen should show.
 Honors the user's startup behavior setting. `"restore"` prefers
 the last successfully submitted form (`GuiPreferences.form_
 values`, saved by `start_run` below) over `get_starter_form`'s
-own true starter values. `"restart"` ignores the saved form and
-starts from the starter values. A restored form is re-validated
-through the exact same `form_values_to_payload`/
+own values. `"restart"` ignores the saved form and starts from
+the starter values (with any saved Settings defaults overlaid,
+exactly like `get_starter_form`). A restored form is re-
+validated through the exact same `form_values_to_payload`/
 `SimulationParams.from_mapping` path `start_run` itself uses: a
 saved form that no longer validates is discarded wholesale
-rather than applied partially.
+rather than applied partially. Deliberately does *not* apply
+the Settings-defaults overlay to a restored form — Settings
+only ever affects what a *fresh* configuration starts with,
+never an in-progress restored session, avoiding a second,
+competing precedence rule against this restore path.
 
 <a id="fim.gui.app.Api.get_startup_behavior"></a>
 
@@ -3769,6 +3780,60 @@ Change the saved dark-mode override (Configure's own field).
 - `"message"` - ...}` if `value` is anything other than those
   three — a caller-side bug (an unrecognized `<select>`
   option), not a value a real user could type.
+
+<a id="fim.gui.app.Api.get_default_run_settings"></a>
+
+#### get\_default\_run\_settings
+
+```python
+@_log_bridge_call
+def get_default_run_settings() -> dict[str, str]
+```
+
+Return the Settings dialog's own execution/convergence-selection defaults.
+
+Seeds Settings' own fields on open. Falls back to `starter_
+form_values()`'s own values for exactly `config_form.DEFAULT_
+RUN_SETTING_FIELD_NAMES`' keys when nothing has been saved yet
+(`self._preferences.default_run_settings is None`), so the
+dialog never shows a blank field the first time it opens.
+
+<a id="fim.gui.app.Api.set_default_run_settings"></a>
+
+#### set\_default\_run\_settings
+
+```python
+@_log_bridge_call
+def set_default_run_settings(values: dict[str, str]) -> dict[str, Any]
+```
+
+Validate and persist Settings' own execution/convergence defaults.
+
+A real, reported request: fields judged "applicable pretty
+universally" (execution engine, `n_replicates`, the
+convergence-selection group) move out of the per-run Configure
+form and into one global-default home here, while an
+individual run's own Configure form can still override any of
+them for that one run — `starter_form_values`'s own `overrides`
+parameter is what every subsequent fresh-form call
+(`get_starter_form`, `get_initial_form`) reads this back
+through.
+
+**Arguments**:
+
+- `values` - One string per `config_form.DEFAULT_RUN_SETTING_
+  FIELD_NAMES` entry — Settings' own fields, collected by
+  `settings.js`.
+
+
+**Returns**:
+
+- ``{"ok"` - True}` on success; `{"ok": False, "message": ...}`
+  if `values`, overlaid on the starter config, does not
+  validate — the identical wording any other invalid form
+  submission already produces, since this goes through the
+  same `starter_form_values`/`form_values_to_payload`/
+  `SimulationParams.from_mapping` path.
 
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 

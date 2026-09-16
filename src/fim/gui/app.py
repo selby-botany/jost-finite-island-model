@@ -69,6 +69,7 @@ from fim.engine import (
 from fim.gui import batch_runner, presets, recent_runs, runner
 from fim.gui.animation import pre_render_batch_frames, pre_render_frames
 from fim.gui.config_form import (
+    DEFAULT_RUN_SETTING_FIELD_NAMES,
     field_for_error,
     form_values_to_payload,
     m_from_params,
@@ -1409,18 +1410,39 @@ class Api:
         """
         self._open_folder(Path(path))
 
+    def _starter_form_values_for_this_session(self) -> dict[str, str]:
+        """`starter_form_values`, overlaid with any saved Settings defaults.
+
+        Falls back to the true, un-overlaid starter values if the saved
+        overlay no longer validates (a range this project tightened
+        since it was saved, say) — the same "a stale saved value is
+        discarded wholesale, never applied partially" policy `get_
+        initial_form` already applies to a stale `form_values` restore,
+        below.
+        """
+        if self._preferences.default_run_settings is None:
+            return starter_form_values()
+        try:
+            return starter_form_values(overrides=self._preferences.default_run_settings)
+        except ValueError:
+            return starter_form_values()
+
     @_log_bridge_call
     def get_starter_form(self) -> dict[str, str]:
         """Return a fresh form's default values.
 
         `config_form.starter_form_values` is the single source of "GUI
         defaults" — the identical values `fim.cli.STARTER_CONFIG` itself
-        expands to — so this bridge method adds no logic of its own
-        beyond calling it. `fim.menu.newConfiguration`'s own explicit,
-        unconditional reset — distinct from `get_initial_form`, just
-        below, which a fresh app launch calls instead.
+        expands to — overlaid with any saved Settings-dialog defaults
+        (`_starter_form_values_for_this_session`) for exactly the field
+        set the user has moved there (execution engine, `n_replicates`,
+        the convergence-selection group — a real, reported request:
+        "the defaults can be applicable pretty universally"). `fim.menu.
+        newConfiguration`'s own explicit, unconditional reset — distinct
+        from `get_initial_form`, just below, which a fresh app launch
+        calls instead.
         """
-        return starter_form_values()
+        return self._starter_form_values_for_this_session()
 
     @_log_bridge_call
     def get_initial_form(self) -> dict[str, str]:
@@ -1429,22 +1451,27 @@ class Api:
         Honors the user's startup behavior setting. `"restore"` prefers
         the last successfully submitted form (`GuiPreferences.form_
         values`, saved by `start_run` below) over `get_starter_form`'s
-        own true starter values. `"restart"` ignores the saved form and
-        starts from the starter values. A restored form is re-validated
-        through the exact same `form_values_to_payload`/
+        own values. `"restart"` ignores the saved form and starts from
+        the starter values (with any saved Settings defaults overlaid,
+        exactly like `get_starter_form`). A restored form is re-
+        validated through the exact same `form_values_to_payload`/
         `SimulationParams.from_mapping` path `start_run` itself uses: a
         saved form that no longer validates is discarded wholesale
-        rather than applied partially.
+        rather than applied partially. Deliberately does *not* apply
+        the Settings-defaults overlay to a restored form — Settings
+        only ever affects what a *fresh* configuration starts with,
+        never an in-progress restored session, avoiding a second,
+        competing precedence rule against this restore path.
         """
         if self._preferences.startup_behavior == "restart":
-            return starter_form_values()
+            return self._starter_form_values_for_this_session()
         values = self._preferences.form_values
         if values is None:
-            return starter_form_values()
+            return self._starter_form_values_for_this_session()
         try:
             SimulationParams.from_mapping(form_values_to_payload(values))
         except ValueError:
-            return starter_form_values()
+            return self._starter_form_values_for_this_session()
         return values
 
     @_log_bridge_call
@@ -2162,6 +2189,57 @@ class Api:
         self._preferences = self._preferences.with_dark_mode_override(value)
         save_preferences(self._preferences_path, self._preferences)
         return {"ok": True, "value": value}
+
+    @_log_bridge_call
+    def get_default_run_settings(self) -> dict[str, str]:
+        """Return the Settings dialog's own execution/convergence-selection defaults.
+
+        Seeds Settings' own fields on open. Falls back to `starter_
+        form_values()`'s own values for exactly `config_form.DEFAULT_
+        RUN_SETTING_FIELD_NAMES`' keys when nothing has been saved yet
+        (`self._preferences.default_run_settings is None`), so the
+        dialog never shows a blank field the first time it opens.
+        """
+        if self._preferences.default_run_settings is not None:
+            return dict(self._preferences.default_run_settings)
+        starter = starter_form_values()
+        return {key: starter[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+
+    @_log_bridge_call
+    def set_default_run_settings(self, values: dict[str, str]) -> dict[str, Any]:
+        """Validate and persist Settings' own execution/convergence defaults.
+
+        A real, reported request: fields judged "applicable pretty
+        universally" (execution engine, `n_replicates`, the
+        convergence-selection group) move out of the per-run Configure
+        form and into one global-default home here, while an
+        individual run's own Configure form can still override any of
+        them for that one run — `starter_form_values`'s own `overrides`
+        parameter is what every subsequent fresh-form call
+        (`get_starter_form`, `get_initial_form`) reads this back
+        through.
+
+        Args:
+            values: One string per `config_form.DEFAULT_RUN_SETTING_
+                FIELD_NAMES` entry — Settings' own fields, collected by
+                `settings.js`.
+
+        Returns:
+            `{"ok": True}` on success; `{"ok": False, "message": ...}`
+            if `values`, overlaid on the starter config, does not
+            validate — the identical wording any other invalid form
+            submission already produces, since this goes through the
+            same `starter_form_values`/`form_values_to_payload`/
+            `SimulationParams.from_mapping` path.
+        """
+        try:
+            merged = starter_form_values(overrides=values)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        subset = {key: merged[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+        self._preferences = self._preferences.with_default_run_settings(subset)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True}
 
     @_log_bridge_call
     def get_welcome_dismissed(self) -> bool:
