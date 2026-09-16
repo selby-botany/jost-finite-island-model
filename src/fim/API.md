@@ -171,6 +171,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [with\_dark\_mode\_override](#fim.gui.preferences.GuiPreferences.with_dark_mode_override)
     * [with\_welcome\_dismissed](#fim.gui.preferences.GuiPreferences.with_welcome_dismissed)
     * [with\_startup\_behavior](#fim.gui.preferences.GuiPreferences.with_startup_behavior)
+    * [with\_default\_run\_settings](#fim.gui.preferences.GuiPreferences.with_default_run_settings)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
   * [save\_preferences](#fim.gui.preferences.save_preferences)
@@ -5673,6 +5674,29 @@ the historic behavior) or restarts from the built-in starter form
 (`"restart"`). It affects only the next launch's initial form values,
 never any saved run artifact.
 
+A sixth field — `default_run_settings` — is the Settings dialog's own
+"execution/convergence-selection defaults" (`engine_backend`,
+`n_replicates`, `convergence_statistic`/`convergence_combinator`/
+`convergence_window`/`convergence_tolerance`), a real, reported request
+to move fields the user judged "applicable pretty universally" out of
+the per-run Configure form and into one global-default home, while an
+individual run's own Configure form can still override any of them for
+that one run. Deliberately the same `dict[str, str]` shape and
+validation precedent `form_values` already established (a partial
+`config_form.form_values_to_payload`-compatible mapping, re-validated
+on load by merging it over the true starter values rather than trying
+to validate a subset in isolation — `config_form.starter_form_values`'s
+own `overrides` parameter), not a sixth pair of narrowly-typed scalar
+fields: `track_expensive_statistics` and the sigma-band pair were
+deliberately left out of this set (judged scientific/per-run choices,
+not administrative defaults), and any future addition or removal from
+that set only ever changes `config_form.DEFAULT_RUN_SETTING_FIELD_
+NAMES`, never this store's own shape. `None` means "nothing saved yet"
+— `Api.get_default_run_settings` falls back to the starter values for
+exactly this field set in that case, the identical "no saved value yet"
+fallback `significant_digits`/`dark_mode_override` already have their
+own callers apply.
+
 Deliberately excludes a "default deme pair for the next run": `Api.
 _start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
 at the start of every run on purpose ("a fresh run never inherits a
@@ -5735,6 +5759,11 @@ One loaded (or default) snapshot of the GUI's own preferences.
   must not see it again on the next launch either.
 - `startup_behavior` - `"restore"` to load the last valid submitted
   form at startup, or `"restart"` to use the starter form.
+- `default_run_settings` - The Settings dialog's own execution/
+  convergence-selection defaults (`config_form.
+  DEFAULT_RUN_SETTING_FIELD_NAMES`' own keys), or `None` if
+  never saved — `Api.get_default_run_settings` falls back to
+  the starter values for that same key set in that case.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
@@ -5870,6 +5899,22 @@ Return a copy with `startup_behavior` replaced.
 
 - `startup_behavior` - `"restore"` to reuse the last valid form at
   startup, or `"restart"` to start from the starter form.
+
+<a id="fim.gui.preferences.GuiPreferences.with_default_run_settings"></a>
+
+#### with\_default\_run\_settings
+
+```python
+def with_default_run_settings(values: Mapping[str, str]) -> GuiPreferences
+```
+
+Return a copy with `default_run_settings` replaced.
+
+The `Api.set_default_run_settings` bridge method's own update —
+`values` is already validated and projected down to `config_form.
+DEFAULT_RUN_SETTING_FIELD_NAMES` by that method before it ever
+reaches here (the same division of labor `with_form_values` and
+`start_run`'s own validation already establish).
 
 <a id="fim.gui.preferences.load_preferences"></a>
 

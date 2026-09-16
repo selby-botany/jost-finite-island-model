@@ -45,6 +45,29 @@ the historic behavior) or restarts from the built-in starter form
 (`"restart"`). It affects only the next launch's initial form values,
 never any saved run artifact.
 
+A sixth field — `default_run_settings` — is the Settings dialog's own
+"execution/convergence-selection defaults" (`engine_backend`,
+`n_replicates`, `convergence_statistic`/`convergence_combinator`/
+`convergence_window`/`convergence_tolerance`), a real, reported request
+to move fields the user judged "applicable pretty universally" out of
+the per-run Configure form and into one global-default home, while an
+individual run's own Configure form can still override any of them for
+that one run. Deliberately the same `dict[str, str]` shape and
+validation precedent `form_values` already established (a partial
+`config_form.form_values_to_payload`-compatible mapping, re-validated
+on load by merging it over the true starter values rather than trying
+to validate a subset in isolation — `config_form.starter_form_values`'s
+own `overrides` parameter), not a sixth pair of narrowly-typed scalar
+fields: `track_expensive_statistics` and the sigma-band pair were
+deliberately left out of this set (judged scientific/per-run choices,
+not administrative defaults), and any future addition or removal from
+that set only ever changes `config_form.DEFAULT_RUN_SETTING_FIELD_
+NAMES`, never this store's own shape. `None` means "nothing saved yet"
+— `Api.get_default_run_settings` falls back to the starter values for
+exactly this field set in that case, the identical "no saved value yet"
+fallback `significant_digits`/`dark_mode_override` already have their
+own callers apply.
+
 Deliberately excludes a "default deme pair for the next run": `Api.
 _start_scalar_run`/`_start_batch_run` reset `_live_deme_pair` to `None`
 at the start of every run on purpose ("a fresh run never inherits a
@@ -128,6 +151,11 @@ class GuiPreferences:
             must not see it again on the next launch either.
         startup_behavior: `"restore"` to load the last valid submitted
             form at startup, or `"restart"` to use the starter form.
+        default_run_settings: The Settings dialog's own execution/
+            convergence-selection defaults (`config_form.
+            DEFAULT_RUN_SETTING_FIELD_NAMES`' own keys), or `None` if
+            never saved — `Api.get_default_run_settings` falls back to
+            the starter values for that same key set in that case.
     """
 
     significant_digits: int | None = None
@@ -136,6 +164,7 @@ class GuiPreferences:
     dark_mode_override: str | None = None
     welcome_dismissed: bool = False
     startup_behavior: str = "restore"
+    default_run_settings: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
@@ -155,6 +184,8 @@ class GuiPreferences:
             result["presets"] = {
                 name: dict(values) for name, values in self.named_presets.items()
             }
+        if self.default_run_settings is not None:
+            result["default_run_settings"] = dict(self.default_run_settings)
         return result
 
     @staticmethod
@@ -215,6 +246,17 @@ class GuiPreferences:
             named_presets = {
                 name: dict(values) for name, values in named_presets.items()
             }
+        default_run_settings = data.get("default_run_settings")
+        if default_run_settings is not None:
+            if not isinstance(default_run_settings, Mapping) or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in default_run_settings.items()
+            ):
+                raise ValueError(
+                    "preferences 'default_run_settings' section must be a "
+                    "str->str object"
+                )
+            default_run_settings = dict(default_run_settings)
         return GuiPreferences(
             significant_digits=gui.get("significant_digits"),
             form_values=form_values,
@@ -222,6 +264,7 @@ class GuiPreferences:
             dark_mode_override=dark_mode_override,
             welcome_dismissed=bool(gui.get("welcome_dismissed", False)),
             startup_behavior=startup_behavior,
+            default_run_settings=default_run_settings,
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -297,6 +340,17 @@ class GuiPreferences:
                 startup, or `"restart"` to start from the starter form.
         """
         return replace(self, startup_behavior=startup_behavior)
+
+    def with_default_run_settings(self, values: Mapping[str, str]) -> GuiPreferences:
+        """Return a copy with `default_run_settings` replaced.
+
+        The `Api.set_default_run_settings` bridge method's own update —
+        `values` is already validated and projected down to `config_form.
+        DEFAULT_RUN_SETTING_FIELD_NAMES` by that method before it ever
+        reaches here (the same division of labor `with_form_values` and
+        `start_run`'s own validation already establish).
+        """
+        return replace(self, default_run_settings=dict(values))
 
 
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:

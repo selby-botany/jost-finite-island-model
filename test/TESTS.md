@@ -12039,6 +12039,38 @@ def test_with_significant_digits_leaves_other_fields_untouched() -> None
 
 `with_significant_digits` updates only `significant_digits`.
 
+<a id="gui.test_preferences.test_with_default_run_settings_leaves_other_fields_untouched"></a>
+
+#### test\_with\_default\_run\_settings\_leaves\_other\_fields\_untouched
+
+```python
+def test_with_default_run_settings_leaves_other_fields_untouched() -> None
+```
+
+`with_default_run_settings` updates only `default_run_settings`.
+
+<a id="gui.test_preferences.test_default_run_settings_round_trips_through_save_and_load"></a>
+
+#### test\_default\_run\_settings\_round\_trips\_through\_save\_and\_load
+
+```python
+def test_default_run_settings_round_trips_through_save_and_load(
+        tmp_path: Path) -> None
+```
+
+A saved-and-reloaded `GuiPreferences` preserves `default_run_settings`.
+
+<a id="gui.test_preferences.test_malformed_default_run_settings_section_is_quarantined"></a>
+
+#### test\_malformed\_default\_run\_settings\_section\_is\_quarantined
+
+```python
+def test_malformed_default_run_settings_section_is_quarantined(
+        tmp_path: Path) -> None
+```
+
+A non-string-map 'default_run_settings' section is rejected, not coerced.
+
 <a id="gui.test_preferences.test_with_dark_mode_override_leaves_other_fields_untouched"></a>
 
 #### test\_with\_dark\_mode\_override\_leaves\_other\_fields\_untouched

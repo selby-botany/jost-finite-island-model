@@ -29,6 +29,7 @@ def test_round_trip_preserves_every_field(tmp_path: Path) -> None:
         significant_digits=5,
         form_values={"N": "500", "m": "0.01"},
         startup_behavior="restart",
+        default_run_settings={"engine_backend": "auto", "n_replicates": "16"},
     )
     save_preferences(path, original)
     loaded, warning = load_preferences(path)
@@ -122,6 +123,7 @@ def test_to_dict_omits_unset_fields() -> None:
     data = GuiPreferences(significant_digits=4).to_dict()
     assert data["gui"] == {"significant_digits": 4}
     assert "form" not in data
+    assert "default_run_settings" not in data
 
 
 def test_startup_behavior_default_is_restore_and_omitted_from_disk() -> None:
@@ -146,6 +148,51 @@ def test_with_significant_digits_leaves_other_fields_untouched() -> None:
     updated = original.with_significant_digits(9)
     assert updated.significant_digits == 9
     assert updated.form_values == {"N": "100"}
+
+
+def test_with_default_run_settings_leaves_other_fields_untouched() -> None:
+    """`with_default_run_settings` updates only `default_run_settings`."""
+    original = GuiPreferences(significant_digits=7)
+    updated = original.with_default_run_settings({"engine_backend": "generational"})
+    assert updated.significant_digits == 7
+    assert updated.default_run_settings == {"engine_backend": "generational"}
+
+
+def test_default_run_settings_round_trips_through_save_and_load(
+    tmp_path: Path,
+) -> None:
+    """A saved-and-reloaded `GuiPreferences` preserves `default_run_settings`."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences(
+        default_run_settings={"engine_backend": "auto", "n_replicates": "16"}
+    )
+    save_preferences(path, original)
+    loaded, warning = load_preferences(path)
+    assert warning is None
+    assert loaded.default_run_settings == {
+        "engine_backend": "auto",
+        "n_replicates": "16",
+    }
+
+
+def test_malformed_default_run_settings_section_is_quarantined(
+    tmp_path: Path,
+) -> None:
+    """A non-string-map 'default_run_settings' section is rejected, not coerced."""
+    path = tmp_path / "preferences.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {},
+                "default_run_settings": {"n_replicates": 16},
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded, warning = load_preferences(path)
+    assert loaded == GuiPreferences()
+    assert warning is not None
 
 
 def test_with_dark_mode_override_leaves_other_fields_untouched() -> None:
