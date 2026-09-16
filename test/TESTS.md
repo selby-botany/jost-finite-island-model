@@ -4004,10 +4004,10 @@ work, not just the dict-based path.
 def test_convergence_values_always_includes_the_always_tracked_four() -> None
 ```
 
-`D`/`G_ST`/`H_S`/`H_T` are present regardless of what is watched.
+`D`/`G_ST`/`H_S`/`H_T`/`H_ST` are present regardless of what is watched.
 
 The display-only counterpart to the two "skips E_ST/K_ST" tests
-above: those four cost nothing extra to compute (`statistics_
+above: those five cost nothing extra to compute (`statistics_
 report` already computes them unconditionally — `b12679b`'s own
 docstring), so `_watched_statistic_values` no longer discards them
 from the returned mapping just because they were not named in
@@ -4087,14 +4087,17 @@ def test_run_result_convergence_histories_include_always_tracked_statistics(
 ) -> None
 ```
 
-A real, full scalar run's own `convergence_histories` include the free four.
+A real, full scalar run's own `convergence_histories` include the free five.
 
 End-to-end proof through `_run_one` itself (not just the per-
 generation helper functions above): a run watching only `D` still
-comes back with real `G_ST`/`H_S`/`H_T` history too, of the same
-length as the watched one — the exact GUI-visible symptom the bug
-report described (a trajectory panel/completed view that narrowed
-down to only the watched statistic once a run finished).
+comes back with real `G_ST`/`H_S`/`H_T`/`H_ST` history too, of the
+same length as the watched one — the exact GUI-visible symptom the
+bug report described (a trajectory panel/completed view that
+narrowed down to only the watched statistic once a run finished).
+`H_ST` joined the other three later (`fim.engine.
+_ALWAYS_TRACKED_STATISTICS`'s own docstring has the "found live"
+account of a real, reported second instance of this same symptom).
 
 <a id="engine.test_engine.test_run_result_convergence_histories_include_e_st_k_st_when_opted_in"></a>
 
@@ -4107,10 +4110,10 @@ def test_run_result_convergence_histories_include_e_st_k_st_when_opted_in(
 
 `track_expensive_statistics=True` extends a real run's own recorded history.
 
-Same run as above, only with the opt-in set — `E_ST`/`K_ST` now
-join the always-tracked four in `RunResult.convergence_histories`,
-each with a real per-generation history the same length as every
-other tracked statistic's own.
+Same run as above, only with the opt-in set — `E_ST`/`K_ST`/
+`A_CGD`/`Delta`/`MI` now join the always-tracked five in `RunResult.
+convergence_histories`, each with a real per-generation history the
+same length as every other tracked statistic's own.
 
 <a id="engine.test_engine.test_sigma_band_stays_scoped_to_watched_statistics_only"></a>
 
@@ -8576,7 +8579,14 @@ Every declared Lato face and its license ship inside the web UI.
 def test_navigation_uses_one_svg_icon_language_instead_of_emoji() -> None
 ```
 
-All seven destinations use the bundled monochrome SVG symbols.
+All six destinations use the bundled monochrome SVG symbols.
+
+Run and Results were two separate rail buttons/icons until they
+were collapsed into one "Run" destination on a real, reported
+request (`screens/nav-rail.js`'s own top comment has the full
+account) -- `icon-results` stays defined in the sprite (below, the
+`icon_id` loop still checks for it) even though nothing references
+it anymore, so this count is six, not seven.
 
 <a id="gui.test_branding.test_home_and_about_carry_restrained_selby_identity"></a>
 
@@ -11140,16 +11150,20 @@ rail's own click handlers, keeps `app.js`'s `showScreen` in sync via
 `updateRailHighlight`, and keeps the parameter strip current -- none of
 which a Python-only test can check.
 
-<a id="gui.test_nav_rail.test_rail_has_the_six_destinations_plus_help_in_order"></a>
+<a id="gui.test_nav_rail.test_rail_has_the_five_destinations_plus_help_in_order"></a>
 
-#### test\_rail\_has\_the\_six\_destinations\_plus\_help\_in\_order
+#### test\_rail\_has\_the\_five\_destinations\_plus\_help\_in\_order
 
 ```python
-def test_rail_has_the_six_destinations_plus_help_in_order(
+def test_rail_has_the_five_destinations_plus_help_in_order(
         window: webview.Window) -> None
 ```
 
-The rail's own seven buttons match design §3.1's own destination list.
+The rail's own six buttons match design §3.1's own destination list.
+
+Run and Results were two separate buttons here until they were
+collapsed into one "Run" destination on a real, reported request
+(`screens/nav-rail.js`'s own top comment has the full account).
 
 <a id="gui.test_nav_rail.test_card_navigation_buttons_have_directional_icons"></a>
 

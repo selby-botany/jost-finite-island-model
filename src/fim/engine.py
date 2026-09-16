@@ -3346,12 +3346,12 @@ def _run_one(
     )
 
 
-_ALWAYS_TRACKED_STATISTICS: Final[tuple[str, ...]] = ("D", "G_ST", "H_S", "H_T")
+_ALWAYS_TRACKED_STATISTICS: Final[tuple[str, ...]] = ("D", "G_ST", "H_S", "H_T", "H_ST")
 """Statistics `_watched_statistic_values` always returns, regardless of
 `params.convergence_statistics`/`track_expensive_statistics`.
 
 `fim.statistics.differentiation.statistics_report`'s own `statistics`
-parameter already computes these four unconditionally, no matter what is
+parameter already computes these five unconditionally, no matter what is
 passed in (each is either the shared `H_S`/`H_T` input every other field
 derives from, or an O(1) step once those are known) — before this
 constant existed, `_watched_statistic_values`'s own final filtering step
@@ -3361,12 +3361,19 @@ own stated default) never had a real history to show for `G_ST`/`H_S`/
 `H_T` even though computing them cost nothing extra. Design doc §6.2
 (`20260907-claude-sonnet-5-botanist-gui-redesign.md`) already describes
 the trajectory panel as plotting "all six report statistics" — this
-constant is what makes four of those six always real, for free, closing
-that gap. `E_ST`/`K_ST` are deliberately excluded: each is a genuine,
-independent O(total allele entries) pass `statistics_report` only pays for
-statistics named in the collection passed to it (commit `b12679b`,
-`FIM-24`/`FIM-32`, measured a ~38% reduction skipping both at a
-many-alleles configuration) — `SimulationParams.track_expensive_
+constant is what makes five of those six always real, for free, closing
+that gap. `H_ST` joined this tuple later than the other four (found
+live: a real, reported "most statistics stopped scrubbing" investigation
+that turned out to be `track_expensive_statistics` correctly gating
+`E_ST`/`K_ST`/`A_CGD`/`Delta`/`MI`, plus this one genuine, separate gap
+— `H_ST` fell into neither this tuple nor `_EXPENSIVE_OPT_IN_STATISTICS`,
+so it had no per-generation history at all unless directly watched, the
+trajectory-history-side twin of the exact watchability gap `FIM-51`
+already closed for it once). `E_ST`/`K_ST` are deliberately excluded: each
+is a genuine, independent O(total allele entries) pass `statistics_
+report` only pays for statistics named in the collection passed to it
+(commit `b12679b`, `FIM-24`/`FIM-32`, measured a ~38% reduction skipping
+both at a many-alleles configuration) — `SimulationParams.track_expensive_
 statistics` is the opt-in a caller sets to pay that cost back
 deliberately, in exchange for a real, continuously updated display value
 for those two as well (see `_statistics_to_compute`, below).
@@ -3457,7 +3464,7 @@ def _convergence_values(
     settled down yet" (see this module's own docstring, above, for what
     convergence means here) — and, since `_ALWAYS_TRACKED_STATISTICS`
     below, also to give a GUI a real, continuously updated history for
-    `D`/`G_ST`/`H_S`/`H_T` regardless of what `params.
+    `D`/`G_ST`/`H_S`/`H_T`/`H_ST` regardless of what `params.
     convergence_statistics` actually watches (design doc §6.2). Only the
     watched subset (`params.convergence_statistics`) — usually just one
     (`D`, most commonly), but this project also supports watching several
@@ -3566,10 +3573,14 @@ def _watched_statistic_values(
     — no longer gated on either being watched, since both cost nothing
     extra to compute or aggregate regardless); `H_S`/`H_T` are likewise
     always returned, being `_pooled_g_st_and_d`'s own two inputs, already
-    computed either way. `E_ST`/`K_ST` (and any less common watched
-    statistic, like `H_ST`) are unaffected by `locus_aggregation` and stay
-    a plain per-locus mean via `_mean_statistic_across_loci`, included
-    only when actually watched or (`E_ST`/`K_ST` only) opted into via
+    computed either way. `H_ST` is also always returned now (`_ALWAYS_
+    TRACKED_STATISTICS`'s own docstring has the "found live" account of
+    when and why it joined the other four) but, unlike them, is not
+    `locus_aggregation`-sensitive — a plain per-locus mean via `_mean_
+    statistic_across_loci`, unconditionally now rather than only when
+    directly watched. `E_ST`/`K_ST` (and any other less common watched
+    statistic) are the same plain-per-locus-mean shape, included only
+    when actually watched or (`E_ST`/`K_ST` only) opted into via
     `params.track_expensive_statistics` (`_statistics_to_compute`'s own
     docstring — every other name here is either always present or never
     computed at all this generation, so there is nothing to look up for
@@ -3587,6 +3598,16 @@ def _watched_statistic_values(
     values: dict[str, float] = {"D": d, "H_S": mean_h_s, "H_T": mean_h_t}
     if g_st is not None:
         values["G_ST"] = g_st
+    # `H_ST` joined `_ALWAYS_TRACKED_STATISTICS` alongside `D`/`G_ST`/
+    # `H_S`/`H_T` (that constant's own docstring has the full "found
+    # live" account) but, unlike those four, is not `locus_aggregation`-
+    # sensitive (this function's own docstring) — a plain per-locus mean
+    # via `_mean_statistic_across_loci`, the identical computation the
+    # `extra` loop below already used whenever `H_ST` happened to be
+    # watched, just no longer gated on that.
+    h_st = _mean_statistic_across_loci(locus_reports, "H_ST")
+    if h_st is not None:
+        values["H_ST"] = h_st
     extra = _statistics_to_compute(params) - set(_ALWAYS_TRACKED_STATISTICS)
     for statistic in extra:
         value = _mean_statistic_across_loci(locus_reports, statistic)
