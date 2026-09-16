@@ -80,10 +80,15 @@ def _drive(
     return outcome.get(timeout=10.0)
 
 
-def test_rail_has_the_six_destinations_plus_help_in_order(
+def test_rail_has_the_five_destinations_plus_help_in_order(
     window: webview.Window,
 ) -> None:
-    """The rail's own seven buttons match design §3.1's own destination list."""
+    """The rail's own six buttons match design §3.1's own destination list.
+
+    Run and Results were two separate buttons here until they were
+    collapsed into one "Run" destination on a real, reported request
+    (`screens/nav-rail.js`'s own top comment has the full account).
+    """
     destinations = _drive(
         window,
         lambda _poll_until: window.evaluate_js(
@@ -96,7 +101,6 @@ def test_rail_has_the_six_destinations_plus_help_in_order(
         "configure",
         "explore",
         "run",
-        "results",
         "compare",
         "help",
     ]

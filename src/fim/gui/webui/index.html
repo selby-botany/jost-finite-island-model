@@ -14,14 +14,17 @@
        sonnet-5-botanist-gui-redesign.md` §3.1): six destinations, always
        visible, current destination highlighted via `aria-current`.
        `data-destination` names the logical destination each button
-       leads to; `screens/nav-rail.js`'s own `DESTINATION_TO_SCREEN`
-       resolves that to a `.screen` id (or, for "run"/"results", to
-       `screen-run` conditionally on `getRunViewState()` -- both rail
-       entries point at the same still-unified run view for now, design
-       §16 phase 1 vs. phase 4: splitting that view's own content into
-       two genuinely separate layouts is deferred to phase 4's "Run/
-       Results side-by-side plots," not part of this first shell slice).
-       Configure (below) is its own new, minimal landing destination
+       leads to; `screens/nav-rail.js`'s own `STATIC_DESTINATION_TO_
+       SCREEN` resolves that to a `.screen` id. Run and Results used to
+       be two separate rail buttons sharing one identical `screen-run`
+       destination underneath, the rail dynamically relabeling one as
+       "Results" once a run completed (design §16 phase 1's own interim
+       shape, phase 4's "Run/Results side-by-side plots" never landed)
+       -- collapsed into this single "Run" button instead, on a real,
+       reported request: splitting the still-unified content into two
+       genuinely different layouts was never going to happen, so the
+       two-button illusion of a split that did not exist only cost a
+       rail slot. Configure (below) is its own new, minimal landing destination
        this phase -- the true two-panel FIM-parameters/Structure layout
        (design §4.1, §4.2) is a follow-up commit; for now it lists the
        same six section buttons the native Configure menu (still present
@@ -68,12 +71,6 @@
             <use href="icons/fim-icons.svg#icon-run"></use>
           </svg>
           <span>Run</span>
-        </button>
-        <button type="button" class="rail-item" data-destination="results">
-          <svg class="rail-icon" aria-hidden="true">
-            <use href="icons/fim-icons.svg#icon-results"></use>
-          </svg>
-          <span>Results</span>
         </button>
         <button type="button" class="rail-item" data-destination="compare">
           <svg class="rail-icon" aria-hidden="true">

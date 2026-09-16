@@ -24,17 +24,20 @@
  * call site needing to know the rail exists at all.
  */
 
-// One rail button, one Configure destination. Run and Results
-// deliberately both resolve to `screen-run` -- splitting that still-
-// unified view's own content into two genuinely separate layouts is
-// design §16 phase 4 ("Run/Results side-by-side plots"), not this
-// phase's own scope; which rail item highlights while `screen-run` is
-// showing is decided dynamically, by `runViewState`, in
-// `resolveDestination` below rather than by this static map.
+// One rail button, one destination each -- Run and Results used to be
+// two separate buttons both resolving to `screen-run`, the rail
+// dynamically relabeling one as "Results" by `runViewState` once a run
+// completed (`resolveDestination`'s own docstring, below, used to
+// explain that split); collapsed into this one "Run" entry instead, on
+// a real, reported request, since the content underneath was always
+// one unified view and splitting it into two genuinely separate
+// layouts (design §16 phase 4's own "Run/Results side-by-side plots")
+// never happened.
 const STATIC_DESTINATION_TO_SCREEN = {
     home: "screen-open-run",
     configure: "screen-configure",
     explore: "screen-explore",
+    run: "screen-run",
     compare: "screen-compare",
     help: "screen-help",
 };
@@ -72,17 +75,13 @@ function showConfigureBanner(message) {
 window.__fimConfigureExampleOptionsReady = false;
 
 /**
- * The rail destination that owns `screenId`, resolving `screen-run`'s
- * own two rail entries (`run`/`results`) by the run view's current
- * state rather than a static lookup -- the one screen id genuinely
- * shared by two rail buttons this phase.
+ * The rail destination that owns `screenId` -- every screen id now maps
+ * to exactly one rail button (`STATIC_DESTINATION_TO_SCREEN`, above),
+ * `screen-run` included, so this is a plain reverse lookup.
  * @param {string} screenId
  * @returns {string|null}
  */
 function resolveDestination(screenId) {
-    if (screenId === "screen-run") {
-        return window.fim.getRunViewState() === "completed" ? "results" : "run";
-    }
     for (const [destination, mappedScreenId] of Object.entries(
         STATIC_DESTINATION_TO_SCREEN
     )) {
@@ -228,7 +227,6 @@ function wireNavRail() {
                     window.fim.menu.explore();
                     break;
                 case "run":
-                case "results":
                     window.fim.showScreen("screen-run");
                     break;
                 case "compare":

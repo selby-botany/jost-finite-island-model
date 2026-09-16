@@ -24,12 +24,20 @@ def test_lato_identity_font_is_local_and_licensed() -> None:
 
 
 def test_navigation_uses_one_svg_icon_language_instead_of_emoji() -> None:
-    """All seven destinations use the bundled monochrome SVG symbols."""
+    """All six destinations use the bundled monochrome SVG symbols.
+
+    Run and Results were two separate rail buttons/icons until they
+    were collapsed into one "Run" destination on a real, reported
+    request (`screens/nav-rail.js`'s own top comment has the full
+    account) -- `icon-results` stays defined in the sprite (below, the
+    `icon_id` loop still checks for it) even though nothing references
+    it anymore, so this count is six, not seven.
+    """
     html = (_WEBUI / "index.html").read_text(encoding="utf-8")
     icons = (_WEBUI / "icons" / "fim-icons.svg").read_text(encoding="utf-8")
 
-    assert html.count('class="rail-icon"') == 7
-    assert html.count('href="icons/fim-icons.svg#icon-') == 24
+    assert html.count('class="rail-icon"') == 6
+    assert html.count('href="icons/fim-icons.svg#icon-') == 23
     for icon_id in (
         "home",
         "configure",
