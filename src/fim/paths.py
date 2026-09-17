@@ -318,3 +318,49 @@ def default_log_file(root: Path | None = None) -> Path:
         (or `FIM_LOG_OPTIONS`'s own `file=`) names a different path.
     """
     return log_directory(root) / "fim.log"
+
+
+def fim_index_directory(results: Path | None = None) -> Path:
+    """Return the hidden index directory holding Study/Experiment bookkeeping.
+
+    Sits inside `results_directory()`, not beside it: a Study or
+    Experiment is a small, separate JSON file referencing existing run
+    directories by name (`20260917-claude-sonnet-5-run-study-experiment-
+    hierarchy-design.md`, `selby/restricted`, §2) — never a change to
+    where any individual run's own output lives.
+
+    Args:
+        results: Optional results-directory override (default:
+            `results_directory()`).
+
+    Returns:
+        `(results or results_directory()) / ".fim"`.
+    """
+    root = results if results is not None else results_directory()
+    return root / ".fim"
+
+
+def studies_directory(results: Path | None = None) -> Path:
+    """Return the directory holding every `StudyManifest` JSON file.
+
+    Args:
+        results: Optional results-directory override (default:
+            `results_directory()`).
+
+    Returns:
+        `fim_index_directory(results) / "studies"`.
+    """
+    return fim_index_directory(results) / "studies"
+
+
+def experiments_directory(results: Path | None = None) -> Path:
+    """Return the directory holding every `ExperimentManifest` JSON file.
+
+    Args:
+        results: Optional results-directory override (default:
+            `results_directory()`).
+
+    Returns:
+        `fim_index_directory(results) / "experiments"`.
+    """
+    return fim_index_directory(results) / "experiments"

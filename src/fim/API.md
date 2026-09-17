@@ -313,7 +313,42 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [results\_directory](#fim.paths.results_directory)
   * [log\_directory](#fim.paths.log_directory)
   * [default\_log\_file](#fim.paths.default_log_file)
+  * [fim\_index\_directory](#fim.paths.fim_index_directory)
+  * [studies\_directory](#fim.paths.studies_directory)
+  * [experiments\_directory](#fim.paths.experiments_directory)
 * [fim.persistence](#fim.persistence)
+* [fim.persistence.groups](#fim.persistence.groups)
+  * [generate\_study\_id](#fim.persistence.groups.generate_study_id)
+  * [generate\_experiment\_id](#fim.persistence.groups.generate_experiment_id)
+  * [StudyManifest](#fim.persistence.groups.StudyManifest)
+    * [\_\_post\_init\_\_](#fim.persistence.groups.StudyManifest.__post_init__)
+    * [run\_count](#fim.persistence.groups.StudyManifest.run_count)
+    * [to\_dict](#fim.persistence.groups.StudyManifest.to_dict)
+    * [from\_dict](#fim.persistence.groups.StudyManifest.from_dict)
+  * [ExperimentManifest](#fim.persistence.groups.ExperimentManifest)
+    * [\_\_post\_init\_\_](#fim.persistence.groups.ExperimentManifest.__post_init__)
+    * [study\_count](#fim.persistence.groups.ExperimentManifest.study_count)
+    * [to\_dict](#fim.persistence.groups.ExperimentManifest.to_dict)
+    * [from\_dict](#fim.persistence.groups.ExperimentManifest.from_dict)
+  * [study\_manifest\_path](#fim.persistence.groups.study_manifest_path)
+  * [experiment\_manifest\_path](#fim.persistence.groups.experiment_manifest_path)
+  * [read\_study\_manifest](#fim.persistence.groups.read_study_manifest)
+  * [write\_study\_manifest](#fim.persistence.groups.write_study_manifest)
+  * [read\_experiment\_manifest](#fim.persistence.groups.read_experiment_manifest)
+  * [write\_experiment\_manifest](#fim.persistence.groups.write_experiment_manifest)
+  * [create\_study](#fim.persistence.groups.create_study)
+  * [get\_study](#fim.persistence.groups.get_study)
+  * [list\_studies](#fim.persistence.groups.list_studies)
+  * [add\_run\_to\_study](#fim.persistence.groups.add_run_to_study)
+  * [delete\_study](#fim.persistence.groups.delete_study)
+  * [copy\_study](#fim.persistence.groups.copy_study)
+  * [create\_experiment](#fim.persistence.groups.create_experiment)
+  * [get\_experiment](#fim.persistence.groups.get_experiment)
+  * [list\_experiments](#fim.persistence.groups.list_experiments)
+  * [add\_study\_to\_experiment](#fim.persistence.groups.add_study_to_experiment)
+  * [delete\_experiment](#fim.persistence.groups.delete_experiment)
+  * [copy\_experiment](#fim.persistence.groups.copy_experiment)
+  * [resolve\_run\_directory](#fim.persistence.groups.resolve_run_directory)
 * [fim.persistence.jsonl\_store](#fim.persistence.jsonl_store)
   * [JSONLTrajectoryStore](#fim.persistence.jsonl_store.JSONLTrajectoryStore)
     * [\_\_init\_\_](#fim.persistence.jsonl_store.JSONLTrajectoryStore.__init__)
@@ -344,6 +379,15 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.persistence.report](#fim.persistence.report)
   * [write\_report](#fim.persistence.report.write_report)
   * [write\_jsonl\_rows](#fim.persistence.report.write_jsonl_rows)
+* [fim.persistence.run\_metadata](#fim.persistence.run_metadata)
+  * [RunMetadata](#fim.persistence.run_metadata.RunMetadata)
+    * [\_\_post\_init\_\_](#fim.persistence.run_metadata.RunMetadata.__post_init__)
+    * [to\_dict](#fim.persistence.run_metadata.RunMetadata.to_dict)
+    * [from\_dict](#fim.persistence.run_metadata.RunMetadata.from_dict)
+  * [run\_metadata\_path](#fim.persistence.run_metadata.run_metadata_path)
+  * [read\_run\_metadata](#fim.persistence.run_metadata.read_run_metadata)
+  * [write\_run\_metadata](#fim.persistence.run_metadata.write_run_metadata)
+  * [replace\_run\_metadata](#fim.persistence.run_metadata.replace_run_metadata)
 * [fim.persistence.store](#fim.persistence.store)
   * [TrajectoryRow](#fim.persistence.store.TrajectoryRow)
   * [TrajectoryStore](#fim.persistence.store.TrajectoryStore)
@@ -454,9 +498,9 @@ Public package metadata for the finite island model simulator.
 Researcher-facing command-line interface for the simulator.
 
 This is what actually runs when you type `fim` at a terminal — the part
-of the program that reads what you typed, figures out which of the four
-things you asked for, and calls the right code to do it. It has four
-commands, each its own subsection below:
+of the program that reads what you typed, figures out which of the
+things you asked for, and calls the right code to do it. Its commands,
+each its own subsection below:
 
 - `fim init` — write out a starter configuration file (a filled-in
   example, ready to run or edit) so a new user has something concrete to
@@ -468,7 +512,17 @@ commands, each its own subsection below:
   a single simulation (`_command_run_scalar`) or a whole batch of
   independent, differently seeded repeats of the same configuration
   (`_command_run_batch`) — see `fim.engine`'s own docstring for why
-  running several repeats matters at all.
+  running several repeats matters at all. `--name`/`--description`
+  attach optional metadata to the completed run; `--study` adds it to
+  an existing Study once it finishes (`_record_run_organization`).
+- `fim study create/add-run/list/delete/copy` — organize completed runs
+  into a named Study, a purely local bookkeeping operation with no
+  engine involved (`_command_study`; `fim.persistence.groups`). See
+  `20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`
+  (`selby/restricted`) for the full Run/Study/Experiment design.
+- `fim experiment create/add-study/list/delete/copy` — the identical
+  bookkeeping one level up, grouping Studies into a named Experiment
+  (`_command_experiment`; `fim.persistence.groups`).
 - `fim stats TRAJECTORY` — recompute statistics from a run's own saved
   data, for any generation, without re-running the simulation
   (`_command_stats`; see `fim.reanalyze`'s own docstring for what
@@ -528,8 +582,8 @@ Parse command-line arguments and dispatch one operation.
 This is the single entry point every invocation of `fim` from a
 terminal reaches (via `pyproject.toml`'s own `[project.scripts]`
 entry, by way of `fim.launcher`) — it parses whatever was typed,
-figures out which of the four commands (see this module's own
-docstring, above) was requested, and calls the matching function.
+figures out which command (see this module's own docstring, above)
+was requested, and calls the matching function (`_dispatch_command`).
 
 Every error that any command can reasonably raise on genuinely bad
 input (a malformed configuration file, an invalid parameter
@@ -10653,6 +10707,72 @@ Return the default operational log file path.
   own default `RotatingFileHandler` target unless `-L file=...`
   (or `FIM_LOG_OPTIONS`'s own `file=`) names a different path.
 
+<a id="fim.paths.fim_index_directory"></a>
+
+#### fim\_index\_directory
+
+```python
+def fim_index_directory(results: Path | None = None) -> Path
+```
+
+Return the hidden index directory holding Study/Experiment bookkeeping.
+
+Sits inside `results_directory()`, not beside it: a Study or
+Experiment is a small, separate JSON file referencing existing run
+directories by name (`20260917-claude-sonnet-5-run-study-experiment-
+hierarchy-design.md`, `selby/restricted`, §2) — never a change to
+where any individual run's own output lives.
+
+**Arguments**:
+
+- `results` - Optional results-directory override (default:
+  `results_directory()`).
+
+
+**Returns**:
+
+  `(results or results_directory()) / ".fim"`.
+
+<a id="fim.paths.studies_directory"></a>
+
+#### studies\_directory
+
+```python
+def studies_directory(results: Path | None = None) -> Path
+```
+
+Return the directory holding every `StudyManifest` JSON file.
+
+**Arguments**:
+
+- `results` - Optional results-directory override (default:
+  `results_directory()`).
+
+
+**Returns**:
+
+  `fim_index_directory(results) / "studies"`.
+
+<a id="fim.paths.experiments_directory"></a>
+
+#### experiments\_directory
+
+```python
+def experiments_directory(results: Path | None = None) -> Path
+```
+
+Return the directory holding every `ExperimentManifest` JSON file.
+
+**Arguments**:
+
+- `results` - Optional results-directory override (default:
+  `results_directory()`).
+
+
+**Returns**:
+
+  `fim_index_directory(results) / "experiments"`.
+
 <a id="fim.persistence"></a>
 
 # fim.persistence
@@ -10680,6 +10800,570 @@ writing other JSON result files (`report.json`, a batch's own
 the manifest — not itself re-exported here, since it is used directly
 by `fim.engine` and `fim.cli` rather than through this package's own
 top-level API.
+
+<a id="fim.persistence.groups"></a>
+
+# fim.persistence.groups
+
+Study and Experiment: named groupings of Runs, and of Studies.
+
+Full design: `20260917-claude-sonnet-5-run-study-experiment-hierarchy-
+design.md` (`selby/restricted`). Three layers exist after this module:
+a **Run** (unchanged — one scalar run or replicate batch, `fim.
+persistence.manifest`), a **Study** (a named list of Run directories
+pursuing one research question), and an **Experiment** (a named list of
+Study ids pursuing a longer-running research goal). A Study/Experiment
+never duplicates or moves anything it references — `StudyManifest.
+run_directories` names existing run directories exactly the way
+`fim.persistence.manifest.BatchManifest.replicate_run_ids` already
+names existing replicate directories one level down, and
+`ExperimentManifest.study_ids` does the same one level further up.
+
+`StudyManifest`/`ExperimentManifest` are deliberately two separate,
+structurally parallel dataclasses (a "twin," like `fim.persistence.
+manifest`'s own `RunManifest`/`BatchManifest`) rather than one generic
+type parameterized over the member field name — this project's own
+established convention prefers a small explicit copy over a shared
+generic (`fim.persistence.manifest.read_manifest`/`read_batch_manifest`
+are byte-identical copy-paste-adapts of each other for the same reason).
+
+Deleting a Study deletes every Run it references; deleting an
+Experiment deletes every Study it references (and, transitively, every
+Run those Studies reference) — a deliberate, explicit product decision
+overriding this design document's own original, more conservative
+leaning ("deleting an organizational grouping should never be a
+data-destroying operation"), confirmed directly by the project owner
+when this module was implemented. `delete_study`/`delete_experiment`
+both accept an escape hatch (`delete_runs=False`/`delete_studies=False`)
+for a caller that genuinely only wants the grouping gone.
+
+<a id="fim.persistence.groups.generate_study_id"></a>
+
+#### generate\_study\_id
+
+```python
+def generate_study_id() -> str
+```
+
+Return a short, opaque, randomly generated Study id.
+
+Unlike `fim.engine.deterministic_run_id`, this is not content-
+derived: a Study has no fixed "configuration" to hash, only a
+membership list expected to grow over its own lifetime
+(`StudyManifest`'s own docstring).
+
+<a id="fim.persistence.groups.generate_experiment_id"></a>
+
+#### generate\_experiment\_id
+
+```python
+def generate_experiment_id() -> str
+```
+
+Return a short, opaque, randomly generated Experiment id.
+
+<a id="fim.persistence.groups.StudyManifest"></a>
+
+## StudyManifest Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class StudyManifest()
+```
+
+A named, described set of Run directories pursuing one research question.
+
+`run_directories` entries are either a bare run-directory name
+(the common case: a run living directly under `results/`) or a
+path — relative to `results/` if the run is nested further inside
+it, otherwise absolute — for a run published somewhere else
+entirely (`fim run -o SOME/OTHER/PATH`). A directory listed here
+that no longer exists (deleted results) is simply skipped by any
+reader that resolves it, never fatal (`fim.gui.app._read_json_
+object`'s own "one missing thing does not hide everything else"
+precedent).
+
+`sweep_spec` is `None` for a manually assembled Study; a future
+`SweepSpec`-shaped tool may populate it purely for provenance —
+never required for reading a Study back, since `run_directories`
+alone is sufficient to show its contents (design doc §3.2/§8).
+
+<a id="fim.persistence.groups.StudyManifest.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Validate schema version, identity, name, and timestamps.
+
+<a id="fim.persistence.groups.StudyManifest.run_count"></a>
+
+#### run\_count
+
+```python
+@property
+def run_count() -> int
+```
+
+Return how many run directories this Study currently references.
+
+<a id="fim.persistence.groups.StudyManifest.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return a JSON-serializable study manifest mapping.
+
+<a id="fim.persistence.groups.StudyManifest.from_dict"></a>
+
+#### from\_dict
+
+```python
+@classmethod
+def from_dict(cls, value: Mapping[str, Any]) -> StudyManifest
+```
+
+Validate and reconstruct a study manifest from a parsed JSON mapping.
+
+<a id="fim.persistence.groups.ExperimentManifest"></a>
+
+## ExperimentManifest Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class ExperimentManifest()
+```
+
+A named, described set of Study ids pursuing a common research goal.
+
+Structurally identical in shape to `StudyManifest`, one level up
+(`study_ids` in place of `run_directories`, no `sweep_spec`) — an
+Experiment is otherwise a thin container with no results of its own
+beyond what its Studies already show (design doc §1.3).
+
+<a id="fim.persistence.groups.ExperimentManifest.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Validate schema version, identity, name, and timestamps.
+
+<a id="fim.persistence.groups.ExperimentManifest.study_count"></a>
+
+#### study\_count
+
+```python
+@property
+def study_count() -> int
+```
+
+Return how many studies this Experiment currently references.
+
+<a id="fim.persistence.groups.ExperimentManifest.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return a JSON-serializable experiment manifest mapping.
+
+<a id="fim.persistence.groups.ExperimentManifest.from_dict"></a>
+
+#### from\_dict
+
+```python
+@classmethod
+def from_dict(cls, value: Mapping[str, Any]) -> ExperimentManifest
+```
+
+Validate and reconstruct an experiment manifest from a parsed mapping.
+
+<a id="fim.persistence.groups.study_manifest_path"></a>
+
+#### study\_manifest\_path
+
+```python
+def study_manifest_path(study_id: str, *, results: Path | None = None) -> Path
+```
+
+Return where one Study's own manifest file lives.
+
+**Arguments**:
+
+- `study_id` - The Study's own id.
+- `results` - Optional results-directory override (default:
+  `fim.paths.results_directory()`).
+
+
+**Returns**:
+
+  `fim.paths.studies_directory(results) / f"{study_id}.json"`.
+
+<a id="fim.persistence.groups.experiment_manifest_path"></a>
+
+#### experiment\_manifest\_path
+
+```python
+def experiment_manifest_path(experiment_id: str,
+                             *,
+                             results: Path | None = None) -> Path
+```
+
+Return where one Experiment's own manifest file lives.
+
+<a id="fim.persistence.groups.read_study_manifest"></a>
+
+#### read\_study\_manifest
+
+```python
+def read_study_manifest(path: Path | str) -> StudyManifest
+```
+
+Read and validate one Study manifest JSON file.
+
+<a id="fim.persistence.groups.write_study_manifest"></a>
+
+#### write\_study\_manifest
+
+```python
+def write_study_manifest(path: Path | str, manifest: StudyManifest) -> None
+```
+
+Atomically write `manifest` to `path`, creating parent directories as needed.
+
+Same mkstemp-then-`os.replace` idiom as `fim.gui.preferences.
+save_preferences` — a Study's own index file is a standalone
+document beside already-published, otherwise-untouched run
+directories, not something built inside a `fim.paths.
+atomic_directory` block the way `manifest.json` itself is, so it
+needs its own atomicity here.
+
+<a id="fim.persistence.groups.read_experiment_manifest"></a>
+
+#### read\_experiment\_manifest
+
+```python
+def read_experiment_manifest(path: Path | str) -> ExperimentManifest
+```
+
+Read and validate one Experiment manifest JSON file.
+
+<a id="fim.persistence.groups.write_experiment_manifest"></a>
+
+#### write\_experiment\_manifest
+
+```python
+def write_experiment_manifest(path: Path | str,
+                              manifest: ExperimentManifest) -> None
+```
+
+Atomically write `manifest` to `path`, creating parent directories as needed.
+
+<a id="fim.persistence.groups.create_study"></a>
+
+#### create\_study
+
+```python
+def create_study(name: str,
+                 description: str | None = None,
+                 *,
+                 results: Path | None = None,
+                 clock: Clock = _utc_now) -> StudyManifest
+```
+
+Create a new, empty Study and write its manifest.
+
+**Arguments**:
+
+- `name` - Short human name; must not be blank.
+- `description` - Optional longer description.
+- `results` - Optional results-directory override.
+- `clock` - Injectable current-time source, for deterministic tests.
+
+
+**Returns**:
+
+  The newly created, empty Study.
+
+<a id="fim.persistence.groups.get_study"></a>
+
+#### get\_study
+
+```python
+def get_study(study_id: str, *, results: Path | None = None) -> StudyManifest
+```
+
+Read one existing Study by id.
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists.
+
+<a id="fim.persistence.groups.list_studies"></a>
+
+#### list\_studies
+
+```python
+def list_studies(*, results: Path | None = None) -> list[StudyManifest]
+```
+
+Return every Study under `results`, oldest first.
+
+Oldest-first (not newest-first, unlike `fim.gui.recent_runs.
+list_recent_runs`) so a per-parent display ordinal computed from
+this order ("Study 1," "Study 2," ...) stays stable as new Studies
+are added (design doc §4).
+
+A manifest file that fails to parse is skipped, logged, never fatal
+to the rest of the listing.
+
+<a id="fim.persistence.groups.add_run_to_study"></a>
+
+#### add\_run\_to\_study
+
+```python
+def add_run_to_study(study_id: str,
+                     run_directory: Path | str,
+                     *,
+                     results: Path | None = None,
+                     clock: Clock = _utc_now) -> StudyManifest
+```
+
+Add one Run directory to an existing Study; idempotent.
+
+Adding a directory already present is a no-op that returns the
+Study unchanged (design doc §5) — `updated_at` only moves forward
+on a genuine membership change.
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists.
+
+<a id="fim.persistence.groups.delete_study"></a>
+
+#### delete\_study
+
+```python
+def delete_study(study_id: str,
+                 *,
+                 results: Path | None = None,
+                 delete_runs: bool = True) -> StudyManifest
+```
+
+Delete a Study's own manifest and, by default, every Run it references.
+
+**Arguments**:
+
+- `study_id` - The Study to delete.
+- `results` - Optional results-directory override.
+- `delete_runs` - When true (the default — a deliberate, explicit
+  product decision; see this module's own docstring), every
+  referenced Run directory is removed too. When false, only
+  the `StudyManifest` itself is removed and its Runs become
+  unattached again ("Unsorted").
+
+
+**Returns**:
+
+  The manifest as it existed immediately before deletion.
+
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists.
+
+<a id="fim.persistence.groups.copy_study"></a>
+
+#### copy\_study
+
+```python
+def copy_study(study_id: str,
+               *,
+               name: str,
+               results: Path | None = None,
+               clock: Clock = _utc_now) -> StudyManifest
+```
+
+Copy a Study's own run list into a new, independent Study.
+
+The lower-complexity alternative to letting one Run belong to more
+than one Study at once (design doc §10, resolved in favor of this):
+since membership is reference-based (`run_directories` names, never
+duplicates, a run's own directory), copying a Study's member list
+costs nothing and creates two genuinely independent groupings a
+botanist can then diverge — add different runs to each — without
+either affecting the other or the underlying Run data at all.
+
+**Raises**:
+
+- `ValueError` - No Study with this id exists, or `name` is blank.
+
+<a id="fim.persistence.groups.create_experiment"></a>
+
+#### create\_experiment
+
+```python
+def create_experiment(name: str,
+                      description: str | None = None,
+                      *,
+                      results: Path | None = None,
+                      clock: Clock = _utc_now) -> ExperimentManifest
+```
+
+Create a new, empty Experiment and write its manifest.
+
+<a id="fim.persistence.groups.get_experiment"></a>
+
+#### get\_experiment
+
+```python
+def get_experiment(experiment_id: str,
+                   *,
+                   results: Path | None = None) -> ExperimentManifest
+```
+
+Read one existing Experiment by id.
+
+**Raises**:
+
+- `ValueError` - No Experiment with this id exists.
+
+<a id="fim.persistence.groups.list_experiments"></a>
+
+#### list\_experiments
+
+```python
+def list_experiments(*,
+                     results: Path | None = None) -> list[ExperimentManifest]
+```
+
+Return every Experiment under `results`, oldest first (see `list_studies`).
+
+<a id="fim.persistence.groups.add_study_to_experiment"></a>
+
+#### add\_study\_to\_experiment
+
+```python
+def add_study_to_experiment(experiment_id: str,
+                            study_id: str,
+                            *,
+                            results: Path | None = None,
+                            clock: Clock = _utc_now) -> ExperimentManifest
+```
+
+Add one Study to an existing Experiment; idempotent.
+
+**Raises**:
+
+- `ValueError` - No Experiment or Study with the given id exists.
+
+<a id="fim.persistence.groups.delete_experiment"></a>
+
+#### delete\_experiment
+
+```python
+def delete_experiment(experiment_id: str,
+                      *,
+                      results: Path | None = None,
+                      delete_studies: bool = True) -> ExperimentManifest
+```
+
+Delete an Experiment's own manifest and, by default, every Study it references.
+
+Cascades transitively: deleting a member Study (`delete_study`,
+`delete_runs=True`) also deletes every Run that Study references —
+the same explicit product decision `delete_study`'s own docstring
+describes, one level up.
+
+**Arguments**:
+
+- `experiment_id` - The Experiment to delete.
+- `results` - Optional results-directory override.
+- `delete_studies` - When true (the default), every referenced Study
+  (and, transitively, every Run it references) is removed
+  too. When false, only the `ExperimentManifest` itself is
+  removed and its Studies become unattached again.
+
+
+**Returns**:
+
+  The manifest as it existed immediately before deletion.
+
+
+**Raises**:
+
+- `ValueError` - No Experiment with this id exists.
+
+<a id="fim.persistence.groups.copy_experiment"></a>
+
+#### copy\_experiment
+
+```python
+def copy_experiment(experiment_id: str,
+                    *,
+                    name: str,
+                    results: Path | None = None,
+                    clock: Clock = _utc_now) -> ExperimentManifest
+```
+
+Copy an Experiment's own study list into a new, independent Experiment.
+
+The Experiment-level counterpart to `copy_study`, above — copies
+only the `study_ids` reference list, never the Studies themselves.
+
+**Raises**:
+
+- `ValueError` - No Experiment with this id exists, or `name` is blank.
+
+<a id="fim.persistence.groups.resolve_run_directory"></a>
+
+#### resolve\_run\_directory
+
+```python
+def resolve_run_directory(reference: str,
+                          *,
+                          results: Path | None = None) -> Path
+```
+
+Resolve a botanist-supplied Run reference to exactly one directory.
+
+Accepts, tried in this order (design doc §10, resolved): a Run
+**directory** (as an existing path, or a bare name relative to
+`results`), a **path to a `manifest.json`** file, or a bare
+**`run_id`** — searched across every run under `results`, since a
+`run_id` is a reproducibility fingerprint of a configuration, not a
+directory-unique key (`fim.engine.deterministic_run_id`'s own
+docstring: running the identical configuration twice yields the
+same `run_id` both times). A `run_id` search is only attempted once
+the first two forms have failed, since a directory/manifest path is
+always unambiguous when it resolves at all.
+
+**Arguments**:
+
+- `reference` - What the botanist typed.
+- `results` - Optional results-directory override.
+
+
+**Returns**:
+
+  The one, resolved, absolute Run directory.
+
+
+**Raises**:
+
+- `ValueError` - `reference` does not uniquely identify a Run —
+  either nothing matches, or (for a bare `run_id`) more than
+  one directory shares it.
 
 <a id="fim.persistence.jsonl_store"></a>
 
@@ -11308,6 +11992,172 @@ formatting difference" reason `write_report` documents.
 
 - `path` - Destination file path. Parent directories are created.
 - `rows` - JSON-serializable mappings, one per line, in order.
+
+<a id="fim.persistence.run_metadata"></a>
+
+# fim.persistence.run\_metadata
+
+Optional name/description sidecar for a run, attachable at any time.
+
+A completed run's own `manifest.json` is a fixed, digest-verified
+receipt (`fim.persistence.manifest`) — rewriting it to add a name would
+either break `verify_trajectory_integrity`'s own checksum or require
+recomputing it for no scientific reason. `RunMetadata` instead lives in
+its own small sidecar file, `metadata.json`, beside `manifest.json`:
+attaching, renaming, or clearing a run's name/description never touches
+the manifest at all.
+
+A run with no `metadata.json` is not incomplete — it is exactly what
+every run produced before this file existed already is (`20260917-
+claude-sonnet-5-run-study-experiment-hierarchy-design.md`, `selby/
+restricted`, §3.1/§3.4): callers read it the same graceful-degradation
+way `fim.gui.app._read_json_object` already reads `report.json`/
+`summary.json` — missing or malformed means "no name set," never an
+error for the run itself.
+
+<a id="fim.persistence.run_metadata.RunMetadata"></a>
+
+## RunMetadata Objects
+
+```python
+@dataclass(frozen=True, slots=True)
+class RunMetadata()
+```
+
+A run's optional, user-attached name and description.
+
+`name`/`description` are independently optional — a user may set
+only one of the two (e.g. a description with no short name yet).
+`created_at` never changes once written; `updated_at` moves forward
+every time `replace_run_metadata` is called again for the same run.
+
+<a id="fim.persistence.run_metadata.RunMetadata.__post_init__"></a>
+
+#### \_\_post\_init\_\_
+
+```python
+def __post_init__() -> None
+```
+
+Validate schema version, timestamps, and non-blank text fields.
+
+<a id="fim.persistence.run_metadata.RunMetadata.to_dict"></a>
+
+#### to\_dict
+
+```python
+def to_dict() -> dict[str, object]
+```
+
+Return a JSON-serializable run metadata mapping.
+
+<a id="fim.persistence.run_metadata.RunMetadata.from_dict"></a>
+
+#### from\_dict
+
+```python
+@classmethod
+def from_dict(cls, value: Mapping[str, Any]) -> RunMetadata
+```
+
+Validate and reconstruct run metadata from a parsed JSON mapping.
+
+<a id="fim.persistence.run_metadata.run_metadata_path"></a>
+
+#### run\_metadata\_path
+
+```python
+def run_metadata_path(run_directory: Path | str) -> Path
+```
+
+Return where a run's own metadata sidecar lives.
+
+**Arguments**:
+
+- `run_directory` - The run's own output directory.
+
+
+**Returns**:
+
+  `run_directory / "metadata.json"`.
+
+<a id="fim.persistence.run_metadata.read_run_metadata"></a>
+
+#### read\_run\_metadata
+
+```python
+def read_run_metadata(path: Path | str) -> RunMetadata
+```
+
+Read and validate one run metadata JSON file.
+
+**Arguments**:
+
+- `path` - The `metadata.json` file to read.
+
+
+**Returns**:
+
+  The parsed, validated run metadata.
+
+
+**Raises**:
+
+- `OSError` - The file cannot be read.
+- `ValueError` - The file's content is not a valid run metadata object.
+
+<a id="fim.persistence.run_metadata.write_run_metadata"></a>
+
+#### write\_run\_metadata
+
+```python
+def write_run_metadata(path: Path | str, metadata: RunMetadata) -> None
+```
+
+Atomically write `metadata` to `path`, creating parent directories as needed.
+
+Same mkstemp-then-`os.replace` idiom as `fim.gui.preferences.
+save_preferences` — a concurrent reader always sees either the
+previous complete file or the new one, never a torn write. Unlike
+`fim.persistence.manifest.write_manifest`, this file is never built
+inside a `fim.paths.atomic_directory` block (it is written beside an
+already-published run, potentially long after the fact), so it needs
+its own atomicity here rather than inheriting a caller's.
+
+<a id="fim.persistence.run_metadata.replace_run_metadata"></a>
+
+#### replace\_run\_metadata
+
+```python
+def replace_run_metadata(run_directory: Path | str,
+                         *,
+                         name: str | None,
+                         description: str | None,
+                         clock: Clock = _utc_now) -> RunMetadata
+```
+
+Create or overwrite a run's own metadata, preserving `created_at`.
+
+The single entry point for both "attach a name at creation" (`fim
+run --name/--description`) and "rename after the fact" (a GUI
+action on an already-completed run) — whichever `metadata.json`
+already exists (if any) only ever contributes its own `created_at`;
+`name`/`description` are always replaced wholesale with the values
+given here, never merged field-by-field, so clearing a field is as
+simple as passing `None` for it.
+
+**Arguments**:
+
+- `run_directory` - The run's own output directory.
+- `name` - The new short name, or `None` to leave/set it unset.
+- `description` - The new longer description, or `None` to leave/set
+  it unset.
+- `clock` - Injectable current-time source, for deterministic tests.
+
+
+**Returns**:
+
+  The metadata just written.
 
 <a id="fim.persistence.store"></a>
 

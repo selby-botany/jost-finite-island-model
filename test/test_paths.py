@@ -90,6 +90,28 @@ def test_results_directory_accepts_a_root_override(tmp_path: Path) -> None:
     assert paths.results_directory(tmp_path) == tmp_path / "results"
 
 
+def test_fim_index_directory_defaults_to_results_directory_slash_dot_fim() -> None:
+    """`fim_index_directory` sits inside `results_directory()`, not beside it."""
+    assert paths.fim_index_directory() == paths.results_directory() / ".fim"
+
+
+def test_fim_index_directory_accepts_a_results_override(tmp_path: Path) -> None:
+    """An explicit results override bypasses `results_directory` entirely."""
+    assert paths.fim_index_directory(tmp_path) == tmp_path / ".fim"
+
+
+def test_studies_directory_sits_under_the_fim_index_directory(tmp_path: Path) -> None:
+    """`studies_directory` is `fim_index_directory() / "studies"`."""
+    assert paths.studies_directory(tmp_path) == tmp_path / ".fim" / "studies"
+
+
+def test_experiments_directory_sits_under_the_fim_index_directory(
+    tmp_path: Path,
+) -> None:
+    """`experiments_directory` is `fim_index_directory() / "experiments"`."""
+    assert paths.experiments_directory(tmp_path) == tmp_path / ".fim" / "experiments"
+
+
 def test_default_output_directory_uses_microsecond_timestamp(
     tmp_path: Path,
 ) -> None:

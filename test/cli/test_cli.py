@@ -1305,6 +1305,184 @@ def test_stats_reports_a_tampered_trajectory_and_unknown_generations(
     assert "no generation" in capsys.readouterr().err
 
 
+def test_run_name_and_description_write_a_metadata_sidecar(tmp_path: Path) -> None:
+    """`fim run --name/--description` attach optional metadata, once run finishes."""
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+
+    status = cli.main(
+        [
+            "run",
+            str(config),
+            "--output",
+            str(output),
+            "--quiet",
+            "--name",
+            "Baseline",
+            "--description",
+            "Sanity check.",
+        ]
+    )
+
+    assert status == 0
+    metadata = json.loads((output / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["name"] == "Baseline"
+    assert metadata["description"] == "Sanity check."
+
+
+def test_run_without_name_or_description_writes_no_metadata_sidecar(
+    tmp_path: Path,
+) -> None:
+    """A plain `fim run` with neither flag never writes `metadata.json` at all."""
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+
+    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
+
+    assert not (output / "metadata.json").exists()
+
+
+def test_run_study_adds_the_completed_run_to_an_existing_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fim run --study` adds the just-published run once it finishes."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+
+    status = cli.main(
+        ["run", str(config), "--output", str(output), "--quiet", "--study", study_id]
+    )
+
+    assert status == 0
+    study_payload = json.loads(
+        (tmp_path / "results" / ".fim" / "studies" / f"{study_id}.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert study_payload["run_directories"] == [str(output.resolve())]
+
+
+def test_run_study_rejects_an_unknown_study_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fim run --study` naming a nonexistent study is a plain, non-traceback error."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+
+    status = cli.main(
+        [
+            "run",
+            str(config),
+            "--output",
+            str(output),
+            "--quiet",
+            "--study",
+            "study-ffffffff",
+        ]
+    )
+
+    assert status == 2
+
+
+def test_study_create_add_run_list_delete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A full `fim study create`/`add-run`/`list`/`delete` life cycle via `cli.main`."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
+
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+
+    assert cli.main(["study", "add-run", study_id, str(output)]) == 0
+    capsys.readouterr()
+    assert cli.main(["study", "list"]) == 0
+    assert "Ring sweep" in capsys.readouterr().out
+
+    assert cli.main(["study", "delete", study_id]) == 0
+    assert not output.exists()
+
+
+def test_study_add_run_resolves_a_bare_run_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fim study add-run` accepts a bare `run_id`, not only a directory."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "results" / "run-a"
+    _write_config(config)
+    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
+    run_id = json.loads((output / "manifest.json").read_text(encoding="utf-8"))[
+        "run_id"
+    ]
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+
+    assert cli.main(["study", "add-run", study_id, run_id]) == 0
+
+    study_payload = json.loads(
+        (tmp_path / "results" / ".fim" / "studies" / f"{study_id}.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert study_payload["run_directories"] == ["run-a"]
+
+
+def test_study_copy_creates_an_independent_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`fim study copy` creates a second, independent study with the same runs."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+
+    assert cli.main(["study", "copy", study_id, "--name", "Ring sweep copy"]) == 0
+
+    names = {
+        json.loads(path.read_text(encoding="utf-8"))["name"]
+        for path in (tmp_path / "results" / ".fim" / "studies").glob("*.json")
+    }
+    assert names == {"Ring sweep", "Ring sweep copy"}
+
+
+def test_experiment_create_add_study_list_delete_cascades_to_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`fim experiment delete` removes its studies and, transitively, their runs."""
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+    assert cli.main(["run", str(config), "--output", str(output), "--quiet"]) == 0
+    assert cli.main(["study", "create", "--name", "Ring sweep"]) == 0
+    study_id = next((tmp_path / "results" / ".fim" / "studies").glob("*.json")).stem
+    assert cli.main(["study", "add-run", study_id, str(output)]) == 0
+    assert cli.main(["experiment", "create", "--name", "Topology"]) == 0
+    experiment_id = next(
+        (tmp_path / "results" / ".fim" / "experiments").glob("*.json")
+    ).stem
+    assert cli.main(["experiment", "add-study", experiment_id, study_id]) == 0
+    capsys.readouterr()
+    assert cli.main(["experiment", "list"]) == 0
+    assert "Topology" in capsys.readouterr().out
+
+    assert cli.main(["experiment", "delete", experiment_id]) == 0
+
+    assert not output.exists()
+    assert not (tmp_path / "results" / ".fim" / "studies" / f"{study_id}.json").exists()
+
+
 def test_format_optional_helper_is_stable() -> None:
     """The optional-statistic terminal formatter has deterministic output.
 

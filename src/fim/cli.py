@@ -1,9 +1,9 @@
 """Researcher-facing command-line interface for the simulator.
 
 This is what actually runs when you type `fim` at a terminal — the part
-of the program that reads what you typed, figures out which of the four
-things you asked for, and calls the right code to do it. It has four
-commands, each its own subsection below:
+of the program that reads what you typed, figures out which of the
+things you asked for, and calls the right code to do it. Its commands,
+each its own subsection below:
 
 - `fim init` — write out a starter configuration file (a filled-in
   example, ready to run or edit) so a new user has something concrete to
@@ -15,7 +15,17 @@ commands, each its own subsection below:
   a single simulation (`_command_run_scalar`) or a whole batch of
   independent, differently seeded repeats of the same configuration
   (`_command_run_batch`) — see `fim.engine`'s own docstring for why
-  running several repeats matters at all.
+  running several repeats matters at all. `--name`/`--description`
+  attach optional metadata to the completed run; `--study` adds it to
+  an existing Study once it finishes (`_record_run_organization`).
+- `fim study create/add-run/list/delete/copy` — organize completed runs
+  into a named Study, a purely local bookkeeping operation with no
+  engine involved (`_command_study`; `fim.persistence.groups`). See
+  `20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`
+  (`selby/restricted`) for the full Run/Study/Experiment design.
+- `fim experiment create/add-study/list/delete/copy` — the identical
+  bookkeeping one level up, grouping Studies into a named Experiment
+  (`_command_experiment`; `fim.persistence.groups`).
 - `fim stats TRAJECTORY` — recompute statistics from a run's own saved
   data, for any generation, without re-running the simulation
   (`_command_stats`; see `fim.reanalyze`'s own docstring for what
@@ -43,10 +53,11 @@ import os
 import pickle
 import shutil
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 from matplotlib import pyplot as plt
@@ -54,6 +65,21 @@ from matplotlib import pyplot as plt
 from fim import __version__, logging_setup, paths, reanalyze, update
 from fim.engine import RunResult, deterministic_run_id, fim, replicate_summary
 from fim.model.params import SimulationParams
+from fim.persistence.groups import (
+    ExperimentManifest,
+    StudyManifest,
+    add_run_to_study,
+    add_study_to_experiment,
+    copy_experiment,
+    copy_study,
+    create_experiment,
+    create_study,
+    delete_experiment,
+    delete_study,
+    list_experiments,
+    list_studies,
+    resolve_run_directory,
+)
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import (
     CURRENT_BATCH_SCHEMA_VERSION,
@@ -70,6 +96,7 @@ from fim.persistence.report import write_jsonl_rows
 # boundary, so it must resolve as this module's own attribute under
 # mypy strict, not merely an unexported transitive import.
 from fim.persistence.report import write_report as write_report  # noqa: PLC0414
+from fim.persistence.run_metadata import replace_run_metadata
 from fim.viz.scatter import plot_frequency_scatter
 
 logger = logging.getLogger(__name__)
@@ -162,8 +189,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     This is the single entry point every invocation of `fim` from a
     terminal reaches (via `pyproject.toml`'s own `[project.scripts]`
     entry, by way of `fim.launcher`) — it parses whatever was typed,
-    figures out which of the four commands (see this module's own
-    docstring, above) was requested, and calls the matching function.
+    figures out which command (see this module's own docstring, above)
+    was requested, and calls the matching function (`_dispatch_command`).
 
     Every error that any command can reasonably raise on genuinely bad
     input (a malformed configuration file, an invalid parameter
@@ -204,14 +231,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(str(error))
     logger.debug("parsed arguments: %s", arguments)
     try:
-        if arguments.command == "init":
-            return _command_init(arguments)
-        if arguments.command == "run":
-            return _command_run(arguments, parser)
-        if arguments.command == "stats":
-            return _command_stats(arguments)
-        if arguments.command == "update":
-            return _command_update(arguments, parser)
+        status = _dispatch_command(arguments, parser)
     except (
         ArithmeticError,
         OSError,
@@ -224,7 +244,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.error("fim %s failed: %s", arguments.command, error)
         print(f"fim: error: {error}", file=sys.stderr)
         return 2
-    parser.error("a command is required")
+    if status is None:
+        parser.error("a command is required")
+    return status
+
+
+def _dispatch_command(
+    arguments: argparse.Namespace, parser: argparse.ArgumentParser
+) -> int | None:
+    """Call whichever command function matches `arguments.command`.
+
+    A dict, not `main`'s own former flat `if`/`elif` chain — six
+    commands (once `study`/`experiment` joined `init`/`run`/`stats`/
+    `update`) pushed a per-branch chain past this project's own
+    configured `PLR0911` limit; a table keeps every command exactly as
+    easy to find and add to, with one line and one return in `main`
+    itself.
+
+    Returns:
+        The called command's exit status, or `None` if `arguments.
+        command` matches nothing — unreachable in practice, since
+        `_parser`'s own top-level subparsers are `required=True`.
+    """
+    handlers: dict[str, Callable[[], int]] = {
+        "init": lambda: _command_init(arguments),
+        "run": lambda: _command_run(arguments, parser),
+        "study": lambda: _command_study(arguments, parser),
+        "experiment": lambda: _command_experiment(arguments, parser),
+        "stats": lambda: _command_stats(arguments),
+        "update": lambda: _command_update(arguments, parser),
+    }
+    handler = handlers.get(arguments.command)
+    return handler() if handler is not None else None
 
 
 def _command_init(arguments: argparse.Namespace) -> int:
@@ -275,6 +326,10 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
     single-line, non-traceback message and exit status 2 either way;
     which mechanism is used follows whether the mistake is in a
     command-line flag or in the loaded config's own data.
+
+    Once the run itself succeeds, `_record_run_organization` attaches
+    any `--name`/`--description`/`--study` given — entirely optional,
+    entirely after the fact, and never able to affect the run itself.
     """
     logger.debug("loading config: %s", arguments.config)
     params = load_config(arguments.config)
@@ -317,8 +372,36 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
         output_directory,
     )
     if params.n_replicates == 1:
-        return _command_run_scalar(params, output_directory, arguments.quiet)
-    return _command_run_batch(params, output_directory, arguments, parser)
+        status = _command_run_scalar(params, output_directory, arguments.quiet)
+    else:
+        status = _command_run_batch(params, output_directory, arguments, parser)
+    if status == 0:
+        _record_run_organization(output_directory, arguments)
+    return status
+
+
+def _record_run_organization(
+    output_directory: Path, arguments: argparse.Namespace
+) -> None:
+    """Attach optional `--name`/`--description` metadata and `--study` membership.
+
+    Reached only once `output_directory` has actually been published by
+    `_command_run_scalar`/`_command_run_batch` (`status == 0`) — a run
+    that failed or was interrupted leaves nothing here to attach
+    metadata to, and `--study` should never add a nonexistent run to a
+    Study. Every one of these three flags is independently optional and
+    does nothing to a plain `fim run` that sets none of them (`fim.
+    persistence.run_metadata`/`fim.persistence.groups`'s own docstrings;
+    `20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`,
+    `selby/restricted`, milestone 1/§9).
+    """
+    name = arguments.name
+    description = arguments.description
+    if name is not None or description is not None:
+        replace_run_metadata(output_directory, name=name, description=description)
+    if arguments.study is not None:
+        study = add_run_to_study(arguments.study, output_directory)
+        print(f"Added to study {study.study_id} ({study.run_count} run(s))")
 
 
 def _command_run_scalar(
@@ -543,6 +626,124 @@ def _command_run_batch(
         print(f"Summary    -> {output_directory / 'summary.json'}")
         print(f"Manifest   -> {output_directory / 'manifest.json'}")
     return 0
+
+
+def _command_study(
+    arguments: argparse.Namespace, parser: argparse.ArgumentParser
+) -> int:
+    """Dispatch one `fim study create/add-run/list/delete/copy` invocation.
+
+    Every one of these is a purely local bookkeeping operation on a
+    small JSON index file (`fim.paths.studies_directory`) — no engine
+    execution involved (`fim.persistence.groups`, `20260917-claude-
+    sonnet-5-run-study-experiment-hierarchy-design.md`, `selby/
+    restricted`, §5/§9 milestone 2). `parser` is threaded through only
+    for the unreachable-in-practice fallthrough below, matching `main`'s
+    own defensive final `parser.error` — `study_command` is already
+    `required=True` in `_parser`, so `argparse` itself rejects a bare
+    `fim study` before this function is ever reached.
+    """
+    if arguments.study_command == "create":
+        study = create_study(arguments.name, arguments.description)
+        print(f"Created study {study.study_id}: {study.name}")
+        return 0
+    if arguments.study_command == "add-run":
+        directory = resolve_run_directory(arguments.run)
+        study = add_run_to_study(arguments.study_id, directory)
+        print(
+            f"Added {directory.name} to study {study.study_id} "
+            f"({study.run_count} run(s))"
+        )
+        return 0
+    if arguments.study_command == "list":
+        _print_studies(list_studies())
+        return 0
+    if arguments.study_command == "delete":
+        deleted = delete_study(arguments.study_id)
+        print(f"Deleted study {deleted.study_id} and {deleted.run_count} run(s)")
+        return 0
+    if arguments.study_command == "copy":
+        copied = copy_study(arguments.study_id, name=arguments.name)
+        print(
+            f"Copied study {arguments.study_id} to {copied.study_id}: "
+            f"{copied.name} ({copied.run_count} run(s))"
+        )
+        return 0
+    parser.error("a study subcommand is required")
+
+
+def _print_studies(studies: Sequence[StudyManifest]) -> None:
+    """Print one study-id/name/run-count/created-at row per Study.
+
+    A plain, fixed-width table — `fim` has no dependency on a terminal
+    table-formatting library, and this is the first `list` subcommand
+    that needs one at all.
+    """
+    if not studies:
+        print("No studies.")
+        return
+    print(f"{'STUDY_ID':<20}{'RUNS':>6}  {'CREATED':<28}  NAME")
+    for study in studies:
+        print(
+            f"{study.study_id:<20}{study.run_count:>6}  "
+            f"{study.created_at:<28}  {study.name}"
+        )
+
+
+def _command_experiment(
+    arguments: argparse.Namespace, parser: argparse.ArgumentParser
+) -> int:
+    """Dispatch one `fim experiment create/add-study/list/delete/copy` invocation.
+
+    The Experiment-level counterpart to `_command_study`, above —
+    identical shape, one level up (`fim.persistence.groups`).
+    """
+    if arguments.experiment_command == "create":
+        experiment = create_experiment(arguments.name, arguments.description)
+        print(f"Created experiment {experiment.experiment_id}: {experiment.name}")
+        return 0
+    if arguments.experiment_command == "add-study":
+        experiment = add_study_to_experiment(
+            arguments.experiment_id, arguments.study_id
+        )
+        print(
+            f"Added {arguments.study_id} to experiment "
+            f"{experiment.experiment_id} ({experiment.study_count} study(ies))"
+        )
+        return 0
+    if arguments.experiment_command == "list":
+        _print_experiments(list_experiments())
+        return 0
+    if arguments.experiment_command == "delete":
+        deleted = delete_experiment(arguments.experiment_id)
+        print(
+            f"Deleted experiment {deleted.experiment_id} and "
+            f"{deleted.study_count} study(ies)"
+        )
+        return 0
+    if arguments.experiment_command == "copy":
+        copied = copy_experiment(arguments.experiment_id, name=arguments.name)
+        print(
+            f"Copied experiment {arguments.experiment_id} to "
+            f"{copied.experiment_id}: {copied.name} "
+            f"({copied.study_count} study(ies))"
+        )
+        return 0
+    parser.error("an experiment subcommand is required")
+
+
+def _print_experiments(experiments: Sequence[ExperimentManifest]) -> None:
+    """Print one experiment-id/name/study-count/created-at row per Experiment."""
+    if not experiments:
+        print("No experiments.")
+        return
+    print(f"{'EXPERIMENT_ID':<24}{'STUDIES':>8}  {'CREATED':<28}  NAME")
+    for experiment in experiments:
+        print(
+            f"{experiment.experiment_id:<24}"
+            f"{experiment.study_count:>8}  "
+            f"{experiment.created_at:<28}  {experiment.name}"
+        )
 
 
 def _command_stats(arguments: argparse.Namespace) -> int:
@@ -936,6 +1137,24 @@ def _parser() -> argparse.ArgumentParser:
             "overrides the loaded config's own value for this run only"
         ),
     )
+    run_parser.add_argument(
+        "--name",
+        metavar="NAME",
+        help="short name recorded for this run, once it completes",
+    )
+    run_parser.add_argument(
+        "--description",
+        metavar="TEXT",
+        help="longer description recorded for this run, once it completes",
+    )
+    run_parser.add_argument(
+        "--study",
+        metavar="STUDY_ID",
+        help="add this run to an existing study once it completes",
+    )
+
+    _add_study_subcommands(subcommands)
+    _add_experiment_subcommands(subcommands)
 
     stats_parser = subcommands.add_parser(
         "stats",
@@ -975,6 +1194,98 @@ def _parser() -> argparse.ArgumentParser:
         help="query the latest GitHub release without downloading",
     )
     return parser
+
+
+def _add_study_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
+    """Wire `fim study create/add-run/list/delete/copy` onto `subcommands`.
+
+    Split out of `_parser` purely to keep that function under this
+    project's own configured `PLR0915` statement-count limit — the
+    Experiment-level counterpart is `_add_experiment_subcommands`, below.
+    """
+    study_parser = subcommands.add_parser(
+        "study",
+        help="organize completed runs into a named study",
+    )
+    study_subcommands = study_parser.add_subparsers(dest="study_command", required=True)
+    study_create_parser = study_subcommands.add_parser(
+        "create",
+        help="create a new, empty study",
+    )
+    study_create_parser.add_argument(
+        "--name", required=True, help="short human name for the study"
+    )
+    study_create_parser.add_argument(
+        "--description", help="optional longer description"
+    )
+    study_add_run_parser = study_subcommands.add_parser(
+        "add-run",
+        help="add one existing run to a study",
+    )
+    study_add_run_parser.add_argument("study_id", metavar="STUDY_ID")
+    study_add_run_parser.add_argument(
+        "run",
+        metavar="RUN",
+        help="a run directory, a path to its manifest.json, or its run_id",
+    )
+    study_subcommands.add_parser("list", help="list every study")
+    study_delete_parser = study_subcommands.add_parser(
+        "delete",
+        help="delete a study and every run it references",
+    )
+    study_delete_parser.add_argument("study_id", metavar="STUDY_ID")
+    study_copy_parser = study_subcommands.add_parser(
+        "copy",
+        help="copy a study's own run list into a new, independent study",
+    )
+    study_copy_parser.add_argument("study_id", metavar="STUDY_ID")
+    study_copy_parser.add_argument(
+        "--name", required=True, help="name for the new study"
+    )
+
+
+def _add_experiment_subcommands(subcommands: argparse._SubParsersAction[Any]) -> None:
+    """Wire `fim experiment create/add-study/list/delete/copy` onto `subcommands`.
+
+    The Experiment-level counterpart to `_add_study_subcommands`, above.
+    """
+    experiment_parser = subcommands.add_parser(
+        "experiment",
+        help="organize studies into a named experiment",
+    )
+    experiment_subcommands = experiment_parser.add_subparsers(
+        dest="experiment_command", required=True
+    )
+    experiment_create_parser = experiment_subcommands.add_parser(
+        "create",
+        help="create a new, empty experiment",
+    )
+    experiment_create_parser.add_argument(
+        "--name", required=True, help="short human name for the experiment"
+    )
+    experiment_create_parser.add_argument(
+        "--description", help="optional longer description"
+    )
+    experiment_add_study_parser = experiment_subcommands.add_parser(
+        "add-study",
+        help="add one existing study to an experiment",
+    )
+    experiment_add_study_parser.add_argument("experiment_id", metavar="EXPERIMENT_ID")
+    experiment_add_study_parser.add_argument("study_id", metavar="STUDY_ID")
+    experiment_subcommands.add_parser("list", help="list every experiment")
+    experiment_delete_parser = experiment_subcommands.add_parser(
+        "delete",
+        help="delete an experiment and every study (and run) it references",
+    )
+    experiment_delete_parser.add_argument("experiment_id", metavar="EXPERIMENT_ID")
+    experiment_copy_parser = experiment_subcommands.add_parser(
+        "copy",
+        help="copy an experiment's own study list into a new, independent experiment",
+    )
+    experiment_copy_parser.add_argument("experiment_id", metavar="EXPERIMENT_ID")
+    experiment_copy_parser.add_argument(
+        "--name", required=True, help="name for the new experiment"
+    )
 
 
 if __name__ == "__main__":

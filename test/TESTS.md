@@ -79,8 +79,10 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_topology`](#model.test_topology)
   - [`test_vectorized`](#model.test_vectorized)
 - [`test/persistence/`](#group-persistence)
+  - [`test_groups`](#persistence.test_groups)
   - [`test_manifest`](#persistence.test_manifest)
   - [`test_report`](#persistence.test_report)
+  - [`test_run_metadata`](#persistence.test_run_metadata)
   - [`test_store`](#persistence.test_store)
   - [`test_validation`](#persistence.test_validation)
 - [`test/statistics/`](#group-statistics)
@@ -1123,6 +1125,50 @@ def test_results_directory_accepts_a_root_override(tmp_path: Path) -> None
 ```
 
 An explicit root bypasses `project_root` entirely.
+
+<a id="test.test_paths.test_fim_index_directory_defaults_to_results_directory_slash_dot_fim"></a>
+
+#### test\_fim\_index\_directory\_defaults\_to\_results\_directory\_slash\_dot\_fim
+
+```python
+def test_fim_index_directory_defaults_to_results_directory_slash_dot_fim(
+) -> None
+```
+
+`fim_index_directory` sits inside `results_directory()`, not beside it.
+
+<a id="test.test_paths.test_fim_index_directory_accepts_a_results_override"></a>
+
+#### test\_fim\_index\_directory\_accepts\_a\_results\_override
+
+```python
+def test_fim_index_directory_accepts_a_results_override(
+        tmp_path: Path) -> None
+```
+
+An explicit results override bypasses `results_directory` entirely.
+
+<a id="test.test_paths.test_studies_directory_sits_under_the_fim_index_directory"></a>
+
+#### test\_studies\_directory\_sits\_under\_the\_fim\_index\_directory
+
+```python
+def test_studies_directory_sits_under_the_fim_index_directory(
+        tmp_path: Path) -> None
+```
+
+`studies_directory` is `fim_index_directory() / "studies"`.
+
+<a id="test.test_paths.test_experiments_directory_sits_under_the_fim_index_directory"></a>
+
+#### test\_experiments\_directory\_sits\_under\_the\_fim\_index\_directory
+
+```python
+def test_experiments_directory_sits_under_the_fim_index_directory(
+        tmp_path: Path) -> None
+```
+
+`experiments_directory` is `fim_index_directory() / "experiments"`.
 
 <a id="test.test_paths.test_default_output_directory_uses_microsecond_timestamp"></a>
 
@@ -2349,6 +2395,97 @@ manifest's recorded SHA-256 digest
 check before `_command_stats` ever gets to read a row, superseding
 the weaker "no rows for this run_id" diagnosis a retag used to
 produce.
+
+<a id="cli.test_cli.test_run_name_and_description_write_a_metadata_sidecar"></a>
+
+#### test\_run\_name\_and\_description\_write\_a\_metadata\_sidecar
+
+```python
+def test_run_name_and_description_write_a_metadata_sidecar(
+        tmp_path: Path) -> None
+```
+
+`fim run --name/--description` attach optional metadata, once run finishes.
+
+<a id="cli.test_cli.test_run_without_name_or_description_writes_no_metadata_sidecar"></a>
+
+#### test\_run\_without\_name\_or\_description\_writes\_no\_metadata\_sidecar
+
+```python
+def test_run_without_name_or_description_writes_no_metadata_sidecar(
+        tmp_path: Path) -> None
+```
+
+A plain `fim run` with neither flag never writes `metadata.json` at all.
+
+<a id="cli.test_cli.test_run_study_adds_the_completed_run_to_an_existing_study"></a>
+
+#### test\_run\_study\_adds\_the\_completed\_run\_to\_an\_existing\_study
+
+```python
+def test_run_study_adds_the_completed_run_to_an_existing_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`fim run --study` adds the just-published run once it finishes.
+
+<a id="cli.test_cli.test_run_study_rejects_an_unknown_study_id"></a>
+
+#### test\_run\_study\_rejects\_an\_unknown\_study\_id
+
+```python
+def test_run_study_rejects_an_unknown_study_id(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`fim run --study` naming a nonexistent study is a plain, non-traceback error.
+
+<a id="cli.test_cli.test_study_create_add_run_list_delete"></a>
+
+#### test\_study\_create\_add\_run\_list\_delete
+
+```python
+def test_study_create_add_run_list_delete(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A full `fim study create`/`add-run`/`list`/`delete` life cycle via `cli.main`.
+
+<a id="cli.test_cli.test_study_add_run_resolves_a_bare_run_id"></a>
+
+#### test\_study\_add\_run\_resolves\_a\_bare\_run\_id
+
+```python
+def test_study_add_run_resolves_a_bare_run_id(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`fim study add-run` accepts a bare `run_id`, not only a directory.
+
+<a id="cli.test_cli.test_study_copy_creates_an_independent_study"></a>
+
+#### test\_study\_copy\_creates\_an\_independent\_study
+
+```python
+def test_study_copy_creates_an_independent_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`fim study copy` creates a second, independent study with the same runs.
+
+<a id="cli.test_cli.test_experiment_create_add_study_list_delete_cascades_to_runs"></a>
+
+#### test\_experiment\_create\_add\_study\_list\_delete\_cascades\_to\_runs
+
+```python
+def test_experiment_create_add_study_list_delete_cascades_to_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+`fim experiment delete` removes its studies and, transitively, their runs.
 
 <a id="cli.test_cli.test_format_optional_helper_is_stable"></a>
 
@@ -18688,6 +18825,366 @@ Every deme's own frequencies sum to 1 after a full fused generation.
 
 ## `test/persistence/`
 
+<a id="persistence.test_groups"></a>
+
+# persistence.test\_groups
+
+Unit tests for `fim.persistence.groups` (Study and Experiment manifests).
+
+<a id="persistence.test_groups.test_study_to_dict_from_dict_round_trips"></a>
+
+#### test\_study\_to\_dict\_from\_dict\_round\_trips
+
+```python
+def test_study_to_dict_from_dict_round_trips() -> None
+```
+
+A written-then-read Study manifest is field-for-field identical.
+
+<a id="persistence.test_groups.test_study_run_count_matches_run_directories"></a>
+
+#### test\_study\_run\_count\_matches\_run\_directories
+
+```python
+def test_study_run_count_matches_run_directories() -> None
+```
+
+`run_count` is derived, never independently settable.
+
+<a id="persistence.test_groups.test_study_from_dict_rejects_a_missing_required_field"></a>
+
+#### test\_study\_from\_dict\_rejects\_a\_missing\_required\_field
+
+```python
+def test_study_from_dict_rejects_a_missing_required_field() -> None
+```
+
+A payload missing `name` is a clear error.
+
+<a id="persistence.test_groups.test_study_name_must_not_be_blank"></a>
+
+#### test\_study\_name\_must\_not\_be\_blank
+
+```python
+def test_study_name_must_not_be_blank() -> None
+```
+
+A whitespace-only Study name is rejected.
+
+<a id="persistence.test_groups.test_study_sweep_spec_must_be_an_object_or_null"></a>
+
+#### test\_study\_sweep\_spec\_must\_be\_an\_object\_or\_null
+
+```python
+def test_study_sweep_spec_must_be_an_object_or_null() -> None
+```
+
+A non-object `sweep_spec` is rejected, not silently coerced.
+
+<a id="persistence.test_groups.test_experiment_to_dict_from_dict_round_trips"></a>
+
+#### test\_experiment\_to\_dict\_from\_dict\_round\_trips
+
+```python
+def test_experiment_to_dict_from_dict_round_trips() -> None
+```
+
+A written-then-read Experiment manifest is field-for-field identical.
+
+<a id="persistence.test_groups.test_experiment_study_count_matches_study_ids"></a>
+
+#### test\_experiment\_study\_count\_matches\_study\_ids
+
+```python
+def test_experiment_study_count_matches_study_ids() -> None
+```
+
+`study_count` is derived, never independently settable.
+
+<a id="persistence.test_groups.test_write_study_manifest_round_trips_through_disk"></a>
+
+#### test\_write\_study\_manifest\_round\_trips\_through\_disk
+
+```python
+def test_write_study_manifest_round_trips_through_disk(tmp_path: Path) -> None
+```
+
+`write_study_manifest`/`read_study_manifest` round-trip through a real file.
+
+<a id="persistence.test_groups.test_write_experiment_manifest_round_trips_through_disk"></a>
+
+#### test\_write\_experiment\_manifest\_round\_trips\_through\_disk
+
+```python
+def test_write_experiment_manifest_round_trips_through_disk(
+        tmp_path: Path) -> None
+```
+
+`write_experiment_manifest`/`read_experiment_manifest` round-trip.
+
+<a id="persistence.test_groups.test_create_study_writes_an_empty_study"></a>
+
+#### test\_create\_study\_writes\_an\_empty\_study
+
+```python
+def test_create_study_writes_an_empty_study(tmp_path: Path) -> None
+```
+
+A freshly created Study has no members yet.
+
+<a id="persistence.test_groups.test_create_study_rejects_a_blank_name"></a>
+
+#### test\_create\_study\_rejects\_a\_blank\_name
+
+```python
+def test_create_study_rejects_a_blank_name(tmp_path: Path) -> None
+```
+
+A whitespace-only name is rejected before anything is written.
+
+<a id="persistence.test_groups.test_get_study_raises_for_an_unknown_id"></a>
+
+#### test\_get\_study\_raises\_for\_an\_unknown\_id
+
+```python
+def test_get_study_raises_for_an_unknown_id(tmp_path: Path) -> None
+```
+
+Looking up a Study that was never created is a clear error.
+
+<a id="persistence.test_groups.test_list_studies_returns_every_study_oldest_first"></a>
+
+#### test\_list\_studies\_returns\_every\_study\_oldest\_first
+
+```python
+def test_list_studies_returns_every_study_oldest_first(tmp_path: Path) -> None
+```
+
+Listing order is creation order, for stable per-parent display ordinals.
+
+<a id="persistence.test_groups.test_list_studies_returns_empty_list_when_no_index_exists"></a>
+
+#### test\_list\_studies\_returns\_empty\_list\_when\_no\_index\_exists
+
+```python
+def test_list_studies_returns_empty_list_when_no_index_exists(
+        tmp_path: Path) -> None
+```
+
+A `results/` tree with no Study ever created lists as empty, not an error.
+
+<a id="persistence.test_groups.test_list_studies_skips_an_unreadable_manifest"></a>
+
+#### test\_list\_studies\_skips\_an\_unreadable\_manifest
+
+```python
+def test_list_studies_skips_an_unreadable_manifest(tmp_path: Path) -> None
+```
+
+One malformed Study file does not hide the rest of the listing.
+
+<a id="persistence.test_groups.test_add_run_to_study_appends_a_reference"></a>
+
+#### test\_add\_run\_to\_study\_appends\_a\_reference
+
+```python
+def test_add_run_to_study_appends_a_reference(tmp_path: Path) -> None
+```
+
+Adding a run records its directory name, without moving anything.
+
+<a id="persistence.test_groups.test_add_run_to_study_is_idempotent"></a>
+
+#### test\_add\_run\_to\_study\_is\_idempotent
+
+```python
+def test_add_run_to_study_is_idempotent(tmp_path: Path) -> None
+```
+
+Adding the same run twice is a no-op, not a duplicate entry.
+
+<a id="persistence.test_groups.test_add_run_to_study_stores_an_absolute_path_outside_results"></a>
+
+#### test\_add\_run\_to\_study\_stores\_an\_absolute\_path\_outside\_results
+
+```python
+def test_add_run_to_study_stores_an_absolute_path_outside_results(
+        tmp_path: Path) -> None
+```
+
+A run published outside `results/` is stored as an absolute path.
+
+<a id="persistence.test_groups.test_add_run_to_study_raises_for_an_unknown_study"></a>
+
+#### test\_add\_run\_to\_study\_raises\_for\_an\_unknown\_study
+
+```python
+def test_add_run_to_study_raises_for_an_unknown_study(tmp_path: Path) -> None
+```
+
+Adding a run to a nonexistent Study is a clear error.
+
+<a id="persistence.test_groups.test_delete_study_removes_its_member_runs_by_default"></a>
+
+#### test\_delete\_study\_removes\_its\_member\_runs\_by\_default
+
+```python
+def test_delete_study_removes_its_member_runs_by_default(
+        tmp_path: Path) -> None
+```
+
+Deleting a Study deletes every Run it references (confirmed product decision).
+
+<a id="persistence.test_groups.test_delete_study_can_keep_its_runs"></a>
+
+#### test\_delete\_study\_can\_keep\_its\_runs
+
+```python
+def test_delete_study_can_keep_its_runs(tmp_path: Path) -> None
+```
+
+`delete_runs=False` removes only the grouping, never the Run data.
+
+<a id="persistence.test_groups.test_delete_study_tolerates_an_already_missing_run_directory"></a>
+
+#### test\_delete\_study\_tolerates\_an\_already\_missing\_run\_directory
+
+```python
+def test_delete_study_tolerates_an_already_missing_run_directory(
+        tmp_path: Path) -> None
+```
+
+A run directory deleted out-of-band does not make Study deletion fail.
+
+<a id="persistence.test_groups.test_copy_study_creates_an_independent_study_with_the_same_runs"></a>
+
+#### test\_copy\_study\_creates\_an\_independent\_study\_with\_the\_same\_runs
+
+```python
+def test_copy_study_creates_an_independent_study_with_the_same_runs(
+        tmp_path: Path) -> None
+```
+
+Copying a Study shares its run references without duplicating any data.
+
+<a id="persistence.test_groups.test_create_experiment_writes_an_empty_experiment"></a>
+
+#### test\_create\_experiment\_writes\_an\_empty\_experiment
+
+```python
+def test_create_experiment_writes_an_empty_experiment(tmp_path: Path) -> None
+```
+
+A freshly created Experiment has no member Studies yet.
+
+<a id="persistence.test_groups.test_add_study_to_experiment_appends_and_is_idempotent"></a>
+
+#### test\_add\_study\_to\_experiment\_appends\_and\_is\_idempotent
+
+```python
+def test_add_study_to_experiment_appends_and_is_idempotent(
+        tmp_path: Path) -> None
+```
+
+Adding a Study to an Experiment behaves like `add_run_to_study` one level up.
+
+<a id="persistence.test_groups.test_add_study_to_experiment_raises_for_an_unknown_study"></a>
+
+#### test\_add\_study\_to\_experiment\_raises\_for\_an\_unknown\_study
+
+```python
+def test_add_study_to_experiment_raises_for_an_unknown_study(
+        tmp_path: Path) -> None
+```
+
+An Experiment cannot reference a Study that does not exist.
+
+<a id="persistence.test_groups.test_list_experiments_returns_every_experiment_oldest_first"></a>
+
+#### test\_list\_experiments\_returns\_every\_experiment\_oldest\_first
+
+```python
+def test_list_experiments_returns_every_experiment_oldest_first(
+        tmp_path: Path) -> None
+```
+
+Listing order matches `list_studies`'s own oldest-first convention.
+
+<a id="persistence.test_groups.test_delete_experiment_cascades_to_studies_and_their_runs"></a>
+
+#### test\_delete\_experiment\_cascades\_to\_studies\_and\_their\_runs
+
+```python
+def test_delete_experiment_cascades_to_studies_and_their_runs(
+        tmp_path: Path) -> None
+```
+
+Deleting an Experiment deletes its Studies, and transitively their Runs.
+
+<a id="persistence.test_groups.test_delete_experiment_can_keep_its_studies"></a>
+
+#### test\_delete\_experiment\_can\_keep\_its\_studies
+
+```python
+def test_delete_experiment_can_keep_its_studies(tmp_path: Path) -> None
+```
+
+`delete_studies=False` removes only the Experiment, never its Studies.
+
+<a id="persistence.test_groups.test_copy_experiment_creates_an_independent_experiment_with_the_same_studies"></a>
+
+#### test\_copy\_experiment\_creates\_an\_independent\_experiment\_with\_the\_same\_studies
+
+```python
+def test_copy_experiment_creates_an_independent_experiment_with_the_same_studies(
+        tmp_path: Path) -> None
+```
+
+Copying an Experiment shares its study references without duplicating them.
+
+<a id="persistence.test_groups.test_resolve_run_directory_accepts_an_existing_directory"></a>
+
+#### test\_resolve\_run\_directory\_accepts\_an\_existing\_directory
+
+```python
+def test_resolve_run_directory_accepts_an_existing_directory(
+        tmp_path: Path) -> None
+```
+
+A real run directory (relative to `results`) resolves to itself.
+
+<a id="persistence.test_groups.test_resolve_run_directory_accepts_an_absolute_directory_path"></a>
+
+#### test\_resolve\_run\_directory\_accepts\_an\_absolute\_directory\_path
+
+```python
+def test_resolve_run_directory_accepts_an_absolute_directory_path(
+        tmp_path: Path) -> None
+```
+
+An absolute directory path resolves directly, bypassing `results` entirely.
+
+<a id="persistence.test_groups.test_resolve_run_directory_accepts_a_manifest_path"></a>
+
+#### test\_resolve\_run\_directory\_accepts\_a\_manifest\_path
+
+```python
+def test_resolve_run_directory_accepts_a_manifest_path(tmp_path: Path) -> None
+```
+
+A path directly to `manifest.json` resolves to its parent directory.
+
+<a id="persistence.test_groups.test_resolve_run_directory_raises_when_nothing_matches"></a>
+
+#### test\_resolve\_run\_directory\_raises\_when\_nothing\_matches
+
+```python
+def test_resolve_run_directory_raises_when_nothing_matches(
+        tmp_path: Path) -> None
+```
+
+A reference matching no directory, manifest path, or run_id is a clear error.
+
 <a id="persistence.test_manifest"></a>
 
 # persistence.test\_manifest
@@ -18783,6 +19280,124 @@ def test_write_report_creates_parent_directories(tmp_path: Path) -> None
 ```
 
 A missing parent directory is created, matching every prior writer.
+
+<a id="persistence.test_run_metadata"></a>
+
+# persistence.test\_run\_metadata
+
+Unit tests for `fim.persistence.run_metadata`.
+
+<a id="persistence.test_run_metadata.test_to_dict_from_dict_round_trips"></a>
+
+#### test\_to\_dict\_from\_dict\_round\_trips
+
+```python
+def test_to_dict_from_dict_round_trips() -> None
+```
+
+A written-then-read metadata object is field-for-field identical.
+
+<a id="persistence.test_run_metadata.test_from_dict_accepts_name_and_description_independently_unset"></a>
+
+#### test\_from\_dict\_accepts\_name\_and\_description\_independently\_unset
+
+```python
+def test_from_dict_accepts_name_and_description_independently_unset() -> None
+```
+
+A user may set only one of `name`/`description`, or neither.
+
+<a id="persistence.test_run_metadata.test_from_dict_rejects_a_missing_required_field"></a>
+
+#### test\_from\_dict\_rejects\_a\_missing\_required\_field
+
+```python
+def test_from_dict_rejects_a_missing_required_field() -> None
+```
+
+A payload missing `created_at` is a clear error, not a crash.
+
+<a id="persistence.test_run_metadata.test_schema_version_below_one_is_rejected"></a>
+
+#### test\_schema\_version\_below\_one\_is\_rejected
+
+```python
+def test_schema_version_below_one_is_rejected() -> None
+```
+
+`schema_version` must be at least 1.
+
+<a id="persistence.test_run_metadata.test_blank_name_is_rejected"></a>
+
+#### test\_blank\_name\_is\_rejected
+
+```python
+def test_blank_name_is_rejected() -> None
+```
+
+A whitespace-only name is treated the same as a missing one, not stored blank.
+
+<a id="persistence.test_run_metadata.test_blank_description_is_rejected"></a>
+
+#### test\_blank\_description\_is\_rejected
+
+```python
+def test_blank_description_is_rejected() -> None
+```
+
+A whitespace-only description is rejected the same way a blank name is.
+
+<a id="persistence.test_run_metadata.test_write_then_read_round_trips_through_disk"></a>
+
+#### test\_write\_then\_read\_round\_trips\_through\_disk
+
+```python
+def test_write_then_read_round_trips_through_disk(tmp_path: Path) -> None
+```
+
+`write_run_metadata`/`read_run_metadata` round-trip through a real file.
+
+<a id="persistence.test_run_metadata.test_read_run_metadata_rejects_a_non_object_root"></a>
+
+#### test\_read\_run\_metadata\_rejects\_a\_non\_object\_root
+
+```python
+def test_read_run_metadata_rejects_a_non_object_root(tmp_path: Path) -> None
+```
+
+A metadata file whose JSON root is not an object is a clear error.
+
+<a id="persistence.test_run_metadata.test_replace_run_metadata_creates_a_fresh_file"></a>
+
+#### test\_replace\_run\_metadata\_creates\_a\_fresh\_file
+
+```python
+def test_replace_run_metadata_creates_a_fresh_file(tmp_path: Path) -> None
+```
+
+Creating metadata for a run with none yet sets `created_at == updated_at`.
+
+<a id="persistence.test_run_metadata.test_replace_run_metadata_preserves_created_at_on_a_second_call"></a>
+
+#### test\_replace\_run\_metadata\_preserves\_created\_at\_on\_a\_second\_call
+
+```python
+def test_replace_run_metadata_preserves_created_at_on_a_second_call(
+        tmp_path: Path) -> None
+```
+
+Renaming an already-named run keeps its original `created_at`.
+
+<a id="persistence.test_run_metadata.test_replace_run_metadata_ignores_an_unreadable_prior_file"></a>
+
+#### test\_replace\_run\_metadata\_ignores\_an\_unreadable\_prior\_file
+
+```python
+def test_replace_run_metadata_ignores_an_unreadable_prior_file(
+        tmp_path: Path) -> None
+```
+
+A corrupt existing `metadata.json` never blocks writing a fresh one.
 
 <a id="persistence.test_store"></a>
 
