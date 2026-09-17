@@ -49,6 +49,7 @@ from fim.gui.config_form import (
     payload_to_yaml_text,
     starter_form_values,
 )
+from fim.gui.literature_visuals import pooled_literature_visual_payload
 from fim.gui.preferences import GuiPreferences, save_preferences
 from fim.gui.recent_runs import RecentRun
 from fim.gui.store import LiveProgressStore
@@ -1839,6 +1840,39 @@ def test_batch_done_payload_pools_every_replicate_final_state(
         [result.final_state for result in batch_results], batch_params.d
     )
     assert payload["panels"] == expected
+
+
+def test_batch_done_payload_pools_literature_visuals(
+    tmp_path: Path,
+    batch_params: SimulationParams,
+    batch_results: tuple[RunResult, ...],
+) -> None:
+    """`literatureVisuals` is pooled over every replicate's own final state.
+
+    A real, reported gap: a completed batch's own run view used to
+    carry no `literatureVisuals` key at all, so the Allele composition/
+    Allele-frequency spectrum supplemental panels stayed hidden for any
+    batch, scalar and batch runs otherwise being the same underlying
+    abstraction regardless of how many replicates make up the set —
+    `webui/screens/run-view-initial.js`'s own `renderSupplementalPanels`
+    was already purely data-driven (`!visuals`/`!visuals.
+    alleleComposition`), never `isBatch`-gated; the gap was entirely
+    that this payload never sent the data in the first place, the exact
+    same pooling `panels`, just above, already applies to the scatter
+    panel.
+    """
+    run_id = deterministic_run_id(batch_params)
+
+    payload = app_module._batch_done_payload(
+        batch_params, run_id, tmp_path, batch_results
+    )
+
+    expected = pooled_literature_visual_payload(
+        [result.final_state for result in batch_results], batch_params
+    )
+    assert payload["literatureVisuals"] == expected
+    assert payload["literatureVisuals"]["alleleComposition"] is not None
+    assert payload["literatureVisuals"]["frequencySpectrum"] is not None
 
 
 def test_batch_done_payload_honors_an_explicit_digits_count(

@@ -7531,6 +7531,30 @@ def test_batch_done_payload_pools_every_replicate_final_state(
 
 `panels` is the pooled scatter over every replicate's own final state.
 
+<a id="gui.test_app_api.test_batch_done_payload_pools_literature_visuals"></a>
+
+#### test\_batch\_done\_payload\_pools\_literature\_visuals
+
+```python
+def test_batch_done_payload_pools_literature_visuals(
+        tmp_path: Path, batch_params: SimulationParams,
+        batch_results: tuple[RunResult, ...]) -> None
+```
+
+`literatureVisuals` is pooled over every replicate's own final state.
+
+A real, reported gap: a completed batch's own run view used to
+carry no `literatureVisuals` key at all, so the Allele composition/
+Allele-frequency spectrum supplemental panels stayed hidden for any
+batch, scalar and batch runs otherwise being the same underlying
+abstraction regardless of how many replicates make up the set —
+`webui/screens/run-view-initial.js`'s own `renderSupplementalPanels`
+was already purely data-driven (`!visuals`/`!visuals.
+alleleComposition`), never `isBatch`-gated; the gap was entirely
+that this payload never sent the data in the first place, the exact
+same pooling `panels`, just above, already applies to the scatter
+panel.
+
 <a id="gui.test_app_api.test_batch_done_payload_honors_an_explicit_digits_count"></a>
 
 #### test\_batch\_done\_payload\_honors\_an\_explicit\_digits\_count
@@ -8235,6 +8259,30 @@ doc §7.7, `Api._effective_allele_interval_summary`), gets a
 ``batch`-results-summary-body` always has exactly twelve `<tr>`
 children regardless of which, if any, statistics `replicate_summary`
 actually defined for this particular run.
+
+<a id="gui.test_batch_results_screen.test_a_completed_batchs_own_supplemental_panels_render"></a>
+
+#### test\_a\_completed\_batchs\_own\_supplemental\_panels\_render
+
+```python
+def test_a_completed_batchs_own_supplemental_panels_render(
+        fast_batch_run_settings: Path) -> None
+```
+
+A completed batch shows the allele-composition/frequency-spectrum panels too.
+
+A real, reported gap: `fim.gui.app._batch_done_payload` never sent
+a `literatureVisuals` key at all, so these two panels stayed
+unconditionally hidden for any batch, even once it finished --
+`webui/screens/run-view-initial.js`'s own `renderSupplementalPanels`
+was already purely data-driven (`!visuals`/`!visuals.
+alleleComposition`), never gated on whether the run was a batch, so
+sending the data (`fim.gui.literature_visuals.pooled_literature_
+visual_payload`, pooled over every published replicate's own final
+state, the same pooling the scatter panel already used) was the
+entire fix -- this proves it end to end, through the real page,
+not only at the payload level (`test/gui/test_app_api.py`'s own
+`test_batch_done_payload_pools_literature_visuals`).
 
 <a id="gui.test_batch_results_screen.test_a_completed_batchs_own_effective_allele_rows_render"></a>
 
@@ -11164,6 +11212,74 @@ def test_literature_visual_payload_groups_identity_by_stepping_stone_distance(
 
 A topology-expanded migration matrix still yields IBD distance classes.
 
+<a id="gui.test_literature_visuals.test_pooled_literature_visual_payload_matches_the_single_state_wrapper"></a>
+
+#### test\_pooled\_literature\_visual\_payload\_matches\_the\_single\_state\_wrapper
+
+```python
+def test_pooled_literature_visual_payload_matches_the_single_state_wrapper(
+) -> None
+```
+
+Pooling exactly one state reproduces `literature_visual_payload`'s own output.
+
+A real, reported gap: a completed batch's own run view used to
+carry no supplemental-visuals payload at all (`fim.gui.app.
+_batch_done_payload` never computed one), unlike a completed scalar
+run — this and the two tests below prove the pooled entry point is
+the identical underlying computation, not a second, independently
+maintained implementation that could drift from the single-state
+one over time.
+
+<a id="gui.test_literature_visuals.test_pooled_allele_composition_payload_averages_frequencies_across_states"></a>
+
+#### test\_pooled\_allele\_composition\_payload\_averages\_frequencies\_across\_states
+
+```python
+def test_pooled_allele_composition_payload_averages_frequencies_across_states(
+) -> None
+```
+
+Pooling two states averages their own per-deme frequencies, not just the first.
+
+`state_a`'s only deme is 100% allele 0; `state_b`'s own single deme
+(same shape) is 100% allele 1 — a pooled call must show each at 50%,
+proving the frequencies genuinely combine rather than the pooled
+entry point silently reading only its first argument.
+
+<a id="gui.test_literature_visuals.test_pooled_frequency_spectrum_payload_concatenates_every_states_frequencies"></a>
+
+#### test\_pooled\_frequency\_spectrum\_payload\_concatenates\_every\_states\_frequencies
+
+```python
+def test_pooled_frequency_spectrum_payload_concatenates_every_states_frequencies(
+) -> (None)
+```
+
+Pooling two states' own spectra concatenates their frequency samples.
+
+Each of `_gradient_state`'s own four demes contributes two nonzero
+frequencies (one locus, two alleles), so one state contributes 8
+samples total (matching `test_literature_visual_payload_carries_a_
+wright_beta_overlay`'s own count above) and pooling two identical
+copies of it must contribute 16 — proving the histogram counts
+accumulate across states rather than only reflecting the last one.
+
+<a id="gui.test_literature_visuals.test_pooled_isolation_by_distance_payload_counts_pairs_across_states"></a>
+
+#### test\_pooled\_isolation\_by\_distance\_payload\_counts\_pairs\_across\_states
+
+```python
+def test_pooled_isolation_by_distance_payload_counts_pairs_across_states(
+) -> None
+```
+
+`pairCount` totals (deme pair, state) samples, not just deme pairs.
+
+Pooling two identical copies of `_gradient_state` must double every
+distance class's own `pairCount` relative to pooling just one copy,
+since each deme pair now contributes one identity sample per state.
+
 <a id="gui.test_loci_grid_screen"></a>
 
 # gui.test\_loci\_grid\_screen
@@ -13613,6 +13729,34 @@ A selected pair can legitimately have the same rendered coordinates
 as the default pair at a particular stochastic generation. This test
 therefore proves that the requested pair reaches the bridge state;
 visual rendering is exercised separately with fixed panel data.
+
+<a id="gui.test_running_screen.test_entering_running_state_clears_a_previous_runs_stale_progress_label"></a>
+
+#### test\_entering\_running\_state\_clears\_a\_previous\_runs\_stale\_progress\_label
+
+```python
+def test_entering_running_state_clears_a_previous_runs_stale_progress_label(
+) -> None
+```
+
+`enterRunningState` clears the progress label immediately, not on the first tick.
+
+A real, reported symptom: starting a smaller batch (n_replicates:
+100, say) right after a larger one (200) briefly showed "200 / 100
+replicates reporting" — `batchProgressHighWaterMark`'s own reset
+(`enterRunningState`'s own first few lines) zeroed the *counter*,
+but nothing cleared the *label text* itself, so it kept showing
+whatever the previous run's own last progress push had written
+until this run's own first tick eventually overwrote it — the same
+"never leave stale content on screen until the first tick
+repopulates it" rule the trajectory panel, just above that same
+reset in the source, already followed.
+
+Calls `window.fim.enterRunningState` directly, synchronously, with
+no real run involved at all: the fix is one line inside a plain
+function, so the only thing worth proving is that calling it
+clears pre-existing stale text, with no timing window for a real
+background thread's own progress ticks to race.
 
 <a id="gui.test_settings_modal"></a>
 

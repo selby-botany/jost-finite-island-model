@@ -65,11 +65,42 @@ def literature_visual_payload(
         all the missing ones go?"); `allele_composition_payload` now
         remaps the shown alleles to a dense 1-based display order
         instead.
+
+        A thin, single-state wrapper over `pooled_literature_visual_
+        payload` — every real caller with only one state to show
+        (a live or reopened scalar run, one animation frame) goes
+        through here; a completed batch's own several final states go
+        through the pooled entry point directly instead. The same
+        underlying computation either way, exactly like `fim.viz.
+        scatter.scatter_panels`/`pooled_scatter_panels`'s own identical
+        split: "how many states" is never a reason for one to be able
+        to show something the other cannot.
+    """
+    return pooled_literature_visual_payload((state,), params)
+
+
+def pooled_literature_visual_payload(
+    states: Sequence[ModelState], params: SimulationParams
+) -> LiteratureVisualPayload:
+    """Return the run view's three supplemental visualization payloads, pooled.
+
+    Args:
+        states: One or more completed or reanalyzed population states
+            sharing the same deme/locus shape — a single scalar run's
+            own final state, or every replicate's own final state from
+            a completed batch, pooled exactly the way `fim.viz.scatter.
+            pooled_scatter_panels` already pools the same replicates'
+            own frequency points for the scatter panel.
+        params: The run's own validated simulation parameters, shared
+            across every state in `states`.
+
+    Returns:
+        The identical shape `literature_visual_payload` returns.
     """
     return {
-        "alleleComposition": allele_composition_payload(state),
-        "frequencySpectrum": frequency_spectrum_payload(state, params),
-        "isolationByDistance": isolation_by_distance_payload(state, params),
+        "alleleComposition": pooled_allele_composition_payload(states),
+        "frequencySpectrum": pooled_frequency_spectrum_payload(states, params),
+        "isolationByDistance": pooled_isolation_by_distance_payload(states, params),
     }
 
 
@@ -93,8 +124,33 @@ def allele_composition_payload(
         showing them raw in a legend of only the top `max_alleles` left
         a reader with no way to tell whether a low id was simply not
         common enough to make the cut or never existed at all.
+
+        A thin, single-state wrapper over `pooled_allele_composition_
+        payload` — see that function's own docstring.
     """
-    allele_totals = _aggregate_frequencies_by_allele(state)
+    return pooled_allele_composition_payload((state,), max_alleles)
+
+
+def pooled_allele_composition_payload(
+    states: Sequence[ModelState], max_alleles: int = _MAX_COMPOSITION_ALLELES
+) -> dict[str, Any]:
+    """Return a per-deme stacked allele-composition barplot, pooled across states.
+
+    Args:
+        states: One or more population states sharing the same deme
+            count — a single scalar run's own final state, or every
+            replicate's own final state from a completed batch.
+        max_alleles: Maximum globally common alleles shown explicitly.
+
+    Returns:
+        The identical shape `allele_composition_payload` returns —
+        frequencies averaged over loci *and* over every state in
+        `states`, so a single-state call and a many-state call render
+        through the same one code path, differing only in `note` (which
+        names the replicate count once there is more than one state to
+        pool).
+    """
+    allele_totals = _aggregate_frequencies_by_allele(states)
     top_alleles = tuple(
         allele_id
         for allele_id, _ in sorted(
@@ -121,8 +177,8 @@ def allele_composition_payload(
     )
 
     demes = []
-    for deme_index in range(state.deme_count):
-        per_deme = _aggregate_deme_frequencies(state, deme_index)
+    for deme_index in range(states[0].deme_count):
+        per_deme = _aggregate_deme_frequencies(states, deme_index)
         shown_total = 0.0
         segments = []
         for key, allele_id in zip(allele_keys, top_alleles, strict=True):
@@ -134,11 +190,19 @@ def allele_composition_payload(
             segments.append({"key": "other", "value": other})
         demes.append({"deme": deme_index + 1, "segments": segments})
 
+    note = (
+        "Allele frequencies are averaged across loci within each deme."
+        if len(states) == 1
+        else (
+            "Allele frequencies are averaged across loci and "
+            f"{len(states)} replicates within each deme."
+        )
+    )
     return {
         "title": "Allele composition by deme",
         "alleles": legend,
         "demes": demes,
-        "note": "Allele frequencies are averaged across loci within each deme.",
+        "note": note,
     }
 
 
@@ -156,16 +220,47 @@ def frequency_spectrum_payload(
     Returns:
         A JSON-ready mapping with bin counts, overlay points, and a note
         naming the overlay assumptions.
+
+        A thin, single-state wrapper over `pooled_frequency_spectrum_
+        payload` — see that function's own docstring.
+    """
+    return pooled_frequency_spectrum_payload((state,), params, bin_count)
+
+
+def pooled_frequency_spectrum_payload(
+    states: Sequence[ModelState],
+    params: SimulationParams,
+    bin_count: int = _HISTOGRAM_BIN_COUNT,
+) -> dict[str, Any]:
+    """Return an empirical frequency spectrum, pooled across states.
+
+    Args:
+        states: One or more population states sharing the same deme/
+            locus shape — a single scalar run's own final state, or
+            every replicate's own final state from a completed batch.
+        params: Parameters used to decide whether a scalar Wright beta
+            approximation is available.
+        bin_count: Number of equal-width bins over ``[0, 1]``.
+
+    Returns:
+        The identical shape `frequency_spectrum_payload` returns — the
+        histogram pools every (deme, locus, allele) frequency across
+        every state in `states`, the same row-wise concatenation `fim.
+        viz.scatter.pooled_frequency_points` already uses for the
+        scatter panel; the Wright beta overlay (when available) is
+        matched against that same pooled allele-frequency distribution,
+        not just one arbitrarily-chosen state's own.
     """
     frequencies = [
         frequency
+        for state in states
         for deme in state.frequencies
         for locus in deme
         for frequency in locus.values()
         if frequency > 0.0
     ]
     bins = _histogram(frequencies, bin_count)
-    overlay = _wright_beta_overlay(state, params, bin_count, len(frequencies))
+    overlay = _wright_beta_overlay(states, params, bin_count, len(frequencies))
     return {
         "title": "Allele-frequency spectrum",
         "bins": bins,
@@ -194,16 +289,44 @@ def isolation_by_distance_payload(
         ``None`` when every deme pair has the same graph distance. Otherwise
         a JSON-ready object with mean identity by distance and a log-linear
         decay fit when at least two positive distance classes are available.
+
+        A thin, single-state wrapper over `pooled_isolation_by_distance_
+        payload` — see that function's own docstring.
     """
-    distances = _migration_graph_distances(params.m, state.deme_count)
+    return pooled_isolation_by_distance_payload((state,), params)
+
+
+def pooled_isolation_by_distance_payload(
+    states: Sequence[ModelState], params: SimulationParams
+) -> dict[str, Any] | None:
+    """Return pairwise identity decay by migration-graph distance, pooled.
+
+    Args:
+        states: One or more population states sharing the same deme
+            count — a single scalar run's own final state, or every
+            replicate's own final state from a completed batch.
+        params: Parameters carrying either scalar or matrix migration,
+            shared across every state in `states`.
+
+    Returns:
+        The identical shape `isolation_by_distance_payload` returns —
+        `pairCount` is the total number of (deme pair, replicate)
+        identity samples averaged into that distance class's own
+        `meanIdentity`, not only the number of deme pairs: pooling adds
+        more samples to the same distance class the same way a second
+        locus already would within one state, no separate accounting
+        needed for "how many states" versus "how many deme pairs."
+    """
+    deme_count = states[0].deme_count
+    distances = _migration_graph_distances(params.m, deme_count)
     grouped: dict[int, list[float]] = {}
-    for left in range(state.deme_count - 1):
-        for right in range(left + 1, state.deme_count):
+    for left in range(deme_count - 1):
+        for right in range(left + 1, deme_count):
             distance = distances[left][right]
             if distance is None or distance <= 0:
                 continue
-            grouped.setdefault(distance, []).append(
-                _pairwise_identity(state, left, right)
+            grouped.setdefault(distance, []).extend(
+                _pairwise_identity(state, left, right) for state in states
             )
     if len(grouped) < _MINIMUM_DECAY_CLASSES:
         return None
@@ -226,25 +349,30 @@ def isolation_by_distance_payload(
     }
 
 
-def _aggregate_deme_frequencies(state: ModelState, deme_index: int) -> dict[int, float]:
-    """Return mean allele frequencies across loci for one deme."""
+def _aggregate_deme_frequencies(
+    states: Sequence[ModelState], deme_index: int
+) -> dict[int, float]:
+    """Return mean allele frequencies across loci and states for one deme."""
     totals: dict[int, float] = {}
-    for locus_index in range(state.locus_count):
-        frequency_map = state.frequency_map(deme_index, locus_index)
-        for allele_id, frequency in frequency_map.items():
-            totals[int(allele_id)] = totals.get(int(allele_id), 0.0) + frequency
-    return {allele_id: total / state.locus_count for allele_id, total in totals.items()}
+    sample_count = 0
+    for state in states:
+        for locus_index in range(state.locus_count):
+            frequency_map = state.frequency_map(deme_index, locus_index)
+            for allele_id, frequency in frequency_map.items():
+                totals[int(allele_id)] = totals.get(int(allele_id), 0.0) + frequency
+            sample_count += 1
+    return {allele_id: total / sample_count for allele_id, total in totals.items()}
 
 
-def _aggregate_frequencies_by_allele(state: ModelState) -> dict[int, float]:
-    """Return globally averaged allele frequencies across demes and loci."""
+def _aggregate_frequencies_by_allele(states: Sequence[ModelState]) -> dict[int, float]:
+    """Return globally averaged allele frequencies across demes, loci, and states."""
     totals: dict[int, float] = {}
-    divisor = state.deme_count
-    for deme_index in range(state.deme_count):
+    deme_count = states[0].deme_count
+    for deme_index in range(deme_count):
         for allele_id, frequency in _aggregate_deme_frequencies(
-            state, deme_index
+            states, deme_index
         ).items():
-            totals[allele_id] = totals.get(allele_id, 0.0) + frequency / divisor
+            totals[allele_id] = totals.get(allele_id, 0.0) + frequency / deme_count
     return totals
 
 
@@ -358,7 +486,10 @@ def _shortest_paths(adjacency: Sequence[Sequence[int]], start: int) -> list[int 
 
 
 def _wright_beta_overlay(
-    state: ModelState, params: SimulationParams, bin_count: int, sample_count: int
+    states: Sequence[ModelState],
+    params: SimulationParams,
+    bin_count: int,
+    sample_count: int,
 ) -> list[dict[str, float]] | None:
     """Return a scalar Wright beta overlay, or ``None`` outside its scope."""
     if (
@@ -372,7 +503,7 @@ def _wright_beta_overlay(
     if theta <= 0.0 or theta >= 1.0 or not isfinite(theta):
         return None
     allele_means = sorted(
-        _aggregate_frequencies_by_allele(state).values(), reverse=True
+        _aggregate_frequencies_by_allele(states).values(), reverse=True
     )[:_MAX_BETA_COMPONENTS]
     eligible = [mean for mean in allele_means if 0.0 < mean < 1.0]
     if not eligible:

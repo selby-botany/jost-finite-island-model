@@ -303,6 +303,77 @@ def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -
     assert settled["trajectoryFrameHidden"] is False
 
 
+def test_a_completed_batchs_own_supplemental_panels_render(
+    fast_batch_run_settings: Path,
+) -> None:
+    """A completed batch shows the allele-composition/frequency-spectrum panels too.
+
+    A real, reported gap: `fim.gui.app._batch_done_payload` never sent
+    a `literatureVisuals` key at all, so these two panels stayed
+    unconditionally hidden for any batch, even once it finished --
+    `webui/screens/run-view-initial.js`'s own `renderSupplementalPanels`
+    was already purely data-driven (`!visuals`/`!visuals.
+    alleleComposition`), never gated on whether the run was a batch, so
+    sending the data (`fim.gui.literature_visuals.pooled_literature_
+    visual_payload`, pooled over every published replicate's own final
+    state, the same pooling the scatter panel already used) was the
+    entire fix -- this proves it end to end, through the real page,
+    not only at the payload level (`test/gui/test_app_api.py`'s own
+    `test_batch_done_payload_pools_literature_visuals`).
+    """
+    done_event = threading.Event()
+    messages: list[RunMessage | BatchMessage] = []
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        messages.append(message)
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            window.evaluate_js(
+                _SET_TINY_BATCH_FIELDS
+                + "document.getElementById('run-button').click();"
+            )
+            settled = None
+            if done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
+                settled = window.evaluate_js(
+                    "({"
+                    "runViewState: window.fim.getRunViewState(), "
+                    "compositionHidden: "
+                    "document.getElementById('allele-composition-card').hidden, "
+                    "spectrumHidden: "
+                    "document.getElementById('frequency-spectrum-card').hidden, "
+                    "compositionTitle: "
+                    "document.getElementById('allele-composition-title')"
+                    ".textContent, "
+                    "spectrumTitle: "
+                    "document.getElementById('frequency-spectrum-title')"
+                    ".textContent"
+                    "})"
+                )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled is not None, (
+        f"done_event was never set within {_EVENT_WAIT_TIMEOUT_SECONDS}s "
+        f"(messages received: {messages!r})"
+    )
+    assert settled["runViewState"] == "completed"
+    assert settled["compositionHidden"] is False
+    assert settled["spectrumHidden"] is False
+    assert settled["compositionTitle"] == "Allele composition by deme"
+    assert settled["spectrumTitle"] == "Allele-frequency spectrum"
+
+
 def test_a_completed_batchs_own_effective_allele_rows_render(
     fast_batch_run_settings: Path,
 ) -> None:

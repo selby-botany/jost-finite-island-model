@@ -79,7 +79,10 @@ from fim.gui.config_form import (
     starter_form_values,
     tab_for_error,
 )
-from fim.gui.literature_visuals import literature_visual_payload
+from fim.gui.literature_visuals import (
+    literature_visual_payload,
+    pooled_literature_visual_payload,
+)
 from fim.gui.preferences import (
     GuiPreferences,
     load_preferences,
@@ -3791,6 +3794,15 @@ def _batch_done_payload(
     Empty (`{}`), the same as `summary` immediately above, if
     `pooled_convergence_histories` itself has too few results to define
     even one generation's own interval from.
+
+    `literatureVisuals` is `pooled_literature_visual_payload`'s own
+    result, over every published replicate's own `final_state` — a
+    real, reported gap, found live: a completed batch's own run view
+    simply never sent this key at all, so `run-view-running.js`'s own
+    `alleleCompositionCard`/`frequencySpectrumCard` stayed unconditionally
+    hidden for any batch, scalar and batch runs otherwise being "the
+    same abstraction... no matter how large the set is." The identical
+    pooling `panels`, just above, already applies to the scatter panel.
     """
     replicates = [
         {
@@ -3856,18 +3868,18 @@ def _batch_done_payload(
         ]
         for name, points in raw_pooled_histories.items()
     }
+    final_states = [result.final_state for result in results]
     return {
         "runId": run_id,
         "outputDirectory": str(output_directory),
-        "panels": pooled_scatter_panels(
-            [result.final_state for result in results], params.d
-        ),
+        "panels": pooled_scatter_panels(final_states, params.d),
         "replicates": replicates,
         "summary": summary,
         "effectiveAlleles": effective_alleles,
         "demeCount": params.d,
         "p0Statistics": p0_statistics,
         "pooledConvergenceHistories": pooled_convergence_histories_payload,
+        "literatureVisuals": pooled_literature_visual_payload(final_states, params),
     }
 
 

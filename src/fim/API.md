@@ -161,9 +161,13 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
 * [fim.gui.literature\_visuals](#fim.gui.literature_visuals)
   * [LiteratureVisualPayload](#fim.gui.literature_visuals.LiteratureVisualPayload)
   * [literature\_visual\_payload](#fim.gui.literature_visuals.literature_visual_payload)
+  * [pooled\_literature\_visual\_payload](#fim.gui.literature_visuals.pooled_literature_visual_payload)
   * [allele\_composition\_payload](#fim.gui.literature_visuals.allele_composition_payload)
+  * [pooled\_allele\_composition\_payload](#fim.gui.literature_visuals.pooled_allele_composition_payload)
   * [frequency\_spectrum\_payload](#fim.gui.literature_visuals.frequency_spectrum_payload)
+  * [pooled\_frequency\_spectrum\_payload](#fim.gui.literature_visuals.pooled_frequency_spectrum_payload)
   * [isolation\_by\_distance\_payload](#fim.gui.literature_visuals.isolation_by_distance_payload)
+  * [pooled\_isolation\_by\_distance\_payload](#fim.gui.literature_visuals.pooled_isolation_by_distance_payload)
 * [fim.gui.preferences](#fim.gui.preferences)
   * [GuiPreferences](#fim.gui.preferences.GuiPreferences)
     * [to\_dict](#fim.gui.preferences.GuiPreferences.to_dict)
@@ -5742,6 +5746,44 @@ Return the run view's three supplemental visualization payloads for one state.
   remaps the shown alleles to a dense 1-based display order
   instead.
 
+  A thin, single-state wrapper over `pooled_literature_visual_
+  payload` — every real caller with only one state to show
+  (a live or reopened scalar run, one animation frame) goes
+  through here; a completed batch's own several final states go
+  through the pooled entry point directly instead. The same
+  underlying computation either way, exactly like `fim.viz.
+  scatter.scatter_panels`/`pooled_scatter_panels`'s own identical
+- `split` - "how many states" is never a reason for one to be able
+  to show something the other cannot.
+
+<a id="fim.gui.literature_visuals.pooled_literature_visual_payload"></a>
+
+#### pooled\_literature\_visual\_payload
+
+```python
+def pooled_literature_visual_payload(
+        states: Sequence[ModelState],
+        params: SimulationParams) -> LiteratureVisualPayload
+```
+
+Return the run view's three supplemental visualization payloads, pooled.
+
+**Arguments**:
+
+- `states` - One or more completed or reanalyzed population states
+  sharing the same deme/locus shape — a single scalar run's
+  own final state, or every replicate's own final state from
+  a completed batch, pooled exactly the way `fim.viz.scatter.
+  pooled_scatter_panels` already pools the same replicates'
+  own frequency points for the scatter panel.
+- `params` - The run's own validated simulation parameters, shared
+  across every state in `states`.
+
+
+**Returns**:
+
+  The identical shape `literature_visual_payload` returns.
+
 <a id="fim.gui.literature_visuals.allele_composition_payload"></a>
 
 #### allele\_composition\_payload
@@ -5773,6 +5815,38 @@ Return a per-deme stacked allele-composition barplot payload.
   a reader with no way to tell whether a low id was simply not
   common enough to make the cut or never existed at all.
 
+  A thin, single-state wrapper over `pooled_allele_composition_
+  payload` — see that function's own docstring.
+
+<a id="fim.gui.literature_visuals.pooled_allele_composition_payload"></a>
+
+#### pooled\_allele\_composition\_payload
+
+```python
+def pooled_allele_composition_payload(
+        states: Sequence[ModelState],
+        max_alleles: int = _MAX_COMPOSITION_ALLELES) -> dict[str, Any]
+```
+
+Return a per-deme stacked allele-composition barplot, pooled across states.
+
+**Arguments**:
+
+- `states` - One or more population states sharing the same deme
+  count — a single scalar run's own final state, or every
+  replicate's own final state from a completed batch.
+- `max_alleles` - Maximum globally common alleles shown explicitly.
+
+
+**Returns**:
+
+  The identical shape `allele_composition_payload` returns —
+  frequencies averaged over loci *and* over every state in
+  `states`, so a single-state call and a many-state call render
+  through the same one code path, differing only in `note` (which
+  names the replicate count once there is more than one state to
+  pool).
+
 <a id="fim.gui.literature_visuals.frequency_spectrum_payload"></a>
 
 #### frequency\_spectrum\_payload
@@ -5799,6 +5873,42 @@ Return an empirical frequency spectrum and optional Wright beta overlay.
   A JSON-ready mapping with bin counts, overlay points, and a note
   naming the overlay assumptions.
 
+  A thin, single-state wrapper over `pooled_frequency_spectrum_
+  payload` — see that function's own docstring.
+
+<a id="fim.gui.literature_visuals.pooled_frequency_spectrum_payload"></a>
+
+#### pooled\_frequency\_spectrum\_payload
+
+```python
+def pooled_frequency_spectrum_payload(
+        states: Sequence[ModelState],
+        params: SimulationParams,
+        bin_count: int = _HISTOGRAM_BIN_COUNT) -> dict[str, Any]
+```
+
+Return an empirical frequency spectrum, pooled across states.
+
+**Arguments**:
+
+- `states` - One or more population states sharing the same deme/
+  locus shape — a single scalar run's own final state, or
+  every replicate's own final state from a completed batch.
+- `params` - Parameters used to decide whether a scalar Wright beta
+  approximation is available.
+- `bin_count` - Number of equal-width bins over ``[0, 1]``.
+
+
+**Returns**:
+
+  The identical shape `frequency_spectrum_payload` returns — the
+  histogram pools every (deme, locus, allele) frequency across
+  every state in `states`, the same row-wise concatenation `fim.
+  viz.scatter.pooled_frequency_points` already uses for the
+  scatter panel; the Wright beta overlay (when available) is
+  matched against that same pooled allele-frequency distribution,
+  not just one arbitrarily-chosen state's own.
+
 <a id="fim.gui.literature_visuals.isolation_by_distance_payload"></a>
 
 #### isolation\_by\_distance\_payload
@@ -5821,6 +5931,40 @@ Return pairwise identity decay by migration-graph distance.
   ``None`` when every deme pair has the same graph distance. Otherwise
   a JSON-ready object with mean identity by distance and a log-linear
   decay fit when at least two positive distance classes are available.
+
+  A thin, single-state wrapper over `pooled_isolation_by_distance_
+  payload` — see that function's own docstring.
+
+<a id="fim.gui.literature_visuals.pooled_isolation_by_distance_payload"></a>
+
+#### pooled\_isolation\_by\_distance\_payload
+
+```python
+def pooled_isolation_by_distance_payload(
+        states: Sequence[ModelState],
+        params: SimulationParams) -> dict[str, Any] | None
+```
+
+Return pairwise identity decay by migration-graph distance, pooled.
+
+**Arguments**:
+
+- `states` - One or more population states sharing the same deme
+  count — a single scalar run's own final state, or every
+  replicate's own final state from a completed batch.
+- `params` - Parameters carrying either scalar or matrix migration,
+  shared across every state in `states`.
+
+
+**Returns**:
+
+  The identical shape `isolation_by_distance_payload` returns —
+  `pairCount` is the total number of (deme pair, replicate)
+  identity samples averaged into that distance class's own
+  `meanIdentity`, not only the number of deme pairs: pooling adds
+  more samples to the same distance class the same way a second
+  locus already would within one state, no separate accounting
+  needed for "how many states" versus "how many deme pairs."
 
 <a id="fim.gui.preferences"></a>
 
