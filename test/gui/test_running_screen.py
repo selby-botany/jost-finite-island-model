@@ -1092,3 +1092,45 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run(
     )
     assert settled["selectorHidden"] is False
     assert settled["pairSelected"] is True
+
+
+def test_entering_running_state_clears_a_previous_runs_stale_progress_label() -> None:
+    """`enterRunningState` clears the progress label immediately, not on the first tick.
+
+    A real, reported symptom: starting a smaller batch (n_replicates:
+    100, say) right after a larger one (200) briefly showed "200 / 100
+    replicates reporting" — `batchProgressHighWaterMark`'s own reset
+    (`enterRunningState`'s own first few lines) zeroed the *counter*,
+    but nothing cleared the *label text* itself, so it kept showing
+    whatever the previous run's own last progress push had written
+    until this run's own first tick eventually overwrote it — the same
+    "never leave stale content on screen until the first tick
+    repopulates it" rule the trajectory panel, just above that same
+    reset in the source, already followed.
+
+    Calls `window.fim.enterRunningState` directly, synchronously, with
+    no real run involved at all: the fix is one line inside a plain
+    function, so the only thing worth proving is that calling it
+    clears pre-existing stale text, with no timing window for a real
+    background thread's own progress ticks to race.
+    """
+    window = create_window(hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _wait_for_input_screen_ready(window)
+            settled = window.evaluate_js(
+                "document.getElementById('progress-generation-label')"
+                ".textContent = '200 / 100 replicates reporting'; "
+                "window.fim.enterRunningState(true); "
+                "document.getElementById('progress-generation-label').textContent;"
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_OUTCOME_TIMEOUT_SECONDS)
+
+    assert settled == ""

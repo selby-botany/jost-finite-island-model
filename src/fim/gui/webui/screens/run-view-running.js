@@ -205,6 +205,15 @@ function enterRunningState(isBatch = false) {
         renderTrajectory(liveTrajectoryGenerations, liveTrajectoryHistories);
     }
     progressBar.value = 0;
+    // Same "never leave a previous run's own stale content on screen
+    // until the first tick repopulates it" reasoning as the trajectory
+    // panel just above -- a real, reported symptom this specific gap
+    // produced: starting a smaller batch (n_replicates: 100, say)
+    // right after a larger one (200) briefly showed "200 / 100
+    // replicates reporting," `batchProgressHighWaterMark`'s own reset
+    // just above notwithstanding, since nothing had told the label
+    // itself to stop showing the *previous* run's own last text yet.
+    progressLabel.textContent = "";
     runProgress.hidden = false;
     if (initialStats) {
         initialStats.hidden = true;
