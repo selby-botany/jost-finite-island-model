@@ -241,6 +241,20 @@ BATCH_FIELDS: Final[tuple[FormField, ...]] = (
     # `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`'s
     # own §5.5 decision (`selby/restricted`).
     FormField("max_concurrent_replicates", "max concurrent replicates", "optional_int"),
+    # `jit`/`auto_vector_min_d`/`auto_vector_max_capacity` (`fim.model.
+    # params.SimulationParams`'s own "Engine backend and JIT" fields,
+    # `configuration.md`'s own section of that name) had no GUI
+    # representation at all until a real, reported request moved them
+    # into the Settings dialog as expert-level execution defaults
+    # (alongside `engine_backend`/`n_replicates`, judged "not really
+    # experiment settings that would generally get changed"). Declared
+    # here, on this tab, purely so `all_fields()`/`form_values_to_
+    # payload`/`params_to_form_values` know about them — Configure's own
+    # HTML never renders a live widget for any of the three, only
+    # `#modal-settings` does (`index.html`'s own comment on each).
+    FormField("jit", "JIT", "choice", choices=("off", "numba")),
+    FormField("auto_vector_min_d", "auto-vector min d", "int"),
+    FormField("auto_vector_max_capacity", "auto-vector max capacity", "int"),
 )
 
 CONVERGENCE_STATISTIC_NAMES: Final[tuple[str, ...]] = (
@@ -1224,6 +1238,9 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
             if params.max_concurrent_replicates is None
             else str(params.max_concurrent_replicates)
         ),
+        "jit": params.jit,
+        "auto_vector_min_d": str(params.auto_vector_min_d),
+        "auto_vector_max_capacity": str(params.auto_vector_max_capacity),
     }
     values.update(m_from_params(params))
     values.update(mu_from_params(params))
@@ -1237,23 +1254,52 @@ def params_to_form_values(params: SimulationParams) -> dict[str, str]:
 DEFAULT_RUN_SETTING_FIELD_NAMES: Final[tuple[str, ...]] = (
     "engine_backend",
     "n_replicates",
-    "convergence_combinator",
+    "max_generations",
     "convergence_window",
     "convergence_tolerance",
-    *(f"cs_{name}" for name in CONVERGENCE_STATISTIC_NAMES),
+    "replicate_confidence",
+    "jit",
+    "auto_vector_min_d",
+    "auto_vector_max_capacity",
+    "max_concurrent_replicates",
 )
-"""Every form-value key the Settings dialog's own execution/convergence-
-selection defaults cover (`fim.gui.preferences.GuiPreferences.
+"""Every `SimulationParams`-backed form-value key the Settings dialog's
+own execution defaults cover (`fim.gui.preferences.GuiPreferences.
 default_run_settings`) — the single source of truth `Api.get_default_
 run_settings`/`set_default_run_settings` and the Settings modal's own
 JS both read, so the set of fields Settings covers can only ever change
-in one place. A real, reported request to move fields judged
-"applicable pretty universally" out of the per-run Configure form and
-into one global-default home — deliberately excludes
-`track_expensive_statistics` and the sigma-band pair
-(`sigma_band_enabled`/`sigma_band_multiplier`/`sigma_band_window`),
-judged scientific/per-run choices rather than administrative defaults,
-and left in Configure untouched."""
+in one place. `max_workers` is deliberately *not* a member: it is not a
+`SimulationParams` field at all (`index.html`'s own long-standing
+comment on that field explains the distinction), so it cannot appear in
+`starter_form_values()`'s own base dict the way every name here can —
+`Api.get_default_run_settings`/`set_default_run_settings` handle it as
+a special case alongside this tuple instead.
+
+Revised from this tuple's first version, which held `engine_backend`,
+`n_replicates`, `convergence_combinator`, `convergence_window`,
+`convergence_tolerance`, plus one `f"cs_{name}"` per
+`CONVERGENCE_STATISTIC_NAMES` entry, and left Configure's own identical
+copies of all of them in place as a per-run override. A real, reported
+follow-up correction: `convergence_statistic`/`convergence_combinator`
+are experimental, per-run choices with no sensible system-wide
+default — a fresh configuration already gets a sensible single-
+statistic default, so their Settings-side duplicates were removed
+entirely (Configure's own sole copy is "parity", not an override of a
+second one). `engine_backend`/`n_replicates`/`max_generations`/
+`convergence_window`/`convergence_tolerance` are not duplicated either
+in this revision — Configure's own widgets for all five are removed
+outright, not kept as a parallel override UI; `Api.start_run`/
+`validate_form` fill them back in from this tuple's own saved values
+before validating a submission (`config_form.py`'s own module
+docstring / `Api`'s own submission-time merge). `replicate_confidence`/
+`max_concurrent_replicates` moved out of Configure's own `#batch-only-
+fields` the same way. `jit`/`auto_vector_min_d`/`auto_vector_max_
+capacity` are new here — "expert-level settings" with no prior GUI
+representation at all (`BATCH_FIELDS`'s own comment on the three).
+`track_expensive_statistics` and the sigma-band pair (`sigma_band_
+enabled`/`sigma_band_multiplier`/`sigma_band_window`) stay Configure-
+only throughout, judged scientific/per-run choices rather than
+administrative defaults — never a member of this tuple."""
 
 
 def starter_form_values(overrides: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -1330,13 +1376,16 @@ _YAML_KEY_ORDER: Final[tuple[str, ...]] = (
     "migrant_sampling",
     # Matching `configuration.md`'s own section order: its "Engine
     # backend and JIT" section follows "Analysis and execution", of
-    # which `migrant_sampling` just above is the final key.
-    # `jit`/`auto_vector_min_d`/`auto_vector_max_capacity` sit between
-    # `engine_backend` and `max_concurrent_replicates` in that section
-    # but are not GUI-exposed fields (`index.html`'s own "Advanced"
-    # disclosure comment) and so never appear in a payload this
-    # function orders.
+    # which `migrant_sampling` just above is the final key. `jit`/
+    # `auto_vector_min_d`/`auto_vector_max_capacity` sit between
+    # `engine_backend` and `max_concurrent_replicates` in that section --
+    # Settings-only GUI fields (`index.html`'s own comment on `#modal-
+    # settings`), not Configure ones, but still real `all_fields()`
+    # entries that can appear in a payload this function orders.
     "engine_backend",
+    "jit",
+    "auto_vector_min_d",
+    "auto_vector_max_capacity",
     "max_concurrent_replicates",
 )
 

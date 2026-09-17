@@ -3089,9 +3089,16 @@ driver thread, before this method was written; see
 
 **Returns**:
 
-- ``{"ok"` - True, "equilibrium": ..., "identityRecovery": ...}`
-  once the run has *started* — not once it finishes; the real
-  outcome arrives via the pushed calls above. `equilibrium` is
+- ``{"ok"` - True, "isBatch": ..., "equilibrium": ...,
+- `"identityRecovery"` - ...}` once the run has *started* — not
+  once it finishes; the real outcome arrives via the pushed
+  calls above. `isBatch` is `params.n_replicates > 1`, the
+  identical "batch or scalar" toggle `_start_batch_run`'s own
+  dispatch above already used — `run-view-controls.js`'s own
+  `onRunClicked` reads it back to pick which running-state
+  sub-view to show, since `values` alone no longer carries
+  `n_replicates` (moved to Settings; Configure's own `<form>`
+  never submits it). `equilibrium` is
   `_equilibrium_reference_payload`'s own result (design doc
   §6.2's predicted-equilibrium trajectory overlay);
   `identityRecovery` is `_identity_recovery_reference_
@@ -3790,13 +3797,31 @@ Change the saved dark-mode override (Configure's own field).
 def get_default_run_settings() -> dict[str, str]
 ```
 
-Return the Settings dialog's own execution/convergence-selection defaults.
+Return the Settings dialog's own execution-default field values.
 
 Seeds Settings' own fields on open. Falls back to `starter_
 form_values()`'s own values for exactly `config_form.DEFAULT_
 RUN_SETTING_FIELD_NAMES`' keys when nothing has been saved yet
 (`self._preferences.default_run_settings is None`), so the
 dialog never shows a blank field the first time it opens.
+`max_workers` is not a `SimulationParams` field and so has no
+entry in `starter_form_values()`'s own base dict at all — its
+fallback is the empty string (`webui`'s own "auto" placeholder),
+the identical default `_parse_max_workers("")` already treats
+as "let the batch runner choose."
+
+A saved `default_run_settings` is re-overlaid onto the starter
+values, exactly like `_starter_form_values_for_this_session`,
+rather than returned as-is: a dict saved under an earlier
+version of this field set (missing a key this version added, or
+carrying one a later revision dropped — `DEFAULT_RUN_SETTING_
+FIELD_NAMES`'s own docstring records one real, reported such
+revision already) must not silently propagate an incomplete or
+stale projection forward. A saved value that no longer overlays
+cleanly at all falls back to the full, un-overlaid starter
+subset, the same "discarded wholesale, never applied partially"
+policy every other stale-saved-value path in this module
+already follows.
 
 <a id="fim.gui.app.Api.set_default_run_settings"></a>
 
@@ -3807,23 +3832,25 @@ dialog never shows a blank field the first time it opens.
 def set_default_run_settings(values: dict[str, str]) -> dict[str, Any]
 ```
 
-Validate and persist Settings' own execution/convergence defaults.
+Validate and persist Settings' own execution-default field values.
 
-A real, reported request: fields judged "applicable pretty
-universally" (execution engine, `n_replicates`, the
-convergence-selection group) move out of the per-run Configure
-form and into one global-default home here, while an
-individual run's own Configure form can still override any of
-them for that one run — `starter_form_values`'s own `overrides`
-parameter is what every subsequent fresh-form call
+A real, reported request: fields describing "how the
+computation runs" (execution engine, replicate/generation
+budgets, convergence-loop timing, replicate confidence, JIT,
+the `auto` backend's own threshold pair, and worker/concurrency
+limits) move out of the per-run Configure form and into one
+global-default home here — `starter_form_values`'s own
+`overrides` parameter is what every subsequent fresh-form call
 (`get_starter_form`, `get_initial_form`) reads this back
-through.
+through, and `start_run`/`validate_form`'s own submission-time
+merge (below) fills the same fields into a run Configure's own
+form no longer submits at all.
 
 **Arguments**:
 
 - `values` - One string per `config_form.DEFAULT_RUN_SETTING_
-  FIELD_NAMES` entry — Settings' own fields, collected by
-  `settings.js`.
+  FIELD_NAMES` entry, plus `max_workers` — Settings' own
+  fields, collected by `settings.js`.
 
 
 **Returns**:
@@ -3833,7 +3860,10 @@ through.
   validate — the identical wording any other invalid form
   submission already produces, since this goes through the
   same `starter_form_values`/`form_values_to_payload`/
-  `SimulationParams.from_mapping` path.
+  `SimulationParams.from_mapping` path. `max_workers` is not
+  part of that validation (`_parse_max_workers` tolerates any
+  text, including nonsense, by treating it as "auto") — saved
+  verbatim alongside the validated subset.
 
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 
@@ -5516,18 +5546,43 @@ Render a validated `SimulationParams` back into the form's fields.
 
 #### DEFAULT\_RUN\_SETTING\_FIELD\_NAMES
 
-Every form-value key the Settings dialog's own execution/convergence-
-selection defaults cover (`fim.gui.preferences.GuiPreferences.
+Every `SimulationParams`-backed form-value key the Settings dialog's
+own execution defaults cover (`fim.gui.preferences.GuiPreferences.
 default_run_settings`) — the single source of truth `Api.get_default_
 run_settings`/`set_default_run_settings` and the Settings modal's own
 JS both read, so the set of fields Settings covers can only ever change
-in one place. A real, reported request to move fields judged
-"applicable pretty universally" out of the per-run Configure form and
-into one global-default home — deliberately excludes
-`track_expensive_statistics` and the sigma-band pair
-(`sigma_band_enabled`/`sigma_band_multiplier`/`sigma_band_window`),
-judged scientific/per-run choices rather than administrative defaults,
-and left in Configure untouched.
+in one place. `max_workers` is deliberately *not* a member: it is not a
+`SimulationParams` field at all (`index.html`'s own long-standing
+comment on that field explains the distinction), so it cannot appear in
+`starter_form_values()`'s own base dict the way every name here can —
+`Api.get_default_run_settings`/`set_default_run_settings` handle it as
+a special case alongside this tuple instead.
+
+Revised from this tuple's first version, which held `engine_backend`,
+`n_replicates`, `convergence_combinator`, `convergence_window`,
+`convergence_tolerance`, plus one `f"cs_{name}"` per
+`CONVERGENCE_STATISTIC_NAMES` entry, and left Configure's own identical
+copies of all of them in place as a per-run override. A real, reported
+follow-up correction: `convergence_statistic`/`convergence_combinator`
+are experimental, per-run choices with no sensible system-wide
+default — a fresh configuration already gets a sensible single-
+statistic default, so their Settings-side duplicates were removed
+entirely (Configure's own sole copy is "parity", not an override of a
+second one). `engine_backend`/`n_replicates`/`max_generations`/
+`convergence_window`/`convergence_tolerance` are not duplicated either
+in this revision — Configure's own widgets for all five are removed
+outright, not kept as a parallel override UI; `Api.start_run`/
+`validate_form` fill them back in from this tuple's own saved values
+before validating a submission (`config_form.py`'s own module
+docstring / `Api`'s own submission-time merge). `replicate_confidence`/
+`max_concurrent_replicates` moved out of Configure's own ``batch`-only-
+fields` the same way. `jit`/`auto_vector_min_d`/`auto_vector_max_
+capacity` are new here — "expert-level settings" with no prior GUI
+representation at all (`BATCH_FIELDS`'s own comment on the three).
+`track_expensive_statistics` and the sigma-band pair (`sigma_band_
+enabled`/`sigma_band_multiplier`/`sigma_band_window`) stay Configure-
+only throughout, judged scientific/per-run choices rather than
+administrative defaults — never a member of this tuple.
 
 <a id="fim.gui.config_form.starter_form_values"></a>
 

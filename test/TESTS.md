@@ -1817,30 +1817,38 @@ def test_init_writes_parseable_starter_config(tmp_path: Path) -> None
 
 The initialization command creates the documented starter file.
 
-<a id="cli.test_cli.test_init_writes_a_config_that_runs_as_a_single_scalar_run"></a>
+<a id="cli.test_cli.test_init_writes_a_config_that_runs_as_an_adaptive_replicate_batch"></a>
 
-#### test\_init\_writes\_a\_config\_that\_runs\_as\_a\_single\_scalar\_run
+#### test\_init\_writes\_a\_config\_that\_runs\_as\_an\_adaptive\_replicate\_batch
 
 ```python
-def test_init_writes_a_config_that_runs_as_a_single_scalar_run(
+def test_init_writes_a_config_that_runs_as_an_adaptive_replicate_batch(
         tmp_path: Path) -> None
 ```
 
-`fim init`'s starter config must pin `n_replicates: 1` explicitly.
+`fim init`'s starter config must pin `n_replicates: 200` explicitly.
 
-Regression test for a real bug: `DEFAULT_N_REPLICATES` changed from
-`1` to `200` in `021f514`, and `STARTER_CONFIG` never set
-`n_replicates` at all, relying on that default — so an un-pinned
-starter config silently switched from "one quick scalar run" to "a
-200-replicate batch" the moment the default changed, producing the
-batch directory layout (`manifest.json`/`summary.json`/
-`replicate-*/`) instead of the flat four-artifact scalar layout every
-packaging smoke test (`.github/workflows/beta.yml`,
-`.github/workflows/ci.yml`) hardcodes and expects from `fim init`'s
-own example. No test caught this until the first "Beta builds" run
-after that default changed, because `ci.yml`'s own equivalent
-packaging jobs only run on a release tag push, not on an ordinary
-branch push.
+This used to assert the opposite — `n_replicates: 1`, so a fresh
+`fim init` produced one quick scalar run — with its own regression-
+test history explaining why: `DEFAULT_N_REPLICATES` changed from `1`
+to `200` in `021f514`, and `STARTER_CONFIG` never set `n_replicates`
+at all, relying on that default, so an un-pinned starter config
+silently switched from "one quick scalar run" to "a 200-replicate
+batch" the moment the library default changed — no test caught it
+until the first "Beta builds" run after, since `ci.yml`'s own
+packaging smoke jobs only run on a release tag push. A real,
+reported product decision reversed that choice: the target default
+behavior for a *new* configuration is now to converge on confidence
+intervals out of the box, so `fim init`'s own example should already
+be a real, CI-producing batch, not a scalar run — this test now
+pins the value the *other* direction, `200`, explicit for the exact
+same "never again silently drift with the library default" reason
+the original pin existed for. The packaging smoke tests
+(`.github/workflows/beta.yml`/`ci.yml`) that expect the flat
+scalar-run artifact layout from their own shrunk-down copy of this
+starter config now patch `n_replicates` back down to `1` themselves,
+explicitly, rather than relying on `fim init`'s own default matching
+what they need.
 
 <a id="cli.test_cli.test_init_writes_a_config_defaulting_to_the_recommended_auto_engine"></a>
 
@@ -5506,6 +5514,142 @@ def drive() -> Callable[..., Any]
 
 Bind `drive_and_read` as a fixture, for tests that prefer the fixture style.
 
+<a id="gui.conftest.fast_scalar_run_settings"></a>
+
+#### fast\_scalar\_run\_settings
+
+```python
+@pytest.fixture
+def fast_scalar_run_settings(_isolate_gui_preferences: Path) -> Path
+```
+
+Pre-seed Settings' own defaults for one small, fast, scalar run.
+
+`n_replicates`/`max_generations`/the convergence-loop timing pair
+moved out of Configure's own `<form>` entirely and into the Settings
+dialog (`2026-09-16` revision, `config_form.DEFAULT_RUN_SETTING_
+FIELD_NAMES`) -- a test that wants one small, fast, scalar run (the
+overwhelming majority of this package's own "click Run and wait for
+completion" tests, previously driven by setting `field-n_replicates`
+etc. directly, the same DOM elements that no longer exist) can no
+longer force that by writing a Configure field. This is the
+replacement: the same "request `_isolate_gui_preferences` directly
+and overwrite that same path with `save_preferences`" override
+pattern that fixture's own docstring already documents for
+`test_welcome_screen.py`, applied here instead.
+
+Only the four fields a fast test actually needs differ from the
+starter defaults; `Api.get_default_run_settings`'s own overlay
+(`starter_form_values(overrides=...)`) fills every other `DEFAULT_
+RUN_SETTING_FIELD_NAMES` key in from the true starter values, the
+same partial-save tolerance a real Settings dialog save never
+actually exercises (it always submits the full set) but the
+underlying store has always been able to hold.
+
+Request this fixture *before* `window` (or any fixture that builds
+one) in a test's own parameter list -- pytest sets up same-scope
+fixtures in request order, and the override must land on disk
+before `Api()`/`create_window()` ever reads it.
+
+<a id="gui.conftest.unreachable_convergence_run_settings"></a>
+
+#### unreachable\_convergence\_run\_settings
+
+```python
+@pytest.fixture
+def unreachable_convergence_run_settings(
+        _isolate_gui_preferences: Path) -> Path
+```
+
+Pre-seed Settings so a fresh scalar run cannot converge before its cap.
+
+`test/gui/test_running_screen.py`'s own module docstring records the
+real, previously-reproduced defect this exists to close: a test that
+wants to observe a run *while it is still going* (not only once it
+finishes) needs a run slow enough to actually catch mid-flight, and
+"the starter form's own defaults happen to take a while" is not a
+real guarantee -- confirmed live, finishing in under two seconds on
+a fast enough machine. The actual fix has one real, *structural*
+guarantee instead: `fim.convergence.criteria.trailing_window_stable`
+always returns `False` while `len(history) < window`, unconditionally,
+before any statistic comparison is even made -- so setting
+`convergence_window` to the same value as `max_generations` (never
+rejected; validation only rejects a window *greater* than `max_
+generations + 1`) forces the full run out to the generation cap
+itself, by construction, not by hoping a delta stays above whatever
+tolerance was chosen. `max_generations` is deliberately left
+unoverridden here (stays at the true starter default, `10000`) so
+`convergence_window` matches it without repeating the value --
+`n_replicates` is pinned to `1` so this stays the one, real, scalar
+run every call site wants, not a batch.
+
+Both fields moved out of Configure's own `<form>` entirely and into
+the Settings dialog (`2026-09-16` revision) -- `field-convergence_
+window`/`field-n_replicates` no longer exist to set via a DOM
+trigger script, so this is `fast_scalar_run_settings`'s own sibling,
+with different values for a deliberately different purpose (a real,
+several-second run to observe mid-flight, not a fast one to finish
+quickly) -- request it the same way, before `window` (or any
+fixture that builds one) in a test's own parameter list.
+
+<a id="gui.conftest.fast_batch_run_settings"></a>
+
+#### fast\_batch\_run\_settings
+
+```python
+@pytest.fixture
+def fast_batch_run_settings(_isolate_gui_preferences: Path) -> Path
+```
+
+Pre-seed Settings for one small, fast, two-replicate batch run.
+
+`test/gui/test_batch_running.py`'s own sibling to `fast_scalar_run_
+settings`: the same tiny-scale values that fixture's own docstring
+explains, plus `n_replicates`/`max_workers` set for a small real
+batch (`n_replicates > 1` is the GUI's own scalar-vs-batch toggle,
+`fim.gui.app.Api.start_run`) instead of one scalar run.
+
+<a id="gui.conftest.unreachable_batch_run_settings"></a>
+
+#### unreachable\_batch\_run\_settings
+
+```python
+@pytest.fixture
+def unreachable_batch_run_settings(_isolate_gui_preferences: Path) -> Path
+```
+
+Pre-seed Settings for a small batch that cannot converge before its cap.
+
+`test/gui/test_batch_running.py`'s own sibling to `unreachable_
+convergence_run_settings`, for a small two-replicate batch instead
+of one scalar run -- a batch that never settles within test time
+keeps reporting real, growing progress until explicitly cancelled,
+needed by that file's own live-trajectory tests, which must observe
+at least one real tick with two or more replicates simultaneously
+reporting, not just the batch's own terminal "done"/"cancelled".
+Sets `max_generations` and `convergence_window` to the same large
+value, the identical "structural, not probabilistic" guarantee
+`unreachable_convergence_run_settings`'s own docstring explains.
+
+<a id="gui.conftest.staggered_batch_run_settings"></a>
+
+#### staggered\_batch\_run\_settings
+
+```python
+@pytest.fixture
+def staggered_batch_run_settings(_isolate_gui_preferences: Path) -> Path
+```
+
+Pre-seed Settings for a 5-replicate batch with staggered stopping generations.
+
+`test/gui/test_batch_results_screen.py`'s own sibling to `fast_
+batch_run_settings`, for the specific `[3, 5, 6, 12, 15]`-generation
+staggered-stopping shape that file's own `_SET_STAGGERED_BATCH_
+FIELDS` comment explains -- needed so the completed batch trajectory
+panel's own pooled band actually exercises real, uneven replicate
+coverage across generations, not just the every-replicate-stops-
+together case `fast_batch_run_settings` happens to produce.
+
 <a id="gui.test_about_modal"></a>
 
 # gui.test\_about\_modal
@@ -5979,6 +6123,10 @@ def test_get_default_run_settings_falls_back_to_starter_subset_when_unsaved(
 ```
 
 With nothing saved, Settings seeds itself from the true starter values.
+
+`max_workers` is not a `SimulationParams` field, so it has no entry
+in `starter_form_values()`'s own base dict at all -- its own
+fallback is the empty string.
 
 <a id="gui.test_app_api.test_set_default_run_settings_changes_what_get_default_run_settings_returns"></a>
 
@@ -8017,7 +8165,8 @@ written to guard against a return of that regression.
 #### test\_a\_completed\_batch\_renders\_the\_run\_view
 
 ```python
-def test_a_completed_batch_renders_the_run_view() -> None
+def test_a_completed_batch_renders_the_run_view(
+        fast_batch_run_settings: Path) -> None
 ```
 
 A finished two-replicate batch shows a run id, two table rows, twelve stat rows.
@@ -8038,7 +8187,8 @@ actually defined for this particular run.
 #### test\_a\_completed\_batchs\_own\_effective\_allele\_rows\_render
 
 ```python
-def test_a_completed_batchs_own_effective_allele_rows_render() -> None
+def test_a_completed_batchs_own_effective_allele_rows_render(
+        fast_batch_run_settings: Path) -> None
 ```
 
 The batch summary's own last two rows are the effective-allele readouts.
@@ -8061,7 +8211,8 @@ these two.
 #### test\_a\_completed\_batch\_hides\_the\_reanalyze\_controls
 
 ```python
-def test_a_completed_batch_hides_the_reanalyze_controls() -> None
+def test_a_completed_batch_hides_the_reanalyze_controls(
+        fast_batch_run_settings: Path) -> None
 ```
 
 A batch's own `completed` view hides item 6's re-analysis controls.
@@ -8079,7 +8230,8 @@ payload_enables_the_reanalyze_controls`.
 #### test\_a\_completed\_batchs\_own\_pooled\_trajectory\_renders
 
 ```python
-def test_a_completed_batchs_own_pooled_trajectory_renders() -> None
+def test_a_completed_batchs_own_pooled_trajectory_renders(
+        staggered_batch_run_settings: Path) -> None
 ```
 
 The completed batch trajectory panel (batch trajectory panel
@@ -8104,7 +8256,8 @@ responsible for verifying.
 #### test\_a\_completed\_batchs\_own\_scrubber\_replays\_the\_pooled\_scatter
 
 ```python
-def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter() -> None
+def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter(
+        staggered_batch_run_settings: Path) -> None
 ```
 
 The completed batch scrubber (batch trajectory panel design
@@ -8128,7 +8281,8 @@ guessing a delay is enough for the un-awaited bridge call to land.
 #### test\_the\_ci\_meter\_names\_the\_replicate\_count\_in\_its\_own\_tooltip
 
 ```python
-def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None
+def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip(
+        fast_batch_run_settings: Path) -> None
 ```
 
 `buildCiMeter`'s own tooltip states "uncertainty across N independent
@@ -8152,7 +8306,8 @@ tooltip string.
 #### test\_batch\_deme\_pair\_selector\_switches\_to\_a\_chosen\_pair\_and\_back
 
 ```python
-def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None
+def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back(
+        fast_batch_run_settings: Path) -> None
 ```
 
 Selecting a pair, then selecting back to the default, round-trips
@@ -8176,7 +8331,8 @@ element id.
 #### test\_running\_a\_batch\_again\_from\_completed\_starts\_a\_new\_batch
 
 ```python
-def test_running_a_batch_again_from_completed_starts_a_new_batch() -> None
+def test_running_a_batch_again_from_completed_starts_a_new_batch(
+        fast_batch_run_settings: Path) -> None
 ```
 
 "Run simulation," clicked again from a completed batch, starts a new one.
@@ -8200,7 +8356,8 @@ which destroys the window after one such stage.
 #### test\_open\_folder\_button\_reaches\_the\_injected\_opener\_and\_settles
 
 ```python
-def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None
+def test_open_folder_button_reaches_the_injected_opener_and_settles(
+        fast_batch_run_settings: Path) -> None
 ```
 
 "Open output folder" reaches the injected opener and settles before teardown.
@@ -8512,7 +8669,7 @@ state a screen that does not exist yet would have rendered.
 
 ```python
 def test_start_run_dispatches_a_real_batch_and_pushes_its_done_message(
-) -> None
+        fast_batch_run_settings: Path) -> None
 ```
 
 `n_replicates: 2` reaches a real `ProcessPoolExecutor` batch, not a scalar run.
@@ -8531,7 +8688,7 @@ handler would raise inside `_drain_batch_messages` first, and
 
 ```python
 def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
-) -> None
+        unreachable_batch_run_settings: Path) -> None
 ```
 
 The live trajectory panel (batch trajectory panel design `20260912-
@@ -8557,7 +8714,7 @@ push has already completed, so no such margin is needed at all here.
 
 Cancels the batch to end the test rather than waiting for it to
 converge (`convergence_window` is set unreachably high specifically
-so it does not, `_SET_UNREACHABLE_BATCH_CONVERGENCE`) -- the same
+so it does not, `unreachable_batch_run_settings`) -- the same
 "Cancel ends the test" precedent `test_running_screen.py`'s own
 Cancel-button test already established.
 
@@ -8566,7 +8723,8 @@ Cancel-button test already established.
 #### test\_a\_live\_batch\_trajectory\_row\_toggle\_works\_mid\_run
 
 ```python
-def test_a_live_batch_trajectory_row_toggle_works_mid_run() -> None
+def test_a_live_batch_trajectory_row_toggle_works_mid_run(
+        unreachable_batch_run_settings: Path) -> None
 ```
 
 A statistic-row click during a still-running batch re-renders.
@@ -8819,7 +8977,7 @@ through.
 
 ```python
 def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
-        window: webview.Window) -> None
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
 ```
 
 Scrubbing away from the final frame shows the watched statistic's
@@ -8836,7 +8994,7 @@ panel).
 
 ```python
 def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_marker(
-        window: webview.Window) -> None
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
 ```
 
 Scrubbing away and then back to the scrubber's own last frame
@@ -8904,12 +9062,15 @@ def test_default_run_setting_field_names_excludes_scientific_per_run_fields(
 ) -> None
 ```
 
-`track_expensive_statistics`/the sigma-band pair are deliberately excluded.
+Execution/backend defaults are covered; per-run scientific choices are not.
 
-A real, reported design decision: those three are scientific/
-per-run choices, not administrative defaults, and stay Configure-
-only -- unlike `engine_backend`/`n_replicates`/the convergence-
-selection group, which this tuple does cover.
+A real, reported design decision: `convergence_statistic`/
+`convergence_combinator` are experimental, per-run choices with no
+sensible system-wide default -- a fresh configuration already gets
+a sensible single-statistic default -- and stay Configure-only,
+unlike `engine_backend`/`n_replicates`/`max_generations`/the
+convergence-loop *timing* fields (statistic-agnostic) and the
+expert-level backend-tuning fields, which this tuple does cover.
 
 <a id="gui.test_config_form.test_all_fields_covers_every_tabs_plain_fields"></a>
 
@@ -10447,7 +10608,8 @@ Growing `d` while fixed-per-deme mode is active recomputes the preview.
 #### test\_a\_real\_run\_with\_fixed\_per\_deme\_all\_different\_completes
 
 ```python
-def test_a_real_run_with_fixed_per_deme_all_different_completes() -> None
+def test_a_real_run_with_fixed_per_deme_all_different_completes(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 A run submitted in fixed-per-deme "all different" mode actually completes.
@@ -10455,7 +10617,10 @@ A run submitted in fixed-per-deme "all different" mode actually completes.
 Same event-driven "wait on a real `threading.Event`, never poll a
 live background run" shape `test_running_screen.py`'s own real-run
 tests already use, for the identical reason those tests' own
-docstrings record.
+docstrings record. `fast_scalar_run_settings` pre-seeds `n_
+replicates`/`max_generations`/the convergence-loop timing pair --
+Settings-only fields now, no longer settable via `_set_field` (the
+`field-n_replicates` etc. elements it targeted no longer exist).
 
 <a id="gui.test_help_screen"></a>
 
@@ -10687,10 +10852,10 @@ read` docstring already documents for its `ready`-polling case.
 Polls for `window.__fimRunViewReady` alongside the field's own
 value, not the field alone: `newConfiguration` cycles that flag
 false-then-true around the whole reset, and `field-N` already shows
-the new value while `resetInputForm` still has two more real bridge
-calls in flight (`get_default_max_workers`, `revalidate`) — reading
-only the field risked `drive`'s own window teardown racing those,
-the same class of failure `test_open_run_screen.py`'s own
+the new value while `resetInputForm` still has a real bridge call in
+flight (`revalidate`) — reading only the field risked `drive`'s own
+window teardown racing it, the same class of failure `test_open_run_
+screen.py`'s own
 `window.__fimOpenRunRecentRunsLoaded` flag exists to prevent for
 `refreshRecentRuns`, confirmed as a real, reproducible
 `JavascriptException` (not merely theoretical) against a `results/`
@@ -10894,129 +11059,6 @@ applies to its own two synthetic calls. The positive case is *also*
 covered against a real batch, end to end, in
 `test_batch_results_screen.py`.
 
-<a id="gui.test_input_screen.test_engine_backend_selector_lists_all_four_options_recommendation_first"></a>
-
-#### test\_engine\_backend\_selector\_lists\_all\_four\_options\_recommendation\_first
-
-```python
-def test_engine_backend_selector_lists_all_four_options_recommendation_first(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-The execution-engine `<select>` shows four options, `auto` labeled recommended.
-
-Approach B3's own shape, proven against the real rendered DOM rather
-than the markup source: all four legal `SimulationParams.engine_
-backend` values are present so none can ever be silently downgraded
-on save, but `lineal` and `auto` come first and `auto` carries the
-"recommended" wording — the two-real-choices emphasis the design
-asked for, expressed through order and labeling rather than by
-withholding values.
-
-<a id="gui.test_input_screen.test_engine_backend_selector_defaults_to_auto"></a>
-
-#### test\_engine\_backend\_selector\_defaults\_to\_auto
-
-```python
-def test_engine_backend_selector_defaults_to_auto(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-An untouched selector sits on `auto`, this screen's own recommended choice.
-
-The `selected` attribute is what a botanist who never opens this
-field sees for the instant before `loadInitialForm` applies a real
-form over the markup — checked here in isolation (resetting
-`selectedIndex` back to `defaultSelected` first) precisely because
-`starter_form_values()`'s own value (`test_config_form.py`'s own
-counterpart test) used to differ from it (`"lineal"`, a real,
-previously-shipped inconsistency between what this markup visually
-promised and what a fresh form's own real starting value actually
-was) — now fixed so the two agree, but this test still checks the
-markup's own default independently, not merely trusting that fix to
-hold.
-
-<a id="gui.test_input_screen.test_engine_backend_selector_accepts_every_legal_value"></a>
-
-#### test\_engine\_backend\_selector\_accepts\_every\_legal\_value
-
-```python
-def test_engine_backend_selector_accepts_every_legal_value(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-Each of the four values can actually be set on the live `<select>`.
-
-The browser-level half of `test_config_form.py`'s own round-trip
-test: assigning a value with no matching `<option>` leaves a
-`<select>` reading back the empty string rather than raising, so a
-missing option is exactly the silent, unobservable downgrade
-approach B1 was rejected over. Reading each assignment straight back
-out of the real DOM is what makes that observable.
-
-<a id="gui.test_input_screen.test_engine_backend_options_are_relabeled_without_numba"></a>
-
-#### test\_engine\_backend\_options\_are\_relabeled\_without\_numba
-
-```python
-def test_engine_backend_options_are_relabeled_without_numba(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-Without numba, `auto`/`generational-vector` say so; the other two are untouched.
-
-Approach A3, driven through the real page: `applyEngineBackend
-Availability` is re-run against a stubbed bridge reporting no numba,
-rather than uninstalling the dependency, and the labels are read
-back out of the live DOM. Values are deliberately left alone — every
-legal value must stay selectable for approach B3's own round trip,
-so the honesty lives in the label, not in a disabled or removed
-option.
-
-<a id="gui.test_input_screen.test_engine_backend_selector_stays_enabled_once_a_batch_is_configured"></a>
-
-#### test\_engine\_backend\_selector\_stays\_enabled\_once\_a\_batch\_is\_configured
-
-```python
-def test_engine_backend_selector_stays_enabled_once_a_batch_is_configured(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-A batch (n_replicates greater than 1) never forces or disables the field.
-
-Until `20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`
-(`selby/restricted`) closed the underlying gap, this selector locked
-to `"lineal"` and disabled itself the moment a batch was configured
-(`fim.gui.batch_runner`'s own real-parallel batch execution used to
-always call `fim.engine.fim(..., max_workers=N, store_factory=...)`,
-a calling convention `fim()` accepted only for `engine_backend=
-"lineal"`). `GenerationalBackend` now honors `store_factory` too
-(`ReplicateFanoutStore`), so every value this selector offers is a
-real, working choice for a batch, exactly as it already was for a
-scalar run — `"auto"` is picked here specifically to prove the field
-is genuinely unaffected, not merely coincidentally already `lineal`.
-
-<a id="gui.test_input_screen.test_run_simulation_submits_the_chosen_engine_backend_for_a_batch"></a>
-
-#### test\_run\_simulation\_submits\_the\_chosen\_engine\_backend\_for\_a\_batch
-
-```python
-def test_run_simulation_submits_the_chosen_engine_backend_for_a_batch(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-A batch submits whichever `engine_backend` was actually chosen.
-
-Exercised through the real "Run simulation" path
-(`run-view-controls.js`'s own `collectFormValues()` call, immediately
-before `window.pywebview.api.start_run`), stubbed the same way
-`test_engine_backend_options_are_relabeled_without_numba` stubs a
-different bridge method, so this proves the actual submission
-payload rather than `collectFormValues` in isolation — the direct,
-positive counterpart to the old lock this replaces: a batch used to
-always submit `"lineal"` regardless of the selector's own value;
-now it submits the real choice.
-
 <a id="gui.test_literature_visuals"></a>
 
 # gui.test\_literature\_visuals
@@ -11122,7 +11164,8 @@ Removing rows stops at one -- a `loci` list can never submit empty.
 #### test\_a\_real\_run\_with\_custom\_nonsequential\_locus\_ids\_completes
 
 ```python
-def test_a_real_run_with_custom_nonsequential_locus_ids_completes() -> None
+def test_a_real_run_with_custom_nonsequential_locus_ids_completes(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 A run submitted with custom, non-sequential locus IDs actually completes.
@@ -11130,7 +11173,9 @@ A run submitted with custom, non-sequential locus IDs actually completes.
 Same event-driven "wait on a real `threading.Event`, never poll a
 live background run" shape `test_running_screen.py`'s own real-run
 tests already use, for the identical reason those tests' own
-docstrings record.
+docstrings record. `fast_scalar_run_settings` pre-seeds `n_
+replicates`/`max_generations`/the convergence-loop timing pair --
+Settings-only fields now, no longer settable via `_set_field`.
 
 <a id="gui.test_migration_matrix_screen"></a>
 
@@ -11186,7 +11231,8 @@ Growing `d` while matrix mode is active adds rows/columns without losing data.
 #### test\_a\_real\_run\_with\_a\_hand\_edited\_matrix\_completes
 
 ```python
-def test_a_real_run_with_a_hand_edited_matrix_completes() -> None
+def test_a_real_run_with_a_hand_edited_matrix_completes(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 A run submitted with a hand-edited full matrix actually completes.
@@ -11194,7 +11240,9 @@ A run submitted with a hand-edited full matrix actually completes.
 Same event-driven "wait on a real `threading.Event`, never poll a
 live background run" shape `test_running_screen.py`'s own real-run
 tests already use, for the identical reason those tests' own
-docstrings record.
+docstrings record. `fast_scalar_run_settings` pre-seeds `n_
+replicates`/`max_generations`/the convergence-loop timing pair --
+Settings-only fields now, no longer settable via `_set_field`.
 
 <a id="gui.test_n_per_deme_screen"></a>
 
@@ -11255,7 +11303,8 @@ it independently (no shared helper between the two grids).
 #### test\_a\_real\_run\_with\_distinct\_per\_deme\_n\_values\_completes
 
 ```python
-def test_a_real_run_with_distinct_per_deme_n_values_completes() -> None
+def test_a_real_run_with_distinct_per_deme_n_values_completes(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 A run submitted with genuinely different per-deme N values actually completes.
@@ -11263,6 +11312,9 @@ A run submitted with genuinely different per-deme N values actually completes.
 Same event-driven "wait on a real `threading.Event`, never poll a
 live background run" shape `test_loci_grid_screen.py`'s own real-run
 test uses, for the identical reason its own docstring records.
+`fast_scalar_run_settings` pre-seeds `n_replicates`/`max_generations`/
+the convergence-loop timing pair -- Settings-only fields now, no
+longer settable via `_set_field`.
 
 <a id="gui.test_nav_rail"></a>
 
@@ -12021,7 +12073,8 @@ Adding a row to the custom loci grid grows p_0's own column count to match.
 #### test\_a\_real\_run\_with\_a\_hand\_edited\_p0\_completes
 
 ```python
-def test_a_real_run_with_a_hand_edited_p0_completes() -> None
+def test_a_real_run_with_a_hand_edited_p0_completes(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 A run submitted with a hand-edited explicit p_0 actually completes.
@@ -12029,7 +12082,9 @@ A run submitted with a hand-edited explicit p_0 actually completes.
 Same event-driven "wait on a real `threading.Event`, never poll a
 live background run" shape `test_running_screen.py`'s own real-run
 tests already use, for the identical reason those tests' own
-docstrings record.
+docstrings record. `fast_scalar_run_settings` pre-seeds `n_
+replicates`/`max_generations`/the convergence-loop timing pair --
+Settings-only fields now, no longer settable via `_set_field`.
 
 <a id="gui.test_preferences"></a>
 
@@ -12812,7 +12867,8 @@ faster the poll loop hammered it.
 
 ```python
 def test_a_completed_run_renders_the_run_view(
-        window: webview.Window, drive: Callable[..., Any]) -> None
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
 ```
 
 A finished run shows its run id, outcome, all six statistics, and a scatter.
@@ -12823,7 +12879,8 @@ A finished run shows its run id, outcome, all six statistics, and a scatter.
 
 ```python
 def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
-        window: webview.Window, drive: Callable[..., Any]) -> None
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
 ```
 
 The run title sits above the plot and the Back action returns to p_0.
@@ -12834,7 +12891,8 @@ The run title sits above the plot and the Back action returns to p_0.
 
 ```python
 def test_completed_scatter_draws_the_marker_color_legend(
-        window: webview.Window, drive: Callable[..., Any]) -> None
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
 ```
 
 The on-screen plot explains its own marker colors.
@@ -12857,7 +12915,7 @@ mismatch when it does not.
 
 ```python
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
-        window: webview.Window) -> None
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
 ```
 
 Selecting a pair, then selecting back to the default, round-trips
@@ -12887,7 +12945,7 @@ live window.
 
 ```python
 def test_running_simulation_again_from_completed_starts_a_new_run(
-        window: webview.Window) -> None
+        fast_scalar_run_settings: Path, window: webview.Window) -> None
 ```
 
 "Run simulation," clicked again from `completed`, starts a genuinely new run.
@@ -12919,7 +12977,8 @@ live window (finish a run, only then click "Run simulation" again)
 #### test\_open\_folder\_button\_reaches\_the\_injected\_opener\_and\_settles
 
 ```python
-def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None
+def test_open_folder_button_reaches_the_injected_opener_and_settles(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 "Open output folder" reaches the injected opener and settles before teardown.
@@ -12949,7 +13008,8 @@ recorded path is the icing.
 
 ```python
 def test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption(
-        window: webview.Window, drive: Callable[..., Any]) -> None
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
 ```
 
 A run started with the sigma-band toggle on draws a real band and caption.
@@ -12967,7 +13027,8 @@ independently reinvented here.
 #### test\_run\_view\_fits\_the\_default\_window\_without\_excess\_scrolling
 
 ```python
-def test_run_view_fits_the_default_window_without_excess_scrolling() -> None
+def test_run_view_fits_the_default_window_without_excess_scrolling(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 A completed scalar run's trajectory panel and stats table are on-screen.
@@ -13021,7 +13082,8 @@ overflowed the window in the first place.
 
 ```python
 def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
-        window: webview.Window, drive: Callable[..., Any]) -> None
+        fast_scalar_run_settings: Path, window: webview.Window,
+        drive: Callable[..., Any]) -> None
 ```
 
 Stepping the completed scrubber updates allele composition & spectrum.
@@ -13223,7 +13285,8 @@ not, on its own, the fix for this specific failure.
 #### test\_run\_button\_starts\_a\_real\_run\_that\_pushes\_live\_progress
 
 ```python
-def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None
+def test_run_button_starts_a_real_run_that_pushes_live_progress(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 Clicking "Run simulation" with a valid form starts a real background run.
@@ -13255,7 +13318,8 @@ landed.
 #### test\_a\_live\_runs\_own\_done\_payload\_enables\_the\_reanalyze\_controls
 
 ```python
-def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls() -> None
+def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 A just-finished live run's own Results card offers re-analysis too.
@@ -13275,7 +13339,7 @@ the reopened-run half of this same payload key).
 
 ```python
 def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
-) -> None
+        fast_scalar_run_settings: Path) -> None
 ```
 
 A completed scalar run draws its own statistic-vs-generation trajectory.
@@ -13294,7 +13358,7 @@ coverage of that).
 
 ```python
 def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
-) -> None
+        fast_scalar_run_settings: Path) -> None
 ```
 
 Clicking a statistic row hides that statistic's own drawn pixels.
@@ -13319,7 +13383,8 @@ a loss of the underlying data.
 #### test\_trajectory\_panel\_updates\_live\_while\_a\_run\_is\_still\_going
 
 ```python
-def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None
+def test_trajectory_panel_updates_live_while_a_run_is_still_going(
+        unreachable_convergence_run_settings: Path) -> None
 ```
 
 The trajectory panel appears and grows *during* a run, not only once it ends.
@@ -13357,7 +13422,8 @@ closing paragraph) — nine legend entries total, not six.
 #### test\_live\_run\_updates\_scrubber\_and\_supplemental\_panels
 
 ```python
-def test_live_run_updates_scrubber_and_supplemental_panels() -> None
+def test_live_run_updates_scrubber_and_supplemental_panels(
+        unreachable_convergence_run_settings: Path) -> None
 ```
 
 The scrubber & supplemental cards are live during a run & support scrubbing.
@@ -13367,7 +13433,8 @@ The scrubber & supplemental cards are live during a run & support scrubbing.
 #### test\_run\_button\_starts\_a\_real\_equilibrium\_split\_run
 
 ```python
-def test_run_button_starts_a_real_equilibrium_split_run() -> None
+def test_run_button_starts_a_real_equilibrium_split_run(
+        fast_scalar_run_settings: Path) -> None
 ```
 
 A real run using the equilibrium-split initial condition completes.
@@ -13382,7 +13449,8 @@ test's own docstring records.
 #### test\_cancel\_button\_stops\_the\_run\_and\_shows\_the\_cancelled\_banner
 
 ```python
-def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None
+def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner(
+        unreachable_convergence_run_settings: Path) -> None
 ```
 
 Clicking Cancel reaches the same real background run `Api.start_run` started.
@@ -13433,7 +13501,7 @@ settled`'s own docstring for the full mechanism.
 
 ```python
 def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run(
-) -> None
+        unreachable_convergence_run_settings: Path) -> None
 ```
 
 "Show pair" swaps the live progress canvas mid-run to a different view.
@@ -13495,13 +13563,18 @@ visual rendering is exercised separately with fixed panel data.
 
 # gui.test\_settings\_modal
 
-Headless functional tests for the Settings dialog's own execution/
-convergence-selection defaults and significant-digits field (botanist
-GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
-§4.2/§11.2/§12, extended on a real, reported request to also hold
-execution engine/`n_replicates`/the convergence-selection group as
-global defaults -- `index.html`'s own comment above ``modal`-settings`
-has the full account).
+Headless functional tests for the Settings dialog's own execution-
+default fields and significant-digits field (botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.2/§11.2/§12,
+extended on a real, reported request to also hold execution engine,
+`n_replicates`, `max_generations`, the convergence-loop timing pair,
+`replicate_confidence`, `jit`, `auto_vector_min_d`, `auto_vector_max_
+capacity`, `max_workers`, and `max_concurrent_replicates` as global
+defaults -- `index.html`'s own comment above ``modal`-settings` has the
+full account). `convergence_statistic`/`convergence_combinator`
+deliberately have no Settings-side copy at all -- experimental, per-run
+choices judged to have no sensible system-wide default -- so this file
+carries no coverage for either.
 
 Real DOM-driven proof that `webui/screens/settings.js` actually seeds,
 collects, and saves these fields through the real `Api.get_default_run_
@@ -13576,15 +13649,16 @@ Changing a field and clicking Save is reflected back by the bridge itself.
 
 The trigger script itself retries the readback (bounded, up to 2.5s)
 rather than trusting one fixed delay before reading back: `Save`'s
-own `click` handler is `async` (collects the 14 fields, awaits a
+own `click` handler is `async` (collects the 11 fields, awaits a
 real `set_default_run_settings` bridge round trip, then updates the
-banner), so a single fixed sleep before reading back raced that
-round trip under real parallel-test load and failed intermittently
--- exactly the non-deterministic-test defect this project's own
-testing discipline forbids tolerating. Polling until the readback
-actually reflects the just-saved value converges to the same
-correct result regardless of how long the real bridge call takes,
-rather than gambling that a guessed delay was enough.
+banner and closes the dialog), so a single fixed sleep before
+reading back raced that round trip under real parallel-test load
+and failed intermittently -- exactly the non-deterministic-test
+defect this project's own testing discipline forbids tolerating.
+Polling until the readback actually reflects the just-saved value
+converges to the same correct result regardless of how long the
+real bridge call takes, rather than gambling that a guessed delay
+was enough.
 
 <a id="gui.test_settings_modal.test_settings_save_button_shows_the_banner_on_an_invalid_value"></a>
 
@@ -13597,16 +13671,119 @@ def test_settings_save_button_shows_the_banner_on_an_invalid_value(
 
 An unparseable value is rejected, surfaced in the banner, not silently saved.
 
-<a id="gui.test_settings_modal.test_settings_checking_a_second_convergence_statistic_reveals_the_combinator"></a>
+<a id="gui.test_settings_modal.test_settings_save_button_closes_the_dialog_on_success"></a>
 
-#### test\_settings\_checking\_a\_second\_convergence\_statistic\_reveals\_the\_combinator
+#### test\_settings\_save\_button\_closes\_the\_dialog\_on\_success
 
 ```python
-def test_settings_checking_a_second_convergence_statistic_reveals_the_combinator(
+def test_settings_save_button_closes_the_dialog_on_success(
         window: webview.Window) -> None
 ```
 
-Settings' own combinator field follows the identical rule Configure's does.
+A successful Save dismisses the dialog -- a real, reported bug, now fixed.
+
+Save used to persist the change but leave the dialog open,
+indistinguishable at a glance from a save that silently failed.
+
+<a id="gui.test_settings_modal.test_settings_engine_backend_visibility_reveals_jit_and_auto_vector_fields"></a>
+
+#### test\_settings\_engine\_backend\_visibility\_reveals\_jit\_and\_auto\_vector\_fields
+
+```python
+def test_settings_engine_backend_visibility_reveals_jit_and_auto_vector_fields(
+        window: webview.Window) -> None
+```
+
+`jit`/`auto_vector_*` show only for the one execution engine each tunes.
+
+"Where apropos" (a real, reported request): `jit` is a real,
+user-facing choice only under `generational` (`lineal` never accepts
+anything but off; `generational-vector` always uses numba
+regardless); `auto_vector_min_d`/`auto_vector_max_capacity` only
+affect the `auto` engine's own threshold, so both are shown or
+hidden together as one group.
+
+<a id="gui.test_settings_modal.test_engine_backend_selector_lists_all_four_options_recommendation_first"></a>
+
+#### test\_engine\_backend\_selector\_lists\_all\_four\_options\_recommendation\_first
+
+```python
+def test_engine_backend_selector_lists_all_four_options_recommendation_first(
+        window: webview.Window) -> None
+```
+
+The execution-engine `<select>` shows four options, `auto` labeled recommended.
+
+Relocated from `test_input_screen.py` (`2026-09-16` revision moved
+this field into Settings entirely -- Configure's own former
+``field`-engine_backend` copy no longer exists). Approach B3's own
+shape, proven against the real rendered DOM rather than the markup
+source: all four legal `SimulationParams.engine_backend` values are
+present so none can ever be silently downgraded on save, but
+`lineal` and `auto` come first and `auto` carries the "recommended"
+wording -- the two-real-choices emphasis the design asked for,
+expressed through order and labeling rather than by withholding
+values.
+
+<a id="gui.test_settings_modal.test_engine_backend_selector_accepts_every_legal_value"></a>
+
+#### test\_engine\_backend\_selector\_accepts\_every\_legal\_value
+
+```python
+def test_engine_backend_selector_accepts_every_legal_value(
+        window: webview.Window) -> None
+```
+
+Each of the four values can actually be set on the live `<select>`.
+
+Relocated from `test_input_screen.py` (`2026-09-16` revision). The
+browser-level half of `test_config_form.py`'s own round-trip test:
+assigning a value with no matching `<option>` leaves a `<select>`
+reading back the empty string rather than raising, so a missing
+option is exactly the silent, unobservable downgrade approach B1
+was rejected over. Reading each assignment straight back out of the
+real DOM is what makes that observable.
+
+<a id="gui.test_settings_modal.test_engine_backend_options_are_relabeled_without_numba"></a>
+
+#### test\_engine\_backend\_options\_are\_relabeled\_without\_numba
+
+```python
+def test_engine_backend_options_are_relabeled_without_numba(
+        window: webview.Window) -> None
+```
+
+Without numba, `auto`/`generational-vector` say so; the other two are untouched.
+
+Relocated from `test_input_screen.py` (`2026-09-16` revision).
+Approach A3, driven through the real page: `applyEngineBackend
+Availability` is re-run against a stubbed bridge reporting no numba,
+rather than uninstalling the dependency, and the labels are read
+back out of the live DOM. Values are deliberately left alone -- every
+legal value must stay selectable for approach B3's own round trip,
+so the honesty lives in the label, not in a disabled or removed
+option.
+
+<a id="gui.test_settings_modal.test_engine_backend_selector_defaults_to_auto"></a>
+
+#### test\_engine\_backend\_selector\_defaults\_to\_auto
+
+```python
+def test_engine_backend_selector_defaults_to_auto(
+        window: webview.Window) -> None
+```
+
+An untouched selector sits on `auto`, this dialog's own recommended choice.
+
+Relocated from `test_input_screen.py` (`2026-09-16` revision). The
+`selected` attribute is what a user who never opens this field would
+see for the instant before `loadSettingsDialog` applies a real,
+saved (or starter) value over the markup -- checked here in
+isolation (resetting `selectedIndex` back to `defaultSelected`
+first) precisely because `starter_form_values()`'s own value could
+in principle drift from it, the same class of markup/value
+inconsistency `test_input_screen.py`'s own history already found
+once for Configure's former copy of this field.
 
 <a id="gui.test_shutdown_deadman"></a>
 

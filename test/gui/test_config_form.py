@@ -60,22 +60,31 @@ def test_starter_form_values_rejects_an_invalid_overlay() -> None:
 
 
 def test_default_run_setting_field_names_excludes_scientific_per_run_fields() -> None:
-    """`track_expensive_statistics`/the sigma-band pair are deliberately excluded.
+    """Execution/backend defaults are covered; per-run scientific choices are not.
 
-    A real, reported design decision: those three are scientific/
-    per-run choices, not administrative defaults, and stay Configure-
-    only -- unlike `engine_backend`/`n_replicates`/the convergence-
-    selection group, which this tuple does cover.
+    A real, reported design decision: `convergence_statistic`/
+    `convergence_combinator` are experimental, per-run choices with no
+    sensible system-wide default -- a fresh configuration already gets
+    a sensible single-statistic default -- and stay Configure-only,
+    unlike `engine_backend`/`n_replicates`/`max_generations`/the
+    convergence-loop *timing* fields (statistic-agnostic) and the
+    expert-level backend-tuning fields, which this tuple does cover.
     """
     names = set(config_form.DEFAULT_RUN_SETTING_FIELD_NAMES)
 
     assert "engine_backend" in names
     assert "n_replicates" in names
-    assert "convergence_combinator" in names
+    assert "max_generations" in names
     assert "convergence_window" in names
     assert "convergence_tolerance" in names
+    assert "replicate_confidence" in names
+    assert "jit" in names
+    assert "auto_vector_min_d" in names
+    assert "auto_vector_max_capacity" in names
+    assert "max_concurrent_replicates" in names
+    assert "convergence_combinator" not in names
     for name in config_form.CONVERGENCE_STATISTIC_NAMES:
-        assert f"cs_{name}" in names
+        assert f"cs_{name}" not in names
     assert "track_expensive_statistics" not in names
     assert "sigma_band_enabled" not in names
     assert "sigma_band_multiplier" not in names
@@ -106,6 +115,9 @@ def test_all_fields_covers_every_tabs_plain_fields() -> None:
         "replicate_confidence",
         "engine_backend",
         "max_concurrent_replicates",
+        "jit",
+        "auto_vector_min_d",
+        "auto_vector_max_capacity",
     }
     # `m`, `mu`/`mu_b`, `loci`/`locus_lengths`, `convergence_statistic`,
     # and `p_0` are all composite mode selectors — never plain
