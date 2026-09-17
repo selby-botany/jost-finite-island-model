@@ -18,6 +18,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -192,13 +193,17 @@ def test_remove_row_leaves_at_least_one_row(window: webview.Window) -> None:
     assert settled["rowCount"] == 1
 
 
-def test_a_real_run_with_custom_nonsequential_locus_ids_completes() -> None:
+def test_a_real_run_with_custom_nonsequential_locus_ids_completes(
+    fast_scalar_run_settings: Path,
+) -> None:
     """A run submitted with custom, non-sequential locus IDs actually completes.
 
     Same event-driven "wait on a real `threading.Event`, never poll a
     live background run" shape `test_running_screen.py`'s own real-run
     tests already use, for the identical reason those tests' own
-    docstrings record.
+    docstrings record. `fast_scalar_run_settings` pre-seeds `n_
+    replicates`/`max_generations`/the convergence-loop timing pair --
+    Settings-only fields now, no longer settable via `_set_field`.
     """
     started_event = threading.Event()
     done_event = threading.Event()
@@ -233,10 +238,6 @@ def test_a_real_run_with_custom_nonsequential_locus_ids_completes() -> None:
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(_set_field("seed", "20260814"))
             window.evaluate_js(_set_field("mu_value", "0.01"))
-            window.evaluate_js(_set_field("convergence_window", "4"))
-            window.evaluate_js(_set_field("convergence_tolerance", "1.0"))
-            window.evaluate_js(_set_field("max_generations", "10"))
-            window.evaluate_js(_set_field("n_replicates", "1"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="loci_mode"][value="custom"]\').click();'

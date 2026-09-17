@@ -55,6 +55,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -79,11 +80,13 @@ _OUTCOME_TIMEOUT_SECONDS = 40.0
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # Mirrors `test/gui/test_results_screen.py`'s own `_SET_TINY_FIELDS`
-# (itself mirroring `test/conftest.py`'s `tiny_params` fixture),
-# including the `n_replicates` override — see that module's own
-# comment for why leaving `field-n_replicates` at the form's own
-# pre-populated `200` default silently submits a real batch run
-# instead of one fast scalar run.
+# (itself mirroring `test/conftest.py`'s `tiny_params` fixture).
+# `n_replicates`/`max_generations`/the convergence-loop timing pair
+# moved out of Configure's own `<form>` entirely and into the Settings
+# dialog (`2026-09-16` revision) -- every test using this constant now
+# also requests `fast_scalar_run_settings` (`conftest.py`), which
+# pre-seeds those through Settings' own mechanism instead of a DOM
+# field that no longer exists.
 _SET_TINY_FIELDS = """
 function setField(name, value) {
     const field = document.getElementById(`field-${name}`);
@@ -96,14 +99,11 @@ setField('seed', '20260814');
 setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
-setField('convergence_window', '4');
-setField('convergence_tolerance', '1.0');
-setField('max_generations', '10');
-setField('n_replicates', '1');
 """
 
-# A real, previously-reproduced defect this constant exists to close:
-# the starter form's own defaults (`d=20`) were assumed, in an earlier
+# A real, previously-reproduced defect closed by every test below that
+# requests `unreachable_convergence_run_settings` (`conftest.py`): the
+# starter form's own defaults (`d=20`) were assumed, in an earlier
 # version of both tests below, to have "no realistic chance of
 # finishing on its own" within a test's own timeframe -- false on a
 # fast-enough or lightly-loaded machine, confirmed live by watching the
@@ -117,19 +117,20 @@ setField('n_replicates', '1');
 # runs even with `tolerance = 1e-12`. `trailing_window_stable` itself
 # has one real, *structural* guarantee instead: `len(history) < window`
 # always returns `False`, unconditionally, before that comparison is
-# ever made. Setting `convergence_window` to the same value as `max_
-# generations` (never rejected -- validation only rejects a window
-# *greater* than `max_generations + 1`) means convergence can never
+# ever made. That fixture sets `convergence_window` to the same value
+# as `max_generations` (never rejected -- validation only rejects a
+# window *greater* than `max_generations + 1`) so convergence can never
 # even be evaluated, let alone satisfied, until the run reaches the
 # generation cap itself -- forcing the full ~16-second-plus run
 # `max_generations=10000` at this project's own measured per-generation
 # cost implies, by construction, not by hoping a delta stays above
-# whatever tolerance was chosen.
-_SET_UNREACHABLE_CONVERGENCE = """
-document.getElementById('field-convergence_window').value = '10000';
-document.getElementById('field-convergence_window')
-    .dispatchEvent(new Event('input', {bubbles: true}));
-"""
+# whatever tolerance was chosen. It also pins `n_replicates` to `1`, a
+# real, second regression found the same way as the first --
+# `STARTER_CONFIG` now defaults every fresh form to a 200-replicate
+# batch (a real, reported product decision that a new configuration
+# should converge on confidence intervals out of the box), and every
+# call site below was written expecting the single scalar run "the
+# starter form's own defaults" meant at the time.
 
 
 def _wait_for_input_screen_ready(window: webview.Window) -> None:
@@ -191,7 +192,9 @@ def _wait_for_cancel_run_settled(window: webview.Window) -> None:
     )
 
 
-def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
+def test_run_button_starts_a_real_run_that_pushes_live_progress(
+    fast_scalar_run_settings: Path,
+) -> None:
     """Clicking "Run simulation" with a valid form starts a real background run.
 
     Waits on `done_event` (set from `Api`'s `on_message` hook, the
@@ -272,7 +275,9 @@ def test_run_button_starts_a_real_run_that_pushes_live_progress() -> None:
     assert settled["neSText"] != ""
 
 
-def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls() -> None:
+def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls(
+    fast_scalar_run_settings: Path,
+) -> None:
     """A just-finished live run's own Results card offers re-analysis too.
 
     Design item 6: the Generation/Differentiation-q sweep controls
@@ -321,7 +326,9 @@ def test_a_live_runs_own_done_payload_enables_the_reanalyze_controls() -> None:
     assert settled["reanalyzeHidden"] is False
 
 
-def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> None:
+def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic(
+    fast_scalar_run_settings: Path,
+) -> None:
     """A completed scalar run draws its own statistic-vs-generation trajectory.
 
     Botanist GUI design doc §6.2's own "how it got here" panel, first
@@ -415,7 +422,9 @@ def test_run_button_shows_the_trajectory_panel_for_the_watched_statistic() -> No
     ]
 
 
-def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels() -> None:
+def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels(
+    fast_scalar_run_settings: Path,
+) -> None:
     """Clicking a statistic row hides that statistic's own drawn pixels.
 
     Botanist GUI design doc §6.2's own display-only toggle, now hosted
@@ -533,7 +542,9 @@ def test_trajectory_row_toggle_hides_and_restores_a_curves_own_pixels() -> None:
         assert entry["ariaPressed"] == "true"
 
 
-def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
+def test_trajectory_panel_updates_live_while_a_run_is_still_going(
+    unreachable_convergence_run_settings: Path,
+) -> None:
     """The trajectory panel appears and grows *during* a run, not only once it ends.
 
     Botanist GUI design doc §6.2's own "updating in lockstep as the run
@@ -588,10 +599,7 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
             frame_hidden_before_start = window.evaluate_js(
                 "document.getElementById('run-trajectory-frame').hidden"
             )
-            window.evaluate_js(
-                _SET_UNREACHABLE_CONVERGENCE
-                + "document.getElementById('run-button').click();"
-            )
+            window.evaluate_js("document.getElementById('run-button').click();")
             settled = None
             if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 for _ in range(_READY_POLL_ATTEMPTS):
@@ -648,7 +656,9 @@ def test_trajectory_panel_updates_live_while_a_run_is_still_going() -> None:
     ]
 
 
-def test_live_run_updates_scrubber_and_supplemental_panels() -> None:
+def test_live_run_updates_scrubber_and_supplemental_panels(
+    unreachable_convergence_run_settings: Path,
+) -> None:
     """The scrubber & supplemental cards are live during a run & support scrubbing."""
     started_event = threading.Event()
     cancelled_event = threading.Event()
@@ -671,10 +681,7 @@ def test_live_run_updates_scrubber_and_supplemental_panels() -> None:
     def _drive() -> None:
         try:
             _wait_for_input_screen_ready(window)
-            window.evaluate_js(
-                _SET_UNREACHABLE_CONVERGENCE
-                + "document.getElementById('run-button').click();"
-            )
+            window.evaluate_js("document.getElementById('run-button').click();")
             settled = None
             if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 for _ in range(_READY_POLL_ATTEMPTS):
@@ -727,13 +734,15 @@ def test_live_run_updates_scrubber_and_supplemental_panels() -> None:
 # `initial_conditions_mode` selector) and fills its three fields with
 # values chosen to converge almost immediately — a loose tolerance
 # (`1.0`, effectively "the first two half-windows never differ enough to
-# matter") over a `2`-generation window, capped at `10` generations,
-# against an `N=4`, `d=2` ancestral population (`sum(N) == 8`) small
-# enough that `EquilibriumSplitInitialCondition`'s own drift/mutation
-# steps cost nothing measurable. Proves the real end-to-end pipeline
-# (mode toggle -> payload inclusion -> `generate_initial_state`'s own
-# dispatch -> a real run) works, not only `test_config_form.py`'s own
-# marshaling-level round trip.
+# matter") over a `2`-generation window, capped at `10` generations (the
+# main run's own `max_generations`/`convergence_window`/`convergence_
+# tolerance`/`n_replicates` come from `fast_scalar_run_settings`
+# instead, Settings-only fields now), against an `N=4`, `d=2` ancestral
+# population (`sum(N) == 8`) small enough that `EquilibriumSplit
+# InitialCondition`'s own drift/mutation steps cost nothing measurable.
+# Proves the real end-to-end pipeline (mode toggle -> payload inclusion
+# -> `generate_initial_state`'s own dispatch -> a real run) works, not
+# only `test_config_form.py`'s own marshaling-level round trip.
 _SET_EQUILIBRIUM_SPLIT_FIELDS = """
 function setField(name, value) {
     const field = document.getElementById(`field-${name}`);
@@ -746,10 +755,6 @@ setField('seed', '20260814');
 setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
-setField('convergence_window', '4');
-setField('convergence_tolerance', '1.0');
-setField('max_generations', '10');
-setField('n_replicates', '1');
 document.querySelector(
     'input[name="initial_conditions_mode"][value="equilibrium_split"]'
 ).click();
@@ -759,7 +764,9 @@ setField('equilibrium_max_generations', '10');
 """
 
 
-def test_run_button_starts_a_real_equilibrium_split_run() -> None:
+def test_run_button_starts_a_real_equilibrium_split_run(
+    fast_scalar_run_settings: Path,
+) -> None:
     """A real run using the equilibrium-split initial condition completes.
 
     Same event-driven "wait on a real `threading.Event`, never poll a
@@ -817,7 +824,9 @@ def test_run_button_starts_a_real_equilibrium_split_run() -> None:
     assert messages[-1][0] == "done"
 
 
-def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
+def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner(
+    unreachable_convergence_run_settings: Path,
+) -> None:
     """Clicking Cancel reaches the same real background run `Api.start_run` started.
 
     Proves the other half of the wiring `_drain_run_messages` handles —
@@ -878,10 +887,7 @@ def test_cancel_button_stops_the_run_and_shows_the_cancelled_banner() -> None:
     def _drive() -> None:
         try:
             _wait_for_input_screen_ready(window)
-            window.evaluate_js(
-                _SET_UNREACHABLE_CONVERGENCE
-                + "document.getElementById('run-button').click();"
-            )
+            window.evaluate_js("document.getElementById('run-button').click();")
             settled = None
             if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 # `started_event` fires from *inside* `Api.start_run`,
@@ -973,7 +979,9 @@ def _select_live_pair(
     return False
 
 
-def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None:
+def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run(
+    unreachable_convergence_run_settings: Path,
+) -> None:
     """ "Show pair" swaps the live progress canvas mid-run to a different view.
 
     Same starter-`d`-plus-`_SET_UNREACHABLE_CONVERGENCE` setup as the
@@ -1050,10 +1058,7 @@ def test_live_deme_pair_selector_shows_a_chosen_pair_during_a_real_run() -> None
     def _drive() -> None:
         try:
             _wait_for_input_screen_ready(window)
-            window.evaluate_js(
-                _SET_UNREACHABLE_CONVERGENCE
-                + "document.getElementById('run-button').click();"
-            )
+            window.evaluate_js("document.getElementById('run-button').click();")
             settled = None
             if started_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS):
                 for _ in range(_READY_POLL_ATTEMPTS):

@@ -422,3 +422,178 @@ def _isolate_gui_preferences(
     # exists.
     save_preferences(preferences_path, GuiPreferences(welcome_dismissed=True))
     return preferences_path
+
+
+@pytest.fixture
+def fast_scalar_run_settings(_isolate_gui_preferences: Path) -> Path:
+    """Pre-seed Settings' own defaults for one small, fast, scalar run.
+
+    `n_replicates`/`max_generations`/the convergence-loop timing pair
+    moved out of Configure's own `<form>` entirely and into the Settings
+    dialog (`2026-09-16` revision, `config_form.DEFAULT_RUN_SETTING_
+    FIELD_NAMES`) -- a test that wants one small, fast, scalar run (the
+    overwhelming majority of this package's own "click Run and wait for
+    completion" tests, previously driven by setting `field-n_replicates`
+    etc. directly, the same DOM elements that no longer exist) can no
+    longer force that by writing a Configure field. This is the
+    replacement: the same "request `_isolate_gui_preferences` directly
+    and overwrite that same path with `save_preferences`" override
+    pattern that fixture's own docstring already documents for
+    `test_welcome_screen.py`, applied here instead.
+
+    Only the four fields a fast test actually needs differ from the
+    starter defaults; `Api.get_default_run_settings`'s own overlay
+    (`starter_form_values(overrides=...)`) fills every other `DEFAULT_
+    RUN_SETTING_FIELD_NAMES` key in from the true starter values, the
+    same partial-save tolerance a real Settings dialog save never
+    actually exercises (it always submits the full set) but the
+    underlying store has always been able to hold.
+
+    Request this fixture *before* `window` (or any fixture that builds
+    one) in a test's own parameter list -- pytest sets up same-scope
+    fixtures in request order, and the override must land on disk
+    before `Api()`/`create_window()` ever reads it.
+    """
+    save_preferences(
+        _isolate_gui_preferences,
+        GuiPreferences(
+            welcome_dismissed=True,
+            default_run_settings={
+                "n_replicates": "1",
+                "max_generations": "10",
+                "convergence_window": "4",
+                "convergence_tolerance": "1.0",
+            },
+        ),
+    )
+    return _isolate_gui_preferences
+
+
+@pytest.fixture
+def unreachable_convergence_run_settings(_isolate_gui_preferences: Path) -> Path:
+    """Pre-seed Settings so a fresh scalar run cannot converge before its cap.
+
+    `test/gui/test_running_screen.py`'s own module docstring records the
+    real, previously-reproduced defect this exists to close: a test that
+    wants to observe a run *while it is still going* (not only once it
+    finishes) needs a run slow enough to actually catch mid-flight, and
+    "the starter form's own defaults happen to take a while" is not a
+    real guarantee -- confirmed live, finishing in under two seconds on
+    a fast enough machine. The actual fix has one real, *structural*
+    guarantee instead: `fim.convergence.criteria.trailing_window_stable`
+    always returns `False` while `len(history) < window`, unconditionally,
+    before any statistic comparison is even made -- so setting
+    `convergence_window` to the same value as `max_generations` (never
+    rejected; validation only rejects a window *greater* than `max_
+    generations + 1`) forces the full run out to the generation cap
+    itself, by construction, not by hoping a delta stays above whatever
+    tolerance was chosen. `max_generations` is deliberately left
+    unoverridden here (stays at the true starter default, `10000`) so
+    `convergence_window` matches it without repeating the value --
+    `n_replicates` is pinned to `1` so this stays the one, real, scalar
+    run every call site wants, not a batch.
+
+    Both fields moved out of Configure's own `<form>` entirely and into
+    the Settings dialog (`2026-09-16` revision) -- `field-convergence_
+    window`/`field-n_replicates` no longer exist to set via a DOM
+    trigger script, so this is `fast_scalar_run_settings`'s own sibling,
+    with different values for a deliberately different purpose (a real,
+    several-second run to observe mid-flight, not a fast one to finish
+    quickly) -- request it the same way, before `window` (or any
+    fixture that builds one) in a test's own parameter list.
+    """
+    save_preferences(
+        _isolate_gui_preferences,
+        GuiPreferences(
+            welcome_dismissed=True,
+            default_run_settings={
+                "n_replicates": "1",
+                "convergence_window": "10000",
+            },
+        ),
+    )
+    return _isolate_gui_preferences
+
+
+@pytest.fixture
+def fast_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
+    """Pre-seed Settings for one small, fast, two-replicate batch run.
+
+    `test/gui/test_batch_running.py`'s own sibling to `fast_scalar_run_
+    settings`: the same tiny-scale values that fixture's own docstring
+    explains, plus `n_replicates`/`max_workers` set for a small real
+    batch (`n_replicates > 1` is the GUI's own scalar-vs-batch toggle,
+    `fim.gui.app.Api.start_run`) instead of one scalar run.
+    """
+    save_preferences(
+        _isolate_gui_preferences,
+        GuiPreferences(
+            welcome_dismissed=True,
+            default_run_settings={
+                "n_replicates": "2",
+                "max_generations": "10",
+                "convergence_window": "4",
+                "convergence_tolerance": "1.0",
+                "max_workers": "2",
+            },
+        ),
+    )
+    return _isolate_gui_preferences
+
+
+@pytest.fixture
+def unreachable_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
+    """Pre-seed Settings for a small batch that cannot converge before its cap.
+
+    `test/gui/test_batch_running.py`'s own sibling to `unreachable_
+    convergence_run_settings`, for a small two-replicate batch instead
+    of one scalar run -- a batch that never settles within test time
+    keeps reporting real, growing progress until explicitly cancelled,
+    needed by that file's own live-trajectory tests, which must observe
+    at least one real tick with two or more replicates simultaneously
+    reporting, not just the batch's own terminal "done"/"cancelled".
+    Sets `max_generations` and `convergence_window` to the same large
+    value, the identical "structural, not probabilistic" guarantee
+    `unreachable_convergence_run_settings`'s own docstring explains.
+    """
+    save_preferences(
+        _isolate_gui_preferences,
+        GuiPreferences(
+            welcome_dismissed=True,
+            default_run_settings={
+                "n_replicates": "2",
+                "max_generations": "10000",
+                "convergence_window": "10000",
+                "max_workers": "2",
+            },
+        ),
+    )
+    return _isolate_gui_preferences
+
+
+@pytest.fixture
+def staggered_batch_run_settings(_isolate_gui_preferences: Path) -> Path:
+    """Pre-seed Settings for a 5-replicate batch with staggered stopping generations.
+
+    `test/gui/test_batch_results_screen.py`'s own sibling to `fast_
+    batch_run_settings`, for the specific `[3, 5, 6, 12, 15]`-generation
+    staggered-stopping shape that file's own `_SET_STAGGERED_BATCH_
+    FIELDS` comment explains -- needed so the completed batch trajectory
+    panel's own pooled band actually exercises real, uneven replicate
+    coverage across generations, not just the every-replicate-stops-
+    together case `fast_batch_run_settings` happens to produce.
+    """
+    save_preferences(
+        _isolate_gui_preferences,
+        GuiPreferences(
+            welcome_dismissed=True,
+            default_run_settings={
+                "n_replicates": "5",
+                "max_generations": "30",
+                "convergence_window": "4",
+                "convergence_tolerance": "0.02",
+                "max_workers": "3",
+            },
+        ),
+    )
+    return _isolate_gui_preferences

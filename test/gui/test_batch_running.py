@@ -27,6 +27,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -47,9 +48,12 @@ _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # A small, fast, two-replicate batch — the same tiny-scale values `test/
 # gui/test_running_screen.py`'s own `_SET_TINY_FIELDS` uses for a scalar
-# run, plus `n_replicates` set to 2 -- there is no separate
-# "batch mode" toggle; `n_replicates` *is* the toggle -- and a matching
-# small `max_workers`.
+# run. `n_replicates`/`max_generations`/the convergence-loop timing
+# pair/`max_workers` moved out of Configure's own `<form>` entirely and
+# into the Settings dialog (`2026-09-16` revision) -- every test using
+# this constant now also requests `fast_batch_run_settings`
+# (`conftest.py`), which pre-seeds those through Settings' own
+# mechanism instead of a DOM field that no longer exists.
 _SET_TINY_BATCH_FIELDS = """
 function setField(name, value) {
     const field = document.getElementById(`field-${name}`);
@@ -62,35 +66,6 @@ setField('seed', '20260814');
 setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
-setField('convergence_window', '4');
-setField('convergence_tolerance', '1.0');
-setField('max_generations', '10');
-setField('n_replicates', '2');
-setField('max_workers', '2');
-"""
-
-# Same shape as `test_running_screen.py`'s own `_SET_UNREACHABLE_
-# CONVERGENCE`, plus `max_generations` raised to match (that file's own
-# comment on its identical pairing explains why both fields, not
-# convergence_window alone, are needed: `trailing_window_stable`'s own
-# structural `len(history) < window` guard means convergence cannot
-# even be *evaluated* before the generation cap, so this run cannot
-# finish before the cap either -- `_SET_TINY_BATCH_FIELDS`'s own
-# `max_generations: '10'` would otherwise let a batch this small reach
-# the cap, and its own `atomic_directory` staging directory get cleaned
-# up, before this test's own poll for reporting replicates ever runs).
-# A batch that never settles within test time keeps reporting real,
-# growing progress until explicitly cancelled -- needed for the live-
-# trajectory test below, which must observe at least one real tick with
-# two or more replicates simultaneously reporting, not just the batch's
-# own terminal "done"/"cancelled".
-_SET_UNREACHABLE_BATCH_CONVERGENCE = """
-document.getElementById('field-convergence_window').value = '10000';
-document.getElementById('field-convergence_window')
-    .dispatchEvent(new Event('input', {bubbles: true}));
-document.getElementById('field-max_generations').value = '10000';
-document.getElementById('field-max_generations')
-    .dispatchEvent(new Event('input', {bubbles: true}));
 """
 
 
@@ -112,7 +87,9 @@ def _wait_for_input_screen_ready(window: webview.Window) -> None:
     )
 
 
-def test_start_run_dispatches_a_real_batch_and_pushes_its_done_message() -> None:
+def test_start_run_dispatches_a_real_batch_and_pushes_its_done_message(
+    fast_batch_run_settings: Path,
+) -> None:
     """`n_replicates: 2` reaches a real `ProcessPoolExecutor` batch, not a scalar run.
 
     Waits on `done_event` (`Api`'s `on_message` hook) rather than
@@ -214,7 +191,9 @@ def _wait_for_progress_with_statistics(
             return payload
 
 
-def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> None:
+def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report(
+    unreachable_batch_run_settings: Path,
+) -> None:
     """The live trajectory panel (batch trajectory panel design `20260912-
     claude-sonnet-5-batch-trajectory-panel-design.md`, `selby/restricted`,
     commit 1) appears mid-batch, not only once it finishes.
@@ -238,7 +217,7 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
 
     Cancels the batch to end the test rather than waiting for it to
     converge (`convergence_window` is set unreachably high specifically
-    so it does not, `_SET_UNREACHABLE_BATCH_CONVERGENCE`) -- the same
+    so it does not, `unreachable_batch_run_settings`) -- the same
     "Cancel ends the test" precedent `test_running_screen.py`'s own
     Cancel-button test already established.
     """
@@ -260,7 +239,6 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
             _wait_for_input_screen_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
-                + _SET_UNREACHABLE_BATCH_CONVERGENCE
                 + "document.getElementById('run-button').click();"
             )
             settled = None
@@ -295,7 +273,9 @@ def test_a_live_batch_shows_a_trajectory_panel_once_two_replicates_report() -> N
     assert settled["statisticRowCount"] == 10
 
 
-def test_a_live_batch_trajectory_row_toggle_works_mid_run() -> None:
+def test_a_live_batch_trajectory_row_toggle_works_mid_run(
+    unreachable_batch_run_settings: Path,
+) -> None:
     """A statistic-row click during a still-running batch re-renders.
 
     Batch trajectory panel design `20260912-claude-sonnet-5-batch-
@@ -339,7 +319,6 @@ def test_a_live_batch_trajectory_row_toggle_works_mid_run() -> None:
             _wait_for_input_screen_ready(window)
             window.evaluate_js(
                 _SET_TINY_BATCH_FIELDS
-                + _SET_UNREACHABLE_BATCH_CONVERGENCE
                 + "document.getElementById('run-button').click();"
             )
             settled = None

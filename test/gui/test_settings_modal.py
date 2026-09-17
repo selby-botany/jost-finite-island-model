@@ -1,10 +1,15 @@
-"""Headless functional tests for the Settings dialog's own execution/
-convergence-selection defaults and significant-digits field (botanist
-GUI design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`
-§4.2/§11.2/§12, extended on a real, reported request to also hold
-execution engine/`n_replicates`/the convergence-selection group as
-global defaults -- `index.html`'s own comment above `#modal-settings`
-has the full account).
+"""Headless functional tests for the Settings dialog's own execution-
+default fields and significant-digits field (botanist GUI design doc
+`20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.2/§11.2/§12,
+extended on a real, reported request to also hold execution engine,
+`n_replicates`, `max_generations`, the convergence-loop timing pair,
+`replicate_confidence`, `jit`, `auto_vector_min_d`, `auto_vector_max_
+capacity`, `max_workers`, and `max_concurrent_replicates` as global
+defaults -- `index.html`'s own comment above `#modal-settings` has the
+full account). `convergence_statistic`/`convergence_combinator`
+deliberately have no Settings-side copy at all -- experimental, per-run
+choices judged to have no sensible system-wide default -- so this file
+carries no coverage for either.
 
 Real DOM-driven proof that `webui/screens/settings.js` actually seeds,
 collects, and saves these fields through the real `Api.get_default_run_
@@ -124,7 +129,13 @@ def test_settings_dialog_seeds_execution_and_convergence_defaults_from_starter(
             "({"
             "engineBackend: document.getElementById('settings-engine_backend').value, "
             "nReplicates: document.getElementById('settings-n_replicates').value, "
-            "csD: document.getElementById('settings-cs_D').checked"
+            "maxGenerations: document.getElementById('settings-max_generations')"
+            ".value, "
+            "replicateConfidence: document.getElementById("
+            "'settings-replicate_confidence').value, "
+            "jit: document.getElementById('settings-jit').value, "
+            "autoVectorMinD: document.getElementById('settings-auto_vector_min_d')"
+            ".value"
             "})",
             lambda value: value is not None and value["nReplicates"] != "",
         )
@@ -134,7 +145,10 @@ def test_settings_dialog_seeds_execution_and_convergence_defaults_from_starter(
     starter = starter_form_values()
     assert result["engineBackend"] == starter["engine_backend"]
     assert result["nReplicates"] == starter["n_replicates"]
-    assert result["csD"] is True
+    assert result["maxGenerations"] == starter["max_generations"]
+    assert result["replicateConfidence"] == starter["replicate_confidence"]
+    assert result["jit"] == starter["jit"]
+    assert result["autoVectorMinD"] == starter["auto_vector_min_d"]
 
 
 def test_settings_dialog_seeds_execution_and_convergence_defaults_from_saved(
@@ -147,18 +161,8 @@ def test_settings_dialog_seeds_execution_and_convergence_defaults_from_saved(
             default_run_settings={
                 "engine_backend": "generational",
                 "n_replicates": "16",
-                "convergence_combinator": "all",
                 "convergence_window": "10",
                 "convergence_tolerance": "0.02",
-                "cs_D": "true",
-                "cs_G_ST": "false",
-                "cs_E_ST": "false",
-                "cs_K_ST": "false",
-                "cs_H_S": "false",
-                "cs_H_T": "false",
-                "cs_A_CGD": "false",
-                "cs_Delta": "false",
-                "cs_MI": "false",
             }
         ),
     )
@@ -191,15 +195,16 @@ def test_settings_save_button_persists_execution_and_convergence_defaults(
 
     The trigger script itself retries the readback (bounded, up to 2.5s)
     rather than trusting one fixed delay before reading back: `Save`'s
-    own `click` handler is `async` (collects the 14 fields, awaits a
+    own `click` handler is `async` (collects the 11 fields, awaits a
     real `set_default_run_settings` bridge round trip, then updates the
-    banner), so a single fixed sleep before reading back raced that
-    round trip under real parallel-test load and failed intermittently
-    -- exactly the non-deterministic-test defect this project's own
-    testing discipline forbids tolerating. Polling until the readback
-    actually reflects the just-saved value converges to the same
-    correct result regardless of how long the real bridge call takes,
-    rather than gambling that a guessed delay was enough.
+    banner and closes the dialog), so a single fixed sleep before
+    reading back raced that round trip under real parallel-test load
+    and failed intermittently -- exactly the non-deterministic-test
+    defect this project's own testing discipline forbids tolerating.
+    Polling until the readback actually reflects the just-saved value
+    converges to the same correct result regardless of how long the
+    real bridge call takes, rather than gambling that a guessed delay
+    was enough.
     """
 
     def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
@@ -251,24 +256,39 @@ def test_settings_save_button_shows_the_banner_on_an_invalid_value(
             "document.getElementById('settings-n_replicates').value = 'not a number';"
             "document.getElementById('settings-save-button').click();"
         )
-        return poll_until(
+        banner = poll_until(
             "({"
             "hidden: document.getElementById('settings-banner').hidden, "
             "text: document.getElementById('settings-banner').textContent"
             "})",
             lambda value: value is not None and value["hidden"] is False,
         )
+        # An invalid value must not also dismiss the dialog -- only a
+        # successful save does (`test_settings_save_button_closes_the_
+        # dialog_on_success`, below); an invalid save leaving the dialog
+        # open is what lets the user see and fix the banner's own
+        # message. Read before `_drive`'s own teardown destroys the
+        # window, not after.
+        banner["dialogOpen"] = window.evaluate_js(
+            "document.getElementById('modal-settings').open"
+        )
+        return banner
 
     result = _drive(window, steps)
 
     assert result["hidden"] is False
     assert "n_replicates" in result["text"]
+    assert result["dialogOpen"] is True
 
 
-def test_settings_checking_a_second_convergence_statistic_reveals_the_combinator(
+def test_settings_save_button_closes_the_dialog_on_success(
     window: webview.Window,
 ) -> None:
-    """Settings' own combinator field follows the identical rule Configure's does."""
+    """A successful Save dismisses the dialog -- a real, reported bug, now fixed.
+
+    Save used to persist the change but leave the dialog open,
+    indistinguishable at a glance from a save that silently failed.
+    """
 
     def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
         window.evaluate_js("document.getElementById('settings-button').click();")
@@ -276,21 +296,213 @@ def test_settings_checking_a_second_convergence_statistic_reveals_the_combinator
             "document.getElementById('modal-settings').open",
             lambda value: value is True,
         )
-        before = window.evaluate_js(
-            "document.getElementById('settings-combinator-field').hidden"
-        )
-        window.evaluate_js(
-            "document.getElementById('settings-cs_G_ST').checked = true;"
-            "document.getElementById('settings-cs_G_ST')"
-            ".dispatchEvent(new Event('change', {bubbles: true}));"
-        )
-        after = poll_until(
-            "document.getElementById('settings-combinator-field').hidden",
+        window.evaluate_js("document.getElementById('settings-save-button').click();")
+        return poll_until(
+            "document.getElementById('modal-settings').open",
             lambda value: value is False,
         )
-        return {"before": before, "after": after}
 
     result = _drive(window, steps)
 
-    assert result["before"] is True
-    assert result["after"] is False
+    assert result is False
+
+
+def test_settings_engine_backend_visibility_reveals_jit_and_auto_vector_fields(
+    window: webview.Window,
+) -> None:
+    """`jit`/`auto_vector_*` show only for the one execution engine each tunes.
+
+    "Where apropos" (a real, reported request): `jit` is a real,
+    user-facing choice only under `generational` (`lineal` never accepts
+    anything but off; `generational-vector` always uses numba
+    regardless); `auto_vector_min_d`/`auto_vector_max_capacity` only
+    affect the `auto` engine's own threshold, so both are shown or
+    hidden together as one group.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("document.getElementById('settings-button').click();")
+        poll_until(
+            "document.getElementById('modal-settings').open",
+            lambda value: value is True,
+        )
+
+        def _set_backend(value: str) -> Any:
+            window.evaluate_js(
+                f"document.getElementById('settings-engine_backend').value "
+                f"= '{value}';"
+                "document.getElementById('settings-engine_backend')"
+                ".dispatchEvent(new Event('change', {bubbles: true}));"
+            )
+            return poll_until(
+                "({"
+                "jitHidden: document.getElementById('settings-jit-field').hidden, "
+                "autoVectorHidden: document.getElementById("
+                "'settings-auto-vector-fields').hidden"
+                "})",
+                lambda value: value is not None,
+            )
+
+        return {
+            "generational": _set_backend("generational"),
+            "auto": _set_backend("auto"),
+            "lineal": _set_backend("lineal"),
+        }
+
+    result = _drive(window, steps)
+
+    assert result["generational"] == {"jitHidden": False, "autoVectorHidden": True}
+    assert result["auto"] == {"jitHidden": True, "autoVectorHidden": False}
+    assert result["lineal"] == {"jitHidden": True, "autoVectorHidden": True}
+
+
+def test_engine_backend_selector_lists_all_four_options_recommendation_first(
+    window: webview.Window,
+) -> None:
+    """The execution-engine `<select>` shows four options, `auto` labeled recommended.
+
+    Relocated from `test_input_screen.py` (`2026-09-16` revision moved
+    this field into Settings entirely -- Configure's own former
+    `#field-engine_backend` copy no longer exists). Approach B3's own
+    shape, proven against the real rendered DOM rather than the markup
+    source: all four legal `SimulationParams.engine_backend` values are
+    present so none can ever be silently downgraded on save, but
+    `lineal` and `auto` come first and `auto` carries the "recommended"
+    wording -- the two-real-choices emphasis the design asked for,
+    expressed through order and labeling rather than by withholding
+    values.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("document.getElementById('settings-button').click();")
+        poll_until(
+            "document.getElementById('modal-settings').open",
+            lambda value: value is True,
+        )
+        return poll_until(
+            "Array.from("
+            "document.querySelectorAll('#settings-engine_backend option')"
+            ").map(function (option) "
+            "{ return [option.value, option.textContent]; })",
+            lambda value: bool(value) and len(value) == 4,
+        )
+
+    settled = _drive(window, steps)
+
+    assert [value for value, _ in settled] == [
+        "lineal",
+        "auto",
+        "generational",
+        "generational-vector",
+    ]
+    assert "reference" in settled[0][1]
+    assert "recommended" in settled[1][1]
+
+
+def test_engine_backend_selector_accepts_every_legal_value(
+    window: webview.Window,
+) -> None:
+    """Each of the four values can actually be set on the live `<select>`.
+
+    Relocated from `test_input_screen.py` (`2026-09-16` revision). The
+    browser-level half of `test_config_form.py`'s own round-trip test:
+    assigning a value with no matching `<option>` leaves a `<select>`
+    reading back the empty string rather than raising, so a missing
+    option is exactly the silent, unobservable downgrade approach B1
+    was rejected over. Reading each assignment straight back out of the
+    real DOM is what makes that observable.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("document.getElementById('settings-button').click();")
+        poll_until(
+            "document.getElementById('modal-settings').open",
+            lambda value: value is True,
+        )
+        return poll_until(
+            "['lineal', 'auto', 'generational', 'generational-vector']"
+            ".map(function (candidate) {"
+            "var select = document.getElementById('settings-engine_backend');"
+            "select.value = candidate;"
+            "return select.value;"
+            "})",
+            lambda value: bool(value) and len(value) == 4,
+        )
+
+    settled = _drive(window, steps)
+
+    assert settled == ["lineal", "auto", "generational", "generational-vector"]
+
+
+def test_engine_backend_options_are_relabeled_without_numba(
+    window: webview.Window,
+) -> None:
+    """Without numba, `auto`/`generational-vector` say so; the other two are untouched.
+
+    Relocated from `test_input_screen.py` (`2026-09-16` revision).
+    Approach A3, driven through the real page: `applyEngineBackend
+    Availability` is re-run against a stubbed bridge reporting no numba,
+    rather than uninstalling the dependency, and the labels are read
+    back out of the live DOM. Values are deliberately left alone -- every
+    legal value must stay selectable for approach B3's own round trip,
+    so the honesty lives in the label, not in a disabled or removed
+    option.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js(
+            "window.pywebview.api.get_engine_backend_availability = "
+            "function () { return Promise.resolve({numba: false}); };"
+            "window.fim.applyEngineBackendAvailability();"
+        )
+        return poll_until(
+            "Array.from("
+            "document.querySelectorAll('#settings-engine_backend option')"
+            ").map(function (option) "
+            "{ return [option.value, option.textContent]; })",
+            lambda value: bool(value) and "numba" in value[1][1],
+        )
+
+    settled = _drive(window, steps)
+
+    labels = dict(settled)
+    assert labels["auto"].endswith(" — needs numba; install fim[jit]")
+    assert labels["generational-vector"].endswith(" — needs numba; install fim[jit]")
+    assert "numba" not in labels["lineal"]
+    assert "numba" not in labels["generational"]
+
+
+def test_engine_backend_selector_defaults_to_auto(window: webview.Window) -> None:
+    """An untouched selector sits on `auto`, this dialog's own recommended choice.
+
+    Relocated from `test_input_screen.py` (`2026-09-16` revision). The
+    `selected` attribute is what a user who never opens this field would
+    see for the instant before `loadSettingsDialog` applies a real,
+    saved (or starter) value over the markup -- checked here in
+    isolation (resetting `selectedIndex` back to `defaultSelected`
+    first) precisely because `starter_form_values()`'s own value could
+    in principle drift from it, the same class of markup/value
+    inconsistency `test_input_screen.py`'s own history already found
+    once for Configure's former copy of this field.
+    """
+
+    def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:
+        window.evaluate_js("document.getElementById('settings-button').click();")
+        poll_until(
+            "document.getElementById('modal-settings').open",
+            lambda value: value is True,
+        )
+        return poll_until(
+            "document.getElementById('settings-engine_backend').selectedIndex "
+            "= -1; "
+            "document.getElementById('settings-engine_backend').selectedIndex = "
+            "Array.from("
+            "document.querySelectorAll('#settings-engine_backend option')"
+            ").findIndex(function (option) { return option.defaultSelected; }); "
+            "document.getElementById('settings-engine_backend').value",
+            bool,
+        )
+
+    selected = _drive(window, steps)
+
+    assert selected == "auto"

@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import queue
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -55,7 +56,12 @@ _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 # Mirrors `test_results_screen.py`'s own `_SET_TINY_FIELDS` field for
 # field -- see that module's docstring for why these particular values
 # (a small, fast-converging run, not the starter form's own
-# `d: 20`/`max_generations: 10000` defaults).
+# `d: 20`/`max_generations: 10000` defaults). `n_replicates`/`max_
+# generations`/the convergence-loop timing pair moved out of Configure's
+# own `<form>` entirely and into the Settings dialog (`2026-09-16`
+# revision) -- every test using this constant now also requests
+# `fast_scalar_run_settings` (`conftest.py`), which pre-seeds those
+# through Settings' own mechanism instead.
 _SET_TINY_FIELDS = """
 function setField(name, value) {
     const field = document.getElementById(`field-${name}`);
@@ -68,10 +74,6 @@ setField('seed', '20260814');
 setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
-setField('convergence_window', '4');
-setField('convergence_tolerance', '1.0');
-setField('max_generations', '10');
-setField('n_replicates', '1');
 """
 
 
@@ -101,6 +103,7 @@ def _scrub_to(window: webview.Window, index: int) -> None:
 
 
 def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
+    fast_scalar_run_settings: Path,
     window: webview.Window,
 ) -> None:
     """Scrubbing away from the final frame shows the watched statistic's
@@ -205,6 +208,7 @@ def test_scrubbing_to_an_earlier_generation_updates_the_stats_table_and_marker(
 
 
 def test_scrubbing_back_to_the_final_frame_restores_the_real_statistics_and_marker(
+    fast_scalar_run_settings: Path,
     window: webview.Window,
 ) -> None:
     """Scrubbing away and then back to the scrubber's own last frame

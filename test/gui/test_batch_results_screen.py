@@ -59,6 +59,11 @@ _OUTCOME_TIMEOUT_SECONDS = 40.0
 _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # Mirrors `test/gui/test_batch_running.py`'s own `_SET_TINY_BATCH_FIELDS`.
+# `n_replicates`/`max_generations`/the convergence-loop timing pair/
+# `max_workers` moved out of Configure's own `<form>` entirely and into
+# the Settings dialog (`2026-09-16` revision) -- every test using this
+# constant now also requests `fast_batch_run_settings` (`conftest.py`),
+# which pre-seeds those through Settings' own mechanism instead.
 _SET_TINY_BATCH_FIELDS = """
 function setField(name, value) {
     const field = document.getElementById(`field-${name}`);
@@ -71,11 +76,6 @@ setField('seed', '20260814');
 setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
-setField('convergence_window', '4');
-setField('convergence_tolerance', '1.0');
-setField('max_generations', '10');
-setField('n_replicates', '2');
-setField('max_workers', '2');
 """
 
 # A 5-replicate batch whose own replicates stop at staggered generations
@@ -85,7 +85,9 @@ setField('max_workers', '2');
 # the completed batch trajectory panel's own pooled band actually
 # exercises real, uneven replicate coverage across generations, not
 # just the every-replicate-stops-together case `_SET_TINY_BATCH_FIELDS`
-# happens to produce.
+# happens to produce. Every test using this constant also requests
+# `staggered_batch_run_settings` (`conftest.py`) for the same
+# Settings-only-fields reason as `_SET_TINY_BATCH_FIELDS`, above.
 _SET_STAGGERED_BATCH_FIELDS = """
 function setField(name, value) {
     const field = document.getElementById(`field-${name}`);
@@ -98,11 +100,6 @@ setField('seed', '42');
 setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
-setField('convergence_window', '4');
-setField('convergence_tolerance', '0.02');
-setField('max_generations', '30');
-setField('n_replicates', '5');
-setField('max_workers', '3');
 """
 
 
@@ -210,7 +207,7 @@ def test_batch_trajectory_domain_keeps_a_uniformly_small_samples_own_band(
     assert settled["maxValue"] == 4
 
 
-def test_a_completed_batch_renders_the_run_view() -> None:
+def test_a_completed_batch_renders_the_run_view(fast_batch_run_settings: Path) -> None:
     """A finished two-replicate batch shows a run id, two table rows, twelve stat rows.
 
     Every one of the ten named statistics (the original seven plus the
@@ -306,7 +303,9 @@ def test_a_completed_batch_renders_the_run_view() -> None:
     assert settled["trajectoryFrameHidden"] is False
 
 
-def test_a_completed_batchs_own_effective_allele_rows_render() -> None:
+def test_a_completed_batchs_own_effective_allele_rows_render(
+    fast_batch_run_settings: Path,
+) -> None:
     """The batch summary's own last two rows are the effective-allele readouts.
 
     Found from a real user's own report: these two rows (botanist GUI
@@ -375,7 +374,9 @@ def test_a_completed_batchs_own_effective_allele_rows_render() -> None:
     assert "uncertainty across 2 independent replicates" in settled["withinTooltip"]
 
 
-def test_a_completed_batch_hides_the_reanalyze_controls() -> None:
+def test_a_completed_batch_hides_the_reanalyze_controls(
+    fast_batch_run_settings: Path,
+) -> None:
     """A batch's own `completed` view hides item 6's re-analysis controls.
 
     A batch manifest has no single trajectory of its own to re-analyze
@@ -425,7 +426,9 @@ def test_a_completed_batch_hides_the_reanalyze_controls() -> None:
     assert settled["trajectoryPath"] is None
 
 
-def test_a_completed_batchs_own_pooled_trajectory_renders() -> None:
+def test_a_completed_batchs_own_pooled_trajectory_renders(
+    staggered_batch_run_settings: Path,
+) -> None:
     """The completed batch trajectory panel (batch trajectory panel
     design `20260912-claude-sonnet-5-batch-trajectory-panel-design.md`,
     `selby/restricted`, commit 2) actually renders, given a real batch
@@ -506,7 +509,9 @@ def test_a_completed_batchs_own_pooled_trajectory_renders() -> None:
     assert settled["canvasNonBlank"] > 0
 
 
-def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter() -> None:
+def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter(
+    staggered_batch_run_settings: Path,
+) -> None:
     """The completed batch scrubber (batch trajectory panel design
     `20260912-claude-sonnet-5-batch-trajectory-panel-design.md`,
     `selby/restricted`) shows, has a real generation range, and
@@ -577,7 +582,9 @@ def test_a_completed_batchs_own_scrubber_replays_the_pooled_scatter() -> None:
     assert "Generation" in settled["afterScrubLabel"]
 
 
-def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None:
+def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip(
+    fast_batch_run_settings: Path,
+) -> None:
     """`buildCiMeter`'s own tooltip states "uncertainty across N independent
     replicates" (botanist GUI design doc §7.2: re-labeled "everywhere it
     appears... so it is never visually confusable with" the within-run
@@ -638,7 +645,9 @@ def test_the_ci_meter_names_the_replicate_count_in_its_own_tooltip() -> None:
     assert chr(0x03C3) not in tooltip
 
 
-def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
+def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back(
+    fast_batch_run_settings: Path,
+) -> None:
     """Selecting a pair, then selecting back to the default, round-trips
     through the real batch bridge (no "Show overview" button any more).
 
@@ -736,7 +745,9 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back() -> None:
     assert settled["revertedMatchesDefault"] is True
 
 
-def test_running_a_batch_again_from_completed_starts_a_new_batch() -> None:
+def test_running_a_batch_again_from_completed_starts_a_new_batch(
+    fast_batch_run_settings: Path,
+) -> None:
     """ "Run simulation," clicked again from a completed batch, starts a new one.
 
     The batch counterpart to `test_results_screen.py`'s own `test_
@@ -809,7 +820,9 @@ def test_running_a_batch_again_from_completed_starts_a_new_batch() -> None:
     assert settled["secondOutputDirectory"] != settled["firstOutputDirectory"]
 
 
-def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
+def test_open_folder_button_reaches_the_injected_opener_and_settles(
+    fast_batch_run_settings: Path,
+) -> None:
     """ "Open output folder" reaches the injected opener and settles before teardown.
 
     The batch-results counterpart to `test_results_screen.py`'s own

@@ -52,18 +52,21 @@ _INPUT_SCREEN_READY = "window.__fimRunViewReady === true"
 
 # Mirrors `test/conftest.py`'s `tiny_params` fixture field for field, so
 # the run converges (or hits its own small generation cap) almost
-# immediately — see this module's own docstring. `n_replicates` must be
-# set explicitly, even though `tiny_params` itself leaves it at `1`:
-# `params.n_replicates > 1` is the GUI's own scalar-vs-batch toggle
-# (`fim.gui.app.Api.start_run`), and the "new run" form's own
-# `field-n_replicates` now pre-populates from `SimulationParams`'s own
-# real default (`200`, `fim.cli.STARTER_CONFIG` never overrides it) —
-# leaving this field untouched silently submits a real 200-replicate
-# batch run through the real form instead of the one fast scalar run
-# this whole module exists to drive. Regression, found directly: a
-# stale `field-n_replicates` value blanks `results-outcome` (the batch
-# branch of `enterCompletedState` always does) and can blow past a
-# fixed wait budget calibrated for one small run, not two hundred.
+# immediately — see this module's own docstring. `n_replicates`/`max_
+# generations`/the convergence-loop timing pair moved out of Configure's
+# own `<form>` entirely and into the Settings dialog (`2026-09-16`
+# revision) -- `field-n_replicates` etc. no longer exist to set here at
+# all, so every test below that uses this constant now also requests
+# `fast_scalar_run_settings` (`conftest.py`), which pre-seeds the
+# identical values through Settings' own mechanism instead. Regression,
+# found directly, that motivated this: with nothing overriding it, a
+# fresh form's own `n_replicates` is `SimulationParams`'s real default
+# (`200`, `fim.cli.STARTER_CONFIG` never overrides it) — silently
+# submitting a real 200-replicate batch run instead of the one fast
+# scalar run this whole module exists to drive, blanking `results-
+# outcome` (the batch branch of `enterCompletedState` always does) and
+# blowing past a fixed wait budget calibrated for one small run, not two
+# hundred.
 _SET_TINY_FIELDS = """
 function setField(name, value) {
     const field = document.getElementById(`field-${name}`);
@@ -76,10 +79,6 @@ setField('seed', '20260814');
 setField('m_rate', '0.1');
 setField('mu_value', '0.01');
 setField('locus_lengths', '200');
-setField('convergence_window', '4');
-setField('convergence_tolerance', '1.0');
-setField('max_generations', '10');
-setField('n_replicates', '1');
 """
 
 
@@ -96,7 +95,7 @@ def _poll_until(
 
 
 def test_a_completed_run_renders_the_run_view(
-    window: webview.Window, drive: Callable[..., Any]
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
     """A finished run shows its run id, outcome, all six statistics, and a scatter."""
     settled = drive(
@@ -210,7 +209,7 @@ def test_a_completed_run_renders_the_run_view(
 
 
 def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
-    window: webview.Window, drive: Callable[..., Any]
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
     """The run title sits above the plot and the Back action returns to p_0."""
     settled = drive(
@@ -261,7 +260,7 @@ def test_completed_run_shows_title_above_canvas_and_back_returns_to_initial(
 
 
 def test_completed_scatter_draws_the_marker_color_legend(
-    window: webview.Window, drive: Callable[..., Any]
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
     """The on-screen plot explains its own marker colors.
 
@@ -312,7 +311,7 @@ def test_completed_scatter_draws_the_marker_color_legend(
 
 
 def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
-    window: webview.Window,
+    fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
     """Selecting a pair, then selecting back to the default, round-trips
     through the real bridge (no "Show overview"
@@ -412,7 +411,7 @@ def test_deme_pair_selector_switches_to_a_chosen_pair_and_back(
 
 
 def test_running_simulation_again_from_completed_starts_a_new_run(
-    window: webview.Window,
+    fast_scalar_run_settings: Path, window: webview.Window
 ) -> None:
     """ "Run simulation," clicked again from `completed`, starts a genuinely new run.
 
@@ -509,7 +508,9 @@ def test_running_simulation_again_from_completed_starts_a_new_run(
     assert settled["secondOutputDirectory"] != settled["firstOutputDirectory"]
 
 
-def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
+def test_open_folder_button_reaches_the_injected_opener_and_settles(
+    fast_scalar_run_settings: Path,
+) -> None:
     """ "Open output folder" reaches the injected opener and settles before teardown.
 
     Builds its own window (not the shared `window` fixture, which
@@ -574,7 +575,7 @@ def test_open_folder_button_reaches_the_injected_opener_and_settles() -> None:
 
 
 def test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption(
-    window: webview.Window, drive: Callable[..., Any]
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
     """A run started with the sigma-band toggle on draws a real band and caption.
 
@@ -638,7 +639,9 @@ def test_a_completed_run_with_a_sigma_band_draws_it_and_shows_the_caption(
     assert settled["canvasNonBlankPixelCount"] > 0
 
 
-def test_run_view_fits_the_default_window_without_excess_scrolling() -> None:
+def test_run_view_fits_the_default_window_without_excess_scrolling(
+    fast_scalar_run_settings: Path,
+) -> None:
     """A completed scalar run's trajectory panel and stats table are on-screen.
 
     Real, reported layout bug at the app's own default window size
@@ -779,7 +782,7 @@ def test_run_view_initial_state_canvas_is_unaffected_by_the_trajectory_fix() -> 
 
 
 def test_completed_scrubber_updates_supplemental_panels_on_scrub_ticks(
-    window: webview.Window, drive: Callable[..., Any]
+    fast_scalar_run_settings: Path, window: webview.Window, drive: Callable[..., Any]
 ) -> None:
     """Stepping the completed scrubber updates allele composition & spectrum."""
     settled = drive(

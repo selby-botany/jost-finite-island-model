@@ -59,8 +59,8 @@ def _wait_for_input_screen_ready(window: webview.Window) -> None:
     `run-view-initial.js`'s own `initializeRunView` does not flip
     `window.__fimRunViewReady` to `true` until every one of its own
     bootstrap bridge calls (`get_engine_backend_availability`,
-    `get_default_max_workers`/`loadInitialForm`, `renderInitialPreview`,
-    `maybeShowWelcome`) has already resolved — that function's own
+    `loadInitialForm`, `renderInitialPreview`, `maybeShowWelcome`) has
+    already resolved — that function's own
     comment states this explicitly: an un-awaited bridge call still in
     flight when a window is destroyed is exactly this file's own
     subject. The three tests below that build their own raw window

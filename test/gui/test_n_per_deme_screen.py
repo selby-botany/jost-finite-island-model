@@ -18,6 +18,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -197,12 +198,17 @@ def test_changing_d_resizes_the_grid_preserving_existing_values_by_position(
     assert settled["fieldN"].split(", ")[0] == "111"
 
 
-def test_a_real_run_with_distinct_per_deme_n_values_completes() -> None:
+def test_a_real_run_with_distinct_per_deme_n_values_completes(
+    fast_scalar_run_settings: Path,
+) -> None:
     """A run submitted with genuinely different per-deme N values actually completes.
 
     Same event-driven "wait on a real `threading.Event`, never poll a
     live background run" shape `test_loci_grid_screen.py`'s own real-run
     test uses, for the identical reason its own docstring records.
+    `fast_scalar_run_settings` pre-seeds `n_replicates`/`max_generations`/
+    the convergence-loop timing pair -- Settings-only fields now, no
+    longer settable via `_set_field`.
     """
     started_event = threading.Event()
     done_event = threading.Event()
@@ -236,10 +242,6 @@ def test_a_real_run_with_distinct_per_deme_n_values_completes() -> None:
             window.evaluate_js(_set_field("d", "2"))
             window.evaluate_js(_set_field("seed", "20260814"))
             window.evaluate_js(_set_field("mu_value", "0.01"))
-            window.evaluate_js(_set_field("convergence_window", "4"))
-            window.evaluate_js(_set_field("convergence_tolerance", "1.0"))
-            window.evaluate_js(_set_field("max_generations", "10"))
-            window.evaluate_js(_set_field("n_replicates", "1"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="n_mode"][value="per_deme"]\').click();'

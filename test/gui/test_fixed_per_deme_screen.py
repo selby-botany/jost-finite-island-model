@@ -19,6 +19,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -215,13 +216,18 @@ def test_changing_d_updates_the_preview_live(window: webview.Window) -> None:
     assert result["previewText"] == "Fixes all 5 deme(s) for allele 0."
 
 
-def test_a_real_run_with_fixed_per_deme_all_different_completes() -> None:
+def test_a_real_run_with_fixed_per_deme_all_different_completes(
+    fast_scalar_run_settings: Path,
+) -> None:
     """A run submitted in fixed-per-deme "all different" mode actually completes.
 
     Same event-driven "wait on a real `threading.Event`, never poll a
     live background run" shape `test_running_screen.py`'s own real-run
     tests already use, for the identical reason those tests' own
-    docstrings record.
+    docstrings record. `fast_scalar_run_settings` pre-seeds `n_
+    replicates`/`max_generations`/the convergence-loop timing pair --
+    Settings-only fields now, no longer settable via `_set_field` (the
+    `field-n_replicates` etc. elements it targeted no longer exist).
     """
     started_event = threading.Event()
     done_event = threading.Event()
@@ -257,10 +263,6 @@ def test_a_real_run_with_fixed_per_deme_all_different_completes() -> None:
             window.evaluate_js(_set_field("seed", "20260814"))
             window.evaluate_js(_set_field("mu_value", "0.01"))
             window.evaluate_js(_set_field("locus_lengths", "200"))
-            window.evaluate_js(_set_field("convergence_window", "4"))
-            window.evaluate_js(_set_field("convergence_tolerance", "1.0"))
-            window.evaluate_js(_set_field("max_generations", "10"))
-            window.evaluate_js(_set_field("n_replicates", "1"))
             window.evaluate_js(
                 "document.querySelector("
                 '\'input[name="initial_conditions_mode"]'
