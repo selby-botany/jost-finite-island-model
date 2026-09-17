@@ -444,31 +444,39 @@ def test_init_writes_parseable_starter_config(tmp_path: Path) -> None:
     assert params.N == 450
 
 
-def test_init_writes_a_config_that_runs_as_a_single_scalar_run(
+def test_init_writes_a_config_that_runs_as_an_adaptive_replicate_batch(
     tmp_path: Path,
 ) -> None:
-    """`fim init`'s starter config must pin `n_replicates: 1` explicitly.
+    """`fim init`'s starter config must pin `n_replicates: 200` explicitly.
 
-    Regression test for a real bug: `DEFAULT_N_REPLICATES` changed from
-    `1` to `200` in `021f514`, and `STARTER_CONFIG` never set
-    `n_replicates` at all, relying on that default — so an un-pinned
-    starter config silently switched from "one quick scalar run" to "a
-    200-replicate batch" the moment the default changed, producing the
-    batch directory layout (`manifest.json`/`summary.json`/
-    `replicate-*/`) instead of the flat four-artifact scalar layout every
-    packaging smoke test (`.github/workflows/beta.yml`,
-    `.github/workflows/ci.yml`) hardcodes and expects from `fim init`'s
-    own example. No test caught this until the first "Beta builds" run
-    after that default changed, because `ci.yml`'s own equivalent
-    packaging jobs only run on a release tag push, not on an ordinary
-    branch push.
+    This used to assert the opposite — `n_replicates: 1`, so a fresh
+    `fim init` produced one quick scalar run — with its own regression-
+    test history explaining why: `DEFAULT_N_REPLICATES` changed from `1`
+    to `200` in `021f514`, and `STARTER_CONFIG` never set `n_replicates`
+    at all, relying on that default, so an un-pinned starter config
+    silently switched from "one quick scalar run" to "a 200-replicate
+    batch" the moment the library default changed — no test caught it
+    until the first "Beta builds" run after, since `ci.yml`'s own
+    packaging smoke jobs only run on a release tag push. A real,
+    reported product decision reversed that choice: the target default
+    behavior for a *new* configuration is now to converge on confidence
+    intervals out of the box, so `fim init`'s own example should already
+    be a real, CI-producing batch, not a scalar run — this test now
+    pins the value the *other* direction, `200`, explicit for the exact
+    same "never again silently drift with the library default" reason
+    the original pin existed for. The packaging smoke tests
+    (`.github/workflows/beta.yml`/`ci.yml`) that expect the flat
+    scalar-run artifact layout from their own shrunk-down copy of this
+    starter config now patch `n_replicates` back down to `1` themselves,
+    explicitly, rather than relying on `fim init`'s own default matching
+    what they need.
     """
     output = tmp_path / "example-run.yaml"
 
     assert cli.main(["init", "--output", str(output)]) == 0
 
     params = cli.load_config(output)
-    assert params.n_replicates == 1
+    assert params.n_replicates == 200
 
 
 def test_init_writes_a_config_defaulting_to_the_recommended_auto_engine(

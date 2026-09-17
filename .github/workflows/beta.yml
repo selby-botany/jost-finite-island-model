@@ -313,6 +313,7 @@ jobs:
             -e 's/convergence_window: 50/convergence_window: 4/' \
             -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
             -e 's/max_generations: 10000/max_generations: 10/' \
+            -e 's/n_replicates: 200/n_replicates: 1/' \
             tiny.yaml
           dist/fim.app/Contents/MacOS/fim run tiny.yaml --output smoke --quiet
           for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
@@ -390,6 +391,7 @@ jobs:
             -e 's/convergence_window: 50/convergence_window: 4/' \
             -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
             -e 's/max_generations: 10000/max_generations: 10/' \
+            -e 's/n_replicates: 200/n_replicates: 1/' \
             tiny.yaml
           dist/fim.app/Contents/MacOS/fim run tiny.yaml --output smoke --quiet
           for artifact in manifest.json report.json scatter.png trajectory.jsonl; do
@@ -503,6 +505,7 @@ jobs:
             -e 's/convergence_window: 50/convergence_window: 4/' \
             -e 's/convergence_tolerance: 0.01/convergence_tolerance: 1.0/' \
             -e 's/max_generations: 10000/max_generations: 10/' \
+            -e 's/n_replicates: 200/n_replicates: 1/' \
             tiny.yaml
           dist/fim run tiny.yaml --output smoke --quiet
           for artifact in manifest.json report.json scatter.png trajectory.jsonl; do

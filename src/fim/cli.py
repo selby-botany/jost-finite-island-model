@@ -91,14 +91,21 @@ convergence_statistic: D
 convergence_window: 50
 convergence_tolerance: 0.01
 max_generations: 10000
-# Explicit, not merely `DEFAULT_N_REPLICATES`'s own value: a first-time
-# user's very first `fim run` should be one quick, single run they can
-# read the result of immediately, not an unannounced 200-replicate batch
-# (`SimulationParams.__post_init__`'s own docstring on why an *absent*
-# `n_replicates` now means 200, not 1). Leaving this field out here once
-# meant the same thing that leaving it out in any other config file
-# means, until that default changed out from under it.
-n_replicates: 1
+# Explicit, not merely `DEFAULT_N_REPLICATES`'s own value (200) --
+# a real, reported request: the target default behavior for a new
+# configuration is to converge on confidence intervals, so a fresh
+# `fim init`/desktop-app starter should already be a real, CI-producing
+# batch out of the box, not a single scalar run. This reverses an
+# earlier version of this file's own choice, which pinned this to `1`
+# specifically so a first-time user's very first `fim run` stayed one
+# quick, single run they could read the result of immediately rather
+# than an unannounced 200-replicate batch -- that reasoning no longer
+# wins against the newer "converges on CIs by default" product
+# decision. Explicit rather than left absent purely for readability:
+# an absent `n_replicates` already means the identical 200
+# (`SimulationParams.__post_init__`'s own docstring), so this line
+# changes nothing a reader could not already infer, it just states it.
+n_replicates: 200
 # Explicit, not merely `PARAMETER_DEFAULTS["engine_backend"]`'s own
 # value (`"lineal"`): the desktop app's own Configure screen already
 # defaults a fresh form to `"auto"`, the choice this project's own
