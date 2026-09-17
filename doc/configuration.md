@@ -771,22 +771,22 @@ mutation_model: finite_alleles
 migrant_sampling: continuous
 ```
 
-**In the desktop app:** this is the only one of this section's five
-settings with a control of its own. You will find it as **execution
-engine** in Configure's Structure panel, offering the same four values
-in the order `lineal`, `auto`, `generational`, `generational-vector`; a
-second, identical control lives in the Settings dialog (top-right of the
-top menu bar) as the *default* every new configuration starts from —
-change it there once, and every fresh form picks it up from then on,
-while Configure's own copy still lets you override it for one particular
-run without touching the default. The app's own built-in starting point
-for that default is `auto`, the recommended choice: it picks whichever
-engine measured fastest for your configuration, and the run records the
-engine it actually chose, so the run stays exactly as reproducible as
-one where you named an engine yourself. Loading a configuration file
-shows whatever that file says, including `generational` or
-`generational-vector`, in Configure's own field; saving it again writes
-the same value back unchanged.
+**In the desktop app:** you will find it as **execution engine** in the
+Settings dialog (top-right of the top menu bar), offering the same four
+values in the order `lineal`, `auto`, `generational`,
+`generational-vector`, as the *default* every new configuration starts
+from — change it there once, and every fresh form picks it up from then
+on. Configure itself has no separate control for this field: it
+describes how the computation runs, not what experiment it asks, so it
+lives in Settings only, alongside `n_replicates` and the rest of this
+section's execution-flavored fields. The app's own built-in starting
+point for that default is `auto`, the recommended choice: it picks
+whichever engine measured fastest for your configuration, and the run
+records the engine it actually chose, so the run stays exactly as
+reproducible as one where you named an engine yourself. Loading a
+configuration file that names a different engine (`generational` or
+`generational-vector`, say) runs with that file's own value; it does
+not change what a *fresh* configuration starts from.
 
 **In `fim init`'s starter config:** the file the CLI writes for a
 first-time user makes the same recommendation as the desktop app's
@@ -802,10 +802,16 @@ so a configuration file naming either one still loads and saves
 faithfully — but a run using them will report that `numba` is missing.
 Packaged beta downloads include `numba` already.
 
-The other four settings in this section have no app control, by design:
-`jit`, `auto_vector_min_d`, and `auto_vector_max_capacity` are
-machine-specific tuning values meant to be re-measured rather than typed
-in, and `auto` needs none of them set by hand.
+`jit`, `auto_vector_min_d`, and `auto_vector_max_capacity` also have
+their own Settings-dialog fields — expert-level defaults, not
+Configure-side per-run fields, since they are machine-specific tuning
+values meant to be re-measured rather than typed in on a per-run basis.
+Each appears in Settings only "where apropos": `jit` only when
+Settings' own execution engine is set to `generational` (`lineal` never
+accepts anything but `off`; `generational-vector` always requires
+`numba` regardless of this setting), and `auto_vector_min_d`/`auto_
+vector_max_capacity` only when it is set to `auto`, the one engine
+either threshold affects.
 
 ### jit
 
@@ -906,8 +912,8 @@ on this page).
 overrides this field for one invocation, without editing the config
 file — see [usage.md](usage.md#run-a-simulation). **In the desktop
 app:** a "max concurrent replicates (blank = unset)" field sits beside
-"parallel workers" in Configure's Structure panel, once a batch is
-configured.
+"max workers" in the Settings dialog, alongside this section's other
+execution-flavored defaults.
 
 ## Validation summary
 

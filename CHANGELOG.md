@@ -618,19 +618,46 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The desktop app's Settings dialog (top-right of the top menu bar) now
-  holds execution engine, `n_replicates`, and the convergence-selection
-  group (which statistic(s) to watch, the combinator, window, and
-  tolerance) as global defaults every new configuration starts from —
-  Configure's own Structure panel keeps an identical, independent copy
-  of each field for overriding any of them on one particular run, so
-  nothing about a per-run configuration's own flexibility is lost.
-  Significant digits and appearance (dark-mode override) relocated into
-  Settings too, from Configure's Structure panel, where they had never
-  really belonged (neither is a `SimulationParams` field). A real,
-  reported request: "the defaults can be applicable pretty universally,
-  while a run config can still override them." `track_expensive_
-  statistics` and the within-run σ band stayed in Configure, judged
-  scientific/per-run choices rather than administrative defaults.
+  holds every field that describes *how the computation runs*, as
+  global defaults every new configuration starts from: execution
+  engine, `n_replicates`, `max_generations`, the convergence-loop
+  timing pair (window/tolerance), `replicate_confidence`, `jit`,
+  `auto_vector_min_d`, `auto_vector_max_capacity`, `max_workers`, and
+  `max_concurrent_replicates`. Configure's own form has no separate copy
+  of any of these — editing them in Settings is the only way to change
+  them, and a submitted run always uses whatever Settings currently
+  holds; `jit`/`auto_vector_min_d`/`auto_vector_max_capacity` are new
+  here, with no prior GUI representation at all. Significant digits and
+  appearance (dark-mode override) relocated into Settings too, from
+  Configure's Structure panel, where they had never really belonged
+  (neither is a `SimulationParams` field). `convergence_statistic`
+  (which statistic(s) to watch) and `convergence_combinator`,
+  `track_expensive_statistics`, and the within-run σ band all stayed in
+  Configure, judged experimental/scientific per-run choices rather than
+  administrative defaults — a fresh configuration already gets a
+  sensible single-statistic default for the first of those two, so no
+  system-wide Settings copy is needed. A real, reported request, revised
+  once after an initial version duplicated the convergence-selection
+  group into both places: "settings that are about selecting and
+  controlling the backend definitely go in Settings, and experimental
+  parameters are on Config card." Saving Settings now also dismisses the
+  dialog, fixing a real, reported bug where a successful save left it
+  open, indistinguishable at a glance from a save that silently failed.
+- `fim init`'s starter config now sets `n_replicates: 200`, the
+  documented library default, rather than pinning it to `1`. The
+  desktop app's own fresh-configuration default follows the same value
+  (via `fim.gui.config_form.starter_form_values`, the single source both
+  already shared) — reversing the explicit `n_replicates: 1` override
+  introduced when the library default itself first changed from `1` to
+  `200` (to preserve a first-time user's one quick scalar run at the
+  time), on a real, reported request: the target default behavior for a
+  new configuration is to converge on confidence intervals out of the
+  box, not to hand a first-time user an unannounced single scalar run.
+  `fim init`'s own regression test is renamed and inverted to match. The
+  packaging smoke tests in `.github/workflows/beta.yml`/`ci.yml` (which
+  shrink a freshly `fim init`'d config for a fast CI run) now explicitly
+  pin `n_replicates: 1` of their own, preserving their existing
+  scalar-run assertions rather than inheriting the new default.
 - `fim.statistics.differentiation`'s `FrequencyTable` type alias narrowed
   from `Sequence[Mapping[Any, Any]]` to `Sequence[Mapping[Any, float]]`,
   and `DemeWeights` from `Sequence[Any] | None` to
