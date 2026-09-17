@@ -8,6 +8,28 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Four new worked examples in `doc/usage.md` (ten → fourteen), each
+  actually run to record its own real numbers before being written up:
+  "Equilibrium-split founding" and "Within-run sigma band" fill genuine
+  gaps against `configuration.md` (the equilibrium-split starting
+  condition and the within-run σ band extension had no worked example
+  of their own before now); "A large-d batch under generational-vector"
+  and "A long-locus batch under the generational engine" are this
+  guide's first examples to name a specific `engine_backend` and run a
+  real, several-second batch (every other example finishes in well
+  under a second under the `auto` default, which never resolves to
+  either at this small a scale) — loading either one in the desktop app
+  also updates Settings' own execution-engine default to match, so
+  clicking "Run simulation" afterward actually uses the engine the
+  example demonstrates (see the "Changed" entry on preset-loading,
+  below). Two existing examples also gained a field each:
+  "Literature distance statistics from an explicit founder split" now
+  sets `track_expensive_statistics: true` (its own report values are
+  unchanged — the flag only affects per-generation tracking, not the
+  final report); "Unequal island sizes with a migration hub" gained a
+  `deme_weighting: equal` comparison paragraph, using its own
+  already-unequal per-deme `N` as the precondition where the setting
+  matters.
 - An **execution engine** control in the desktop app's Configure screen
   (Structure panel), the first graphical way to choose
   `engine_backend` — until now every run the app could start was
@@ -658,6 +680,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shrink a freshly `fim init`'d config for a fast CI run) now explicitly
   pin `n_replicates: 1` of their own, preserving their existing
   scalar-run assertions rather than inheriting the new default.
+- Loading a preset or a hand-picked YAML file (File → "Open
+  configuration…") now also updates Settings' own execution-default
+  fields to match whatever was just loaded — the one deliberate
+  exception to "no per-run override" the Settings-dialog redesign above
+  otherwise established. Without this, a loaded configuration naming a
+  specific `engine_backend`/`n_replicates`/etc. would have been silently
+  ignored in favor of whatever Settings already held, since Configure's
+  own form no longer submits any of those fields itself. Merely opening
+  the preset picker (which probes every preset's own loadability) never
+  triggers this — only actually choosing one does.
 - `fim.statistics.differentiation`'s `FrequencyTable` type alias narrowed
   from `Sequence[Mapping[Any, Any]]` to `Sequence[Mapping[Any, float]]`,
   and `DemeWeights` from `Sequence[Any] | None` to

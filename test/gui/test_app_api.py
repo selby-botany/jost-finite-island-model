@@ -315,8 +315,9 @@ def test_list_presets_matches_presets_module_directly() -> None:
 
     `loadable` cross-checked against `get_preset_form_values` directly
     (not hardcoded `True` for every entry) so this test does not itself
-    assume the six/one split `test_every_other_builtin_preset_loads_
-    into_form_values` exists specifically to verify.
+    assume the representable/unrepresentable split
+    `test_every_other_builtin_preset_loads_into_form_values` exists
+    specifically to verify.
     """
     api = Api()
     result = api.list_presets()
@@ -600,20 +601,19 @@ def test_every_other_builtin_preset_loads_into_form_values(
 
     A full-coverage regression test `test_get_preset_form_values_loads_a_
     representable_preset` (above) never was: that test covers exactly one
-    of the six representable presets by name, leaving the other five
-    (`unequal-island-sizes-with-a-migration-hub`, `stochastic-migrant-
-    counts`, `finite-length-alleles-the-k-allele-model`, `several-
-    convergence-statistics`, `an-adaptive-replicate-batch-with-a-
-    confidence-interval`) with no assertion that `get_preset_form_values`
-    actually succeeds for them at all — found investigating a real user's
-    own "examples that don't work aren't very useful" report (design doc
-    `20260913-claude-sonnet-5-gui-worked-example-loadability-design.md`,
-    `selby/restricted`), which needed a live check of all seven to even
-    answer "how many actually work today," a question this suite could
-    not otherwise answer on its own. A future preset added to `doc/
-    usage.md` that happens to trip a different, new form limitation now
-    fails here immediately, by name, rather than only being discovered
-    live by a real user.
+    representable preset by name, leaving the rest with no assertion that
+    `get_preset_form_values` actually succeeds for them at all — found
+    investigating a real user's own "examples that don't work aren't very
+    useful" report (design doc `20260913-claude-sonnet-5-gui-worked-
+    example-loadability-design.md`, `selby/restricted`), which needed a
+    live check of every one to even answer "how many actually work
+    today," a question this suite could not otherwise answer on its own.
+    Parametrized dynamically over `presets_module.list_presets()` itself
+    (minus the one known exception), rather than a hand-maintained name
+    list, so a future preset added to `doc/usage.md` is covered
+    automatically — and fails here immediately, by name, if it happens
+    to trip a different, new form limitation, rather than only being
+    discovered live by a real user.
     """
     result = Api().get_preset_form_values(preset.preset_id)
 

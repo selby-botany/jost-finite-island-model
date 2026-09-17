@@ -2,32 +2,33 @@
 selectable Configure presets (botanist GUI design doc
 `20260907-claude-sonnet-5-botanist-gui-redesign.md` §4.5, `selby/restricted`).
 
-`doc/usage.md` already documents seven complete, runnable configurations
-under "Worked examples" — each demonstrating one `configuration.md`
-option, worked through by hand and committed once, nowhere else.
-`dev/bin/generate-help-html` already renders that same file into
-`webui/help/usage.html` at commit time (the Help screen's own content
-source, `screens/help.js`), and `packaging/fim.spec` already bundles the
-whole `webui/` tree into every packaged executable — so that rendered
-HTML, not `doc/usage.md` itself, is the one artifact guaranteed to exist
-both in a development checkout and inside a frozen `.exe`/`.app`
-(`doc/usage.md` is not bundled on its own; only `webui/` is).
+`doc/usage.md` already documents fourteen complete, runnable
+configurations under "Worked examples" — each demonstrating one
+`configuration.md` option, worked through by hand and committed once,
+nowhere else. `dev/bin/generate-help-html` already renders that same
+file into `webui/help/usage.html` at commit time (the Help screen's own
+content source, `screens/help.js`), and `packaging/fim.spec` already
+bundles the whole `webui/` tree into every packaged executable — so
+that rendered HTML, not `doc/usage.md` itself, is the one artifact
+guaranteed to exist both in a development checkout and inside a frozen
+`.exe`/`.app` (`doc/usage.md` is not bundled on its own; only `webui/`
+is).
 
 This module reads that already-bundled HTML back, rather than embedding
 a second, hand-copied set of example configurations the way `fim.cli.
 STARTER_CONFIG` embeds its own single starter scenario: `doc/usage.md`
-stays the one and only place these seven examples are written, exactly
-as `dev/bin/generate-help-html`'s own "never hand-edit the generated
-file" rule already establishes for the HTML itself, one level up.
-Staleness between `doc/usage.md` and the committed `usage.html` is
+stays the one and only place these fourteen examples are written,
+exactly as `dev/bin/generate-help-html`'s own "never hand-edit the
+generated file" rule already establishes for the HTML itself, one level
+up. Staleness between `doc/usage.md` and the committed `usage.html` is
 already a generic, existing gate (`dev/git-hooks/pre-push`/`./build
 --ci`, `dev/bin/generate-help-html --help`'s own documented purpose for
 `--output-dir`) — nothing here duplicates that. `test/gui/test_presets.
-py`'s own `test_list_presets_returns_the_seven_worked_examples` instead
-guards this module's own parser against the real, committed file
-directly, by name and count, the same "if it changes, a human notices
-and updates this test" precedent `test_starter_form_values_reflects_
-the_cli_starter_config` already sets for `STARTER_CONFIG`.
+py`'s own `test_list_presets_returns_the_fourteen_worked_examples`
+instead guards this module's own parser against the real, committed
+file directly, by name and count, the same "if it changes, a human
+notices and updates this test" precedent `test_starter_form_values_
+reflects_the_cli_starter_config` already sets for `STARTER_CONFIG`.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ class Preset:
             does not change, and already unique (one `<h3>` per
             example, `doc/usage.md`'s own structure).
         title: The example's own heading text, plain (no embedded
-            `<code>` markup — none of the seven titles use any).
+            `<code>` markup — none of the fourteen titles use any).
         yaml_text: The example's own complete YAML configuration, exactly
             as `doc/usage.md` presents it — ready for `yaml.safe_load`.
     """

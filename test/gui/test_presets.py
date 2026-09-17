@@ -17,8 +17,8 @@ _REAL_WEBUI_DIRECTORY = (
     Path(__file__).resolve().parents[2] / "src" / "fim" / "gui" / "webui"
 )
 
-# The ten "Worked examples" titles `doc/usage.md` documents today, in
-# order — a snapshot, not a re-derivation: if a future edit adds,
+# The fourteen "Worked examples" titles `doc/usage.md` documents today,
+# in order — a snapshot, not a re-derivation: if a future edit adds,
 # removes, or renames an example (and regenerates `usage.html` to
 # match, `dev/bin/generate-help-html`'s own job), this list is meant to
 # need updating right alongside it, the same "if it changes, a human
@@ -28,19 +28,23 @@ _EXPECTED_TITLES = (
     "Unequal island sizes with a migration hub",
     "Stepping-stone (spatial) migration",
     "Literature distance statistics from an explicit founder split",
+    "Equilibrium-split founding",
     "Stochastic migrant counts",
     "Finite-length alleles (the K-allele model)",
     "Wright-Takahata finite-deme correction",
     "Kimura-Weiss isolation by distance",
     "Per-base mutation rate across unequal locus lengths",
     "Several convergence statistics",
+    "Within-run sigma band",
     "An adaptive replicate batch with a confidence interval",
+    "A large-d batch under generational-vector",
+    "A long-locus batch under the generational engine",
 )
 
 _REAL_PRESETS = list_presets(_REAL_WEBUI_DIRECTORY)
 
 
-def test_list_presets_returns_the_ten_worked_examples() -> None:
+def test_list_presets_returns_the_fourteen_worked_examples() -> None:
     """Every `doc/usage.md` worked example is found, in its own document order.
 
     Reads the real, committed `webui/help/usage.html` directly — this
@@ -54,7 +58,7 @@ def test_list_presets_returns_the_ten_worked_examples() -> None:
 
 
 def test_get_preset_returns_the_matching_preset() -> None:
-    """`get_preset` finds one preset by its own id, out of the real seven."""
+    """`get_preset` finds one preset by its own id, out of the real fourteen."""
     preset = get_preset(_REAL_WEBUI_DIRECTORY, "stepping-stone-spatial-migration")
 
     assert preset is not None
@@ -114,8 +118,9 @@ def test_parser_scopes_to_the_worked_examples_section_only(tmp_path: Path) -> No
 def test_every_preset_parses_as_yaml(preset: Preset) -> None:
     """Every real preset's own text is at least syntactically valid YAML.
 
-    Whether it also validates as a full `SimulationParams` (six of the
-    seven do; the seventh's own genuinely per-locus `mu` has no form
+    Whether it also validates as a full `SimulationParams` (thirteen of
+    the fourteen do; the "Per-base mutation rate across unequal locus
+    lengths" example's own genuinely per-locus `mu` has no form
     representation, exactly like a hand-loaded YAML file with the same
     shape already does not) is `test/gui/test_app_api.py`'s own concern
     (`get_preset_form_values`), not this module's.

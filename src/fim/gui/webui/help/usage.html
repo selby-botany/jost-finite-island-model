@@ -119,6 +119,12 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 and <code>parameters.m</code> record the exact per-deme sizes and matrix rows used —
 compare them against a run with one shared <code>N/m</code> to see the effect of
 unequal size and asymmetric connectivity on differentiation.</p>
+<p>deme_weighting only affects E<sub>ST</sub> — D and K<sub>ST</sub> weight demes equally by
+definition, regardless of this setting. With the unequal per-deme <code>N</code> above,
+the default <code>size</code> weighting gives E<sub>ST</sub> \sim 0.0208; adding
+<code>deme_weighting: equal</code> to the same configuration gives E<sub>ST</sub> \sim 0.0249
+instead — deme 4's own 800-gene-copy weight pulls the size-weighted value
+down, since it is both the largest deme and the best-connected one.</p>
 <h3 id="stepping-stone-spatial-migration">Stepping-stone (spatial) migration</h3>
 <p>Six demes arranged on a ring, each migrating only with its two neighbors —
 <code>fim.model.topology</code>'s compact sugar for a sparse migration matrix, instead
@@ -150,7 +156,16 @@ distance classes.</p>
 <p>Three demes start fixed for three different alleles. This is a deliberately
 small, deterministic demonstration of the supplemental statistics added from
 the differentiation literature: Caballero-García-Dorado allelic distance
-A<sub>CGD</sub>, Gregorius δ, and Sherwin mutual information <code>MI</code>.</p>
+A<sub>CGD</sub>, Gregorius δ, and Sherwin mutual information <code>MI</code>.
+track_expensive_statistics turns on their own per-generation tracking (D,
+G<sub>ST</sub>, H<sub>S</sub>, and H<sub>T</sub> are always tracked for free;
+this opts the remaining two — E<sub>ST</sub> and K<sub>ST</sub> — and the
+three literature statistics above into the same treatment), so a run that
+only converges on <code>D</code> still records all six for display — this example's
+own final-report values are identical either way, since a report always
+computes every statistic at the converged generation regardless of this
+setting; the flag only changes what is available generation by generation
+before that point.</p>
 <pre><code class="language-yaml">N: 200
 d: 3
 m: 0.0
@@ -167,6 +182,7 @@ convergence_statistic: D
 convergence_window: 2
 convergence_tolerance: 0.000001
 max_generations: 1
+track_expensive_statistics: true
 n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run literature-distance-statistics.yaml \
@@ -179,6 +195,42 @@ statistics are interchangeable; they are the easiest possible sanity check
 for a complete three-way split. Change one deme's <code>p_0</code> cell to
 <code>0:0.5,1:0.5</code> to see the distance-oriented statistics respond directly to
 shared alleles.</p>
+<h3 id="equilibrium-split-founding">Equilibrium-split founding</h3>
+<p>The example above hand-picks generation-0 frequencies directly. This one
+derives them instead: your demes are founded from a single shared ancestral
+population rather than an independent Dirichlet draw per deme — the
+ancestral population simulates alone until its own diversity settles, then
+splits into your demes by sampling without replacement, so the demes
+already differ a little at generation 0 purely from which copies each one
+happened to receive, a genuine founder effect rather than an assumption:</p>
+<pre><code class="language-yaml">N: 200
+d: 3
+m: 0.005
+mu: 0.001
+seed: 20260916
+loci:
+  - locus_id: 1
+    length: 100
+equilibrium_convergence_window: 20
+equilibrium_convergence_tolerance: 0.01
+equilibrium_max_generations: 500
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 300
+n_replicates: 1   # a single scalar run; the default (200) would batch
+</code></pre>
+<pre><code class="language-console">fim run equilibrium-split.yaml --output results/equilibrium-split --quiet
+</code></pre>
+<p>Converges at generation 9 with D \sim 0.0357 — real differentiation the
+ancestral-population founder effect produced, with no explicit <code>p_0</code>
+anywhere in the file. Loosen equilibrium_convergence_tolerance to let the
+ancestral phase settle sooner (a less stable shared history to found from),
+or tighten it to require a longer, more stable ancestral run first; either
+way, reaching equilibrium_max_generations without settling is a hard error,
+not an ordinary result — see
+<a href="#" data-fim-help="configuration" data-fim-anchor="equilibrium_convergence_window-equilibrium_convergence_tolerance-equilibrium_max_generations">equilibrium_convergence_window, equilibrium_convergence_tolerance,
+equilibrium_max_generations</a>.</p>
 <h3 id="stochastic-migrant-counts">Stochastic migrant counts</h3>
 <p>By default, migration blends each deme's frequencies with an exact
 <code>rate * N</code> fraction of its neighbors' — a deterministic step given that
@@ -344,6 +396,40 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 <p>Converges at generation 13, with <code>report.json</code>'s converged_on recording
 [&quot;D&quot;, &quot;G<sub>ST</sub>&quot;] — both were watched, and <code>any</code> means only one needed to
 stabilize first.</p>
+<h3 id="within-run-sigma-band">Within-run sigma band</h3>
+<p>Once a run genuinely converges, keep going for a further window and report
+how much the watched statistic still wobbles, generation to generation,
+immediately after being declared stable — a different question from the
+across-replicate confidence interval in the next example, which asks how
+much independent replicates disagree with each other, not how noisy any one
+of them still is:</p>
+<pre><code class="language-yaml">N: 150
+d: 4
+m: 0.02
+mu: 0.001
+seed: 20260916
+loci:
+  - locus_id: 1
+    length: 100
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 300
+sigma_band_multiplier: 2.0
+sigma_band_window: 30
+n_replicates: 1   # a single scalar run; the default (200) would batch
+</code></pre>
+<pre><code class="language-console">fim run sigma-band.yaml --output results/sigma-band --quiet
+</code></pre>
+<p>Converges at generation 10 with D = 0.265; the following 30-generation
+extension reports D = 0.124 ± 0.161 (mean ± 2σ). The band's own mean
+differs from the converged value itself — it is computed over the
+<em>extension</em> window, not the generations that triggered convergence — and
+is wide enough here to dip below zero, an honest report of how much a
+single statistic can still wobble over just 30 generations, not a sign of
+anything wrong. <code>results/sigma-band/sigma_band_trajectory.jsonl</code> records
+one <code>D</code> value per extension generation; <code>manifest.json</code>'s own <code>sigma_band</code>
+field holds the summarized band shown here.</p>
 <h3 id="an-adaptive-replicate-batch-with-a-confidence-interval">An adaptive replicate batch with a confidence interval</h3>
 <p>Rather than guessing how many replicate runs a confidence interval needs,
 set n<sub>replicates</sub> well above the plausible requirement and let
@@ -373,10 +459,82 @@ remaining 25 possible replicates were never needed.
 <code>results/adaptive-batch/summary.json</code> reports every statistic's own
 interval; <code>results/adaptive-batch/replicate-001/</code> through
 <code>replicate-025/</code> each hold the ordinary four-file scalar-run contract for
-that one replicate. Drop <code>--sequential</code> to run the same batch across a worker
-process per CPU instead — the computed numbers are identical either way
-(see <a href="#batches-nreplicates-greater-than-one">Batches</a>); only the wall-clock
-time differs.</p>
+that one replicate. Drop <code>--sequential</code> to run the same batch across a
+worker process per CPU instead — the computed numbers are identical
+either way (see <a href="#batches-nreplicates-greater-than-one">Batches</a>); only
+the wall-clock time differs.</p>
+<h3 id="a-large-d-batch-under-generational-vector">A large-<code>d</code> batch under generational-vector</h3>
+<p>Every example above finishes in well under a second and uses <code>engine_ backend</code>'s own default, <code>auto</code> — which, at this small a scale, always
+resolves to <code>lineal</code>, the single-threaded reference implementation. This
+example and the next are the deliberate exception: each names a specific
+engine backend and runs a real, moderately long batch (a few seconds, not
+instant) large enough for that backend's own advantage to actually show.
+<code>generational-vector</code> keeps a dense, array-native representation of every
+active replicate at once, and is the fastest measured choice once <code>d</code>
+grows large enough — see <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-simulator-design.md#46-choosing-an-engine-backend">choosing an engine
+backend</a> for the
+full measured comparison this example's own shape is drawn from:</p>
+<pre><code class="language-yaml">N: 500
+d: 70
+m: 0.05
+mu: 0.001
+seed: 20260916
+mutation_model: finite_alleles
+migrant_sampling: continuous
+loci:
+  - locus_id: 1
+    length: 5
+engine_backend: generational-vector
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 100
+n_replicates: 16
+</code></pre>
+<pre><code class="language-console">fim run vector-showcase.yaml --output results/vector-showcase --quiet
+</code></pre>
+<p>Ran in about 10 seconds on ordinary development hardware. The adaptive
+<code>replicate_tolerance</code> default stopped at the 10-replicate minimum — <code>D</code>'s
+95% confidence interval was already <code>0.0493 +/- 0.0061</code>. In the desktop
+app, loading this example as a preset also sets Settings' own execution
+engine to <code>generational-vector</code> (Settings holds this field now, not
+Configure — see the <a href="#desktop-gui-fim-gui">desktop GUI</a> section below), so
+clicking &quot;Run simulation&quot; afterward actually uses it, not whatever engine
+Settings held before.</p>
+<h3 id="a-long-locus-batch-under-the-generational-engine">A long-locus batch under the generational engine</h3>
+<p>The same batch shape as the example above, but favoring locus length over
+deme count instead — <code>d: 35</code> with a 7-base locus (16384 possible allele
+states under <code>finite_alleles</code>) rather than <code>d: 70</code> with a 5-base one —
+and the plain <code>generational</code> engine, which this project's own measured
+benchmarks find winning over <code>generational-vector</code> in exactly this kind of
+region (moderate <code>d</code>, a longer locus):</p>
+<pre><code class="language-yaml">N: 500
+d: 35
+m: 0.05
+mu: 0.001
+seed: 20260916
+mutation_model: finite_alleles
+migrant_sampling: continuous
+loci:
+  - locus_id: 1
+    length: 7
+engine_backend: generational
+convergence_statistic: D
+convergence_window: 10
+convergence_tolerance: 0.02
+max_generations: 100
+n_replicates: 16
+</code></pre>
+<pre><code class="language-console">fim run generational-showcase.yaml --output results/generational-showcase --quiet
+</code></pre>
+<p>Ran in about 8 seconds on the same hardware — faster than the
+<code>generational-vector</code> example above despite a longer locus, illustrating
+that neither backend is universally faster; which one wins depends on
+where a configuration actually sits on the <code>d</code>/locus-length grid. Also
+stopped at the 10-replicate minimum, with <code>D</code>'s 95% confidence interval at
+<code>0.0524 +/- 0.0063</code>. Loading this example syncs Settings' own execution
+engine to <code>generational</code> the same way the previous example syncs it to
+<code>generational-vector</code>.</p>
 <h2 id="re-analyze-a-trajectory">Re-analyze a trajectory</h2>
 <pre><code class="language-console">fim stats TRAJECTORY [--manifest PATH] [--generation N]
     [--q ORDER ...] [-o PATH | --output PATH]

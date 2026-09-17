@@ -6290,8 +6290,9 @@ With no user presets saved, the bridge method lists only the built-ins.
 
 `loadable` cross-checked against `get_preset_form_values` directly
 (not hardcoded `True` for every entry) so this test does not itself
-assume the six/one split `test_every_other_builtin_preset_loads_
-into_form_values` exists specifically to verify.
+assume the representable/unrepresentable split
+`test_every_other_builtin_preset_loads_into_form_values` exists
+specifically to verify.
 
 <a id="gui.test_app_api.test_save_current_as_preset_then_list_and_load_it_back"></a>
 
@@ -6503,20 +6504,19 @@ Every built-in preset but the one documented exception loads successfully.
 
 A full-coverage regression test `test_get_preset_form_values_loads_a_
 representable_preset` (above) never was: that test covers exactly one
-of the six representable presets by name, leaving the other five
-(`unequal-island-sizes-with-a-migration-hub`, `stochastic-migrant-
-counts`, `finite-length-alleles-the-k-allele-model`, `several-
-convergence-statistics`, `an-adaptive-replicate-batch-with-a-
-confidence-interval`) with no assertion that `get_preset_form_values`
-actually succeeds for them at all — found investigating a real user's
-own "examples that don't work aren't very useful" report (design doc
-`20260913-claude-sonnet-5-gui-worked-example-loadability-design.md`,
-`selby/restricted`), which needed a live check of all seven to even
-answer "how many actually work today," a question this suite could
-not otherwise answer on its own. A future preset added to `doc/
-usage.md` that happens to trip a different, new form limitation now
-fails here immediately, by name, rather than only being discovered
-live by a real user.
+representable preset by name, leaving the rest with no assertion that
+`get_preset_form_values` actually succeeds for them at all — found
+investigating a real user's own "examples that don't work aren't very
+useful" report (design doc `20260913-claude-sonnet-5-gui-worked-
+example-loadability-design.md`, `selby/restricted`), which needed a
+live check of every one to even answer "how many actually work
+today," a question this suite could not otherwise answer on its own.
+Parametrized dynamically over `presets_module.list_presets()` itself
+(minus the one known exception), rather than a hand-maintained name
+list, so a future preset added to `doc/usage.md` is covered
+automatically — and fails here immediately, by name, if it happens
+to trip a different, new form limitation, rather than only being
+discovered live by a real user.
 
 <a id="gui.test_app_api.test_get_preset_yaml_returns_a_builtin_preset_unmodified"></a>
 
@@ -12563,12 +12563,12 @@ Unit tests for `fim.gui.presets` (no display, no `gui` marker).
 `list_presets`/`get_preset` only ever read a plain HTML file from disk —
 none of the pywebview machinery this package's other tests need.
 
-<a id="gui.test_presets.test_list_presets_returns_the_ten_worked_examples"></a>
+<a id="gui.test_presets.test_list_presets_returns_the_fourteen_worked_examples"></a>
 
-#### test\_list\_presets\_returns\_the\_ten\_worked\_examples
+#### test\_list\_presets\_returns\_the\_fourteen\_worked\_examples
 
 ```python
-def test_list_presets_returns_the_ten_worked_examples() -> None
+def test_list_presets_returns_the_fourteen_worked_examples() -> None
 ```
 
 Every `doc/usage.md` worked example is found, in its own document order.
@@ -12585,7 +12585,7 @@ actually agree, not a synthetic fixture standing in for it.
 def test_get_preset_returns_the_matching_preset() -> None
 ```
 
-`get_preset` finds one preset by its own id, out of the real seven.
+`get_preset` finds one preset by its own id, out of the real fourteen.
 
 <a id="gui.test_presets.test_get_preset_returns_none_for_an_unknown_id"></a>
 
@@ -12643,8 +12643,9 @@ def test_every_preset_parses_as_yaml(preset: Preset) -> None
 
 Every real preset's own text is at least syntactically valid YAML.
 
-Whether it also validates as a full `SimulationParams` (six of the
-seven do; the seventh's own genuinely per-locus `mu` has no form
+Whether it also validates as a full `SimulationParams` (thirteen of
+the fourteen do; the "Per-base mutation rate across unequal locus
+lengths" example's own genuinely per-locus `mu` has no form
 representation, exactly like a hand-loaded YAML file with the same
 shape already does not) is `test/gui/test_app_api.py`'s own concern
 (`get_preset_form_values`), not this module's.
