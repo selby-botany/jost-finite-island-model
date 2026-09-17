@@ -874,6 +874,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Six worked examples in `doc/usage.md` had their own documented
+  generation/statistic numbers corrected against a real re-run:
+  "Unequal island sizes with a migration hub," "Stepping-stone (spatial)
+  migration," "Stochastic migrant counts," "Per-base mutation rate
+  across unequal locus lengths," "Several convergence statistics," and
+  "An adaptive replicate batch with a confidence interval" had all
+  drifted from what the current engine actually produces for the same
+  seed and configuration — found while auditing the guide for an
+  unrelated documentation update. The other four ("Literature distance
+  statistics from an explicit founder split," "Finite-length alleles,"
+  "Wright-Takahata finite-deme correction," "Kimura-Weiss isolation by
+  distance") were re-verified and already matched.
 - The desktop app now opens to **Home**, not **Run**. Botanist GUI
   redesign doc §9 calls Home "a richer landing destination reachable
   from anywhere via the rail," but the rail's own default highlight and

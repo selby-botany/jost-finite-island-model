@@ -115,7 +115,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run hub-island.yaml --output results/hub-island --quiet
 </code></pre>
-<p>Converges at generation 11 with D \sim 0.100. <code>manifest.json</code>'s <code>parameters.N</code>
+<p>Converges at generation 19 with D \sim 0.0453. <code>manifest.json</code>'s <code>parameters.N</code>
 and <code>parameters.m</code> record the exact per-deme sizes and matrix rows used —
 compare them against a run with one shared <code>N/m</code> to see the effect of
 unequal size and asymmetric connectivity on differentiation.</p>
@@ -141,7 +141,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stepping-stone.yaml --output results/stepping-stone --quiet
 </code></pre>
-<p>Converges at generation 10 with D \sim 0.124. Swap <code>topology: ring</code> for
+<p>Converges at generation 17 with D \sim 0.0892. Swap <code>topology: ring</code> for
 <code>linear</code> to remove the wrap-around edge between deme 1 and deme 6. In
 the GUI, the completed-run Literature visualizations panel includes an
 isolation-by-distance plot whenever the migration graph has at least two
@@ -202,7 +202,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 </code></pre>
-<p>Converges at generation 15 with D \sim 0.039. Re-run with migrant_sampling
+<p>Converges at generation 9 with D \sim 0.183. Re-run with migrant_sampling
 removed (or set to <code>continuous</code>, the default) at the same seed to compare
 against the deterministic-migration baseline directly.</p>
 <h3 id="finite-length-alleles-the-k-allele-model">Finite-length alleles (the K-allele model)</h3>
@@ -316,7 +316,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run mu-b.yaml --output results/mu-b --quiet
 </code></pre>
-<p>Converges at generation 15 with D \sim 0.090. <code>results/mu-b/manifest.json</code>'s
+<p>Converges at generation 17 with D \sim 0.191. <code>results/mu-b/manifest.json</code>'s
 <code>parameters.mu</code> records the two derived rates — <code>0.0009995</code> for the
 50-base locus and <code>0.0099503</code> for the 500-base one — the expanded,
 canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never stored.</p>
@@ -341,7 +341,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 </code></pre>
 <pre><code class="language-console">fim run multi-statistic.yaml --output results/multi-statistic --quiet
 </code></pre>
-<p>Converges at generation 16, with <code>report.json</code>'s converged_on recording
+<p>Converges at generation 13, with <code>report.json</code>'s converged_on recording
 [&quot;D&quot;, &quot;G<sub>ST</sub>&quot;] — both were watched, and <code>any</code> means only one needed to
 stabilize first.</p>
 <h3 id="an-adaptive-replicate-batch-with-a-confidence-interval">An adaptive replicate batch with a confidence interval</h3>
@@ -367,13 +367,13 @@ replicate_tolerance: 0.05
 </code></pre>
 <pre><code class="language-console">fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 </code></pre>
-<p>Stops at exactly 10 replicates (replicate_minimum) — <code>D</code>'s 95% confidence
-interval is already <code>0.218 +/- 0.048</code>, tighter than the requested <code>0.05</code>
-half-width, so the remaining 40 possible replicates were never needed.
+<p>Stops at 25 replicates — <code>D</code>'s 95% confidence interval has just tightened to
+<code>0.256 +/- 0.0498</code>, inside the requested <code>0.05</code> half-width, so the
+remaining 25 possible replicates were never needed.
 <code>results/adaptive-batch/summary.json</code> reports every statistic's own
-interval; <code>results/adaptive-batch/replicate-001/</code> through <code>replicate-010/</code>
-each hold the ordinary four-file scalar-run contract for that one
-replicate. Drop <code>--sequential</code> to run the same batch across a worker
+interval; <code>results/adaptive-batch/replicate-001/</code> through
+<code>replicate-025/</code> each hold the ordinary four-file scalar-run contract for
+that one replicate. Drop <code>--sequential</code> to run the same batch across a worker
 process per CPU instead — the computed numbers are identical either way
 (see <a href="#batches-nreplicates-greater-than-one">Batches</a>); only the wall-clock
 time differs.</p>

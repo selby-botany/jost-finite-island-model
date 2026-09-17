@@ -140,7 +140,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run hub-island.yaml --output results/hub-island --quiet
 ```
 
-Converges at generation 11 with D \sim 0.100. `manifest.json`'s `parameters.N`
+Converges at generation 19 with D \sim 0.0453. `manifest.json`'s `parameters.N`
 and `parameters.m` record the exact per-deme sizes and matrix rows used —
 compare them against a run with one shared `N/m` to see the effect of
 unequal size and asymmetric connectivity on differentiation.
@@ -173,7 +173,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run stepping-stone.yaml --output results/stepping-stone --quiet
 ```
 
-Converges at generation 10 with D \sim 0.124. Swap `topology: ring` for
+Converges at generation 17 with D \sim 0.0892. Swap `topology: ring` for
 `linear` to remove the wrap-around edge between deme 1 and deme 6. In
 the GUI, the completed-run Literature visualizations panel includes an
 isolation-by-distance plot whenever the migration graph has at least two
@@ -248,7 +248,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run stochastic-migrants.yaml --output results/stochastic-migrants --quiet
 ```
 
-Converges at generation 15 with D \sim 0.039. Re-run with migrant_sampling
+Converges at generation 9 with D \sim 0.183. Re-run with migrant_sampling
 removed (or set to `continuous`, the default) at the same seed to compare
 against the deterministic-migration baseline directly.
 
@@ -390,7 +390,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run mu-b.yaml --output results/mu-b --quiet
 ```
 
-Converges at generation 15 with D \sim 0.090. `results/mu-b/manifest.json`'s
+Converges at generation 17 with D \sim 0.191. `results/mu-b/manifest.json`'s
 `parameters.mu` records the two derived rates — `0.0009995` for the
 50-base locus and `0.0099503` for the 500-base one — the expanded,
 canonical form μ<sub>b</sub> is sugar for; μ<sub>b</sub> itself is never stored.
@@ -422,7 +422,7 @@ n_replicates: 1   # a single scalar run; the default (200) would batch
 fim run multi-statistic.yaml --output results/multi-statistic --quiet
 ```
 
-Converges at generation 16, with `report.json`'s converged_on recording
+Converges at generation 13, with `report.json`'s converged_on recording
 ["D", "G<sub>ST</sub>"] — both were watched, and `any` means only one needed to
 stabilize first.
 
@@ -455,13 +455,13 @@ replicate_tolerance: 0.05
 fim run adaptive-batch.yaml --output results/adaptive-batch --sequential --quiet
 ```
 
-Stops at exactly 10 replicates (replicate_minimum) — `D`'s 95% confidence
-interval is already `0.218 +/- 0.048`, tighter than the requested `0.05`
-half-width, so the remaining 40 possible replicates were never needed.
+Stops at 25 replicates — `D`'s 95% confidence interval has just tightened to
+`0.256 +/- 0.0498`, inside the requested `0.05` half-width, so the
+remaining 25 possible replicates were never needed.
 `results/adaptive-batch/summary.json` reports every statistic's own
-interval; `results/adaptive-batch/replicate-001/` through `replicate-010/`
-each hold the ordinary four-file scalar-run contract for that one
-replicate. Drop `--sequential` to run the same batch across a worker
+interval; `results/adaptive-batch/replicate-001/` through
+`replicate-025/` each hold the ordinary four-file scalar-run contract for
+that one replicate. Drop `--sequential` to run the same batch across a worker
 process per CPU instead — the computed numbers are identical either way
 (see [Batches](#batches-nreplicates-greater-than-one)); only the wall-clock
 time differs.
