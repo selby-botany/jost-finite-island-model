@@ -118,11 +118,18 @@ def test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid(
 
 
 def test_get_default_run_settings_falls_back_to_starter_subset_when_unsaved() -> None:
-    """With nothing saved, Settings seeds itself from the true starter values."""
+    """With nothing saved, Settings seeds itself from the true starter values.
+
+    `max_workers` is not a `SimulationParams` field, so it has no entry
+    in `starter_form_values()`'s own base dict at all -- its own
+    fallback is the empty string.
+    """
     result = Api().get_default_run_settings()
 
     starter = starter_form_values()
-    assert result == {key: starter[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+    expected = {key: starter[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+    expected["max_workers"] = ""
+    assert result == expected
 
 
 def test_set_default_run_settings_changes_what_get_default_run_settings_returns() -> (
@@ -348,7 +355,15 @@ def test_save_current_as_preset_then_list_and_load_it_back() -> None:
     ]
 
     load_result = api.get_preset_form_values("user:My scenario")
-    assert load_result == {"ok": True, "values": starter_form_values()}
+    # `save_current_as_preset` merges in Configure-absent execution-
+    # default fields before saving (`Api._merge_default_run_settings`) —
+    # a no-op for every `SimulationParams`-backed key here (`starter_
+    # form_values()` already had them), but `max_workers` is not one of
+    # those and so is newly added.
+    assert load_result == {
+        "ok": True,
+        "values": {**starter_form_values(), "max_workers": ""},
+    }
 
 
 def test_save_current_as_preset_rejects_an_empty_name() -> None:

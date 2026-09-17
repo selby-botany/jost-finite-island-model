@@ -1223,9 +1223,16 @@ class Api:
                 `SimulationParams` field at all, parsed here directly.
 
         Returns:
-            `{"ok": True, "equilibrium": ..., "identityRecovery": ...}`
-            once the run has *started* — not once it finishes; the real
-            outcome arrives via the pushed calls above. `equilibrium` is
+            `{"ok": True, "isBatch": ..., "equilibrium": ...,
+            "identityRecovery": ...}` once the run has *started* — not
+            once it finishes; the real outcome arrives via the pushed
+            calls above. `isBatch` is `params.n_replicates > 1`, the
+            identical "batch or scalar" toggle `_start_batch_run`'s own
+            dispatch above already used — `run-view-controls.js`'s own
+            `onRunClicked` reads it back to pick which running-state
+            sub-view to show, since `values` alone no longer carries
+            `n_replicates` (moved to Settings; Configure's own `<form>`
+            never submits it). `equilibrium` is
             `_equilibrium_reference_payload`'s own result (design doc
             §6.2's predicted-equilibrium trajectory overlay);
             `identityRecovery` is `_identity_recovery_reference_
@@ -1244,6 +1251,7 @@ class Api:
             the form does not validate or the output directory cannot be
             allocated.
         """
+        values = self._merge_default_run_settings(values)
         try:
             payload = form_values_to_payload(values)
             params = SimulationParams.from_mapping(payload)
@@ -1260,9 +1268,20 @@ class Api:
             output_directory = paths.default_output_directory()
         except FileExistsError as error:
             return {"ok": False, "message": str(error)}
-        if params.n_replicates > 1:
-            return self._start_batch_run(params, output_directory, values)
-        return self._start_scalar_run(params, output_directory)
+        is_batch = params.n_replicates > 1
+        result = (
+            self._start_batch_run(params, output_directory, values)
+            if is_batch
+            else self._start_scalar_run(params, output_directory)
+        )
+        # `n_replicates` is no longer a field Configure's own `<form>`
+        # submits (moved to Settings) -- `run-view-controls.js`'s own
+        # `onRunClicked` can no longer infer "batch or scalar" from the
+        # values it already has in hand before this call, so the real,
+        # validated `params.n_replicates` this method computed is
+        # reported back explicitly instead.
+        result["isBatch"] = is_batch
+        return result
 
     def _start_scalar_run(
         self, params: SimulationParams, output_directory: Path
@@ -1427,6 +1446,29 @@ class Api:
         except ValueError:
             return starter_form_values()
 
+    def _merge_default_run_settings(self, values: dict[str, str]) -> dict[str, str]:
+        """Fill in Configure-absent execution-default fields before using a submission.
+
+        Configure's own `<form>` no longer collects `config_form.
+        DEFAULT_RUN_SETTING_FIELD_NAMES`' fields, or `max_workers`, at
+        all — moved to Settings (`2026-09-16` revision) — so `webui/
+        screens/config-modals.js`'s own `collectFormValues` (a
+        `FormData` scan of `#input-form`) never produces any of them.
+        Every bridge call that expects an `all_fields()`-complete values
+        dict from Configure's live form merges them in here, from
+        whatever Settings currently holds (`get_default_run_settings`'s
+        own fallback chain) — the value *at the moment of this call*,
+        not one captured whenever Configure's form happened to last
+        load, the more correct semantic for a field with no per-run
+        override. Only fills a key `values` does not already have, so a
+        future per-run override (none exists today) is never silently
+        clobbered.
+        """
+        merged = dict(values)
+        for key, value in self.get_default_run_settings().items():
+            merged.setdefault(key, value)
+        return merged
+
     @_log_bridge_call
     def get_starter_form(self) -> dict[str, str]:
         """Return a fresh form's default values.
@@ -1522,6 +1564,7 @@ class Api:
             error, for instance), for the caller to switch to and
             highlight when they are not.
         """
+        values = self._merge_default_run_settings(values)
         try:
             payload = form_values_to_payload(values)
             SimulationParams.from_mapping(payload)
@@ -1557,6 +1600,7 @@ class Api:
             blank — invalid form values are already reported through the
             normal validation path).
         """
+        values = self._merge_default_run_settings(values)
         try:
             payload = form_values_to_payload(values)
             params = SimulationParams.from_mapping(payload)
@@ -1602,6 +1646,7 @@ class Api:
             `{"ok": True, "panel": ...}` on success; `{"ok": False,
             "message": ...}` if the form is invalid or the pair is invalid.
         """
+        values = self._merge_default_run_settings(values)
         try:
             payload = form_values_to_payload(values)
             params = SimulationParams.from_mapping(payload)
@@ -1998,6 +2043,7 @@ class Api:
         stripped_name = name.strip()
         if not stripped_name:
             return {"ok": False, "message": "a preset needs a name"}
+        values = self._merge_default_run_settings(values)
         try:
             SimulationParams.from_mapping(form_values_to_payload(values))
         except ValueError as error:
@@ -2032,6 +2078,7 @@ class Api:
             not currently validate (saving an invalid form is refused,
             the same as running one) or the write itself failed.
         """
+        values = self._merge_default_run_settings(values)
         try:
             payload = form_values_to_payload(values)
             SimulationParams.from_mapping(payload)
@@ -2192,37 +2239,67 @@ class Api:
 
     @_log_bridge_call
     def get_default_run_settings(self) -> dict[str, str]:
-        """Return the Settings dialog's own execution/convergence-selection defaults.
+        """Return the Settings dialog's own execution-default field values.
 
         Seeds Settings' own fields on open. Falls back to `starter_
         form_values()`'s own values for exactly `config_form.DEFAULT_
         RUN_SETTING_FIELD_NAMES`' keys when nothing has been saved yet
         (`self._preferences.default_run_settings is None`), so the
         dialog never shows a blank field the first time it opens.
+        `max_workers` is not a `SimulationParams` field and so has no
+        entry in `starter_form_values()`'s own base dict at all — its
+        fallback is the empty string (`webui`'s own "auto" placeholder),
+        the identical default `_parse_max_workers("")` already treats
+        as "let the batch runner choose."
+
+        A saved `default_run_settings` is re-overlaid onto the starter
+        values, exactly like `_starter_form_values_for_this_session`,
+        rather than returned as-is: a dict saved under an earlier
+        version of this field set (missing a key this version added, or
+        carrying one a later revision dropped — `DEFAULT_RUN_SETTING_
+        FIELD_NAMES`'s own docstring records one real, reported such
+        revision already) must not silently propagate an incomplete or
+        stale projection forward. A saved value that no longer overlays
+        cleanly at all falls back to the full, un-overlaid starter
+        subset, the same "discarded wholesale, never applied partially"
+        policy every other stale-saved-value path in this module
+        already follows.
         """
-        if self._preferences.default_run_settings is not None:
-            return dict(self._preferences.default_run_settings)
+        saved = self._preferences.default_run_settings
+        if saved is not None:
+            try:
+                merged = starter_form_values(overrides=saved)
+                values = {key: merged[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+            except ValueError:
+                starter = starter_form_values()
+                values = {key: starter[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+            values["max_workers"] = saved.get("max_workers", "")
+            return values
         starter = starter_form_values()
-        return {key: starter[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+        values = {key: starter[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+        values["max_workers"] = ""
+        return values
 
     @_log_bridge_call
     def set_default_run_settings(self, values: dict[str, str]) -> dict[str, Any]:
-        """Validate and persist Settings' own execution/convergence defaults.
+        """Validate and persist Settings' own execution-default field values.
 
-        A real, reported request: fields judged "applicable pretty
-        universally" (execution engine, `n_replicates`, the
-        convergence-selection group) move out of the per-run Configure
-        form and into one global-default home here, while an
-        individual run's own Configure form can still override any of
-        them for that one run — `starter_form_values`'s own `overrides`
-        parameter is what every subsequent fresh-form call
+        A real, reported request: fields describing "how the
+        computation runs" (execution engine, replicate/generation
+        budgets, convergence-loop timing, replicate confidence, JIT,
+        the `auto` backend's own threshold pair, and worker/concurrency
+        limits) move out of the per-run Configure form and into one
+        global-default home here — `starter_form_values`'s own
+        `overrides` parameter is what every subsequent fresh-form call
         (`get_starter_form`, `get_initial_form`) reads this back
-        through.
+        through, and `start_run`/`validate_form`'s own submission-time
+        merge (below) fills the same fields into a run Configure's own
+        form no longer submits at all.
 
         Args:
             values: One string per `config_form.DEFAULT_RUN_SETTING_
-                FIELD_NAMES` entry — Settings' own fields, collected by
-                `settings.js`.
+                FIELD_NAMES` entry, plus `max_workers` — Settings' own
+                fields, collected by `settings.js`.
 
         Returns:
             `{"ok": True}` on success; `{"ok": False, "message": ...}`
@@ -2230,13 +2307,17 @@ class Api:
             validate — the identical wording any other invalid form
             submission already produces, since this goes through the
             same `starter_form_values`/`form_values_to_payload`/
-            `SimulationParams.from_mapping` path.
+            `SimulationParams.from_mapping` path. `max_workers` is not
+            part of that validation (`_parse_max_workers` tolerates any
+            text, including nonsense, by treating it as "auto") — saved
+            verbatim alongside the validated subset.
         """
         try:
             merged = starter_form_values(overrides=values)
         except ValueError as error:
             return {"ok": False, "message": str(error)}
         subset = {key: merged[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+        subset["max_workers"] = values.get("max_workers", "")
         self._preferences = self._preferences.with_default_run_settings(subset)
         save_preferences(self._preferences_path, self._preferences)
         return {"ok": True}
