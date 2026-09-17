@@ -1469,6 +1469,41 @@ class Api:
             merged.setdefault(key, value)
         return merged
 
+    def _sync_default_run_settings_from_loaded_config(
+        self, values: Mapping[str, str]
+    ) -> None:
+        """Update Settings' own execution defaults to match a just-loaded configuration.
+
+        A real, reported request: loading a preset or a hand-picked YAML
+        file that names a specific `engine_backend`/`n_replicates`/etc.
+        makes that configuration's own values the session's new
+        execution defaults too — otherwise a submitted run would
+        silently ignore what was just loaded in favor of whatever
+        Settings already held (`_merge_default_run_settings`, above,
+        which only ever reads from Settings, since Configure's own
+        `<form>` no longer submits any of these fields itself). This is
+        the one, deliberate exception to that function's own "no per-run
+        override" rule: loading a named, curated configuration is
+        exactly the moment a user's intent for *this* execution shape is
+        most explicit, so it is allowed to change the session default
+        rather than being silently discarded. `max_workers` is left
+        untouched — not a `SimulationParams` field, so a loaded
+        configuration never has an opinion on it.
+
+        Args:
+            values: An already-validated form-values dict (`params_to_
+                form_values`'s own output, or an equivalently-shaped
+                saved preset) — never re-validated here, since every
+                caller has already confirmed it round-trips through
+                `SimulationParams.from_mapping`.
+        """
+        saved = self._preferences.default_run_settings
+        max_workers = (saved or {}).get("max_workers", "")
+        subset = {key: values[key] for key in DEFAULT_RUN_SETTING_FIELD_NAMES}
+        subset["max_workers"] = max_workers
+        self._preferences = self._preferences.with_default_run_settings(subset)
+        save_preferences(self._preferences_path, self._preferences)
+
     @_log_bridge_call
     def get_starter_form(self) -> dict[str, str]:
         """Return a fresh form's default values.
@@ -1834,7 +1869,11 @@ class Api:
 
         Routes through `fim.cli.load_config` — the identical function
         `fim run` uses (doc/fim-gui-design.md) — so a config that runs from the
-        terminal loads identically here, error for error.
+        terminal loads identically here, error for error. Also syncs
+        Settings' own execution defaults to match the loaded file
+        (`_sync_default_run_settings_from_loaded_config`'s own
+        docstring) — the same treatment `load_preset`, below, gives a
+        loaded preset.
 
         Returns:
             `{"ok": True, "values": {...}}` on success;
@@ -1855,6 +1894,7 @@ class Api:
             values = params_to_form_values(params)
         except (OSError, ValueError, yaml.YAMLError) as error:
             return {"ok": False, "message": str(error)}
+        self._sync_default_run_settings_from_loaded_config(values)
         return {"ok": True, "values": values}
 
     @_log_bridge_call
@@ -1966,6 +2006,34 @@ class Api:
         except (ValueError, yaml.YAMLError) as error:
             return {"ok": False, "message": str(error)}
         return {"ok": True, "values": values}
+
+    @_log_bridge_call
+    def load_preset(self, preset_id: str) -> dict[str, Any]:
+        """Load one preset into the form, syncing Settings to match it.
+
+        The actual "apply this preset" bridge call
+        (`screens/presets.js`'s own `applyPreset`) — distinct from
+        `get_preset_form_values`, above, which `list_presets` also
+        calls, once per preset, purely to compute each preset's own
+        `loadable` flag. Syncing Settings on every such probe would
+        silently overwrite the user's own saved defaults every time the
+        picker opens, a real, surprising side effect `list_presets`'s
+        own loadability check must never trigger — so the sync
+        (`_sync_default_run_settings_from_loaded_config`'s own
+        docstring) lives here, the one call site that means "the user
+        actually chose this," not inside `get_preset_form_values`
+        itself.
+
+        Args:
+            preset_id: A `preset_id` from a prior `list_presets` call.
+
+        Returns:
+            The identical shape `get_preset_form_values` returns.
+        """
+        result = self.get_preset_form_values(preset_id)
+        if result["ok"]:
+            self._sync_default_run_settings_from_loaded_config(result["values"])
+        return result
 
     @_log_bridge_call
     def get_preset_yaml(self, preset_id: str) -> dict[str, Any]:

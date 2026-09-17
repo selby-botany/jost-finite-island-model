@@ -187,7 +187,7 @@ function showExampleLoadNotice(title, message) {
  *     avoid jumping to Configure after a load that only showed an alert.
  */
 async function applyPreset(presetId, presetTitle) {
-    const result = await window.pywebview.api.get_preset_form_values(presetId);
+    const result = await window.pywebview.api.load_preset(presetId);
     if (!result.ok) {
         presetsDialog.close();
         showExampleLoadNotice(presetTitle, result.message);

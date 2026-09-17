@@ -89,6 +89,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [load\_yaml](#fim.gui.app.Api.load_yaml)
     * [list\_presets](#fim.gui.app.Api.list_presets)
     * [get\_preset\_form\_values](#fim.gui.app.Api.get_preset_form_values)
+    * [load\_preset](#fim.gui.app.Api.load_preset)
     * [get\_preset\_yaml](#fim.gui.app.Api.get_preset_yaml)
     * [save\_current\_as\_preset](#fim.gui.app.Api.save_current_as_preset)
     * [delete\_user\_preset](#fim.gui.app.Api.delete_user_preset)
@@ -3432,7 +3433,11 @@ Browse for and load a YAML config, returning the form values it renders to.
 
 Routes through `fim.cli.load_config` — the identical function
 `fim run` uses (doc/fim-gui-design.md) — so a config that runs from the
-terminal loads identically here, error for error.
+terminal loads identically here, error for error. Also syncs
+Settings' own execution defaults to match the loaded file
+(`_sync_default_run_settings_from_loaded_config`'s own
+docstring) — the same treatment `load_preset`, below, gives a
+loaded preset.
 
 **Returns**:
 
@@ -3522,6 +3527,39 @@ Return one preset's own form values, ready for `applyFormValues`.
   can stop validating later only if a range this project
   itself enforces changed in the meantime, not through any
   fault of the saved file itself.
+
+<a id="fim.gui.app.Api.load_preset"></a>
+
+#### load\_preset
+
+```python
+@_log_bridge_call
+def load_preset(preset_id: str) -> dict[str, Any]
+```
+
+Load one preset into the form, syncing Settings to match it.
+
+The actual "apply this preset" bridge call
+(`screens/presets.js`'s own `applyPreset`) — distinct from
+`get_preset_form_values`, above, which `list_presets` also
+calls, once per preset, purely to compute each preset's own
+`loadable` flag. Syncing Settings on every such probe would
+silently overwrite the user's own saved defaults every time the
+picker opens, a real, surprising side effect `list_presets`'s
+own loadability check must never trigger — so the sync
+(`_sync_default_run_settings_from_loaded_config`'s own
+docstring) lives here, the one call site that means "the user
+actually chose this," not inside `get_preset_form_values`
+itself.
+
+**Arguments**:
+
+- `preset_id` - A `preset_id` from a prior `list_presets` call.
+
+
+**Returns**:
+
+  The identical shape `get_preset_form_values` returns.
 
 <a id="fim.gui.app.Api.get_preset_yaml"></a>
 

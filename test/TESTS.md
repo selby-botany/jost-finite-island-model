@@ -6427,6 +6427,60 @@ limitation ("edit the YAML file directly"), not specific to presets
 — this proves `get_preset_form_values` surfaces that same message
 rather than crashing or silently loading a wrong value.
 
+<a id="gui.test_app_api.test_load_preset_syncs_settings_execution_defaults"></a>
+
+#### test\_load\_preset\_syncs\_settings\_execution\_defaults
+
+```python
+def test_load_preset_syncs_settings_execution_defaults() -> None
+```
+
+Loading a preset makes its own execution fields the new session default.
+
+A real, reported request: `engine_backend`/`n_replicates`/etc. are
+Settings-only fields now (Configure's own `<form>` has no live
+control for any of them), so a submitted run would otherwise
+silently ignore whatever a just-loaded preset named in favor of
+whatever Settings already held — `load_preset`, unlike
+`get_preset_form_values` it wraps, closes that gap.
+
+<a id="gui.test_app_api.test_load_preset_leaves_max_workers_untouched"></a>
+
+#### test\_load\_preset\_leaves\_max\_workers\_untouched
+
+```python
+def test_load_preset_leaves_max_workers_untouched() -> None
+```
+
+Not a `SimulationParams` field, so a loaded preset has no say over it.
+
+<a id="gui.test_app_api.test_load_preset_of_an_unknown_id_does_not_touch_settings"></a>
+
+#### test\_load\_preset\_of\_an\_unknown\_id\_does\_not\_touch\_settings
+
+```python
+def test_load_preset_of_an_unknown_id_does_not_touch_settings() -> None
+```
+
+A failed load never overwrites Settings with nothing.
+
+<a id="gui.test_app_api.test_list_presets_does_not_sync_settings_execution_defaults"></a>
+
+#### test\_list\_presets\_does\_not\_sync\_settings\_execution\_defaults
+
+```python
+def test_list_presets_does_not_sync_settings_execution_defaults() -> None
+```
+
+Merely listing presets must never silently overwrite Settings' own defaults.
+
+`list_presets` calls `get_preset_form_values` (not `load_preset`)
+once per preset, purely to compute each one's own `loadable` flag —
+if the sync `load_preset` performs lived in `get_preset_form_values`
+instead, opening the picker at all would silently clobber whatever
+Settings held with the *last* preset checked, whether or not the
+user ever chose it.
+
 <a id="gui.test_app_api.test_every_other_builtin_preset_loads_into_form_values"></a>
 
 #### test\_every\_other\_builtin\_preset\_loads\_into\_form\_values

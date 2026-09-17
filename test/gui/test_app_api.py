@@ -505,6 +505,73 @@ def test_get_preset_form_values_surfaces_the_per_locus_mu_limitation() -> None:
     assert "per-locus mu" in result["message"]
 
 
+def test_load_preset_syncs_settings_execution_defaults() -> None:
+    """Loading a preset makes its own execution fields the new session default.
+
+    A real, reported request: `engine_backend`/`n_replicates`/etc. are
+    Settings-only fields now (Configure's own `<form>` has no live
+    control for any of them), so a submitted run would otherwise
+    silently ignore whatever a just-loaded preset named in favor of
+    whatever Settings already held — `load_preset`, unlike
+    `get_preset_form_values` it wraps, closes that gap.
+    """
+    api = Api()
+    values = dict(starter_form_values())
+    values["engine_backend"] = "generational"
+    values["n_replicates"] = "16"
+    api.save_current_as_preset("Generational scenario", values)
+
+    result = api.load_preset("user:Generational scenario")
+
+    assert result["ok"] is True
+    defaults = api.get_default_run_settings()
+    assert defaults["engine_backend"] == "generational"
+    assert defaults["n_replicates"] == "16"
+
+
+def test_load_preset_leaves_max_workers_untouched() -> None:
+    """Not a `SimulationParams` field, so a loaded preset has no say over it."""
+    api = Api()
+    set_result = api.set_default_run_settings({"max_workers": "3"})
+    assert set_result == {"ok": True}
+
+    api.save_current_as_preset("Plain scenario", starter_form_values())
+    api.load_preset("user:Plain scenario")
+
+    assert api.get_default_run_settings()["max_workers"] == "3"
+
+
+def test_load_preset_of_an_unknown_id_does_not_touch_settings() -> None:
+    """A failed load never overwrites Settings with nothing."""
+    api = Api()
+    before = api.get_default_run_settings()
+
+    result = api.load_preset("not-a-real-preset")
+
+    assert result["ok"] is False
+    assert api.get_default_run_settings() == before
+
+
+def test_list_presets_does_not_sync_settings_execution_defaults() -> None:
+    """Merely listing presets must never silently overwrite Settings' own defaults.
+
+    `list_presets` calls `get_preset_form_values` (not `load_preset`)
+    once per preset, purely to compute each one's own `loadable` flag —
+    if the sync `load_preset` performs lived in `get_preset_form_values`
+    instead, opening the picker at all would silently clobber whatever
+    Settings held with the *last* preset checked, whether or not the
+    user ever chose it.
+    """
+    api = Api()
+    set_result = api.set_default_run_settings({"engine_backend": "generational"})
+    assert set_result == {"ok": True}
+    before = api.get_default_run_settings()
+
+    api.list_presets()
+
+    assert api.get_default_run_settings() == before
+
+
 # The one built-in preset `get_preset_form_values` cannot represent today
 # (`test_get_preset_form_values_surfaces_the_per_locus_mu_limitation`,
 # above) — a genuinely per-locus `mu`, the one construct `mu_from_params`

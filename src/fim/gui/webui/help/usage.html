@@ -462,7 +462,7 @@ action the matching on-screen control already performs.</p>
 </tr>
 <tr>
 <td>Configure</td>
-<td>Two always-visible, independently scrollable panels: FIM parameters (N — scalar or a per-deme table, d, m, mu, seed — the five values that together are &quot;the finite island model&quot;) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, the full convergence group, the full batch/replicate group, a light/dark override, and significant digits) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, &quot;Load example…&quot; opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
+<td>Two always-visible, independently scrollable panels: FIM parameters (N — scalar or a per-deme table, d, m, mu, seed — the five values that together are &quot;the finite island model&quot;) and Structure (initial conditions, migrant sampling, mutation model, deme weighting, loci, which convergence statistic(s) to watch, replicate tolerance/minimum, and the within-run σ band) — one per <a href="#" data-fim-help="configuration" data-fim-anchor="">configuration reference</a> section, no dialog to open for any of them; every field and mode-selector group has a hover/focus tooltip. Execution engine, n<sub>replicates</sub>, max_generations, convergence window/tolerance, replicate confidence, and the batch-execution tuning fields (JIT, the <code>auto</code> engine's own two thresholds, parallel workers, max concurrent replicates) live in Settings instead, as defaults every fresh configuration starts from — loading a saved configuration or a worked example updates them to match what was loaded. &quot;Load configuration…&quot;/&quot;Save configuration…&quot; read and write the exact YAML file format above, &quot;Load example…&quot; opens the Presets picker (each preset also viewable as plain YAML, with a copy-to-clipboard action, and a loaded preset can be duplicated under a new name), and &quot;▶ Run&quot;/&quot;🔮 Explore&quot; jump to those destinations with the configuration exactly as shown. An invalid field on &quot;Run simulation&quot; (from anywhere) navigates here and marks the specific field, not only the section it lives in</td>
 <td><a href="#create-a-configuration">Create a configuration</a></td>
 </tr>
 <tr>
@@ -530,20 +530,28 @@ the number of seconds to allow, or to <code>0</code> to wait indefinitely:</p>
 <pre><code class="language-console">FIM_GUI_SHUTDOWN_TIMEOUT=0 fim --graphical
 </code></pre>
 <h3 id="saved-preferences">Saved preferences</h3>
-<p>The GUI remembers five things between launches: Configure's own Significant
+<p>The GUI remembers six things between launches: Settings' own Significant
 digits setting, the light/dark override (absent/<code>null</code> means &quot;follow the
 OS,&quot; the default), whether the first-launch welcome panel has already been
-dismissed, the startup behavior selected in Settings, and the last
-configuration you successfully clicked &quot;Run simulation&quot; with. In Settings,
-&quot;Restore the last submitted configuration&quot; keeps the existing behavior: a
-fresh launch's own Run view starts from that saved configuration rather than
-from the built-in starter values. &quot;Restart from the starter configuration&quot;
-uses the built-in starter values on the next launch instead. A genuinely
+dismissed, the startup behavior selected in Settings, the execution defaults
+(execution engine, n<sub>replicates</sub>, and the rest of Settings' own
+&quot;how the computation runs&quot; fields — see the Configure row above) every fresh
+configuration starts from, and the last configuration you successfully
+clicked &quot;Run simulation&quot; with. In Settings, &quot;Restore the last submitted
+configuration&quot; keeps the existing behavior: a fresh launch's own Run view
+starts from that saved configuration rather than from the built-in starter
+values. &quot;Restart from the starter configuration&quot; uses the built-in starter
+values on the next launch instead — with the saved execution defaults still
+applied over them, the same as any other fresh configuration. A genuinely
 first launch (welcome not yet dismissed) shows the welcome panel offering
 &quot;Try a worked example…&quot; or &quot;Start from scratch.&quot; File menu → &quot;New
-configuration&quot; always resets to the built-in starter values regardless of
-what is saved; it is the one action that ignores the saved configuration on
-purpose.</p>
+configuration&quot; always resets to the built-in starter values (execution
+defaults included) regardless of what is saved as the last submitted
+configuration; it is the one action that ignores that saved configuration on
+purpose. Loading a saved configuration file or a worked example, on the
+other hand, updates the saved execution defaults themselves to match what
+was loaded — the next fresh configuration starts from there too, not only
+the one you just opened.</p>
 <p>Nothing scientific is stored here: a run's own configuration, seed, and
 results always live in that run's own <code>manifest.json</code>/<code>trajectory.jsonl</code>
 under <code>results/</code>, exactly as described throughout this guide. This file
