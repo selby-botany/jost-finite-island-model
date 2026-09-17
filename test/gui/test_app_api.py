@@ -26,7 +26,7 @@ import yaml
 from webview.menu import Menu, MenuAction, MenuSeparator
 
 from fim import __version__ as fim_version
-from fim import cli, update
+from fim import cli, paths, update
 from fim import engine as engine_module
 from fim.engine import (
     RunResult,
@@ -2439,6 +2439,264 @@ def test_list_home_runs_omits_config_summary_when_manifest_is_unavailable(
     assert len(result) == 1
     assert result[0]["configSummary"] is None
     assert result[0]["statistics"] is None
+
+
+def test_list_home_runs_reports_a_runs_own_metadata_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run with a `metadata.json` name reports it; one without reports `None`."""
+    (tmp_path / "named").mkdir()
+    (tmp_path / "unnamed").mkdir()
+    named = _write_run(tmp_path / "named")
+    (named / "metadata.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "name": "Baseline",
+                "description": None,
+                "created_at": "2026-09-17T00:00:00Z",
+                "updated_at": "2026-09-17T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    unnamed = _write_run(tmp_path / "unnamed", seed=2)
+    real_list_recent_runs = recent_runs_module.list_recent_runs
+    monkeypatch.setattr(
+        recent_runs_module,
+        "list_recent_runs",
+        lambda: sorted(
+            [
+                *real_list_recent_runs(named.parent),
+                *real_list_recent_runs(unnamed.parent),
+            ],
+            key=lambda run: run.directory.name,
+        ),
+    )
+
+    result = Api().list_home_runs()
+
+    names = {row["directory"]: row["name"] for row in result}
+    assert names[str(named)] == "Baseline"
+    assert names[str(unnamed)] is None
+
+
+def _use_isolated_results_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Point `paths.results_directory()` at an isolated `tmp_path` for this test.
+
+    `fim.persistence.groups` resolves its own default `results` this
+    same way (`from fim import paths` then `paths.results_directory()`)
+    -- patching the one shared `fim.paths` module attribute here covers
+    every `Api` bridge method under test, with no need to pass an
+    explicit `results=` override through the bridge layer itself (which
+    has none -- a real GUI always means "the real results directory").
+    """
+    results = tmp_path / "results"
+    monkeypatch.setattr(paths, "results_directory", lambda: results)
+    return results
+
+
+def _write_run_under(results: Path, name: str, **overrides: object) -> Path:
+    """`_write_run`, into a not-yet-existing subdirectory of `results`.
+
+    `_write_run` writes `run.yaml` directly into the directory it is
+    given, which must already exist (matching every existing caller,
+    always a real `tmp_path`) -- a Study/Experiment test's own `results`
+    override does not exist yet at all until this creates it.
+    """
+    (results / name).mkdir(parents=True)
+    return _write_run(results / name, **overrides)
+
+
+def test_create_and_list_studies_round_trips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`create_study` then `list_studies` shows the new, empty Study."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+
+    created = api.create_study("Ring sweep", "A description.")
+
+    assert created == {"ok": True, "studyId": created["studyId"]}
+    listed = api.list_studies()
+    assert len(listed) == 1
+    assert listed[0]["name"] == "Ring sweep"
+    assert listed[0]["description"] == "A description."
+    assert listed[0]["runCount"] == 0
+    assert listed[0]["runDirectories"] == []
+
+
+def test_create_study_rejects_a_blank_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A blank name is a validation failure, not a silently-created Study."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+
+    result = Api().create_study("   ")
+
+    assert result["ok"] is False
+    assert Api().list_studies() == []
+
+
+def test_add_run_to_study_and_get_study_run_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Study's own lazily-fetched runs match `list_home_runs`'s own row shape."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+
+    added = api.add_run_to_study(study_id, str(output))
+
+    assert added == {"ok": True}
+    study_rows = api.list_studies()
+    assert study_rows[0]["runCount"] == 1
+    assert study_rows[0]["runDirectories"] == [str(output)]
+    summary = api.get_study_run_summary(study_id)
+    assert summary["ok"] is True
+    assert len(summary["runs"]) == 1
+    assert summary["runs"][0]["directory"] == str(output)
+    assert summary["runs"][0]["statistics"] is not None
+
+
+def test_add_run_to_study_reports_an_unknown_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Adding a run to a nonexistent Study is a clean `{"ok": False}`, not a crash."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+
+    result = Api().add_run_to_study("study-ffffffff", str(output))
+
+    assert result["ok"] is False
+    assert "no such study" in result["message"]
+
+
+def test_get_study_run_summary_reports_an_unknown_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Expanding a Study row for an id that no longer exists fails cleanly."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+
+    result = Api().get_study_run_summary("study-ffffffff")
+
+    assert result["ok"] is False
+
+
+def test_create_experiment_and_add_study_round_trips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`create_experiment` + `add_study_to_experiment` shows in `list_experiments`."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    experiment_id = api.create_experiment("Topology")["experimentId"]
+
+    added = api.add_study_to_experiment(experiment_id, study_id)
+
+    assert added == {"ok": True}
+    experiments = api.list_experiments()
+    assert experiments[0]["studyIds"] == [study_id]
+    assert experiments[0]["studyCount"] == 1
+
+
+def test_add_study_to_experiment_reports_an_unknown_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An Experiment cannot reference a Study that does not exist."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    experiment_id = Api().create_experiment("Topology")["experimentId"]
+
+    result = Api().add_study_to_experiment(experiment_id, "study-ffffffff")
+
+    assert result["ok"] is False
+
+
+def test_delete_study_removes_it_and_its_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deleting a Study from the GUI cascades to its member Runs (confirmed)."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    api.add_run_to_study(study_id, str(output))
+
+    deleted = api.delete_study(study_id)
+
+    assert deleted == {"ok": True, "deletedRunCount": 1}
+    assert not output.exists()
+    assert api.list_studies() == []
+
+
+def test_delete_experiment_cascades_to_studies_and_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deleting an Experiment cascades through its Studies to their Runs."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    api.add_run_to_study(study_id, str(output))
+    experiment_id = api.create_experiment("Topology")["experimentId"]
+    api.add_study_to_experiment(experiment_id, study_id)
+
+    deleted = api.delete_experiment(experiment_id)
+
+    assert deleted == {"ok": True, "deletedStudyCount": 1}
+    assert not output.exists()
+    assert api.list_studies() == []
+    assert api.list_experiments() == []
+
+
+def test_copy_study_creates_an_independent_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`copy_study`: the confirmed, lower-complexity alternative to multi-membership."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    api.add_run_to_study(study_id, str(output))
+
+    copied = api.copy_study(study_id, "Ring sweep copy")
+
+    assert copied["ok"] is True
+    names = {study["name"] for study in api.list_studies()}
+    assert names == {"Ring sweep", "Ring sweep copy"}
+
+
+def test_copy_experiment_creates_an_independent_experiment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`copy_experiment` mirrors `copy_study` one level up."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    experiment_id = Api().create_experiment("Topology")["experimentId"]
+
+    copied = Api().copy_experiment(experiment_id, "Topology copy")
+
+    assert copied["ok"] is True
+    names = {experiment["name"] for experiment in Api().list_experiments()}
+    assert names == {"Topology", "Topology copy"}
+
+
+def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bulk "Select/Delete/Delete all" idiom: one round trip, many directories."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    first = _write_run_under(results, "run-a")
+    second = _write_run_under(results, "run-b", seed=2)
+    already_gone = results / "run-c"
+
+    result = Api().delete_runs([str(first), str(second), str(already_gone)])
+
+    assert result == {"ok": True, "deletedCount": 2}
+    assert not first.exists()
+    assert not second.exists()
 
 
 def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> None:

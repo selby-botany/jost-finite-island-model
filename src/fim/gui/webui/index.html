@@ -629,25 +629,96 @@
           </button>
         </div>
       </div>
+      <!-- Run/Study/Experiment hierarchy design (`20260917-claude-
+           sonnet-5-run-study-experiment-hierarchy-design.md`, `selby/
+           restricted`), §6 "New affordances". A Study/Experiment is
+           purely local bookkeeping (`fim.persistence.groups`) -- these
+           two cards are the only way to create one from the GUI; every
+           existing run keeps working, unattached, in "Unsorted",
+           unless a user explicitly organizes it into one of these.
+           Plain, always-visible text inputs, not a dialog -- this app
+           has no `window.prompt`/`confirm` anywhere (`screens/open-
+           run.js`'s own `confirmThenRun` docstring: both block
+           indefinitely under this project's own hidden/headless
+           pywebview window). -->
+      <div class="home-card">
+        <h3>New study</h3>
+        <p>Group related runs under one name, for a research question.</p>
+        <input
+          type="text"
+          id="home-new-study-name"
+          placeholder="Study name"
+          aria-label="New study name"
+        >
+        <input
+          type="text"
+          id="home-new-study-description"
+          placeholder="Description (optional)"
+          aria-label="New study description"
+        >
+        <div class="actions">
+          <button type="button" id="home-new-study-button">
+            Create study
+          </button>
+        </div>
+      </div>
+      <div class="home-card">
+        <h3>New experiment</h3>
+        <p>Group related studies under one longer-running research goal.</p>
+        <input
+          type="text"
+          id="home-new-experiment-name"
+          placeholder="Experiment name"
+          aria-label="New experiment name"
+        >
+        <input
+          type="text"
+          id="home-new-experiment-description"
+          placeholder="Description (optional)"
+          aria-label="New experiment description"
+        >
+        <div class="actions">
+          <button type="button" id="home-new-experiment-button">
+            Create experiment
+          </button>
+        </div>
+      </div>
     </div>
     <p>Recent runs (results/*/manifest.json):</p>
-    <!-- Grouped by date bucket (Today / This week / Earlier -- the only
-         grouping signal a `RecentRun` carries today) so a `results/`
-         directory with many old runs doesn't render as one, ever-
-         growing scroll (`screens/open-run.js`'s own `dateBucketFor`/
-         `renderRecentRuns`). Once a `SweepManifest` exists (design docs
-         `20260907-claude-sonnet-5-{large-sweep-architecture-roadmap,
-         sweep-first-class-cluster-scaling-rebuttal}.md`, `selby/
-         restricted`), a sweep-id group key can be added as a second,
-         preferred grouping source without changing this markup. -->
+    <!-- A three-level tree: Experiments, expanding to their own Studies,
+         expanding to their own Runs -- plus every Study not inside an
+         Experiment, plus an "Unsorted" bucket for every Run in none of
+         them, itself grouped by date bucket (Today / Yesterday / Earlier)
+         exactly as this table rendered before Study/Experiment existed
+         (`20260917-claude-sonnet-5-run-study-experiment-hierarchy-
+         design.md`, `selby/restricted`, §6; `screens/open-run.js`'s own
+         `buildHomeGroups`/`dateBucketFor`/`renderRecentRuns`). On a
+         checkout with no Study/Experiment ever created, this renders
+         exactly as the old flat date-bucketed view did -- no empty
+         "Unsorted" wrapper, matching that section's own "zero required
+         migration" design goal. -->
     <div class="open-run-list-controls">
       <input
         type="search"
         id="open-run-filter"
-        placeholder="Filter by run ID, label, or date…"
+        placeholder="Filter by run ID, label, date, study, or experiment…"
         aria-label="Filter recent runs"
       >
       <span id="open-run-count" class="open-run-count"></span>
+    </div>
+    <!-- Bulk "Select/Delete/Delete all" idiom (design doc §10, resolved
+         directly by the project owner: "the current 2500 runs cannot
+         realistically be deleted in the UI today"). Selection is a set
+         of directories, not DOM rows, so "Select all" reaches every
+         loaded run regardless of which groups are currently collapsed
+         (`screens/open-run.js`'s own `selectedDirectories`). -->
+    <div class="open-run-selection-toolbar">
+      <button type="button" id="open-run-select-all-button">Select all</button>
+      <button type="button" id="open-run-clear-selection-button">Clear selection</button>
+      <button type="button" id="open-run-delete-selected-button" disabled>
+        Delete selected
+      </button>
+      <span id="open-run-selection-count" class="open-run-count"></span>
     </div>
     <table class="open-run-table">
       <thead>
@@ -657,6 +728,7 @@
           <th>Outcome</th>
           <th>Configuration</th>
           <th>Statistics</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="open-run-recent-runs-body"></tbody>

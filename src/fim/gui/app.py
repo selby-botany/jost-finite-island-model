@@ -38,6 +38,7 @@ import json
 import logging
 import os
 import queue
+import shutil
 import subprocess
 import sys
 import threading
@@ -94,7 +95,9 @@ from fim.gui.trajectory_history import sampled_statistic_history
 from fim.model.initial import generate_initial_state
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
+from fim.persistence import groups
 from fim.persistence.manifest import RunManifest, read_batch_manifest, read_manifest
+from fim.persistence.run_metadata import run_metadata_path
 from fim.reanalyze import reanalyze_trajectory
 from fim.statistics import (
     effective_allele_count,
@@ -903,6 +906,109 @@ def _read_json_object(path: Path) -> dict[str, Any] | None:
     except (OSError, ValueError):
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _home_run_row(run: recent_runs.RecentRun, *, digits: int) -> dict[str, Any]:
+    """Build one Home row for `run`.
+
+    Factored out of `Api.list_home_runs` so `Api.get_study_run_summary`
+    can build pixel-for-pixel identical rows for a Study's own lazily
+    fetched runs, rather than a second, independently maintained
+    enrichment path (`20260917-claude-sonnet-5-run-study-experiment-
+    hierarchy-design.md`, `selby/restricted`).
+
+    Returns:
+        `{"runId", "directory", "trajectoryPath", "endedAt", "label",
+        "isBatch", "configSummary", "statistics", "name"}`.
+        `configSummary` is `_run_config_summary`'s own `{"N", "d", "m",
+        "mu", "mutation_model", "seed"}`, or `None` if `run.manifest`
+        was unavailable or its own parameters no longer validate.
+        `statistics` is `None` if the row's own `report.json`/
+        `summary.json` could not be read; otherwise one entry per
+        `_RESULT_STATISTIC_NAMES` name. `name` is the run's own
+        `metadata.json` name (`fim.persistence.run_metadata`), or
+        `None` if it was never set.
+    """
+    config_summary: dict[str, str] | None = None
+    if run.manifest is not None:
+        try:
+            config_summary = _run_config_summary(run.manifest.params())
+        except ValueError:
+            config_summary = None
+    statistics: dict[str, Any] | None = None
+    if run.is_batch:
+        raw_summary = _read_json_object(run.directory / "summary.json")
+        if raw_summary is not None:
+            statistics = {
+                name: _interval_payload(interval, digits)
+                for name, interval in raw_summary.items()
+                if name in _RESULT_STATISTIC_NAMES
+            }
+    else:
+        raw_report = _read_json_object(run.directory / "report.json")
+        if raw_report is not None:
+            statistics = {
+                name: format_statistic(
+                    cast("float | None", raw_report.get(name)), digits
+                )
+                for name in _RESULT_STATISTIC_NAMES
+                if name in raw_report
+            }
+    raw_metadata = _read_json_object(run_metadata_path(run.directory))
+    run_name = raw_metadata.get("name") if raw_metadata is not None else None
+    return {
+        "runId": run.run_id,
+        "directory": str(run.directory),
+        "trajectoryPath": (
+            None if run.is_batch else str(run.directory / "trajectory.jsonl")
+        ),
+        "endedAt": run.ended_at,
+        "label": run.label,
+        "isBatch": run.is_batch,
+        "configSummary": config_summary,
+        "statistics": statistics,
+        "name": run_name if isinstance(run_name, str) else None,
+    }
+
+
+def _recent_run_at_directory(directory: Path) -> recent_runs.RecentRun | None:
+    """Build one `RecentRun` for an arbitrary directory, not a `list_recent_runs` scan.
+
+    A Study's own `run_directories` (`fim.persistence.groups.
+    study_run_directories`) can reference a directory anywhere, not
+    only a direct child of `results_directory()` — the one case `fim.
+    gui.recent_runs.list_recent_runs`'s own `root.glob("*/manifest.
+    json")` scan cannot reach by construction. A small local copy of
+    that module's own `_recent_run_from_file` try-scalar-then-batch
+    logic, rather than importing its private name across packages.
+    """
+    manifest_path = directory / "manifest.json"
+    try:
+        manifest = read_manifest(manifest_path)
+    except (OSError, ValueError, KeyError):
+        pass
+    else:
+        return recent_runs.RecentRun(
+            run_id=manifest.run_id,
+            directory=directory,
+            ended_at=manifest.ended_at,
+            label=manifest.stop_reason,
+            is_batch=False,
+            manifest=manifest,
+        )
+    try:
+        batch_manifest = read_batch_manifest(manifest_path)
+    except (OSError, ValueError, KeyError):
+        return None
+    n_replicates = batch_manifest.params().n_replicates
+    return recent_runs.RecentRun(
+        run_id=batch_manifest.run_id,
+        directory=directory,
+        ended_at=batch_manifest.ended_at,
+        label=f"batch ({batch_manifest.replicate_count}/{n_replicates})",
+        is_batch=True,
+        manifest=batch_manifest,
+    )
 
 
 # The Explore workspace (design doc `20260907-claude-sonnet-5-botanist-
@@ -2537,65 +2643,249 @@ class Api:
         asked for this heavier per-row read, so neither pays for it.
 
         Returns:
-            One dict per run/batch, newest first: `{"runId",
-            "directory", "trajectoryPath", "endedAt", "label",
-            "isBatch", "configSummary", "statistics"}` — the first six
-            keys identical to `list_recent_runs`'s own shape.
-            `configSummary` is `_run_config_summary`'s own `{"N", "d",
-            "m", "mu", "mutation_model", "seed"}`, or `None` if
-            `RecentRun.manifest` was unavailable (a hand-built row in a
-            test) or its own parameters no longer validate. `statistics`
-            is `None` if the row's own `report.json`/`summary.json`
-            could not be read; otherwise one entry per `_RESULT_
-            STATISTIC_NAMES` name — a `format_statistic`-formatted
-            string for a scalar run, or `_interval_payload`'s own
-            `buildCiMeter` input shape for a batch.
+            One dict per run/batch, newest first — see `_home_run_row`
+            for the exact shape. Every returned run, including one
+            already claimed by a Study, is included: the Run/Study/
+            Experiment hierarchy design (`20260917-claude-sonnet-5-run-
+            study-experiment-hierarchy-design.md`, `selby/restricted`,
+            §6) has the client, not this method, decide which rows
+            belong under "Unsorted" versus inside a Study — it already
+            has `list_studies`'s own `runDirectories` for exactly that.
         """
         digits = self._significant_digits
-        rows: list[dict[str, Any]] = []
-        for run in recent_runs.list_recent_runs():
-            config_summary: dict[str, str] | None = None
-            if run.manifest is not None:
-                try:
-                    config_summary = _run_config_summary(run.manifest.params())
-                except ValueError:
-                    config_summary = None
-            statistics: dict[str, Any] | None = None
-            if run.is_batch:
-                raw_summary = _read_json_object(run.directory / "summary.json")
-                if raw_summary is not None:
-                    statistics = {
-                        name: _interval_payload(interval, digits)
-                        for name, interval in raw_summary.items()
-                        if name in _RESULT_STATISTIC_NAMES
-                    }
-            else:
-                raw_report = _read_json_object(run.directory / "report.json")
-                if raw_report is not None:
-                    statistics = {
-                        name: format_statistic(
-                            cast("float | None", raw_report.get(name)), digits
-                        )
-                        for name in _RESULT_STATISTIC_NAMES
-                        if name in raw_report
-                    }
-            rows.append(
-                {
-                    "runId": run.run_id,
-                    "directory": str(run.directory),
-                    "trajectoryPath": (
-                        None
-                        if run.is_batch
-                        else str(run.directory / "trajectory.jsonl")
-                    ),
-                    "endedAt": run.ended_at,
-                    "label": run.label,
-                    "isBatch": run.is_batch,
-                    "configSummary": config_summary,
-                    "statistics": statistics,
-                }
-            )
-        return rows
+        return [
+            _home_run_row(run, digits=digits) for run in recent_runs.list_recent_runs()
+        ]
+
+    @_log_bridge_call
+    def list_studies(self) -> list[dict[str, Any]]:
+        """List every Study, oldest first (matching `groups.list_studies`'s own order).
+
+        Returns:
+            One dict per Study: `{"studyId", "name", "description",
+            "runCount", "createdAt", "runDirectories"}`. `runDirectories`
+            is each member run's directory resolved to the same string
+            form `list_home_runs`'s own `"directory"` field uses, so the
+            client can match a Home row to its Study by plain string
+            equality (design doc §6: "which runs are already claimed by
+            a Study" is decided client-side from this list, not by a
+            second bridge round trip per row).
+        """
+        results = paths.results_directory()
+        return [
+            {
+                "studyId": study.study_id,
+                "name": study.name,
+                "description": study.description,
+                "runCount": study.run_count,
+                "createdAt": study.created_at,
+                "runDirectories": [
+                    str(directory)
+                    for directory in groups.study_run_directories(
+                        study, results=results
+                    )
+                ],
+            }
+            for study in groups.list_studies(results=results)
+        ]
+
+    @_log_bridge_call
+    def list_experiments(self) -> list[dict[str, Any]]:
+        """List every Experiment, oldest first.
+
+        Returns:
+            One dict per Experiment: `{"experimentId", "name",
+            "description", "studyCount", "createdAt", "studyIds"}`.
+            `studyIds` lets the client find an Experiment's own member
+            Studies directly from `list_studies`'s own already-fetched
+            result — expanding an Experiment row needs no bridge call of
+            its own (design doc §6).
+        """
+        results = paths.results_directory()
+        return [
+            {
+                "experimentId": experiment.experiment_id,
+                "name": experiment.name,
+                "description": experiment.description,
+                "studyCount": experiment.study_count,
+                "createdAt": experiment.created_at,
+                "studyIds": list(experiment.study_ids),
+            }
+            for experiment in groups.list_experiments(results=results)
+        ]
+
+    @_log_bridge_call
+    def get_study_run_summary(self, study_id: str) -> dict[str, Any]:
+        """List one Study's own member Runs, enriched exactly like `list_home_runs`.
+
+        Fetched lazily, only the first time a Study row's own expand
+        control is clicked (`webui/screens/open-run.js`'s own
+        `expandStudyGroup`) — the same "approach B1" reasoning
+        `get_batch_replicate_summary` already established one level
+        down: a Study with many member runs should not make every
+        *other*, still-collapsed Study or Experiment pay for resolving
+        its own runs' config summaries and statistics.
+
+        Returns:
+            `{"ok": True, "runs": [...]}`, each entry `_home_run_row`'s
+            own shape; `{"ok": False, "message": ...}` if `study_id`
+            does not exist. A member directory that no longer exists on
+            disk is silently skipped (`fim.persistence.groups.
+            study_run_directories`'s own "one missing thing does not
+            hide everything else" precedent), never a partial failure.
+        """
+        try:
+            study = groups.get_study(study_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        digits = self._significant_digits
+        runs = [
+            run
+            for directory in groups.study_run_directories(study)
+            if (run := _recent_run_at_directory(directory)) is not None
+        ]
+        return {"ok": True, "runs": [_home_run_row(run, digits=digits) for run in runs]}
+
+    @_log_bridge_call
+    def create_study(self, name: str, description: str = "") -> dict[str, Any]:
+        """Create a new, empty Study.
+
+        Returns:
+            `{"ok": True, "studyId": ...}` on success; `{"ok": False,
+            "message": ...}` if `name` is blank after stripping.
+        """
+        try:
+            study = groups.create_study(name, description or None)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "studyId": study.study_id}
+
+    @_log_bridge_call
+    def create_experiment(self, name: str, description: str = "") -> dict[str, Any]:
+        """Create a new, empty Experiment. See `create_study`."""
+        try:
+            experiment = groups.create_experiment(name, description or None)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "experimentId": experiment.experiment_id}
+
+    @_log_bridge_call
+    def add_run_to_study(self, study_id: str, directory: str) -> dict[str, Any]:
+        """Add one existing Run directory to a Study; idempotent.
+
+        Returns:
+            `{"ok": True}` on success; `{"ok": False, "message": ...}`
+            if `study_id` does not exist.
+        """
+        try:
+            groups.add_run_to_study(study_id, Path(directory))
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True}
+
+    @_log_bridge_call
+    def add_study_to_experiment(
+        self, experiment_id: str, study_id: str
+    ) -> dict[str, Any]:
+        """Add one existing Study to an Experiment; idempotent.
+
+        Returns:
+            `{"ok": True}` on success; `{"ok": False, "message": ...}`
+            if either id does not exist.
+        """
+        try:
+            groups.add_study_to_experiment(experiment_id, study_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True}
+
+    @_log_bridge_call
+    def delete_study(self, study_id: str) -> dict[str, Any]:
+        """Delete a Study and every Run it references.
+
+        A deliberate, explicit product decision (`fim.persistence.
+        groups.delete_study`'s own docstring) — the GUI never offers the
+        `delete_runs=False` escape hatch that function itself still
+        supports, matching the confirmed design.
+
+        Returns:
+            `{"ok": True, "deletedRunCount": N}` on success; `{"ok":
+            False, "message": ...}` if `study_id` does not exist.
+        """
+        try:
+            deleted = groups.delete_study(study_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "deletedRunCount": deleted.run_count}
+
+    @_log_bridge_call
+    def delete_experiment(self, experiment_id: str) -> dict[str, Any]:
+        """Delete an Experiment, its Studies, and their Runs. See `delete_study`.
+
+        Returns:
+            `{"ok": True, "deletedStudyCount": N}` on success; `{"ok":
+            False, "message": ...}` if `experiment_id` does not exist.
+        """
+        try:
+            deleted = groups.delete_experiment(experiment_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "deletedStudyCount": deleted.study_count}
+
+    @_log_bridge_call
+    def copy_study(self, study_id: str, name: str) -> dict[str, Any]:
+        """Copy a Study's own run list into a new, independent Study.
+
+        Returns:
+            `{"ok": True, "studyId": ...}` on success; `{"ok": False,
+            "message": ...}` if `study_id` does not exist or `name` is
+            blank.
+        """
+        try:
+            copied = groups.copy_study(study_id, name=name)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "studyId": copied.study_id}
+
+    @_log_bridge_call
+    def copy_experiment(self, experiment_id: str, name: str) -> dict[str, Any]:
+        """Copy an Experiment's own study list into a new, independent Experiment.
+
+        Returns:
+            `{"ok": True, "experimentId": ...}` on success; `{"ok":
+            False, "message": ...}` if `experiment_id` does not exist or
+            `name` is blank.
+        """
+        try:
+            copied = groups.copy_experiment(experiment_id, name=name)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "experimentId": copied.experiment_id}
+
+    @_log_bridge_call
+    def delete_runs(self, directories: list[str]) -> dict[str, Any]:
+        """Delete every one of `directories` outright, skipping any already gone.
+
+        The "Select/Delete/Delete all" idiom Home's own bulk-selection
+        toolbar needs (a real, reported gap: thousands of Unsorted runs
+        could not realistically be deleted one at a time through the
+        GUI) — one round trip for the whole selection, rather than one
+        per directory, matters once a selection reaches into the
+        thousands.
+
+        Returns:
+            `{"ok": True, "deletedCount": N}` — `N` is how many of
+            `directories` actually existed and were removed; a
+            directory already gone (deleted out of band, or a stale
+            selection from before a refresh) is not an error.
+        """
+        deleted_count = 0
+        for directory in directories:
+            path = Path(directory)
+            if path.is_dir():
+                shutil.rmtree(path)
+                deleted_count += 1
+        return {"ok": True, "deletedCount": deleted_count}
 
     @_log_bridge_call
     def get_batch_replicate_summary(self, directory: str) -> dict[str, Any]:

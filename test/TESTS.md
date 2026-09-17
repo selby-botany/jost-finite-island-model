@@ -47,6 +47,7 @@ Every test module, fixture, and test function documented here in full; `doc/fim-
   - [`test_field_help_screen`](#gui.test_field_help_screen)
   - [`test_fixed_per_deme_screen`](#gui.test_fixed_per_deme_screen)
   - [`test_help_screen`](#gui.test_help_screen)
+  - [`test_home_hierarchy_screen`](#gui.test_home_hierarchy_screen)
   - [`test_input_screen`](#gui.test_input_screen)
   - [`test_literature_visuals`](#gui.test_literature_visuals)
   - [`test_loci_grid_screen`](#gui.test_loci_grid_screen)
@@ -7901,6 +7902,149 @@ Mirrors `test_list_recent_runs_reshapes_every_recent_run_into_a_
 json_dict`'s own canned-row style — `RecentRun.manifest` defaults to
 `None` for exactly this case.
 
+<a id="gui.test_app_api.test_list_home_runs_reports_a_runs_own_metadata_name"></a>
+
+#### test\_list\_home\_runs\_reports\_a\_runs\_own\_metadata\_name
+
+```python
+def test_list_home_runs_reports_a_runs_own_metadata_name(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A run with a `metadata.json` name reports it; one without reports `None`.
+
+<a id="gui.test_app_api.test_create_and_list_studies_round_trips"></a>
+
+#### test\_create\_and\_list\_studies\_round\_trips
+
+```python
+def test_create_and_list_studies_round_trips(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`create_study` then `list_studies` shows the new, empty Study.
+
+<a id="gui.test_app_api.test_create_study_rejects_a_blank_name"></a>
+
+#### test\_create\_study\_rejects\_a\_blank\_name
+
+```python
+def test_create_study_rejects_a_blank_name(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A blank name is a validation failure, not a silently-created Study.
+
+<a id="gui.test_app_api.test_add_run_to_study_and_get_study_run_summary"></a>
+
+#### test\_add\_run\_to\_study\_and\_get\_study\_run\_summary
+
+```python
+def test_add_run_to_study_and_get_study_run_summary(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A Study's own lazily-fetched runs match `list_home_runs`'s own row shape.
+
+<a id="gui.test_app_api.test_add_run_to_study_reports_an_unknown_study"></a>
+
+#### test\_add\_run\_to\_study\_reports\_an\_unknown\_study
+
+```python
+def test_add_run_to_study_reports_an_unknown_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Adding a run to a nonexistent Study is a clean `{"ok": False}`, not a crash.
+
+<a id="gui.test_app_api.test_get_study_run_summary_reports_an_unknown_study"></a>
+
+#### test\_get\_study\_run\_summary\_reports\_an\_unknown\_study
+
+```python
+def test_get_study_run_summary_reports_an_unknown_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Expanding a Study row for an id that no longer exists fails cleanly.
+
+<a id="gui.test_app_api.test_create_experiment_and_add_study_round_trips"></a>
+
+#### test\_create\_experiment\_and\_add\_study\_round\_trips
+
+```python
+def test_create_experiment_and_add_study_round_trips(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`create_experiment` + `add_study_to_experiment` shows in `list_experiments`.
+
+<a id="gui.test_app_api.test_add_study_to_experiment_reports_an_unknown_study"></a>
+
+#### test\_add\_study\_to\_experiment\_reports\_an\_unknown\_study
+
+```python
+def test_add_study_to_experiment_reports_an_unknown_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An Experiment cannot reference a Study that does not exist.
+
+<a id="gui.test_app_api.test_delete_study_removes_it_and_its_runs"></a>
+
+#### test\_delete\_study\_removes\_it\_and\_its\_runs
+
+```python
+def test_delete_study_removes_it_and_its_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Deleting a Study from the GUI cascades to its member Runs (confirmed).
+
+<a id="gui.test_app_api.test_delete_experiment_cascades_to_studies_and_runs"></a>
+
+#### test\_delete\_experiment\_cascades\_to\_studies\_and\_runs
+
+```python
+def test_delete_experiment_cascades_to_studies_and_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Deleting an Experiment cascades through its Studies to their Runs.
+
+<a id="gui.test_app_api.test_copy_study_creates_an_independent_study"></a>
+
+#### test\_copy\_study\_creates\_an\_independent\_study
+
+```python
+def test_copy_study_creates_an_independent_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`copy_study`: the confirmed, lower-complexity alternative to multi-membership.
+
+<a id="gui.test_app_api.test_copy_experiment_creates_an_independent_experiment"></a>
+
+#### test\_copy\_experiment\_creates\_an\_independent\_experiment
+
+```python
+def test_copy_experiment_creates_an_independent_experiment(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`copy_experiment` mirrors `copy_study` one level up.
+
+<a id="gui.test_app_api.test_delete_runs_removes_every_directory_and_tolerates_a_missing_one"></a>
+
+#### test\_delete\_runs\_removes\_every\_directory\_and\_tolerates\_a\_missing\_one
+
+```python
+def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The bulk "Select/Delete/Delete all" idiom: one round trip, many directories.
+
 <a id="gui.test_app_api.test_open_run_reanalyzes_the_final_generation_by_default"></a>
 
 #### test\_open\_run\_reanalyzes\_the\_final\_generation\_by\_default
@@ -10928,6 +11072,110 @@ Back returns to Results, not a fixed default, when Help was opened from there.
 The one genuinely new interaction Help adds relative to every other
 screen's own fixed-target "Back" button: recording
 *whichever* screen was showing, not always the same one.
+
+<a id="gui.test_home_hierarchy_screen"></a>
+
+# gui.test\_home\_hierarchy\_screen
+
+Headless functional tests for Home's Run/Study/Experiment tree.
+
+Real DOM-driven proof that the three-level Experiment/Study/Run tree
+(`20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`,
+`selby/restricted`, §6) actually works end to end through the page's own
+JavaScript (`screens/open-run.js`'s own `buildHomeGroups`/
+`createGroup`/`buildGroupActionControls`) -- `test/gui/test_app_api.py`'s
+own tests already prove every underlying `Api` bridge method correct as
+a plain Python call; this file proves the page wires them together,
+which no Python-only test can check.
+
+This codebase has no `window.prompt`/`window.confirm` anywhere: both
+were confirmed, live, to block indefinitely under a hidden/headless
+pywebview window (`screens/open-run.js`'s own `confirmThenRun`
+docstring) -- every interaction here is therefore a plain DOM click/
+input against always-visible controls, never a native dialog.
+
+<a id="gui.test_home_hierarchy_screen.test_creating_a_study_shows_it_in_the_tree_and_wraps_unsorted"></a>
+
+#### test\_creating\_a\_study\_shows\_it\_in\_the\_tree\_and\_wraps\_unsorted
+
+```python
+def test_creating_a_study_shows_it_in_the_tree_and_wraps_unsorted(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A new, empty Study appears; every existing run becomes "Unsorted".
+
+Before any Study/Experiment exists, Home renders the plain date-
+bucket tree with no "Unsorted" wrapper (design doc §6, "zero
+required migration") -- creating the very first Study is the one
+moment that wrapper is expected to appear.
+
+<a id="gui.test_home_hierarchy_screen.test_adding_a_run_to_a_study_moves_it_out_of_unsorted"></a>
+
+#### test\_adding\_a\_run\_to\_a\_study\_moves\_it\_out\_of\_unsorted
+
+```python
+def test_adding_a_run_to_a_study_moves_it_out_of_unsorted(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+"Add to study…" moves a run's own count from Unsorted into the Study.
+
+<a id="gui.test_home_hierarchy_screen.test_creating_an_experiment_and_adding_a_study_nests_it"></a>
+
+#### test\_creating\_an\_experiment\_and\_adding\_a\_study\_nests\_it
+
+```python
+def test_creating_an_experiment_and_adding_a_study_nests_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+"Add to experiment…" nests a Study's own row under its Experiment.
+
+<a id="gui.test_home_hierarchy_screen.test_deleting_a_study_cascades_to_its_own_runs"></a>
+
+#### test\_deleting\_a\_study\_cascades\_to\_its\_own\_runs
+
+```python
+def test_deleting_a_study_cascades_to_its_own_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A Study's own inline Delete confirmation removes it and its member Runs.
+
+The confirmed, deliberate product decision (`fim.persistence.groups.
+delete_study`'s own docstring): deleting a Study is a real,
+data-destroying operation for the runs it references, not merely a
+bookkeeping change -- confirmed here against real files on disk, not
+only against `Api.delete_study` as a plain Python call
+(`test/gui/test_app_api.py`'s own coverage).
+
+<a id="gui.test_home_hierarchy_screen.test_copying_a_study_creates_an_independent_copy_with_no_prompt"></a>
+
+#### test\_copying\_a\_study\_creates\_an\_independent\_copy\_with\_no\_prompt
+
+```python
+def test_copying_a_study_creates_an_independent_copy_with_no_prompt(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Copy needs no name entry -- it derives "<name> copy" and acts immediately.
+
+<a id="gui.test_home_hierarchy_screen.test_bulk_select_all_and_delete_selected_removes_every_run"></a>
+
+#### test\_bulk\_select\_all\_and\_delete\_selected\_removes\_every\_run
+
+```python
+def test_bulk_select_all_and_delete_selected_removes_every_run(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The "Select all"/"Delete selected" idiom removes every loaded run at once.
+
+The explicit gap this idiom answers: thousands of Unsorted runs
+could not realistically be deleted one at a time through the GUI.
+"Select all" reaches every loaded run even while its own group is
+collapsed -- this test never expands anything.
 
 <a id="gui.test_input_screen"></a>
 

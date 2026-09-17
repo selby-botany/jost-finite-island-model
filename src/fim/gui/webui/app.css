@@ -1344,6 +1344,17 @@ fieldset.composite > label {
     color: var(--fim-muted);
 }
 
+/* "New study"/"New experiment" home cards (Run/Study/Experiment
+ * hierarchy design, `20260917-claude-sonnet-5-run-study-experiment-
+ * hierarchy-design.md`, `selby/restricted`, §6) -- plain, stacked text
+ * inputs, full card width, rather than `.actions`'s own inline-row
+ * layout (which assumes short buttons/selects, not a name field). */
+.home-card input[type="text"] {
+    display: block;
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
 /* Screen 6: open an existing run (design §4.6). */
 .open-run-table {
     width: 100%;
@@ -1456,6 +1467,75 @@ fieldset.composite > label {
 .open-run-replicate-row td:nth-child(3) {
     padding-left: 1.5rem;
     color: var(--fim-muted);
+}
+
+/* Run/Study/Experiment hierarchy (design doc `20260917-claude-sonnet-5-
+ * run-study-experiment-hierarchy-design.md`, `selby/restricted`, §6). */
+.open-run-select-checkbox {
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}
+
+.open-run-add-to-select {
+    font-size: 0.85rem;
+    max-width: 10rem;
+}
+
+/* A Study/Experiment group header's own Copy/Delete/"Add to
+ * experiment…" controls, beside its toggle button in the same cell --
+ * distinct, muted buttons so they read as secondary to the toggle
+ * itself, which stays the row's own primary, full-width click target. */
+.open-run-group-actions {
+    float: right;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.open-run-group-action-button {
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+    background: none;
+    border: 1px solid var(--fim-border);
+    border-radius: 4px;
+    padding: 0.1rem 0.5rem;
+    cursor: pointer;
+}
+
+.open-run-group-action-button:hover {
+    color: inherit;
+    border-color: var(--fim-accent);
+}
+
+/* The bulk "Select/Delete/Delete all" toolbar sits directly above the
+ * table, beside the filter row -- one round trip for a selection of any
+ * size (`Api.delete_runs`), since the runs it was built for could number
+ * in the thousands. */
+.open-run-selection-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+}
+
+/* `confirmThenRun`'s own inline "are you sure?" row -- this codebase's
+ * only confirmation mechanism for a hard-to-reverse action (deleting a
+ * Study/Experiment/selection of runs), since a native `window.confirm`
+ * dialog blocks indefinitely under this project's own hidden/headless
+ * pywebview window. Appears immediately after the button that triggered
+ * it, inline, rather than anywhere modal. */
+.open-run-inline-confirm {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--fim-muted);
+}
+
+.open-run-inline-confirm button {
+    font-size: 0.8rem;
+    padding: 0.1rem 0.5rem;
 }
 
 /* Explore (design doc `20260907-claude-sonnet-5-botanist-gui-redesign.md`

@@ -656,7 +656,13 @@ def test_recent_runs_row_shows_config_summary_and_statistics(
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert settled is not None
-    assert settled["cellCount"] == 5
+    # 6, not 5: the Run/Study/Experiment hierarchy design (`20260917-
+    # claude-sonnet-5-run-study-experiment-hierarchy-design.md`, `selby/
+    # restricted`, §6/§10) added a trailing "Actions" column (an "Add to
+    # study…" pulldown per run row) -- the bulk-selection checkbox lives
+    # inside the existing first cell instead, so it added no column of
+    # its own.
+    assert settled["cellCount"] == 6
     assert "N=20" in settled["configText"]
     assert "mu=0.01" in settled["configText"]
     assert settled["configTitle"] == settled["configText"]

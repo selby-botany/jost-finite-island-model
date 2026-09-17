@@ -109,6 +109,18 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [set\_live\_deme\_pair](#fim.gui.app.Api.set_live_deme_pair)
     * [list\_recent\_runs](#fim.gui.app.Api.list_recent_runs)
     * [list\_home\_runs](#fim.gui.app.Api.list_home_runs)
+    * [list\_studies](#fim.gui.app.Api.list_studies)
+    * [list\_experiments](#fim.gui.app.Api.list_experiments)
+    * [get\_study\_run\_summary](#fim.gui.app.Api.get_study_run_summary)
+    * [create\_study](#fim.gui.app.Api.create_study)
+    * [create\_experiment](#fim.gui.app.Api.create_experiment)
+    * [add\_run\_to\_study](#fim.gui.app.Api.add_run_to_study)
+    * [add\_study\_to\_experiment](#fim.gui.app.Api.add_study_to_experiment)
+    * [delete\_study](#fim.gui.app.Api.delete_study)
+    * [delete\_experiment](#fim.gui.app.Api.delete_experiment)
+    * [copy\_study](#fim.gui.app.Api.copy_study)
+    * [copy\_experiment](#fim.gui.app.Api.copy_experiment)
+    * [delete\_runs](#fim.gui.app.Api.delete_runs)
     * [get\_batch\_replicate\_summary](#fim.gui.app.Api.get_batch_replicate_summary)
     * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
@@ -338,6 +350,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [write\_experiment\_manifest](#fim.persistence.groups.write_experiment_manifest)
   * [create\_study](#fim.persistence.groups.create_study)
   * [get\_study](#fim.persistence.groups.get_study)
+  * [study\_run\_directories](#fim.persistence.groups.study_run_directories)
   * [list\_studies](#fim.persistence.groups.list_studies)
   * [add\_run\_to\_study](#fim.persistence.groups.add_run_to_study)
   * [delete\_study](#fim.persistence.groups.delete_study)
@@ -4127,19 +4140,240 @@ asked for this heavier per-row read, so neither pays for it.
 
 **Returns**:
 
-  One dict per run/batch, newest first: `{"runId",
-  "directory", "trajectoryPath", "endedAt", "label",
-  "isBatch", "configSummary", "statistics"}` — the first six
-  keys identical to `list_recent_runs`'s own shape.
-  `configSummary` is `_run_config_summary`'s own `{"N", "d",
-  "m", "mu", "mutation_model", "seed"}`, or `None` if
-  `RecentRun.manifest` was unavailable (a hand-built row in a
-  test) or its own parameters no longer validate. `statistics`
-  is `None` if the row's own `report.json`/`summary.json`
-  could not be read; otherwise one entry per `_RESULT_
-  STATISTIC_NAMES` name — a `format_statistic`-formatted
-  string for a scalar run, or `_interval_payload`'s own
-  `buildCiMeter` input shape for a batch.
+  One dict per run/batch, newest first — see `_home_run_row`
+  for the exact shape. Every returned run, including one
+  already claimed by a Study, is included: the Run/Study/
+  Experiment hierarchy design (`20260917-claude-sonnet-5-run-
+  study-experiment-hierarchy-design.md`, `selby/restricted`,
+  §6) has the client, not this method, decide which rows
+  belong under "Unsorted" versus inside a Study — it already
+  has `list_studies`'s own `runDirectories` for exactly that.
+
+<a id="fim.gui.app.Api.list_studies"></a>
+
+#### list\_studies
+
+```python
+@_log_bridge_call
+def list_studies() -> list[dict[str, Any]]
+```
+
+List every Study, oldest first (matching `groups.list_studies`'s own order).
+
+**Returns**:
+
+  One dict per Study: `{"studyId", "name", "description",
+  "runCount", "createdAt", "runDirectories"}`. `runDirectories`
+  is each member run's directory resolved to the same string
+  form `list_home_runs`'s own `"directory"` field uses, so the
+  client can match a Home row to its Study by plain string
+  equality (design doc §6: "which runs are already claimed by
+  a Study" is decided client-side from this list, not by a
+  second bridge round trip per row).
+
+<a id="fim.gui.app.Api.list_experiments"></a>
+
+#### list\_experiments
+
+```python
+@_log_bridge_call
+def list_experiments() -> list[dict[str, Any]]
+```
+
+List every Experiment, oldest first.
+
+**Returns**:
+
+  One dict per Experiment: `{"experimentId", "name",
+  "description", "studyCount", "createdAt", "studyIds"}`.
+  `studyIds` lets the client find an Experiment's own member
+  Studies directly from `list_studies`'s own already-fetched
+  result — expanding an Experiment row needs no bridge call of
+  its own (design doc §6).
+
+<a id="fim.gui.app.Api.get_study_run_summary"></a>
+
+#### get\_study\_run\_summary
+
+```python
+@_log_bridge_call
+def get_study_run_summary(study_id: str) -> dict[str, Any]
+```
+
+List one Study's own member Runs, enriched exactly like `list_home_runs`.
+
+Fetched lazily, only the first time a Study row's own expand
+control is clicked (`webui/screens/open-run.js`'s own
+`expandStudyGroup`) — the same "approach B1" reasoning
+`get_batch_replicate_summary` already established one level
+down: a Study with many member runs should not make every
+*other*, still-collapsed Study or Experiment pay for resolving
+its own runs' config summaries and statistics.
+
+**Returns**:
+
+- ``{"ok"` - True, "runs": [...]}`, each entry `_home_run_row`'s
+  own shape; `{"ok": False, "message": ...}` if `study_id`
+  does not exist. A member directory that no longer exists on
+  disk is silently skipped (`fim.persistence.groups.
+  study_run_directories`'s own "one missing thing does not
+  hide everything else" precedent), never a partial failure.
+
+<a id="fim.gui.app.Api.create_study"></a>
+
+#### create\_study
+
+```python
+@_log_bridge_call
+def create_study(name: str, description: str = "") -> dict[str, Any]
+```
+
+Create a new, empty Study.
+
+**Returns**:
+
+- ``{"ok"` - True, "studyId": ...}` on success; `{"ok": False,
+- `"message"` - ...}` if `name` is blank after stripping.
+
+<a id="fim.gui.app.Api.create_experiment"></a>
+
+#### create\_experiment
+
+```python
+@_log_bridge_call
+def create_experiment(name: str, description: str = "") -> dict[str, Any]
+```
+
+Create a new, empty Experiment. See `create_study`.
+
+<a id="fim.gui.app.Api.add_run_to_study"></a>
+
+#### add\_run\_to\_study
+
+```python
+@_log_bridge_call
+def add_run_to_study(study_id: str, directory: str) -> dict[str, Any]
+```
+
+Add one existing Run directory to a Study; idempotent.
+
+**Returns**:
+
+- ``{"ok"` - True}` on success; `{"ok": False, "message": ...}`
+  if `study_id` does not exist.
+
+<a id="fim.gui.app.Api.add_study_to_experiment"></a>
+
+#### add\_study\_to\_experiment
+
+```python
+@_log_bridge_call
+def add_study_to_experiment(experiment_id: str,
+                            study_id: str) -> dict[str, Any]
+```
+
+Add one existing Study to an Experiment; idempotent.
+
+**Returns**:
+
+- ``{"ok"` - True}` on success; `{"ok": False, "message": ...}`
+  if either id does not exist.
+
+<a id="fim.gui.app.Api.delete_study"></a>
+
+#### delete\_study
+
+```python
+@_log_bridge_call
+def delete_study(study_id: str) -> dict[str, Any]
+```
+
+Delete a Study and every Run it references.
+
+A deliberate, explicit product decision (`fim.persistence.
+groups.delete_study`'s own docstring) — the GUI never offers the
+`delete_runs=False` escape hatch that function itself still
+supports, matching the confirmed design.
+
+**Returns**:
+
+- ``{"ok"` - True, "deletedRunCount": N}` on success; `{"ok":
+  False, "message": ...}` if `study_id` does not exist.
+
+<a id="fim.gui.app.Api.delete_experiment"></a>
+
+#### delete\_experiment
+
+```python
+@_log_bridge_call
+def delete_experiment(experiment_id: str) -> dict[str, Any]
+```
+
+Delete an Experiment, its Studies, and their Runs. See `delete_study`.
+
+**Returns**:
+
+- ``{"ok"` - True, "deletedStudyCount": N}` on success; `{"ok":
+  False, "message": ...}` if `experiment_id` does not exist.
+
+<a id="fim.gui.app.Api.copy_study"></a>
+
+#### copy\_study
+
+```python
+@_log_bridge_call
+def copy_study(study_id: str, name: str) -> dict[str, Any]
+```
+
+Copy a Study's own run list into a new, independent Study.
+
+**Returns**:
+
+- ``{"ok"` - True, "studyId": ...}` on success; `{"ok": False,
+- `"message"` - ...}` if `study_id` does not exist or `name` is
+  blank.
+
+<a id="fim.gui.app.Api.copy_experiment"></a>
+
+#### copy\_experiment
+
+```python
+@_log_bridge_call
+def copy_experiment(experiment_id: str, name: str) -> dict[str, Any]
+```
+
+Copy an Experiment's own study list into a new, independent Experiment.
+
+**Returns**:
+
+- ``{"ok"` - True, "experimentId": ...}` on success; `{"ok":
+  False, "message": ...}` if `experiment_id` does not exist or
+  `name` is blank.
+
+<a id="fim.gui.app.Api.delete_runs"></a>
+
+#### delete\_runs
+
+```python
+@_log_bridge_call
+def delete_runs(directories: list[str]) -> dict[str, Any]
+```
+
+Delete every one of `directories` outright, skipping any already gone.
+
+The "Select/Delete/Delete all" idiom Home's own bulk-selection
+toolbar needs (a real, reported gap: thousands of Unsorted runs
+could not realistically be deleted one at a time through the
+GUI) — one round trip for the whole selection, rather than one
+per directory, matters once a selection reaches into the
+thousands.
+
+**Returns**:
+
+- ``{"ok"` - True, "deletedCount": N}` — `N` is how many of
+  `directories` actually existed and were removed; a
+  directory already gone (deleted out of band, or a stale
+  selection from before a refresh) is not an error.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 
@@ -11108,6 +11342,25 @@ Read one existing Study by id.
 **Raises**:
 
 - `ValueError` - No Study with this id exists.
+
+<a id="fim.persistence.groups.study_run_directories"></a>
+
+#### study\_run\_directories
+
+```python
+def study_run_directories(study: StudyManifest,
+                          *,
+                          results: Path | None = None) -> list[Path]
+```
+
+Resolve every Run directory `study` references that still exists.
+
+A directory listed in `study.run_directories` that no longer exists
+(deleted out of band) is silently skipped, never fatal — the same
+"one missing thing does not hide everything else" precedent this
+module's own docstring describes for `run_directories` itself. The
+GUI's `Api.list_studies`/`Api.get_study_run_summary` (`fim.gui.app`)
+are this function's own two callers.
 
 <a id="fim.persistence.groups.list_studies"></a>
 

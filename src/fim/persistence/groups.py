@@ -430,6 +430,26 @@ def get_study(study_id: str, *, results: Path | None = None) -> StudyManifest:
     return read_study_manifest(path)
 
 
+def study_run_directories(
+    study: StudyManifest, *, results: Path | None = None
+) -> list[Path]:
+    """Resolve every Run directory `study` references that still exists.
+
+    A directory listed in `study.run_directories` that no longer exists
+    (deleted out of band) is silently skipped, never fatal — the same
+    "one missing thing does not hide everything else" precedent this
+    module's own docstring describes for `run_directories` itself. The
+    GUI's `Api.list_studies`/`Api.get_study_run_summary` (`fim.gui.app`)
+    are this function's own two callers.
+    """
+    root = results if results is not None else paths.results_directory()
+    resolved = (
+        _resolve_stored_run_reference(entry, results=root)
+        for entry in study.run_directories
+    )
+    return [directory for directory in resolved if directory.is_dir()]
+
+
 def list_studies(*, results: Path | None = None) -> list[StudyManifest]:
     """Return every Study under `results`, oldest first.
 
