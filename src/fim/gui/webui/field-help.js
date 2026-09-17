@@ -143,6 +143,16 @@ const FIELD_HELP = {
         "parallel workers, this is a real model parameter, and has no " +
         "effect under lineal. Blank means every requested replicate at " +
         "once.",
+    jit: "Whether the generational engine JIT-compiles its inner loop " +
+        "with numba. lineal never accepts anything but off; " +
+        "generational-vector always uses numba regardless of this " +
+        "setting.",
+    auto_vector_min_d: "The deme-count threshold the auto engine uses to " +
+        "prefer generational-vector over generational. Only meaningful " +
+        "when the execution engine above is auto; ignored otherwise.",
+    auto_vector_max_capacity: "The N x d x loci capacity ceiling the auto " +
+        "engine uses to prefer generational-vector. Only meaningful " +
+        "when the execution engine above is auto; ignored otherwise.",
     significant_digits: "How many digits every displayed statistic rounds " +
         "to. Cosmetic only — saved files always keep full precision.",
     dark_mode_override: "Follow system matches your OS's own light/dark " +

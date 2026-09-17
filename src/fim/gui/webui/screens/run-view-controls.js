@@ -76,13 +76,18 @@ async function onRunClicked() {
     // bridge round-trip, not after" fix already needed for Cancel's
     // button-enable timing.
     showRunBanner("");
-    // `n_replicates > 1` is the same "batch or scalar" toggle design
-    // §4.1 already established server-side (`Api._start_batch_run`'s
-    // own dispatch) -- known here from the form values already in
-    // hand, no bridge round trip needed just to pick which of
-    // `results-stats`/`batch-results-summary` `enterRunningState`
-    // shows for the run about to start.
-    window.fim.enterRunningState(Number(values.n_replicates) > 1);
+    // `n_replicates` is a Settings-only default now (Configure's own
+    // `<form>` never submits it), so `values` alone cannot say whether
+    // this is a batch -- entering a provisional scalar-shaped `running`
+    // state first (clearing any stale `completed` view immediately, the
+    // same "visible before its own bridge round trip" reasoning as
+    // Cancel's button-enable timing) and correcting it below from
+    // `start_run`'s own real, validated answer (`started.isBatch`)
+    // once it resolves -- the "batch or scalar" toggle design §4.1
+    // already established server-side (`Api._start_batch_run`'s own
+    // dispatch), reported back explicitly since this caller can no
+    // longer compute it locally.
+    window.fim.enterRunningState(false);
     const started = await window.pywebview.api.start_run(values);
     if (!started.ok) {
         // Rare (an output-directory collision retry timing out, or a
@@ -94,6 +99,7 @@ async function onRunClicked() {
         showRunBanner(started.message);
         return;
     }
+    window.fim.enterRunningState(Boolean(started.isBatch));
     // The live trajectory panel's own predicted-equilibrium reference
     // line (design §6.2) -- `started.equilibrium` is `undefined` for a
     // batch (`_start_batch_run` sends no such field at all) and `null`

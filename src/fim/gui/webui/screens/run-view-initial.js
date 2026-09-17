@@ -422,9 +422,9 @@ window.fim.enterInitialState = enterInitialState;
  * Cycles `window.__fimRunViewReady` false-then-true around the reset so
  * a test (or anything else) waiting for "the form is in a fully settled
  * state" has one reliable signal, instead of racing a DOM value change
- * alone -- `resetInputForm` still has two more real bridge calls in
- * flight (`get_default_max_workers`, `revalidate`'s own `validate_form`)
- * after `field-N` itself already shows the new value.
+ * alone -- `resetInputForm` still has a real bridge call in flight
+ * (`revalidate`'s own `validate_form`) after `field-N` itself already
+ * shows the new value.
  */
 window.fim.menu.newConfiguration = async function newConfiguration() {
     window.fim.showScreen("screen-run");

@@ -99,18 +99,14 @@ function collectFormValues() {
     values.track_expensive_statistics = data.has("track_expensive_statistics")
         ? "true"
         : "false";
-    // `engine_backend` is read directly rather than trusted to `FormData`
-    // for the same robustness reason the checkboxes above have their own
-    // fallback: nothing about this field's own disabled-ness should ever
-    // silently drop it from the submitted payload, even though nothing
-    // in this screen disables it today (it once did, while a batch was
-    // configured -- removed once a batch under any engine_backend became
-    // a real, working combination, `20260914-claude-sonnet-5-non-lineal-
-    // batch-execution-design.md`, `selby/restricted`). `form_values_to_
-    // payload`'s own generic dispatch loop (`config_form.py`) reads this
-    // key unconditionally for every `all_fields()` entry, so it must
-    // always be present.
-    values.engine_backend = form.elements.namedItem("engine_backend").value;
+    // `engine_backend`/`n_replicates`/`max_generations`/the convergence-
+    // loop timing pair/`replicate_confidence`/`max_concurrent_
+    // replicates`/`max_workers` are Settings-only fields now (`2026-09-
+    // 16` revision) -- this `<form>` never had, and does not need, a
+    // live control for any of them. `Api._merge_default_run_settings`
+    // fills each in server-side, from whatever Settings currently holds,
+    // before any bridge call that needs an `all_fields()`-complete
+    // values dict actually uses `values`.
     return values;
 }
 
@@ -159,20 +155,11 @@ function syncConditionalVisibility() {
     document.getElementById("sigma-band-fields").hidden = !form.elements.namedItem(
         "sigma_band_enabled"
     ).checked;
-
-    const nReplicatesField = form.elements.namedItem("n_replicates");
-    const isBatch = parseInt(nReplicatesField.value, 10) > 1;
-    document.getElementById("batch-only-fields").hidden = !isBatch;
-    // `engine_backend` used to lock to `"lineal"` and disable itself
-    // whenever a batch was configured -- `fim.engine._batch_worker`'s own
-    // call into `fim()` used to always supply a concrete `max_workers`/
-    // `store_factory`, a calling convention `fim()` itself accepted only
-    // for `engine_backend="lineal"`. Every value this selector offers is
-    // now a real, working choice for a batch, exactly as it already was
-    // for a scalar run (`GenerationalBackend`'s own `store_factory`
-    // support via `ReplicateFanoutStore`, `20260914-claude-sonnet-5-
-    // non-lineal-batch-execution-design.md`, `selby/restricted`), so
-    // nothing here needs to gate it any more.
+    // `batch-only-fields` (`replicate_tolerance`/`replicate_minimum`)
+    // used to hide behind a live `n_replicates > 1` check -- `n_
+    // replicates` moved into Settings entirely (`2026-09-16` revision),
+    // so this form has no live value left to check; that div is simply
+    // always visible now (`index.html`'s own comment on it).
 }
 
 function clearTabErrorDots() {
@@ -235,10 +222,14 @@ async function revalidate() {
  * newConfiguration`'s own unconditional reset (design doc `20260907-
  * claude-sonnet-5-gui-preferences-persistence-design.md`: an explicit
  * "New configuration" always means `STARTER_CONFIG`, never whatever
- * happens to be saved). `get_starter_form` never includes `max_workers`
- * (`config_form.starter_form_values`'s own docstring: it is not a
- * `SimulationParams` field at all), so this fetches and applies
- * `get_default_max_workers` itself, same as it always has.
+ * happens to be saved).
+ *
+ * `max_workers` is no longer part of this form at all (moved into the
+ * Settings dialog, `2026-09-16` revision -- its own field there seeds
+ * from `Api.get_default_run_settings`/`settings.js`'s own
+ * `loadSettingsDialog`, independently of this reset), so this no longer
+ * fetches or applies `get_default_max_workers` itself the way it used
+ * to when `#field-max_workers` still lived here.
  *
  * Distinct from `loadInitialForm`, just below, which a fresh app launch
  * uses instead -- the two used to be the same call (`get_starter_form`)
@@ -248,8 +239,6 @@ async function revalidate() {
 async function resetInputForm() {
     const values = await window.pywebview.api.get_starter_form();
     applyFormValues(values);
-    const defaultWorkers = await window.pywebview.api.get_default_max_workers();
-    form.elements.namedItem("max_workers").value = String(defaultWorkers);
     await revalidate();
 }
 
@@ -257,10 +246,10 @@ async function resetInputForm() {
  * Fetch this launch's own initial form and apply it -- prefers the last
  * successfully submitted form (`Api.get_initial_form`, re-validated
  * server-side) over the true starter values `resetInputForm` above
- * always uses, so a botanist's own values survive a relaunch. Already
- * includes a usable `max_workers` (`collectFormValues`'s own `FormData`
- * scan covers every form field, not only `SimulationParams` ones), so —
- * unlike `resetInputForm` -- there is no second bridge call to make here.
+ * always uses, so a botanist's own values survive a relaunch. Needs no
+ * second bridge call of its own the way `resetInputForm` once did:
+ * `max_workers` is a Settings-only field now (`resetInputForm`'s own
+ * comment), with its own independent seeding there.
  */
 async function loadInitialForm() {
     const values = await window.pywebview.api.get_initial_form();
@@ -394,13 +383,19 @@ const NUMBA_DEPENDENT_BACKENDS = [
  * Idempotent -- the suffix is appended only when not already present --
  * so a second call (a reload, a test calling it directly) can never
  * stack duplicates onto the same option.
+ *
+ * Targets `#settings-engine_backend` -- the *only* `engine_backend`
+ * selector left (`2026-09-16` revision moved it into Settings entirely;
+ * Configure's own former `#field-engine_backend` copy no longer
+ * exists), present in the DOM from first load exactly like Configure's
+ * own fields always were, so relabeling it this early still works.
  */
 async function applyEngineBackendAvailability() {
     const availability = await window.pywebview.api.get_engine_backend_availability();
     if (availability.numba) {
         return;
     }
-    const select = document.getElementById("field-engine_backend");
+    const select = document.getElementById("settings-engine_backend");
     for (const [value, suffix] of NUMBA_DEPENDENT_BACKENDS) {
         const option = select.querySelector(`option[value="${value}"]`);
         if (option !== null && !option.textContent.endsWith(suffix)) {

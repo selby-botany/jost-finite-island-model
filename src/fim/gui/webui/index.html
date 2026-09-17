@@ -907,29 +907,21 @@
        separate work): the non-scalar editors below (the migration
        matrix, the loci table, the p_0 grid) still render inline exactly
        as their six-modal-era selves did, rather than as the shared,
-       reusable grid component design §4.4 describes (phase 3); the
-       "Advanced: execution & performance" disclosure (`engine_backend`,
-       `jit`, `auto_vector_min_d`, `auto_vector_max_capacity`,
-       `max_concurrent_replicates`) is still only partly built.
+       reusable grid component design §4.4 describes (phase 3).
 
-       `engine_backend` ships as a plain `<select>` in the Structure
-       panel below (GUI engine-backend selector design doc
-       `20260911-claude-sonnet-5-gui-engine-backend-selector-design.md`,
-       approaches B3/C); `max_concurrent_replicates` ships beside
-       `max_workers` in `batch-only-fields`
-       (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
-       `selby/restricted`, §5.5) -- both new surface rather than a
-       relocation, since neither field ever had a GUI control to move.
-       `jit`/`auto_vector_min_d`/`auto_vector_max_capacity` stay
-       unexposed at their `SimulationParams` defaults, on purpose rather
-       than pending: they are machine-specific benchmark artifacts meant
-       to be re-measured with `dev/bin/benchmark-engines`, a developer
-       workflow this screen's own audience has no business being
-       handed, and `"auto"`'s own resolution needs none of them set by
-       hand -- a justification that never actually applied to
-       `max_concurrent_replicates`, a plain concurrency/memory control,
-       not a benchmark artifact, which this same comment used to group
-       in with the other three regardless. -->
+       The "Advanced: execution & performance" disclosure this comment
+       once anticipated building here (`engine_backend`, `n_replicates`,
+       `max_generations`, the convergence-loop timing pair,
+       `replicate_confidence`, `jit`, `auto_vector_min_d`,
+       `auto_vector_max_capacity`, `max_workers`,
+       `max_concurrent_replicates`) never was, on a real, reported
+       `2026-09-16` revision: all ten describe "how the computation
+       runs," not what experiment this form asks, and moved into the
+       Settings dialog (`#modal-settings`) as global defaults instead --
+       Settings' own comment has the full field-by-field account.
+       `replicate_tolerance`/`replicate_minimum`, and `track_expensive_
+       statistics`/the sigma-band pair, stayed here -- real per-run,
+       scientific/batch-tuning choices, not administrative defaults. -->
   <section id="screen-configure" class="screen" hidden>
     <div id="configure-banner" class="banner" hidden></div>
     <!-- Back uses the shared screen-history controls, not a fixed
@@ -1156,17 +1148,21 @@
           </div>
         </fieldset>
 
-        <!-- This group (convergence statistic(s) through tolerance,
-             below) and `engine_backend`/`n_replicates`, further down,
-             each have a second, independent copy in the Settings
-             dialog (`#modal-settings`) now too -- a real, reported
-             request to let these act as global defaults, "applicable
-             pretty universally," while this per-run copy stays exactly
-             what it always was: editing it here overrides the default
-             for this one run only, no different from editing any other
-             field on this form. `track_expensive_statistics`/the
-             sigma-band fieldset, below, stay Configure-only -- judged
-             scientific/per-run choices, not administrative defaults. -->
+        <!-- `convergence_statistic`/`convergence_combinator` are
+             experimental, per-run choices with no sensible system-wide
+             default -- a fresh configuration already gets a sensible
+             single-statistic default -- so this is their one and only
+             copy, not overriding a Settings-side default the way
+             editing any other field on this form would. `execution
+             engine`/`n_replicates`/`max generations`/the convergence-
+             loop *timing* pair (window/tolerance -- statistic-agnostic,
+             unlike this group) live in the Settings dialog
+             (`#modal-settings`) only, with no copy here at all: a real,
+             reported request to move fields describing "how the
+             computation runs" out of this per-run form entirely, while
+             `track_expensive_statistics`/the sigma-band fieldset, below,
+             stay Configure-only -- judged scientific/per-run choices,
+             not administrative defaults. -->
         <fieldset class="composite" id="cs-selector">
           <legend data-field-help="cs_group">convergence statistic(s)</legend>
           <label><input type="checkbox" name="cs_D" value="true" checked form="input-form"> D</label>
@@ -1191,20 +1187,8 @@
           </select>
         </div>
         <div class="field">
-          <label for="field-convergence_window">convergence window</label>
-          <input type="text" id="field-convergence_window" name="convergence_window" form="input-form">
-        </div>
-        <div class="field">
-          <label for="field-convergence_tolerance">tolerance</label>
-          <input type="text" id="field-convergence_tolerance" name="convergence_tolerance" form="input-form">
-        </div>
-        <div class="field">
           <label for="field-track_expensive_statistics">track E<sub>ST</sub>/K<sub>ST</sub>/A<sub>CGD</sub>/&delta;<sub>G</sub>/I for display</label>
           <input type="checkbox" id="field-track_expensive_statistics" name="track_expensive_statistics" form="input-form">
-        </div>
-        <div class="field">
-          <label for="field-max_generations">max generations</label>
-          <input type="text" id="field-max_generations" name="max_generations" form="input-form">
         </div>
 
         <!-- Within-run σ band (design doc §7.2, `20260910-claude-
@@ -1238,52 +1222,23 @@
           </div>
         </fieldset>
 
-        <div class="field">
-          <label for="field-n_replicates">n_replicates</label>
-          <input type="text" id="field-n_replicates" name="n_replicates" form="input-form">
-        </div>
-        <!-- Execution engine (GUI engine-backend selector design doc
-             `20260911-claude-sonnet-5-gui-engine-backend-selector-
-             design.md`, approach B3) -- the first field of the
-             "Advanced: execution & performance" group this screen's own
-             header comment has anticipated since the two-panel Configure
-             redesign landed. Deliberately outside `batch-only-fields`
-             below: `engine_backend` is just as meaningful for a single
-             scalar run as for a batch, unlike `replicate_*`.
-
-             All four legal values are present so every real
-             `SimulationParams.engine_backend` a loaded YAML or reopened
-             manifest can hold renders honestly (approach B3 over B1 --
-             a missing `<option>` silently downgrades a deliberately
-             chosen field on the next save). Order carries the
-             recommendation instead: `lineal` and `auto` first, `auto`
-             `selected` by default, the two array/thread-parallel
-             choices below them as visibly secondary. `auto` is the
-             default because this project's own recorded benchmark
-             history (`model/params.py`'s `DEFAULT_AUTO_VECTOR_MIN_D`/
-             `DEFAULT_AUTO_VECTOR_MAX_CAPACITY` docstrings) has
-             `"lineal"` winning no benchmarked configuration at all --
-             it is the golden reference every other backend's
-             correctness is checked against, not a competitive execution
-             choice -- and because `"auto"` stamps the concrete backend
-             it resolved to into the run's own manifest, so it costs
-             nothing in reproducibility or auditability.
-
-             `auto`/`generational-vector` need the optional `numba`
-             dependency; `screens/config-modals.js`'s own
-             `applyEngineBackendAvailability` relabels exactly those two
-             when the running install lacks it, rather than leaving the
-             selector promising something this install cannot do. -->
-        <div class="field">
-          <label for="field-engine_backend">execution engine</label>
-          <select id="field-engine_backend" name="engine_backend" form="input-form">
-            <option value="lineal">lineal (reference &mdash; single-threaded, exact)</option>
-            <option value="auto" selected>auto (recommended &mdash; fastest for this configuration)</option>
-            <option value="generational">generational (thread-parallel, exact)</option>
-            <option value="generational-vector">generational-vector (array-native, fastest for large configurations)</option>
-          </select>
-        </div>
-        <div id="batch-only-fields" hidden>
+        <!-- `n_replicates`/`engine_backend` (execution engine)/
+             `replicate_confidence`/`max_workers`/`max_concurrent_
+             replicates` all moved into the Settings dialog entirely
+             (`2026-09-16` revision) -- "how the computation runs," not
+             what experiment it asks (this form's own remaining scope).
+             `Api._merge_default_run_settings` fills each in server-side
+             from whatever Settings currently holds, before any
+             submission is validated. `replicate_tolerance`/`replicate_
+             minimum`, below, stayed -- real per-run batch-tuning
+             choices, not administrative defaults -- and used to hide
+             behind a live `n_replicates > 1` check; with no such field
+             left on this form to check, they are simply always shown
+             now, the same "documented as inert, never hidden" precedent
+             `max_concurrent_replicates` (now in Settings) already
+             followed for a configuration where it happened not to
+             apply. -->
+        <div id="batch-only-fields">
           <div class="field">
             <label for="field-replicate_tolerance">replicate tolerance (blank = unset)</label>
             <input type="text" id="field-replicate_tolerance" name="replicate_tolerance" form="input-form">
@@ -1291,30 +1246,6 @@
           <div class="field">
             <label for="field-replicate_minimum">replicate minimum</label>
             <input type="text" id="field-replicate_minimum" name="replicate_minimum" form="input-form">
-          </div>
-          <div class="field">
-            <label for="field-replicate_confidence">replicate confidence</label>
-            <select id="field-replicate_confidence" name="replicate_confidence" form="input-form">
-              <option value="0.9">0.9</option>
-              <option value="0.95" selected>0.95</option>
-              <option value="0.99">0.99</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="field-max_workers">parallel workers</label>
-            <input type="text" id="field-max_workers" name="max_workers" form="input-form">
-            <p class="hint">Not a `SimulationParams` field — the batch's own worker-process
-            count (design §0.5, H5). Defaults to this machine's own CPU count.</p>
-          </div>
-          <div class="field">
-            <label for="field-max_concurrent_replicates">max concurrent replicates (blank = unset)</label>
-            <input type="text" id="field-max_concurrent_replicates" name="max_concurrent_replicates" form="input-form">
-            <p class="hint">A real `SimulationParams` field (unlike parallel workers, above)
-            — caps how many replicate lanes run at once under the generational/
-            generational-vector engines; blank means every requested replicate at
-            once. Has no effect under the lineal engine, which has no such lane
-            concept (`20260914-claude-sonnet-5-non-lineal-batch-execution-design.md`,
-            `selby/restricted`).</p>
           </div>
         </div>
 
@@ -1325,8 +1256,8 @@
              so neither ever needed to sit beside the model's own
              per-run parameters in the first place; `#modal-settings`'s
              own comment has the full account, including why
-             `engine_backend`/`n_replicates`/the convergence-selection
-             group stay here too, unlike these two. -->
+             `engine_backend`/`n_replicates`/the execution-default
+             fields stay there too, unlike these two. -->
       </div>
     </div>
 
@@ -1556,14 +1487,14 @@
     <fieldset class="composite">
       <legend>Execution defaults</legend>
       <p class="hint">
-        Seeds every new configuration; a run's own Configure form can
-        still change either field for that one run.
+        Seeds every new configuration -- how the computation runs, not
+        what experiment it asks (Configure's own per-run scope).
       </p>
       <div class="field">
         <label for="settings-engine_backend" data-field-help="engine_backend">execution engine</label>
         <select id="settings-engine_backend">
           <option value="lineal">lineal (reference &mdash; single-threaded, exact)</option>
-          <option value="auto">auto (recommended &mdash; fastest for this configuration)</option>
+          <option value="auto" selected>auto (recommended &mdash; fastest for this configuration)</option>
           <option value="generational">generational (thread-parallel, exact)</option>
           <option value="generational-vector">generational-vector (array-native, fastest for large configurations)</option>
         </select>
@@ -1572,35 +1503,35 @@
         <label for="settings-n_replicates" data-field-help="n_replicates">n_replicates</label>
         <input type="text" id="settings-n_replicates">
       </div>
+      <div class="field">
+        <label for="settings-max_generations" data-field-help="max_generations">max generations</label>
+        <input type="text" id="settings-max_generations">
+      </div>
+      <div class="field">
+        <label for="settings-replicate_confidence" data-field-help="replicate_confidence">replicate confidence</label>
+        <select id="settings-replicate_confidence">
+          <option value="0.9">0.9</option>
+          <option value="0.95">0.95</option>
+          <option value="0.99">0.99</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="settings-max_workers" data-field-help="max_workers">max workers</label>
+        <input type="text" id="settings-max_workers" placeholder="auto">
+      </div>
+      <div class="field">
+        <label for="settings-max_concurrent_replicates" data-field-help="max_concurrent_replicates">max concurrent replicates</label>
+        <input type="text" id="settings-max_concurrent_replicates" placeholder="unlimited">
+      </div>
     </fieldset>
 
     <fieldset class="composite">
-      <legend>Convergence defaults</legend>
+      <legend>Convergence timing</legend>
       <p class="hint">
-        The shipped defaults already run statistics to convergence with
-        confidence intervals -- there is generally no reason to change
-        these; a run's own Configure form can still override any of
-        them for that one run.
+        How long a run watches for stability before declaring
+        convergence -- not which statistic it watches for
+        (Configure's own per-run, experimental choice).
       </p>
-      <fieldset class="composite" id="settings-cs-selector">
-        <legend data-field-help="cs_group">convergence statistic(s)</legend>
-        <label><input type="checkbox" id="settings-cs_D" checked> D</label>
-        <label><input type="checkbox" id="settings-cs_G_ST"> G<sub>ST</sub></label>
-        <label><input type="checkbox" id="settings-cs_E_ST"> E<sub>ST</sub></label>
-        <label><input type="checkbox" id="settings-cs_K_ST"> K<sub>ST</sub></label>
-        <label><input type="checkbox" id="settings-cs_H_S"> H<sub>S</sub></label>
-        <label><input type="checkbox" id="settings-cs_H_T"> H<sub>T</sub></label>
-        <label><input type="checkbox" id="settings-cs_A_CGD"> A<sub>CGD</sub></label>
-        <label><input type="checkbox" id="settings-cs_Delta"> &delta;<sub>G</sub></label>
-        <label><input type="checkbox" id="settings-cs_MI"> I</label>
-      </fieldset>
-      <div class="field" id="settings-combinator-field" hidden>
-        <label for="settings-convergence_combinator" data-field-help="convergence_combinator">combinator</label>
-        <select id="settings-convergence_combinator">
-          <option value="any">any</option>
-          <option value="all">all</option>
-        </select>
-      </div>
       <div class="field">
         <label for="settings-convergence_window" data-field-help="convergence_window">convergence window</label>
         <input type="text" id="settings-convergence_window">
@@ -1608,6 +1539,31 @@
       <div class="field">
         <label for="settings-convergence_tolerance" data-field-help="convergence_tolerance">tolerance</label>
         <input type="text" id="settings-convergence_tolerance">
+      </div>
+    </fieldset>
+
+    <fieldset class="composite">
+      <legend>Expert: engine tuning</legend>
+      <p class="hint">
+        Rarely need changing. Each field below only appears once the
+        execution engine above is set to the one it tunes.
+      </p>
+      <div class="field" id="settings-jit-field" hidden>
+        <label for="settings-jit" data-field-help="jit">JIT</label>
+        <select id="settings-jit">
+          <option value="off">off</option>
+          <option value="numba">numba</option>
+        </select>
+      </div>
+      <div id="settings-auto-vector-fields" hidden>
+        <div class="field">
+          <label for="settings-auto_vector_min_d" data-field-help="auto_vector_min_d">auto-vector min d</label>
+          <input type="text" id="settings-auto_vector_min_d">
+        </div>
+        <div class="field">
+          <label for="settings-auto_vector_max_capacity" data-field-help="auto_vector_max_capacity">auto-vector max capacity</label>
+          <input type="text" id="settings-auto_vector_max_capacity">
+        </div>
       </div>
     </fieldset>
 

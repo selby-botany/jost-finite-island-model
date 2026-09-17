@@ -5,32 +5,28 @@ const settingsDialog = document.getElementById("modal-settings");
 const settingsBanner = document.getElementById("settings-banner");
 const startupBehaviorSelect = document.getElementById("settings-startup-behavior");
 
-// The Structure panel's own `#cs-selector` order -- kept identical so a
-// value collected here and one collected there mean the same thing to
-// `config_form.CONVERGENCE_STATISTIC_NAMES` on the Python side.
-const SETTINGS_CONVERGENCE_STATISTIC_NAMES = [
-    "D",
-    "G_ST",
-    "E_ST",
-    "K_ST",
-    "H_S",
-    "H_T",
-    "A_CGD",
-    "Delta",
-    "MI",
-];
-
 const settingsEngineBackendSelect = document.getElementById("settings-engine_backend");
 const settingsNReplicatesInput = document.getElementById("settings-n_replicates");
-const settingsCombinatorField = document.getElementById("settings-combinator-field");
-const settingsConvergenceCombinatorSelect = document.getElementById(
-    "settings-convergence_combinator"
+const settingsMaxGenerationsInput = document.getElementById("settings-max_generations");
+const settingsReplicateConfidenceSelect = document.getElementById(
+    "settings-replicate_confidence"
+);
+const settingsMaxWorkersInput = document.getElementById("settings-max_workers");
+const settingsMaxConcurrentReplicatesInput = document.getElementById(
+    "settings-max_concurrent_replicates"
 );
 const settingsConvergenceWindowInput = document.getElementById(
     "settings-convergence_window"
 );
 const settingsConvergenceToleranceInput = document.getElementById(
     "settings-convergence_tolerance"
+);
+const settingsJitField = document.getElementById("settings-jit-field");
+const settingsJitSelect = document.getElementById("settings-jit");
+const settingsAutoVectorFields = document.getElementById("settings-auto-vector-fields");
+const settingsAutoVectorMinDInput = document.getElementById("settings-auto_vector_min_d");
+const settingsAutoVectorMaxCapacityInput = document.getElementById(
+    "settings-auto_vector_max_capacity"
 );
 const settingsSaveButton = document.getElementById("settings-save-button");
 
@@ -45,76 +41,68 @@ function showSettingsBanner(message) {
 }
 
 /**
- * How many of Settings' own convergence-statistic checkboxes are
- * checked -- `config-modals.js`'s own `checkedStatisticCount`, mirrored
- * here rather than shared, since Settings' checkboxes have no shared
- * `<form>` to query via `form.elements.namedItem` the way Configure's
- * own copy does.
+ * Reveal `jit` only for the one execution engine it is a real, user-
+ * facing choice for (`lineal` never accepts anything but off;
+ * `generational-vector` always uses numba regardless), and the
+ * `auto_vector_*` pair only for the `auto` engine, the only one either
+ * threshold affects (`FIELD_HELP.jit`/`FIELD_HELP.auto_vector_min_d`'s
+ * own wording) -- "where apropos," a real, reported request.
  */
-function checkedSettingsStatisticCount() {
-    return SETTINGS_CONVERGENCE_STATISTIC_NAMES.filter(
-        (name) => document.getElementById(`settings-cs_${name}`).checked
-    ).length;
+function syncSettingsEngineBackendVisibility() {
+    const backend = settingsEngineBackendSelect.value;
+    settingsJitField.hidden = backend !== "generational";
+    settingsAutoVectorFields.hidden = backend !== "auto";
 }
+
+settingsEngineBackendSelect.addEventListener(
+    "change",
+    syncSettingsEngineBackendVisibility
+);
 
 /**
- * Reveal the combinator field only once two or more statistics are
- * checked -- the identical rule `config-modals.js`'s own
- * `syncConditionalVisibility` already applies to Configure's own copy.
- */
-function syncSettingsConditionalVisibility() {
-    settingsCombinatorField.hidden = checkedSettingsStatisticCount() < 2;
-}
-
-for (const name of SETTINGS_CONVERGENCE_STATISTIC_NAMES) {
-    document
-        .getElementById(`settings-cs_${name}`)
-        .addEventListener("change", syncSettingsConditionalVisibility);
-}
-
-/**
- * Collect Settings' own execution/convergence-selection fields into the
- * same `dict[str, str]` shape `Api.set_default_run_settings` expects
- * (`config_form.DEFAULT_RUN_SETTING_FIELD_NAMES`'s own key set) -- an
- * explicit-checkbox-presence read for the `cs_*` keys, the same
- * "checked -> \"true\", unchecked -> \"false\"" convention `collect
- * FormValues` already uses for Configure's own copy, reimplemented here
- * since there is no shared `<form>`/`FormData` to scan.
+ * Collect Settings' own execution-default fields into the same
+ * `dict[str, str]` shape `Api.set_default_run_settings` expects
+ * (`config_form.DEFAULT_RUN_SETTING_FIELD_NAMES`'s own key set, plus
+ * `max_workers` -- not a `SimulationParams` field, handled as a special
+ * case on both sides of the bridge, `Api.get_default_run_settings`'s own
+ * docstring).
  * @returns {Record<string, string>}
  */
 function collectDefaultRunSettingsValues() {
-    const values = {
+    return {
         engine_backend: settingsEngineBackendSelect.value,
         n_replicates: settingsNReplicatesInput.value,
-        convergence_combinator: settingsConvergenceCombinatorSelect.value,
+        max_generations: settingsMaxGenerationsInput.value,
         convergence_window: settingsConvergenceWindowInput.value,
         convergence_tolerance: settingsConvergenceToleranceInput.value,
+        replicate_confidence: settingsReplicateConfidenceSelect.value,
+        jit: settingsJitSelect.value,
+        auto_vector_min_d: settingsAutoVectorMinDInput.value,
+        auto_vector_max_capacity: settingsAutoVectorMaxCapacityInput.value,
+        max_workers: settingsMaxWorkersInput.value,
+        max_concurrent_replicates: settingsMaxConcurrentReplicatesInput.value,
     };
-    for (const name of SETTINGS_CONVERGENCE_STATISTIC_NAMES) {
-        values[`cs_${name}`] = document.getElementById(`settings-cs_${name}`).checked
-            ? "true"
-            : "false";
-    }
-    return values;
 }
 
 /**
- * Seed Settings' own execution/convergence-selection fields from
- * `Api.get_default_run_settings`'s own return shape -- the inverse of
+ * Seed Settings' own execution-default fields from `Api.get_default_
+ * run_settings`'s own return shape -- the inverse of
  * `collectDefaultRunSettingsValues`, called once when the dialog opens.
  * @param {Record<string, string>} values
  */
 function applyDefaultRunSettingsValues(values) {
     settingsEngineBackendSelect.value = values.engine_backend;
     settingsNReplicatesInput.value = values.n_replicates;
-    settingsConvergenceCombinatorSelect.value = values.convergence_combinator;
+    settingsMaxGenerationsInput.value = values.max_generations;
     settingsConvergenceWindowInput.value = values.convergence_window;
     settingsConvergenceToleranceInput.value = values.convergence_tolerance;
-    for (const name of SETTINGS_CONVERGENCE_STATISTIC_NAMES) {
-        document.getElementById(`settings-cs_${name}`).checked =
-            values[`cs_${name}`] === "true";
-    }
-    syncSettingsConditionalVisibility();
+    settingsReplicateConfidenceSelect.value = values.replicate_confidence;
+    settingsJitSelect.value = values.jit;
+    settingsAutoVectorMinDInput.value = values.auto_vector_min_d;
+    settingsAutoVectorMaxCapacityInput.value = values.auto_vector_max_capacity;
+    settingsMaxWorkersInput.value = values.max_workers;
+    settingsMaxConcurrentReplicatesInput.value = values.max_concurrent_replicates;
+    syncSettingsEngineBackendVisibility();
 }
 
 async function loadSettingsDialog() {
@@ -141,15 +129,22 @@ startupBehaviorSelect.addEventListener("change", async () => {
 // Collected together into one bridge call on Save, unlike startup
 // behavior/significant digits/appearance above and below (each a single
 // independent scalar, applied immediately on its own `change`) -- this
-// is ~14 fields, and a per-field round trip for each would be chatty
+// is ~11 fields, and a per-field round trip for each would be chatty
 // for no real benefit, since none of them takes effect until a *new*
 // configuration is started anyway (`index.html`'s own comment above
-// `#modal-settings` has the full account).
+// `#modal-settings` has the full account). Closes the dialog on success
+// -- a real, reported bug: Save used to leave it open, indistinguishable
+// from a save that silently failed.
 settingsSaveButton.addEventListener("click", async () => {
     const result = await window.pywebview.api.set_default_run_settings(
         collectDefaultRunSettingsValues()
     );
-    showSettingsBanner(result.ok ? "" : result.message);
+    if (!result.ok) {
+        showSettingsBanner(result.message);
+        return;
+    }
+    showSettingsBanner("");
+    settingsDialog.close();
 });
 
 /**
