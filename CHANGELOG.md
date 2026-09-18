@@ -636,6 +636,30 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the other six until actually picked and failing. Picking it anyway
   now shows a small, non-blocking inline notice on whichever screen is
   showing, instead of a blocking native `window.alert`.
+- Configurable storage locations: `--root`/`FIM_HOME`, `-R`/
+  `--results-directory`/`FIM_RESULTS_DIRECTORY`, `--log-directory`/
+  `FIM_LOG_DIRECTORY`, and `--preferences-file`/`FIM_PREFERENCES_FILE`
+  each independently override where results, logs, and the desktop
+  app's own preferences are written, in place of `fim.paths`/`fim.gui.
+  preferences`'s own previously fixed resolution. `fim` and `fim-gui`
+  accept all four as real flags; `fim --graphical`/a double-clicked
+  packaged build honors the matching environment variables only, with
+  no new flags of its own. The desktop app's Welcome panel confirms the
+  results location once, on first launch, with a "Change…" folder
+  picker; Settings offers the identical field afterward (read-only,
+  with an explanatory hint, whenever a flag/variable already governs
+  it), taking effect at the next launch rather than live. A fifth
+  addition, `--logging-config PATH`/`FIM_LOGGING_CONFIG`, reads a
+  standard-library `logging.config.dictConfig` YAML file in place of
+  `-l`/`-L` entirely, for a logging setup — several loggers, several
+  handlers, a custom formatter — `-L`'s own inline `key=value` options
+  cannot express; it is not layered with `-l`/`-L`, whichever one is
+  actually given wins outright, and every one of `fim`/`fim-gui`/`fim
+  --graphical` honors it identically. See `20260918-claude-sonnet-5-
+  configurable-storage-root-design.md` (`selby/restricted`) for the
+  full design, including the four GUI-launch options considered and why
+  a Settings change takes effect only at the next launch rather than
+  live.
 
 ### Changed
 

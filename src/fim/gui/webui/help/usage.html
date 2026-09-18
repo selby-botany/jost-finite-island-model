@@ -659,11 +659,15 @@ the CLI, none at all.</p>
 distributions already have installed — see
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/install/README.md">installation alternatives</a> if <code>fim-gui</code> reports it
 is missing rather than opening a window.</p>
-<p>Launched with no flags of its own, the GUI's own operational log is
-configured from two environment variables instead — <code>FIM_LOG_LEVEL</code> and
-<code>FIM_LOG_OPTIONS</code>, the exact equivalents of <code>-l</code>/<code>-L</code> below, set before
-launching (a modified shortcut's own &quot;Target&quot; field, or a wrapper
-script). See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-logging-design.md">operational logging design</a> §5.</p>
+<p>A double-clicked or <code>fim --graphical</code>-launched GUI takes no flags of its
+own, so its operational log is configured from two environment
+variables instead — <code>FIM_LOG_LEVEL</code> and <code>FIM_LOG_OPTIONS</code>, the exact
+equivalents of <code>-l</code>/<code>-L</code> below, set before launching (a modified
+shortcut's own &quot;Target&quot; field, or a wrapper script). See <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-logging-design.md">operational
+logging design</a> §5. The separate <code>fim-gui</code>
+console-script entry point additionally accepts real flags of its own
+— see <a href="#where-results-logs-and-preferences-are-written">Where results, logs, and preferences are
+written</a>, below.</p>
 <h3 id="if-the-window-closes-but-fim-keeps-running">If the window closes but <code>fim</code> keeps running</h3>
 <p>Closing the window should end the program immediately. If something
 inside it fails to stop, <code>fim</code> guards against being left running
@@ -767,6 +771,58 @@ given at all; <code>-l debug</code> raises what reaches it (and the terminal),
 <code>fim run ... -l debug</code>). Full flag reference, every <code>-L</code> key, and where
 each log call in the source lives:
 <a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-logging-design.md">operational logging design</a>.</p>
+<p><code>--logging-config PATH</code> (or the <code>FIM_LOGGING_CONFIG</code> environment
+variable) replaces <code>-l</code>/<code>-L</code> entirely for one invocation, reading a
+standard-library <code>logging.config.dictConfig</code> YAML file instead — for a
+setup that needs more than <code>-L</code>'s own inline options can express
+(several loggers, several handlers, a custom formatter). It is not
+layered with <code>-l</code>/<code>-L</code>: whichever one is actually given wins outright.</p>
+<h3 id="where-results-logs-and-preferences-are-written">Where results, logs, and preferences are written</h3>
+<p>By default, <code>fim</code> writes into <code>results/</code>/<code>logs/</code> beside a real checkout,
+or a <code>fim/</code> folder in your home directory for a packaged build (see
+<a href="#" data-fim-external="https://github.com/selby-botany/jost-finite-island-model/blob/main/doc/fim-logging-design.md">operational logging design</a> §6). Four flags,
+each with a matching environment variable, override this independently
+of one another — every one must appear <em>before</em> the subcommand name,
+the same as <code>-l</code>/<code>-L</code> above:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Environment variable</th>
+<th>Overrides</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--root PATH</code></td>
+<td><code>FIM_HOME</code></td>
+<td>Both <code>results/</code> and <code>logs/</code> at once, unless a more specific flag/variable below also applies</td>
+</tr>
+<tr>
+<td><code>-R</code>/<code>--results-directory PATH</code></td>
+<td><code>FIM_RESULTS_DIRECTORY</code></td>
+<td>Where runs, batches, Studies, and Experiments are written</td>
+</tr>
+<tr>
+<td><code>--log-directory PATH</code></td>
+<td><code>FIM_LOG_DIRECTORY</code></td>
+<td>Where <code>fim.log</code> is written</td>
+</tr>
+<tr>
+<td><code>--preferences-file PATH</code></td>
+<td><code>FIM_PREFERENCES_FILE</code></td>
+<td>The desktop app's own <code>preferences.json</code> (form defaults, named presets, Settings) — meaningful only to a later <code>fim --graphical</code>/<code>fim-gui</code> launch, accepted here regardless</td>
+</tr>
+</tbody>
+</table>
+<p><code>fim-gui</code> (the separate desktop-app entry point) accepts the identical
+four flags directly; <code>fim --graphical</code>/a double-clicked packaged build
+honors the matching environment variables only, with no flags of its
+own — set them before launching (a modified shortcut's own &quot;Target&quot;
+field, or a wrapper script), the same mechanism already documented
+above for <code>FIM_LOG_LEVEL</code>/<code>FIM_LOG_OPTIONS</code>. The desktop app's own
+Settings dialog additionally offers a &quot;Storage location&quot; field for
+results — see the in-app Help screen.</p>
 <h2 id="output-schemas">Output schemas</h2>
 <h3 id="trajectoryjsonl"><code>trajectory.jsonl</code></h3>
 <p>One JSON object is appended for every nonzero frequency:</p>

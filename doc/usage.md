@@ -762,11 +762,15 @@ distributions already have installed — see
 [installation alternatives](../install/README.md) if `fim-gui` reports it
 is missing rather than opening a window.
 
-Launched with no flags of its own, the GUI's own operational log is
-configured from two environment variables instead — `FIM_LOG_LEVEL` and
-`FIM_LOG_OPTIONS`, the exact equivalents of `-l`/`-L` below, set before
-launching (a modified shortcut's own "Target" field, or a wrapper
-script). See [operational logging design](fim-logging-design.md) §5.
+A double-clicked or `fim --graphical`-launched GUI takes no flags of its
+own, so its operational log is configured from two environment
+variables instead — `FIM_LOG_LEVEL` and `FIM_LOG_OPTIONS`, the exact
+equivalents of `-l`/`-L` below, set before launching (a modified
+shortcut's own "Target" field, or a wrapper script). See [operational
+logging design](fim-logging-design.md) §5. The separate `fim-gui`
+console-script entry point additionally accepts real flags of its own
+— see [Where results, logs, and preferences are
+written](#where-results-logs-and-preferences-are-written), below.
 
 ### If the window closes but `fim` keeps running
 
@@ -873,6 +877,38 @@ given at all; `-l debug` raises what reaches it (and the terminal),
 `fim run ... -l debug`). Full flag reference, every `-L` key, and where
 each log call in the source lives:
 [operational logging design](fim-logging-design.md).
+
+`--logging-config PATH` (or the `FIM_LOGGING_CONFIG` environment
+variable) replaces `-l`/`-L` entirely for one invocation, reading a
+standard-library `logging.config.dictConfig` YAML file instead — for a
+setup that needs more than `-L`'s own inline options can express
+(several loggers, several handlers, a custom formatter). It is not
+layered with `-l`/`-L`: whichever one is actually given wins outright.
+
+### Where results, logs, and preferences are written
+
+By default, `fim` writes into `results/`/`logs/` beside a real checkout,
+or a `fim/` folder in your home directory for a packaged build (see
+[operational logging design](fim-logging-design.md) §6). Four flags,
+each with a matching environment variable, override this independently
+of one another — every one must appear *before* the subcommand name,
+the same as `-l`/`-L` above:
+
+| Flag | Environment variable | Overrides |
+|---|---|---|
+| `--root PATH` | `FIM_HOME` | Both `results/` and `logs/` at once, unless a more specific flag/variable below also applies |
+| `-R`/`--results-directory PATH` | `FIM_RESULTS_DIRECTORY` | Where runs, batches, Studies, and Experiments are written |
+| `--log-directory PATH` | `FIM_LOG_DIRECTORY` | Where `fim.log` is written |
+| `--preferences-file PATH` | `FIM_PREFERENCES_FILE` | The desktop app's own `preferences.json` (form defaults, named presets, Settings) — meaningful only to a later `fim --graphical`/`fim-gui` launch, accepted here regardless |
+
+`fim-gui` (the separate desktop-app entry point) accepts the identical
+four flags directly; `fim --graphical`/a double-clicked packaged build
+honors the matching environment variables only, with no flags of its
+own — set them before launching (a modified shortcut's own "Target"
+field, or a wrapper script), the same mechanism already documented
+above for `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`. The desktop app's own
+Settings dialog additionally offers a "Storage location" field for
+results — see the in-app Help screen.
 
 ## Output schemas
 
