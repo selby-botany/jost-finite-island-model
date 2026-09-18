@@ -217,17 +217,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     parser = _parser()
     arguments = parser.parse_args(argv)
+    # Applied before logging configuration: `--log-directory` changes
+    # where `logging_setup.configure`'s own default log file lands
+    # (`20260918-claude-sonnet-5-configurable-storage-root-design.md`,
+    # `selby/restricted`, §3). `--preferences-file` is meaningful only
+    # to a later GUI launch (`fim.gui.preferences.preferences_file_
+    # path`) — accepted and stored here regardless, via a deferred
+    # import so a plain `fim run`/`fim init`/... invocation never
+    # imports `fim.gui` at all, the same "only pay for it if actually
+    # used" discipline `fim.launcher.main`'s own deferred imports
+    # already establish.
+    if arguments.root is not None:
+        paths.set_root_override(Path(arguments.root))
+    if arguments.results_directory is not None:
+        paths.set_results_directory_override(Path(arguments.results_directory))
+    if arguments.log_directory is not None:
+        paths.set_log_directory_override(Path(arguments.log_directory))
+    if arguments.preferences_file is not None:
+        from fim.gui.preferences import set_preferences_file_override  # noqa: PLC0415
+
+        set_preferences_file_override(Path(arguments.preferences_file))
     try:
-        logging_setup.configure(
-            arguments.log, logging_setup.parse_log_options(arguments.log_options)
-        )
-    except ValueError as error:
-        # A malformed `-l`/`-L` value is a command-line mistake, exactly
-        # like any other `parser.error` case below — `argparse`'s own
-        # usage-line-plus-message shape, not a traceback, and not yet
-        # routed through the run-the-actual-work `except` block below
-        # (logging is not configured until this succeeds, so nothing
-        # past this point should run at all).
+        if arguments.logging_config is not None:
+            logging_setup.apply_logging_config_file(Path(arguments.logging_config))
+        else:
+            logging_setup.configure(
+                arguments.log, logging_setup.parse_log_options(arguments.log_options)
+            )
+    except (ValueError, OSError, yaml.YAMLError) as error:
+        # A malformed `-l`/`-L`/`--logging-config` value is a command-
+        # line mistake, exactly like any other `parser.error` case
+        # below — `argparse`'s own usage-line-plus-message shape, not a
+        # traceback, and not yet routed through the run-the-actual-work
+        # `except` block below (logging is not configured until this
+        # succeeds, so nothing past this point should run at all).
         parser.error(str(error))
     logger.debug("parsed arguments: %s", arguments)
     try:
@@ -1072,6 +1095,49 @@ def _parser() -> argparse.ArgumentParser:
         "--log-options",
         metavar="KEY=VALUE[,KEY=VALUE]...",
         help="log configuration overrides (see doc/fim-logging-design.md)",
+    )
+    parser.add_argument(
+        "--logging-config",
+        metavar="PATH",
+        help=(
+            "a logging.config.dictConfig YAML file, used instead of "
+            "-l/-L/--log-options entirely (see doc/fim-logging-design.md)"
+        ),
+    )
+    # `--root`/`--results-directory`/`--log-directory`/`--preferences-
+    # file` (`20260918-claude-sonnet-5-configurable-storage-root-
+    # design.md`, `selby/restricted`): the identical "declared once,
+    # here, before the subcommand" placement as `-l`/`-L`, above, for
+    # the identical reason -- `fim --root <path> run CONFIG`, not `fim
+    # run CONFIG --root <path>`.
+    parser.add_argument(
+        "--root",
+        metavar="PATH",
+        help=(
+            "default location for both results/ and logs/, unless "
+            "--results-directory/--log-directory names one specifically "
+            "(or FIM_HOME/FIM_RESULTS_DIRECTORY/FIM_LOG_DIRECTORY)"
+        ),
+    )
+    parser.add_argument(
+        "-R",
+        "--results-directory",
+        metavar="PATH",
+        help="where runs/batches/Studies/Experiments are written (see --root)",
+    )
+    parser.add_argument(
+        "--log-directory",
+        metavar="PATH",
+        help="where fim.log is written (see --root)",
+    )
+    parser.add_argument(
+        "--preferences-file",
+        metavar="PATH",
+        help=(
+            "the GUI's own preferences.json (form defaults, named "
+            "presets, Settings) -- meaningful only for a later "
+            "fim --graphical/fim-gui launch, accepted here regardless"
+        ),
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 

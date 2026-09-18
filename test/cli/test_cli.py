@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 import yaml
 
 from fim import __version__, cli, paths, update
+from fim.gui.preferences import preferences_file_override
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import hash_file, read_batch_manifest
 
@@ -661,6 +663,213 @@ def test_an_invalid_log_options_entry_is_a_plain_parser_error(
 
     assert exit_info.value.code == 2
     assert "invalid --log-options entry" in capsys.readouterr().err
+
+
+def test_root_results_directory_log_directory_and_preferences_file_are_accepted_before_every_subcommand(  # noqa: E501
+    tmp_path: Path,
+) -> None:
+    """`--root`/`-R`/`--log-directory`/`--preferences-file` parse before any subcommand.
+
+    Not a runtime assertion about their own effect (the functional
+    override behavior below covers that) -- just that `argparse` accepts
+    the flags at all, the same shared declaration point `-l`/`-L`'s own
+    equivalent test, above, already covers.
+    """
+    parser = cli._parser()
+    root = str(tmp_path / "root")
+    results = str(tmp_path / "results")
+    logs = str(tmp_path / "logs")
+    preferences = str(tmp_path / "preferences.json")
+
+    parsed = parser.parse_args(
+        [
+            "--root",
+            root,
+            "-R",
+            results,
+            "--log-directory",
+            logs,
+            "--preferences-file",
+            preferences,
+            "init",
+        ]
+    )
+    assert parsed.root == root
+    assert parsed.results_directory == results
+    assert parsed.log_directory == logs
+    assert parsed.preferences_file == preferences
+
+
+def test_root_flag_overrides_where_a_starter_config_is_written(tmp_path: Path) -> None:
+    """`--root` changes `fim init`'s own default output location."""
+    root = tmp_path / "custom-root"
+    status = cli.main(["--root", str(root), "init"])
+    assert status == 0
+    assert (root / "results" / "example-run.yaml").is_file()
+
+
+def test_results_directory_flag_overrides_where_a_starter_config_is_written(
+    tmp_path: Path,
+) -> None:
+    """`--results-directory` returns the named directory directly, unjoined."""
+    results = tmp_path / "custom-results"
+    status = cli.main(["--results-directory", str(results), "init"])
+    assert status == 0
+    assert (results / "example-run.yaml").is_file()
+
+
+def test_fim_results_directory_env_var_overrides_where_a_starter_config_is_written(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`FIM_RESULTS_DIRECTORY` has the identical effect as `--results-directory`."""
+    results = tmp_path / "env-results"
+    monkeypatch.setenv("FIM_RESULTS_DIRECTORY", str(results))
+    status = cli.main(["init"])
+    assert status == 0
+    assert (results / "example-run.yaml").is_file()
+
+
+def test_log_directory_flag_overrides_the_default_log_file_location(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--log-directory` moves `fim.log` without touching `--results-directory`."""
+    # `test/cli/conftest.py`'s own autouse `log_isolation` replaces
+    # `paths.default_log_file` outright (a fixed `tmp_path/"fim.log"`,
+    # ignoring `log_directory()` entirely) to keep every *other* test in
+    # this directory off the real checkout's own `logs/` -- exactly the
+    # behavior this specific test needs to see through, to prove
+    # `--log-directory` really reaches the real `log_directory()` chain.
+    # Restoring it to delegate to the real (unpatched) `log_directory`
+    # keeps that isolation (still never the real checkout) while letting
+    # the override under test actually take effect -- a test's own
+    # `monkeypatch.setattr` call composes over an autouse fixture's
+    # earlier one, since both share this same function-scoped instance.
+    monkeypatch.setattr(
+        paths,
+        "default_log_file",
+        lambda root=None: paths.log_directory(root) / "fim.log",
+    )
+    logs = tmp_path / "custom-logs"
+    results = tmp_path / "results"
+    status = cli.main(
+        [
+            "--log-directory",
+            str(logs),
+            "--results-directory",
+            str(results),
+            "-l",
+            "info",
+            "init",
+        ]
+    )
+    assert status == 0
+    assert (logs / "fim.log").is_file()
+    assert not (results / "logs").exists()
+
+
+def test_logging_config_flag_is_used_instead_of_log_and_log_options(
+    tmp_path: Path,
+) -> None:
+    """`--logging-config` fully replaces `-l`/`-L`'s own handler assembly."""
+    log_file = tmp_path / "custom.log"
+    config_path = tmp_path / "logging.yaml"
+    config_path.write_text(
+        f"""
+version: 1
+disable_existing_loggers: false
+formatters:
+  custom:
+    format: "CUSTOM:%(message)s"
+handlers:
+  file:
+    class: logging.FileHandler
+    filename: {log_file}
+    formatter: custom
+loggers:
+  fim:
+    level: INFO
+    handlers: [file]
+    propagate: false
+""",
+        encoding="utf-8",
+    )
+
+    status = cli.main(
+        [
+            "--logging-config",
+            str(config_path),
+            "--results-directory",
+            str(tmp_path),
+            "init",
+        ]
+    )
+
+    assert status == 0
+    assert "CUSTOM:" in log_file.read_text(encoding="utf-8")
+
+
+def test_logging_config_flag_naming_a_missing_file_is_a_plain_parser_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A `--logging-config` file that does not exist exits 2 with a plain message."""
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["--logging-config", str(tmp_path / "missing.yaml"), "init"])
+
+    assert exit_info.value.code == 2
+    assert "fim: error:" in capsys.readouterr().err
+
+
+def test_preferences_file_flag_applies_the_override(tmp_path: Path) -> None:
+    """`--preferences-file` reaches `fim.gui.preferences.set_preferences_file_override`.
+
+    Meaningless to `fim init` itself (only a later `fim --graphical`/
+    `fim-gui` launch ever reads `preferences_file_path()`) -- accepted
+    and applied regardless, confirmed here directly against the getter
+    rather than only that `argparse` parses the flag (the parser-level
+    test, above, already covers that).
+    """
+    preferences_path = tmp_path / "custom-preferences.json"
+    status = cli.main(
+        [
+            "--preferences-file",
+            str(preferences_path),
+            "--results-directory",
+            str(tmp_path / "results"),
+            "init",
+        ]
+    )
+
+    assert status == 0
+    assert preferences_file_override() == preferences_path
+
+
+def test_fim_cli_module_does_not_import_fim_gui_at_module_scope() -> None:
+    """`fim.cli`'s own top-level imports never include `fim.gui`.
+
+    A plain `fim run`/`fim init`/... invocation must never pay the cost
+    of importing the GUI stack just because `--preferences-file` exists
+    as a flag -- `fim.launcher.main`'s own deferred imports establish
+    the same discipline one layer up. A static check on the source text
+    rather than a runtime `sys.modules` assertion: this test suite runs
+    with `-n auto`, sharing a process (and its `sys.modules` cache)
+    across unrelated test files within a worker, so asserting "not yet
+    imported" at runtime would be a function of test execution order,
+    not of this module's own code -- exactly the kind of order-dependent
+    flakiness this project's own testing standard forbids.
+    """
+    tree = ast.parse(Path(cli.__file__).read_text(encoding="utf-8"))
+    # `tree.body` alone, deliberately not `ast.walk(tree)` -- the latter
+    # would also flag `main`'s own deferred, inside-the-`if`-branch
+    # import, which is exactly the pattern this test exists to require,
+    # not forbid.
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            assert not any(alias.name.startswith("fim.gui") for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            assert node.module is None or not node.module.startswith("fim.gui")
 
 
 def test_load_config_requires_a_mapping_root(tmp_path: Path) -> None:
