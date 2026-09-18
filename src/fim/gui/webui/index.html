@@ -829,8 +829,17 @@
     <div class="run-plot-row">
       <div class="explore-plot-column">
         <div class="field">
-          <label for="explore-axis">Sweep</label>
-          <select id="explore-axis">
+          <!-- No visible <label>: the chosen axis is already named twice
+               over without one (this <select>'s own selected option text,
+               and the chart's own rendered axis label, `exploreAxisLabel`)
+               -- a third, floating word here ("Sweep:") would only add a
+               name collision with a future, unrelated feature that also
+               wants that word (`20260918-claude-sonnet-5-explore-to-
+               study-run-handoff-design.md`, `selby/restricted`, §7).
+               `aria-label` alone keeps this control's accessible name,
+               matching `explore-scrub-range`'s own identical pattern,
+               below. -->
+          <select id="explore-axis" aria-label="Chart axis">
             <option value="m">m (migration rate)</option>
             <option value="mu">μ (mutation rate)</option>
             <option value="N">N (gene copies/deme)</option>
