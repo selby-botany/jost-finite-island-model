@@ -11,16 +11,26 @@ and `fim.gui.app.main` (from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`).
 `configure` is idempotent: calling it more than once replaces the
 `fim` logger's own handlers rather than accumulating them, so a test
 (or a future caller) that calls it twice never sees doubled output.
+
+`apply_logging_config_file`, below, is each entry point's alternative
+to `configure` — not a layer on top of it — for the one thing `-l`/`-L`
+cannot express at all: a full, reusable, multiple-handler logging
+configuration read from an external YAML file (`--logging-config`/
+`FIM_LOGGING_CONFIG`, `20260918-claude-sonnet-5-configurable-storage-
+root-design.md`, `selby/restricted`, §9).
 """
 
 from __future__ import annotations
 
 import logging
+import logging.config
 import logging.handlers
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Final, TextIO
+
+import yaml
 
 from fim import paths
 
@@ -157,6 +167,50 @@ def parse_log_options(text: str | None) -> dict[str, str]:
             )
         options[key] = value.strip()
     return options
+
+
+def apply_logging_config_file(path: Path) -> None:
+    """Configure logging entirely from an external YAML file.
+
+    `--logging-config <path>`/`FIM_LOGGING_CONFIG` (`20260918-claude-
+    sonnet-5-configurable-storage-root-design.md`, `selby/restricted`,
+    §9) — the one thing `-l`/`-L`'s own inline `key=value` options
+    (`parse_log_options`, `VALID_OPTION_KEYS`) cannot express: multiple
+    loggers, multiple handlers, or a custom formatter class, defined
+    once in a reusable file instead of assembled from a handful of flat
+    options on every invocation.
+
+    Deliberately **not** layered with `-l`/`-L`/`configure` — whichever
+    of "a logging config file" or "the ordinary `-l`/`-L` flags" a
+    caller actually used wins outright, in full, rather than this
+    function attempting to merge a config file's own handler/formatter
+    definitions with `configure`'s own from-scratch handler rebuild (`
+    logging.config.dictConfig`'s own `disable_existing_loggers` default
+    already disables anything `configure` set up moments earlier unless
+    the file re-declares it, so a partial merge is not merely more
+    code, it is a genuinely different, harder-to-predict semantic).
+    `fim.cli.main`/`fim.launcher.main`/`fim.gui.app.main` each call this
+    *instead of* `configure` when `--logging-config`/`FIM_LOGGING_
+    CONFIG` is given, never both.
+
+    Args:
+        path: A YAML file whose top-level mapping is `logging.config.
+            dictConfig`'s own schema (the standard library's, not a
+            `fim`-specific one — see the Python documentation for
+            `logging.config.dictConfig` for the full schema).
+
+    Raises:
+        OSError: `path` cannot be read.
+        yaml.YAMLError: `path`'s own content is not valid YAML.
+        ValueError: `path`'s own top-level content is not a mapping, or
+            `dictConfig` itself rejects the schema (e.g. an unknown
+            handler class, a malformed level name).
+    """
+    with path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError("logging configuration file root must be a mapping")
+    logging.config.dictConfig(payload)
 
 
 def configure(

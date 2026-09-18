@@ -19,6 +19,7 @@ import warnings
 from pathlib import Path
 
 import pytest
+import yaml
 
 from fim import logging_setup
 
@@ -270,3 +271,77 @@ def test_configure_enables_warnings_capture_through_the_file_handler(
         warnings.warn("a captured test warning", UserWarning, stacklevel=1)
 
     assert "a captured test warning" in log_file.read_text(encoding="utf-8")
+
+
+def test_apply_logging_config_file_missing_file_raises_oserror(tmp_path: Path) -> None:
+    """A path that does not exist is a plain `OSError`, not a silent no-op."""
+    with pytest.raises(OSError):
+        logging_setup.apply_logging_config_file(tmp_path / "does-not-exist.yaml")
+
+
+def test_apply_logging_config_file_invalid_yaml_raises_yamlerror(
+    tmp_path: Path,
+) -> None:
+    """Unparsable YAML surfaces as `yaml.YAMLError`, not a `dictConfig` traceback."""
+    path = tmp_path / "logging.yaml"
+    path.write_text("version: 1\n  bad indent: [", encoding="utf-8")
+
+    with pytest.raises(yaml.YAMLError):
+        logging_setup.apply_logging_config_file(path)
+
+
+def test_apply_logging_config_file_rejects_a_non_mapping_root(tmp_path: Path) -> None:
+    """A YAML document whose root is not a mapping is rejected before `dictConfig`."""
+    path = tmp_path / "logging.yaml"
+    path.write_text("- version\n- 1\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must be a mapping"):
+        logging_setup.apply_logging_config_file(path)
+
+
+def test_apply_logging_config_file_applies_the_dictconfig_schema(
+    tmp_path: Path,
+) -> None:
+    """A real, valid file reaches `logging.config.dictConfig`, end to end.
+
+    Confirms the schema is handed to `dictConfig` unmodified -- a custom
+    formatter and an explicit file handler, neither of which `-l`/`-L`
+    can express at all (this function's own docstring).
+    """
+    log_file = tmp_path / "custom.log"
+    config_path = tmp_path / "logging.yaml"
+    config_path.write_text(
+        f"""
+version: 1
+disable_existing_loggers: false
+formatters:
+  custom:
+    format: "CUSTOM:%(message)s"
+handlers:
+  file:
+    class: logging.FileHandler
+    filename: {log_file}
+    formatter: custom
+loggers:
+  fim:
+    level: INFO
+    handlers: [file]
+    propagate: false
+""",
+        encoding="utf-8",
+    )
+    logger = logging.getLogger(logging_setup.LOGGER_NAME)
+    snapshot = (list(logger.handlers), logger.level, logger.propagate)
+    try:
+        logging_setup.apply_logging_config_file(config_path)
+        logging.getLogger("fim.test_logging_setup").info("hello from a config file")
+        assert "CUSTOM:hello from a config file" in log_file.read_text(encoding="utf-8")
+    finally:
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
+        original_handlers, original_level, original_propagate = snapshot
+        for handler in original_handlers:
+            logger.addHandler(handler)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
