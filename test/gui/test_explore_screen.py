@@ -454,3 +454,84 @@ def test_axis_scrubber_moves_the_marker_and_repredicts(
 
     # Reset restores the committed configuration's own numbers exactly.
     assert restored == committed
+
+
+def test_run_this_for_real_seeds_configure_and_preselects_new_study(
+    window: webview.Window,
+) -> None:
+    """The Explore-to-Study/Run handoff carries values over and nudges "New study…".
+
+    `20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
+    (`selby/restricted`), §1 Option B/§8: clicking "▶ Run this for real"
+    seeds Configure's own `N` field from Explore's current value,
+    navigates there, and pre-selects `run-study-select`'s own "New
+    study…" entry with its inline creation row revealed -- a soft
+    nudge, not a forced requirement (`run-study-select` still starts
+    editable at "No study" otherwise).
+    """
+    outcome: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def _poll_until(script: str, predicate: Callable[[Any], bool]) -> Any:
+        value = None
+        for _ in range(_POLL_ATTEMPTS):
+            value = window.evaluate_js(script)
+            if predicate(value):
+                return value
+            time.sleep(_POLL_INTERVAL_SECONDS)
+        return value
+
+    def _drive() -> None:
+        try:
+            _poll_until(_INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("setTimeout(() => { window.fim.showExplore(); }, 0);")
+            _poll_until(
+                "window.__fimExploreReady === true", lambda value: value is True
+            )
+            window.evaluate_js(
+                "document.getElementById('explore-n').value = '777';"
+                "document.getElementById('explore-n')"
+                ".dispatchEvent(new Event('change'));"
+            )
+            _poll_until(
+                "window.__fimExploreReady === true", lambda value: value is True
+            )
+            window.evaluate_js(
+                "setTimeout(() => {"
+                "document.getElementById('explore-run-for-real-button').click();"
+                "}, 0);"
+            )
+            # Polls on `studySelectValue === "__new__"` specifically, not
+            # merely `configureVisible` -- `preselectNewStudy()` is the
+            # handler's own *last* step (`explore.js`), sequentially
+            # awaited after `applyFormValues`, so waiting for it also
+            # guarantees `nValue` has already landed. `configureVisible`
+            # alone flips true as soon as `showConfigureScreen()`'s own
+            # first line runs, well before `applyFormValues` -- a real,
+            # reproduced race under `-n auto` load caught this exact gap
+            # (`field-N` still read the pre-handoff starter value, "450",
+            # not "777", the instant this poll's predicate first matched).
+            settled = _poll_until(
+                "({"
+                "configureVisible: !document.getElementById('screen-configure')"
+                ".hidden, "
+                "nValue: document.getElementById('field-N').value, "
+                "studySelectValue: document.getElementById('run-study-select')"
+                ".value, "
+                "newRowHidden: document.getElementById('run-study-new-row')"
+                ".hidden"
+                "})",
+                lambda value: (
+                    value is not None and value["studySelectValue"] == "__new__"
+                ),
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=10)
+
+    assert result["configureVisible"] is True
+    assert result["nValue"] == "777"
+    assert result["studySelectValue"] == "__new__"
+    assert result["newRowHidden"] is False

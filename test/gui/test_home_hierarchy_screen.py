@@ -594,3 +594,149 @@ def test_starting_a_run_from_configure_with_a_study_selected_attaches_it(
     assert settled["done"] is True, "the run never reached a terminal state"
     updated = groups.get_study(study.study_id, results=results)
     assert updated.run_count == 1
+
+
+def test_run_study_select_new_study_creates_and_selects_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Configure's own "New study…" entry creates a real Study inline.
+
+    `20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
+    (`selby/restricted`), §1 Option B: the compact counterpart to
+    Home's own "New study" card, reached from `run-study-select`
+    itself rather than a navigation away from Configure.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "window.__fimTestConfigureReady = false;"
+                "window.fim.showConfigureScreen().then("
+                "() => { window.__fimTestConfigureReady = true; }"
+                ");"
+            )
+            _poll_until(
+                window,
+                "window.__fimTestConfigureReady === true",
+                lambda value: value is True,
+            )
+            row_hidden_before = window.evaluate_js(
+                "document.getElementById('run-study-new-row').hidden"
+            )
+            window.evaluate_js(
+                "document.getElementById('run-study-select').value = '__new__';"
+                "document.getElementById('run-study-select')"
+                ".dispatchEvent(new Event('change'));"
+            )
+            row_hidden_after_select = window.evaluate_js(
+                "document.getElementById('run-study-new-row').hidden"
+            )
+            window.evaluate_js(
+                "document.getElementById('run-study-new-name').value = 'Ring sweep';"
+            )
+            window.evaluate_js(
+                "document.getElementById('run-study-new-create-button').click();"
+            )
+            selected = _poll_until(
+                window,
+                "document.getElementById('run-study-select').value",
+                lambda value: value not in (None, "", "__new__"),
+            )
+            row_hidden_after_create = window.evaluate_js(
+                "document.getElementById('run-study-new-row').hidden"
+            )
+            outcome.put(
+                {
+                    "rowHiddenBefore": row_hidden_before,
+                    "rowHiddenAfterSelect": row_hidden_after_select,
+                    "selected": selected,
+                    "rowHiddenAfterCreate": row_hidden_after_create,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["rowHiddenBefore"] is True
+    assert settled["rowHiddenAfterSelect"] is False
+    assert settled["rowHiddenAfterCreate"] is True
+    study_id = settled["selected"]
+    assert study_id != "__new__"
+    created = groups.get_study(study_id, results=results)
+    assert created.name == "Ring sweep"
+    assert created.run_count == 0
+
+
+def test_run_study_select_new_study_cancel_returns_to_no_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelling the inline "New study…" row abandons it, no Study created."""
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js(
+                "window.__fimTestConfigureReady = false;"
+                "window.fim.showConfigureScreen().then("
+                "() => { window.__fimTestConfigureReady = true; }"
+                ");"
+            )
+            _poll_until(
+                window,
+                "window.__fimTestConfigureReady === true",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                "document.getElementById('run-study-select').value = '__new__';"
+                "document.getElementById('run-study-select')"
+                ".dispatchEvent(new Event('change'));"
+            )
+            window.evaluate_js(
+                "document.getElementById('run-study-new-name').value = 'Abandoned';"
+            )
+            window.evaluate_js(
+                "document.getElementById('run-study-new-cancel-button').click();"
+            )
+            selected = window.evaluate_js(
+                "document.getElementById('run-study-select').value"
+            )
+            row_hidden = window.evaluate_js(
+                "document.getElementById('run-study-new-row').hidden"
+            )
+            name_cleared = window.evaluate_js(
+                "document.getElementById('run-study-new-name').value"
+            )
+            outcome.put(
+                {
+                    "selected": selected,
+                    "rowHidden": row_hidden,
+                    "nameCleared": name_cleared,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["selected"] == ""
+    assert settled["rowHidden"] is True
+    assert settled["nameCleared"] == ""
+    assert groups.list_studies(results=results) == []

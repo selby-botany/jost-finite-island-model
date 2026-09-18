@@ -1656,6 +1656,46 @@ class Api:
         return self._starter_form_values_for_this_session()
 
     @_log_bridge_call
+    def get_starter_form_with_overrides(
+        self, overrides: dict[str, str]
+    ) -> dict[str, Any]:
+        """Return a fresh form's values, with specific fields overridden.
+
+        Explore's own "▶ Run this for real" handoff (`20260918-claude-
+        sonnet-5-explore-to-study-run-handoff-design.md`, `selby/
+        restricted`, §1/§8) is the one caller: `overrides` is Explore's
+        own current `N`/`d`/`m_rate`/`mu_value`, layered on top of
+        `get_starter_form`'s own values (including any saved Settings
+        defaults) exactly like `config_form.starter_form_values`'s own
+        `overrides` parameter already does for a single call.
+
+        Unlike `get_starter_form`/`_starter_form_values_for_this_
+        session`, a merged whole that fails to validate is **not**
+        silently discarded in favor of the un-overlaid starter values.
+        That fallback exists for a possibly-stale *saved* Settings
+        default the user is not actively looking at; `overrides` here
+        comes directly from a live user action (Explore's own current
+        fields), so a validation failure must be surfaced back to the
+        caller, never hidden behind values the botanist did not ask for.
+
+        Args:
+            overrides: A partial `dict[str, str]` of form field name to
+                value, the same shape `config_form.starter_form_values`
+                itself accepts.
+
+        Returns:
+            `{"ok": True, "values": ...}` on success; `{"ok": False,
+            "message": ...}` if the merged whole does not validate.
+        """
+        merged_overrides = dict(self._preferences.default_run_settings or {})
+        merged_overrides.update(overrides)
+        try:
+            values = starter_form_values(overrides=merged_overrides)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        return {"ok": True, "values": values}
+
+    @_log_bridge_call
     def get_initial_form(self) -> dict[str, str]:
         """Return the values a fresh app launch's own Input screen should show.
 

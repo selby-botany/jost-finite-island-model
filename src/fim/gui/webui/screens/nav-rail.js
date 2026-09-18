@@ -281,7 +281,19 @@ function wireNavRail() {
         .addEventListener("click", () => window.fim.menu.runSimulation());
     document
         .getElementById("configure-explore-button")
-        .addEventListener("click", () => window.fim.menu.explore());
+        .addEventListener("click", () => {
+            // Carries Configure's own *current* N/d/m/mu into Explore,
+            // unlike `window.fim.menu.explore()` (the File menu/rail
+            // button's own generic path, reachable from any screen, no
+            // "current Configure values" to push) -- the symmetric fix
+            // to the Explore-to-Study/Run handoff's own §"Current state"
+            // (`20260918-claude-sonnet-5-explore-to-study-run-handoff-
+            // design.md`, `selby/restricted`): this button previously
+            // navigated to Explore relying entirely on `showExplore`'s
+            // own once-per-launch seed, silently ignoring whatever
+            // Configure was actually showing at the time.
+            window.fim.showExplore(collectFormValues());
+        });
     configureBackButton.addEventListener("click", () => {
         window.fim.navigateBack();
     });

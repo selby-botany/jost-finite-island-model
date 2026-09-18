@@ -796,6 +796,17 @@
         </svg>
         Back
       </button>
+      <!-- Explore-to-Study/Run handoff (`20260918-claude-sonnet-5-
+           explore-to-study-run-handoff-design.md`, `selby/restricted`,
+           §1/§8): seeds Configure from this screen's own current N/d/
+           m/mu and navigates there, pre-selecting "New study…" on
+           Configure's own run-study-select. -->
+      <button type="button" id="explore-run-for-real-button" class="primary-action">
+        <svg class="button-icon" aria-hidden="true">
+          <use href="icons/fim-icons.svg#icon-run"></use>
+        </svg>
+        Run this for real
+      </button>
     </div>
     <div class="explore-fields">
       <div class="field">
@@ -1400,7 +1411,24 @@
       </button>
       <select id="run-study-select" aria-label="Add this run to a study">
         <option value="" selected>No study</option>
+        <option value="__new__">New study…</option>
       </select>
+      <!-- Shown only while "New study…" is selected above -- inline,
+           not a dialog (this codebase has no native dialogs at all,
+           `open-run.js`'s own `createGroup` docstring), the compact
+           counterpart to Home's own "New study" card (`20260918-
+           claude-sonnet-5-explore-to-study-run-handoff-design.md`,
+           `selby/restricted`, §1 Option B). -->
+      <span id="run-study-new-row" class="inline-create-row" hidden>
+        <input
+          type="text"
+          id="run-study-new-name"
+          placeholder="Study name"
+          aria-label="New study name"
+        >
+        <button type="button" id="run-study-new-create-button">Create</button>
+        <button type="button" id="run-study-new-cancel-button">Cancel</button>
+      </span>
       <button type="button" id="configure-run-button">
         <svg class="button-icon" aria-hidden="true">
           <use href="icons/fim-icons.svg#icon-run"></use>

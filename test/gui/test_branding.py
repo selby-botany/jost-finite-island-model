@@ -37,7 +37,7 @@ def test_navigation_uses_one_svg_icon_language_instead_of_emoji() -> None:
     icons = (_WEBUI / "icons" / "fim-icons.svg").read_text(encoding="utf-8")
 
     assert html.count('class="rail-icon"') == 6
-    assert html.count('href="icons/fim-icons.svg#icon-') == 23
+    assert html.count('href="icons/fim-icons.svg#icon-') == 24
     for icon_id in (
         "home",
         "configure",

@@ -6594,6 +6594,44 @@ def test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid(
 
 A saved overlay that no longer validates is discarded wholesale.
 
+<a id="gui.test_app_api.test_get_starter_form_with_overrides_applies_the_given_values"></a>
+
+#### test\_get\_starter\_form\_with\_overrides\_applies\_the\_given\_values
+
+```python
+def test_get_starter_form_with_overrides_applies_the_given_values() -> None
+```
+
+Explore's own four fields overlay the starter values; everything else
+unchanged.
+
+<a id="gui.test_app_api.test_get_starter_form_with_overrides_also_applies_saved_default_run_settings"></a>
+
+#### test\_get\_starter\_form\_with\_overrides\_also\_applies\_saved\_default\_run\_settings
+
+```python
+def test_get_starter_form_with_overrides_also_applies_saved_default_run_settings(
+        tmp_path: Path) -> None
+```
+
+Both layers apply together: Settings defaults, then Explore's own overrides.
+
+<a id="gui.test_app_api.test_get_starter_form_with_overrides_surfaces_an_invalid_override"></a>
+
+#### test\_get\_starter\_form\_with\_overrides\_surfaces\_an\_invalid\_override
+
+```python
+def test_get_starter_form_with_overrides_surfaces_an_invalid_override(
+        tmp_path: Path) -> None
+```
+
+Unlike `get_starter_form`, an invalid override is never silently discarded.
+
+`overrides` here comes from a live user action (Explore's own
+current fields), not a possibly-stale saved Settings default --
+a validation failure must be reported back, never hidden behind
+values the botanist did not actually ask for.
+
 <a id="gui.test_app_api.test_get_default_run_settings_falls_back_to_starter_subset_when_unsaved"></a>
 
 #### test\_get\_default\_run\_settings\_falls\_back\_to\_starter\_subset\_when\_unsaved
@@ -11114,6 +11152,25 @@ since `scrubber.js`. Moving it must change the predictions, mark the
 table as showing something other than the typed configuration, and
 come back to the committed numbers on reset.
 
+<a id="gui.test_explore_screen.test_run_this_for_real_seeds_configure_and_preselects_new_study"></a>
+
+#### test\_run\_this\_for\_real\_seeds\_configure\_and\_preselects\_new\_study
+
+```python
+def test_run_this_for_real_seeds_configure_and_preselects_new_study(
+        window: webview.Window) -> None
+```
+
+The Explore-to-Study/Run handoff carries values over and nudges "New study…".
+
+`20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
+(`selby/restricted`), §1 Option B/§8: clicking "▶ Run this for real"
+seeds Configure's own `N` field from Explore's current value,
+navigates there, and pre-selects `run-study-select`'s own "New
+study…" entry with its inline creation row revealed -- a soft
+nudge, not a forced requirement (`run-study-select` still starts
+editable at "No study" otherwise).
+
 <a id="gui.test_field_help"></a>
 
 # gui.test\_field\_help
@@ -11621,6 +11678,33 @@ beforehand, and confirms the Study's own manifest lists the real
 run directory afterward, on real disk -- not only that `Api.
 start_run`'s own `study_id` argument is accepted (`test_app_api.py`'s
 own narrower coverage).
+
+<a id="gui.test_home_hierarchy_screen.test_run_study_select_new_study_creates_and_selects_it"></a>
+
+#### test\_run\_study\_select\_new\_study\_creates\_and\_selects\_it
+
+```python
+def test_run_study_select_new_study_creates_and_selects_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Configure's own "New study…" entry creates a real Study inline.
+
+`20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
+(`selby/restricted`), §1 Option B: the compact counterpart to
+Home's own "New study" card, reached from `run-study-select`
+itself rather than a navigation away from Configure.
+
+<a id="gui.test_home_hierarchy_screen.test_run_study_select_new_study_cancel_returns_to_no_study"></a>
+
+#### test\_run\_study\_select\_new\_study\_cancel\_returns\_to\_no\_study
+
+```python
+def test_run_study_select_new_study_cancel_returns_to_no_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Cancelling the inline "New study…" row abandons it, no Study created.
 
 <a id="gui.test_input_screen"></a>
 

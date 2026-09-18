@@ -17,6 +17,10 @@ const runButton = document.getElementById("run-button");
 const cancelButton = document.getElementById("cancel-run-button");
 const openFolderButton = document.getElementById("open-folder-button");
 const runStudySelect = document.getElementById("run-study-select");
+const runStudyNewRow = document.getElementById("run-study-new-row");
+const runStudyNewNameInput = document.getElementById("run-study-new-name");
+const runStudyNewCreateButton = document.getElementById("run-study-new-create-button");
+const runStudyNewCancelButton = document.getElementById("run-study-new-cancel-button");
 
 function showRunBanner(message) {
     if (!message) {
@@ -35,6 +39,17 @@ function showRunBanner(message) {
  * form values, no separate "New run" step needed).
  */
 async function onRunClicked() {
+    // "New study…" selected but never actually created (or cancelled)
+    // -- `Api.start_run` would otherwise reject this as an unknown
+    // study id, a confusing failure mode for a botanist who simply
+    // has not finished the inline row yet. Checked before `revalidate`
+    // below so this reads as its own, more specific message rather
+    // than piggybacking on the form's own field-level errors.
+    if (runStudySelect.value === "__new__") {
+        showRunBanner("create or cancel the new study first");
+        runStudyNewNameInput.focus();
+        return;
+    }
     const result = await revalidate();
     if (!result.ok) {
         window.fim.focusInvalidField(result.field);
@@ -226,6 +241,12 @@ async function refreshRunStudySelectOptions() {
     placeholder.value = "";
     placeholder.textContent = "No study";
     runStudySelect.appendChild(placeholder);
+    // Re-added on every rebuild -- `replaceChildren()` just above wipes
+    // `index.html`'s own static copy along with every real Study option.
+    const newStudyOption = document.createElement("option");
+    newStudyOption.value = "__new__";
+    newStudyOption.textContent = "New study…";
+    runStudySelect.appendChild(newStudyOption);
     for (const study of studies) {
         const option = document.createElement("option");
         option.value = study.studyId;
@@ -235,9 +256,78 @@ async function refreshRunStudySelectOptions() {
     if (studies.some((study) => study.studyId === previousValue)) {
         runStudySelect.value = previousValue;
     }
+    // A refresh mid-creation (rare -- Configure is only re-shown by
+    // navigating to it, which the inline row itself never triggers) is
+    // still handled correctly rather than left showing a stale row: the
+    // preservation check above never matches `"__new__"` (no real Study
+    // ever has that id), so the select falls back to its own first
+    // option ("No study") on any refresh that does not restore it.
+    syncRunStudyNewRowVisibility();
 }
 
 window.fim.refreshRunStudySelectOptions = refreshRunStudySelectOptions;
+
+/** Show/hide `run-study-new-row` to match `run-study-select`'s own current value. */
+function syncRunStudyNewRowVisibility() {
+    runStudyNewRow.hidden = runStudySelect.value !== "__new__";
+}
+
+runStudySelect.addEventListener("change", () => {
+    syncRunStudyNewRowVisibility();
+    if (!runStudyNewRow.hidden) {
+        runStudyNewNameInput.focus();
+    }
+});
+
+/**
+ * Create the Study named in `run-study-new-row`'s own input, then select
+ * it -- the inline counterpart to `open-run.js`'s own `createGroup`,
+ * scoped to Configure's own footer rather than a Home card (§1 Option B).
+ */
+async function onRunStudyNewCreateClicked() {
+    const name = runStudyNewNameInput.value.trim();
+    if (!name) {
+        showRunBanner("a study needs a name");
+        return;
+    }
+    const result = await window.pywebview.api.create_study(name);
+    if (!result.ok) {
+        showRunBanner(result.message);
+        return;
+    }
+    showRunBanner("");
+    runStudyNewNameInput.value = "";
+    await refreshRunStudySelectOptions();
+    // Not covered by `refreshRunStudySelectOptions`'s own previous-value
+    // preservation (that logic matches `"__new__"` against nothing,
+    // §"refreshRunStudySelectOptions" above) -- the freshly created
+    // study's own id is only known here, after this call resolves.
+    runStudySelect.value = result.studyId;
+    syncRunStudyNewRowVisibility();
+}
+
+function onRunStudyNewCancelClicked() {
+    runStudyNewNameInput.value = "";
+    runStudySelect.value = "";
+    syncRunStudyNewRowVisibility();
+}
+
+runStudyNewCreateButton.addEventListener("click", onRunStudyNewCreateClicked);
+runStudyNewCancelButton.addEventListener("click", onRunStudyNewCancelClicked);
+
+/**
+ * Pre-select "New study…" and reveal its own inline row -- the Explore
+ * handoff's own soft nudge (§2's "New study…" default rather than "No
+ * study," `20260918-claude-sonnet-5-explore-to-study-run-handoff-
+ * design.md`, `selby/restricted`, §5/§8), exposed so `explore.js` can
+ * reach it after navigating to Configure without reaching into this
+ * file's own private `<select>` reference directly.
+ */
+window.fim.preselectNewStudy = function preselectNewStudy() {
+    runStudySelect.value = "__new__";
+    syncRunStudyNewRowVisibility();
+    runStudyNewNameInput.focus();
+};
 
 function wireRunViewControls() {
     runButton.addEventListener("click", onRunClicked);

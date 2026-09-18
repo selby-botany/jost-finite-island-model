@@ -687,6 +687,32 @@ fieldset.composite > label {
     cursor: not-allowed;
 }
 
+/* `run-study-new-row`: the compact, inline "New study…" counterpart to
+ * Home's own full "New study" card -- reuses `.actions button`'s own
+ * sizing/border rules directly (not a class of its own) so its two
+ * buttons read as the same kind of control as everything else on this
+ * row, without duplicating that rule block for one more selector. */
+.inline-create-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.inline-create-row button {
+    font: inherit;
+    padding: 0.45rem 0.9rem;
+    border-radius: 6px;
+    border: 1px solid var(--fim-border);
+    background: var(--fim-background);
+    color: var(--fim-foreground);
+    cursor: pointer;
+}
+
+.inline-create-row button:hover:not(:disabled) {
+    border-color: var(--fim-action);
+    background: var(--fim-surface-soft);
+}
+
 /* `home-example-select` (Home's "New run" card): a plain `<select>`
  * sharing an `.actions` row with a real `<button>` -- matched to that
  * button's own sizing/border/radius so the two read as one action

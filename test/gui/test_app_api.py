@@ -123,6 +123,57 @@ def test_get_starter_form_falls_back_when_saved_default_run_settings_is_invalid(
     assert result == starter_form_values()
 
 
+def test_get_starter_form_with_overrides_applies_the_given_values() -> None:
+    """Explore's own four fields overlay the starter values; everything else
+    unchanged."""
+    result = Api().get_starter_form_with_overrides(
+        {"N": "777", "d": "9", "m_rate": "0.02", "mu_value": "0.003"}
+    )
+
+    assert result["ok"] is True
+    assert result["values"]["N"] == "777"
+    assert result["values"]["d"] == "9"
+    assert result["values"]["m_rate"] == "0.02"
+    assert result["values"]["mu_value"] == "0.003"
+    # Untouched by the overrides -- still the true starter value.
+    assert result["values"]["seed"] == starter_form_values()["seed"]
+
+
+def test_get_starter_form_with_overrides_also_applies_saved_default_run_settings(
+    tmp_path: Path,
+) -> None:
+    """Both layers apply together: Settings defaults, then Explore's own overrides."""
+    preferences_path = tmp_path / "preferences.json"
+    save_preferences(
+        preferences_path,
+        GuiPreferences(default_run_settings={"engine_backend": "generational"}),
+    )
+
+    result = Api(preferences_path=preferences_path).get_starter_form_with_overrides(
+        {"N": "777"}
+    )
+
+    assert result["ok"] is True
+    assert result["values"]["engine_backend"] == "generational"
+    assert result["values"]["N"] == "777"
+
+
+def test_get_starter_form_with_overrides_surfaces_an_invalid_override(
+    tmp_path: Path,
+) -> None:
+    """Unlike `get_starter_form`, an invalid override is never silently discarded.
+
+    `overrides` here comes from a live user action (Explore's own
+    current fields), not a possibly-stale saved Settings default --
+    a validation failure must be reported back, never hidden behind
+    values the botanist did not actually ask for.
+    """
+    result = Api().get_starter_form_with_overrides({"N": "not a number"})
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
 def test_get_default_run_settings_falls_back_to_starter_subset_when_unsaved() -> None:
     """With nothing saved, Settings seeds itself from the true starter values.
 

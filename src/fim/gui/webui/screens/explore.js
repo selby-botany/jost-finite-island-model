@@ -17,6 +17,7 @@
 
 const exploreBanner = document.getElementById("explore-banner");
 const exploreBackButton = document.getElementById("explore-back-button");
+const exploreRunForRealButton = document.getElementById("explore-run-for-real-button");
 const exploreN = document.getElementById("explore-n");
 const exploreD = document.getElementById("explore-d");
 const exploreM = document.getElementById("explore-m");
@@ -773,14 +774,56 @@ exploreBackButton.addEventListener("click", () => {
 });
 
 /**
- * Show Explore. The four fields are seeded once per launch, from the
- * same `get_starter_form` values a brand-new Configure form starts with
- * (`N`/`d`/`m_rate`/`mu_value`) — not hardcoded here a second time,
- * so the two can never quietly drift apart — and are left exactly as
- * the user set them on every subsequent visit within this launch.
+ * Explore-to-Study/Run handoff (`20260918-claude-sonnet-5-explore-to-
+ * study-run-handoff-design.md`, `selby/restricted`, §1/§8, Option B):
+ * seeds Configure from this screen's own current N/d/m/mu, navigates
+ * there, and pre-selects "New study…" on Configure's own `run-study-
+ * select` -- a soft nudge (§2), never forced; one extra click abandons
+ * it back to "No study," identical to any other visit.
  */
-window.fim.showExplore = async function showExplore() {
-    if (!exploreSeeded) {
+exploreRunForRealButton.addEventListener("click", async () => {
+    const values = collectExploreValues();
+    const result = await window.pywebview.api.get_starter_form_with_overrides({
+        N: values.n,
+        d: values.d,
+        m_rate: values.m,
+        mu_value: values.mu,
+    });
+    if (!result.ok) {
+        exploreBanner.textContent = result.message;
+        exploreBanner.hidden = false;
+        return;
+    }
+    await window.fim.showConfigureScreen();
+    applyFormValues(result.values);
+    await revalidate();
+    window.fim.preselectNewStudy();
+});
+
+/**
+ * Show Explore. `overrides`, when given, is Configure's own current
+ * form values (`N`/`d`/`m_rate`/`mu_value` -- `collectFormValues`'s own
+ * shape) — the symmetric fix for the existing "🔮 Explore" button
+ * (`nav-rail.js`), which previously navigated here without carrying
+ * over whatever Configure was actually showing at the time, relying
+ * instead on this function's own once-per-launch seed below (§"Current
+ * state" of the handoff design document, above, flags this as the same
+ * underlying gap in the opposite direction). Absent `overrides`, the
+ * four fields are seeded once per launch, from the same `get_starter_
+ * form` values a brand-new Configure form starts with — not hardcoded
+ * here a second time, so the two can never quietly drift apart — and
+ * are left exactly as the user set them on every subsequent visit
+ * within this launch.
+ * @param {{N: string, d: string, m_rate: string, mu_value: string}} [overrides]
+ */
+window.fim.showExplore = async function showExplore(overrides) {
+    if (overrides) {
+        exploreSeeded = true;
+        exploreN.value = overrides.N;
+        exploreD.value = overrides.d;
+        exploreM.value = overrides.m_rate;
+        exploreMu.value = overrides.mu_value;
+    } else if (!exploreSeeded) {
         exploreSeeded = true;
         const starter = await window.pywebview.api.get_starter_form();
         exploreN.value = starter.N;
