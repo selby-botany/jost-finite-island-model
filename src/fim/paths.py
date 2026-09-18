@@ -34,12 +34,25 @@ it sits (`fim/cli.py`, `fim/gui/runner.py`, ...), resolves the identical
 root this way, where anchoring on each caller's own `__file__` would need a
 different `parents[N]` depth per caller and silently break the moment a new
 caller sat at a different depth.
+
+`project_root`/`results_directory`/`log_directory` are each
+independently, explicitly overridable — `set_root_override`/`set_
+results_directory_override`/`set_log_directory_override`, and the
+matching `FIM_HOME`/`FIM_RESULTS_DIRECTORY`/`FIM_LOG_DIRECTORY`
+environment variables — for a user (or a test) who wants results, logs,
+or both somewhere other than the default, without a per-invocation
+flag on every single command (`fim run -o <path>`/`-L file=<path>`
+already exist for that narrower, one-off case). See each function's
+own docstring for the exact precedence, and `20260918-claude-sonnet-5-
+configurable-storage-root-design.md` (`selby/restricted`) for the full
+design.
 """
 
 from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import shutil
 import sys
 import tempfile
@@ -52,6 +65,87 @@ import fim
 Clock = Callable[[], datetime]
 
 logger = logging.getLogger(__name__)
+
+# Module-level, settable overrides -- `20260918-claude-sonnet-5-
+# configurable-storage-root-design.md` (`selby/restricted`). Each is
+# `None` (meaning "no override") until one of the three real callers
+# (`fim.cli`'s own `--root`/`--results-directory`/`--log-directory`
+# flags, `fim.gui.app.main`'s own identical flags, or a GUI Settings
+# save) sets it via the matching `set_*_override` function below, once,
+# early in that entry point's own startup — the same "one thing,
+# decided once, read from several unrelated places" shape `fim.gui.app`
+# already uses for `_active_window`/`_cancel_event`, rather than a
+# `root`/`results` parameter threaded through every caller of
+# `project_root`/`results_directory`/`log_directory` that never asked
+# for one. A test sets one of these directly (`monkeypatch.setattr
+# (paths, "_root_override", tmp_path)`), which — unlike calling the
+# public setter — pytest's own `monkeypatch` restores automatically at
+# teardown, with no matching `set_*_override(None)` cleanup call needed.
+_root_override: Path | None = None
+_results_directory_override: Path | None = None
+_log_directory_override: Path | None = None
+
+
+def set_root_override(root: Path | None) -> None:
+    """Override `project_root()`'s own resolution, or clear a previous one.
+
+    The *bulk* override — "put results and logs both under this one
+    place" — checked by `project_root()` itself, so it affects
+    `results_directory()`/`log_directory()` (and everything derived
+    from either) for free, with no code of its own. A more specific
+    override (`set_results_directory_override`/`set_log_directory_
+    override`, or that location's own environment variable) still wins
+    over this one — see each function's own docstring.
+
+    Args:
+        root: The path to use in place of `project_root()`'s own
+            three-case resolution, or `None` to remove the override.
+    """
+    global _root_override  # noqa: PLW0603
+    _root_override = root
+
+
+def root_override() -> Path | None:
+    """The current `project_root()` override, if any set via `set_root_override`."""
+    return _root_override
+
+
+def set_results_directory_override(path: Path | None) -> None:
+    """Override `results_directory()`'s own resolution, or clear a previous one.
+
+    Args:
+        path: The exact directory to use in place of `results_
+            directory()`'s own computation, or `None` to remove the
+            override. Unlike `set_root_override`, this is the results
+            directory itself, not a project root to append `"results"`
+            to — a user naming this specific location means exactly
+            that location.
+    """
+    global _results_directory_override  # noqa: PLW0603
+    _results_directory_override = path
+
+
+def results_directory_override() -> Path | None:
+    """The current `results_directory()` override, if any."""
+    return _results_directory_override
+
+
+def set_log_directory_override(path: Path | None) -> None:
+    """Override `log_directory()`'s own resolution, or clear a previous one.
+
+    Args:
+        path: The exact directory to use in place of `log_directory()`'s
+            own computation, or `None` to remove the override — the
+            same "the location itself, not a root to append `logs` to"
+            shape `set_results_directory_override` already documents.
+    """
+    global _log_directory_override  # noqa: PLW0603
+    _log_directory_override = path
+
+
+def log_directory_override() -> Path | None:
+    """The current `log_directory()` override, if any."""
+    return _log_directory_override
 
 
 @contextlib.contextmanager
@@ -233,6 +327,13 @@ def project_root() -> Path:
        working directory, exactly as most ordinary command-line tools
        do.
 
+    Checks `set_root_override`'s own current value first, then the
+    `FIM_HOME` environment variable, before any of the three cases
+    below — `20260918-claude-sonnet-5-configurable-storage-root-
+    design.md` (`selby/restricted`). Both are the *bulk* override,
+    lower precedence than `results_directory()`/`log_directory()`'s own
+    more specific overrides — see each one's own docstring.
+
     Returns:
         The checkout root containing `pyproject.toml`, if one is found
         above the installed `fim` package; otherwise `Path.home() / "fim"`
@@ -257,6 +358,11 @@ def project_root() -> Path:
         run` example already passes `--output` explicitly, so it never
         relies on this default output location at all.
     """
+    if _root_override is not None:
+        return _root_override
+    home = os.environ.get("FIM_HOME")
+    if home:
+        return Path(home)
     # `fim.__file__` is the path to this package's own `__init__.py`
     # (see this module's own docstring, above, for why anchoring on this
     # specific file rather than the calling module's own `__file__`
@@ -278,13 +384,31 @@ def results_directory(root: Path | None = None) -> Path:
     `default_output_directory`, just above, for how each individual
     run then gets its own timestamped subfolder inside this one).
 
+    `root`, when given, is the single highest-precedence override —
+    an explicit function argument always wins. Absent that, checks
+    `set_results_directory_override`'s own current value, then the
+    `FIM_RESULTS_DIRECTORY` environment variable, before falling back
+    to `project_root() / "results"` — `20260918-claude-sonnet-5-
+    configurable-storage-root-design.md` (`selby/restricted`) §8 spells
+    out the full precedence across all three location-specific chains.
+
     Args:
         root: Optional project root override (default: `project_root()`).
 
     Returns:
-        `root / "results"`.
+        `root / "results"`, or the current override/`FIM_RESULTS_
+        DIRECTORY` directly (not joined with `"results"` — see `set_
+        results_directory_override`'s own docstring for why) when
+        `root` is not given and one is set.
     """
-    return (root if root is not None else project_root()) / "results"
+    if root is not None:
+        return root / "results"
+    if _results_directory_override is not None:
+        return _results_directory_override
+    env_value = os.environ.get("FIM_RESULTS_DIRECTORY")
+    if env_value:
+        return Path(env_value)
+    return project_root() / "results"
 
 
 def log_directory(root: Path | None = None) -> Path:
@@ -295,15 +419,25 @@ def log_directory(root: Path | None = None) -> Path:
     program ever writes, including the frozen-app-with-no-writable-cwd
     fallback `project_root`'s own docstring documents, rather than a
     second, platform-specific rule invented for logs alone
-    (`doc/fim-logging-design.md` §6).
+    (`doc/fim-logging-design.md` §6). `root`, `set_log_directory_
+    override`, and `FIM_LOG_DIRECTORY` compose in the identical order
+    `results_directory`'s own docstring describes, one location over.
 
     Args:
         root: Optional project root override (default: `project_root()`).
 
     Returns:
-        `root / "logs"`.
+        `root / "logs"`, or the current override/`FIM_LOG_DIRECTORY`
+        directly when `root` is not given and one is set.
     """
-    return (root if root is not None else project_root()) / "logs"
+    if root is not None:
+        return root / "logs"
+    if _log_directory_override is not None:
+        return _log_directory_override
+    env_value = os.environ.get("FIM_LOG_DIRECTORY")
+    if env_value:
+        return Path(env_value)
+    return project_root() / "logs"
 
 
 def default_log_file(root: Path | None = None) -> Path:

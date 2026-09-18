@@ -102,6 +102,9 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [set\_dark\_mode\_override](#fim.gui.app.Api.set_dark_mode_override)
     * [get\_default\_run\_settings](#fim.gui.app.Api.get_default_run_settings)
     * [set\_default\_run\_settings](#fim.gui.app.Api.set_default_run_settings)
+    * [get\_results\_location](#fim.gui.app.Api.get_results_location)
+    * [set\_results\_location](#fim.gui.app.Api.set_results_location)
+    * [browse\_for\_results\_location](#fim.gui.app.Api.browse_for_results_location)
     * [get\_welcome\_dismissed](#fim.gui.app.Api.get_welcome_dismissed)
     * [dismiss\_welcome](#fim.gui.app.Api.dismiss_welcome)
     * [get\_startup\_warnings](#fim.gui.app.Api.get_startup_warnings)
@@ -192,7 +195,10 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [with\_welcome\_dismissed](#fim.gui.preferences.GuiPreferences.with_welcome_dismissed)
     * [with\_startup\_behavior](#fim.gui.preferences.GuiPreferences.with_startup_behavior)
     * [with\_default\_run\_settings](#fim.gui.preferences.GuiPreferences.with_default_run_settings)
+    * [with\_results\_location\_override](#fim.gui.preferences.GuiPreferences.with_results_location_override)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
+  * [set\_preferences\_file\_override](#fim.gui.preferences.set_preferences_file_override)
+  * [preferences\_file\_override](#fim.gui.preferences.preferences_file_override)
   * [preferences\_file\_path](#fim.gui.preferences.preferences_file_path)
   * [save\_preferences](#fim.gui.preferences.save_preferences)
 * [fim.gui.presets](#fim.gui.presets)
@@ -233,6 +239,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [resolve\_level](#fim.logging_setup.resolve_level)
   * [log\_file\_streams](#fim.logging_setup.log_file_streams)
   * [parse\_log\_options](#fim.logging_setup.parse_log_options)
+  * [apply\_logging\_config\_file](#fim.logging_setup.apply_logging_config_file)
   * [configure](#fim.logging_setup.configure)
 * [fim.model](#fim.model)
 * [fim.model.allele](#fim.model.allele)
@@ -319,6 +326,12 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [drift\_vectorized](#fim.model.vectorized.drift_vectorized)
   * [step\_vectorized](#fim.model.vectorized.step_vectorized)
 * [fim.paths](#fim.paths)
+  * [set\_root\_override](#fim.paths.set_root_override)
+  * [root\_override](#fim.paths.root_override)
+  * [set\_results\_directory\_override](#fim.paths.set_results_directory_override)
+  * [results\_directory\_override](#fim.paths.results_directory_override)
+  * [set\_log\_directory\_override](#fim.paths.set_log_directory_override)
+  * [log\_directory\_override](#fim.paths.log_directory_override)
   * [atomic\_directory](#fim.paths.atomic_directory)
   * [default\_output\_directory](#fim.paths.default_output_directory)
   * [project\_root](#fim.paths.project_root)
@@ -3985,6 +3998,87 @@ form no longer submits at all.
   text, including nonsense, by treating it as "auto") — saved
   verbatim alongside the validated subset.
 
+<a id="fim.gui.app.Api.get_results_location"></a>
+
+#### get\_results\_location
+
+```python
+@_log_bridge_call
+def get_results_location() -> dict[str, Any]
+```
+
+Return where results/logs/Study data live now, and whether Settings can
+edit it.
+
+`20260918-claude-sonnet-5-configurable-storage-root-design.md`
+(`selby/restricted`) §7 — backs both the Settings dialog's own
+"Storage location" field and the first-launch Welcome panel's
+identical field (§5, Option D4).
+
+**Returns**:
+
+- ``{"path"` - str(paths.results_directory()), "editable": bool}`.
+  `editable` is `False` whenever something more specific than
+  a previously saved Settings value already governs `results_
+  directory()` for this process — an active `--root`/
+  `--results-directory` flag or `FIM_HOME`/`FIM_RESULTS_
+  DIRECTORY` — matching `_apply_saved_results_location_
+  override`'s own identical check one level up: editing the
+  field would have no effect until that flag/variable is
+  itself removed, and the page shows the read-only hint
+  instead of a saveable input in that case.
+
+<a id="fim.gui.app.Api.set_results_location"></a>
+
+#### set\_results\_location
+
+```python
+@_log_bridge_call
+def set_results_location(path: str) -> dict[str, Any]
+```
+
+Persist a new default results/logs location, effective next launch.
+
+Option D1 (`20260918-...-configurable-storage-root-design.md`
+§5/§6): deliberately does *not* call `paths.set_results_
+directory_override` itself — this session's own already-showing
+Home stays exactly as it is; `fim.gui.app._apply_saved_results_
+location_override` is what applies a saved value, once, the
+*next* time the app starts.
+
+**Arguments**:
+
+- `path` - The chosen directory — created if it does not exist
+  yet (`Path.mkdir(parents=True, exist_ok=True)`, the same
+  "validate by attempting it, not by guessing" discipline
+  a run's own output directory already gets from `fim.
+  paths.atomic_directory`).
+
+
+**Returns**:
+
+- ``{"ok"` - True}` on success; `{"ok": False, "message": ...}`
+  if `path` cannot be created or is not a writable directory
+  (a file already existing at that exact name, say).
+
+<a id="fim.gui.app.Api.browse_for_results_location"></a>
+
+#### browse\_for\_results\_location
+
+```python
+@_log_bridge_call
+def browse_for_results_location() -> dict[str, Any]
+```
+
+Browse for a results/logs directory via the OS's own native folder picker.
+
+**Returns**:
+
+- ``{"ok"` - True, "path": "..."}` on a real selection;
+- ``{"ok"` - False, "path": ""}` for a cancelled dialog — the
+  same shape `browse_for_trajectory` already establishes,
+  `webview.FileDialog.FOLDER` in place of `OPEN`.
+
 <a id="fim.gui.app.Api.get_welcome_dismissed"></a>
 
 #### get\_welcome\_dismissed
@@ -5055,26 +5149,46 @@ outcome than the hang it guards against.
 #### main
 
 ```python
-def main() -> int
+def main(argv: Sequence[str] | None = None) -> int
 ```
 
 Launch the GUI and block until the window closes.
 
-Configures logging from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`
-(`doc/fim-logging-design.md` §5) again here, independently of
-`fim.launcher.main`'s own call — reached only via `fim.launcher`'s
-GUI branches in practice, where the environment was already
-validated once, but this keeps the function independently correct
-for any future caller that reaches it another way.
+Configures logging from `--logging-config`/`FIM_LOGGING_CONFIG`, or
+else `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` (`doc/fim-logging-design.md`
+§5; `20260918-claude-sonnet-5-configurable-storage-root-design.md`,
+`selby/restricted`, §9) again here, independently of `fim.launcher.
+main`'s own call — reached only via `fim.launcher`'s GUI branches in
+practice, where the environment was already validated once (and
+`_launch_gui`'s own `gui_main([])` call means `arguments.logging_
+config` is always `None` at that point, so it is `FIM_LOGGING_
+CONFIG` alone, not the flag, that keeps that first, already-correct
+configuration from being silently thrown away and replaced by a
+second, `FIM_LOG_LEVEL`-only one here -- a real gap, caught directly
+against this exact call path, that existed until this env-var check
+was added), but this keeps the function independently correct for
+any future caller that reaches it another way too, including a
+direct `fim-gui` invocation, which never goes through `fim.launcher`
+at all.
+
+**Arguments**:
+
+- `argv` - Arguments excluding the program name (`_gui_argument_
+  parser`'s own tiny flag set), or `None` for `sys.argv`.
+  `fim.launcher._launch_gui` always passes `[]` explicitly —
+  see that call site's own comment for why `None`'s default
+  behavior (reading the *real* `sys.argv`, still holding
+  `--graphical` at that point) would be wrong there.
+
 
 **Returns**:
 
   0 on an ordinary close — `webview.start()` returning means the
   user closed the window, not an error condition to report
-  differently — or 2 if `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` is
-  malformed. A hung shutdown never returns from here at all: the
-  deadman terminates the process with
-  `_SHUTDOWN_DEADMAN_EXIT_CODE` instead (see
+  differently — or 2 if `--logging-config`/`FIM_LOGGING_CONFIG`/
+  `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` is malformed. A hung shutdown
+  never returns from here at all: the deadman terminates the
+  process with `_SHUTDOWN_DEADMAN_EXIT_CODE` instead (see
   `_start_shutdown_deadman`).
 
 <a id="fim.gui.batch_runner"></a>
@@ -6406,6 +6520,15 @@ One loaded (or default) snapshot of the GUI's own preferences.
   DEFAULT_RUN_SETTING_FIELD_NAMES`' own keys), or `None` if
   never saved — `Api.get_default_run_settings` falls back to
   the starter values for that same key set in that case.
+- `results_location_override` - The Settings dialog's own "Storage
+  location" field (`20260918-claude-sonnet-5-configurable-
+  storage-root-design.md`, `selby/restricted`, §7), or `None`
+  if never saved — `fim.gui.app._apply_saved_results_
+  location_override` applies it once, at the *next* launch
+  (Option D1), never mid-session. `None` here means "no
+  Settings override," not "results/ has no location at all" —
+  `fim.paths.results_directory()` still has its own further
+  fallback chain regardless.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
@@ -6558,6 +6681,25 @@ DEFAULT_RUN_SETTING_FIELD_NAMES` by that method before it ever
 reaches here (the same division of labor `with_form_values` and
 `start_run`'s own validation already establish).
 
+<a id="fim.gui.preferences.GuiPreferences.with_results_location_override"></a>
+
+#### with\_results\_location\_override
+
+```python
+def with_results_location_override(path: str | None) -> GuiPreferences
+```
+
+Return a copy with `results_location_override` replaced.
+
+The `Api.set_results_location` bridge method's own update —
+`path` is already validated as a writable directory by that
+method before it ever reaches here. `None` clears a previously
+saved override, not merely "leaves it unset" — `Api.set_
+results_location` never passes `None` itself today (there is no
+"clear this field" affordance in Settings yet), but this
+matches `with_form_values`'s own "replace wholesale" shape
+rather than silently only ever growing.
+
 <a id="fim.gui.preferences.load_preferences"></a>
 
 #### load\_preferences
@@ -6583,6 +6725,42 @@ Load `path`, quarantining and defaulting on any unreadable content.
   line (`fim.gui.app`'s own comment on why `Api.__init__` has no
   inline-error surface to return one through instead).
 
+<a id="fim.gui.preferences.set_preferences_file_override"></a>
+
+#### set\_preferences\_file\_override
+
+```python
+def set_preferences_file_override(path: Path | None) -> None
+```
+
+Override `preferences_file_path()`'s own resolution, or clear a previous one.
+
+`20260918-claude-sonnet-5-configurable-storage-root-design.md`
+(`selby/restricted`) — the same "one thing, decided once" shape
+`fim.paths.set_results_directory_override` already establishes one
+module over, kept here rather than in `fim.paths` itself since
+`preferences_file_path`'s own resolution has never derived from
+`fim.paths.project_root` (this module's own top docstring) and this
+document's own design deliberately keeps it that way — a plain
+`fim.cli` invocation calls this only via a deferred import, exactly
+the way `fim.launcher` already defers importing `fim.gui.app` for
+the identical "never pay for it unless actually used" reason.
+
+**Arguments**:
+
+- `path` - The exact file to use in place of `preferences_file_
+  path()`'s own computation, or `None` to remove the override.
+
+<a id="fim.gui.preferences.preferences_file_override"></a>
+
+#### preferences\_file\_override
+
+```python
+def preferences_file_override() -> Path | None
+```
+
+The current `preferences_file_path()` override, if any.
+
 <a id="fim.gui.preferences.preferences_file_path"></a>
 
 #### preferences\_file\_path
@@ -6595,6 +6773,11 @@ def preferences_file_path(*,
 ```
 
 Return the platform-appropriate `preferences.json` path.
+
+Checks `set_preferences_file_override`'s own current value first,
+then the `FIM_PREFERENCES_FILE` entry of `environ`, before any of
+the platform-specific cases below — `20260918-claude-sonnet-5-
+configurable-storage-root-design.md` (`selby/restricted`).
 
 **Arguments**:
 
@@ -6609,11 +6792,12 @@ Return the platform-appropriate `preferences.json` path.
 
 **Returns**:
 
-  `~/Library/Application Support/fim/preferences.json` on macOS,
-  `%APPDATA%\fim\preferences.json` on Windows (falling back to
-  `home / "AppData" / "Roaming"` if `APPDATA` is unset — the same
-  defensive fallback `os.environ.get` already needs, since a
-  packaged Windows build's own launch environment is not
+  The current override/`FIM_PREFERENCES_FILE`, if either is set;
+  otherwise `~/Library/Application Support/fim/preferences.json`
+  on macOS, `%APPDATA%\fim\preferences.json` on Windows (falling
+  back to `home / "AppData" / "Roaming"` if `APPDATA` is unset —
+  the same defensive fallback `os.environ.get` already needs,
+  since a packaged Windows build's own launch environment is not
   guaranteed to set every variable a normal interactive shell
   would), and `$XDG_CONFIG_HOME/fim/preferences.json` (or
   `~/.config/fim/preferences.json` if that variable is unset) on
@@ -7459,6 +7643,13 @@ and `fim.gui.app.main` (from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`).
 `fim` logger's own handlers rather than accumulating them, so a test
 (or a future caller) that calls it twice never sees doubled output.
 
+`apply_logging_config_file`, below, is each entry point's alternative
+to `configure` — not a layer on top of it — for the one thing `-l`/`-L`
+cannot express at all: a full, reusable, multiple-handler logging
+configuration read from an external YAML file (`--logging-config`/
+`FIM_LOGGING_CONFIG`, `20260918-claude-sonnet-5-configurable-storage-
+root-design.md`, `selby/restricted`, §9).
+
 <a id="fim.logging_setup.resolve_level"></a>
 
 #### resolve\_level
@@ -7554,6 +7745,53 @@ silently wrong log destination" contract `doc/fim-logging-design.md`
 
 - `ValueError` - If an entry has no `=`, or names a key not in
   `VALID_OPTION_KEYS`.
+
+<a id="fim.logging_setup.apply_logging_config_file"></a>
+
+#### apply\_logging\_config\_file
+
+```python
+def apply_logging_config_file(path: Path) -> None
+```
+
+Configure logging entirely from an external YAML file.
+
+`--logging-config <path>`/`FIM_LOGGING_CONFIG` (`20260918-claude-
+sonnet-5-configurable-storage-root-design.md`, `selby/restricted`,
+§9) — the one thing `-l`/`-L`'s own inline `key=value` options
+(`parse_log_options`, `VALID_OPTION_KEYS`) cannot express: multiple
+loggers, multiple handlers, or a custom formatter class, defined
+once in a reusable file instead of assembled from a handful of flat
+options on every invocation.
+
+Deliberately **not** layered with `-l`/`-L`/`configure` — whichever
+of "a logging config file" or "the ordinary `-l`/`-L` flags" a
+caller actually used wins outright, in full, rather than this
+function attempting to merge a config file's own handler/formatter
+definitions with `configure`'s own from-scratch handler rebuild (`
+logging.config.dictConfig`'s own `disable_existing_loggers` default
+already disables anything `configure` set up moments earlier unless
+the file re-declares it, so a partial merge is not merely more
+code, it is a genuinely different, harder-to-predict semantic).
+`fim.cli.main`/`fim.launcher.main`/`fim.gui.app.main` each call this
+*instead of* `configure` when `--logging-config`/`FIM_LOGGING_
+CONFIG` is given, never both.
+
+**Arguments**:
+
+- `path` - A YAML file whose top-level mapping is `logging.config.
+  dictConfig`'s own schema (the standard library's, not a
+  `fim`-specific one — see the Python documentation for
+  `logging.config.dictConfig` for the full schema).
+
+
+**Raises**:
+
+- `OSError` - `path` cannot be read.
+- `yaml.YAMLError` - `path`'s own content is not valid YAML.
+- `ValueError` - `path`'s own top-level content is not a mapping, or
+  `dictConfig` itself rejects the schema (e.g. an unknown
+  handler class, a malformed level name).
 
 <a id="fim.logging_setup.configure"></a>
 
@@ -10703,6 +10941,107 @@ root this way, where anchoring on each caller's own `__file__` would need a
 different `parents[N]` depth per caller and silently break the moment a new
 caller sat at a different depth.
 
+`project_root`/`results_directory`/`log_directory` are each
+independently, explicitly overridable — `set_root_override`/`set_
+results_directory_override`/`set_log_directory_override`, and the
+matching `FIM_HOME`/`FIM_RESULTS_DIRECTORY`/`FIM_LOG_DIRECTORY`
+environment variables — for a user (or a test) who wants results, logs,
+or both somewhere other than the default, without a per-invocation
+flag on every single command (`fim run -o <path>`/`-L file=<path>`
+already exist for that narrower, one-off case). See each function's
+own docstring for the exact precedence, and `20260918-claude-sonnet-5-
+configurable-storage-root-design.md` (`selby/restricted`) for the full
+design.
+
+<a id="fim.paths.set_root_override"></a>
+
+#### set\_root\_override
+
+```python
+def set_root_override(root: Path | None) -> None
+```
+
+Override `project_root()`'s own resolution, or clear a previous one.
+
+The *bulk* override — "put results and logs both under this one
+place" — checked by `project_root()` itself, so it affects
+`results_directory()`/`log_directory()` (and everything derived
+from either) for free, with no code of its own. A more specific
+override (`set_results_directory_override`/`set_log_directory_
+override`, or that location's own environment variable) still wins
+over this one — see each function's own docstring.
+
+**Arguments**:
+
+- `root` - The path to use in place of `project_root()`'s own
+  three-case resolution, or `None` to remove the override.
+
+<a id="fim.paths.root_override"></a>
+
+#### root\_override
+
+```python
+def root_override() -> Path | None
+```
+
+The current `project_root()` override, if any set via `set_root_override`.
+
+<a id="fim.paths.set_results_directory_override"></a>
+
+#### set\_results\_directory\_override
+
+```python
+def set_results_directory_override(path: Path | None) -> None
+```
+
+Override `results_directory()`'s own resolution, or clear a previous one.
+
+**Arguments**:
+
+- `path` - The exact directory to use in place of `results_
+  directory()`'s own computation, or `None` to remove the
+  override. Unlike `set_root_override`, this is the results
+  directory itself, not a project root to append `"results"`
+  to — a user naming this specific location means exactly
+  that location.
+
+<a id="fim.paths.results_directory_override"></a>
+
+#### results\_directory\_override
+
+```python
+def results_directory_override() -> Path | None
+```
+
+The current `results_directory()` override, if any.
+
+<a id="fim.paths.set_log_directory_override"></a>
+
+#### set\_log\_directory\_override
+
+```python
+def set_log_directory_override(path: Path | None) -> None
+```
+
+Override `log_directory()`'s own resolution, or clear a previous one.
+
+**Arguments**:
+
+- `path` - The exact directory to use in place of `log_directory()`'s
+  own computation, or `None` to remove the override — the
+  same "the location itself, not a root to append `logs` to"
+  shape `set_results_directory_override` already documents.
+
+<a id="fim.paths.log_directory_override"></a>
+
+#### log\_directory\_override
+
+```python
+def log_directory_override() -> Path | None
+```
+
+The current `log_directory()` override, if any.
+
 <a id="fim.paths.atomic_directory"></a>
 
 #### atomic\_directory
@@ -10857,6 +11196,13 @@ checkout and not packaged either — falls back to the current
 working directory, exactly as most ordinary command-line tools
 do.
 
+Checks `set_root_override`'s own current value first, then the
+`FIM_HOME` environment variable, before any of the three cases
+below — `20260918-claude-sonnet-5-configurable-storage-root-
+design.md` (`selby/restricted`). Both are the *bulk* override,
+lower precedence than `results_directory()`/`log_directory()`'s own
+more specific overrides — see each one's own docstring.
+
 **Returns**:
 
   The checkout root containing `pyproject.toml`, if one is found
@@ -10896,6 +11242,14 @@ The one folder every unnamed run's own output lands under (see
 `default_output_directory`, just above, for how each individual
 run then gets its own timestamped subfolder inside this one).
 
+`root`, when given, is the single highest-precedence override —
+an explicit function argument always wins. Absent that, checks
+`set_results_directory_override`'s own current value, then the
+`FIM_RESULTS_DIRECTORY` environment variable, before falling back
+to `project_root() / "results"` — `20260918-claude-sonnet-5-
+configurable-storage-root-design.md` (`selby/restricted`) §8 spells
+out the full precedence across all three location-specific chains.
+
 **Arguments**:
 
 - `root` - Optional project root override (default: `project_root()`).
@@ -10903,7 +11257,10 @@ run then gets its own timestamped subfolder inside this one).
 
 **Returns**:
 
-  `root / "results"`.
+  `root / "results"`, or the current override/`FIM_RESULTS_
+  DIRECTORY` directly (not joined with `"results"` — see `set_
+  results_directory_override`'s own docstring for why) when
+  `root` is not given and one is set.
 
 <a id="fim.paths.log_directory"></a>
 
@@ -10920,7 +11277,9 @@ Sits beside `results_directory()` under the same resolved
 program ever writes, including the frozen-app-with-no-writable-cwd
 fallback `project_root`'s own docstring documents, rather than a
 second, platform-specific rule invented for logs alone
-(`doc/fim-logging-design.md` §6).
+(`doc/fim-logging-design.md` §6). `root`, `set_log_directory_
+override`, and `FIM_LOG_DIRECTORY` compose in the identical order
+`results_directory`'s own docstring describes, one location over.
 
 **Arguments**:
 
@@ -10929,7 +11288,8 @@ second, platform-specific rule invented for logs alone
 
 **Returns**:
 
-  `root / "logs"`.
+  `root / "logs"`, or the current override/`FIM_LOG_DIRECTORY`
+  directly when `root` is not given and one is set.
 
 <a id="fim.paths.default_log_file"></a>
 

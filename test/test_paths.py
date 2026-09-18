@@ -80,6 +80,48 @@ def test_project_root_finds_the_real_checkout() -> None:
     assert (paths.project_root() / "pyproject.toml").is_file()
 
 
+def test_project_root_honors_the_root_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`set_root_override` wins over every other case `project_root` checks."""
+    monkeypatch.setattr(paths, "_root_override", tmp_path)
+
+    assert paths.project_root() == tmp_path
+
+
+def test_project_root_honors_fim_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`FIM_HOME` wins over the real-checkout/frozen/cwd fallback chain."""
+    monkeypatch.setenv("FIM_HOME", str(tmp_path))
+
+    assert paths.project_root() == tmp_path
+
+
+def test_project_root_override_wins_over_fim_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The programmatic override outranks the environment variable."""
+    monkeypatch.setenv("FIM_HOME", str(tmp_path / "from-env"))
+    monkeypatch.setattr(paths, "_root_override", tmp_path / "from-override")
+
+    assert paths.project_root() == tmp_path / "from-override"
+
+
+def test_set_root_override_round_trips_through_the_getter(tmp_path: Path) -> None:
+    """`set_root_override`/`root_override` is a plain setter/getter pair."""
+    assert paths.root_override() is None
+    try:
+        paths.set_root_override(tmp_path)
+        assert paths.root_override() == tmp_path
+    finally:
+        paths.set_root_override(None)
+    assert paths.root_override() is None
+
+
 def test_results_directory_defaults_to_project_root_slash_results() -> None:
     """`results_directory` appends `results` to the resolved project root."""
     assert paths.results_directory() == paths.project_root() / "results"
@@ -88,6 +130,60 @@ def test_results_directory_defaults_to_project_root_slash_results() -> None:
 def test_results_directory_accepts_a_root_override(tmp_path: Path) -> None:
     """An explicit root bypasses `project_root` entirely."""
     assert paths.results_directory(tmp_path) == tmp_path / "results"
+
+
+def test_results_directory_honors_its_own_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`set_results_directory_override` returns the path directly, unjoined."""
+    monkeypatch.setattr(paths, "_results_directory_override", tmp_path)
+
+    assert paths.results_directory() == tmp_path
+
+
+def test_results_directory_honors_its_own_env_var(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`FIM_RESULTS_DIRECTORY` returns the path directly, unjoined."""
+    monkeypatch.setenv("FIM_RESULTS_DIRECTORY", str(tmp_path))
+
+    assert paths.results_directory() == tmp_path
+
+
+def test_results_directory_override_wins_over_its_own_env_var(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The programmatic override outranks the location's own environment variable."""
+    monkeypatch.setenv("FIM_RESULTS_DIRECTORY", str(tmp_path / "from-env"))
+    monkeypatch.setattr(
+        paths, "_results_directory_override", tmp_path / "from-override"
+    )
+
+    assert paths.results_directory() == tmp_path / "from-override"
+
+
+def test_results_directory_explicit_root_wins_over_its_own_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit `root` argument still outranks the results-specific override."""
+    monkeypatch.setattr(paths, "_results_directory_override", tmp_path / "override")
+
+    assert paths.results_directory(tmp_path / "root") == tmp_path / "root" / "results"
+
+
+def test_results_directory_own_override_wins_over_the_bulk_root_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A location-specific override outranks the bulk `FIM_HOME`-style root override."""
+    monkeypatch.setattr(paths, "_root_override", tmp_path / "bulk-root")
+    monkeypatch.setattr(paths, "_results_directory_override", tmp_path / "specific")
+
+    assert paths.results_directory() == tmp_path / "specific"
 
 
 def test_fim_index_directory_defaults_to_results_directory_slash_dot_fim() -> None:
@@ -155,6 +251,47 @@ def test_log_directory_defaults_to_project_root_slash_logs() -> None:
 def test_log_directory_accepts_a_root_override(tmp_path: Path) -> None:
     """An explicit root bypasses `project_root` entirely."""
     assert paths.log_directory(tmp_path) == tmp_path / "logs"
+
+
+def test_log_directory_honors_its_own_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`set_log_directory_override` returns the path directly, unjoined."""
+    monkeypatch.setattr(paths, "_log_directory_override", tmp_path)
+
+    assert paths.log_directory() == tmp_path
+
+
+def test_log_directory_honors_its_own_env_var(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`FIM_LOG_DIRECTORY` returns the path directly, unjoined."""
+    monkeypatch.setenv("FIM_LOG_DIRECTORY", str(tmp_path))
+
+    assert paths.log_directory() == tmp_path
+
+
+def test_log_directory_override_wins_over_its_own_env_var(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The programmatic override outranks the location's own environment variable."""
+    monkeypatch.setenv("FIM_LOG_DIRECTORY", str(tmp_path / "from-env"))
+    monkeypatch.setattr(paths, "_log_directory_override", tmp_path / "from-override")
+
+    assert paths.log_directory() == tmp_path / "from-override"
+
+
+def test_log_directory_explicit_root_wins_over_its_own_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit `root` argument still outranks the log-specific override."""
+    monkeypatch.setattr(paths, "_log_directory_override", tmp_path / "override")
+
+    assert paths.log_directory(tmp_path / "root") == tmp_path / "root" / "logs"
 
 
 def test_default_log_file_is_fim_log_under_the_log_directory(tmp_path: Path) -> None:

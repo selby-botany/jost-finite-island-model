@@ -554,6 +554,39 @@ reaching either would itself fail the test, since `configure()`
 (`doc/fim-logging-design.md` §5) is the first thing `main` does,
 before either dispatch branch runs.
 
+<a id="test.test_launcher.test_launcher_honors_fim_logging_config_over_fim_log_level"></a>
+
+#### test\_launcher\_honors\_fim\_logging\_config\_over\_fim\_log\_level
+
+```python
+def test_launcher_honors_fim_logging_config_over_fim_log_level(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
+```
+
+`FIM_LOGGING_CONFIG` is used instead of `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`.
+
+`fim.gui.app.main` -- unlike `test_launcher_rejects_a_malformed_fim_
+log_level`'s own equivalent test, this one *must* stub it: the real
+`gui_main` reconfigures logging all over again from `FIM_LOG_LEVEL`
+directly when called with no `--logging-config` argv of its own
+(`_launch_gui`'s own `gui_main([])` call), which would both open a
+real window and (since `FIM_LOG_LEVEL="verbose"` here is otherwise
+invalid) mask this dispatcher's own first, correct configuration
+with a second, failing one -- caught the hard way, confirmed live,
+before this stub was added.
+
+<a id="test.test_launcher.test_launcher_reports_a_missing_fim_logging_config_file"></a>
+
+#### test\_launcher\_reports\_a\_missing\_fim\_logging\_config\_file
+
+```python
+def test_launcher_reports_a_missing_fim_logging_config_file(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A `FIM_LOGGING_CONFIG` naming a missing file fails before any dispatch.
+
 <a id="test.test_launcher.test_launcher_dispatches_nonempty_sys_argv_to_cli_main_unchanged"></a>
 
 #### test\_launcher\_dispatches\_nonempty\_sys\_argv\_to\_cli\_main\_unchanged
@@ -894,6 +927,54 @@ A real `warnings.warn` call reaches the configured file handler.
 Confirms the `logging.captureWarnings` bridge is actually active,
 end to end, rather than only asserting the function was called.
 
+<a id="test.test_logging_setup.test_apply_logging_config_file_missing_file_raises_oserror"></a>
+
+#### test\_apply\_logging\_config\_file\_missing\_file\_raises\_oserror
+
+```python
+def test_apply_logging_config_file_missing_file_raises_oserror(
+        tmp_path: Path) -> None
+```
+
+A path that does not exist is a plain `OSError`, not a silent no-op.
+
+<a id="test.test_logging_setup.test_apply_logging_config_file_invalid_yaml_raises_yamlerror"></a>
+
+#### test\_apply\_logging\_config\_file\_invalid\_yaml\_raises\_yamlerror
+
+```python
+def test_apply_logging_config_file_invalid_yaml_raises_yamlerror(
+        tmp_path: Path) -> None
+```
+
+Unparsable YAML surfaces as `yaml.YAMLError`, not a `dictConfig` traceback.
+
+<a id="test.test_logging_setup.test_apply_logging_config_file_rejects_a_non_mapping_root"></a>
+
+#### test\_apply\_logging\_config\_file\_rejects\_a\_non\_mapping\_root
+
+```python
+def test_apply_logging_config_file_rejects_a_non_mapping_root(
+        tmp_path: Path) -> None
+```
+
+A YAML document whose root is not a mapping is rejected before `dictConfig`.
+
+<a id="test.test_logging_setup.test_apply_logging_config_file_applies_the_dictconfig_schema"></a>
+
+#### test\_apply\_logging\_config\_file\_applies\_the\_dictconfig\_schema
+
+```python
+def test_apply_logging_config_file_applies_the_dictconfig_schema(
+        tmp_path: Path) -> None
+```
+
+A real, valid file reaches `logging.config.dictConfig`, end to end.
+
+Confirms the schema is handed to `dictConfig` unmodified -- a custom
+formatter and an explicit file handler, neither of which `-l`/`-L`
+can express at all (this function's own docstring).
+
 <a id="test.test_metadata"></a>
 
 # test.test\_metadata
@@ -1107,6 +1188,50 @@ def test_project_root_finds_the_real_checkout() -> None
 
 A real checkout resolves to the directory containing pyproject.toml.
 
+<a id="test.test_paths.test_project_root_honors_the_root_override"></a>
+
+#### test\_project\_root\_honors\_the\_root\_override
+
+```python
+def test_project_root_honors_the_root_override(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`set_root_override` wins over every other case `project_root` checks.
+
+<a id="test.test_paths.test_project_root_honors_fim_home"></a>
+
+#### test\_project\_root\_honors\_fim\_home
+
+```python
+def test_project_root_honors_fim_home(tmp_path: Path,
+                                      monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`FIM_HOME` wins over the real-checkout/frozen/cwd fallback chain.
+
+<a id="test.test_paths.test_project_root_override_wins_over_fim_home"></a>
+
+#### test\_project\_root\_override\_wins\_over\_fim\_home
+
+```python
+def test_project_root_override_wins_over_fim_home(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The programmatic override outranks the environment variable.
+
+<a id="test.test_paths.test_set_root_override_round_trips_through_the_getter"></a>
+
+#### test\_set\_root\_override\_round\_trips\_through\_the\_getter
+
+```python
+def test_set_root_override_round_trips_through_the_getter(
+        tmp_path: Path) -> None
+```
+
+`set_root_override`/`root_override` is a plain setter/getter pair.
+
 <a id="test.test_paths.test_results_directory_defaults_to_project_root_slash_results"></a>
 
 #### test\_results\_directory\_defaults\_to\_project\_root\_slash\_results
@@ -1126,6 +1251,61 @@ def test_results_directory_accepts_a_root_override(tmp_path: Path) -> None
 ```
 
 An explicit root bypasses `project_root` entirely.
+
+<a id="test.test_paths.test_results_directory_honors_its_own_override"></a>
+
+#### test\_results\_directory\_honors\_its\_own\_override
+
+```python
+def test_results_directory_honors_its_own_override(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`set_results_directory_override` returns the path directly, unjoined.
+
+<a id="test.test_paths.test_results_directory_honors_its_own_env_var"></a>
+
+#### test\_results\_directory\_honors\_its\_own\_env\_var
+
+```python
+def test_results_directory_honors_its_own_env_var(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`FIM_RESULTS_DIRECTORY` returns the path directly, unjoined.
+
+<a id="test.test_paths.test_results_directory_override_wins_over_its_own_env_var"></a>
+
+#### test\_results\_directory\_override\_wins\_over\_its\_own\_env\_var
+
+```python
+def test_results_directory_override_wins_over_its_own_env_var(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The programmatic override outranks the location's own environment variable.
+
+<a id="test.test_paths.test_results_directory_explicit_root_wins_over_its_own_override"></a>
+
+#### test\_results\_directory\_explicit\_root\_wins\_over\_its\_own\_override
+
+```python
+def test_results_directory_explicit_root_wins_over_its_own_override(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An explicit `root` argument still outranks the results-specific override.
+
+<a id="test.test_paths.test_results_directory_own_override_wins_over_the_bulk_root_override"></a>
+
+#### test\_results\_directory\_own\_override\_wins\_over\_the\_bulk\_root\_override
+
+```python
+def test_results_directory_own_override_wins_over_the_bulk_root_override(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A location-specific override outranks the bulk `FIM_HOME`-style root override.
 
 <a id="test.test_paths.test_fim_index_directory_defaults_to_results_directory_slash_dot_fim"></a>
 
@@ -1222,6 +1402,50 @@ def test_log_directory_accepts_a_root_override(tmp_path: Path) -> None
 ```
 
 An explicit root bypasses `project_root` entirely.
+
+<a id="test.test_paths.test_log_directory_honors_its_own_override"></a>
+
+#### test\_log\_directory\_honors\_its\_own\_override
+
+```python
+def test_log_directory_honors_its_own_override(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`set_log_directory_override` returns the path directly, unjoined.
+
+<a id="test.test_paths.test_log_directory_honors_its_own_env_var"></a>
+
+#### test\_log\_directory\_honors\_its\_own\_env\_var
+
+```python
+def test_log_directory_honors_its_own_env_var(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`FIM_LOG_DIRECTORY` returns the path directly, unjoined.
+
+<a id="test.test_paths.test_log_directory_override_wins_over_its_own_env_var"></a>
+
+#### test\_log\_directory\_override\_wins\_over\_its\_own\_env\_var
+
+```python
+def test_log_directory_override_wins_over_its_own_env_var(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The programmatic override outranks the location's own environment variable.
+
+<a id="test.test_paths.test_log_directory_explicit_root_wins_over_its_own_override"></a>
+
+#### test\_log\_directory\_explicit\_root\_wins\_over\_its\_own\_override
+
+```python
+def test_log_directory_explicit_root_wins_over_its_own_override(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An explicit `root` argument still outranks the log-specific override.
 
 <a id="test.test_paths.test_default_log_file_is_fim_log_under_the_log_directory"></a>
 
@@ -2026,6 +2250,125 @@ def test_an_invalid_log_options_entry_is_a_plain_parser_error(
 ```
 
 A bad `-L` entry exits 2 with a plain message, never a traceback.
+
+<a id="cli.test_cli.test_root_results_directory_log_directory_and_preferences_file_are_accepted_before_every_subcommand"></a>
+
+#### test\_root\_results\_directory\_log\_directory\_and\_preferences\_file\_are\_accepted\_before\_every\_subcommand
+
+```python
+def test_root_results_directory_log_directory_and_preferences_file_are_accepted_before_every_subcommand(
+        tmp_path: Path) -> None
+```
+
+`--root`/`-R`/`--log-directory`/`--preferences-file` parse before any subcommand.
+
+Not a runtime assertion about their own effect (the functional
+override behavior below covers that) -- just that `argparse` accepts
+the flags at all, the same shared declaration point `-l`/`-L`'s own
+equivalent test, above, already covers.
+
+<a id="cli.test_cli.test_root_flag_overrides_where_a_starter_config_is_written"></a>
+
+#### test\_root\_flag\_overrides\_where\_a\_starter\_config\_is\_written
+
+```python
+def test_root_flag_overrides_where_a_starter_config_is_written(
+        tmp_path: Path) -> None
+```
+
+`--root` changes `fim init`'s own default output location.
+
+<a id="cli.test_cli.test_results_directory_flag_overrides_where_a_starter_config_is_written"></a>
+
+#### test\_results\_directory\_flag\_overrides\_where\_a\_starter\_config\_is\_written
+
+```python
+def test_results_directory_flag_overrides_where_a_starter_config_is_written(
+        tmp_path: Path) -> None
+```
+
+`--results-directory` returns the named directory directly, unjoined.
+
+<a id="cli.test_cli.test_fim_results_directory_env_var_overrides_where_a_starter_config_is_written"></a>
+
+#### test\_fim\_results\_directory\_env\_var\_overrides\_where\_a\_starter\_config\_is\_written
+
+```python
+def test_fim_results_directory_env_var_overrides_where_a_starter_config_is_written(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`FIM_RESULTS_DIRECTORY` has the identical effect as `--results-directory`.
+
+<a id="cli.test_cli.test_log_directory_flag_overrides_the_default_log_file_location"></a>
+
+#### test\_log\_directory\_flag\_overrides\_the\_default\_log\_file\_location
+
+```python
+def test_log_directory_flag_overrides_the_default_log_file_location(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`--log-directory` moves `fim.log` without touching `--results-directory`.
+
+<a id="cli.test_cli.test_logging_config_flag_is_used_instead_of_log_and_log_options"></a>
+
+#### test\_logging\_config\_flag\_is\_used\_instead\_of\_log\_and\_log\_options
+
+```python
+def test_logging_config_flag_is_used_instead_of_log_and_log_options(
+        tmp_path: Path) -> None
+```
+
+`--logging-config` fully replaces `-l`/`-L`'s own handler assembly.
+
+<a id="cli.test_cli.test_logging_config_flag_naming_a_missing_file_is_a_plain_parser_error"></a>
+
+#### test\_logging\_config\_flag\_naming\_a\_missing\_file\_is\_a\_plain\_parser\_error
+
+```python
+def test_logging_config_flag_naming_a_missing_file_is_a_plain_parser_error(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
+```
+
+A `--logging-config` file that does not exist exits 2 with a plain message.
+
+<a id="cli.test_cli.test_preferences_file_flag_applies_the_override"></a>
+
+#### test\_preferences\_file\_flag\_applies\_the\_override
+
+```python
+def test_preferences_file_flag_applies_the_override(tmp_path: Path) -> None
+```
+
+`--preferences-file` reaches `fim.gui.preferences.set_preferences_file_override`.
+
+Meaningless to `fim init` itself (only a later `fim --graphical`/
+`fim-gui` launch ever reads `preferences_file_path()`) -- accepted
+and applied regardless, confirmed here directly against the getter
+rather than only that `argparse` parses the flag (the parser-level
+test, above, already covers that).
+
+<a id="cli.test_cli.test_fim_cli_module_does_not_import_fim_gui_at_module_scope"></a>
+
+#### test\_fim\_cli\_module\_does\_not\_import\_fim\_gui\_at\_module\_scope
+
+```python
+def test_fim_cli_module_does_not_import_fim_gui_at_module_scope() -> None
+```
+
+`fim.cli`'s own top-level imports never include `fim.gui`.
+
+A plain `fim run`/`fim init`/... invocation must never pay the cost
+of importing the GUI stack just because `--preferences-file` exists
+as a flag -- `fim.launcher.main`'s own deferred imports establish
+the same discipline one layer up. A static check on the source text
+rather than a runtime `sys.modules` assertion: this test suite runs
+with `-n auto`, sharing a process (and its `sys.modules` cache)
+across unrelated test files within a worker, so asserting "not yet
+imported" at runtime would be a function of test execution order,
+not of this module's own code -- exactly the kind of order-dependent
+flakiness this project's own testing standard forbids.
 
 <a id="cli.test_cli.test_load_config_requires_a_mapping_root"></a>
 
@@ -8442,11 +8785,71 @@ def test_main_returns_2_on_a_malformed_fim_log_level(
 
 A bad `FIM_LOG_LEVEL` fails before any window is ever built.
 
-`main`'s own `configure()` call is deliberately the very first thing
-it does (`doc/fim-logging-design.md` §5) — this test relies on that
-ordering to call the real `main()` safely, with no window/`webview.
-start()` reached at all: a malformed value raises out of
-`configure()` before `create_window()` is ever called.
+`main`'s own logging-configuration call is deliberately made before
+`create_window()` (`doc/fim-logging-design.md` §5) — this test relies
+on that ordering to call the real `main()` safely, with no window/
+`webview.start()` reached at all: a malformed value raises before
+`create_window()` is ever called. `argv=[]`, not the default `None`
+(which would make `_gui_argument_parser().parse_args` -- `main`'s own
+first line -- parse the *real* `sys.argv`, i.e. this test suite's own
+invocation arguments, not `fim-gui`'s own flags at all): confirmed
+live to fail under a bare `pytest test/gui/test_app_api.py -n 0`
+invocation, whose own leftover argv this parser does not recognize,
+while passing coincidentally under `-n auto` (each xdist worker gets
+its own, argv-free `sys.argv[0]`) -- exactly the kind of test-runner-
+dependent, not code-dependent, non-determinism this project's own
+testing standard forbids.
+
+<a id="gui.test_app_api.test_main_logging_config_flag_wins_over_fim_logging_config_env_var"></a>
+
+#### test\_main\_logging\_config\_flag\_wins\_over\_fim\_logging\_config\_env\_var
+
+```python
+def test_main_logging_config_flag_wins_over_fim_logging_config_env_var(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
+```
+
+`--logging-config` takes precedence over `FIM_LOGGING_CONFIG`, same call.
+
+Confirmed via a deliberately *invalid* env-var file: if the flag did
+not win, `main` would fail trying to read the missing env-var path
+instead of successfully applying the flag's own valid one.
+
+<a id="gui.test_app_api.test_main_honors_fim_logging_config_env_var_with_no_flag"></a>
+
+#### test\_main\_honors\_fim\_logging\_config\_env\_var\_with\_no\_flag
+
+```python
+def test_main_honors_fim_logging_config_env_var_with_no_flag(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
+```
+
+`FIM_LOGGING_CONFIG` alone (no `--logging-config`) is honored.
+
+Regression test: `_launch_gui`'s own `gui_main([])` call means
+`arguments.logging_config` is always `None` for every `fim.launcher`-
+dispatched GUI launch -- before this env-var check existed here,
+that call path silently reconfigured logging from `FIM_LOG_LEVEL`
+alone, discarding `fim.launcher.main`'s own earlier, correct
+`FIM_LOGGING_CONFIG`-based configuration -- caught live while adding
+coverage for this exact call path.
+
+<a id="gui.test_app_api.test_main_applies_root_results_directory_log_directory_and_preferences_file"></a>
+
+#### test\_main\_applies\_root\_results\_directory\_log\_directory\_and\_preferences\_file
+
+```python
+def test_main_applies_root_results_directory_log_directory_and_preferences_file(
+        tmp_path: Path) -> None
+```
+
+`--root`/`-R`/`--log-directory`/`--preferences-file` reach the real overrides.
+
+`main` itself never publishes a window in this test (a malformed
+`--logging-config` still raises before `create_window()`, the same
+ordering `test_main_returns_2_on_a_malformed_fim_log_level` relies
+on) -- this exercises only the override-application lines that run
+just before that.
 
 <a id="gui.test_batch_results_screen"></a>
 
@@ -12851,6 +13254,39 @@ def test_malformed_default_run_settings_section_is_quarantined(
 
 A non-string-map 'default_run_settings' section is rejected, not coerced.
 
+<a id="gui.test_preferences.test_with_results_location_override_leaves_other_fields_untouched"></a>
+
+#### test\_with\_results\_location\_override\_leaves\_other\_fields\_untouched
+
+```python
+def test_with_results_location_override_leaves_other_fields_untouched(
+) -> None
+```
+
+`with_results_location_override` updates only `results_location_override`.
+
+<a id="gui.test_preferences.test_results_location_override_round_trips_through_save_and_load"></a>
+
+#### test\_results\_location\_override\_round\_trips\_through\_save\_and\_load
+
+```python
+def test_results_location_override_round_trips_through_save_and_load(
+        tmp_path: Path) -> None
+```
+
+A saved-and-reloaded `GuiPreferences` preserves `results_location_override`.
+
+<a id="gui.test_preferences.test_malformed_results_location_override_is_quarantined"></a>
+
+#### test\_malformed\_results\_location\_override\_is\_quarantined
+
+```python
+def test_malformed_results_location_override_is_quarantined(
+        tmp_path: Path) -> None
+```
+
+A non-string 'gui.results_location_override' is rejected, not coerced.
+
 <a id="gui.test_preferences.test_with_dark_mode_override_leaves_other_fields_untouched"></a>
 
 #### test\_with\_dark\_mode\_override\_leaves\_other\_fields\_untouched
@@ -13081,6 +13517,40 @@ def test_preferences_file_path_linux_without_xdg_falls_back(
 ```
 
 Linux falls back to `~/.config` when `XDG_CONFIG_HOME` is unset.
+
+<a id="gui.test_preferences.test_preferences_file_path_honors_fim_preferences_file_env_var"></a>
+
+#### test\_preferences\_file\_path\_honors\_fim\_preferences\_file\_env\_var
+
+```python
+def test_preferences_file_path_honors_fim_preferences_file_env_var(
+        tmp_path: Path) -> None
+```
+
+`FIM_PREFERENCES_FILE` wins over the platform-specific resolution.
+
+<a id="gui.test_preferences.test_preferences_file_path_honors_the_programmatic_override"></a>
+
+#### test\_preferences\_file\_path\_honors\_the\_programmatic\_override
+
+```python
+def test_preferences_file_path_honors_the_programmatic_override(
+        tmp_path: Path) -> None
+```
+
+`set_preferences_file_override` wins over every other case checked.
+
+<a id="gui.test_preferences.test_set_preferences_file_override_round_trips_through_the_getter"></a>
+
+#### test\_set\_preferences\_file\_override\_round\_trips\_through\_the\_getter
+
+```python
+def test_set_preferences_file_override_round_trips_through_the_getter(
+        tmp_path: Path) -> None
+```
+
+`set_preferences_file_override`/`preferences_file_override` is a plain
+setter/getter pair.
 
 <a id="gui.test_preferences.test_quarantine_injected_clock_produces_exact_name"></a>
 
