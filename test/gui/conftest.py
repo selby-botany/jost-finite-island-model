@@ -159,6 +159,7 @@ from typing import Any
 import pytest
 import webview
 
+from fim import paths as paths_module
 from fim.gui import app as app_module
 from fim.gui.app import await_bridge_threads, create_window
 from fim.gui.preferences import GuiPreferences, save_preferences
@@ -422,6 +423,60 @@ def _isolate_gui_preferences(
     # exists.
     save_preferences(preferences_path, GuiPreferences(welcome_dismissed=True))
     return preferences_path
+
+
+@pytest.fixture(autouse=True)
+def _isolate_gui_results(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """Never let a real run/Study/Experiment write into this checkout's own `results/`.
+
+    `fim.paths.results_directory` — and everything derived from it:
+    `studies_directory`/`experiments_directory`/`fim_index_directory`
+    (`fim.persistence.groups`), `fim.gui.recent_runs.list_recent_runs`'s
+    own no-argument default, and `Api.start_run`'s own `paths.default_
+    output_directory()` — resolves through `fim.paths.project_root`,
+    anchored on the real, installed `fim` package's own checkout root
+    when nothing overrides it. Left unguarded, any test in this package
+    that starts a real run (`Api.start_run`, or `fim.cli.main(["run",
+    ...])` with no `-o`/`--output` of its own) writes a real, genuinely
+    timestamped `run-YYYYMMDD-.../` directory straight into this
+    repository's own real `results/` — confirmed directly: a full `test/
+    gui/` suite run left dozens of stray run directories behind, every
+    time, silently, since `results/` is gitignored and nothing else ever
+    notices. `20260917-claude-sonnet-5-run-study-experiment-workflow-
+    ergonomics.md` (`selby/restricted`) records the discovery.
+
+    Patches `project_root` itself, not `results_directory` directly —
+    the same choice `test/conftest.py`'s own `log_isolation` already
+    made for `default_log_file`'s identical hazard, one derived function
+    over, for the identical reason: patching the *root* rather than a
+    function derived from it means a test that specifically exercises
+    *derivation from `project_root`* keeps working completely unchanged.
+    `test_recent_runs.py`'s own `test_recent_runs_defaults_to_paths_
+    results_directory` patches `project_root` itself, later, inside its
+    own test body, specifically to prove `list_recent_runs()`'s own
+    no-argument default resolves all the way through the real chain —
+    that call simply takes precedence over this fixture's own patch for
+    its own duration, the same "a test's own explicit override always
+    wins" precedent every `results_directory`-patching test elsewhere in
+    this package (`test_open_run_screen.py`, `test_app_api.py`,
+    `test_compare_screen.py`) already relies on for exactly this reason.
+    Patching `results_directory` directly here instead would have
+    silently disabled that one test's own real derivation-through-
+    `project_root` logic, the identical failure `log_isolation`'s own
+    docstring already records for a first, rejected attempt at that
+    fixture.
+
+    `fim.gui.app._webui_directory` (the actual GUI asset-serving path —
+    `index.html`/`app.css`/every `webui/screens/*.js` a real window
+    renders) resolves from `__file__` directly, never through `project_
+    root` at all, so this never touches what a real window actually
+    shows.
+    """
+    root = tmp_path_factory.mktemp("gui-test-results-root")
+    monkeypatch.setattr(paths_module, "project_root", lambda: root)
+    return root
 
 
 @pytest.fixture
