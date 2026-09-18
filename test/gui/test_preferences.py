@@ -195,6 +195,43 @@ def test_malformed_default_run_settings_section_is_quarantined(
     assert warning is not None
 
 
+def test_with_results_location_override_leaves_other_fields_untouched() -> None:
+    """`with_results_location_override` updates only `results_location_override`."""
+    original = GuiPreferences(significant_digits=7)
+    updated = original.with_results_location_override("/mnt/data/fim")
+    assert updated.significant_digits == 7
+    assert updated.results_location_override == "/mnt/data/fim"
+
+
+def test_results_location_override_round_trips_through_save_and_load(
+    tmp_path: Path,
+) -> None:
+    """A saved-and-reloaded `GuiPreferences` preserves `results_location_override`."""
+    path = tmp_path / "preferences.json"
+    original = GuiPreferences(results_location_override="/mnt/data/fim")
+    save_preferences(path, original)
+    loaded, warning = load_preferences(path)
+    assert warning is None
+    assert loaded.results_location_override == "/mnt/data/fim"
+
+
+def test_malformed_results_location_override_is_quarantined(tmp_path: Path) -> None:
+    """A non-string 'gui.results_location_override' is rejected, not coerced."""
+    path = tmp_path / "preferences.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "gui": {"results_location_override": 5},
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded, warning = load_preferences(path)
+    assert loaded == GuiPreferences()
+    assert warning is not None
+
+
 def test_with_dark_mode_override_leaves_other_fields_untouched() -> None:
     """`with_dark_mode_override` updates only `dark_mode_override`."""
     original = GuiPreferences(significant_digits=7)
@@ -431,6 +468,51 @@ def test_preferences_file_path_linux_without_xdg_falls_back(tmp_path: Path) -> N
     """Linux falls back to `~/.config` when `XDG_CONFIG_HOME` is unset."""
     path = preferences_file_path(platform="linux", environ={}, home=tmp_path)
     assert path == tmp_path / ".config" / "fim" / "preferences.json"
+
+
+def test_preferences_file_path_honors_fim_preferences_file_env_var(
+    tmp_path: Path,
+) -> None:
+    """`FIM_PREFERENCES_FILE` wins over the platform-specific resolution."""
+    override = tmp_path / "custom-preferences.json"
+    path = preferences_file_path(
+        platform="darwin",
+        environ={"FIM_PREFERENCES_FILE": str(override)},
+        home=tmp_path,
+    )
+    assert path == override
+
+
+def test_preferences_file_path_honors_the_programmatic_override(
+    tmp_path: Path,
+) -> None:
+    """`set_preferences_file_override` wins over every other case checked."""
+    override = tmp_path / "override-preferences.json"
+    preferences_module.set_preferences_file_override(override)
+    try:
+        path = preferences_file_path(
+            platform="darwin",
+            environ={"FIM_PREFERENCES_FILE": str(tmp_path / "from-env.json")},
+            home=tmp_path,
+        )
+        assert path == override
+    finally:
+        preferences_module.set_preferences_file_override(None)
+
+
+def test_set_preferences_file_override_round_trips_through_the_getter(
+    tmp_path: Path,
+) -> None:
+    """`set_preferences_file_override`/`preferences_file_override` is a plain
+    setter/getter pair."""
+    assert preferences_module.preferences_file_override() is None
+    override = tmp_path / "preferences.json"
+    try:
+        preferences_module.set_preferences_file_override(override)
+        assert preferences_module.preferences_file_override() == override
+    finally:
+        preferences_module.set_preferences_file_override(None)
+    assert preferences_module.preferences_file_override() is None
 
 
 def test_quarantine_injected_clock_produces_exact_name(tmp_path: Path) -> None:

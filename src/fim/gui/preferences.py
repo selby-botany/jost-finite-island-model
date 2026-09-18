@@ -156,6 +156,15 @@ class GuiPreferences:
             DEFAULT_RUN_SETTING_FIELD_NAMES`' own keys), or `None` if
             never saved — `Api.get_default_run_settings` falls back to
             the starter values for that same key set in that case.
+        results_location_override: The Settings dialog's own "Storage
+            location" field (`20260918-claude-sonnet-5-configurable-
+            storage-root-design.md`, `selby/restricted`, §7), or `None`
+            if never saved — `fim.gui.app._apply_saved_results_
+            location_override` applies it once, at the *next* launch
+            (Option D1), never mid-session. `None` here means "no
+            Settings override," not "results/ has no location at all" —
+            `fim.paths.results_directory()` still has its own further
+            fallback chain regardless.
     """
 
     significant_digits: int | None = None
@@ -165,6 +174,7 @@ class GuiPreferences:
     welcome_dismissed: bool = False
     startup_behavior: str = "restore"
     default_run_settings: dict[str, str] | None = None
+    results_location_override: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
@@ -177,6 +187,8 @@ class GuiPreferences:
             gui["welcome_dismissed"] = True
         if self.startup_behavior != "restore":
             gui["startup_behavior"] = self.startup_behavior
+        if self.results_location_override is not None:
+            gui["results_location_override"] = self.results_location_override
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
         if self.form_values is not None:
             result["form"] = dict(self.form_values)
@@ -220,6 +232,13 @@ class GuiPreferences:
         if startup_behavior not in ("restart", "restore"):
             raise ValueError(
                 "preferences 'gui.startup_behavior' must be 'restart' or 'restore'"
+            )
+        results_location_override = gui.get("results_location_override")
+        if results_location_override is not None and not isinstance(
+            results_location_override, str
+        ):
+            raise ValueError(
+                "preferences 'gui.results_location_override' must be a string"
             )
         form_values = data.get("form")
         if form_values is not None:
@@ -265,6 +284,7 @@ class GuiPreferences:
             welcome_dismissed=bool(gui.get("welcome_dismissed", False)),
             startup_behavior=startup_behavior,
             default_run_settings=default_run_settings,
+            results_location_override=results_location_override,
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -352,6 +372,20 @@ class GuiPreferences:
         """
         return replace(self, default_run_settings=dict(values))
 
+    def with_results_location_override(self, path: str | None) -> GuiPreferences:
+        """Return a copy with `results_location_override` replaced.
+
+        The `Api.set_results_location` bridge method's own update —
+        `path` is already validated as a writable directory by that
+        method before it ever reaches here. `None` clears a previously
+        saved override, not merely "leaves it unset" — `Api.set_
+        results_location` never passes `None` itself today (there is no
+        "clear this field" affordance in Settings yet), but this
+        matches `with_form_values`'s own "replace wholesale" shape
+        rather than silently only ever growing.
+        """
+        return replace(self, results_location_override=path)
+
 
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:
     """Load `path`, quarantining and defaulting on any unreadable content.
@@ -384,6 +418,36 @@ def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:
         return GuiPreferences(), warning
 
 
+_preferences_file_override: Path | None = None
+
+
+def set_preferences_file_override(path: Path | None) -> None:
+    """Override `preferences_file_path()`'s own resolution, or clear a previous one.
+
+    `20260918-claude-sonnet-5-configurable-storage-root-design.md`
+    (`selby/restricted`) — the same "one thing, decided once" shape
+    `fim.paths.set_results_directory_override` already establishes one
+    module over, kept here rather than in `fim.paths` itself since
+    `preferences_file_path`'s own resolution has never derived from
+    `fim.paths.project_root` (this module's own top docstring) and this
+    document's own design deliberately keeps it that way — a plain
+    `fim.cli` invocation calls this only via a deferred import, exactly
+    the way `fim.launcher` already defers importing `fim.gui.app` for
+    the identical "never pay for it unless actually used" reason.
+
+    Args:
+        path: The exact file to use in place of `preferences_file_
+            path()`'s own computation, or `None` to remove the override.
+    """
+    global _preferences_file_override  # noqa: PLW0603
+    _preferences_file_override = path
+
+
+def preferences_file_override() -> Path | None:
+    """The current `preferences_file_path()` override, if any."""
+    return _preferences_file_override
+
+
 def preferences_file_path(
     *,
     platform: str = sys.platform,
@@ -391,6 +455,11 @@ def preferences_file_path(
     home: Path | None = None,
 ) -> Path:
     """Return the platform-appropriate `preferences.json` path.
+
+    Checks `set_preferences_file_override`'s own current value first,
+    then the `FIM_PREFERENCES_FILE` entry of `environ`, before any of
+    the platform-specific cases below — `20260918-claude-sonnet-5-
+    configurable-storage-root-design.md` (`selby/restricted`).
 
     Args:
         platform: Defaults to `sys.platform`; overridable so a test can
@@ -402,11 +471,12 @@ def preferences_file_path(
             touches a real home directory.
 
     Returns:
-        `~/Library/Application Support/fim/preferences.json` on macOS,
-        `%APPDATA%\\fim\\preferences.json` on Windows (falling back to
-        `home / "AppData" / "Roaming"` if `APPDATA` is unset — the same
-        defensive fallback `os.environ.get` already needs, since a
-        packaged Windows build's own launch environment is not
+        The current override/`FIM_PREFERENCES_FILE`, if either is set;
+        otherwise `~/Library/Application Support/fim/preferences.json`
+        on macOS, `%APPDATA%\\fim\\preferences.json` on Windows (falling
+        back to `home / "AppData" / "Roaming"` if `APPDATA` is unset —
+        the same defensive fallback `os.environ.get` already needs,
+        since a packaged Windows build's own launch environment is not
         guaranteed to set every variable a normal interactive shell
         would), and `$XDG_CONFIG_HOME/fim/preferences.json` (or
         `~/.config/fim/preferences.json` if that variable is unset) on
@@ -417,6 +487,11 @@ def preferences_file_path(
     """
     resolved_environ = os.environ if environ is None else environ
     resolved_home = Path.home() if home is None else home
+    if _preferences_file_override is not None:
+        return _preferences_file_override
+    env_value = resolved_environ.get("FIM_PREFERENCES_FILE")
+    if env_value:
+        return Path(env_value)
     if platform == "darwin":
         base = resolved_home / "Library" / "Application Support"
     elif platform == "win32":
