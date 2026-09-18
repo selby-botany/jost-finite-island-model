@@ -34,6 +34,9 @@ import multiprocessing
 import os
 import sys
 from collections.abc import Sequence
+from pathlib import Path
+
+import yaml
 
 from fim import logging_setup
 
@@ -69,11 +72,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     # this module's own one-line dispatch trace only; it is never the
     # last word for a CLI invocation.
     try:
-        logging_setup.configure(
-            os.environ.get("FIM_LOG_LEVEL", "warning"),
-            logging_setup.parse_log_options(os.environ.get("FIM_LOG_OPTIONS")),
-        )
-    except ValueError as error:
+        logging_config = os.environ.get("FIM_LOGGING_CONFIG")
+        if logging_config:
+            logging_setup.apply_logging_config_file(Path(logging_config))
+        else:
+            logging_setup.configure(
+                os.environ.get("FIM_LOG_LEVEL", "warning"),
+                logging_setup.parse_log_options(os.environ.get("FIM_LOG_OPTIONS")),
+            )
+    except (ValueError, OSError, yaml.YAMLError) as error:
         print(f"fim: error: {error}", file=sys.stderr)
         return 2
 
@@ -191,7 +198,19 @@ def _launch_gui(*, detach: bool) -> int:
     # never imports `pywebview` — at all.
     from fim.gui.app import main as gui_main  # noqa: PLC0415
 
-    return gui_main()
+    # `[]`, not the default `None` (which would make `gui_main` parse
+    # the *real* `sys.argv` itself — still `["--graphical"]` or
+    # `["--graphical", "--detach"]` at this point, neither of which
+    # `gui_main`'s own parser recognizes at all): `fim --graphical`
+    # deliberately does not carry `fim.cli`'s own `--root`/`--results-
+    # directory`/etc. flags through to the GUI it launches (`20260918-
+    # claude-sonnet-5-configurable-storage-root-design.md`, `selby/
+    # restricted`, §4's own documented scope decision) — the matching
+    # `FIM_*` environment variables already work identically for this
+    # launch path with no code here at all, and `fim-gui --root <path>`
+    # (a separate, direct entry point) already covers the CLI-flag case
+    # for anyone who wants one.
+    return gui_main([])
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ import multiprocessing
 import runpy
 import subprocess
 from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 
@@ -52,10 +53,10 @@ def test_launcher_dispatches_empty_argv_to_the_gui(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Zero arguments launches the GUI, never the CLI parser."""
-    calls: list[None] = []
+    calls: list[Sequence[str] | None] = []
 
-    def fake_gui_main() -> int:
-        calls.append(None)
+    def fake_gui_main(argv: Sequence[str] | None = None) -> int:
+        calls.append(argv)
         return 0
 
     def fail_if_called(argv: Sequence[str] | None = None) -> int:
@@ -67,17 +68,21 @@ def test_launcher_dispatches_empty_argv_to_the_gui(
     status = launcher.main([])
 
     assert status == 0
-    assert calls == [None]
+    # `[]`, not `None` -- `_launch_gui`'s own comment on why `gui_main`
+    # must never be left to parse the real `sys.argv` itself here (still
+    # `["--graphical", ...]` at this point, which `gui_main`'s own
+    # parser does not recognize).
+    assert calls == [[]]
 
 
 def test_launcher_dispatches_empty_sys_argv_to_the_gui(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`argv=None` falls back to `sys.argv[1:]`, same as `fim.cli.main`."""
-    calls: list[None] = []
+    calls: list[Sequence[str] | None] = []
 
-    def fake_gui_main() -> int:
-        calls.append(None)
+    def fake_gui_main(argv: Sequence[str] | None = None) -> int:
+        calls.append(argv)
         return 0
 
     monkeypatch.setattr(fim.gui.app, "main", fake_gui_main)
@@ -86,7 +91,7 @@ def test_launcher_dispatches_empty_sys_argv_to_the_gui(
     status = launcher.main(None)
 
     assert status == 0
-    assert calls == [None]
+    assert calls == [[]]
 
 
 @pytest.mark.parametrize(
@@ -129,10 +134,10 @@ def test_launcher_graphical_alone_launches_the_gui_in_the_foreground(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`--graphical` alone runs the GUI in this process — no subprocess spawned."""
-    calls: list[None] = []
+    calls: list[Sequence[str] | None] = []
 
-    def fake_gui_main() -> int:
-        calls.append(None)
+    def fake_gui_main(argv: Sequence[str] | None = None) -> int:
+        calls.append(argv)
         return 0
 
     def fail_if_popen_called(*_args: object, **_kwargs: object) -> None:
@@ -144,7 +149,7 @@ def test_launcher_graphical_alone_launches_the_gui_in_the_foreground(
     status = launcher.main(["--graphical"])
 
     assert status == 0
-    assert calls == [None]
+    assert calls == [[]]
 
 
 @pytest.mark.parametrize(
@@ -269,6 +274,70 @@ def test_launcher_rejects_a_malformed_fim_log_level(
     assert "unknown log level 'verbose'" in capsys.readouterr().err
 
 
+def test_launcher_honors_fim_logging_config_over_fim_log_level(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`FIM_LOGGING_CONFIG` is used instead of `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`.
+
+    `fim.gui.app.main` -- unlike `test_launcher_rejects_a_malformed_fim_
+    log_level`'s own equivalent test, this one *must* stub it: the real
+    `gui_main` reconfigures logging all over again from `FIM_LOG_LEVEL`
+    directly when called with no `--logging-config` argv of its own
+    (`_launch_gui`'s own `gui_main([])` call), which would both open a
+    real window and (since `FIM_LOG_LEVEL="verbose"` here is otherwise
+    invalid) mask this dispatcher's own first, correct configuration
+    with a second, failing one -- caught the hard way, confirmed live,
+    before this stub was added.
+    """
+    calls: list[Sequence[str] | None] = []
+
+    def fake_gui_main(argv: Sequence[str] | None = None) -> int:
+        calls.append(argv)
+        return 0
+
+    monkeypatch.setattr(fim.gui.app, "main", fake_gui_main)
+    log_file = tmp_path / "custom.log"
+    config_path = tmp_path / "logging.yaml"
+    config_path.write_text(
+        f"""
+version: 1
+disable_existing_loggers: false
+handlers:
+  file:
+    class: logging.FileHandler
+    filename: {log_file}
+loggers:
+  fim:
+    level: INFO
+    handlers: [file]
+    propagate: false
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FIM_LOGGING_CONFIG", str(config_path))
+    monkeypatch.setenv("FIM_LOG_LEVEL", "verbose")
+
+    status = launcher.main([])
+
+    assert status == 0
+    assert log_file.is_file()
+
+
+def test_launcher_reports_a_missing_fim_logging_config_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A `FIM_LOGGING_CONFIG` naming a missing file fails before any dispatch."""
+    monkeypatch.setenv("FIM_LOGGING_CONFIG", str(tmp_path / "missing.yaml"))
+
+    status = launcher.main([])
+
+    assert status == 2
+    assert "fim: error:" in capsys.readouterr().err
+
+
 def test_launcher_dispatches_nonempty_sys_argv_to_cli_main_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -366,7 +435,7 @@ def test_launcher_frees_the_console_only_on_win32(
     class _FakeWindll:
         kernel32 = _FakeKernel32()
 
-    def fake_gui_main() -> int:
+    def fake_gui_main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     monkeypatch.setattr(fim.gui.app, "main", fake_gui_main)
