@@ -9,6 +9,10 @@ from pathlib import Path
 import pytest
 
 from fim.persistence.groups import (
+    DEFAULT_EXPERIMENT_ID,
+    DEFAULT_EXPERIMENT_NAME,
+    DEFAULT_STUDY_ID,
+    DEFAULT_STUDY_NAME,
     ExperimentManifest,
     StudyManifest,
     add_run_to_study,
@@ -19,6 +23,8 @@ from fim.persistence.groups import (
     create_study,
     delete_experiment,
     delete_study,
+    ensure_default_experiment,
+    ensure_default_study,
     experiment_manifest_path,
     get_experiment,
     get_study,
@@ -336,6 +342,73 @@ def test_add_study_to_experiment_raises_for_an_unknown_study(tmp_path: Path) -> 
         add_study_to_experiment(
             experiment.experiment_id, "study-ffffffff", results=tmp_path
         )
+
+
+def test_ensure_default_study_creates_it_nested_in_the_default_experiment(
+    tmp_path: Path,
+) -> None:
+    """A first call creates both the default Study and its own default Experiment."""
+    study = ensure_default_study(results=tmp_path)
+
+    assert study.study_id == DEFAULT_STUDY_ID
+    assert study.name == DEFAULT_STUDY_NAME
+    assert study.run_count == 0
+    experiment = get_experiment(DEFAULT_EXPERIMENT_ID, results=tmp_path)
+    assert experiment.name == DEFAULT_EXPERIMENT_NAME
+    assert experiment.study_ids == (DEFAULT_STUDY_ID,)
+
+
+def test_ensure_default_study_is_idempotent(tmp_path: Path) -> None:
+    """A second call returns the identical, already-created Study, not a new one."""
+    first = ensure_default_study(results=tmp_path)
+    second = ensure_default_study(results=tmp_path)
+
+    assert first == second
+    assert len(list_studies(results=tmp_path)) == 1
+    assert len(list_experiments(results=tmp_path)) == 1
+
+
+def test_ensure_default_study_repairs_a_missing_experiment_link(
+    tmp_path: Path,
+) -> None:
+    """A default Study whose own Experiment link was lost gets it re-added."""
+    ensure_default_study(results=tmp_path)
+    # Simulate the link having been lost some other way (never actually
+    # reachable through this module's own public API today) -- the
+    # default Experiment itself deleted with `delete_studies=False`,
+    # leaving the Study manifest intact but unlinked.
+    delete_experiment(DEFAULT_EXPERIMENT_ID, results=tmp_path, delete_studies=False)
+    assert get_study(DEFAULT_STUDY_ID, results=tmp_path).study_id == DEFAULT_STUDY_ID
+
+    ensure_default_study(results=tmp_path)
+
+    experiment = get_experiment(DEFAULT_EXPERIMENT_ID, results=tmp_path)
+    assert experiment.study_ids == (DEFAULT_STUDY_ID,)
+
+
+def test_ensure_default_study_after_deletion_creates_a_fresh_empty_one(
+    tmp_path: Path,
+) -> None:
+    """Deleting the default Study like any other; the next call re-creates it, empty."""
+    study = ensure_default_study(results=tmp_path)
+    run = _run_directory(tmp_path, "run-a")
+    add_run_to_study(study.study_id, run, results=tmp_path)
+    delete_study(DEFAULT_STUDY_ID, results=tmp_path)
+
+    recreated = ensure_default_study(results=tmp_path)
+
+    assert recreated.study_id == DEFAULT_STUDY_ID
+    assert recreated.run_count == 0
+    assert not run.exists()
+
+
+def test_ensure_default_experiment_is_idempotent(tmp_path: Path) -> None:
+    """A second call returns the identical, already-created Experiment."""
+    first = ensure_default_experiment(results=tmp_path)
+    second = ensure_default_experiment(results=tmp_path)
+
+    assert first == second
+    assert len(list_experiments(results=tmp_path)) == 1
 
 
 def test_list_experiments_returns_every_experiment_oldest_first(

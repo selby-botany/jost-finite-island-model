@@ -377,6 +377,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
   * [get\_experiment](#fim.persistence.groups.get_experiment)
   * [list\_experiments](#fim.persistence.groups.list_experiments)
   * [add\_study\_to\_experiment](#fim.persistence.groups.add_study_to_experiment)
+  * [ensure\_default\_experiment](#fim.persistence.groups.ensure_default_experiment)
+  * [ensure\_default\_study](#fim.persistence.groups.ensure_default_study)
   * [delete\_experiment](#fim.persistence.groups.delete_experiment)
   * [copy\_experiment](#fim.persistence.groups.copy_experiment)
   * [resolve\_run\_directory](#fim.persistence.groups.resolve_run_directory)
@@ -5090,7 +5092,7 @@ own equivalent action called the same module the same way.
 
 ```python
 @_log_bridge_call
-def get_about_info() -> dict[str, str]
+def get_about_info() -> dict[str, str | None]
 ```
 
 Return the static "About fim" facts the Help menu shows.
@@ -5119,6 +5121,17 @@ actually is.
 own branding exclusion does not carve out) — `branding_note` is
 the one place that exclusion is disclosed, not a correction to
 this field.
+
+`commit` is `None` for an installed release or a PyInstaller
+bundle, and a short `git` commit label (`fim.__dev_commit__`)
+only when this process is itself running from a source-tree
+`dev` checkout — so several `fim-gui` windows launched from
+source at different commits can be told apart in the dialog,
+without perturbing `version` itself (kept as the plain
+`fim.__version__`, since that is also what `check_for_updates`
+compares against a GitHub release tag, and a commit suffix
+there would break `update.compare_versions`'s strict
+three-part parsing).
 
 <a id="fim.gui.app.in_flight_bridge_threads"></a>
 
@@ -12048,6 +12061,61 @@ Add one Study to an existing Experiment; idempotent.
 **Raises**:
 
 - `ValueError` - No Experiment or Study with the given id exists.
+
+<a id="fim.persistence.groups.ensure_default_experiment"></a>
+
+#### ensure\_default\_experiment
+
+```python
+def ensure_default_experiment(*,
+                              results: Path | None = None,
+                              clock: Clock = _utc_now) -> ExperimentManifest
+```
+
+Return the always-present default Experiment, creating it on first use.
+
+`20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+restricted`), §1: called lazily, only from the one place that
+actually needs to resolve "no Experiment chosen" into a real one
+(`ensure_default_study`, below) — never eagerly at app launch, so a
+checkout that never runs anything never gains an empty manifest
+file it did not ask for.
+
+**Returns**:
+
+  The existing default Experiment, unchanged, if one is already
+  on disk; otherwise a newly created, empty one at `DEFAULT_
+  EXPERIMENT_ID`.
+
+<a id="fim.persistence.groups.ensure_default_study"></a>
+
+#### ensure\_default\_study
+
+```python
+def ensure_default_study(*,
+                         results: Path | None = None,
+                         clock: Clock = _utc_now) -> StudyManifest
+```
+
+Return the always-present default Study, creating it on first use.
+
+`20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+restricted`), §1/§2 — the destination `Api.start_run`'s own
+`study_id=None` resolves to (§2 of that same document), so that no
+run is ever left without a Study from the moment it publishes.
+Always ensures the default Experiment exists and references this
+Study too (`ensure_default_experiment`, `add_study_to_experiment`
+— both idempotent, so this costs nothing extra once either already
+holds), not only on this Study's own first creation: a Study whose
+manifest survived some earlier partial failure but whose own link
+to the default Experiment did not is repaired the next time
+anything asks for it, rather than staying silently orphaned.
+
+**Returns**:
+
+  The existing default Study, unchanged, if one is already on
+  disk; otherwise a newly created, empty one at `DEFAULT_STUDY_
+  ID`, nested inside the default Experiment either way.
 
 <a id="fim.persistence.groups.delete_experiment"></a>
 

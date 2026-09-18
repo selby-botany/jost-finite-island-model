@@ -1013,6 +1013,79 @@ def test_version_loader_reads_pyinstaller_bundle(
 
 A frozen application reads the version file bundled by its spec.
 
+<a id="test.test_metadata.test_dev_commit_suffix_reads_short_sha_from_a_clean_checkout"></a>
+
+#### test\_dev\_commit\_suffix\_reads\_short\_sha\_from\_a\_clean\_checkout
+
+```python
+def test_dev_commit_suffix_reads_short_sha_from_a_clean_checkout(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A clean `git` checkout gets a bare `g<sha>` label.
+
+<a id="test.test_metadata.test_dev_commit_suffix_flags_an_uncommitted_working_tree"></a>
+
+#### test\_dev\_commit\_suffix\_flags\_an\_uncommitted\_working\_tree
+
+```python
+def test_dev_commit_suffix_flags_an_uncommitted_working_tree(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Uncommitted local changes get a `-dirty` marker on the label.
+
+So two windows on the same commit, one with in-progress edits, are
+still distinguishable — not just two windows on different commits.
+
+<a id="test.test_metadata.test_dev_commit_suffix_is_none_without_a_git_directory"></a>
+
+#### test\_dev\_commit\_suffix\_is\_none\_without\_a\_git\_directory
+
+```python
+def test_dev_commit_suffix_is_none_without_a_git_directory(
+        tmp_path: Path) -> None
+```
+
+A source tarball (no `.git`) gets no commit label, not an error.
+
+<a id="test.test_metadata.test_dev_commit_suffix_is_none_when_git_binary_is_missing"></a>
+
+#### test\_dev\_commit\_suffix\_is\_none\_when\_git\_binary\_is\_missing
+
+```python
+def test_dev_commit_suffix_is_none_when_git_binary_is_missing(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A missing `git` executable degrades to no label, not a crash.
+
+<a id="test.test_metadata.test_load_version_sets_dev_commit_only_for_the_source_tree_checkout"></a>
+
+#### test\_load\_version\_sets\_dev\_commit\_only\_for\_the\_source\_tree\_checkout
+
+```python
+def test_load_version_sets_dev_commit_only_for_the_source_tree_checkout(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A frozen bundle never shells out to `git`, even if `.git` exists.
+
+Regression guard for exactly the scenario `_dev_commit_suffix`'s own
+docstring promises: an installed release's version string must never
+depend on whatever happens to be on the machine's `PATH`.
+
+<a id="test.test_metadata.test_load_version_sets_dev_commit_for_a_real_source_checkout"></a>
+
+#### test\_load\_version\_sets\_dev\_commit\_for\_a\_real\_source\_checkout
+
+```python
+def test_load_version_sets_dev_commit_for_a_real_source_checkout(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The module's own `_load_version()` wires the two functions together.
+
 <a id="test.test_metadata.test_mplconfigdir_pinned_only_when_frozen_and_darwin"></a>
 
 #### test\_mplconfigdir\_pinned\_only\_when\_frozen\_and\_darwin
@@ -8510,6 +8583,35 @@ another window) fails the launch outright, before `_active_window`
 is ever consulted, so this needs no real window to exercise: an
 unknown `study_id` is exactly as invalid whether or not one exists.
 
+<a id="gui.test_app_api.test_attach_finished_run_to_study_with_none_uses_the_default_study"></a>
+
+#### test\_attach\_finished\_run\_to\_study\_with\_none\_uses\_the\_default\_study
+
+```python
+def test_attach_finished_run_to_study_with_none_uses_the_default_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`study_id=None` attaches to the always-present default Study, not nothing.
+
+`20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+restricted`), §2: exercised directly against `_attach_finished_run_
+to_study` itself (the shared body every `"done"`-branch call site
+reaches), rather than through a real, full `Api.start_run` — no
+engine invocation needed to prove this one function's own
+resolution rule.
+
+<a id="gui.test_app_api.test_attach_finished_run_to_study_with_an_explicit_id_is_unaffected"></a>
+
+#### test\_attach\_finished\_run\_to\_study\_with\_an\_explicit\_id\_is\_unaffected
+
+```python
+def test_attach_finished_run_to_study_with_an_explicit_id_is_unaffected(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An explicitly chosen Study still wins; the default Study stays untouched.
+
 <a id="gui.test_app_api.test_open_run_reanalyzes_the_final_generation_by_default"></a>
 
 #### test\_open\_run\_reanalyzes\_the\_final\_generation\_by\_default
@@ -8876,6 +8978,23 @@ def test_open_external_link_opens_the_os_default_browser(
 
 The same `_reveal_in_file_browser` precedent this module already
 follows for OS-dispatched actions — no real browser opens in a test.
+
+<a id="gui.test_app_api.test_get_about_info_reports_the_dev_checkout_commit"></a>
+
+#### test\_get\_about\_info\_reports\_the\_dev\_checkout\_commit
+
+```python
+def test_get_about_info_reports_the_dev_checkout_commit(
+        monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`commit` mirrors `fim.__dev_commit__`'s module-level value.
+
+`None` for a release install or frozen build; a short `git` label
+(`g<sha>`, `-dirty`-suffixed for uncommitted local changes) for a
+source-tree `dev` checkout — `fim.__init__._dev_commit_suffix`'s own
+docstring. Monkeypatched here rather than relying on this test
+process's own live value, so the assertion is exact either way.
 
 <a id="gui.test_app_api.test_main_returns_2_on_a_malformed_fim_log_level"></a>
 
@@ -20068,6 +20187,59 @@ def test_add_study_to_experiment_raises_for_an_unknown_study(
 ```
 
 An Experiment cannot reference a Study that does not exist.
+
+<a id="persistence.test_groups.test_ensure_default_study_creates_it_nested_in_the_default_experiment"></a>
+
+#### test\_ensure\_default\_study\_creates\_it\_nested\_in\_the\_default\_experiment
+
+```python
+def test_ensure_default_study_creates_it_nested_in_the_default_experiment(
+        tmp_path: Path) -> None
+```
+
+A first call creates both the default Study and its own default Experiment.
+
+<a id="persistence.test_groups.test_ensure_default_study_is_idempotent"></a>
+
+#### test\_ensure\_default\_study\_is\_idempotent
+
+```python
+def test_ensure_default_study_is_idempotent(tmp_path: Path) -> None
+```
+
+A second call returns the identical, already-created Study, not a new one.
+
+<a id="persistence.test_groups.test_ensure_default_study_repairs_a_missing_experiment_link"></a>
+
+#### test\_ensure\_default\_study\_repairs\_a\_missing\_experiment\_link
+
+```python
+def test_ensure_default_study_repairs_a_missing_experiment_link(
+        tmp_path: Path) -> None
+```
+
+A default Study whose own Experiment link was lost gets it re-added.
+
+<a id="persistence.test_groups.test_ensure_default_study_after_deletion_creates_a_fresh_empty_one"></a>
+
+#### test\_ensure\_default\_study\_after\_deletion\_creates\_a\_fresh\_empty\_one
+
+```python
+def test_ensure_default_study_after_deletion_creates_a_fresh_empty_one(
+        tmp_path: Path) -> None
+```
+
+Deleting the default Study like any other; the next call re-creates it, empty.
+
+<a id="persistence.test_groups.test_ensure_default_experiment_is_idempotent"></a>
+
+#### test\_ensure\_default\_experiment\_is\_idempotent
+
+```python
+def test_ensure_default_experiment_is_idempotent(tmp_path: Path) -> None
+```
+
+A second call returns the identical, already-created Experiment.
 
 <a id="persistence.test_groups.test_list_experiments_returns_every_experiment_oldest_first"></a>
 

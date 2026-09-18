@@ -43,7 +43,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from fim import paths
 from fim.persistence.manifest import read_batch_manifest, read_manifest
@@ -61,6 +61,19 @@ CURRENT_EXPERIMENT_SCHEMA_VERSION = 1
 _STUDY_ID_PREFIX = "study-"
 _EXPERIMENT_ID_PREFIX = "experiment-"
 _ID_RANDOM_HEX_DIGITS = 8
+
+# The always-present default Study/Experiment (`20260918-claude-
+# sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §1) --
+# fixed, well-known ids rather than `generate_study_id`/`generate_
+# experiment_id`'s own random ones, so code resolving "no Study/
+# Experiment chosen" never needs a name-matching heuristic, and a
+# botanist renaming either never breaks that resolution. `"default"`
+# is not valid hex, so these can never collide with a randomly
+# generated id sharing the same prefix.
+DEFAULT_STUDY_ID: Final = "study-default"
+DEFAULT_EXPERIMENT_ID: Final = "experiment-default"
+DEFAULT_STUDY_NAME: Final = "Default study"
+DEFAULT_EXPERIMENT_NAME: Final = "Default experiment"
 
 Clock = Callable[[], datetime]
 
@@ -675,6 +688,91 @@ def add_study_to_experiment(
         experiment_manifest_path(experiment_id, results=root), updated
     )
     return updated
+
+
+def ensure_default_experiment(
+    *, results: Path | None = None, clock: Clock = _utc_now
+) -> ExperimentManifest:
+    """Return the always-present default Experiment, creating it on first use.
+
+    `20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+    restricted`), §1: called lazily, only from the one place that
+    actually needs to resolve "no Experiment chosen" into a real one
+    (`ensure_default_study`, below) — never eagerly at app launch, so a
+    checkout that never runs anything never gains an empty manifest
+    file it did not ask for.
+
+    Returns:
+        The existing default Experiment, unchanged, if one is already
+        on disk; otherwise a newly created, empty one at `DEFAULT_
+        EXPERIMENT_ID`.
+    """
+    root = results if results is not None else paths.results_directory()
+    try:
+        return get_experiment(DEFAULT_EXPERIMENT_ID, results=root)
+    except ValueError:
+        pass
+    now = _format_timestamp(clock())
+    manifest = ExperimentManifest(
+        schema_version=CURRENT_EXPERIMENT_SCHEMA_VERSION,
+        experiment_id=DEFAULT_EXPERIMENT_ID,
+        name=DEFAULT_EXPERIMENT_NAME,
+        description=None,
+        created_at=now,
+        updated_at=now,
+        study_ids=(),
+    )
+    write_experiment_manifest(
+        experiment_manifest_path(DEFAULT_EXPERIMENT_ID, results=root), manifest
+    )
+    return manifest
+
+
+def ensure_default_study(
+    *, results: Path | None = None, clock: Clock = _utc_now
+) -> StudyManifest:
+    """Return the always-present default Study, creating it on first use.
+
+    `20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+    restricted`), §1/§2 — the destination `Api.start_run`'s own
+    `study_id=None` resolves to (§2 of that same document), so that no
+    run is ever left without a Study from the moment it publishes.
+    Always ensures the default Experiment exists and references this
+    Study too (`ensure_default_experiment`, `add_study_to_experiment`
+    — both idempotent, so this costs nothing extra once either already
+    holds), not only on this Study's own first creation: a Study whose
+    manifest survived some earlier partial failure but whose own link
+    to the default Experiment did not is repaired the next time
+    anything asks for it, rather than staying silently orphaned.
+
+    Returns:
+        The existing default Study, unchanged, if one is already on
+        disk; otherwise a newly created, empty one at `DEFAULT_STUDY_
+        ID`, nested inside the default Experiment either way.
+    """
+    root = results if results is not None else paths.results_directory()
+    ensure_default_experiment(results=root, clock=clock)
+    try:
+        manifest = get_study(DEFAULT_STUDY_ID, results=root)
+    except ValueError:
+        now = _format_timestamp(clock())
+        manifest = StudyManifest(
+            schema_version=CURRENT_STUDY_SCHEMA_VERSION,
+            study_id=DEFAULT_STUDY_ID,
+            name=DEFAULT_STUDY_NAME,
+            description=None,
+            created_at=now,
+            updated_at=now,
+            run_directories=(),
+            sweep_spec=None,
+        )
+        write_study_manifest(
+            study_manifest_path(DEFAULT_STUDY_ID, results=root), manifest
+        )
+    add_study_to_experiment(
+        DEFAULT_EXPERIMENT_ID, DEFAULT_STUDY_ID, results=root, clock=clock
+    )
+    return manifest
 
 
 def delete_experiment(
