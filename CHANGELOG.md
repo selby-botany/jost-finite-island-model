@@ -660,6 +660,24 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   full design, including the four GUI-launch options considered and why
   a Settings change takes effect only at the next launch rather than
   live.
+- A real "▶ Run this for real" handoff from Explore into an actual,
+  executed run: seeds Configure with Explore's own current N/d/m/mu,
+  navigates there, and pre-selects Configure's own Study picker at
+  "New study…" (inline, no navigation away from Configure to create
+  one first) — a soft nudge, not a requirement. Configure's own
+  existing "🔮 Explore" button gains the identical treatment in the
+  other direction, carrying its current N/d/m/mu into Explore rather
+  than relying on a once-per-launch seed. A Study group's own row in
+  Home's tree gains "Re-run all…", re-submitting every one of its
+  member runs' own already-saved configurations as brand-new runs and
+  attaching the results to the same Study — a fresh seed for each by
+  default, or each run's own original seed, per a new Settings choice
+  ("When re-running a study"). Explore's own axis selector drops its
+  redundant "Sweep" label (the chosen axis was already named twice
+  over without it) to leave that word free for a future feature. See
+  `20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
+  (`selby/restricted`) for the full design and the usability reasoning
+  behind each choice.
 
 ### Changed
 
