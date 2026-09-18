@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+import webview
 import yaml
 from webview.menu import Menu, MenuAction, MenuSeparator
 
@@ -50,7 +51,11 @@ from fim.gui.config_form import (
     starter_form_values,
 )
 from fim.gui.literature_visuals import pooled_literature_visual_payload
-from fim.gui.preferences import GuiPreferences, save_preferences
+from fim.gui.preferences import (
+    GuiPreferences,
+    preferences_file_override,
+    save_preferences,
+)
 from fim.gui.recent_runs import RecentRun
 from fim.gui.store import LiveProgressStore
 from fim.model.allele import AlleleId
@@ -3596,15 +3601,161 @@ def test_main_returns_2_on_a_malformed_fim_log_level(
 ) -> None:
     """A bad `FIM_LOG_LEVEL` fails before any window is ever built.
 
-    `main`'s own `configure()` call is deliberately the very first thing
-    it does (`doc/fim-logging-design.md` §5) — this test relies on that
-    ordering to call the real `main()` safely, with no window/`webview.
-    start()` reached at all: a malformed value raises out of
-    `configure()` before `create_window()` is ever called.
+    `main`'s own logging-configuration call is deliberately made before
+    `create_window()` (`doc/fim-logging-design.md` §5) — this test relies
+    on that ordering to call the real `main()` safely, with no window/
+    `webview.start()` reached at all: a malformed value raises before
+    `create_window()` is ever called. `argv=[]`, not the default `None`
+    (which would make `_gui_argument_parser().parse_args` -- `main`'s own
+    first line -- parse the *real* `sys.argv`, i.e. this test suite's own
+    invocation arguments, not `fim-gui`'s own flags at all): confirmed
+    live to fail under a bare `pytest test/gui/test_app_api.py -n 0`
+    invocation, whose own leftover argv this parser does not recognize,
+    while passing coincidentally under `-n auto` (each xdist worker gets
+    its own, argv-free `sys.argv[0]`) -- exactly the kind of test-runner-
+    dependent, not code-dependent, non-determinism this project's own
+    testing standard forbids.
     """
     monkeypatch.setenv("FIM_LOG_LEVEL", "verbose")
 
-    status = app_module.main()
+    status = app_module.main([])
 
     assert status == 2
     assert "unknown log level 'verbose'" in capsys.readouterr().err
+
+
+def _stub_main_past_logging_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub everything `main` does after logging configuration succeeds.
+
+    A test whose own `main([...])` call is expected to *succeed*
+    (`status == 0`) would otherwise fall straight through into a real
+    `create_window()` + blocking `webview.start()` -- confirmed live: an
+    early version of the two tests below hung the whole test run
+    waiting for a real window only a human could close. Also stubs
+    `_start_shutdown_deadman`: left real, its own daemon thread would
+    still be sleeping toward a real `os._exit(3)` (`_SHUTDOWN_DEADMAN_
+    SECONDS`, 20s) long after this test itself returns, an even worse
+    hazard than the hang -- it would kill this entire worker process
+    out from under whatever unrelated test happens to be running 20
+    seconds later.
+    """
+    monkeypatch.setattr(app_module, "create_window", object)
+    monkeypatch.setattr(webview, "start", lambda **_kwargs: None)
+    monkeypatch.setattr(app_module, "_build_menu", lambda _window: [])
+    monkeypatch.setattr(app_module, "_start_shutdown_deadman", lambda _timeout: None)
+
+
+def test_main_logging_config_flag_wins_over_fim_logging_config_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`--logging-config` takes precedence over `FIM_LOGGING_CONFIG`, same call.
+
+    Confirmed via a deliberately *invalid* env-var file: if the flag did
+    not win, `main` would fail trying to read the missing env-var path
+    instead of successfully applying the flag's own valid one.
+    """
+    _stub_main_past_logging_config(monkeypatch)
+    log_file = tmp_path / "flag.log"
+    flag_config = tmp_path / "flag-logging.yaml"
+    flag_config.write_text(
+        f"""
+version: 1
+disable_existing_loggers: false
+handlers:
+  file:
+    class: logging.FileHandler
+    filename: {log_file}
+loggers:
+  fim:
+    level: INFO
+    handlers: [file]
+    propagate: false
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FIM_LOGGING_CONFIG", str(tmp_path / "does-not-exist.yaml"))
+
+    status = app_module.main(["--logging-config", str(flag_config)])
+
+    assert status == 0
+    assert log_file.is_file()
+
+
+def test_main_honors_fim_logging_config_env_var_with_no_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`FIM_LOGGING_CONFIG` alone (no `--logging-config`) is honored.
+
+    Regression test: `_launch_gui`'s own `gui_main([])` call means
+    `arguments.logging_config` is always `None` for every `fim.launcher`-
+    dispatched GUI launch -- before this env-var check existed here,
+    that call path silently reconfigured logging from `FIM_LOG_LEVEL`
+    alone, discarding `fim.launcher.main`'s own earlier, correct
+    `FIM_LOGGING_CONFIG`-based configuration -- caught live while adding
+    coverage for this exact call path.
+    """
+    _stub_main_past_logging_config(monkeypatch)
+    log_file = tmp_path / "env.log"
+    config_path = tmp_path / "env-logging.yaml"
+    config_path.write_text(
+        f"""
+version: 1
+disable_existing_loggers: false
+handlers:
+  file:
+    class: logging.FileHandler
+    filename: {log_file}
+loggers:
+  fim:
+    level: INFO
+    handlers: [file]
+    propagate: false
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FIM_LOGGING_CONFIG", str(config_path))
+
+    status = app_module.main([])
+
+    assert status == 0
+    assert log_file.is_file()
+
+
+def test_main_applies_root_results_directory_log_directory_and_preferences_file(
+    tmp_path: Path,
+) -> None:
+    """`--root`/`-R`/`--log-directory`/`--preferences-file` reach the real overrides.
+
+    `main` itself never publishes a window in this test (a malformed
+    `--logging-config` still raises before `create_window()`, the same
+    ordering `test_main_returns_2_on_a_malformed_fim_log_level` relies
+    on) -- this exercises only the override-application lines that run
+    just before that.
+    """
+    root = tmp_path / "root"
+    results = tmp_path / "results"
+    logs = tmp_path / "logs"
+    preferences_path = tmp_path / "preferences.json"
+
+    status = app_module.main(
+        [
+            "--root",
+            str(root),
+            "--results-directory",
+            str(results),
+            "--log-directory",
+            str(logs),
+            "--preferences-file",
+            str(preferences_path),
+            "--logging-config",
+            str(tmp_path / "does-not-exist.yaml"),
+        ]
+    )
+
+    assert status == 2
+    assert paths.root_override() == root
+    assert paths.results_directory_override() == results
+    assert paths.log_directory_override() == logs
+    assert preferences_file_override() == preferences_path

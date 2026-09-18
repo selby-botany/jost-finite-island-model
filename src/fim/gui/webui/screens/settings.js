@@ -30,6 +30,16 @@ const settingsAutoVectorMaxCapacityInput = document.getElementById(
 );
 const settingsSaveButton = document.getElementById("settings-save-button");
 
+const settingsResultsLocationInput = document.getElementById(
+    "settings-results-location"
+);
+const settingsResultsLocationChangeButton = document.getElementById(
+    "settings-results-location-change-button"
+);
+const settingsResultsLocationOverriddenHint = document.getElementById(
+    "settings-results-location-overridden-hint"
+);
+
 function showSettingsBanner(message) {
     if (!message) {
         settingsBanner.hidden = true;
@@ -105,10 +115,42 @@ function applyDefaultRunSettingsValues(values) {
     syncSettingsEngineBackendVisibility();
 }
 
+/**
+ * Seed the "Storage location" field from `Api.get_results_location`
+ * (design doc `20260918-claude-sonnet-5-configurable-storage-root-
+ * design.md`, `selby/restricted`, §5 Option D1) -- when a `--root`/
+ * `--results-directory` flag or `FIM_HOME`/`FIM_RESULTS_DIRECTORY`
+ * already governs this process, `editable` is false: the field is
+ * shown read-only with an explanatory hint instead of a working Change
+ * button, since a Settings change here would have no visible effect
+ * until that flag/variable is itself removed.
+ */
+async function loadSettingsResultsLocation() {
+    const location = await window.pywebview.api.get_results_location();
+    settingsResultsLocationInput.value = location.path;
+    settingsResultsLocationChangeButton.hidden = !location.editable;
+    settingsResultsLocationOverriddenHint.hidden = location.editable;
+}
+
+settingsResultsLocationChangeButton.addEventListener("click", async () => {
+    const picked = await window.pywebview.api.browse_for_results_location();
+    if (!picked.ok) {
+        return;
+    }
+    const result = await window.pywebview.api.set_results_location(picked.path);
+    if (!result.ok) {
+        showSettingsBanner(result.message);
+        return;
+    }
+    showSettingsBanner("");
+    settingsResultsLocationInput.value = picked.path;
+});
+
 async function loadSettingsDialog() {
     showSettingsBanner("");
     startupBehaviorSelect.value = await window.pywebview.api.get_startup_behavior();
     applyDefaultRunSettingsValues(await window.pywebview.api.get_default_run_settings());
+    await loadSettingsResultsLocation();
 }
 
 settingsButton.addEventListener("click", async () => {

@@ -161,6 +161,7 @@ import webview
 
 from fim import paths as paths_module
 from fim.gui import app as app_module
+from fim.gui import preferences as preferences_module
 from fim.gui.app import await_bridge_threads, create_window
 from fim.gui.preferences import GuiPreferences, save_preferences
 
@@ -344,6 +345,36 @@ def _isolate_logging(log_isolation: None) -> None:
     `create_window()`/`webview.start()` directly, never `main()`), but
     this stays package-wide so that stays true for any future test too.
     """
+
+
+@pytest.fixture(autouse=True)
+def _isolate_path_overrides() -> Iterator[None]:
+    """Restore every `fim.paths`/`fim.gui.preferences` override after each test.
+
+    `fim.gui.app.main`'s own `--root`/`--results-directory`/`--log-
+    directory`/`--preferences-file` handling (`20260918-claude-sonnet-5-
+    configurable-storage-root-design.md`, `selby/restricted`) calls the
+    matching `set_*_override` function directly, with no matching
+    `set_*_override(None)` call of its own -- by design, meant to
+    outlive that one call for the rest of a real process's own lifetime.
+    A test that exercises one of these flags via a real `app_module.
+    main([...])` call would otherwise leak it into every later test in
+    the same worker process, in this package or (since `-n auto`
+    schedules whole test *files*, not just this package, onto a shared
+    worker) any other -- the identical hazard `test/cli/conftest.py`'s
+    own sibling fixture already guards against, one entry point over.
+    Deliberately does not also touch `_isolate_gui_results`'s own
+    `project_root` patch, above -- that patch replaces `project_root`
+    outright rather than setting `_root_override`, so it needs no
+    matching restore here.
+    """
+    try:
+        yield
+    finally:
+        paths_module.set_root_override(None)
+        paths_module.set_results_directory_override(None)
+        paths_module.set_log_directory_override(None)
+        preferences_module.set_preferences_file_override(None)
 
 
 @pytest.fixture(autouse=True)

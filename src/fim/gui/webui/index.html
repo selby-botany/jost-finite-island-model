@@ -1435,6 +1435,25 @@
       from a worked example close to your own question, or from a
       blank configuration.
     </p>
+    <!-- Storage-location confirmation (Run/Study/Experiment workflow-
+         ergonomics follow-up, `20260918-claude-sonnet-5-configurable-
+         storage-root-design.md`, `selby/restricted`, §5 Option D4):
+         shown once, ever, folded into this same first-launch panel
+         rather than a separate dialog -- dismissing the Welcome panel
+         any of its own existing ways (either button, Escape, backdrop-
+         click, `welcome.js`'s own `close` handler) finalizes whatever
+         location is showing here at that moment. A later change
+         reaches the identical field from Settings instead
+         (`#settings-results-location`) -- this is the only place it is
+         ever shown unprompted. -->
+    <p class="hint" id="welcome-storage-location">
+      Results, logs, and Study/Experiment data will be stored in:
+      <br>
+      <strong id="welcome-storage-location-path"></strong>
+      <button type="button" id="welcome-storage-location-change-button">
+        Change…
+      </button>
+    </p>
     <div class="actions">
       <button
         type="button"
@@ -1561,6 +1580,33 @@
       <p class="hint">
         This controls the configuration loaded on the next launch. It does not
         change saved run results.
+      </p>
+    </div>
+
+    <!-- Storage location (`20260918-claude-sonnet-5-configurable-
+         storage-root-design.md`, `selby/restricted`, §7): read-only,
+         with a hint explaining why, whenever `Api.get_results_
+         location`'s own "editable" flag is false -- a `--root`/
+         `--results-directory` flag or `FIM_HOME`/`FIM_RESULTS_
+         DIRECTORY` already governs this process, and saving a value
+         here would silently have no effect until that flag/variable is
+         itself removed. Takes effect starting the *next* launch (Option
+         D1) -- `settings.js`'s own save handler never touches anything
+         currently on screen. -->
+    <div class="field">
+      <label for="settings-results-location">Storage location</label>
+      <p class="hint">
+        Results, logs, and Study/Experiment data. Changing this takes
+        effect the next time you open fim.
+      </p>
+      <input type="text" id="settings-results-location" readonly>
+      <button type="button" id="settings-results-location-change-button">
+        Change…
+      </button>
+      <p class="hint" id="settings-results-location-overridden-hint" hidden>
+        Currently set by a --root/--results-directory flag or
+        FIM_HOME/FIM_RESULTS_DIRECTORY -- change or unset that to edit
+        this here instead.
       </p>
     </div>
 

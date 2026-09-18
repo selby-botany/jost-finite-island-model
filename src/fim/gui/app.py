@@ -31,6 +31,7 @@ after the `await` resolves.
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import faulthandler
 import functools
@@ -89,6 +90,7 @@ from fim.gui.preferences import (
     load_preferences,
     preferences_file_path,
     save_preferences,
+    set_preferences_file_override,
 )
 from fim.gui.store import read_live_state, read_progress_sidecar
 from fim.gui.trajectory_history import sampled_statistic_history
@@ -2521,6 +2523,93 @@ class Api:
         self._preferences = self._preferences.with_default_run_settings(subset)
         save_preferences(self._preferences_path, self._preferences)
         return {"ok": True}
+
+    @_log_bridge_call
+    def get_results_location(self) -> dict[str, Any]:
+        """Return where results/logs/Study data live now, and whether Settings can
+        edit it.
+
+        `20260918-claude-sonnet-5-configurable-storage-root-design.md`
+        (`selby/restricted`) §7 — backs both the Settings dialog's own
+        "Storage location" field and the first-launch Welcome panel's
+        identical field (§5, Option D4).
+
+        Returns:
+            `{"path": str(paths.results_directory()), "editable": bool}`.
+            `editable` is `False` whenever something more specific than
+            a previously saved Settings value already governs `results_
+            directory()` for this process — an active `--root`/
+            `--results-directory` flag or `FIM_HOME`/`FIM_RESULTS_
+            DIRECTORY` — matching `_apply_saved_results_location_
+            override`'s own identical check one level up: editing the
+            field would have no effect until that flag/variable is
+            itself removed, and the page shows the read-only hint
+            instead of a saveable input in that case.
+        """
+        overridden_elsewhere = (
+            paths.results_directory_override() is not None
+            or bool(os.environ.get("FIM_RESULTS_DIRECTORY"))
+            or paths.root_override() is not None
+            or bool(os.environ.get("FIM_HOME"))
+        )
+        return {
+            "path": str(paths.results_directory()),
+            "editable": not overridden_elsewhere,
+        }
+
+    @_log_bridge_call
+    def set_results_location(self, path: str) -> dict[str, Any]:
+        """Persist a new default results/logs location, effective next launch.
+
+        Option D1 (`20260918-...-configurable-storage-root-design.md`
+        §5/§6): deliberately does *not* call `paths.set_results_
+        directory_override` itself — this session's own already-showing
+        Home stays exactly as it is; `fim.gui.app._apply_saved_results_
+        location_override` is what applies a saved value, once, the
+        *next* time the app starts.
+
+        Args:
+            path: The chosen directory — created if it does not exist
+                yet (`Path.mkdir(parents=True, exist_ok=True)`, the same
+                "validate by attempting it, not by guessing" discipline
+                a run's own output directory already gets from `fim.
+                paths.atomic_directory`).
+
+        Returns:
+            `{"ok": True}` on success; `{"ok": False, "message": ...}`
+            if `path` cannot be created or is not a writable directory
+            (a file already existing at that exact name, say).
+        """
+        target = Path(path)
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            return {"ok": False, "message": str(error)}
+        if not target.is_dir():
+            return {"ok": False, "message": f"not a directory: {target}"}
+        self._preferences = self._preferences.with_results_location_override(
+            str(target)
+        )
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True}
+
+    @_log_bridge_call
+    def browse_for_results_location(self) -> dict[str, Any]:
+        """Browse for a results/logs directory via the OS's own native folder picker.
+
+        Returns:
+            `{"ok": True, "path": "..."}` on a real selection;
+            `{"ok": False, "path": ""}` for a cancelled dialog — the
+            same shape `browse_for_trajectory` already establishes,
+            `webview.FileDialog.FOLDER` in place of `OPEN`.
+        """
+        window = _active_window()
+        if window is None:
+            return {"ok": False, "path": ""}
+        selection = window.create_file_dialog(webview.FileDialog.FOLDER)
+        if not selection:
+            return {"ok": False, "path": ""}
+        return {"ok": True, "path": selection[0]}
 
     @_log_bridge_call
     def get_welcome_dismissed(self) -> bool:
@@ -4987,33 +5076,124 @@ def _start_shutdown_deadman(timeout_seconds: float) -> None:
     logger.debug("shutdown deadman armed (%gs)", timeout_seconds)
 
 
-def main() -> int:
+def _gui_argument_parser() -> argparse.ArgumentParser:
+    """Build `fim-gui`'s own tiny flag set.
+
+    `20260918-claude-sonnet-5-configurable-storage-root-design.md`
+    (`selby/restricted`) §4 — the identical `--root`/`--results-
+    directory`/`-R`/`--log-directory`/`--preferences-file`/`--logging-
+    config` flags `fim.cli._parser()` declares at its own top level,
+    for the one GUI entry point that never goes through `fim.cli` at
+    all (`fim-gui`, a separate `[project.scripts]` console script).
+    `fim --graphical` deliberately does *not* carry these through
+    (`fim.launcher._launch_gui`'s own comment on that decision) — the
+    matching `FIM_*` environment variables already cover that launch
+    path uniformly, with no flag needed.
+    """
+    parser = argparse.ArgumentParser(prog="fim-gui")
+    parser.add_argument("--root", metavar="PATH")
+    parser.add_argument("-R", "--results-directory", metavar="PATH")
+    parser.add_argument("--log-directory", metavar="PATH")
+    parser.add_argument("--preferences-file", metavar="PATH")
+    parser.add_argument("--logging-config", metavar="PATH")
+    return parser
+
+
+def _apply_saved_results_location_override() -> None:
+    """Apply a GUI Settings-saved results location, once, before the window opens.
+
+    Option D1 (`20260918-claude-sonnet-5-configurable-storage-root-
+    design.md`, `selby/restricted`, §5/§6): a location saved from
+    Settings takes effect starting with the *next* launch — this
+    function *is* that moment, called once here, never again
+    mid-session (`Api.set_results_location` itself never calls `paths.
+    set_results_directory_override` directly, precisely so a change
+    saved while already running never silently reshapes what Home is
+    already showing).
+
+    A no-op whenever anything more specific already governs `results_
+    directory()` for this process — an explicit `--root`/`--results-
+    directory` flag, or `FIM_HOME`/`FIM_RESULTS_DIRECTORY` — matching
+    `Api.get_results_location`'s own "read-only when overridden" logic
+    (§7) exactly: the Settings value would have no effect either way,
+    so this never overwrites a more deliberate, more specific choice
+    with an older, more general one.
+    """
+    if (
+        paths.results_directory_override() is not None
+        or os.environ.get("FIM_RESULTS_DIRECTORY")
+        or paths.root_override() is not None
+        or os.environ.get("FIM_HOME")
+    ):
+        return
+    preferences, _ = load_preferences(preferences_file_path())
+    if preferences.results_location_override:
+        paths.set_results_directory_override(
+            Path(preferences.results_location_override)
+        )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     """Launch the GUI and block until the window closes.
 
-    Configures logging from `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS`
-    (`doc/fim-logging-design.md` §5) again here, independently of
-    `fim.launcher.main`'s own call — reached only via `fim.launcher`'s
-    GUI branches in practice, where the environment was already
-    validated once, but this keeps the function independently correct
-    for any future caller that reaches it another way.
+    Configures logging from `--logging-config`/`FIM_LOGGING_CONFIG`, or
+    else `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` (`doc/fim-logging-design.md`
+    §5; `20260918-claude-sonnet-5-configurable-storage-root-design.md`,
+    `selby/restricted`, §9) again here, independently of `fim.launcher.
+    main`'s own call — reached only via `fim.launcher`'s GUI branches in
+    practice, where the environment was already validated once (and
+    `_launch_gui`'s own `gui_main([])` call means `arguments.logging_
+    config` is always `None` at that point, so it is `FIM_LOGGING_
+    CONFIG` alone, not the flag, that keeps that first, already-correct
+    configuration from being silently thrown away and replaced by a
+    second, `FIM_LOG_LEVEL`-only one here -- a real gap, caught directly
+    against this exact call path, that existed until this env-var check
+    was added), but this keeps the function independently correct for
+    any future caller that reaches it another way too, including a
+    direct `fim-gui` invocation, which never goes through `fim.launcher`
+    at all.
+
+    Args:
+        argv: Arguments excluding the program name (`_gui_argument_
+            parser`'s own tiny flag set), or `None` for `sys.argv`.
+            `fim.launcher._launch_gui` always passes `[]` explicitly —
+            see that call site's own comment for why `None`'s default
+            behavior (reading the *real* `sys.argv`, still holding
+            `--graphical` at that point) would be wrong there.
 
     Returns:
         0 on an ordinary close — `webview.start()` returning means the
         user closed the window, not an error condition to report
-        differently — or 2 if `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` is
-        malformed. A hung shutdown never returns from here at all: the
-        deadman terminates the process with
-        `_SHUTDOWN_DEADMAN_EXIT_CODE` instead (see
+        differently — or 2 if `--logging-config`/`FIM_LOGGING_CONFIG`/
+        `FIM_LOG_LEVEL`/`FIM_LOG_OPTIONS` is malformed. A hung shutdown
+        never returns from here at all: the deadman terminates the
+        process with `_SHUTDOWN_DEADMAN_EXIT_CODE` instead (see
         `_start_shutdown_deadman`).
     """
+    arguments = _gui_argument_parser().parse_args(argv)
+    if arguments.root is not None:
+        paths.set_root_override(Path(arguments.root))
+    if arguments.results_directory is not None:
+        paths.set_results_directory_override(Path(arguments.results_directory))
+    if arguments.log_directory is not None:
+        paths.set_log_directory_override(Path(arguments.log_directory))
+    if arguments.preferences_file is not None:
+        set_preferences_file_override(Path(arguments.preferences_file))
     try:
-        logging_setup.configure(
-            os.environ.get("FIM_LOG_LEVEL", "warning"),
-            logging_setup.parse_log_options(os.environ.get("FIM_LOG_OPTIONS")),
+        logging_config = arguments.logging_config or os.environ.get(
+            "FIM_LOGGING_CONFIG"
         )
-    except ValueError as error:
+        if logging_config:
+            logging_setup.apply_logging_config_file(Path(logging_config))
+        else:
+            logging_setup.configure(
+                os.environ.get("FIM_LOG_LEVEL", "warning"),
+                logging_setup.parse_log_options(os.environ.get("FIM_LOG_OPTIONS")),
+            )
+    except (ValueError, OSError, yaml.YAMLError) as error:
         print(f"fim: error: {error}", file=sys.stderr)
         return 2
+    _apply_saved_results_location_override()
     logger.info("starting fim %s", fim_version)
     window = create_window()
     webview.start(menu=_build_menu(window))
