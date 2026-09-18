@@ -39,6 +39,7 @@ import json
 import logging
 import os
 import queue
+import random
 import shutil
 import subprocess
 import sys
@@ -1754,6 +1755,34 @@ class Api:
         return {"ok": True, "value": value}
 
     @_log_bridge_call
+    def get_rerun_seed_mode(self) -> str:
+        """Return whether `Api.rerun_study` draws a fresh seed or reuses each
+        original."""
+        return self._preferences.rerun_seed_mode
+
+    @_log_bridge_call
+    def set_rerun_seed_mode(self, value: str) -> dict[str, Any]:
+        """Set whether `Api.rerun_study` draws a fresh seed or reuses each original.
+
+        Args:
+            value: `"new"` to draw a fresh seed for each re-run (the
+                default), or `"same"` to reuse each configuration's own
+                original seed instead.
+
+        Returns:
+            `{"ok": True, "value": value}` on success; otherwise
+            `{"ok": False, "message": ...}`.
+        """
+        if value not in ("new", "same"):
+            return {
+                "ok": False,
+                "message": f"rerun seed mode must be 'new' or 'same': {value!r}",
+            }
+        self._preferences = self._preferences.with_rerun_seed_mode(value)
+        save_preferences(self._preferences_path, self._preferences)
+        return {"ok": True, "value": value}
+
+    @_log_bridge_call
     def validate_form(self, values: dict[str, str]) -> dict[str, Any]:
         """Validate the form exactly as "Run simulation" would.
 
@@ -3000,6 +3029,77 @@ class Api:
         return {"ok": True, "studyId": copied.study_id}
 
     @_log_bridge_call
+    def rerun_study(self, study_id: str) -> dict[str, Any]:
+        """Re-run every real, completed configuration a Study already references.
+
+        `20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
+        (`selby/restricted`), §4/§8's own "Re-run every configuration in
+        this Study" — the concrete, buildable-today answer to "the whole
+        Study, for completeness": every member run already stores its
+        own full, validated parameters in `manifest.json`
+        (`RunManifest.parameters`); this reads each one back,
+        re-submits it as a brand-new run, and attaches the result to the
+        same Study, exactly the shape a future sweep tool's own "run
+        sweep" action would need internally (§6).
+
+        Each configuration draws a fresh seed by default, or reuses its
+        own original one, per `GuiPreferences.rerun_seed_mode` (the
+        botanist's own Settings choice, §5) — never a per-call choice,
+        since this bridge method takes no argument for it.
+
+        Runs every configuration sequentially and blocks until each has
+        finished (or failed) before returning — no live, per-
+        configuration progress push exists yet, a deliberate scope-
+        narrowing for this first version ("a small, standalone Study
+        action," not a new multi-run live-progress screen). The page's
+        own JS-bridge call runs on its own thread, so the rest of the
+        page stays responsive while this is in flight; the caller is
+        expected to show its own "Re-running…" state for the duration.
+
+        A configuration that no longer validates (an engine change, a
+        schema change since it was first run) or whose own re-run
+        fails/is cancelled is skipped, not fatal to the rest — the same
+        "one bad entry does not hide everything else" precedent `fim.
+        persistence.groups`'s own docstrings already establish for a
+        deleted run directory.
+
+        Returns:
+            `{"ok": True, "completed": N, "failed": M}` once every
+            configuration has been attempted; `{"ok": False, "message":
+            ...}` if `study_id` does not exist, or the Study has no
+            still-existing run to re-run at all.
+        """
+        try:
+            study = groups.get_study(study_id)
+        except ValueError as error:
+            return {"ok": False, "message": str(error)}
+        parameter_payloads = []
+        for directory in groups.study_run_directories(study):
+            try:
+                manifest = read_manifest(directory / "manifest.json")
+            except (OSError, ValueError):
+                continue
+            parameter_payloads.append(manifest.parameters)
+        if not parameter_payloads:
+            return {"ok": False, "message": "this study has no runs to re-run"}
+        seed_mode = self._preferences.rerun_seed_mode
+        completed = 0
+        failed = 0
+        for parameters in parameter_payloads:
+            try:
+                params = SimulationParams.from_mapping(_reseeded(parameters, seed_mode))
+            except ValueError:
+                failed += 1
+                continue
+            output_directory = _run_one_configuration_to_completion(params)
+            if output_directory is None:
+                failed += 1
+                continue
+            _attach_finished_run_to_study(study_id, output_directory)
+            completed += 1
+        return {"ok": True, "completed": completed, "failed": failed}
+
+    @_log_bridge_call
     def copy_experiment(self, experiment_id: str, name: str) -> dict[str, Any]:
         """Copy an Experiment's own study list into a new, independent Experiment.
 
@@ -3727,6 +3827,67 @@ class Api:
             "organization_url": "https://selby.org/botany/",
             "copyright_year": "2026",
         }
+
+
+def _reseeded(parameters: Mapping[str, Any], seed_mode: str) -> dict[str, Any]:
+    """Return `parameters` with `seed` replaced, unless `seed_mode` says "same".
+
+    `Api.rerun_study`'s own per-configuration step. A fresh, non-
+    negative int well within the range `SimulationParams.__post_init__`
+    already accepts (`seed >= 0`, and every batch replicate's own
+    derived seed — `seed + replicate_index` — must not overflow either;
+    `2**31` leaves enormous headroom either way, chosen only to avoid
+    depending on `SimulationParams`'s own internal upper-bound
+    reasoning here). `random`, not `secrets` — this is "give the next
+    run a different starting point," not a security-sensitive value.
+    """
+    reseeded = dict(parameters)
+    if seed_mode != "same":
+        reseeded["seed"] = random.randint(0, 2**31 - 1)
+    return reseeded
+
+
+def _run_one_configuration_to_completion(params: SimulationParams) -> Path | None:
+    """Run one already-validated configuration synchronously; return its own
+    output directory.
+
+    `Api.rerun_study`'s own per-configuration step — reuses `fim.gui.
+    runner.start_run`/`fim.gui.batch_runner.start_batch_run` exactly as
+    `Api._start_scalar_run`/`_start_batch_run` do (the identical engine
+    invocation and atomic artifact-publish, `n_replicates` choosing
+    between them the same way `Api.start_run` already does), but drains
+    the resulting message queue itself, synchronously, discarding every
+    `"progress"` message rather than pushing it to a live window — there
+    is no live view for a Study-level re-run to draw into (`rerun_
+    study`'s own docstring). Both `start_run`/`start_batch_run` already
+    spawn their own worker thread internally; this function's own
+    caller is free to be a background thread itself (a JS-bridge call's
+    own delivery thread) without spawning yet another one here.
+
+    Returns:
+        The published output directory once the worker reports
+        `"done"`; `None` if the target already existed, the run was
+        cancelled (never actually triggered by this caller, but the
+        message shape allows it), or it failed with an engine error.
+    """
+    output_directory = paths.default_output_directory()
+    message_queue: queue.Queue[Any] = queue.Queue()
+    cancel_event = threading.Event()
+    try:
+        if params.n_replicates > 1:
+            batch_runner.start_batch_run(
+                params, output_directory, message_queue, cancel_event
+            )
+        else:
+            runner.start_run(params, output_directory, message_queue, cancel_event)
+    except FileExistsError:
+        return None
+    while True:
+        message = message_queue.get()
+        if message[0] == "done":
+            return output_directory
+        if message[0] in ("cancelled", "error"):
+            return None
 
 
 def _attach_finished_run_to_study(study_id: str | None, output_directory: Path) -> None:

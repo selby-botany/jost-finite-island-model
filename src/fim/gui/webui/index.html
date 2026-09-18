@@ -1620,6 +1620,22 @@
       </p>
     </div>
 
+    <!-- Re-run seed mode (`20260918-claude-sonnet-5-explore-to-study-
+         run-handoff-design.md`, `selby/restricted`, §4/§5): the
+         botanist's own call for what a Study group's own "Re-run all…"
+         action (`open-run.js`) does with each configuration's seed. -->
+    <div class="field">
+      <label for="settings-rerun-seed-mode">When re-running a study</label>
+      <select id="settings-rerun-seed-mode">
+        <option value="new">Draw a new seed for each run</option>
+        <option value="same">Reuse each run's original seed</option>
+      </select>
+      <p class="hint">
+        A new seed widens a study's own confidence with fresh replicates;
+        the same seed reproduces each run exactly.
+      </p>
+    </div>
+
     <!-- Storage location (`20260918-claude-sonnet-5-configurable-
          storage-root-design.md`, `selby/restricted`, §7): read-only,
          with a hint explaining why, whenever `Api.get_results_

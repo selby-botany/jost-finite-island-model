@@ -82,6 +82,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_initial\_form](#fim.gui.app.Api.get_initial_form)
     * [get\_startup\_behavior](#fim.gui.app.Api.get_startup_behavior)
     * [set\_startup\_behavior](#fim.gui.app.Api.set_startup_behavior)
+    * [get\_rerun\_seed\_mode](#fim.gui.app.Api.get_rerun_seed_mode)
+    * [set\_rerun\_seed\_mode](#fim.gui.app.Api.set_rerun_seed_mode)
     * [validate\_form](#fim.gui.app.Api.validate_form)
     * [get\_initial\_state\_panels](#fim.gui.app.Api.get_initial_state_panels)
     * [get\_initial\_state\_deme\_pair\_panel](#fim.gui.app.Api.get_initial_state_deme_pair_panel)
@@ -123,6 +125,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [delete\_study](#fim.gui.app.Api.delete_study)
     * [delete\_experiment](#fim.gui.app.Api.delete_experiment)
     * [copy\_study](#fim.gui.app.Api.copy_study)
+    * [rerun\_study](#fim.gui.app.Api.rerun_study)
     * [copy\_experiment](#fim.gui.app.Api.copy_experiment)
     * [delete\_runs](#fim.gui.app.Api.delete_runs)
     * [get\_batch\_replicate\_summary](#fim.gui.app.Api.get_batch_replicate_summary)
@@ -197,6 +200,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [with\_startup\_behavior](#fim.gui.preferences.GuiPreferences.with_startup_behavior)
     * [with\_default\_run\_settings](#fim.gui.preferences.GuiPreferences.with_default_run_settings)
     * [with\_results\_location\_override](#fim.gui.preferences.GuiPreferences.with_results_location_override)
+    * [with\_rerun\_seed\_mode](#fim.gui.preferences.GuiPreferences.with_rerun_seed_mode)
   * [load\_preferences](#fim.gui.preferences.load_preferences)
   * [set\_preferences\_file\_override](#fim.gui.preferences.set_preferences_file_override)
   * [preferences\_file\_override](#fim.gui.preferences.preferences_file_override)
@@ -3371,6 +3375,41 @@ Set how a fresh launch chooses its initial form values.
 - ``{"ok"` - True, "value": value}` on success; otherwise
 - ``{"ok"` - False, "message": ...}`.
 
+<a id="fim.gui.app.Api.get_rerun_seed_mode"></a>
+
+#### get\_rerun\_seed\_mode
+
+```python
+@_log_bridge_call
+def get_rerun_seed_mode() -> str
+```
+
+Return whether `Api.rerun_study` draws a fresh seed or reuses each
+original.
+
+<a id="fim.gui.app.Api.set_rerun_seed_mode"></a>
+
+#### set\_rerun\_seed\_mode
+
+```python
+@_log_bridge_call
+def set_rerun_seed_mode(value: str) -> dict[str, Any]
+```
+
+Set whether `Api.rerun_study` draws a fresh seed or reuses each original.
+
+**Arguments**:
+
+- `value` - `"new"` to draw a fresh seed for each re-run (the
+  default), or `"same"` to reuse each configuration's own
+  original seed instead.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "value": value}` on success; otherwise
+- ``{"ok"` - False, "message": ...}`.
+
 <a id="fim.gui.app.Api.validate_form"></a>
 
 #### validate\_form
@@ -4479,6 +4518,55 @@ Copy a Study's own run list into a new, independent Study.
 - ``{"ok"` - True, "studyId": ...}` on success; `{"ok": False,
 - `"message"` - ...}` if `study_id` does not exist or `name` is
   blank.
+
+<a id="fim.gui.app.Api.rerun_study"></a>
+
+#### rerun\_study
+
+```python
+@_log_bridge_call
+def rerun_study(study_id: str) -> dict[str, Any]
+```
+
+Re-run every real, completed configuration a Study already references.
+
+`20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
+(`selby/restricted`), §4/§8's own "Re-run every configuration in
+this Study" — the concrete, buildable-today answer to "the whole
+Study, for completeness": every member run already stores its
+own full, validated parameters in `manifest.json`
+(`RunManifest.parameters`); this reads each one back,
+re-submits it as a brand-new run, and attaches the result to the
+same Study, exactly the shape a future sweep tool's own "run
+sweep" action would need internally (§6).
+
+Each configuration draws a fresh seed by default, or reuses its
+own original one, per `GuiPreferences.rerun_seed_mode` (the
+botanist's own Settings choice, §5) — never a per-call choice,
+since this bridge method takes no argument for it.
+
+Runs every configuration sequentially and blocks until each has
+finished (or failed) before returning — no live, per-
+configuration progress push exists yet, a deliberate scope-
+narrowing for this first version ("a small, standalone Study
+action," not a new multi-run live-progress screen). The page's
+own JS-bridge call runs on its own thread, so the rest of the
+page stays responsive while this is in flight; the caller is
+expected to show its own "Re-running…" state for the duration.
+
+A configuration that no longer validates (an engine change, a
+schema change since it was first run) or whose own re-run
+fails/is cancelled is skipped, not fatal to the rest — the same
+"one bad entry does not hide everything else" precedent `fim.
+persistence.groups`'s own docstrings already establish for a
+deleted run directory.
+
+**Returns**:
+
+- ``{"ok"` - True, "completed": N, "failed": M}` once every
+  configuration has been attempted; `{"ok": False, "message":
+  ...}` if `study_id` does not exist, or the Study has no
+  still-existing run to re-run at all.
 
 <a id="fim.gui.app.Api.copy_experiment"></a>
 
@@ -6571,6 +6659,17 @@ One loaded (or default) snapshot of the GUI's own preferences.
   Settings override," not "results/ has no location at all" —
   `fim.paths.results_directory()` still has its own further
   fallback chain regardless.
+- `rerun_seed_mode` - `"new"` (the default) draws a fresh seed for
+  each run `Api.rerun_study` re-submits; `"same"` reuses each
+  run's own original seed instead — the botanist's own call
+  (`20260918-claude-sonnet-5-explore-to-study-run-handoff-
+  design.md`, `selby/restricted`, §4/§5): "new" is the more
+  broadly useful default for widening a Study's own
+  confidence, while an exact-reproduction need already has
+  its own documented path (`doc/usage.md`'s "Reproduce a
+  run") and does not need to be this action's own default
+  behavior. Process-local like `significant_digits`, never
+  part of any saved configuration.
 
 <a id="fim.gui.preferences.GuiPreferences.to_dict"></a>
 
@@ -6741,6 +6840,23 @@ results_location` never passes `None` itself today (there is no
 "clear this field" affordance in Settings yet), but this
 matches `with_form_values`'s own "replace wholesale" shape
 rather than silently only ever growing.
+
+<a id="fim.gui.preferences.GuiPreferences.with_rerun_seed_mode"></a>
+
+#### with\_rerun\_seed\_mode
+
+```python
+def with_rerun_seed_mode(rerun_seed_mode: str) -> GuiPreferences
+```
+
+Return a copy with `rerun_seed_mode` replaced.
+
+The `Api.set_rerun_seed_mode` bridge method's own update.
+
+**Arguments**:
+
+- `rerun_seed_mode` - `"new"` or `"same"` — see this dataclass's
+  own field docstring for what each means.
 
 <a id="fim.gui.preferences.load_preferences"></a>
 

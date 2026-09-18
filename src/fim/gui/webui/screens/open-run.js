@@ -925,6 +925,53 @@ function buildAddRunToStudySelect(studyId) {
 }
 
 /**
+ * "Re-run every configuration in this Study" -- the concrete, buildable-
+ * today answer to "the whole Study, for completeness" (`20260918-claude-
+ * sonnet-5-explore-to-study-run-handoff-design.md`, `selby/restricted`,
+ * §4/§8): re-submits every member run's own already-saved parameters as
+ * a brand-new run, attaching each result back to this same Study. Draws
+ * a fresh seed by default, or reuses each run's own original one, per
+ * the botanist's own Settings choice (§5) -- this button takes no
+ * per-click choice of its own. Disabled while empty (nothing to
+ * re-run) or already running (`Api.rerun_study` blocks until every
+ * configuration has been attempted -- no live, per-configuration
+ * progress push exists yet, §4's own documented scope-narrowing for
+ * this first version).
+ * @param {object} group
+ * @returns {HTMLButtonElement}
+ */
+function buildRerunStudyButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button";
+    button.textContent = "Re-run all…";
+    button.disabled = group.runCount === 0;
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        button.disabled = true;
+        const originalText = button.textContent;
+        button.textContent = "Re-running…";
+        const result = await window.pywebview.api.rerun_study(group.studyId);
+        button.textContent = originalText;
+        if (!result.ok) {
+            showOpenRunBanner(result.message);
+            button.disabled = group.runCount === 0;
+            return;
+        }
+        if (result.failed > 0) {
+            showOpenRunBanner(
+                `Re-ran ${result.completed} of ${result.completed + result.failed} `
+                    + "configuration(s); the rest failed or no longer validate."
+            );
+        } else {
+            showOpenRunBanner("");
+        }
+        await refreshRecentRuns();
+    });
+    return button;
+}
+
+/**
  * Build a Study/Experiment group header's own extra action controls --
  * (for a Study only) "Add run…", the primary/first action, then Copy,
  * Delete, and (for a Study only) "Add to experiment…", appended beside
@@ -973,6 +1020,10 @@ function buildGroupActionControls(group) {
         await refreshRecentRuns();
     });
     container.appendChild(copyButton);
+
+    if (group.kind === "study") {
+        container.appendChild(buildRerunStudyButton(group));
+    }
 
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";

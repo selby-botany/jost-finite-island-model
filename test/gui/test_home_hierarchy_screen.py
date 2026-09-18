@@ -185,6 +185,30 @@ def _click_group_delete(window: webview.Window, group_label: str) -> None:
     )
 
 
+def _click_group_rerun_all(window: webview.Window, group_label: str) -> None:
+    """Click "Re-run all…" on the group header whose toggle names `group_label`."""
+    clicked = window.evaluate_js(
+        "(function(label) {"
+        "var headers = document.querySelectorAll('.open-run-group-header');"
+        "for (var header of headers) {"
+        "  var toggle = header.querySelector('.open-run-group-toggle');"
+        "  if (toggle && toggle.textContent.includes(label)) {"
+        "    var buttons = header.querySelectorAll('.open-run-group-action-button');"
+        "    for (var button of buttons) {"
+        "      if (button.textContent === 'Re-run all…') {"
+        "        button.click(); return true;"
+        "      }"
+        "    }"
+        "  }"
+        "}"
+        "return false; })"
+        f"({group_label!r})"
+    )
+    assert clicked is True, (
+        f"no group header named {group_label!r} had a Re-run all… button"
+    )
+
+
 def _confirm_inline(window: webview.Window) -> None:
     """Click "Confirm" on the currently-showing `confirmThenRun` inline row."""
     window.evaluate_js(
@@ -740,3 +764,57 @@ def test_run_study_select_new_study_cancel_returns_to_no_study(
     assert settled["rowHidden"] is True
     assert settled["nameCleared"] == ""
     assert groups.list_studies(results=results) == []
+
+
+def test_rerun_all_re_runs_every_configuration_in_a_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Study group's own "Re-run all…" button re-runs its member configuration.
+
+    `20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
+    (`selby/restricted`), §4/§8: real, DOM-driven proof that the button
+    actually reaches `Api.rerun_study` and the tree reflects the new
+    run count once it resolves -- `test/gui/test_app_api.py`'s own
+    tests already prove `rerun_study` itself correct as a plain Python
+    call.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    _write_run(results, "run-a", seed=1)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _create_study(window, "Ring sweep")
+            _expand_every_group(window)
+            _add_run_to_study(window, "seed=1", "Ring sweep")
+            _poll_until(
+                window,
+                _TREE_TEXT,
+                lambda value: value is not None and "Ring sweep (1 run)" in value,
+            )
+            _click_group_rerun_all(window, "Ring sweep")
+            _poll_until(
+                window,
+                _TREE_TEXT,
+                lambda value: value is not None and "Ring sweep (2 runs)" in value,
+            )
+            outcome.put(window.evaluate_js(_TREE_TEXT))
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    tree_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert tree_text is not None
+    assert "Ring sweep (2 runs)" in tree_text

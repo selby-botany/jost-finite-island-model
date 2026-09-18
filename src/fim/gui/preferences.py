@@ -165,6 +165,17 @@ class GuiPreferences:
             Settings override," not "results/ has no location at all" —
             `fim.paths.results_directory()` still has its own further
             fallback chain regardless.
+        rerun_seed_mode: `"new"` (the default) draws a fresh seed for
+            each run `Api.rerun_study` re-submits; `"same"` reuses each
+            run's own original seed instead — the botanist's own call
+            (`20260918-claude-sonnet-5-explore-to-study-run-handoff-
+            design.md`, `selby/restricted`, §4/§5): "new" is the more
+            broadly useful default for widening a Study's own
+            confidence, while an exact-reproduction need already has
+            its own documented path (`doc/usage.md`'s "Reproduce a
+            run") and does not need to be this action's own default
+            behavior. Process-local like `significant_digits`, never
+            part of any saved configuration.
     """
 
     significant_digits: int | None = None
@@ -175,6 +186,7 @@ class GuiPreferences:
     startup_behavior: str = "restore"
     default_run_settings: dict[str, str] | None = None
     results_location_override: str | None = None
+    rerun_seed_mode: str = "new"
 
     def to_dict(self) -> dict[str, Any]:
         """Return the on-disk JSON shape this preference set writes as."""
@@ -189,6 +201,8 @@ class GuiPreferences:
             gui["startup_behavior"] = self.startup_behavior
         if self.results_location_override is not None:
             gui["results_location_override"] = self.results_location_override
+        if self.rerun_seed_mode != "new":
+            gui["rerun_seed_mode"] = self.rerun_seed_mode
         result: dict[str, Any] = {"schema_version": CURRENT_SCHEMA_VERSION, "gui": gui}
         if self.form_values is not None:
             result["form"] = dict(self.form_values)
@@ -240,6 +254,11 @@ class GuiPreferences:
             raise ValueError(
                 "preferences 'gui.results_location_override' must be a string"
             )
+        rerun_seed_mode = gui.get("rerun_seed_mode", "new")
+        if rerun_seed_mode not in ("new", "same"):
+            raise ValueError(
+                "preferences 'gui.rerun_seed_mode' must be 'new' or 'same'"
+            )
         form_values = data.get("form")
         if form_values is not None:
             if not isinstance(form_values, Mapping) or not all(
@@ -285,6 +304,7 @@ class GuiPreferences:
             startup_behavior=startup_behavior,
             default_run_settings=default_run_settings,
             results_location_override=results_location_override,
+            rerun_seed_mode=rerun_seed_mode,
         )
 
     def with_form_values(self, form_values: Mapping[str, str]) -> GuiPreferences:
@@ -385,6 +405,17 @@ class GuiPreferences:
         rather than silently only ever growing.
         """
         return replace(self, results_location_override=path)
+
+    def with_rerun_seed_mode(self, rerun_seed_mode: str) -> GuiPreferences:
+        """Return a copy with `rerun_seed_mode` replaced.
+
+        The `Api.set_rerun_seed_mode` bridge method's own update.
+
+        Args:
+            rerun_seed_mode: `"new"` or `"same"` — see this dataclass's
+                own field docstring for what each means.
+        """
+        return replace(self, rerun_seed_mode=rerun_seed_mode)
 
 
 def load_preferences(path: Path) -> tuple[GuiPreferences, str | None]:
