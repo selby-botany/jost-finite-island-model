@@ -863,12 +863,79 @@ function confirmThenRun(triggerButton, message, action) {
 }
 
 /**
+ * Every currently-Unsorted run -- the same `claimedDirectories`/filter
+ * `buildHomeGroups` already applies, exposed here for `buildAddRunTo
+ * StudySelect`'s own picker. Only Unsorted runs are offered: a run
+ * already in a *different* Study is left alone, matching this design's
+ * own "no Run belongs to more than one Study" precedent
+ * (`20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`,
+ * `selby/restricted`, §10) rather than silently creating one.
+ * @returns {Array<object>}
+ */
+function currentlyUnsortedRuns() {
+    const claimed = claimedDirectories(allStudies);
+    return allRecentRuns.filter((run) => !claimed.has(run.directory));
+}
+
+/**
+ * An immediately-acting "Add run…" pulldown for one Study row -- the
+ * primary action on a Study's own header (Run/Study/Experiment
+ * workflow-ergonomics design `20260917-claude-sonnet-5-run-study-
+ * experiment-workflow-ergonomics.md`, `selby/restricted`, item 2/4):
+ * assembling a Study by reaching out and claiming Unsorted runs, rather
+ * than only by hunting through Unsorted for "Add to study…" one row at
+ * a time. See `buildAddToExperimentSelect`'s own docstring for the
+ * shared immediately-acting-pulldown idiom.
+ * @param {string} studyId
+ * @returns {HTMLSelectElement}
+ */
+function buildAddRunToStudySelect(studyId) {
+    const select = document.createElement("select");
+    select.className = "open-run-add-to-select";
+    select.setAttribute("aria-label", "Add a run to this study");
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Add run…";
+    placeholder.selected = true;
+    select.appendChild(placeholder);
+    for (const run of currentlyUnsortedRuns()) {
+        const option = document.createElement("option");
+        option.value = run.directory;
+        option.textContent = run.name
+            ? `${run.name} (${run.runId})`
+            : `${run.runId} — ${formatEndedAt(run.endedAt)}`;
+        select.appendChild(option);
+    }
+    select.addEventListener("click", (event) => event.stopPropagation());
+    select.addEventListener("change", async () => {
+        const directory = select.value;
+        if (!directory) {
+            return;
+        }
+        const result = await window.pywebview.api.add_run_to_study(
+            studyId,
+            directory
+        );
+        if (!result.ok) {
+            showOpenRunBanner(result.message);
+        }
+        await refreshRecentRuns();
+    });
+    return select;
+}
+
+/**
  * Build a Study/Experiment group header's own extra action controls --
- * Copy, Delete, and (for a Study only) "Add to experiment…", appended
- * beside the toggle button in the same cell. An Experiment group gets
- * Copy/Delete only; a plain date-bucket/Unsorted group gets none of this
- * at all (`buildGroupHeaderRow` only calls this for `kind === "study"`
- * or `"experiment"`).
+ * (for a Study only) "Add run…", the primary/first action, then Copy,
+ * Delete, and (for a Study only) "Add to experiment…", appended beside
+ * the toggle button in the same cell. An Experiment group gets Copy/
+ * Delete only; a plain date-bucket/Unsorted group gets none of this at
+ * all (`buildGroupHeaderRow` only calls this for `kind === "study"` or
+ * `"experiment"`). "Add run…" leads, ahead of Copy/Delete/"Add to
+ * experiment…": it is the operation a Study's own row exists for and,
+ * per the same design document, the one most likely to be reached for
+ * first -- putting the *Study's own parent* assignment ahead of it, as
+ * this row's actions did before, answered the wrong question first.
  *
  * "Copy" needs no name prompt (see `confirmThenRun`'s own docstring for
  * why this codebase has no dialogs at all): it derives `"<name> copy"`
@@ -880,6 +947,10 @@ function confirmThenRun(triggerButton, message, action) {
 function buildGroupActionControls(group) {
     const container = document.createElement("span");
     container.className = "open-run-group-actions";
+
+    if (group.kind === "study") {
+        container.appendChild(buildAddRunToStudySelect(group.studyId));
+    }
 
     const copyButton = document.createElement("button");
     copyButton.type = "button";

@@ -575,18 +575,26 @@
         </p>
       </div>
     </header>
-    <!-- Slice 3 of home enrichment design doc `20260909-claude-sonnet-
+    <!-- Ordered top-down, matching the actual research process
+         (`20260917-claude-sonnet-5-run-study-experiment-workflow-
+         ergonomics.md`, `selby/restricted`, "Concrete fixes, either
+         way" item 1): decide the research question (Experiment) and
+         one angle on it (Study) first; "New run"/Explore, the
+         bottom-of-the-hierarchy actions, come after. Nothing here is
+         required -- a run/study can still be created with no
+         organization at all (`20260917-...-hierarchy-design.md`'s own
+         "zero required migration" goal, kept for new work too, not
+         only old) -- this reorder only fixes which action a botanist
+         reaches for *first*, not what is possible.
+
+         Slice 3 of home enrichment design doc `20260909-claude-sonnet-
          5-home-enrichment-design.md`'s (`selby/restricted`) own commit
          schedule: pure navigation shortcuts, no new bridge calls --
          "New run" opens Configure showing whatever is already loaded
          (the last-used configuration, `loadInitialForm`'s own existing
          behavior; a worked example is still one click away there, via
          "Load example…", once showing), and Explore opens the
-         predictive workspace directly -- both destinations the rail
-         already reaches from anywhere, drawn larger here since a
-         returning user landing on Home is often deciding between
-         exactly these two next steps (design §9's own reasoning for
-         the Explore card).
+         predictive workspace directly.
 
          `home-example-select` (added afterward, on top of this slice):
          a second, independent way into the New run card -- jump
@@ -600,8 +608,62 @@
          reachable only from the full picker, matching "one of the
          examples" rather than every saved configuration. The
          "Configure a new run" button itself is untouched: an
-         additional way in, never a replacement. -->
+         additional way in, never a replacement.
+
+         New study/New experiment (Run/Study/Experiment hierarchy
+         design `20260917-claude-sonnet-5-run-study-experiment-
+         hierarchy-design.md`, `selby/restricted`, §6 "New
+         affordances"): a Study/Experiment is purely local bookkeeping
+         (`fim.persistence.groups`) -- these two cards are the only way
+         to create one from the GUI directly (Configure's own Study
+         picker, `#screen-configure`'s footer, is the other). Plain,
+         always-visible text inputs, not a dialog -- this app has no
+         `window.prompt`/`confirm` anywhere (`screens/open-run.js`'s
+         own `confirmThenRun` docstring: both block indefinitely under
+         this project's own hidden/headless pywebview window). -->
     <div class="home-cards">
+      <div class="home-card">
+        <h3>New experiment</h3>
+        <p>Start with the research question — group related studies under it.</p>
+        <input
+          type="text"
+          id="home-new-experiment-name"
+          placeholder="Experiment name"
+          aria-label="New experiment name"
+        >
+        <input
+          type="text"
+          id="home-new-experiment-description"
+          placeholder="Description (optional)"
+          aria-label="New experiment description"
+        >
+        <div class="actions">
+          <button type="button" id="home-new-experiment-button">
+            Create experiment
+          </button>
+        </div>
+      </div>
+      <div class="home-card">
+        <h3>New study</h3>
+        <p>One angle on a question — group related runs under it, or leave it for now.</p>
+        <input
+          type="text"
+          id="home-new-study-name"
+          placeholder="Study name"
+          aria-label="New study name"
+        >
+        <input
+          type="text"
+          id="home-new-study-description"
+          placeholder="Description (optional)"
+          aria-label="New study description"
+        >
+        <div class="actions">
+          <button type="button" id="home-new-study-button">
+            Create study
+          </button>
+        </div>
+      </div>
       <div class="home-card">
         <h3>New run</h3>
         <p>Start from your last configuration, or a worked example.</p>
@@ -626,60 +688,6 @@
               <use href="icons/fim-icons.svg#icon-explore"></use>
             </svg>
             Explore
-          </button>
-        </div>
-      </div>
-      <!-- Run/Study/Experiment hierarchy design (`20260917-claude-
-           sonnet-5-run-study-experiment-hierarchy-design.md`, `selby/
-           restricted`), §6 "New affordances". A Study/Experiment is
-           purely local bookkeeping (`fim.persistence.groups`) -- these
-           two cards are the only way to create one from the GUI; every
-           existing run keeps working, unattached, in "Unsorted",
-           unless a user explicitly organizes it into one of these.
-           Plain, always-visible text inputs, not a dialog -- this app
-           has no `window.prompt`/`confirm` anywhere (`screens/open-
-           run.js`'s own `confirmThenRun` docstring: both block
-           indefinitely under this project's own hidden/headless
-           pywebview window). -->
-      <div class="home-card">
-        <h3>New study</h3>
-        <p>Group related runs under one name, for a research question.</p>
-        <input
-          type="text"
-          id="home-new-study-name"
-          placeholder="Study name"
-          aria-label="New study name"
-        >
-        <input
-          type="text"
-          id="home-new-study-description"
-          placeholder="Description (optional)"
-          aria-label="New study description"
-        >
-        <div class="actions">
-          <button type="button" id="home-new-study-button">
-            Create study
-          </button>
-        </div>
-      </div>
-      <div class="home-card">
-        <h3>New experiment</h3>
-        <p>Group related studies under one longer-running research goal.</p>
-        <input
-          type="text"
-          id="home-new-experiment-name"
-          placeholder="Experiment name"
-          aria-label="New experiment name"
-        >
-        <input
-          type="text"
-          id="home-new-experiment-description"
-          placeholder="Description (optional)"
-          aria-label="New experiment description"
-        >
-        <div class="actions">
-          <button type="button" id="home-new-experiment-button">
-            Create experiment
           </button>
         </div>
       </div>
@@ -1358,7 +1366,29 @@
          `refreshExampleOptions` (`screens/presets.js`); applies in
          place via `window.fim.applyPreset` with no navigation, since
          there is nowhere else to jump to -- unlike Home's own version,
-         which jumps to Configure on success. -->
+         which jumps to Configure on success.
+
+         `run-study-select` (Run/Study/Experiment workflow-ergonomics
+         design `20260917-claude-sonnet-5-run-study-experiment-
+         workflow-ergonomics.md`, `selby/restricted`, "Concrete fixes,
+         either way" item 3): the one place a run launched from the GUI
+         can be attached to a Study *before* it starts, closing the gap
+         that document reported ("Configure ... has no link to
+         organization"). Lives here, not only on `#screen-run`'s own
+         toolbar, since this is the screen a botanist is actually
+         looking at when deciding to run something -- but it is read by
+         `screens/run-view-controls.js`'s own `onRunClicked` regardless
+         of which screen is showing at the moment "Run" is actually
+         clicked (`configure-run-button`, below, immediately navigates
+         to `#screen-run` and clicks its own `run-button` before that
+         handler ever runs), the same way `collectFormValues()` already
+         reads every other Configure field after that same navigation.
+         Optional, defaulting to "No study" -- Option A of that design
+         document: nothing about starting a run requires organizing it,
+         only offers to. Populated from `Api.list_studies()`
+         (`refreshRunStudySelectOptions`, `run-view-controls.js`),
+         re-fetched every time Configure is shown so a Study created
+         since app launch appears with no restart needed. -->
     <div class="actions">
       <button type="button" id="configure-load-button">Load configuration…</button>
       <select id="configure-example-select" aria-label="Try a worked example">
@@ -1368,6 +1398,9 @@
       <button type="button" id="configure-duplicate-preset-button" disabled>
         Duplicate current configuration
       </button>
+      <select id="run-study-select" aria-label="Add this run to a study">
+        <option value="" selected>No study</option>
+      </select>
       <button type="button" id="configure-run-button">
         <svg class="button-icon" aria-hidden="true">
           <use href="icons/fim-icons.svg#icon-run"></use>

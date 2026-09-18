@@ -19,6 +19,7 @@ input against always-visible controls, never a native dialog.
 from __future__ import annotations
 
 import queue
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -30,7 +31,10 @@ import yaml
 
 from fim import cli
 from fim import paths as paths_module
-from fim.gui.app import create_window
+from fim.gui.app import Api, create_window
+from fim.gui.batch_runner import BatchMessage
+from fim.gui.runner import RunMessage
+from fim.persistence import groups
 
 pytestmark = pytest.mark.gui
 
@@ -39,6 +43,24 @@ _POLL_INTERVAL_SECONDS = 0.1
 _POLL_ATTEMPTS = 300
 _DRIVE_TIMEOUT_SECONDS = _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
 _TREE_TEXT = "document.getElementById('open-run-recent-runs-body').textContent"
+_EVENT_WAIT_TIMEOUT_SECONDS = 30.0
+
+# Mirrors `test/gui/test_running_screen.py`'s own identically-named
+# constant -- a direct parallel, not a shared import, per this project's
+# established per-test-file fixture convention.
+_SET_TINY_FIELDS = """
+function setField(name, value) {
+    const field = document.getElementById(`field-${name}`);
+    field.value = value;
+    field.dispatchEvent(new Event('input', {bubbles: true}));
+}
+setField('N', '20');
+setField('d', '2');
+setField('seed', '20260814');
+setField('m_rate', '0.1');
+setField('mu_value', '0.01');
+setField('locus_lengths', '200');
+"""
 
 
 def _write_run(results: Path, name: str, seed: int) -> Path:
@@ -488,3 +510,87 @@ def test_bulk_select_all_and_delete_selected_removes_every_run(
     assert result["treeText"] == "0 runs"
     assert not first.exists()
     assert not second.exists()
+
+
+def test_starting_a_run_from_configure_with_a_study_selected_attaches_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fast_scalar_run_settings: Path,
+) -> None:
+    """Configure's own Study picker attaches a real run to a real Study once done.
+
+    Run/Study/Experiment workflow-ergonomics design (`20260917-claude-
+    sonnet-5-run-study-experiment-workflow-ergonomics.md`, `selby/
+    restricted`, item 3): "Configure ... has no link to organization"
+    was the reported gap -- this drives the actual Configure screen's
+    own "Run" button (`configure-run-button`, which navigates to
+    `#screen-run` and clicks `run-button` itself, the identical path a
+    real click takes) with a Study chosen in `run-study-select`
+    beforehand, and confirms the Study's own manifest lists the real
+    run directory afterward, on real disk -- not only that `Api.
+    start_run`'s own `study_id` argument is accepted (`test_app_api.py`'s
+    own narrower coverage).
+    """
+    results = tmp_path / "results"
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+
+    done_event = threading.Event()
+
+    def on_message(message: RunMessage | BatchMessage) -> None:
+        if message[0] in ("done", "cancelled", "error"):
+            done_event.set()
+
+    window = create_window(api=Api(on_message=on_message), hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            # Waits for `showConfigureScreen()`'s own returned promise to
+            # settle, not merely for `run-study-select` to look populated
+            # (`options.length > 1` can also turn true from `wireRunView
+            # Controls`'s own unrelated launch-time refresh, still racing
+            # in the background under heavy parallel test load -- a real,
+            # reproduced flake, not a hypothetical one; `run-view-
+            # controls.js`'s own `runStudyRefreshToken` guard fixes the
+            # production race this exposed, but this test still needs its
+            # own explicit "the call I actually triggered is done" signal
+            # rather than an ambiguous DOM side effect).
+            window.evaluate_js(
+                "window.__fimTestConfigureReady = false;"
+                "window.fim.showConfigureScreen().then("
+                "() => { window.__fimTestConfigureReady = true; }"
+                ");"
+            )
+            _poll_until(
+                window,
+                "window.__fimTestConfigureReady === true",
+                lambda value: value is True,
+            )
+            window.evaluate_js(
+                f"document.getElementById('run-study-select').value ="
+                f" {study.study_id!r};"
+            )
+            selected = window.evaluate_js(
+                "document.getElementById('run-study-select').value"
+            )
+            window.evaluate_js(
+                _SET_TINY_FIELDS
+                + "document.getElementById('configure-run-button').click();"
+            )
+            done = done_event.wait(timeout=_EVENT_WAIT_TIMEOUT_SECONDS)
+            outcome.put({"selected": selected, "done": done})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["selected"] == study.study_id, (
+        "run-study-select did not accept the chosen study"
+    )
+    assert settled["done"] is True, "the run never reached a terminal state"
+    updated = groups.get_study(study.study_id, results=results)
+    assert updated.run_count == 1

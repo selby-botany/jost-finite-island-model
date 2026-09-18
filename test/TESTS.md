@@ -8045,6 +8045,24 @@ def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
 
 The bulk "Select/Delete/Delete all" idiom: one round trip, many directories.
 
+<a id="gui.test_app_api.test_start_run_rejects_an_unknown_study_id"></a>
+
+#### test\_start\_run\_rejects\_an\_unknown\_study\_id
+
+```python
+def test_start_run_rejects_an_unknown_study_id(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`start_run`'s own `study_id` is validated before anything else starts.
+
+Run/Study/Experiment workflow-ergonomics design (`20260917-claude-
+sonnet-5-run-study-experiment-workflow-ergonomics.md`, `selby/
+restricted`, item 3) -- a stale id (a Study deleted moments ago in
+another window) fails the launch outright, before `_active_window`
+is ever consulted, so this needs no real window to exercise: an
+unknown `study_id` is exactly as invalid whether or not one exists.
+
 <a id="gui.test_app_api.test_open_run_reanalyzes_the_final_generation_by_default"></a>
 
 #### test\_open\_run\_reanalyzes\_the\_final\_generation\_by\_default
@@ -11176,6 +11194,30 @@ The explicit gap this idiom answers: thousands of Unsorted runs
 could not realistically be deleted one at a time through the GUI.
 "Select all" reaches every loaded run even while its own group is
 collapsed -- this test never expands anything.
+
+<a id="gui.test_home_hierarchy_screen.test_starting_a_run_from_configure_with_a_study_selected_attaches_it"></a>
+
+#### test\_starting\_a\_run\_from\_configure\_with\_a\_study\_selected\_attaches\_it
+
+```python
+def test_starting_a_run_from_configure_with_a_study_selected_attaches_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        fast_scalar_run_settings: Path) -> None
+```
+
+Configure's own Study picker attaches a real run to a real Study once done.
+
+Run/Study/Experiment workflow-ergonomics design (`20260917-claude-
+sonnet-5-run-study-experiment-workflow-ergonomics.md`, `selby/
+restricted`, item 3): "Configure ... has no link to organization"
+was the reported gap -- this drives the actual Configure screen's
+own "Run" button (`configure-run-button`, which navigates to
+``screen`-run` and clicks `run-button` itself, the identical path a
+real click takes) with a Study chosen in `run-study-select`
+beforehand, and confirms the Study's own manifest lists the real
+run directory afterward, on real disk -- not only that `Api.
+start_run`'s own `study_id` argument is accepted (`test_app_api.py`'s
+own narrower coverage).
 
 <a id="gui.test_input_screen"></a>
 

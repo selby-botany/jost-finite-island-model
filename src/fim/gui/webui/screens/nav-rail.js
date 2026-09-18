@@ -197,11 +197,18 @@ async function refreshConfigureExampleOptions() {
  * file for now.
  *
  * Screen history is owned centrally by `window.fim.showScreen`, so this
- * entry point only shows Configure and refreshes its example dropdown.
+ * entry point only shows Configure and refreshes its example dropdown
+ * and its own Study picker (`run-view-controls.js`'s own `run-study-
+ * select` -- Run/Study/Experiment workflow-ergonomics design, `selby/
+ * restricted`, item 3), so either reflects anything created since app
+ * launch with no restart needed.
  */
 async function showConfigureScreen() {
     window.fim.showScreen("screen-configure");
-    await refreshConfigureExampleOptions();
+    await Promise.all([
+        refreshConfigureExampleOptions(),
+        window.fim.refreshRunStudySelectOptions(),
+    ]);
 }
 
 window.fim.showConfigureScreen = showConfigureScreen;

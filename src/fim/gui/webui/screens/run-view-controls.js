@@ -16,6 +16,7 @@ const runReason = document.getElementById("run-reason");
 const runButton = document.getElementById("run-button");
 const cancelButton = document.getElementById("cancel-run-button");
 const openFolderButton = document.getElementById("open-folder-button");
+const runStudySelect = document.getElementById("run-study-select");
 
 function showRunBanner(message) {
     if (!message) {
@@ -88,7 +89,18 @@ async function onRunClicked() {
     // dispatch), reported back explicitly since this caller can no
     // longer compute it locally.
     window.fim.enterRunningState(false);
-    const started = await window.pywebview.api.start_run(values);
+    // `run-study-select`'s own current value (Run/Study/Experiment
+    // workflow-ergonomics design `20260917-claude-sonnet-5-run-study-
+    // experiment-workflow-ergonomics.md`, `selby/restricted`, item 3)
+    // -- read here, at the moment "Run" is actually clicked, not
+    // wherever the click originated from; see that `<select>`'s own
+    // comment in `index.html` for why this works regardless of which
+    // screen was showing a moment ago. Empty string (its own "No
+    // study" default option) becomes `null`, `Api.start_run`'s own
+    // "attach nothing" case -- identical to a plain `fim run` with no
+    // `--study` flag at the CLI layer.
+    const studyId = runStudySelect.value || null;
+    const started = await window.pywebview.api.start_run(values, studyId);
     if (!started.ok) {
         // Rare (an output-directory collision retry timing out, or a
         // validation edge case `revalidate` above did not catch) --
@@ -180,10 +192,58 @@ async function onOpenFolderClicked() {
     window.__fimOpenFolderSettled = true;
 }
 
+// Bumped by every `refreshRunStudySelectOptions` call, at its own
+// start -- lets a call whose own fetch resolves *after* a later call
+// already started (both in flight at once: launch's own `wireRunView
+// Controls` call, still pending, and a near-immediate `showConfigure
+// Screen` visit) recognize it is now stale and skip mutating the
+// select at all, rather than clobbering whatever the newer call (or a
+// selection made in between) already wrote. A real, reproduced race,
+// not a hypothetical one -- confirmed live, driving Configure this
+// same way a fraction of a second after launch.
+let runStudyRefreshToken = 0;
+
+/**
+ * Repopulate `run-study-select` from `Api.list_studies()` -- called once
+ * at launch (`wireRunViewControls`, below) and again every time
+ * Configure is shown (`screens/nav-rail.js`'s own `showConfigureScreen`)
+ * so a Study created since app launch appears with no restart needed,
+ * the same "never trust a stale fetch across visits" precedent `screens/
+ * open-run.js`'s own `refreshHomeExampleOptions` already established.
+ * Preserves the currently selected study, if it still exists after the
+ * refetch, rather than silently resetting to "No study" underneath a
+ * choice the botanist already made this session.
+ */
+async function refreshRunStudySelectOptions() {
+    const token = ++runStudyRefreshToken;
+    const previousValue = runStudySelect.value;
+    const studies = await window.pywebview.api.list_studies();
+    if (token !== runStudyRefreshToken) {
+        return;
+    }
+    runStudySelect.replaceChildren();
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "No study";
+    runStudySelect.appendChild(placeholder);
+    for (const study of studies) {
+        const option = document.createElement("option");
+        option.value = study.studyId;
+        option.textContent = study.name;
+        runStudySelect.appendChild(option);
+    }
+    if (studies.some((study) => study.studyId === previousValue)) {
+        runStudySelect.value = previousValue;
+    }
+}
+
+window.fim.refreshRunStudySelectOptions = refreshRunStudySelectOptions;
+
 function wireRunViewControls() {
     runButton.addEventListener("click", onRunClicked);
     cancelButton.addEventListener("click", onCancelClicked);
     openFolderButton.addEventListener("click", onOpenFolderClicked);
+    refreshRunStudySelectOptions();
 }
 
 window.fim.showRunBanner = showRunBanner;

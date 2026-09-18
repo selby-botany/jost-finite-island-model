@@ -2699,6 +2699,25 @@ def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
     assert not second.exists()
 
 
+def test_start_run_rejects_an_unknown_study_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`start_run`'s own `study_id` is validated before anything else starts.
+
+    Run/Study/Experiment workflow-ergonomics design (`20260917-claude-
+    sonnet-5-run-study-experiment-workflow-ergonomics.md`, `selby/
+    restricted`, item 3) -- a stale id (a Study deleted moments ago in
+    another window) fails the launch outright, before `_active_window`
+    is ever consulted, so this needs no real window to exercise: an
+    unknown `study_id` is exactly as invalid whether or not one exists.
+    """
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+
+    result = Api().start_run({}, study_id="study-ffffffff")
+
+    assert result == {"ok": False, "message": "no such study: study-ffffffff"}
+
+
 def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> None:
     """A bare "final" open reproduces the run's own terminal report."""
     output = _write_run(tmp_path)

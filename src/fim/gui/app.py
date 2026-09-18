@@ -1309,7 +1309,9 @@ class Api:
         self._live_deme_pair: tuple[int, int] | None = None
 
     @_log_bridge_call
-    def start_run(self, values: dict[str, str]) -> dict[str, Any]:
+    def start_run(
+        self, values: dict[str, str], study_id: str | None = None
+    ) -> dict[str, Any]:
         """Validate the form, then start a run pushing live progress to the page.
 
         Dispatches to a scalar or a real parallel batch run based on
@@ -1330,6 +1332,16 @@ class Api:
             values: The same shape `validate_form` accepts, plus (for a
                 batch) the Batch tab's own `max_workers` field — not a
                 `SimulationParams` field at all, parsed here directly.
+            study_id: An existing Study to add this run to once it
+                finishes (`run-view-controls.js`'s own `run-study-
+                select`, "No study" mapping to `None`) — the GUI
+                counterpart to `fim run --study <id>` (`fim.cli`); see
+                `20260917-claude-sonnet-5-run-study-experiment-workflow-
+                ergonomics.md` (`selby/restricted`), item 3. Validated
+                here, before anything starts, so a stale id (a Study
+                deleted moments ago in another window) fails the launch
+                outright rather than silently producing an unattached
+                run the botanist thought they had organized.
 
         Returns:
             `{"ok": True, "isBatch": ..., "equilibrium": ...,
@@ -1357,9 +1369,14 @@ class Api:
             `setLiveIdentityRecoveryReference`), and the same values are
             reused, not recomputed, in the eventual `"done"` push
             (`_drain_run_messages`). `{"ok": False, "message": ...}` if
-            the form does not validate or the output directory cannot be
-            allocated.
+            the form does not validate, `study_id` does not name an
+            existing Study, or the output directory cannot be allocated.
         """
+        if study_id is not None:
+            try:
+                groups.get_study(study_id)
+            except ValueError as error:
+                return {"ok": False, "message": str(error)}
         values = self._merge_default_run_settings(values)
         try:
             payload = form_values_to_payload(values)
@@ -1379,9 +1396,9 @@ class Api:
             return {"ok": False, "message": str(error)}
         is_batch = params.n_replicates > 1
         result = (
-            self._start_batch_run(params, output_directory, values)
+            self._start_batch_run(params, output_directory, values, study_id)
             if is_batch
-            else self._start_scalar_run(params, output_directory)
+            else self._start_scalar_run(params, output_directory, study_id)
         )
         # `n_replicates` is no longer a field Configure's own `<form>`
         # submits (moved to Settings) -- `run-view-controls.js`'s own
@@ -1393,7 +1410,10 @@ class Api:
         return result
 
     def _start_scalar_run(
-        self, params: SimulationParams, output_directory: Path
+        self,
+        params: SimulationParams,
+        output_directory: Path,
+        study_id: str | None = None,
     ) -> dict[str, Any]:
         """The `n_replicates == 1` half of `start_run` (`fim.gui.runner`, unchanged)."""
         # Checked before starting anything with a side effect (`_active_
@@ -1446,6 +1466,7 @@ class Api:
                 self._on_message,
                 equilibrium,
                 identity_recovery,
+                study_id,
             ),
             daemon=True,
         ).start()
@@ -1460,6 +1481,7 @@ class Api:
         params: SimulationParams,
         output_directory: Path,
         values: dict[str, str],
+        study_id: str | None = None,
     ) -> dict[str, Any]:
         """The `n_replicates > 1` half of `start_run`.
 
@@ -1508,6 +1530,7 @@ class Api:
                 self.get_live_deme_pair,
                 self._on_message,
                 self._on_batch_progress,
+                study_id,
             ),
             daemon=True,
         ).start()
@@ -3577,6 +3600,33 @@ class Api:
         }
 
 
+def _attach_finished_run_to_study(study_id: str | None, output_directory: Path) -> None:
+    """Add a just-published run/batch to `study_id`, tolerating a since-deleted Study.
+
+    The shared body of `_drain_run_messages`/`_drain_batch_messages`'s
+    own identical `"done"`-branch step (`Api.start_run`'s own `study_id`
+    argument, Run/Study/Experiment workflow-ergonomics design
+    `20260917-claude-sonnet-5-run-study-experiment-workflow-ergonomics.
+    md`, `selby/restricted`, item 3) — factored out only to keep each
+    caller's own branch count under this project's own configured
+    `PLR0912` limit, not because the two calls differ in any way. A
+    no-op when `study_id` is `None` (the common, "no study chosen"
+    case). A `ValueError` (the Study was deleted by another window, or
+    from Home, while this run/batch was still in flight) is logged and
+    swallowed, never raised into the caller's own `"done"` handling —
+    the run itself already succeeded; this is a best-effort organizing
+    step, not part of what "done" reports.
+    """
+    if study_id is None:
+        return
+    try:
+        groups.add_run_to_study(study_id, output_directory)
+    except ValueError as error:
+        logger.warning(
+            "could not add %s to study %s: %s", output_directory, study_id, error
+        )
+
+
 def _drain_run_messages(
     window: _EvaluatesJs,
     message_queue: queue.Queue[runner.RunMessage],
@@ -3588,6 +3638,7 @@ def _drain_run_messages(
     on_message: Callable[[runner.RunMessage], None] | None = None,
     equilibrium: dict[str, str] | None = None,
     identity_recovery: dict[str, float] | None = None,
+    study_id: str | None = None,
 ) -> None:
     """Push every `runner.RunMessage` to the page as it arrives, until the run ends.
 
@@ -3639,6 +3690,13 @@ def _drain_run_messages(
     through to the eventual `"done"` push unchanged, the identical
     values the page already cached at run-start (`Api.start_run`'s own
     return), not a second, independent computation.
+
+    `study_id` (`Api.start_run`'s own already-validated argument) is
+    attached to `output_directory` only in the `"done"` branch, below,
+    exactly mirroring `fim.cli._record_run_organization`'s own "only
+    once the run has actually published successfully" ordering — never
+    for a `"cancelled"` or error outcome, which publish nothing to
+    attach in the first place.
     """
     logger.debug("run message-drain thread started: %s", output_directory)
     while True:
@@ -3745,6 +3803,7 @@ def _drain_run_messages(
                 # payload`'s own docstring) — same reuse, not recomputed.
                 "identityRecovery": identity_recovery,
             }
+            _attach_finished_run_to_study(study_id, output_directory)
             logger.info("run done: %s", output_directory)
             window.evaluate_js(f"fim.onRunDone({json.dumps(payload)})")
             if on_message is not None:
@@ -4183,6 +4242,7 @@ def _drain_batch_messages(
     live_deme_pair: Callable[[], tuple[int, int] | None] = lambda: None,
     on_message: Callable[[batch_runner.BatchMessage], None] | None = None,
     on_progress: Callable[[dict[str, object]], None] | None = None,
+    study_id: str | None = None,
 ) -> None:
     """Push every `batch_runner.BatchMessage`, polling live progress between them.
 
@@ -4211,6 +4271,11 @@ def _drain_batch_messages(
     is a separate, on-demand mechanism, `get_batch_deme_pair_panel`).
     `on_progress` also rides along to `_push_batch_progress`, unchanged
     every tick — see `Api.__init__`'s own docstring for what it is for.
+
+    `study_id` (`Api.start_run`'s own already-validated argument) is
+    attached to `output_directory` only once the batch's own `"done"`
+    message arrives, exactly mirroring `_drain_run_messages`'s own
+    identical ordering one level down.
     """
     started = message_queue.get()
     if started[0] != "started":
@@ -4249,6 +4314,7 @@ def _drain_batch_messages(
             payload = _batch_done_payload(
                 params, run_id, output_directory, message[1], digits
             )
+            _attach_finished_run_to_study(study_id, output_directory)
             logger.info("batch done: %s", output_directory)
             window.evaluate_js(f"fim.onBatchDone({json.dumps(payload)})")
         elif message[0] == "cancelled":

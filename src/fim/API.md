@@ -3133,7 +3133,8 @@ Start with no run in flight.
 
 ```python
 @_log_bridge_call
-def start_run(values: dict[str, str]) -> dict[str, Any]
+def start_run(values: dict[str, str],
+              study_id: str | None = None) -> dict[str, Any]
 ```
 
 Validate the form, then start a run pushing live progress to the page.
@@ -3157,6 +3158,16 @@ driver thread, before this method was written; see
 - `values` - The same shape `validate_form` accepts, plus (for a
   batch) the Batch tab's own `max_workers` field — not a
   `SimulationParams` field at all, parsed here directly.
+- `study_id` - An existing Study to add this run to once it
+  finishes (`run-view-controls.js`'s own `run-study-
+  select`, "No study" mapping to `None`) — the GUI
+  counterpart to `fim run --study <id>` (`fim.cli`); see
+  `20260917-claude-sonnet-5-run-study-experiment-workflow-
+  ergonomics.md` (`selby/restricted`), item 3. Validated
+  here, before anything starts, so a stale id (a Study
+  deleted moments ago in another window) fails the launch
+  outright rather than silently producing an unattached
+  run the botanist thought they had organized.
 
 
 **Returns**:
@@ -3186,8 +3197,8 @@ driver thread, before this method was written; see
   `setLiveIdentityRecoveryReference`), and the same values are
   reused, not recomputed, in the eventual `"done"` push
   (`_drain_run_messages`). `{"ok": False, "message": ...}` if
-  the form does not validate or the output directory cannot be
-  allocated.
+  the form does not validate, `study_id` does not name an
+  existing Study, or the output directory cannot be allocated.
 
 <a id="fim.gui.app.Api.cancel_run"></a>
 
