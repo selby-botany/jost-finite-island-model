@@ -76,6 +76,7 @@ from fim.persistence.groups import (
     create_study,
     delete_experiment,
     delete_study,
+    ensure_default_study,
     list_experiments,
     list_studies,
     resolve_run_directory,
@@ -406,17 +407,30 @@ def _command_run(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
 def _record_run_organization(
     output_directory: Path, arguments: argparse.Namespace
 ) -> None:
-    """Attach optional `--name`/`--description` metadata and `--study` membership.
+    """Attach optional `--name`/`--description` metadata; always attach a Study.
 
     Reached only once `output_directory` has actually been published by
     `_command_run_scalar`/`_command_run_batch` (`status == 0`) — a run
     that failed or was interrupted leaves nothing here to attach
-    metadata to, and `--study` should never add a nonexistent run to a
-    Study. Every one of these three flags is independently optional and
-    does nothing to a plain `fim run` that sets none of them (`fim.
-    persistence.run_metadata`/`fim.persistence.groups`'s own docstrings;
+    metadata to. `--name`/`--description` remain independently optional
+    and do nothing to a plain `fim run` that sets neither (`fim.
+    persistence.run_metadata`'s own docstring;
     `20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`,
     `selby/restricted`, milestone 1/§9).
+
+    `--study` is no longer optional in its *effect*, only in whether it
+    is spelled out: an unset `--study` now attaches to the always-
+    present default Study (`ensure_default_study`) rather than leaving
+    the run unattached, mirroring `fim.gui.app._attach_finished_run_to_
+    study`'s own identical resolution (`20260918-claude-sonnet-5-home-
+    tree-reorg-design.md`, `selby/restricted`, §2) — the CLI and GUI
+    already converge on this same `add_run_to_study` call, so a run
+    made from a terminal is exactly as visible in Home's own tree as
+    one made from the GUI, never a silent gap only discoverable by
+    counting `results/*/manifest.json` files by hand. Only an
+    explicitly-named `--study` prints a confirmation; the implicit
+    default attachment stays silent, matching a plain `fim run`'s own
+    existing quiet behavior.
     """
     name = arguments.name
     description = arguments.description
@@ -425,6 +439,8 @@ def _record_run_organization(
     if arguments.study is not None:
         study = add_run_to_study(arguments.study, output_directory)
         print(f"Added to study {study.study_id} ({study.run_count} run(s))")
+    else:
+        add_run_to_study(ensure_default_study().study_id, output_directory)
 
 
 def _command_run_scalar(

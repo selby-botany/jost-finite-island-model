@@ -1553,6 +1553,36 @@ def test_run_without_name_or_description_writes_no_metadata_sidecar(
     assert not (output / "metadata.json").exists()
 
 
+def test_run_without_study_attaches_to_the_always_present_default_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A plain `fim run` with no `--study` still lands in a real Study.
+
+    `20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+    restricted`), §2: the CLI and GUI converge on the identical
+    `add_run_to_study` call, so a run made from a terminal is exactly as
+    visible in Home's own tree as one made from the GUI -- never a
+    silent gap discoverable only by counting `results/*/manifest.json`
+    files by hand. `fim.persistence.groups.DEFAULT_STUDY_ID` is a fixed
+    id (`"study-default"`), not something this test needs to discover.
+    """
+    monkeypatch.setattr(paths, "results_directory", lambda: tmp_path / "results")
+    config = tmp_path / "run.yaml"
+    output = tmp_path / "output"
+    _write_config(config)
+
+    status = cli.main(["run", str(config), "--output", str(output), "--quiet"])
+
+    assert status == 0
+    study_payload = json.loads(
+        (tmp_path / "results" / ".fim" / "studies" / "study-default.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert study_payload["run_directories"] == [str(output.resolve())]
+    assert study_payload["name"] == "Default study"
+
+
 def test_run_study_adds_the_completed_run_to_an_existing_study(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
