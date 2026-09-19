@@ -678,6 +678,38 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `20260918-claude-sonnet-5-explore-to-study-run-handoff-design.md`
   (`selby/restricted`) for the full design and the usability reasoning
   behind each choice.
+- Home is now one opinionated Experiment/Study/Run tree, replacing the
+  former top-of-page shortcut cards ("New experiment," "New study,"
+  "New run," "Explore") and the flat "Unsorted" bucket every run
+  without a Study used to fall into. A run always belongs to a Study
+  now — the CLI's own bare `fim run` (no `--study`) and the GUI's own
+  unattached submissions both attach to an always-present default
+  Study, inside a default Experiment, created automatically the first
+  time either is needed, so a checkout that has never run anything
+  still shows a real, clickable row to start from. Creation moved onto
+  the row that receives it: an Experiment row's own "Create study…"
+  creates and nests a Study in one action instead of two separate
+  steps, and a Study row's own "Create run…" opens Configure with that
+  Study already selected; a Study/Experiment can still also be deleted
+  or copied from its own row. "Create experiment…," beside the filter
+  bar, is the one action that stays at the page level, since a brand
+  new Experiment has no row of its own to hang the action off yet.
+  Deletion is now a universal Select/Select all/Delete idiom across
+  every row kind (Run, Study, Experiment) — a checkbox per row and one
+  "Delete selected" action, itemizing every kind involved in its own
+  confirmation, replacing each Study/Experiment row's former standalone
+  "Delete…" button. A Study's own expanded run list keeps the
+  Today/Yesterday/Earlier date-bucket grouping "Unsorted" used to have,
+  now generalized to any Study so a large default Study stays as
+  browsable as Unsorted once was. Two narrower, related removals: the
+  per-run "Add to study…" picker (its own "unclaimed by any Study" pool
+  no longer exists to draw from) and Home's own free-text run filter
+  (it only ever applied inside the now-removed Unsorted bucket; a
+  Study's own expanded view was never filtered by free text even
+  before this change — filtering now narrows by Study/Experiment name
+  instead). See `20260918-claude-sonnet-5-home-tree-reorg-design.md`
+  (`selby/restricted`) for the full design, the critique that motivated
+  it, and each amendment made while building it.
 
 ### Changed
 
