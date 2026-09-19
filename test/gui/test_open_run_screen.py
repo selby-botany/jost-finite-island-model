@@ -41,9 +41,8 @@ import yaml
 
 from fim import cli
 from fim import paths as paths_module
-from fim.gui import app as app_module
-from fim.gui import presets as presets_module
 from fim.gui.app import create_window
+from fim.persistence import groups
 
 pytestmark = pytest.mark.gui
 
@@ -60,8 +59,11 @@ _DRIVE_TIMEOUT_SECONDS = 3 * _POLL_ATTEMPTS * _POLL_INTERVAL_SECONDS + 10.0
 _REAL_ROW_SELECTOR = "'#open-run-recent-runs-body tr:not(.open-run-group-header)'"
 
 
-def _write_batch_run(tmp_path: Path) -> Path:
-    """Write a small, real completed batch (3 replicates) and return its directory."""
+def _write_batch_run(tmp_path: Path, *, study_id: str | None = None) -> Path:
+    """Write a small, real completed batch (3 replicates) and return its directory.
+
+    `study_id`: see `_write_run`'s own identical parameter.
+    """
     config = {
         "N": 20,
         "d": 2,
@@ -78,14 +80,23 @@ def _write_batch_run(tmp_path: Path) -> Path:
     config_path = tmp_path / "batch.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     output_directory = tmp_path / "results" / "batch-output"
-    assert (
-        cli.main(["run", str(config_path), "-o", str(output_directory), "--quiet"]) == 0
-    )
+    arguments = ["run", str(config_path), "-o", str(output_directory), "--quiet"]
+    if study_id is not None:
+        arguments += ["--study", study_id]
+    assert cli.main(arguments) == 0
     return output_directory
 
 
-def _write_run(tmp_path: Path) -> Path:
-    """Write a small, real completed run under `tmp_path` and return its directory."""
+def _write_run(tmp_path: Path, *, study_id: str | None = None) -> Path:
+    """Write a small, real completed run under `tmp_path` and return its directory.
+
+    `study_id`, when given, attaches the run to that Study directly at
+    creation time via `fim run --study` -- the CLI's own bare `fim run`
+    now attaches to the always-present default Study instead of leaving
+    the run unattached (`20260918-claude-sonnet-5-home-tree-reorg-
+    design.md`, `selby/restricted`, §2), so an explicit `study_id` is
+    the only way a test can put a run somewhere else.
+    """
     config = {
         "N": 20,
         "d": 2,
@@ -102,9 +113,10 @@ def _write_run(tmp_path: Path) -> Path:
     config_path = tmp_path / "run.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     output_directory = tmp_path / "results" / "run-output"
-    assert (
-        cli.main(["run", str(config_path), "-o", str(output_directory), "--quiet"]) == 0
-    )
+    arguments = ["run", str(config_path), "-o", str(output_directory), "--quiet"]
+    if study_id is not None:
+        arguments += ["--study", study_id]
+    assert cli.main(arguments) == 0
     return output_directory
 
 
@@ -245,12 +257,28 @@ def _expand_all_recent_run_groups(window: webview.Window) -> None:
             value is not None and value["loaded"] is True and value["toggleCount"] > 0
         ),
     )
-    for _ in range(5):
+    for _ in range(6):
         window.evaluate_js(
             "Array.from(document.querySelectorAll("
             "'.open-run-group-toggle[aria-expanded=\"false\"]'"
             ")).forEach((b) => b.click());"
         )
+        # A Study group's own toggle click is async (`buildGroupHeaderRow`'s
+        # own handler awaits `get_study_run_summary` before its own rows,
+        # and any further-nested date-bucket toggles inside it, ever reach
+        # the DOM) -- every run now belongs to some real Study, the
+        # always-present default one at worst (`20260918-claude-sonnet-5-
+        # home-tree-reorg-design.md`, `selby/restricted`, §1/§2), so this
+        # function's own toggle-expansion loop hits that await on every
+        # single call now, not only for a test that happens to create a
+        # Study. Without this sleep, five successive `evaluate_js` round
+        # trips easily outrace one bridge call, leaving `remaining` non-
+        # zero forever and this loop's own 5-round budget exhausted before
+        # any run row ever renders -- confirmed live as the exact cause of
+        # a real `rowCount == 0` failure across most of this file's own
+        # tests when the "Unsorted" bucket (synchronous, no bridge call at
+        # all) was removed in favor of the default Study.
+        time.sleep(0.15)
         remaining = window.evaluate_js(
             "document.querySelectorAll("
             "'.open-run-group-toggle[aria-expanded=\"false\"]').length"
@@ -264,8 +292,8 @@ def test_selecting_and_opening_a_recent_run_renders_screen_three(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A real recent run, selected and opened, ends on a populated Screen 3."""
-    output = _write_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    output = _write_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -331,8 +359,8 @@ def test_double_clicking_a_recent_run_row_opens_it_directly(
     above this one), reached in one interaction instead of two --
     `open-run.js`'s own `openTrajectory`, shared by both paths.
     """
-    output = _write_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    output = _write_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -381,21 +409,23 @@ def test_double_clicking_a_recent_run_row_opens_it_directly(
     assert output.exists()
 
 
-def test_double_clicking_a_batch_row_does_not_open_it(
+def test_double_clicking_a_batch_row_opens_its_pooled_results(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A batch row's own double-click is a safe no-op, not a crash or a
-    (nonsensical) attempt to open a manifest with no single trajectory.
+    """Double-clicking a batch row opens the identical batch Results card
+    a live batch's own completion already shows.
 
-    `open-run.js`'s own single-click handler already draws this exact
-    "no single trajectory" boundary for a batch row (`showOpenRunBanner`)
-    -- the double-click handler only needs to defer to it, not repeat
-    the message, so this test's own bar is simply "still on Home, still
-    `initial`," not a duplicated banner assertion.
+    `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+    design.md` (`selby/restricted`), §3: batch and scalar rows are
+    symmetric now -- `open-run.js`'s own `openBatch`, reached the
+    identical way `openTrajectory` already is for a scalar row (the
+    test right above this one). "Open replicate," reached by expanding
+    the row instead, is a separate, still-available way to open one
+    specific replicate's own scalar result.
     """
-    _write_batch_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_batch_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -415,25 +445,106 @@ def test_double_clicking_a_batch_row_does_not_open_it(
                 ".dispatchEvent(new MouseEvent("
                 "'dblclick', {bubbles: true}));"
             )
-            # Nothing async to await on a no-op -- read state directly
-            # rather than polling for a change that should never happen.
-            outcome.put(
-                {
-                    "runViewState": window.evaluate_js("window.fim.getRunViewState()"),
-                    "screenOpenRunHidden": window.evaluate_js(
-                        "document.getElementById('screen-open-run').hidden"
-                    ),
-                }
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "runId: "
+                "document.getElementById('results-run-id').textContent, "
+                "screenOpenRunHidden: "
+                "document.getElementById('screen-open-run').hidden, "
+                "batchTableHidden: "
+                "document.getElementById('batch-results-table').hidden, "
+                "replicateRowCount: document.querySelectorAll("
+                "'#batch-results-table-body tr').length"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
             )
+            outcome.put(settled)
         finally:
             window.destroy()
 
     webview.start(_drive)
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
-    assert settled is not None
-    assert settled["runViewState"] == "initial"
-    assert settled["screenOpenRunHidden"] is False
+    assert settled is not None, "`completed` was never reached after double-clicking"
+    assert settled["runViewState"] == "completed"
+    assert settled["runId"].startswith("run-")
+    assert settled["screenOpenRunHidden"] is True
+    assert settled["batchTableHidden"] is False
+    # 4, not 3: `renderBatchTable` prepends a p0 baseline row (the
+    # shared initial conditions) ahead of the batch's own 3 replicate
+    # rows -- `open_batch` recomputes `p0Statistics` fresh from the
+    # batch's own manifest params, exactly like a live batch's own
+    # "done" payload already does.
+    assert settled["replicateRowCount"] == 4
+
+
+def test_selecting_and_opening_a_batch_row_via_the_open_button(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A single click selects a batch row and enables "Open," exactly
+    like a scalar row -- no more early-return banner (`20260919-claude-
+    sonnet-5-unified-batch-and-study-results-reopen-design.md`,
+    `selby/restricted`, §3)."""
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_batch_run(tmp_path)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _expand_all_recent_run_groups(window)
+            _poll_until(
+                window,
+                f"document.querySelectorAll({_REAL_ROW_SELECTOR}).length",
+                lambda value: value is not None and value > 0,
+            )
+            window.evaluate_js(f"document.querySelector({_REAL_ROW_SELECTOR}).click();")
+            open_button_disabled_after_select = window.evaluate_js(
+                "document.getElementById('open-run-open-button').disabled"
+            )
+            banner_hidden_after_select = window.evaluate_js(
+                "document.getElementById('open-run-banner').hidden"
+            )
+            window.evaluate_js(
+                "document.getElementById('open-run-open-button').click();"
+            )
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "batchTableHidden: "
+                "document.getElementById('batch-results-table').hidden"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
+            )
+            outcome.put(
+                {
+                    "openButtonDisabledAfterSelect": open_button_disabled_after_select,
+                    "bannerHiddenAfterSelect": banner_hidden_after_select,
+                    "settled": settled,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["openButtonDisabledAfterSelect"] is False
+    assert result["bannerHiddenAfterSelect"] is True
+    assert result["settled"]["runViewState"] == "completed"
+    assert result["settled"]["batchTableHidden"] is False
 
 
 def test_reanalyzing_at_a_chosen_generation_updates_the_outcome_text(
@@ -450,8 +561,8 @@ def test_reanalyzing_at_a_chosen_generation_updates_the_outcome_text(
     observable directly from that text, without needing to inspect the
     stats table's own numbers.
     """
-    _write_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -539,8 +650,8 @@ def test_reanalyzing_a_run_with_a_differentiation_q_sweep_draws_the_curve(
     claude-sonnet-5-botanist-gui-redesign.md` §7.7) actually draws
     something, not only that the per-order text lines still render.
     """
-    _write_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -621,8 +732,8 @@ def test_recent_runs_row_shows_config_summary_and_statistics(
     each cell's own `title` attribute once the compact text is
     ellipsized.
     """
-    _write_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -685,8 +796,8 @@ def test_recent_runs_row_hides_fractional_seconds_in_the_ended_column(
     use the raw, untrimmed value -- unaffected by this display-only
     formatting, and not this test's own concern.
     """
-    _write_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -738,8 +849,8 @@ def test_a_batch_rows_statistics_cell_names_its_own_replicate_count(
     test above) carries no such caption at all, since a point value has
     no replicate count to name.
     """
-    _write_batch_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_batch_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
@@ -782,8 +893,8 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
     "Open ▶", the same selection mechanism a scalar row's own click
     already uses.
     """
-    _write_batch_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_batch_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -851,326 +962,6 @@ def test_expanding_a_batch_row_shows_its_own_replicate_list(
     assert settled["afterCollapseCount"] == 1
 
 
-def test_home_new_run_card_opens_configure(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """Home enrichment design doc's own slice 3: "New run" reaches Configure.
-
-    Pure navigation, no new bridge call — `Api.list_home_runs`'s own
-    empty-`results/` case is enough here, no real run needs writing.
-    `is_ready` checks for `False` specifically, not merely "not `None`"
-    — a real race an earlier version of this test hit live: `hidden`'s
-    own *starting* value (`True`, before the click has even fired) is
-    already non-`None`, so a looser check accepted it on the very first
-    poll, before the `setTimeout` callback had a chance to run at all.
-    """
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "window.fim.showOpenRunScreen(); "
-            "setTimeout(() => { "
-            "document.getElementById('home-new-run-button').click(); "
-            "}, 0);"
-        ),
-        read="document.getElementById('screen-configure').hidden",
-        is_ready=lambda value: value is False,
-    )
-
-    assert settled is False
-
-
-def test_home_explore_card_opens_explore(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """Home enrichment design doc's own slice 3: "Explore" reaches Explore."""
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "window.fim.showOpenRunScreen(); "
-            "setTimeout(() => { "
-            "document.getElementById('home-explore-button').click(); "
-            "}, 0);"
-        ),
-        read="document.getElementById('screen-explore').hidden",
-        is_ready=lambda value: value is False,
-    )
-
-    assert settled is False
-
-
-def test_home_example_select_lists_only_built_in_examples(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """`home-example-select` lists the built-in worked examples only.
-
-    Populated by `refreshHomeExampleOptions()` from `Api.list_presets`'s
-    own `builtin` entries, filtering out any user-saved preset — the
-    full combined list stays reachable only from the existing
-    `modal-presets` picker (`fim.menu.loadExample`). The option order
-    and titles must match `fim.gui.presets.list_presets` directly (not
-    a hand-copied count), the same "read the real module, don't
-    re-derive a snapshot" precedent `test_presets.py`'s own
-    `_REAL_PRESETS` sets — a real gap this test would have caught: an
-    earlier draft asserted a bare option count, which would not have
-    noticed the dropdown silently including a user-saved preset instead
-    of a missing built-in one.
-    """
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger="window.fim.showOpenRunScreen();",
-        read=(
-            "({"
-            "ready: window.__fimHomeExampleOptionsReady === true, "
-            "labels: Array.from("
-            "document.getElementById('home-example-select').options"
-            ").map((option) => option.textContent), "
-            "placeholderSelected: "
-            "document.getElementById('home-example-select').value === ''"
-            "})"
-        ),
-        is_ready=lambda value: value is not None and value.get("ready"),
-    )
-
-    api = app_module.Api()
-    expected_titles = [
-        preset.title
-        if api.get_preset_form_values(preset.preset_id)["ok"]
-        else f"{preset.title} (view YAML only)"
-        for preset in presets_module.list_presets(app_module._webui_directory())
-    ]
-    assert settled["labels"] == ["Try a worked example…", *expected_titles]
-    assert settled["placeholderSelected"] is True
-
-
-def test_choosing_a_home_example_applies_it_and_opens_configure(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """Picking an example applies its values, opens Configure, then resets.
-
-    A plain, immediately-acting pulldown (no separate confirm step): the
-    `change` event alone drives it, matching how a real user's own
-    pulldown selection fires it. Selects the "Stepping-stone (spatial)
-    migration" example specifically (option index 2 — index 0 is the
-    placeholder, index 1 is "Unequal island sizes with a migration
-    hub") since its own d=6 ring matrix is distinct from the starter
-    form's own defaults, the identical "a changed field is real proof
-    the click did something" reasoning `test_presets_screen.py`'s own
-    equivalent test already uses for the same preset. Reuses
-    `presets.js`'s own `applyPreset` via `window.fim.applyPreset` —
-    genuinely the same apply path the File-menu picker uses, not a
-    second, independent one.
-    """
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "window.fim.showOpenRunScreen(); "
-            "setTimeout(async () => { "
-            "await new Promise((resolve) => { "
-            "const check = () => window.__fimHomeExampleOptionsReady "
-            "? resolve() : setTimeout(check, 20); "
-            "check(); "
-            "}); "
-            "const select = document.getElementById('home-example-select'); "
-            "select.selectedIndex = 2; "
-            "select.dispatchEvent(new Event('change')); "
-            "}, 0);"
-        ),
-        read=(
-            "({"
-            "configureVisible: "
-            "!document.getElementById('screen-configure').hidden, "
-            "mMode: document.querySelector("
-            "'input[name=\"m_mode\"]:checked')?.value, "
-            "nValue: document.getElementById('field-N').value, "
-            "selectValue: "
-            "document.getElementById('home-example-select').value"
-            "})"
-        ),
-        is_ready=lambda value: (
-            value is not None and value.get("configureVisible") is True
-        ),
-        poll_attempts=500,
-    )
-
-    assert settled["configureVisible"] is True
-    assert settled["mMode"] == "matrix"
-    assert settled["nValue"] == "150"
-    # Reset to its own placeholder afterward — the control always reads
-    # as an action, never as "currently showing example X."
-    assert settled["selectValue"] == ""
-
-
-def test_choosing_the_non_loadable_home_example_shows_an_inline_notice(
-    window: webview.Window, drive: Callable[..., Any]
-) -> None:
-    """The one non-loadable example shows Home's own banner, not an alert,
-    and does not navigate to Configure.
-
-    Design doc `20260913-claude-sonnet-5-gui-worked-example-loadability-
-    design.md` (`selby/restricted`), Option C — the Home-screen
-    counterpart of `test_nav_rail.py`'s own identically named test for
-    Configure's own select. `home-example-select` only navigates on a
-    successful apply (`open-run.js`'s own `change` handler); staying on
-    Home here is the direct proof that branch was not taken.
-    """
-    settled = drive(
-        window,
-        ready=_INPUT_SCREEN_READY,
-        trigger=(
-            "window.fim.showOpenRunScreen(); "
-            "setTimeout(async () => { "
-            "await new Promise((resolve) => { "
-            "const check = () => window.__fimHomeExampleOptionsReady "
-            "? resolve() : setTimeout(check, 20); "
-            "check(); "
-            "}); "
-            "const select = document.getElementById('home-example-select'); "
-            "select.value = "
-            "'per-base-mutation-rate-across-unequal-locus-lengths'; "
-            "select.dispatchEvent(new Event('change')); "
-            "}, 0);"
-        ),
-        read=(
-            "({"
-            "bannerHidden: document.getElementById('open-run-banner').hidden, "
-            "bannerText: document.getElementById('open-run-banner').textContent, "
-            "homeVisible: !document.getElementById('screen-open-run').hidden, "
-            "configureVisible: "
-            "!document.getElementById('screen-configure').hidden"
-            "})"
-        ),
-        is_ready=lambda value: value is not None and value.get("bannerHidden") is False,
-        poll_attempts=500,
-    )
-
-    assert settled["homeVisible"] is True
-    assert settled["configureVisible"] is False
-    assert (
-        'Could not load "Per-base mutation rate across unequal locus lengths"'
-        in settled["bannerText"]
-    )
-    assert "(view YAML only)" not in settled["bannerText"]
-    assert "per-locus mu" in settled["bannerText"]
-
-
-def test_home_example_select_excludes_a_user_saved_preset(
-    window: webview.Window,
-) -> None:
-    """A user-saved preset never appears in Home's own example shortcut.
-
-    "One of the examples" (the design ask) means built-in worked
-    examples only — a user-saved configuration stays reachable solely
-    from the full `modal-presets` picker. Needs its own two-stage,
-    manually driven window (save, then reopen Home) rather than the
-    shared `drive` fixture, which destroys its window after one stage.
-    """
-    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
-
-    def _drive() -> None:
-        try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.evaluate_js(
-                "window.__testSaveDone = false; "
-                "window.pywebview.api.save_current_as_preset("
-                "'Test user preset', collectFormValues()"
-                ").then(() => { window.__testSaveDone = true; });"
-            )
-            _poll_until(
-                window, "window.__testSaveDone === true", lambda value: value is True
-            )
-            window.evaluate_js("window.fim.showOpenRunScreen();")
-            settled = _poll_until(
-                window,
-                "({"
-                "ready: window.__fimHomeExampleOptionsReady === true, "
-                "labels: Array.from("
-                "document.getElementById('home-example-select').options"
-                ").map((option) => option.textContent)"
-                "})",
-                lambda value: value is not None and value.get("ready"),
-            )
-            outcome.put(settled)
-        finally:
-            window.destroy()
-
-    webview.start(_drive)
-    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
-
-    assert settled is not None
-    assert "Test user preset" not in settled["labels"]
-    api = app_module.Api()
-    expected_titles = [
-        preset.title
-        if api.get_preset_form_values(preset.preset_id)["ok"]
-        else f"{preset.title} (view YAML only)"
-        for preset in presets_module.list_presets(app_module._webui_directory())
-    ]
-    assert settled["labels"] == ["Try a worked example…", *expected_titles]
-
-
-def test_home_example_select_stays_inside_its_card_at_a_narrow_window_width(
-    window: webview.Window,
-) -> None:
-    """`home-example-select` never overflows `.home-card`'s own bounding box.
-
-    A real, reported layout bug: a `<select>` element defaults to
-    `min-width: auto` inside a flex container (`.actions`, `app.css`),
-    so it refuses to shrink below its own widest `<option>`'s rendered
-    width (several real worked-example titles are long, e.g. "Per-base
-    mutation rate across unequal locus lengths") — at a narrow window
-    width, the control overflowed its own card's left edge rather than
-    wrapping or shrinking the way `.actions`'s own `flex-wrap` already
-    lets every other child do. `window.resize` (a Python-side pywebview
-    call, not something the shared `drive` fixture's own JS-string
-    `trigger` can express) needs its own manually driven window, the
-    same precedent `test_home_example_select_excludes_a_user_saved_
-    preset`, just above, already established for a different reason.
-
-    Confirmed live before fixing: reverting the `app.css` fix reproduced
-    `selectLeft: -2.5` (past the *viewport's* own left edge, let alone
-    the card's) at this same window width.
-    """
-    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
-
-    def _drive() -> None:
-        try:
-            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
-            window.resize(420, 700)
-            window.evaluate_js("window.fim.showOpenRunScreen();")
-            settled = _poll_until(
-                window,
-                "(function() {"
-                "if (window.__fimHomeExampleOptionsReady !== true) { return null; }"
-                "var card = document.querySelector('.home-cards .home-card');"
-                "var select = document.getElementById('home-example-select');"
-                "var cardRect = card.getBoundingClientRect();"
-                "var selectRect = select.getBoundingClientRect();"
-                "return {"
-                "cardLeft: cardRect.left, cardRight: cardRect.right,"
-                "selectLeft: selectRect.left, selectRight: selectRect.right"
-                "};"
-                "})()",
-                lambda value: value is not None,
-            )
-            outcome.put(settled)
-        finally:
-            window.destroy()
-
-    webview.start(_drive)
-    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
-
-    assert settled is not None
-    # A small tolerance, not an exact `>=`/`<=`, matching sub-pixel
-    # layout rounding this project's own other bounding-box assertions
-    # already tolerate.
-    assert settled["selectLeft"] >= settled["cardLeft"] - 0.5
-    assert settled["selectRight"] <= settled["cardRight"] + 0.5
-
-
 def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1192,8 +983,8 @@ def test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line(
     statistic-color key is intentionally absent; only non-statistic
     overlays keep their own caption-style legend entries.
     """
-    _write_run_with_sigma_band(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run_with_sigma_band(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -1274,8 +1065,8 @@ def test_opening_a_run_without_a_sigma_band_still_hides_the_trajectory_panel(
     "nothing to show" case, confirmed still correct now that it shares
     a gate with the new sigma-band-alone case above.
     """
-    _write_run(tmp_path)
     monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
+    _write_run(tmp_path)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -1320,22 +1111,30 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Design proposal for "a fantastically long results scroll": runs
-    render grouped into date-bucket sections, each with its own
-    collapsible header naming its member count. Every group starts
-    collapsed by default (`ensureGroupDefaults`), so opening the screen
-    shows headers only; expanding a header adds only its own rows
+    """Design proposal for "a fantastically long results scroll": a Study's
+    own expanded runs render grouped into date-bucket sections, each with
+    its own collapsible header naming its member count. Every group
+    starts collapsed by default (`ensureGroupDefaults`), so opening the
+    screen shows headers only; expanding a header adds only its own rows
     (`open-run.js`'s own `renderRecentRuns`/`buildGroupHeaderRow`), and
     collapsing it again removes only its own rows, the other bucket's
     own rows unaffected.
+
+    Both runs here are bare (`--study` unset), so both land in the
+    always-present default Study inside its own default Experiment
+    (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+    restricted`, §1/§2) — the date-bucket grouping this test cares about
+    is nested two levels deep (Experiment > Study > date bucket), not at
+    the tree's own top level the way the now-removed "Unsorted" bucket's
+    date grouping once was.
     """
+    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
     _write_run(tmp_path)
     batch_directory = _write_batch_run(tmp_path)
     manifest_path = batch_directory / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["ended_at"] = (datetime.now(UTC) - timedelta(days=10)).isoformat()
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -1355,20 +1154,33 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
                 ".length;"
                 "return {headers: headers, rowCount: rows};"
                 "})()",
-                lambda value: value is not None and len(value.get("headers", [])) == 2,
+                lambda value: value is not None and len(value.get("headers", [])) == 1,
             )
-            # Every group starts collapsed -- expand everything (including
-            # "Earlier"'s own nested per-date sub-group, item 3) to see
-            # every row.
+            # Every group starts collapsed -- expand everything (Default
+            # experiment > Default study > "Earlier"'s own nested
+            # per-date sub-group, item 3) to see every row.
             _expand_all_recent_run_groups(window)
             after_expand = _poll_until(
                 window,
-                "document.querySelectorAll("
-                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
-                lambda value: value is not None and value == 2,
+                "({"
+                "rowCount: document.querySelectorAll("
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length, "
+                "headers: Array.from(document.querySelectorAll("
+                "'.open-run-group-header .open-run-group-toggle'))"
+                ".map((b) => b.textContent)"
+                "})",
+                lambda value: value is not None and value.get("rowCount") == 2,
             )
             window.evaluate_js(
-                "document.querySelector('.open-run-group-toggle').click();"
+                "(function(){"
+                "var toggles = document.querySelectorAll("
+                "'.open-run-group-toggle');"
+                "for (var toggle of toggles) {"
+                "  if (toggle.textContent.includes('Today')) {"
+                "    toggle.click(); return;"
+                "  }"
+                "}"
+                "})()"
             )
             after_collapse = _poll_until(
                 window,
@@ -1390,14 +1202,20 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
     settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert settled is not None
-    # Collapsed by default: two group headers, zero run rows.
+    # Collapsed by default: one top-level group header ("Default
+    # experiment"), zero run rows -- "Default study" and the date
+    # buckets inside it are nested, not rendered until each ancestor is
+    # itself expanded.
     assert settled["collapsed"]["rowCount"] == 0
-    assert any("Today" in header for header in settled["collapsed"]["headers"])
-    assert any("Earlier" in header for header in settled["collapsed"]["headers"])
-    assert settled["afterExpand"] == 2
-    # Collapsing the first ("Today") group's header removes only its own
-    # one row, leaving the "Earlier" batch row (now inside its own
-    # expanded per-date sub-group) still rendered.
+    assert any(
+        "Default experiment" in header for header in settled["collapsed"]["headers"]
+    )
+    assert settled["afterExpand"]["rowCount"] == 2
+    assert any("Today" in header for header in settled["afterExpand"]["headers"])
+    assert any("Earlier" in header for header in settled["afterExpand"]["headers"])
+    # Collapsing the "Today" group's header removes only its own one
+    # row, leaving the "Earlier" batch row (still inside its own
+    # expanded per-date sub-group) rendered.
     assert settled["afterCollapse"] == 1
 
 
@@ -1405,17 +1223,26 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The filter bar narrows the same rows the table draws from, live
-    (`open-run.js`'s own `renderRecentRuns`) -- not a second, separate
-    search index that could drift from what actually renders, and the
-    count label states how much of the full list is currently visible.
+    """The filter bar narrows by Study/Experiment name, live
+    (`open-run.js`'s own `renderRecentRuns`/`nameMatchesFilter`) -- not a
+    second, separate search index that could drift from what actually
+    renders, and the count label states how much of the full list is
+    currently visible.
+
+    Filters by Study *name*, not by a run's own id/label/date the way an
+    earlier revision of this test did: the Run-level free-text filter
+    (`matchesRecentRunsFilter`) was removed along with the "Unsorted"
+    bucket it only ever applied to (`20260918-claude-sonnet-5-home-
+    tree-reorg-design.md`, `selby/restricted`, §5's own amendment) --
+    every run now belongs to some real Study, and a Study's own expanded
+    view was never filtered by free text even before that change.
     """
-    run_directory = _write_run(tmp_path)
-    _write_batch_run(tmp_path)
-    monkeypatch.setattr(paths_module, "results_directory", lambda: tmp_path / "results")
-    run_id = json.loads((run_directory / "manifest.json").read_text(encoding="utf-8"))[
-        "run_id"
-    ]
+    results = tmp_path / "results"
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    ring_sweep = groups.create_study("Ring sweep", results=results)
+    topology = groups.create_study("Topology", results=results)
+    _write_run(tmp_path, study_id=ring_sweep.study_id)
+    _write_batch_run(tmp_path, study_id=topology.study_id)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -1426,35 +1253,7 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
             window.evaluate_js("window.fim.menu.openRun();")
             # Groups start collapsed by default -- expand them all first
             # so the filter's own effect on row count is what's measured.
-            # Waits for `window.__fimOpenRunRecentRunsLoaded === true`,
-            # not only for a toggle to exist -- the app's own launch
-            # sequence now shows Home by default and pre-populates it
-            # (`run-view-initial.js`'s own `initializeRunView`), so a
-            # toggle from that earlier, unrelated fetch can already be
-            # in the DOM the moment `menu.openRun()` above fires a fresh
-            # one; without this, the filter typed below could land on a
-            # render this test's own fetch is about to replace, and
-            # `refreshRecentRuns()`'s own `recentRunsFilterInput.value =
-            # ""` reset would silently clear it back out
-            # (`_expand_all_recent_run_groups`'s own docstring records
-            # the identical race in full, confirmed live).
-            _poll_until(
-                window,
-                "({"
-                "loaded: window.__fimOpenRunRecentRunsLoaded === true, "
-                "toggleCount: document.querySelectorAll("
-                "'.open-run-group-toggle').length"
-                "})",
-                lambda value: (
-                    value is not None
-                    and value["loaded"] is True
-                    and value["toggleCount"] > 0
-                ),
-            )
-            window.evaluate_js(
-                "Array.from(document.querySelectorAll("
-                "'.open-run-group-toggle')).forEach((b) => b.click());"
-            )
+            _expand_all_recent_run_groups(window)
             _poll_until(
                 window,
                 "document.querySelectorAll("
@@ -1464,7 +1263,7 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
             window.evaluate_js(
                 "(function(){"
                 "var input = document.getElementById('open-run-filter');"
-                f"input.value = {run_id!r};"
+                "input.value = 'Ring sweep';"
                 "input.dispatchEvent(new Event('input', {bubbles: true}));"
                 "})();"
             )

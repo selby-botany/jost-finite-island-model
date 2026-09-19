@@ -27,22 +27,12 @@ const recentRunsCountLabel = document.getElementById("open-run-count");
 const browseButton = document.getElementById("browse-trajectory-button");
 const openButton = document.getElementById("open-run-open-button");
 const openRunBackButton = document.getElementById("open-run-back-button");
-const homeNewRunButton = document.getElementById("home-new-run-button");
-const homeExploreButton = document.getElementById("home-explore-button");
-const homeExampleSelect = document.getElementById("home-example-select");
-const homeNewStudyNameInput = document.getElementById("home-new-study-name");
-const homeNewStudyDescriptionInput = document.getElementById(
-    "home-new-study-description"
-);
-const homeNewStudyButton = document.getElementById("home-new-study-button");
-const homeNewExperimentNameInput = document.getElementById(
-    "home-new-experiment-name"
-);
-const homeNewExperimentDescriptionInput = document.getElementById(
-    "home-new-experiment-description"
-);
 const homeNewExperimentButton = document.getElementById(
     "home-new-experiment-button"
+);
+const openRunTable = document.getElementById("open-run-table");
+const toggleSelectButton = document.getElementById(
+    "open-run-toggle-select-button"
 );
 const selectAllButton = document.getElementById("open-run-select-all-button");
 const clearSelectionButton = document.getElementById(
@@ -54,6 +44,13 @@ const deleteSelectedButton = document.getElementById(
 const selectionCountLabel = document.getElementById("open-run-selection-count");
 
 let selectedTrajectoryPath = null;
+// A batch row's own counterpart to `selectedTrajectoryPath` -- a batch
+// has no single trajectory of its own to select (`run.trajectoryPath`
+// is `null` for one), so it needs its own directory-shaped selection
+// instead. The two are mutually exclusive by construction
+// (`setSelectedTrajectory`/`setSelectedBatch` each clear the other),
+// never both non-null at once.
+let selectedBatchDirectory = null;
 
 // Every run/Study/Experiment fetched for this visit (`refreshRecentRuns`),
 // unfiltered and ungrouped -- `renderRecentRuns` derives the actual
@@ -64,11 +61,18 @@ let selectedTrajectoryPath = null;
 let allRecentRuns = [];
 let allStudies = [];
 let allExperiments = [];
-// A Run's own directory, not a DOM row -- so "Select all" (below) can
-// reach every loaded run regardless of which groups are currently
-// collapsed, and a selection survives a re-render (a filter keystroke)
-// untouched.
-const selectedDirectories = new Set();
+// A Run's own directory/a Study's own id/an Experiment's own id, not a
+// DOM row -- so "Select all" (below) can reach every loaded item
+// regardless of which groups are currently collapsed, and a selection
+// survives a re-render (a filter keystroke) untouched. Three separate
+// sets, one per kind, rather than one tagged collection -- `Api.
+// delete_selected`'s own three-phase (experiment, then study, then
+// run) dispatch reads directly off these without needing to first sort
+// a mixed collection by kind (`20260918-claude-sonnet-5-home-tree-
+// reorg-design.md`, `selby/restricted`, §5).
+const selectedRunDirectories = new Set();
+const selectedStudyIds = new Set();
+const selectedExperimentIds = new Set();
 // Group ids the user has explicitly collapsed -- persists across visits
 // within this launch (`refreshRecentRuns` no longer resets this; see
 // its own comment for why). A group id is stable across re-fetches
@@ -159,19 +163,32 @@ function formatEndedAt(endedAt) {
 }
 
 /**
- * Whether `run` matches a free-text filter -- run ID, label, and ended
- * date, the same fields the table itself shows, so "what you can read
- * is what you can search for."
- * @param {{runId: string, label: string, endedAt: string}} run
- * @param {string} filterText
- * @returns {boolean}
+ * Keep only the most recent run for each distinct `runId` -- `run.
+ * runId` is a deterministic hash of the run's own configuration
+ * (`fim.engine.deterministic_run_id`), not a per-invocation random id,
+ * so running the identical configuration more than once produces
+ * several real, distinct run directories that all share one `runId`.
+ * Showing every one of those inside the same Study's own expanded row
+ * is just noise -- reported live: two rows reading the exact same
+ * `run-<hash>` label, a few dozen seconds apart, both under one
+ * Study's own "Today" bucket. Compares `endedAt` directly (ISO-8601,
+ * `Z`-suffixed, so a plain string compare already sorts chronologically)
+ * rather than assuming `runs` arrives in any particular order --
+ * `Api.get_study_run_summary`'s own list follows `study_run_
+ * directories`'s storage order, not necessarily newest-first the way
+ * `Api.list_home_runs`'s own already is.
+ * @param {Array<object>} runs
+ * @returns {Array<object>}
  */
-function matchesRecentRunsFilter(run, filterText) {
-    if (!filterText) {
-        return true;
+function dedupeMostRecentPerRunId(runs) {
+    const mostRecentById = new Map();
+    for (const run of runs) {
+        const existing = mostRecentById.get(run.runId);
+        if (!existing || run.endedAt > existing.endedAt) {
+            mostRecentById.set(run.runId, run);
+        }
     }
-    const haystack = `${run.runId} ${run.label} ${run.endedAt}`.toLowerCase();
-    return haystack.includes(filterText.toLowerCase());
+    return runs.filter((run) => mostRecentById.get(run.runId) === run);
 }
 
 /**
@@ -187,13 +204,25 @@ function matchesRecentRunsFilter(run, filterText) {
  * shows in parentheses) -- `buildHomeGroups`, below, gives a Study/
  * Experiment group the identical two fields, so every group in the tree
  * is rendered by the same code with no per-kind special-casing.
+ *
+ * `idPrefix` namespaces every id this call produces (including the
+ * nested per-date ids under "Earlier") -- needed once this function
+ * became callable more than once per render, one call per expanded
+ * Study (`studyGroup`, above): `collapsedGroupIds`/`knownGroupIds` are
+ * flat sets keyed by plain string id, so two different Studies each
+ * showing their own "Today" bucket would otherwise collide under the
+ * identical bare id `"Today"`, collapsing one when the botanist meant
+ * to collapse only the other. Empty (the historical, single-caller
+ * default) when omitted, matching this function's own original
+ * behavior exactly for its one remaining bare caller, if any.
  * @param {Array<object>} runs
+ * @param {string} [idPrefix]
  * @returns {Array<{id: string, label: string, runCount: number,
  *     countLabel: string, runs?: Array<object>,
  *     subgroups?: Array<{id: string, label: string, runs: Array<object>,
  *         runCount: number, countLabel: string}>}>}
  */
-function groupRecentRuns(runs) {
+function groupRecentRuns(runs, idPrefix = "") {
     const buckets = new Map();
     for (const run of runs) {
         const bucketId = dateBucketFor(run.endedAt);
@@ -207,7 +236,7 @@ function groupRecentRuns(runs) {
             const bucketRuns = buckets.get(bucketId);
             if (bucketId !== "Earlier") {
                 return {
-                    id: bucketId,
+                    id: `${idPrefix}${bucketId}`,
                     label: bucketId,
                     runs: bucketRuns,
                     runCount: bucketRuns.length,
@@ -224,7 +253,7 @@ function groupRecentRuns(runs) {
             }
             const subgroups = Array.from(dateGroups.entries()).map(
                 ([dateLabel, dateRuns]) => ({
-                    id: `Earlier:${dateLabel}`,
+                    id: `${idPrefix}Earlier:${dateLabel}`,
                     label: dateLabel,
                     runs: dateRuns,
                     runCount: dateRuns.length,
@@ -236,7 +265,7 @@ function groupRecentRuns(runs) {
                 0
             );
             return {
-                id: bucketId,
+                id: `${idPrefix}${bucketId}`,
                 label: bucketId,
                 subgroups,
                 runCount,
@@ -269,29 +298,8 @@ function ensureGroupDefaults(groups) {
 }
 
 /**
- * Every Run directory already claimed by some Study -- Run/Study/
- * Experiment hierarchy design (`20260917-claude-sonnet-5-run-study-
- * experiment-hierarchy-design.md`, `selby/restricted`, §6): "Unsorted"
- * is every Run with no Study membership, decided here, client-side,
- * from `Api.list_studies`'s own already-fetched `runDirectories` --
- * never a second bridge round trip per Run row.
- * @param {Array<{runDirectories: Array<string>}>} studies
- * @returns {Set<string>}
- */
-function claimedDirectories(studies) {
-    const claimed = new Set();
-    for (const study of studies) {
-        for (const directory of study.runDirectories) {
-            claimed.add(directory);
-        }
-    }
-    return claimed;
-}
-
-/**
- * Whether `name` matches a filter's free text -- case-insensitive
- * substring, the same rule `matchesRecentRunsFilter` already applies to
- * a Run's own fields, extended to a Study/Experiment's own name.
+ * Whether `name` matches a filter's free text -- a plain, case-
+ * insensitive substring match against a Study/Experiment's own name.
  * @param {string} name
  * @param {string} filterText
  * @returns {boolean}
@@ -309,7 +317,20 @@ function nameMatchesFilter(name, filterText) {
  * in this visit -- the identical cache-survives-rebuild shape
  * `toggleBatchRow`'s own `window.__fimBatchReplicateCache` already
  * established one level down.
- * @param {{studyId: string, name: string, runCount: number}} study
+ *
+ * Once fetched, the flat cached list is wrapped into the identical
+ * Today/Yesterday/Earlier(-by-date) `subgroups` shape `groupRecentRuns`
+ * already built for the now-removed "Unsorted" bucket (`20260918-
+ * claude-sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §6):
+ * every unattached run now lands in the always-present default Study
+ * (§1/§2 of that same document) rather than a separate, larger
+ * "Unsorted" group, so a real Study's own row needs this same
+ * chronological browsing aid, not only a flat list -- a real
+ * regression that document flags explicitly if left unaddressed. The
+ * *not-yet-fetched* case is untouched: still a bare `runs: null`, never
+ * reached by `renderGroup` for a still-collapsed group either way.
+ * @param {{studyId: string, name: string, runCount: number,
+ *     runDirectories: Array<string>}} study
  * @returns {object}
  */
 function studyGroup(study) {
@@ -317,14 +338,21 @@ function studyGroup(study) {
         window.__fimStudyRunsCache = {};
     }
     const cachedRuns = window.__fimStudyRunsCache[study.studyId];
-    return {
+    const base = {
         id: `study:${study.studyId}`,
         label: study.name,
         kind: "study",
         studyId: study.studyId,
         runCount: study.runCount,
         countLabel: `${study.runCount} run${study.runCount === 1 ? "" : "s"}`,
-        runs: cachedRuns === undefined ? null : cachedRuns,
+        runDirectories: study.runDirectories,
+    };
+    if (cachedRuns === undefined) {
+        return { ...base, runs: null };
+    }
+    return {
+        ...base,
+        subgroups: groupRecentRuns(cachedRuns, `${base.id}:`),
     };
 }
 
@@ -358,27 +386,64 @@ function experimentGroup(experiment, studiesById) {
 }
 
 /**
- * Build Home's own top-level tree: every Experiment, every Study not
- * inside one, and an "Unsorted" bucket for every Run in neither --
- * itself grouped by date exactly as `groupRecentRuns` already grouped
- * every run before Study/Experiment existed. On a checkout with no
- * Study/Experiment ever created, returns the plain date-bucket groups
- * directly, matching that exact prior rendering byte-for-byte -- no
- * empty "Unsorted" wrapper cluttering a first-run screen (design doc §6:
- * "zero required migration").
+ * Count the distinct run directories reachable from `groups` -- a run
+ * added to more than one Study (`add_run_to_study` only ever appends,
+ * never detaches from a prior Study, so this is a real, reachable data
+ * shape, not a hypothetical one) is counted once here, never once per
+ * Study it happens to belong to.
+ *
+ * A naive `groups.reduce((total, group) => total + group.runCount, 0)`
+ * -- this function's own former shape -- double(-or-more)-counts any
+ * such run instead: confirmed live on a checkout with heavy manual
+ * "Add to study…"/"Add to experiment…" use, where the very same two
+ * runs had been added to several different Studies, producing a
+ * nonsensical "722 of 2 runs" label with no filter text even typed
+ * (`visibleRuns` and `totalRuns` are supposed to be equal whenever
+ * every group matches the filter trivially, which an empty filter
+ * always does).
+ * @param {Array<object>} groups
+ * @returns {number}
+ */
+function distinctRunCount(groups) {
+    const seen = new Set();
+    const visit = (group) => {
+        if (group.kind === "study") {
+            for (const directory of group.runDirectories) {
+                seen.add(directory);
+            }
+        } else if (group.kind === "experiment") {
+            group.subgroups.forEach(visit);
+        }
+    };
+    groups.forEach(visit);
+    return seen.size;
+}
+
+/**
+ * Build Home's own top-level tree: every Experiment, then every Study
+ * not inside one -- no "Unsorted" bucket, no floating run, ever
+ * (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+ * restricted`, §1/§2/§7): the always-present default Experiment/Study
+ * (`fim.persistence.groups.ensure_default_study`) is an ordinary entry
+ * in these same two lists, ordered first because it is, by
+ * construction, the oldest one whenever it exists at all (`Api.list_
+ * experiments`/`list_studies`'s own oldest-first ordering) -- this
+ * function needs no special-casing to put it there. `runs` (every run,
+ * unconditionally, `Api.list_home_runs`) is no longer read here at
+ * all: every run now belongs to some real Study, so there is nothing
+ * left for this function to place outside one.
  *
  * A filter's free text matches a Study/Experiment by name (`
- * nameMatchesFilter`) and a Run by its own existing fields
- * (`matchesRecentRunsFilter`, applied to "Unsorted" exactly as before);
- * an Experiment matching by name keeps every one of its own Studies,
- * not just ones that would themselves match.
- * @param {Array<object>} runs
+ * nameMatchesFilter`); an Experiment matching by name keeps every one
+ * of its own Studies, not just ones that would themselves match. A
+ * Study's own run-level filtering (matching a run's own N/d/m/etc.)
+ * happens once it is actually expanded, unaffected by this function.
  * @param {Array<object>} studies
  * @param {Array<object>} experiments
  * @param {string} filterText
  * @returns {Array<object>}
  */
-function buildHomeGroups(runs, studies, experiments, filterText) {
+function buildHomeGroups(studies, experiments, filterText) {
     const studiesById = new Map(studies.map((study) => [study.studyId, study]));
     const groupedStudyIds = new Set();
     const experimentGroups = [];
@@ -397,96 +462,8 @@ function buildHomeGroups(runs, studies, experiments, filterText) {
                 nameMatchesFilter(study.name, filterText)
         )
         .map(studyGroup);
-    const claimed = claimedDirectories(studies);
-    const unsortedRuns = runs
-        .filter((run) => !claimed.has(run.directory))
-        .filter((run) => matchesRecentRunsFilter(run, filterText));
-    const dateGroups = groupRecentRuns(unsortedRuns);
-    if (studies.length === 0 && experiments.length === 0) {
-        return dateGroups;
-    }
-    const unsortedGroup = {
-        id: "Unsorted",
-        label: "Unsorted",
-        kind: "unsorted",
-        runCount: unsortedRuns.length,
-        countLabel: String(unsortedRuns.length),
-        subgroups: dateGroups,
-    };
-    return [...experimentGroups, ...standaloneStudyGroups, unsortedGroup];
+    return [...experimentGroups, ...standaloneStudyGroups];
 }
-
-// Home's own shortcut cards (design §9, slice 3): both delegate to an
-// already-existing entry point exactly the rail's own buttons use
-// (`screens/nav-rail.js`'s own `wireNavRail`) -- pure navigation, no
-// bridge call of its own. "New run" shows Configure with whatever is
-// already loaded (`loadInitialForm`'s own "prefer the last submitted
-// form" behavior); a worked example is still one click away there via
-// "Load example…", unchanged.
-homeNewRunButton.addEventListener("click", () => {
-    window.fim.showConfigureScreen();
-});
-
-homeExploreButton.addEventListener("click", () => {
-    window.fim.menu.explore();
-});
-
-// Set once `refreshHomeExampleOptions`'s own bridge call has settled and
-// the dropdown genuinely lists this visit's own built-in examples --
-// `window.__fimXReady`-flag precedent (`presets.js`'s own
-// `__fimPresetsListReady`, `__fimOpenRunRecentRunsLoaded` above) for the
-// identical reason: a test polling only "the select exists" could
-// otherwise observe it with no example options yet, in the narrow
-// window before this async call resolves.
-window.__fimHomeExampleOptionsReady = false;
-
-/**
- * Populate `home-example-select` with this visit's own built-in worked
- * examples -- `screens/presets.js`'s own shared `refreshExampleOptions`
- * (design ask: "one of the examples," not every user-saved
- * configuration too; the full combined list stays reachable only from
- * the picker `fim.menu.loadExample` opens). Re-fetched on every visit to
- * Home rather than once, matching `refreshRecentRuns`'s own "never trust
- * a stale fetch across visits" precedent, even though the built-in set
- * itself never changes at runtime.
- */
-async function refreshHomeExampleOptions() {
-    window.__fimHomeExampleOptionsReady = false;
-    await window.fim.refreshExampleOptions(homeExampleSelect);
-    window.__fimHomeExampleOptionsReady = true;
-}
-
-// A plain, immediately-acting pulldown (botanist GUI design doc's own
-// "jump-start" precedent for a shortcut like this): picking an example
-// applies it and navigates straight to Configure, then resets to its
-// own placeholder so the control always reads as an action, never as
-// "currently showing example X" -- Configure itself, not this select,
-// is where the loaded values are actually reviewed. Reuses `presets.js`'s
-// own `applyPreset` (the exact mechanism `modal-presets`'s own picker
-// already calls) via `window.fim.applyPreset`, so this is genuinely a
-// second entry point to one mechanism, not a second, independent way of
-// loading a preset's values. Only navigates on a successful apply --
-// `applyPreset`'s own rejected-values path already shows an inline
-// notice on this same screen (`showExampleLoadNotice`), and jumping to
-// Configure on top of that would land on an unchanged form right after
-// telling the user why nothing changed.
-homeExampleSelect.addEventListener("change", async () => {
-    const presetId = homeExampleSelect.value;
-    if (!presetId) {
-        return;
-    }
-    // The option's own bare title (`refreshExampleOptions`'s own
-    // `dataset.presetTitle`), not its visible `textContent` -- the
-    // latter carries a "(view YAML only)" suffix for the one example
-    // this affects, meant for the pulldown's own label, not to be
-    // echoed back inside `showExampleLoadNotice`'s own message.
-    const presetTitle = homeExampleSelect.selectedOptions[0].dataset.presetTitle;
-    homeExampleSelect.value = "";
-    const applied = await window.fim.applyPreset(presetId, presetTitle);
-    if (applied) {
-        window.fim.showConfigureScreen();
-    }
-});
 
 function showOpenRunBanner(message) {
     if (!message) {
@@ -500,7 +477,21 @@ function showOpenRunBanner(message) {
 
 function setSelectedTrajectory(path) {
     selectedTrajectoryPath = path;
+    selectedBatchDirectory = null;
     openButton.disabled = path === null;
+}
+
+/**
+ * A batch row's own counterpart to `setSelectedTrajectory` -- see
+ * `selectedBatchDirectory`'s own comment for why a batch needs a
+ * separate, directory-shaped selection rather than reusing the same
+ * variable a trajectory path already occupies.
+ * @param {string | null} directory
+ */
+function setSelectedBatch(directory) {
+    selectedBatchDirectory = directory;
+    selectedTrajectoryPath = null;
+    openButton.disabled = directory === null;
 }
 
 /**
@@ -730,13 +721,13 @@ function buildRunRow(run) {
             checkbox.type = "checkbox";
             checkbox.className = "open-run-select-checkbox";
             checkbox.setAttribute("aria-label", `Select ${run.runId} for deletion`);
-            checkbox.checked = selectedDirectories.has(run.directory);
+            checkbox.checked = selectedRunDirectories.has(run.directory);
             checkbox.addEventListener("click", (event) => event.stopPropagation());
             checkbox.addEventListener("change", () => {
                 if (checkbox.checked) {
-                    selectedDirectories.add(run.directory);
+                    selectedRunDirectories.add(run.directory);
                 } else {
-                    selectedDirectories.delete(run.directory);
+                    selectedRunDirectories.delete(run.directory);
                 }
                 updateSelectionToolbar();
             });
@@ -783,31 +774,31 @@ function buildRunRow(run) {
             sibling.classList.remove("selected");
         }
         row.classList.add("selected");
+        showOpenRunBanner("");
+        // A batch row selects its own directory rather than a
+        // trajectory path -- it has none of its own (`run.
+        // trajectoryPath` is `null` for a batch) -- but is otherwise
+        // symmetric with a scalar row from here on: select on click,
+        // "Open"/double-click opens it (`20260919-claude-sonnet-5-
+        // unified-batch-and-study-results-reopen-design.md`, `selby/
+        // restricted`, §3). "Open replicate," reached by expanding the
+        // row instead, is unchanged and still the way to open one
+        // specific replicate's own scalar result.
         if (run.isBatch) {
-            // Design §0, §4.0 #9: a batch manifest has no single
-            // trajectory of its own to verify or re-analyze here --
-            // named explicitly rather than silently doing nothing
-            // or attempting (and failing) to re-analyze it anyway.
-            setSelectedTrajectory(null);
-            showOpenRunBanner(
-                "batch runs have no single trajectory — open a replicate " +
-                    "from its own batch results screen instead"
-            );
+            setSelectedBatch(run.directory);
             return;
         }
-        showOpenRunBanner("");
         setSelectedTrajectory(run.trajectoryPath);
     });
     // Double-clicking a run row opens it directly (item 5) -- final
     // generation, no differentiation-q sweep, exactly what the "Open"
     // button does once a row is selected, without the intermediate
-    // click. A batch row has no single trajectory to open this way
-    // (the single-click handler above already explains why and shows
-    // the banner saying so); the batch's own click already fired by
-    // the time a real double-click's second `dblclick` event reaches
-    // here, so this only needs to skip it, not repeat that message.
+    // click. A batch row opens through the identical Results card too
+    // (§3, above) -- `openBatch` in place of `openTrajectory`, nothing
+    // else about this handler's own shape changes.
     row.addEventListener("dblclick", async () => {
         if (run.isBatch) {
+            await openBatch(run.directory);
             return;
         }
         await openTrajectory(run.trajectoryPath);
@@ -863,65 +854,140 @@ function confirmThenRun(triggerButton, message, action) {
 }
 
 /**
- * Every currently-Unsorted run -- the same `claimedDirectories`/filter
- * `buildHomeGroups` already applies, exposed here for `buildAddRunTo
- * StudySelect`'s own picker. Only Unsorted runs are offered: a run
- * already in a *different* Study is left alone, matching this design's
- * own "no Run belongs to more than one Study" precedent
- * (`20260917-claude-sonnet-5-run-study-experiment-hierarchy-design.md`,
- * `selby/restricted`, §10) rather than silently creating one.
- * @returns {Array<object>}
+ * Show an inline name-prompt right after `triggerButton` -- the input-
+ * taking counterpart to `confirmThenRun`, above, for an action that
+ * needs one short string rather than only a yes/no. Reused by `build
+ * CreateStudyButton`'s own "Create study…", the row-level counterpart
+ * to Home's own former "New study" card (`20260918-claude-sonnet-5-
+ * home-tree-reorg-design.md`, `selby/restricted`, §4).
+ * @param {HTMLButtonElement} triggerButton
+ * @param {string} placeholder
+ * @param {(name: string) => Promise<void>} action
  */
-function currentlyUnsortedRuns() {
-    const claimed = claimedDirectories(allStudies);
-    return allRecentRuns.filter((run) => !claimed.has(run.directory));
-}
-
-/**
- * An immediately-acting "Add run…" pulldown for one Study row -- the
- * primary action on a Study's own header (Run/Study/Experiment
- * workflow-ergonomics design `20260917-claude-sonnet-5-run-study-
- * experiment-workflow-ergonomics.md`, `selby/restricted`, item 2/4):
- * assembling a Study by reaching out and claiming Unsorted runs, rather
- * than only by hunting through Unsorted for "Add to study…" one row at
- * a time. See `buildAddToExperimentSelect`'s own docstring for the
- * shared immediately-acting-pulldown idiom.
- * @param {string} studyId
- * @returns {HTMLSelectElement}
- */
-function buildAddRunToStudySelect(studyId) {
-    const select = document.createElement("select");
-    select.className = "open-run-add-to-select";
-    select.setAttribute("aria-label", "Add a run to this study");
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "Add run…";
-    placeholder.selected = true;
-    select.appendChild(placeholder);
-    for (const run of currentlyUnsortedRuns()) {
-        const option = document.createElement("option");
-        option.value = run.directory;
-        option.textContent = run.name
-            ? `${run.name} (${run.runId})`
-            : `${run.runId} — ${formatEndedAt(run.endedAt)}`;
-        select.appendChild(option);
+function promptForNameThenRun(triggerButton, placeholder, action) {
+    if (triggerButton._fimPromptRow) {
+        return;
     }
-    select.addEventListener("click", (event) => event.stopPropagation());
-    select.addEventListener("change", async () => {
-        const directory = select.value;
-        if (!directory) {
+    triggerButton.disabled = true;
+    const row = document.createElement("span");
+    row.className = "open-run-inline-confirm";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", placeholder);
+    input.addEventListener("click", (event) => event.stopPropagation());
+    row.appendChild(input);
+    const createButton = document.createElement("button");
+    createButton.type = "button";
+    createButton.textContent = "Create";
+    createButton.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const name = input.value.trim();
+        if (!name) {
+            input.focus();
             return;
         }
-        const result = await window.pywebview.api.add_run_to_study(
-            studyId,
-            directory
-        );
-        if (!result.ok) {
-            showOpenRunBanner(result.message);
+        row.remove();
+        triggerButton._fimPromptRow = null;
+        triggerButton.disabled = false;
+        await action(name);
+    });
+    row.appendChild(createButton);
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.textContent = "Cancel";
+    cancelButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        row.remove();
+        triggerButton._fimPromptRow = null;
+        triggerButton.disabled = false;
+    });
+    row.appendChild(cancelButton);
+    triggerButton.after(row);
+    triggerButton._fimPromptRow = row;
+    input.focus();
+}
+
+// "Create experiment…" has no row to hang off of -- an Experiment is
+// the tree's own outermost level -- so it lives beside the filter input
+// instead, the one page-level creation action `.home-cards`' own
+// removal (§7) still needs: every other card's action moved onto a
+// row (§4), but there is no row a *new* Experiment could belong to
+// before it exists. The always-present default Experiment (§1) means
+// this is never required for a first "do a run," only for a botanist
+// who deliberately wants a second one.
+homeNewExperimentButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    promptForNameThenRun(homeNewExperimentButton, "Experiment name", async (name) => {
+        const created = await window.pywebview.api.create_experiment(name);
+        if (!created.ok) {
+            showOpenRunBanner(created.message);
+            return;
         }
         await refreshRecentRuns();
     });
-    return select;
+});
+
+/**
+ * "Create study…" on an Experiment row -- one user action instead of
+ * today's two disconnected ones (create a Study anywhere, then a
+ * separate "Add to experiment…" picker): `Api.create_study` followed
+ * immediately by `Api.add_study_to_experiment`, both against this
+ * row's own Experiment (`20260918-claude-sonnet-5-home-tree-reorg-
+ * design.md`, `selby/restricted`, §4).
+ * @param {{experimentId: string}} group
+ * @returns {HTMLButtonElement}
+ */
+function buildCreateStudyButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button";
+    button.textContent = "Create study…";
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        promptForNameThenRun(button, "Study name", async (name) => {
+            const created = await window.pywebview.api.create_study(name);
+            if (!created.ok) {
+                showOpenRunBanner(created.message);
+                return;
+            }
+            const added = await window.pywebview.api.add_study_to_experiment(
+                group.experimentId,
+                created.studyId
+            );
+            if (!added.ok) {
+                showOpenRunBanner(added.message);
+                return;
+            }
+            await refreshRecentRuns();
+        });
+    });
+    return button;
+}
+
+/**
+ * "Create run…" on a Study row -- navigates to Configure with this
+ * Study hard-selected on `run-study-select` (`20260918-claude-sonnet-
+ * 5-home-tree-reorg-design.md`, `selby/restricted`, §4): unlike the
+ * Explore handoff's own "New study…" soft nudge, a botanist reaching
+ * Configure this way has already explicitly chosen this Study by
+ * clicking its own row, so the selection is set outright, not merely
+ * pre-selected -- still fully changeable afterward, never locking the
+ * botanist in.
+ * @param {{studyId: string}} group
+ * @returns {HTMLButtonElement}
+ */
+function buildCreateRunButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button primary-action";
+    button.textContent = "Create run…";
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await window.fim.showConfigureScreen();
+        window.fim.selectStudyForNewRun(group.studyId);
+    });
+    return button;
 }
 
 /**
@@ -972,22 +1038,27 @@ function buildRerunStudyButton(group) {
 }
 
 /**
- * Build a Study/Experiment group header's own extra action controls --
- * (for a Study only) "Add run…", the primary/first action, then Copy,
- * Delete, and (for a Study only) "Add to experiment…", appended beside
- * the toggle button in the same cell. An Experiment group gets Copy/
- * Delete only; a plain date-bucket/Unsorted group gets none of this at
- * all (`buildGroupHeaderRow` only calls this for `kind === "study"` or
- * `"experiment"`). "Add run…" leads, ahead of Copy/Delete/"Add to
- * experiment…": it is the operation a Study's own row exists for and,
- * per the same design document, the one most likely to be reached for
- * first -- putting the *Study's own parent* assignment ahead of it, as
- * this row's actions did before, answered the wrong question first.
+ * Build a Study/Experiment group header's own extra action controls
+ * (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+ * restricted`, §4/§5): a Study row leads with "Create run…" (navigates
+ * to Configure, this Study hard-selected); an Experiment row leads
+ * with "Create study…" (inline name prompt, nests the new Study in
+ * this Experiment immediately) -- each the primary, first-reached-for
+ * action for its own row. Then Copy, "Re-run all…" (Study only), and
+ * (Study only) "Add to experiment…". No standalone "Delete…" button
+ * for either kind anymore -- deletion is the header row's own
+ * checkbox (`buildGroupSelectCheckbox`, `buildGroupHeaderRow`) plus the
+ * one shared "Delete selected" toolbar action, reviewed as a whole
+ * before anything is actually removed, the same idiom a Run row's own
+ * checkbox already established (§5: "deletion... should not... happen
+ * accidentally"). A plain date-bucket group gets none of this at all
+ * (`buildGroupHeaderRow` only calls this for `kind === "study"` or
+ * `"experiment"`).
  *
  * "Copy" needs no name prompt (see `confirmThenRun`'s own docstring for
  * why this codebase has no dialogs at all): it derives `"<name> copy"`
  * outright, non-destructive and instantly renamable/deletable again if
- * unwanted, unlike Delete.
+ * unwanted, unlike deletion.
  * @param {object} group
  * @returns {HTMLSpanElement}
  */
@@ -996,7 +1067,13 @@ function buildGroupActionControls(group) {
     container.className = "open-run-group-actions";
 
     if (group.kind === "study") {
-        container.appendChild(buildAddRunToStudySelect(group.studyId));
+        container.appendChild(buildCreateRunButton(group));
+    }
+    if (group.kind === "experiment") {
+        container.appendChild(buildCreateStudyButton(group));
+    }
+    if (group.kind === "study") {
+        container.appendChild(buildOpenStudyButton(group));
     }
 
     const copyButton = document.createElement("button");
@@ -1024,34 +1101,6 @@ function buildGroupActionControls(group) {
     if (group.kind === "study") {
         container.appendChild(buildRerunStudyButton(group));
     }
-
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "open-run-group-action-button";
-    deleteButton.textContent = "Delete…";
-    deleteButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        confirmThenRun(
-            deleteButton,
-            group.kind === "study"
-                ? `Delete "${group.label}" and its ${group.runCount} run(s)?`
-                : `Delete "${group.label}" and everything inside it?`,
-            async () => {
-                const result =
-                    group.kind === "study"
-                        ? await window.pywebview.api.delete_study(group.studyId)
-                        : await window.pywebview.api.delete_experiment(
-                              group.experimentId
-                          );
-                if (!result.ok) {
-                    showOpenRunBanner(result.message);
-                    return;
-                }
-                await refreshRecentRuns();
-            }
-        );
-    });
-    container.appendChild(deleteButton);
 
     if (group.kind === "study") {
         container.appendChild(buildAddToExperimentSelect(group.studyId));
@@ -1123,6 +1172,39 @@ function buildAddToExperimentSelect(studyId) {
  *     can be indented to show its place in the hierarchy.
  * @returns {HTMLTableRowElement}
  */
+/**
+ * A Study/Experiment group header's own selection checkbox -- the
+ * identical bulk Select/Select all/Delete idiom a Run row's own
+ * checkbox already established, generalized to these two kinds
+ * (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+ * restricted`, §5), replacing each row's own former standalone
+ * "Delete…" button in favor of one selection, reviewed as a whole,
+ * before the one "Delete selected" action that actually removes
+ * anything.
+ * @param {{kind: "study" | "experiment", studyId?: string,
+ *     experimentId?: string, label: string}} group
+ * @returns {HTMLInputElement}
+ */
+function buildGroupSelectCheckbox(group) {
+    const selected = group.kind === "study" ? selectedStudyIds : selectedExperimentIds;
+    const id = group.kind === "study" ? group.studyId : group.experimentId;
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "open-run-select-checkbox";
+    checkbox.setAttribute("aria-label", `Select ${group.label} for deletion`);
+    checkbox.checked = selected.has(id);
+    checkbox.addEventListener("click", (event) => event.stopPropagation());
+    checkbox.addEventListener("change", () => {
+        if (checkbox.checked) {
+            selected.add(id);
+        } else {
+            selected.delete(id);
+        }
+        updateSelectionToolbar();
+    });
+    return checkbox;
+}
+
 function buildGroupHeaderRow(group, nested = false) {
     const row = document.createElement("tr");
     row.className = "open-run-group-header";
@@ -1131,6 +1213,19 @@ function buildGroupHeaderRow(group, nested = false) {
     }
     const cell = document.createElement("td");
     cell.colSpan = 6;
+    // A `<td>` itself as the flex container (an earlier version of this
+    // function) computed `display: flex` correctly but did not actually
+    // lay its children out that way under this project's own bundled
+    // WebKit -- a real, confirmed rendering quirk, not merely a guess --
+    // so the flex row lives on a plain wrapper `<span>` nested inside
+    // the cell instead, the far more common (and reliably supported)
+    // "flex container inside a table cell" shape.
+    const cellRow = document.createElement("span");
+    cellRow.className = "open-run-group-header-cell";
+    cell.appendChild(cellRow);
+    if (group.kind === "study" || group.kind === "experiment") {
+        cellRow.appendChild(buildGroupSelectCheckbox(group));
+    }
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "open-run-group-toggle";
@@ -1148,7 +1243,7 @@ function buildGroupHeaderRow(group, nested = false) {
                 group.studyId
             );
             window.__fimStudyRunsCache[group.studyId] = result.ok
-                ? result.runs
+                ? dedupeMostRecentPerRunId(result.runs)
                 : [];
         }
         if (expanding) {
@@ -1158,9 +1253,9 @@ function buildGroupHeaderRow(group, nested = false) {
         }
         renderRecentRuns();
     });
-    cell.appendChild(toggle);
+    cellRow.appendChild(toggle);
     if (group.kind === "study" || group.kind === "experiment") {
-        cell.appendChild(buildGroupActionControls(group));
+        cellRow.appendChild(buildGroupActionControls(group));
     }
     row.appendChild(cell);
     return row;
@@ -1205,12 +1300,7 @@ function renderGroup(group, nested = false) {
 function renderRecentRuns() {
     recentRunsBody.replaceChildren();
     const filterText = recentRunsFilterInput.value.trim();
-    const groups = buildHomeGroups(
-        allRecentRuns,
-        allStudies,
-        allExperiments,
-        filterText
-    );
+    const groups = buildHomeGroups(allStudies, allExperiments, filterText);
     // Decide "closed by default" for any group this launch has never
     // seen before *first*, so the very first render after a fresh fetch
     // already reflects that default rather than briefly flashing open.
@@ -1219,7 +1309,7 @@ function renderRecentRuns() {
         renderGroup(group);
     }
     const totalRuns = allRecentRuns.length;
-    const visibleRuns = groups.reduce((total, group) => total + group.runCount, 0);
+    const visibleRuns = distinctRunCount(groups);
     recentRunsCountLabel.textContent =
         visibleRuns === totalRuns
             ? `${totalRuns} run${totalRuns === 1 ? "" : "s"}`
@@ -1254,16 +1344,37 @@ async function refreshRecentRuns() {
     // way (item 2b); `ensureGroupDefaults` (called from
     // `renderRecentRuns`) is what seeds a *new* group's default state
     // (closed) the first time this window ever sees it. A selection
-    // (`selectedDirectories`) IS reset -- a bulk delete or a fresh visit
-    // should never carry a stale selection referencing a Run that may no
-    // longer even be listed.
-    selectedDirectories.clear();
+    // (`selectedRunDirectories`/`selectedStudyIds`/`selectedExperiment
+    // Ids`) IS reset -- a bulk delete or a fresh visit should never
+    // carry a stale selection referencing an item that may no longer
+    // even be listed. Select mode (checkbox visibility) resets with it,
+    // for the same reason: nothing selected means no reason to keep
+    // showing the checkboxes a fresh visit never asked for.
+    selectedRunDirectories.clear();
+    selectedStudyIds.clear();
+    selectedExperimentIds.clear();
+    setSelectMode(false);
     recentRunsFilterInput.value = "";
     [allRecentRuns, allStudies, allExperiments] = await Promise.all([
         window.pywebview.api.list_home_runs(),
         window.pywebview.api.list_studies(),
         window.pywebview.api.list_experiments(),
     ]);
+    // A checkout that has never run anything, and never created a
+    // Study/Experiment by hand, has nothing to click "Create run…" on
+    // yet -- `ensure_default_study` is lazy on the Python side (design
+    // doc §1: never called eagerly at launch), so this is the one place
+    // that materializes it for real, exactly when the tree would
+    // otherwise render completely empty. Sequential, not folded into
+    // the `Promise.all` above, so this never races the initial fetch:
+    // both lists are already known empty before creating anything.
+    if (allStudies.length === 0 && allExperiments.length === 0) {
+        await window.pywebview.api.ensure_default_study();
+        [allStudies, allExperiments] = await Promise.all([
+            window.pywebview.api.list_studies(),
+            window.pywebview.api.list_experiments(),
+        ]);
+    }
     // Clearing `__fimStudyRunsCache` just above means an *already
     // expanded* Study (its own group id already removed from
     // `collapsedGroupIds` by an earlier visit's own toggle click) would
@@ -1294,7 +1405,24 @@ recentRunsFilterInput.addEventListener("input", () => {
 });
 
 /**
- * Reflect `selectedDirectories`'s own current size in the bulk-selection
+ * Total selected count across all three kinds -- Runs, Studies, and
+ * Experiments (`20260918-claude-sonnet-5-home-tree-reorg-design.md`,
+ * `selby/restricted`, §5). Deliberately a flat sum, not inflated by
+ * counting a selected Study/Experiment's own member Runs a second time
+ * even if any of them also happen to be individually selected --
+ * `buildDeleteSelectedMessage`, below, is what actually spells out the
+ * full cascade a botanist is about to trigger, so this count alone
+ * never has to.
+ * @returns {number}
+ */
+function totalSelectedCount() {
+    return (
+        selectedRunDirectories.size + selectedStudyIds.size + selectedExperimentIds.size
+    );
+}
+
+/**
+ * Reflect the current selection's own total size in the bulk-selection
  * toolbar -- the "Delete selected" button's own enabled state and the
  * live count beside it. Called after every re-render and every checkbox
  * toggle, so it never drifts from the actual selection.
@@ -1307,92 +1435,112 @@ function updateSelectionToolbar() {
     if (deleteSelectedButton._fimConfirmRow) {
         return;
     }
-    const count = selectedDirectories.size;
+    const count = totalSelectedCount();
     deleteSelectedButton.disabled = count === 0;
     deleteSelectedButton.textContent =
         count === 0 ? "Delete selected" : `Delete selected (${count})`;
     selectionCountLabel.textContent = count === 0 ? "" : `${count} selected`;
 }
 
+/**
+ * Spell out exactly what "Delete selected" is about to remove -- never
+ * understating a Study/Experiment's own cascade, the reason this
+ * codebase never offers a bare row-level "Delete…" button anymore
+ * (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+ * restricted`, §5): a botanist who selected two Experiments and one
+ * bare Run sees exactly that named, not a single opaque number.
+ * @returns {string}
+ */
+function buildDeleteSelectedMessage() {
+    const parts = [];
+    if (selectedExperimentIds.size > 0) {
+        parts.push(
+            `${selectedExperimentIds.size} experiment(s) (and everything inside them)`
+        );
+    }
+    if (selectedStudyIds.size > 0) {
+        parts.push(`${selectedStudyIds.size} stud(y/ies) (and its/their own runs)`);
+    }
+    if (selectedRunDirectories.size > 0) {
+        parts.push(`${selectedRunDirectories.size} individual run(s)`);
+    }
+    return `Delete ${parts.join(", ")}?`;
+}
+
 // Bulk "Select/Delete/Delete all" idiom (design doc §10, resolved
 // directly by the project owner: thousands of Unsorted runs could not
-// realistically be deleted one at a time through the GUI). "Select all"
-// selects every currently *loaded* run (`allRecentRuns`), not merely
-// whatever rows happen to be in the DOM right now -- a collapsed group's
-// own runs are just as selectable this way as an expanded one's,
-// composing into "delete every run" with no separate button needed for
-// that case specifically.
+// realistically be deleted one at a time through the GUI; generalized
+// to Study/Experiment rows too, `20260918-claude-sonnet-5-home-tree-
+// reorg-design.md`, `selby/restricted`, §5).
+//
+// Checkboxes are hidden by default (`#open-run-table`'s own
+// `open-run-selecting` class, `app.css`) -- a checkbox on every row is
+// noise on a screen a botanist mostly uses to look, not to bulk-
+// delete. "Select" toggles that visibility alone; it never touches the
+// underlying selection state itself, so toggling it off and back on
+// leaves whatever was already selected exactly as it was.
+function setSelectMode(selecting) {
+    openRunTable.classList.toggle("open-run-selecting", selecting);
+    toggleSelectButton.setAttribute("aria-pressed", String(selecting));
+}
+
+toggleSelectButton.addEventListener("click", () => {
+    setSelectMode(!openRunTable.classList.contains("open-run-selecting"));
+});
+
+// "Select all" selects every currently *loaded* Run/Study/Experiment
+// (`allRecentRuns`/`allStudies`/`allExperiments`), not merely whatever
+// rows happen to be in the DOM right now -- a collapsed group's own
+// runs are just as selectable this way as an expanded one's, composing
+// into "delete everything" with no separate button needed for that
+// case specifically. Also turns select mode on: selecting everything
+// while the checkboxes stay hidden would otherwise look like nothing
+// happened at all.
 selectAllButton.addEventListener("click", () => {
     for (const run of allRecentRuns) {
-        selectedDirectories.add(run.directory);
+        selectedRunDirectories.add(run.directory);
     }
+    for (const study of allStudies) {
+        selectedStudyIds.add(study.studyId);
+    }
+    for (const experiment of allExperiments) {
+        selectedExperimentIds.add(experiment.experimentId);
+    }
+    setSelectMode(true);
     updateSelectionToolbar();
     renderRecentRuns();
 });
 
 clearSelectionButton.addEventListener("click", () => {
-    selectedDirectories.clear();
+    selectedRunDirectories.clear();
+    selectedStudyIds.clear();
+    selectedExperimentIds.clear();
     renderRecentRuns();
 });
 
 deleteSelectedButton.addEventListener("click", () => {
-    const directories = Array.from(selectedDirectories);
-    if (directories.length === 0) {
+    if (totalSelectedCount() === 0) {
         return;
     }
-    confirmThenRun(deleteSelectedButton, `Delete ${directories.length} run(s)?`, async () => {
-        const result = await window.pywebview.api.delete_runs(directories);
+    confirmThenRun(deleteSelectedButton, buildDeleteSelectedMessage(), async () => {
+        const items = [
+            ...Array.from(selectedExperimentIds, (experimentId) => ({
+                kind: "experiment",
+                experimentId,
+            })),
+            ...Array.from(selectedStudyIds, (studyId) => ({ kind: "study", studyId })),
+            ...Array.from(selectedRunDirectories, (directory) => ({
+                kind: "run",
+                directory,
+            })),
+        ];
+        const result = await window.pywebview.api.delete_selected(items);
         if (!result.ok) {
             showOpenRunBanner(result.message);
             return;
         }
         await refreshRecentRuns();
     });
-});
-
-/**
- * Read the visible name/description fields on the "New study"/"New
- * experiment" home card, create it, clear those fields, and refresh
- * Home so it appears immediately. Plain, always-visible text inputs on
- * the card itself, not a dialog or a new modal (see `confirmThenRun`'s
- * own docstring for why this codebase has no dialogs at all; every
- * existing modal here is reserved for a genuinely multi-field form,
- * which a bare name and one-line description is not).
- * @param {"study" | "experiment"} kind
- */
-async function createGroup(kind) {
-    const nameInput =
-        kind === "study" ? homeNewStudyNameInput : homeNewExperimentNameInput;
-    const descriptionInput =
-        kind === "study"
-            ? homeNewStudyDescriptionInput
-            : homeNewExperimentDescriptionInput;
-    const name = nameInput.value.trim();
-    if (!name) {
-        showOpenRunBanner(`a ${kind} needs a name`);
-        return;
-    }
-    const description = descriptionInput.value.trim();
-    const result =
-        kind === "study"
-            ? await window.pywebview.api.create_study(name, description)
-            : await window.pywebview.api.create_experiment(name, description);
-    if (!result.ok) {
-        showOpenRunBanner(result.message);
-        return;
-    }
-    showOpenRunBanner("");
-    nameInput.value = "";
-    descriptionInput.value = "";
-    await refreshRecentRuns();
-}
-
-homeNewStudyButton.addEventListener("click", () => {
-    createGroup("study");
-});
-
-homeNewExperimentButton.addEventListener("click", () => {
-    createGroup("experiment");
 });
 
 browseButton.addEventListener("click", async () => {
@@ -1430,7 +1578,77 @@ async function openTrajectory(trajectoryPath) {
     window.fim.enterCompletedState(result, false);
 }
 
+/**
+ * `openTrajectory`'s own batch counterpart -- `Api.open_batch`
+ * (`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+ * design.md`, `selby/restricted`, §1) reconstructs the identical
+ * shape a live batch's own "done" payload has, minus the convergence-
+ * history trajectory panel, so this hands its result to `enter
+ * CompletedState` with `isBatch: true` exactly like `onBatchDone`
+ * already does for a batch that just finished live.
+ * @param {string} directory
+ */
+async function openBatch(directory) {
+    const result = await window.pywebview.api.open_batch(directory);
+    if (!result.ok) {
+        showOpenRunBanner(result.message);
+        return;
+    }
+    showOpenRunBanner("");
+    window.fim.resetTrajectoryLegendVisibility();
+    window.fim.enterCompletedState(result, true);
+}
+
+/**
+ * `openBatch`'s own Study counterpart -- `Api.open_study` pools every
+ * member run/replicate one level up (`20260919-claude-sonnet-5-
+ * unified-batch-and-study-results-reopen-design.md`, `selby/
+ * restricted`, §2), returning the identical shape `enterCompletedState`
+ * already renders for a batch. A `parameterMismatches` key, when
+ * present, is shown once the completed view itself is up
+ * (`run-view-completed.js`'s own `resultsOutcome`), not as a banner
+ * here -- this screen is about to be hidden by `enterCompletedState`,
+ * so a banner set on it first would never actually be seen.
+ * @param {string} studyId
+ */
+async function openStudy(studyId) {
+    const result = await window.pywebview.api.open_study(studyId);
+    if (!result.ok) {
+        showOpenRunBanner(result.message);
+        return;
+    }
+    showOpenRunBanner("");
+    window.fim.resetTrajectoryLegendVisibility();
+    window.fim.enterCompletedState(result, true);
+}
+
+/**
+ * "Open…" on a Study row -- pools every member run/replicate and opens
+ * the identical Results card a batch already uses (§3, above). No
+ * select-then-"Open"-button step the way a Run/batch row has: a Study
+ * row's own toggle is already the row's primary click target (expand/
+ * collapse), so this lives beside "Create run…"/"Copy" instead of
+ * needing a second interaction.
+ * @param {{studyId: string}} group
+ * @returns {HTMLButtonElement}
+ */
+function buildOpenStudyButton(group) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "open-run-group-action-button";
+    button.textContent = "Open…";
+    button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await openStudy(group.studyId);
+    });
+    return button;
+}
+
 openButton.addEventListener("click", async () => {
+    if (selectedBatchDirectory !== null) {
+        await openBatch(selectedBatchDirectory);
+        return;
+    }
     if (selectedTrajectoryPath === null) {
         showOpenRunBanner("no trajectory selected");
         return;
@@ -1448,13 +1666,13 @@ window.fim.showOpenRunScreen = async function showOpenRunScreen() {
     window.fim.showScreen("screen-open-run");
     // Still fire-and-forget from every existing (click-driven) caller's
     // own point of view -- the screen switch above already happened
-    // synchronously, before either `await` below ever suspends this
+    // synchronously, before the `await` below ever suspends this
     // function, so a caller that does not await this call (every one
     // today) sees no change in when the screen itself appears. Awaiting
-    // both calls here, rather than leaving them fully detached the way
-    // this function used to, only matters to a caller that *does* await
-    // it -- `run-view-initial.js`'s own launch sequence, which needs
-    // both real bridge calls fully settled before flipping `window.
+    // it here, rather than leaving it fully detached the way this
+    // function used to, only matters to a caller that *does* await it --
+    // `run-view-initial.js`'s own launch sequence, which needs the real
+    // bridge call fully settled before flipping `window.
     // __fimRunViewReady`, the same flag every GUI test's own teardown
     // gates on. Without that, a launch-triggered `list_home_runs()` can
     // still be in flight when a test destroys its window moments later
@@ -1463,5 +1681,5 @@ window.fim.showOpenRunScreen = async function showOpenRunScreen() {
     // click-driven call site -- a second, always-fired call site at
     // bootstrap reintroduces it for every test, not just Home's own,
     // unless this function's own caller can wait for it).
-    await Promise.all([refreshRecentRuns(), refreshHomeExampleOptions()]);
+    await refreshRecentRuns();
 };

@@ -66,6 +66,21 @@ def test_publish_beta_marks_the_release_as_a_prerelease() -> None:
     assert "--prerelease" in text
 
 
+def test_windows_beta_smoke_checks_batch_level_artifacts() -> None:
+    """The Windows executable smoke matches `fim run`'s default batch output.
+
+    `fim init`'s starter configuration is a batch (`n_replicates > 1`),
+    so the top-level smoke directory contains `manifest.json` and
+    `summary.json`; scalar artifacts live under each `replicate-*`
+    directory. The beta smoke must check that current contract rather
+    than the old scalar four-file layout.
+    """
+    text = BETA_WORKFLOW.read_text(encoding="utf-8")
+
+    assert '"summary.json"' in text
+    assert "the expected batch-level artifacts" in text
+
+
 def test_linux_beta_job_matches_ci_ymls_own_gtk_dependency_list() -> None:
     """`linux-beta-x64` carries the same GTK/WebKit build toolchain `ci.yml` does.
 

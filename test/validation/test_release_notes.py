@@ -109,6 +109,8 @@ def test_release_workflow_uses_changelog_notes() -> None:
     assert "pyinstaller --workpath .pyinstaller-build --noconfirm" in workflow
     assert "$actualVersion -ne $expectedVersion" in workflow
     assert "Compare-Object $expectedArtifacts $actualArtifacts" in workflow
+    assert '"summary.json"' in workflow
+    assert "the expected batch-level artifacts" in workflow
     assert "dev/bin/extract-release-notes" in workflow
     assert "--notes-file release-notes.md" in workflow
     assert "--generate-notes" not in workflow
@@ -315,9 +317,15 @@ def test_ci_build_runs_every_test_marker_except_slow() -> None:
     three times in one day. `--ci` now excludes `slow` specifically,
     named explicitly here rather than silently — every other marker,
     including `packaging` and `statistical`, keeps running through this
-    one gate exactly as originally established.
+    one gate exactly as originally established. `gui` is split into its
+    own serial pytest process for pywebview shutdown stability, and
+    `packaging` is split into its own serial pytest process because it
+    builds real distributions in shared build-tree paths, but both are
+    still included by `--ci`.
     """
     build_script = BUILD_SCRIPT.read_text(encoding="utf-8")
 
-    assert "pytest_marker_args=(-m 'not slow and not packaging')" in build_script
-    assert "\"${ci}\" && pytest_marker_args=(-m 'not slow')" in build_script
+    assert "non_gui_marker='not slow and not packaging and not gui'" in build_script
+    assert "gui_marker='gui and not slow and not packaging'" in build_script
+    assert "gui_marker='gui and not slow'" in build_script
+    assert "-m 'packaging and not slow'" in build_script

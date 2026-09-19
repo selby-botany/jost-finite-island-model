@@ -190,15 +190,33 @@ if "${run_test}"; then
         # excluded -- the same reasoning R17 itself established, now
         # applied to one deliberately-named exception rather than none.
         #
-        # `--dist=loadgroup` keeps all GUI tests on one worker while
-        # allowing non-GUI tests to use the remaining workers. The
-        # collection hook in test/conftest.py adds the shared group;
-        # concurrent pywebview windows remain unsupported.
-        pytest_marker_args=(-m 'not slow and not packaging')
-        "${ci}" && pytest_marker_args=(-m 'not slow')
+        # GUI tests build real pywebview windows and, on Linux/GTK under
+        # Xvfb, WebKit helper processes and pywebview's local HTTP server
+        # can outlive the test item itself. Running that workload inside
+        # an xdist worker leaves the controller waiting on a worker whose
+        # interpreter is already in shutdown diagnostics. Packaging tests
+        # build real sdists/wheels and share build-tree paths that are not
+        # xdist-safe. Keep xdist for the large pure-test layer, then run
+        # those two stateful layers serially.
+        non_gui_marker='not slow and not packaging and not gui'
+        gui_marker='gui and not slow and not packaging'
+        if "${ci}"; then
+            gui_marker='gui and not slow'
+        fi
+        if "${ci}"; then
+            run "${python}" -m pytest -o addopts= --strict-config \
+                --strict-markers -m 'packaging and not slow' \
+                --cov=fim --cov-branch --cov-report= --cov-fail-under=0
+        fi
+        coverage_append=()
+        "${ci}" && coverage_append=(--cov-append)
         run "${python}" -m pytest -o addopts= --strict-config \
-            --strict-markers -n auto --dist=loadgroup "${pytest_marker_args[@]}" \
-            --cov=fim --cov-branch --cov-report=term-missing \
+            --strict-markers -n auto -m "${non_gui_marker}" \
+            --cov=fim --cov-branch "${coverage_append[@]}" --cov-report= \
+            --cov-fail-under=0
+        run "${python}" -m pytest -o addopts= --strict-config \
+            --strict-markers -m "${gui_marker}" test/gui \
+            --cov=fim --cov-branch --cov-append --cov-report=term-missing \
             --cov-fail-under=90
     else
         run "${python}" -m pytest

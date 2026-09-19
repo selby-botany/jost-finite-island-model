@@ -18,10 +18,13 @@ input against always-visible controls, never a native dialog.
 
 from __future__ import annotations
 
+import json
 import queue
+import re
 import threading
 import time
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -63,9 +66,26 @@ setField('locus_lengths', '200');
 """
 
 
-def _write_run(results: Path, name: str, seed: int) -> Path:
-    """Write a small, real completed run under `results / name`."""
-    config = {
+def _write_run(
+    results: Path,
+    name: str,
+    seed: int,
+    *,
+    study_id: str | None = None,
+    **overrides: object,
+) -> Path:
+    """Write a small, real completed run under `results / name`.
+
+    `study_id`, when given, attaches the run to that Study directly at
+    creation time via `fim run --study` — the CLI's own bare `fim run`
+    now attaches to the always-present default Study instead (`20260918-
+    claude-sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §2),
+    so an explicit `study_id` is the only way a test can put a run
+    somewhere else. `**overrides` layers onto the base config below --
+    e.g. `d=4` for a test that needs a Study member disagreeing with
+    another on deme count.
+    """
+    config: dict[str, object] = {
         "N": 20,
         "d": 2,
         "m": 0.1,
@@ -78,12 +98,14 @@ def _write_run(results: Path, name: str, seed: int) -> Path:
         "n_replicates": 1,
         "replicate_tolerance": None,
     }
+    config.update(overrides)
     config_path = results / f"{name}.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     output_directory = results / name
-    assert (
-        cli.main(["run", str(config_path), "-o", str(output_directory), "--quiet"]) == 0
-    )
+    arguments = ["run", str(config_path), "-o", str(output_directory), "--quiet"]
+    if study_id is not None:
+        arguments += ["--study", study_id]
+    assert cli.main(arguments) == 0
     return output_directory
 
 
@@ -121,35 +143,77 @@ def _expand_every_group(window: webview.Window) -> None:
         time.sleep(0.15)
 
 
-def _create_study(window: webview.Window, name: str) -> None:
-    """Fill in and submit the "New study" card's own inline form."""
-    window.evaluate_js(
-        f"document.getElementById('home-new-study-name').value = {name!r};"
+def _click_group_button(
+    window: webview.Window, group_label: str, button_text: str
+) -> None:
+    """Click the action button reading `button_text` on the group header
+    whose toggle names `group_label`."""
+    clicked = window.evaluate_js(
+        "(function(label, text) {"
+        "var headers = document.querySelectorAll('.open-run-group-header');"
+        "for (var header of headers) {"
+        "  var toggle = header.querySelector('.open-run-group-toggle');"
+        "  if (toggle && toggle.textContent.includes(label)) {"
+        "    var buttons = header.querySelectorAll('.open-run-group-action-button');"
+        "    for (var button of buttons) {"
+        "      if (button.textContent === text) { button.click(); return true; }"
+        "    }"
+        "  }"
+        "}"
+        "return false; })"
+        f"({group_label!r}, {button_text!r})"
     )
-    window.evaluate_js("document.getElementById('home-new-study-button').click();")
-    _poll_until(window, _TREE_TEXT, lambda value: value is not None and name in value)
+    assert clicked is True, (
+        f"no group header named {group_label!r} had a {button_text!r} button"
+    )
+
+
+def _submit_inline_prompt(window: webview.Window, name: str) -> None:
+    """Fill and submit the currently-showing `promptForNameThenRun` inline row."""
+    window.evaluate_js(
+        f"document.querySelector('.open-run-inline-confirm input').value = {name!r};"
+    )
+    window.evaluate_js(
+        "(function(){"
+        "var row = document.querySelector('.open-run-inline-confirm');"
+        "var buttons = row.querySelectorAll('button');"
+        "for (var button of buttons) {"
+        "  if (button.textContent === 'Create') { button.click(); return; }"
+        "}"
+        "})()"
+    )
 
 
 def _create_experiment(window: webview.Window, name: str) -> None:
-    """Fill in and submit the "New experiment" card's own inline form."""
-    window.evaluate_js(
-        f"document.getElementById('home-new-experiment-name').value = {name!r};"
-    )
+    """Submit Home's own page-level "Create experiment…" button with `name`."""
     window.evaluate_js("document.getElementById('home-new-experiment-button').click();")
+    _submit_inline_prompt(window, name)
     _poll_until(window, _TREE_TEXT, lambda value: value is not None and name in value)
 
 
-def _add_run_to_study(window: webview.Window, run_marker: str, study_name: str) -> None:
-    """Pick `study_name` from the "Add to study…" select on `run_marker`'s own row."""
+def _create_study_on_experiment(
+    window: webview.Window, experiment_label: str, name: str
+) -> None:
+    """Submit an Experiment row's own "Create study…" button with `name`."""
+    _click_group_button(window, experiment_label, "Create study…")
+    _submit_inline_prompt(window, name)
+    _poll_until(window, _TREE_TEXT, lambda value: value is not None and name in value)
+
+
+def _add_study_to_experiment(
+    window: webview.Window, study_label: str, experiment_name: str
+) -> None:
+    """Pick `experiment_name` from the "Add to experiment…" select on a Study's
+    own row."""
     picked = window.evaluate_js(
-        "(function(marker, studyName) {"
-        "var rows = document.querySelectorAll("
-        "'#open-run-recent-runs-body tr:not(.open-run-group-header)');"
-        "for (var row of rows) {"
-        "  if (row.textContent.includes(marker)) {"
-        "    var select = row.querySelector('.open-run-add-to-select');"
+        "(function(label, experimentName) {"
+        "var headers = document.querySelectorAll('.open-run-group-header');"
+        "for (var header of headers) {"
+        "  var toggle = header.querySelector('.open-run-group-toggle');"
+        "  if (toggle && toggle.textContent.includes(label)) {"
+        "    var select = header.querySelector('.open-run-add-to-select');"
         "    for (var option of select.options) {"
-        "      if (option.textContent === studyName) {"
+        "      if (option.textContent === experimentName) {"
         "        select.value = option.value;"
         "        select.dispatchEvent(new Event('change'));"
         "        return true;"
@@ -158,54 +222,32 @@ def _add_run_to_study(window: webview.Window, run_marker: str, study_name: str) 
         "  }"
         "}"
         "return false; })"
-        f"({run_marker!r}, {study_name!r})"
+        f"({study_label!r}, {experiment_name!r})"
     )
-    assert picked is True, f"no row matching {run_marker!r} had a {study_name!r} option"
+    assert picked is True, (
+        f"no group header named {study_label!r} had a {experiment_name!r} option"
+    )
 
 
-def _click_group_delete(window: webview.Window, group_label: str) -> None:
-    """Click the Delete… button on the group header whose toggle names `group_label`."""
-    clicked = window.evaluate_js(
+def _check_group_checkbox(window: webview.Window, group_label: str) -> None:
+    """Check the Select checkbox on the group header whose toggle names
+    `group_label`."""
+    checked = window.evaluate_js(
         "(function(label) {"
         "var headers = document.querySelectorAll('.open-run-group-header');"
         "for (var header of headers) {"
         "  var toggle = header.querySelector('.open-run-group-toggle');"
         "  if (toggle && toggle.textContent.includes(label)) {"
-        "    var buttons = header.querySelectorAll('.open-run-group-action-button');"
-        "    for (var button of buttons) {"
-        "      if (button.textContent === 'Delete…') { button.click(); return true; }"
-        "    }"
+        "    var checkbox = header.querySelector('.open-run-select-checkbox');"
+        "    checkbox.click();"
+        "    return true;"
         "  }"
         "}"
         "return false; })"
         f"({group_label!r})"
     )
-    assert clicked is True, (
-        f"no group header named {group_label!r} had a Delete… button"
-    )
-
-
-def _click_group_rerun_all(window: webview.Window, group_label: str) -> None:
-    """Click "Re-run all…" on the group header whose toggle names `group_label`."""
-    clicked = window.evaluate_js(
-        "(function(label) {"
-        "var headers = document.querySelectorAll('.open-run-group-header');"
-        "for (var header of headers) {"
-        "  var toggle = header.querySelector('.open-run-group-toggle');"
-        "  if (toggle && toggle.textContent.includes(label)) {"
-        "    var buttons = header.querySelectorAll('.open-run-group-action-button');"
-        "    for (var button of buttons) {"
-        "      if (button.textContent === 'Re-run all…') {"
-        "        button.click(); return true;"
-        "      }"
-        "    }"
-        "  }"
-        "}"
-        "return false; })"
-        f"({group_label!r})"
-    )
-    assert clicked is True, (
-        f"no group header named {group_label!r} had a Re-run all… button"
+    assert checked is True, (
+        f"no group header named {group_label!r} had a select checkbox"
     )
 
 
@@ -222,20 +264,25 @@ def _confirm_inline(window: webview.Window) -> None:
     )
 
 
-def test_creating_a_study_shows_it_in_the_tree_and_wraps_unsorted(
+def test_a_bare_cli_run_appears_under_the_default_study(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A new, empty Study appears; every existing run becomes "Unsorted".
+    """A plain `fim run` (no `--study`) still shows up in Home's own tree.
 
-    Before any Study/Experiment exists, Home renders the plain date-
-    bucket tree with no "Unsorted" wrapper (design doc §6, "zero
-    required migration") -- creating the very first Study is the one
-    moment that wrapper is expected to appear.
+    `20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+    restricted`) §2: the CLI and GUI converge on the identical
+    `add_run_to_study` call, so a run made from a terminal is exactly
+    as visible in Home as one made from the GUI -- never a silent gap
+    only discoverable by counting `results/*/manifest.json` files by
+    hand, the regression this test would have caught directly (a real
+    one, hit live while building this feature: removing the old
+    "Unsorted" bucket without this CLI-side change made every bare run
+    disappear from the tree entirely).
     """
     results = tmp_path / "results"
     results.mkdir()
-    _write_run(results, "run-a", seed=1)
     monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    _write_run(results, "run-a", seed=1)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
@@ -249,7 +296,7 @@ def test_creating_a_study_shows_it_in_the_tree_and_wraps_unsorted(
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _create_study(window, "Ring sweep")
+            _expand_every_group(window)
             outcome.put(window.evaluate_js(_TREE_TEXT))
         finally:
             window.destroy()
@@ -258,18 +305,70 @@ def test_creating_a_study_shows_it_in_the_tree_and_wraps_unsorted(
     tree_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert tree_text is not None
-    assert "Ring sweep (0 runs)" in tree_text
-    assert "Unsorted (1)" in tree_text
+    assert "Default study (1 run)" in tree_text
+    assert "seed=1" in tree_text
 
 
-def test_adding_a_run_to_a_study_moves_it_out_of_unsorted(
+def test_home_run_count_label_does_not_double_count_a_run_in_two_studies(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ "Add to study…" moves a run's own count from Unsorted into the Study."""
+    """A run belonging to more than one Study is still counted once.
+
+    A real, reported bug: `add_run_to_study` only ever appends, never
+    detaches from a prior Study, so a run genuinely can end up in more
+    than one Study (here: the always-present default Study, plus two
+    more added by hand). The bottom-of-table count label used to sum
+    each visible Study's own `runCount` across the whole tree, double-
+    (or more-)counting any run shared this way -- confirmed live on a
+    checkout with heavy manual "Add to study…" use, producing a
+    nonsensical "722 of 2 runs" with no filter text even typed. The
+    label must count distinct run directories instead.
+    """
     results = tmp_path / "results"
     results.mkdir()
-    _write_run(results, "run-a", seed=1)
-    _write_run(results, "run-b", seed=2)
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    output = _write_run(results, "run-a", seed=1)
+    first = groups.create_study("First study", results=results)
+    second = groups.create_study("Second study", results=results)
+    groups.add_run_to_study(first.study_id, output, results=results)
+    groups.add_run_to_study(second.study_id, output, results=results)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            count_text = _poll_until(
+                window,
+                "document.getElementById('open-run-count').textContent",
+                lambda value: value not in (None, ""),
+            )
+            outcome.put(count_text)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    count_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert count_text == "1 run"
+
+
+def test_home_materializes_the_default_study_on_a_truly_empty_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A checkout with nothing yet still shows a clickable default Study row.
+
+    §1's own amendment: `ensure_default_study` stays lazy (never called
+    at app launch), but Home's own `refreshRecentRuns` calls it once,
+    exactly when a visit's own `list_studies`/`list_experiments` both
+    come back empty -- otherwise a botanist with nothing yet has no row
+    at all to click "Create run…" on, contradicting the whole point of
+    this reorg.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
     monkeypatch.setattr(paths_module, "results_directory", lambda: results)
 
     window = create_window(hidden=True)
@@ -284,15 +383,8 @@ def test_adding_a_run_to_a_study_moves_it_out_of_unsorted(
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _create_study(window, "Ring sweep")
             _expand_every_group(window)
-            _add_run_to_study(window, "seed=1", "Ring sweep")
-            tree_text = _poll_until(
-                window,
-                _TREE_TEXT,
-                lambda value: value is not None and "Ring sweep (1 run)" in value,
-            )
-            outcome.put(tree_text)
+            outcome.put(window.evaluate_js(_TREE_TEXT))
         finally:
             window.destroy()
 
@@ -300,16 +392,71 @@ def test_adding_a_run_to_a_study_moves_it_out_of_unsorted(
     tree_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert tree_text is not None
-    assert "Ring sweep (1 run)" in tree_text
-    assert "Unsorted (1)" in tree_text
+    assert "Default experiment (1 study)" in tree_text
+    assert "Default study (0 runs)" in tree_text
+    assert groups.get_study(groups.DEFAULT_STUDY_ID, results=results).name == (
+        "Default study"
+    )
 
 
-def test_creating_an_experiment_and_adding_a_study_nests_it(
+def test_creating_an_experiment_and_a_study_on_its_row_nests_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ "Add to experiment…" nests a Study's own row under its Experiment."""
+    """Row-level "Create experiment…"/"Create study…" nest one action, not two.
+
+    `20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+    restricted`) §4: creating a Study on an Experiment's own row calls
+    `create_study` immediately followed by `add_study_to_experiment`,
+    already nested -- no separate "Add to experiment…" step needed for
+    a Study created this way (that picker still exists, `test_moving_
+    an_existing_study_into_an_experiment_via_the_picker`, just below,
+    for a Study that already exists elsewhere).
+    """
     results = tmp_path / "results"
     results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _create_experiment(window, "Topology")
+            _create_study_on_experiment(window, "Topology", "Ring sweep")
+            _expand_every_group(window)
+            outcome.put(window.evaluate_js(_TREE_TEXT))
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    tree_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert tree_text is not None
+    assert "Topology (1 study)" in tree_text
+    assert "Ring sweep (0 runs)" in tree_text
+
+
+def test_moving_an_existing_study_into_an_experiment_via_the_picker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The "Add to experiment…" picker still nests an already-existing,
+    standalone Study.
+
+    Kept as real, separate functionality from row-level "Create study…"
+    (`buildAddToExperimentSelect` is untouched by this reorg) -- a
+    Study created standalone, or moved out of one Experiment, still
+    needs a way into a different one after the fact.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    groups.create_study("Ring sweep", results=results)
     monkeypatch.setattr(paths_module, "results_directory", lambda: results)
 
     window = create_window(hidden=True)
@@ -324,22 +471,29 @@ def test_creating_an_experiment_and_adding_a_study_nests_it(
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _create_study(window, "Ring sweep")
             _create_experiment(window, "Topology")
-            picked = window.evaluate_js(
-                "(function(){"
-                "var selects = document.querySelectorAll('.open-run-add-to-select');"
-                "for (var select of selects) {"
-                "  for (var option of select.options) {"
-                "    if (option.textContent === 'Topology') {"
-                "      select.value = option.value;"
-                "      select.dispatchEvent(new Event('change'));"
-                "      return true;"
-                "    }"
-                "  }"
-                "}"
-                "return false; })()"
-            )
+            picked = False
+            for _ in range(30):
+                picked = bool(
+                    window.evaluate_js(
+                        "(function(){"
+                        "var selects = document.querySelectorAll("
+                        "'.open-run-add-to-select');"
+                        "for (var select of selects) {"
+                        "  for (var option of select.options) {"
+                        "    if (option.textContent === 'Topology') {"
+                        "      select.value = option.value;"
+                        "      select.dispatchEvent(new Event('change'));"
+                        "      return true;"
+                        "    }"
+                        "  }"
+                        "}"
+                        "return false; })()"
+                    )
+                )
+                if picked:
+                    break
+                time.sleep(_POLL_INTERVAL_SECONDS)
             _poll_until(
                 window,
                 _TREE_TEXT,
@@ -363,20 +517,24 @@ def test_creating_an_experiment_and_adding_a_study_nests_it(
 def test_deleting_a_study_cascades_to_its_own_runs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A Study's own inline Delete confirmation removes it and its member Runs.
+    """Checking a Study's own row and confirming "Delete selected" removes its Runs too.
 
     The confirmed, deliberate product decision (`fim.persistence.groups.
     delete_study`'s own docstring): deleting a Study is a real,
     data-destroying operation for the runs it references, not merely a
     bookkeeping change -- confirmed here against real files on disk, not
     only against `Api.delete_study` as a plain Python call
-    (`test/gui/test_app_api.py`'s own coverage).
+    (`test/gui/test_app_api.py`'s own coverage). Deletion is checkbox +
+    "Delete selected" only now, not a per-row "Delete…" button
+    (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+    restricted`, §5).
     """
     results = tmp_path / "results"
     results.mkdir()
-    kept = _write_run(results, "run-a", seed=1)
-    deleted = _write_run(results, "run-b", seed=2)
     monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    kept = _write_run(results, "run-a", seed=1)
+    deleted = _write_run(results, "run-b", seed=2, study_id=study.study_id)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -390,15 +548,10 @@ def test_deleting_a_study_cascades_to_its_own_runs(
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _create_study(window, "Ring sweep")
-            _expand_every_group(window)
-            _add_run_to_study(window, "seed=2", "Ring sweep")
-            _poll_until(
-                window,
-                _TREE_TEXT,
-                lambda value: value is not None and "Ring sweep (1 run)" in value,
+            _check_group_checkbox(window, "Ring sweep")
+            window.evaluate_js(
+                "document.getElementById('open-run-delete-selected-button').click();"
             )
-            _click_group_delete(window, "Ring sweep")
             confirm_text = window.evaluate_js(
                 "document.querySelector('.open-run-inline-confirm').textContent"
             )
@@ -416,7 +569,7 @@ def test_deleting_a_study_cascades_to_its_own_runs(
     result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert result is not None
-    assert "1 run" in result["confirmText"]
+    assert "1 stud" in result["confirmText"]
     assert "Ring sweep" not in result["treeText"]
     assert not deleted.exists()
     assert kept.exists()
@@ -428,8 +581,9 @@ def test_copying_a_study_creates_an_independent_copy_with_no_prompt(
     """Copy needs no name entry -- it derives "<name> copy" and acts immediately."""
     results = tmp_path / "results"
     results.mkdir()
-    _write_run(results, "run-a", seed=1)
     monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    _write_run(results, "run-a", seed=1, study_id=study.study_id)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -443,9 +597,7 @@ def test_copying_a_study_creates_an_independent_copy_with_no_prompt(
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _create_study(window, "Ring sweep")
             _expand_every_group(window)
-            _add_run_to_study(window, "seed=1", "Ring sweep")
             _poll_until(
                 window,
                 _TREE_TEXT,
@@ -480,18 +632,27 @@ def test_copying_a_study_creates_an_independent_copy_with_no_prompt(
 def test_bulk_select_all_and_delete_selected_removes_every_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The "Select all"/"Delete selected" idiom removes every loaded run at once.
+    """The "Select all"/"Delete selected" idiom removes every loaded item at once.
 
     The explicit gap this idiom answers: thousands of Unsorted runs
     could not realistically be deleted one at a time through the GUI.
-    "Select all" reaches every loaded run even while its own group is
-    collapsed -- this test never expands anything.
+    "Select all" reaches every loaded Run/Study/Experiment even while
+    its own group is collapsed -- this test never expands anything. Both
+    bare runs land in the always-present default Study/Experiment
+    (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+    restricted`, §1/§2), so "Select all" selects 4 items total, not 2 --
+    the 2 runs plus that one Study and one Experiment (`20260918-...
+    -design.md` §5's own "Select all" generalization) -- and deleting
+    them cascades the Experiment away too, which is harmless: nothing
+    here treats the default Study/Experiment as undeletable, and
+    `ensure_default_study` simply recreates it, empty, the next time
+    anything needs it (§5's own explicit "no special-casing" note).
     """
     results = tmp_path / "results"
     results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
     first = _write_run(results, "run-a", seed=1)
     second = _write_run(results, "run-b", seed=2)
-    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
@@ -511,7 +672,7 @@ def test_bulk_select_all_and_delete_selected_removes_every_run(
             selection_count = _poll_until(
                 window,
                 "document.getElementById('open-run-selection-count').textContent",
-                lambda value: value == "2 selected",
+                lambda value: value == "4 selected",
             )
             window.evaluate_js(
                 "document.getElementById('open-run-delete-selected-button').click();"
@@ -530,10 +691,24 @@ def test_bulk_select_all_and_delete_selected_removes_every_run(
     result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
 
     assert result is not None
-    assert result["selectionCount"] == "2 selected"
+    assert result["selectionCount"] == "4 selected"
     assert result["treeText"] == "0 runs"
     assert not first.exists()
     assert not second.exists()
+    # Recreated fresh and empty, not gone for good -- Home's own next
+    # render sees an otherwise-empty tree and re-materializes the
+    # default Study/Experiment exactly as it did on first launch (§1's
+    # own amendment), the same "simply recreates it, empty" behavior
+    # this test's own docstring already describes.
+    remaining_studies = [
+        study.study_id for study in groups.list_studies(results=results)
+    ]
+    assert remaining_studies == [groups.DEFAULT_STUDY_ID]
+    remaining_experiments = [
+        experiment.experiment_id
+        for experiment in groups.list_experiments(results=results)
+    ]
+    assert remaining_experiments == [groups.DEFAULT_EXPERIMENT_ID]
 
 
 def test_starting_a_run_from_configure_with_a_study_selected_attaches_it(
@@ -763,7 +938,12 @@ def test_run_study_select_new_study_cancel_returns_to_no_study(
     assert settled["selected"] == ""
     assert settled["rowHidden"] is True
     assert settled["nameCleared"] == ""
-    assert groups.list_studies(results=results) == []
+    # No "Abandoned" Study exists -- only the always-present default one,
+    # materialized as a side effect of Home's own launch-time pre-
+    # population (`run-view-initial.js`), unrelated to anything this
+    # test itself did in Configure.
+    names = [study.name for study in groups.list_studies(results=results)]
+    assert names == ["Default study"]
 
 
 def test_rerun_all_re_runs_every_configuration_in_a_study(
@@ -780,8 +960,9 @@ def test_rerun_all_re_runs_every_configuration_in_a_study(
     """
     results = tmp_path / "results"
     results.mkdir()
-    _write_run(results, "run-a", seed=1)
     monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    _write_run(results, "run-a", seed=1, study_id=study.study_id)
 
     window = create_window(hidden=True)
     outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
@@ -795,15 +976,13 @@ def test_rerun_all_re_runs_every_configuration_in_a_study(
                 "window.__fimOpenRunRecentRunsLoaded === true",
                 lambda value: value is True,
             )
-            _create_study(window, "Ring sweep")
             _expand_every_group(window)
-            _add_run_to_study(window, "seed=1", "Ring sweep")
             _poll_until(
                 window,
                 _TREE_TEXT,
                 lambda value: value is not None and "Ring sweep (1 run)" in value,
             )
-            _click_group_rerun_all(window, "Ring sweep")
+            _click_group_button(window, "Ring sweep", "Re-run all…")
             _poll_until(
                 window,
                 _TREE_TEXT,
@@ -818,3 +997,337 @@ def test_rerun_all_re_runs_every_configuration_in_a_study(
 
     assert tree_text is not None
     assert "Ring sweep (2 runs)" in tree_text
+
+
+def test_home_shows_only_the_most_recent_run_for_a_repeated_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two runs of the identical configuration share a `run_id`; only the
+    newer one renders.
+
+    Reported live: a Study's own expanded view showed the same `run-
+    <hash>` label twice, a run apart in time -- `run_id` is a
+    deterministic hash of the configuration itself (`fim.engine.
+    deterministic_run_id`), not a per-invocation random id, so two
+    genuinely distinct run directories sharing an identical
+    configuration also share one `run_id`. Showing both is noise;
+    `dedupeMostRecentPerRunId` keeps only the one with the later
+    `endedAt`.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    older = _write_run(results, "run-a", seed=1, study_id=study.study_id)
+    newer = _write_run(results, "run-b", seed=1, study_id=study.study_id)
+    # Both finish within the same instant in practice -- push `newer`'s
+    # own `ended_at` forward by hand, rather than a real sleep, so the
+    # two are unambiguously ordered without slowing this test down
+    # (`test_open_run_screen.py`'s own `test_recent_runs_group_by_date_
+    # bucket_and_can_be_collapsed` already establishes this same direct-
+    # manifest-edit precedent for date-bucket testing).
+    newer_manifest_path = newer / "manifest.json"
+    newer_manifest = json.loads(newer_manifest_path.read_text(encoding="utf-8"))
+    newer_manifest["ended_at"] = (
+        datetime.fromisoformat(newer_manifest["ended_at"]) + timedelta(minutes=5)
+    ).isoformat()
+    newer_manifest_path.write_text(json.dumps(newer_manifest), encoding="utf-8")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _expand_every_group(window)
+            row_count = _poll_until(
+                window,
+                "document.querySelectorAll("
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
+                lambda value: value is not None and value > 0,
+            )
+            tree_text = window.evaluate_js(_TREE_TEXT)
+            outcome.put({"rowCount": row_count, "treeText": tree_text})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["rowCount"] == 1
+    older_manifest = json.loads((older / "manifest.json").read_text(encoding="utf-8"))
+    newer_manifest = json.loads((newer / "manifest.json").read_text(encoding="utf-8"))
+    assert older_manifest["run_id"] == newer_manifest["run_id"]
+    # `formatEndedAt` (`screens/open-run.js`) strips sub-second precision
+    # for display; compare against the same trimmed form rather than the
+    # raw manifest value.
+    newer_ended_at = re.sub(r"\.\d+(?=Z?$)", "", newer_manifest["ended_at"])
+    older_ended_at = re.sub(r"\.\d+(?=Z?$)", "", older_manifest["ended_at"])
+    assert newer_ended_at in result["treeText"]
+    assert older_ended_at not in result["treeText"]
+
+
+def test_home_select_button_toggles_the_checkbox_column(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Checkboxes stay hidden until "Select" is clicked, on every row kind.
+
+    Noise on a screen mostly used to look, not to bulk-delete -- "Select"
+    (`open-run-toggle-select-button`) is a pure display toggle
+    (`#open-run-table`'s own `open-run-selecting` class), never touching
+    the underlying selection state.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    _write_run(results, "run-a", seed=1, study_id=study.study_id)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _expand_every_group(window)
+            _poll_until(
+                window,
+                "document.querySelectorAll('.open-run-select-checkbox').length",
+                lambda value: value is not None and value > 0,
+            )
+            before = window.evaluate_js(
+                "getComputedStyle(document.querySelector("
+                "'.open-run-select-checkbox')).display"
+            )
+            window.evaluate_js(
+                "document.getElementById('open-run-toggle-select-button').click();"
+            )
+            after = window.evaluate_js(
+                "getComputedStyle(document.querySelector("
+                "'.open-run-select-checkbox')).display"
+            )
+            pressed_after = window.evaluate_js(
+                "document.getElementById('open-run-toggle-select-button')"
+                ".getAttribute('aria-pressed')"
+            )
+            window.evaluate_js(
+                "document.getElementById('open-run-toggle-select-button').click();"
+            )
+            after_second_click = window.evaluate_js(
+                "getComputedStyle(document.querySelector("
+                "'.open-run-select-checkbox')).display"
+            )
+            outcome.put(
+                {
+                    "before": before,
+                    "after": after,
+                    "pressedAfter": pressed_after,
+                    "afterSecondClick": after_second_click,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["before"] == "none"
+    assert result["after"] != "none"
+    assert result["pressedAfter"] == "true"
+    assert result["afterSecondClick"] == "none"
+
+
+def test_home_checkbox_and_toggle_sit_on_one_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Study/Experiment row's own checkbox and toggle never wrap onto
+    separate lines.
+
+    A real, reported layout bug: the toggle's own former `width: 100%`
+    made it an inline-block wider than the space the checkbox left
+    beside it, wrapping it onto a line of its own below the checkbox
+    (`.open-run-group-header-cell`'s own flex layout, `app.css`, fixes
+    this). Confirmed by comparing each element's own vertical position
+    rather than reading text, since a line-wrap changes nothing about
+    what text is present, only where it renders.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    groups.create_study("Ring sweep", results=results)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            window.evaluate_js(
+                "document.getElementById('open-run-toggle-select-button').click();"
+            )
+            settled = _poll_until(
+                window,
+                "(function(){"
+                "var checkbox = document.querySelector("
+                "'.open-run-select-checkbox');"
+                "var toggle = document.querySelector('.open-run-group-toggle');"
+                "if (!checkbox || !toggle) { return null; }"
+                "return {"
+                "checkboxTop: checkbox.getBoundingClientRect().top,"
+                "toggleTop: toggle.getBoundingClientRect().top"
+                "};"
+                "})()",
+                lambda value: value is not None,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    # A checkbox and a button of different heights, centered together on
+    # one flex line, land a few px apart even when correctly inline --
+    # a genuine line-wrap (the bug this guards against) is off by a full
+    # line height instead, an order of magnitude more.
+    assert abs(result["checkboxTop"] - result["toggleTop"]) < 10
+
+
+def test_home_selection_toolbar_sits_on_the_filter_line(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The Select/Select all/Clear selection/Delete selected group nests
+    inside the same row as the filter input, not a separate line below
+    it."""
+    nested = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="window.fim.showOpenRunScreen();",
+        read=(
+            "document.querySelector("
+            "'.open-run-list-controls .open-run-selection-toolbar') !== null"
+        ),
+    )
+
+    assert nested is True
+
+
+def test_opening_a_study_row_pools_its_own_member_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Study row's own "Open…" pools every member run into the batch
+    Results card.
+
+    `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+    design.md` (`selby/restricted`), §2/§3.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    _write_run(results, "run-a", seed=1, study_id=study.study_id)
+    _write_run(results, "run-b", seed=2, study_id=study.study_id)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _click_group_button(window, "Ring sweep", "Open…")
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "batchTableHidden: "
+                "document.getElementById('batch-results-table').hidden, "
+                "replicateRowCount: document.querySelectorAll("
+                "'#batch-results-table-body tr').length"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["runViewState"] == "completed"
+    assert settled["batchTableHidden"] is False
+    # 3, not 2: `renderBatchTable` prepends its own p0 baseline row.
+    assert settled["replicateRowCount"] == 3
+
+
+def test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mismatched `d` across a Study's own members still pools, with a
+    visible note naming it -- never a refusal."""
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    _write_run(results, "run-a", seed=1, d=2, study_id=study.study_id)
+    _write_run(results, "run-b", seed=2, d=4, study_id=study.study_id)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _click_group_button(window, "Ring sweep", "Open…")
+            settled = _poll_until(
+                window,
+                "({"
+                "runViewState: window.fim.getRunViewState(), "
+                "outcomeText: "
+                "document.getElementById('results-outcome').textContent"
+                "})",
+                lambda value: (
+                    value is not None and value.get("runViewState") == "completed"
+                ),
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    settled = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert settled is not None
+    assert settled["runViewState"] == "completed"
+    assert "varies across members" in settled["outcomeText"]
+    assert "d" in settled["outcomeText"]

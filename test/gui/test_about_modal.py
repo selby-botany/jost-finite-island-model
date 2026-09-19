@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 import webview
 
+from fim import __dev_commit__ as fim_dev_commit
 from fim import __version__ as fim_version
 
 pytestmark = pytest.mark.gui
@@ -86,7 +87,14 @@ def test_about_menu_shows_name_version_and_selby_attribution(
 
     assert settled["dialogOpen"] is True
     assert settled["name"] == "FIM"
-    assert settled["version"] == fim_version
+    # `showAboutModal`'s own logic: a dev checkout's commit label is
+    # appended in parentheses (`fim.__dev_commit__`, non-`None` for
+    # every real `git` checkout this test itself runs from); `None` off
+    # a release install/frozen build leaves the bare version alone.
+    expected_version = (
+        f"{fim_version} ({fim_dev_commit})" if fim_dev_commit else fim_version
+    )
+    assert settled["version"] == expected_version
     assert "AGPL" in settled["license"]
     assert "Marie Selby Botanical Gardens" in settled["brandingNote"]
     assert "not covered by this license" in settled["brandingNote"]

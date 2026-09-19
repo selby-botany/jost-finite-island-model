@@ -358,16 +358,15 @@ to), and `test/gui/conftest.py` (`doc/fim-logging-design.md` §12).
 
 Regression tests for parallel CI test scheduling.
 
-<a id="test.test_build_ci_parallel.test_ci_build_uses_xdist_loadgroup_for_parallel_gui_safe_execution"></a>
+<a id="test.test_build_ci_parallel.test_ci_build_runs_non_gui_parallel_and_gui_serially"></a>
 
-#### test\_ci\_build\_uses\_xdist\_loadgroup\_for\_parallel\_gui\_safe\_execution
+#### test\_ci\_build\_runs\_non\_gui\_parallel\_and\_gui\_serially
 
 ```python
-def test_ci_build_uses_xdist_loadgroup_for_parallel_gui_safe_execution(
-) -> None
+def test_ci_build_runs_non_gui_parallel_and_gui_serially() -> None
 ```
 
-`--ci` parallelizes tests while assigning GUI tests to one worker.
+`--ci` keeps stateful tests out of xdist while parallelizing the rest.
 
 <a id="test.test_hypothesis_profile"></a>
 
@@ -1022,7 +1021,7 @@ def test_dev_commit_suffix_reads_short_sha_from_a_clean_checkout(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A clean `git` checkout gets a bare `g<sha>` label.
+A clean `git` checkout gets a bare `<sha>` label.
 
 <a id="test.test_metadata.test_dev_commit_suffix_flags_an_uncommitted_working_tree"></a>
 
@@ -8180,6 +8179,111 @@ def test_batch_done_payload_honors_an_explicit_digits_count(
 reaches every formatted statistic in both `replicates` and `summary` —
 not only the bare-call default the tests above exercise.
 
+<a id="gui.test_app_api.test_open_batch_matches_a_live_batchs_own_done_payload"></a>
+
+#### test\_open\_batch\_matches\_a\_live\_batchs\_own\_done\_payload
+
+```python
+def test_open_batch_matches_a_live_batchs_own_done_payload(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Reopening a real, persisted batch reproduces `_batch_done_payload`'s
+own shape, minus the convergence-history panel.
+
+`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+design.md` (`selby/restricted`), §1: every field is rebuilt from
+disk (`reanalyze_trajectory` per replicate), not from any live
+`RunResult` -- confirmed here by comparing against the *real*
+on-disk artifacts a real `fim run` batch actually wrote, not
+against a second, independently constructed expectation that could
+drift from what the CLI truly persists.
+
+<a id="gui.test_app_api.test_open_batch_reports_a_missing_manifest"></a>
+
+#### test\_open\_batch\_reports\_a\_missing\_manifest
+
+```python
+def test_open_batch_reports_a_missing_manifest(tmp_path: Path) -> None
+```
+
+A directory naming no batch manifest is a clean failure, not a crash.
+
+<a id="gui.test_app_api.test_open_batch_reports_a_tampered_replicate_trajectory"></a>
+
+#### test\_open\_batch\_reports\_a\_tampered\_replicate\_trajectory
+
+```python
+def test_open_batch_reports_a_tampered_replicate_trajectory(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A single replicate's own edited trajectory fails the whole reopen,
+matching `open_run`'s own integrity-check precedent for a scalar run.
+
+<a id="gui.test_app_api.test_open_study_pools_a_homogeneous_studys_own_scalar_runs"></a>
+
+#### test\_open\_study\_pools\_a\_homogeneous\_studys\_own\_scalar\_runs
+
+```python
+def test_open_study_pools_a_homogeneous_studys_own_scalar_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Two same-configuration runs in a Study pool with no mismatch note.
+
+`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+design.md` (`selby/restricted`), §2.
+
+<a id="gui.test_app_api.test_open_study_flattens_a_batch_members_own_replicates"></a>
+
+#### test\_open\_study\_flattens\_a\_batch\_members\_own\_replicates
+
+```python
+def test_open_study_flattens_a_batch_members_own_replicates(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A batch member contributes each of its own replicates individually,
+not one already-pooled point.
+
+<a id="gui.test_app_api.test_open_study_pools_regardless_of_a_mismatched_parameter"></a>
+
+#### test\_open\_study\_pools\_regardless\_of\_a\_mismatched\_parameter
+
+```python
+def test_open_study_pools_regardless_of_a_mismatched_parameter(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A mismatched `d` across members is warned about, never refused.
+
+Project owner's own resolution: there are legitimate reasons to
+intentionally pool runs in the same parameter neighborhood, so this
+is a check/suggestion, not a gate.
+
+<a id="gui.test_app_api.test_open_study_reports_an_unknown_study"></a>
+
+#### test\_open\_study\_reports\_an\_unknown\_study
+
+```python
+def test_open_study_reports_an_unknown_study(tmp_path: Path) -> None
+```
+
+Reopening a nonexistent Study is a clean failure, not a crash.
+
+<a id="gui.test_app_api.test_open_study_reports_no_readable_runs"></a>
+
+#### test\_open\_study\_reports\_no\_readable\_runs
+
+```python
+def test_open_study_reports_no_readable_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An existing, empty Study cannot be pooled -- named explicitly, not a
+silent empty success.
+
 <a id="gui.test_app_api.test_push_batch_progress_pushes_a_pooled_scatter_from_real_sidecars"></a>
 
 #### test\_push\_batch\_progress\_pushes\_a\_pooled\_scatter\_from\_real\_sidecars
@@ -9062,7 +9166,7 @@ def test_get_about_info_reports_the_dev_checkout_commit(
 `commit` mirrors `fim.__dev_commit__`'s module-level value.
 
 `None` for a release install or frozen build; a short `git` label
-(`g<sha>`, `-dirty`-suffixed for uncommitted local changes) for a
+(`<sha>`, `-dirty`-suffixed for uncommitted local changes) for a
 source-tree `dev` checkout — `fim.__init__._dev_commit_suffix`'s own
 docstring. Monkeypatched here rather than relying on this test
 process's own live value, so the assertion is exact either way.
@@ -9316,8 +9420,11 @@ def test_a_completed_batch_hides_the_reanalyze_controls(
 A batch's own `completed` view hides item 6's re-analysis controls.
 
 A batch manifest has no single trajectory of its own to re-analyze
-(the same "no single trajectory" boundary `open-run.js`'s own
-single-click row handler already draws for a batch row on Home) --
+at a chosen generation -- unlike a scalar run, this is not something
+`Api.open_batch` changes (`20260919-claude-sonnet-5-unified-batch-
+and-study-results-reopen-design.md`, `selby/restricted`, §1: the
+reopened batch card still has no single trajectory, only a pooled
+one, exactly like a live batch's own completion) --
 `enterCompletedState`'s own `resultsReanalyzeControls.hidden = isBatch`
 is what enforces this; the scalar counterpart (hidden is `False`) is
 `test/gui/test_running_screen.py`'s own `test_a_live_runs_own_done_
@@ -11856,6 +11963,27 @@ one, hit live while building this feature: removing the old
 "Unsorted" bucket without this CLI-side change made every bare run
 disappear from the tree entirely).
 
+<a id="gui.test_home_hierarchy_screen.test_home_run_count_label_does_not_double_count_a_run_in_two_studies"></a>
+
+#### test\_home\_run\_count\_label\_does\_not\_double\_count\_a\_run\_in\_two\_studies
+
+```python
+def test_home_run_count_label_does_not_double_count_a_run_in_two_studies(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A run belonging to more than one Study is still counted once.
+
+A real, reported bug: `add_run_to_study` only ever appends, never
+detaches from a prior Study, so a run genuinely can end up in more
+than one Study (here: the always-present default Study, plus two
+more added by hand). The bottom-of-table count label used to sum
+each visible Study's own `runCount` across the whole tree, double-
+(or more-)counting any run shared this way -- confirmed live on a
+checkout with heavy manual "Add to study…" use, producing a
+nonsensical "722 of 2 runs" with no filter text even typed. The
+label must count distinct run directories instead.
+
 <a id="gui.test_home_hierarchy_screen.test_home_materializes_the_default_study_on_a_truly_empty_checkout"></a>
 
 #### test\_home\_materializes\_the\_default\_study\_on\_a\_truly\_empty\_checkout
@@ -12035,6 +12163,103 @@ actually reaches `Api.rerun_study` and the tree reflects the new
 run count once it resolves -- `test/gui/test_app_api.py`'s own
 tests already prove `rerun_study` itself correct as a plain Python
 call.
+
+<a id="gui.test_home_hierarchy_screen.test_home_shows_only_the_most_recent_run_for_a_repeated_configuration"></a>
+
+#### test\_home\_shows\_only\_the\_most\_recent\_run\_for\_a\_repeated\_configuration
+
+```python
+def test_home_shows_only_the_most_recent_run_for_a_repeated_configuration(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Two runs of the identical configuration share a `run_id`; only the
+newer one renders.
+
+Reported live: a Study's own expanded view showed the same `run-
+<hash>` label twice, a run apart in time -- `run_id` is a
+deterministic hash of the configuration itself (`fim.engine.
+deterministic_run_id`), not a per-invocation random id, so two
+genuinely distinct run directories sharing an identical
+configuration also share one `run_id`. Showing both is noise;
+`dedupeMostRecentPerRunId` keeps only the one with the later
+`endedAt`.
+
+<a id="gui.test_home_hierarchy_screen.test_home_select_button_toggles_the_checkbox_column"></a>
+
+#### test\_home\_select\_button\_toggles\_the\_checkbox\_column
+
+```python
+def test_home_select_button_toggles_the_checkbox_column(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Checkboxes stay hidden until "Select" is clicked, on every row kind.
+
+Noise on a screen mostly used to look, not to bulk-delete -- "Select"
+(`open-run-toggle-select-button`) is a pure display toggle
+(``open`-run-table`'s own `open-run-selecting` class), never touching
+the underlying selection state.
+
+<a id="gui.test_home_hierarchy_screen.test_home_checkbox_and_toggle_sit_on_one_line"></a>
+
+#### test\_home\_checkbox\_and\_toggle\_sit\_on\_one\_line
+
+```python
+def test_home_checkbox_and_toggle_sit_on_one_line(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A Study/Experiment row's own checkbox and toggle never wrap onto
+separate lines.
+
+A real, reported layout bug: the toggle's own former `width: 100%`
+made it an inline-block wider than the space the checkbox left
+beside it, wrapping it onto a line of its own below the checkbox
+(`.open-run-group-header-cell`'s own flex layout, `app.css`, fixes
+this). Confirmed by comparing each element's own vertical position
+rather than reading text, since a line-wrap changes nothing about
+what text is present, only where it renders.
+
+<a id="gui.test_home_hierarchy_screen.test_home_selection_toolbar_sits_on_the_filter_line"></a>
+
+#### test\_home\_selection\_toolbar\_sits\_on\_the\_filter\_line
+
+```python
+def test_home_selection_toolbar_sits_on_the_filter_line(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The Select/Select all/Clear selection/Delete selected group nests
+inside the same row as the filter input, not a separate line below
+it.
+
+<a id="gui.test_home_hierarchy_screen.test_opening_a_study_row_pools_its_own_member_runs"></a>
+
+#### test\_opening\_a\_study\_row\_pools\_its\_own\_member\_runs
+
+```python
+def test_opening_a_study_row_pools_its_own_member_runs(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A Study row's own "Open…" pools every member run into the batch
+Results card.
+
+`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+design.md` (`selby/restricted`), §2/§3.
+
+<a id="gui.test_home_hierarchy_screen.test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pools"></a>
+
+#### test\_opening\_a\_study\_with\_a\_mismatched\_parameter\_shows\_a\_note\_but\_still\_pools
+
+```python
+def test_opening_a_study_with_a_mismatched_parameter_shows_a_note_but_still_pools(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A mismatched `d` across a Study's own members still pools, with a
+visible note naming it -- never a refusal.
 
 <a id="gui.test_input_screen"></a>
 
@@ -13070,23 +13295,39 @@ single click plus the "Open" button already gives (the test right
 above this one), reached in one interaction instead of two --
 `open-run.js`'s own `openTrajectory`, shared by both paths.
 
-<a id="gui.test_open_run_screen.test_double_clicking_a_batch_row_does_not_open_it"></a>
+<a id="gui.test_open_run_screen.test_double_clicking_a_batch_row_opens_its_pooled_results"></a>
 
-#### test\_double\_clicking\_a\_batch\_row\_does\_not\_open\_it
+#### test\_double\_clicking\_a\_batch\_row\_opens\_its\_pooled\_results
 
 ```python
-def test_double_clicking_a_batch_row_does_not_open_it(
+def test_double_clicking_a_batch_row_opens_its_pooled_results(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A batch row's own double-click is a safe no-op, not a crash or a
-(nonsensical) attempt to open a manifest with no single trajectory.
+Double-clicking a batch row opens the identical batch Results card
+a live batch's own completion already shows.
 
-`open-run.js`'s own single-click handler already draws this exact
-"no single trajectory" boundary for a batch row (`showOpenRunBanner`)
--- the double-click handler only needs to defer to it, not repeat
-the message, so this test's own bar is simply "still on Home, still
-`initial`," not a duplicated banner assertion.
+`20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+design.md` (`selby/restricted`), §3: batch and scalar rows are
+symmetric now -- `open-run.js`'s own `openBatch`, reached the
+identical way `openTrajectory` already is for a scalar row (the
+test right above this one). "Open replicate," reached by expanding
+the row instead, is a separate, still-available way to open one
+specific replicate's own scalar result.
+
+<a id="gui.test_open_run_screen.test_selecting_and_opening_a_batch_row_via_the_open_button"></a>
+
+#### test\_selecting\_and\_opening\_a\_batch\_row\_via\_the\_open\_button
+
+```python
+def test_selecting_and_opening_a_batch_row_via_the_open_button(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A single click selects a batch row and enables "Open," exactly
+like a scalar row -- no more early-return banner (`20260919-claude-
+sonnet-5-unified-batch-and-study-results-reopen-design.md`,
+`selby/restricted`, §3).
 
 <a id="gui.test_open_run_screen.test_reanalyzing_at_a_chosen_generation_updates_the_outcome_text"></a>
 
@@ -22577,6 +22818,22 @@ def test_publish_beta_marks_the_release_as_a_prerelease() -> None
 A beta build must never appear as a real release on the project's
 own GitHub Releases page.
 
+<a id="validation.test_beta_workflow.test_windows_beta_smoke_checks_batch_level_artifacts"></a>
+
+#### test\_windows\_beta\_smoke\_checks\_batch\_level\_artifacts
+
+```python
+def test_windows_beta_smoke_checks_batch_level_artifacts() -> None
+```
+
+The Windows executable smoke matches `fim run`'s default batch output.
+
+`fim init`'s starter configuration is a batch (`n_replicates > 1`),
+so the top-level smoke directory contains `manifest.json` and
+`summary.json`; scalar artifacts live under each `replicate-*`
+directory. The beta smoke must check that current contract rather
+than the old scalar four-file layout.
+
 <a id="validation.test_beta_workflow.test_linux_beta_job_matches_ci_ymls_own_gtk_dependency_list"></a>
 
 #### test\_linux\_beta\_job\_matches\_ci\_ymls\_own\_gtk\_dependency\_list
@@ -23936,7 +24193,11 @@ single `slow`-marked engine scenario test, even after being raised
 three times in one day. `--ci` now excludes `slow` specifically,
 named explicitly here rather than silently — every other marker,
 including `packaging` and `statistical`, keeps running through this
-one gate exactly as originally established.
+one gate exactly as originally established. `gui` is split into its
+own serial pytest process for pywebview shutdown stability, and
+`packaging` is split into its own serial pytest process because it
+builds real distributions in shared build-tree paths, but both are
+still included by `--ci`.
 
 <a id="validation.test_sdist_contents"></a>
 

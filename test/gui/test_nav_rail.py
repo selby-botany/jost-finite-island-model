@@ -127,8 +127,7 @@ def test_card_navigation_buttons_have_directional_icons(
             ".querySelector('use')?.getAttribute('href')), "
             "forwardButtons: ["
             "'history-forward-button', "
-            "'results-history-forward-button', "
-            "'home-new-run-button'"
+            "'results-history-forward-button'"
             "].map(id => document.getElementById(id)"
             ".querySelector('use')?.getAttribute('href'))"
             "})"
@@ -145,8 +144,11 @@ def test_card_navigation_buttons_have_directional_icons(
             "icons/fim-icons.svg#icon-back",
             "icons/fim-icons.svg#icon-back",
         ],
+        # Home's own "New run" card, the third forward-icon button here,
+        # is gone (`.home-cards` removed outright, `20260918-claude-
+        # sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §7) --
+        # its row-level "Create run…" successor is plain text, no icon.
         "forwardButtons": [
-            "icons/fim-icons.svg#icon-forward",
             "icons/fim-icons.svg#icon-forward",
             "icons/fim-icons.svg#icon-forward",
         ],
@@ -479,12 +481,14 @@ def test_configure_back_button_returns_to_whichever_screen_preceded_it(
 def test_configure_example_select_lists_only_built_in_examples(
     window: webview.Window,
 ) -> None:
-    """`configure-example-select` offers the identical shortcut Home's own
-    `home-example-select` does — built-in worked examples only, populated
-    by the same shared `refreshExampleOptions` (`screens/presets.js`), not
-    a second, independently maintained option list that could drift from
-    it (`test_open_run_screen.py`'s own `test_home_example_select_lists_
-    only_built_in_examples` is the identical test for Home's copy).
+    """`configure-example-select` offers a built-in-examples-only shortcut,
+    populated by the shared `refreshExampleOptions` (`screens/presets.js`)
+    -- the same mechanism `fim.menu.loadExample`'s own full picker uses,
+    not a second, independently maintained option list that could drift
+    from it. Home's own former copy of this shortcut (`home-example-
+    select`) was removed along with `.home-cards` (`20260918-claude-
+    sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §7); this is
+    now the only such shortcut in the app.
     """
 
     def steps(poll_until: Callable[[str, Callable[[Any], bool]], Any]) -> Any:

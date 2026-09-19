@@ -713,18 +713,19 @@ fieldset.composite > label {
     background: var(--fim-surface-soft);
 }
 
-/* `home-example-select` (Home's "New run" card): a plain `<select>`
- * sharing an `.actions` row with a real `<button>` -- matched to that
- * button's own sizing/border/radius so the two read as one action
- * group, not a mismatched form control dropped beside styled buttons.
- * `min-width: 0` overrides a flex item's own default `min-width: auto`
- * -- without it, a `<select>` refuses to shrink below its own widest
- * `<option>`'s rendered width (several real worked-example titles are
- * long, e.g. "Per-base mutation rate across unequal locus lengths"),
- * overflowing `.home-card`'s own bounding box at a narrow window width
- * instead of wrapping or shrinking the way `.actions`'s own `flex-wrap`
- * otherwise allows every other child to. `max-width: 100%` is the
- * actual shrink target once `min-width` no longer forbids it. */
+/* `configure-example-select` (Configure's "Load example…" shortcut): a
+ * plain `<select>` sharing an `.actions` row with a real `<button>` --
+ * matched to that button's own sizing/border/radius so the two read as
+ * one action group, not a mismatched form control dropped beside styled
+ * buttons. `min-width: 0` overrides a flex item's own default `min-
+ * width: auto` -- without it, a `<select>` refuses to shrink below its
+ * own widest `<option>`'s rendered width (several real worked-example
+ * titles are long, e.g. "Per-base mutation rate across unequal locus
+ * lengths"), overflowing its own container's bounding box at a narrow
+ * window width instead of wrapping or shrinking the way `.actions`'s
+ * own `flex-wrap` otherwise allows every other child to. `max-width:
+ * 100%` is the actual shrink target once `min-width` no longer forbids
+ * it. */
 .actions select {
     font: inherit;
     padding: 0.45rem 0.9rem;
@@ -1335,52 +1336,6 @@ fieldset.composite > label {
     font-size: 0.95rem;
 }
 
-/* Home's own shortcut cards (design §9; home enrichment design doc
- * `20260909-claude-sonnet-5-home-enrichment-design.md`, `selby/
- * restricted`, slice 3) -- deliberately plain, bordered boxes, not
- * `.config-modal`'s own dialog styling (these sit inline on the page,
- * never in a `<dialog>`). */
-.home-cards {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin-bottom: 1.25rem;
-}
-
-.home-card {
-    flex: 1 1 16rem;
-    min-width: 14rem;
-    border: 1px solid var(--fim-border);
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
-    background: var(--fim-background);
-    box-shadow: 0 2px 8px var(--fim-shadow);
-}
-
-.home-card h3 {
-    margin: 0 0 0.35rem;
-    font-size: 0.95rem;
-    font-weight: 900;
-    color: var(--fim-accent);
-}
-
-.home-card p {
-    margin: 0 0 0.75rem;
-    font-size: 0.85rem;
-    color: var(--fim-muted);
-}
-
-/* "New study"/"New experiment" home cards (Run/Study/Experiment
- * hierarchy design, `20260917-claude-sonnet-5-run-study-experiment-
- * hierarchy-design.md`, `selby/restricted`, §6) -- plain, stacked text
- * inputs, full card width, rather than `.actions`'s own inline-row
- * layout (which assumes short buttons/selects, not a name field). */
-.home-card input[type="text"] {
-    display: block;
-    width: 100%;
-    margin-bottom: 0.5rem;
-}
-
 /* Screen 6: open an existing run (design §4.6). */
 .open-run-table {
     width: 100%;
@@ -1441,6 +1396,29 @@ fieldset.composite > label {
     background: none;
 }
 
+/* The checkbox, toggle, and action buttons inside one group header's
+ * own cell used to fall out of one line: the toggle's own `width:
+ * 100%` made it an inline-block wider than the space the checkbox
+ * left beside it on the same line, so it wrapped down onto a line of
+ * its own instead of sitting beside the checkbox the way a Run row's
+ * own checkbox-plus-label already does. A flex `<span>` wrapper
+ * (`screens/open-run.js`'s own `buildGroupHeaderRow`) keeps checkbox/
+ * toggle/actions on one line regardless of width -- `display: flex`
+ * directly on the `<td>` itself computed correctly but did not
+ * actually lay its children out that way under this project's own
+ * bundled WebKit, confirmed live, hence the wrapper rather than the
+ * cell itself as the flex container. `width: 100%` here (a `<span>`
+ * defaults to shrink-to-fit) makes the wrapper fill the cell first, so
+ * the toggle's own `flex: 1 1 auto` (replacing that old `width: 100%`)
+ * still has the cell's full remaining width to grow into for its own
+ * large click target, and naturally pushes the actions to the row's
+ * own right edge with no separate `float`/margin trick needed. */
+.open-run-group-header-cell {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
 .open-run-group-toggle {
     font: inherit;
     font-weight: 700;
@@ -1449,7 +1427,8 @@ fieldset.composite > label {
     border: none;
     cursor: pointer;
     padding: 0.2rem 0;
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     text-align: left;
 }
 
@@ -1502,6 +1481,16 @@ fieldset.composite > label {
     vertical-align: middle;
 }
 
+/* Hidden by default -- a checkbox on every single row is noise on a
+ * screen a botanist mostly uses to look, not to bulk-delete -- and
+ * shown only once "Select" (`open-run-toggle-select-button`) turns
+ * `#open-run-table` into "selecting" mode (`screens/open-run.js`).
+ * Selection state itself (`selectedRunDirectories`/etc.) is untouched
+ * either way; this is a pure display toggle, never a data reset. */
+#open-run-table:not(.open-run-selecting) .open-run-select-checkbox {
+    display: none;
+}
+
 .open-run-add-to-select {
     font-size: 0.85rem;
     max-width: 10rem;
@@ -1510,9 +1499,11 @@ fieldset.composite > label {
 /* A Study/Experiment group header's own Copy/Delete/"Add to
  * experiment…" controls, beside its toggle button in the same cell --
  * distinct, muted buttons so they read as secondary to the toggle
- * itself, which stays the row's own primary, full-width click target. */
+ * itself, which stays the row's own primary click target
+ * (`.open-run-group-header-cell`'s own flex row places this last,
+ * flush against the row's own right edge once the toggle's own
+ * `flex: 1 1 auto` has claimed the space between them). */
 .open-run-group-actions {
-    float: right;
     display: flex;
     align-items: center;
     gap: 0.4rem;
@@ -1533,15 +1524,17 @@ fieldset.composite > label {
     border-color: var(--fim-accent);
 }
 
-/* The bulk "Select/Delete/Delete all" toolbar sits directly above the
- * table, beside the filter row -- one round trip for a selection of any
- * size (`Api.delete_runs`), since the runs it was built for could number
- * in the thousands. */
+/* The bulk "Select/Delete/Delete all" toolbar sits on the same line as
+ * the filter input, pushed flush right (`margin-left: auto` inside
+ * `.open-run-list-controls`'s own flex row) rather than a second line
+ * of its own -- one round trip for a selection of any size (`Api.
+ * delete_runs`), since the runs it was built for could number in the
+ * thousands. */
 .open-run-selection-toolbar {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    margin-bottom: 0.6rem;
+    margin-left: auto;
 }
 
 /* `confirmThenRun`'s own inline "are you sure?" row -- this codebase's

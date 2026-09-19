@@ -133,6 +133,8 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_batch\_replicate\_summary](#fim.gui.app.Api.get_batch_replicate_summary)
     * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
+    * [open\_batch](#fim.gui.app.Api.open_batch)
+    * [open\_study](#fim.gui.app.Api.open_study)
     * [compare\_runs](#fim.gui.app.Api.compare_runs)
     * [get\_animation\_frames](#fim.gui.app.Api.get_animation_frames)
     * [get\_animation\_deme\_pair\_frames](#fim.gui.app.Api.get_animation_deme_pair_frames)
@@ -4804,6 +4806,123 @@ reuse, not a second rendering path.
   exist) — `message` is shown verbatim, matching `fim
   stats`'s own wording.
 
+<a id="fim.gui.app.Api.open_batch"></a>
+
+#### open\_batch
+
+```python
+@_log_bridge_call
+def open_batch(directory: str) -> dict[str, Any]
+```
+
+Reopen a persisted batch, matching `open_run`'s own semantics one level up.
+
+`20260919-claude-sonnet-5-unified-batch-and-study-results-
+reopen-design.md` (`selby/restricted`), §1: every replicate's
+own final `state`/`report` is rediscovered fresh from its own
+`trajectory.jsonl` (`reanalyze_trajectory`, the identical
+function `open_run`/`get_batch_deme_pair_panel` already use),
+never from a possibly-stale `report.json`/`summary.json` --
+this gets the identical tamper/corruption check a scalar reopen
+already has, for free, once per replicate.
+
+The one field a live batch's own "done" payload carries that
+this cannot reconstruct is `pooledConvergenceHistories`: a
+byproduct of a live run's own `ConvergenceMonitor`, computed
+nowhere else and not persisted anywhere on disk. Reported here
+as an empty `{}`, exactly matching `open_run`'s own already-
+shipped precedent of a reopened *scalar* run carrying no
+`convergenceGenerations`/`convergenceHistories` either --
+"opened" has shown less than "just finished" since before this
+method existed, not a new, batch-specific compromise.
+
+**Arguments**:
+
+- `directory` - The batch's own top-level output directory
+  (`RecentRun.directory`/`Api.list_home_runs`'s own
+  `"directory"` field, for a row where `isBatch` is
+  true).
+
+
+**Returns**:
+
+  The identical shape `_batch_done_payload` returns (see its
+  own docstring for every field), so `window.fim.
+  enterCompletedState(result, true)` renders it exactly as it
+  would a batch that just finished live. `{"ok": False,
+- `"message"` - ...}` if the batch manifest cannot be read, or
+  any one replicate's own trajectory fails its integrity
+  check (`reanalyze_trajectory`'s own `ValueError`/`OSError`
+- `cases)` - the identical failure shape `open_run` already
+  uses for the same class of problem, one level up.
+
+<a id="fim.gui.app.Api.open_study"></a>
+
+#### open\_study
+
+```python
+@_log_bridge_call
+def open_study(study_id: str) -> dict[str, Any]
+```
+
+Reopen a whole Study, pooling every member run/replicate one level up.
+
+`20260919-claude-sonnet-5-unified-batch-and-study-results-
+reopen-design.md` (`selby/restricted`), §2: a Study's own
+member runs are flattened to individual-replicate granularity
+before pooling -- a batch member contributes each of its own
+published replicates individually, exactly as if they had been
+separate scalar runs in the Study directly, rather than
+contributing one already-pooled mean as a single data point
+(every individual simulation is an independent draw; a batch is
+not one observation). The rest of the aggregation is `Api.
+open_batch`'s own §1 aggregation, via the same shared `_pooled_
+batch_payload`.
+
+Pooling never refuses on a mismatched configuration (the
+project owner's own resolution to this document's first open
+question) -- there are legitimate reasons to intentionally pool
+runs in the same parameter neighborhood. `parameterMismatches`
+instead names every field, among `N`/`d`/`m`/`mu`/`loci`/
+`mutation_model`/`migrant_sampling`, that actually varies across
+the pooled members, each with the distinct values seen -- the
+botanist, not this method, decides whether that variation is
+meaningful. Present only when something actually does vary; the
+common, homogeneous case carries no such key at all.
+
+Unlike `Api.open_batch`, `outputDirectory` in the returned
+payload is this checkout's own results root, not any one
+member's own directory -- a Study's own members are not all
+replicates of one shared batch directory, so there is no single
+directory "Open output folder" could point at more precisely.
+The completed view's own animated scatter scrubber
+(`get_batch_animation_frames`, keyed on exactly one batch
+manifest) does not resolve against that root and simply stays
+hidden, the identical graceful degradation it already has for
+any directory with too few frames to animate — the static
+pooled scatter (`payload.panels`, built directly from every
+member's own already-collected final state) still renders
+whenever every member shares one deme count, and degrades to an
+empty panel rather than raising when a `parameterMismatches`
+`"d"` entry means they do not (`_pooled_batch_payload`'s own
+`ValueError` fallback -- `pooled_frequency_points` cannot
+concatenate final states of differing deme shape into one
+panel, an unavoidable structural consequence of "warn, never
+refuse," not a bug).
+
+**Arguments**:
+
+- `study_id` - The Study to reopen.
+
+
+**Returns**:
+
+  The identical shape `open_batch` returns, plus
+  `parameterMismatches` when present. `{"ok": False,
+- `"message"` - ...}` if no such Study exists, it has no
+  readable member runs at all, or any one member's own
+  trajectory fails its integrity check.
+
 <a id="fim.gui.app.Api.compare_runs"></a>
 
 #### compare\_runs
@@ -5155,7 +5274,7 @@ own equivalent action called the same module the same way.
 
 ```python
 @_log_bridge_call
-def get_about_info() -> dict[str, str | None]
+def get_about_info() -> dict[str, Any]
 ```
 
 Return the static "About fim" facts the Help menu shows.

@@ -62,6 +62,7 @@ from fim.model.allele import AlleleId
 from fim.model.locus import LocusSpec
 from fim.model.params import SimulationParams
 from fim.model.state import ModelState
+from fim.persistence import groups
 from fim.persistence.jsonl_store import JSONLTrajectoryStore
 from fim.persistence.manifest import read_manifest
 from fim.statistics import (
@@ -1957,6 +1958,168 @@ def test_batch_done_payload_honors_an_explicit_digits_count(
         assert summary[name]["mean"] == format_statistic(interval["mean"], 2)
 
 
+def test_open_batch_matches_a_live_batchs_own_done_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reopening a real, persisted batch reproduces `_batch_done_payload`'s
+    own shape, minus the convergence-history panel.
+
+    `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+    design.md` (`selby/restricted`), §1: every field is rebuilt from
+    disk (`reanalyze_trajectory` per replicate), not from any live
+    `RunResult` -- confirmed here by comparing against the *real*
+    on-disk artifacts a real `fim run` batch actually wrote, not
+    against a second, independently constructed expectation that could
+    drift from what the CLI truly persists.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output_directory = _write_run_under(results, "batch-a", n_replicates=3)
+
+    result = Api().open_batch(str(output_directory))
+
+    assert result["ok"] is True
+    assert result["outputDirectory"] == str(output_directory)
+    replicates = result["replicates"]
+    assert isinstance(replicates, list)
+    assert len(replicates) == 3
+    for row in replicates:
+        assert isinstance(row["replicateId"], str)
+        assert set(row["statistics"]) >= {"D", "G_ST", "E_ST"}
+    summary = result["summary"]
+    assert isinstance(summary, dict)
+    assert "D" in summary
+    assert summary["D"]["sampleCount"] == 3
+    p0 = result["p0Statistics"]
+    assert isinstance(p0, dict)
+    assert set(p0) == set(app_module._RESULT_STATISTIC_NAMES)
+    assert isinstance(result["panels"], list)
+    assert len(result["panels"]) > 0
+    # The one field a reopened batch cannot reconstruct -- matches a
+    # reopened *scalar* run's own already-shipped "no history panel"
+    # precedent (`Api.open_run`), not a new, batch-specific gap.
+    assert result["pooledConvergenceHistories"] == {}
+
+
+def test_open_batch_reports_a_missing_manifest(tmp_path: Path) -> None:
+    """A directory naming no batch manifest is a clean failure, not a crash."""
+    empty_directory = tmp_path / "not-a-batch"
+    empty_directory.mkdir()
+
+    result = Api().open_batch(str(empty_directory))
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_open_batch_reports_a_tampered_replicate_trajectory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A single replicate's own edited trajectory fails the whole reopen,
+    matching `open_run`'s own integrity-check precedent for a scalar run."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output_directory = _write_run_under(results, "batch-a", n_replicates=2)
+    first_replicate = sorted(output_directory.glob("replicate-*"))[0]
+    trajectory_path = first_replicate / "trajectory.jsonl"
+    trajectory_path.write_text(
+        trajectory_path.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    )
+
+    result = Api().open_batch(str(output_directory))
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_open_study_pools_a_homogeneous_studys_own_scalar_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two same-configuration runs in a Study pool with no mismatch note.
+
+    `20260919-claude-sonnet-5-unified-batch-and-study-results-reopen-
+    design.md` (`selby/restricted`), §2.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    _write_run_under(results, "run-a", seed=1, study_id=study_id)
+    _write_run_under(results, "run-b", seed=2, study_id=study_id)
+
+    result = api.open_study(study_id)
+
+    assert result["ok"] is True
+    assert "parameterMismatches" not in result
+    summary = result["summary"]
+    assert isinstance(summary, dict)
+    assert summary["D"]["sampleCount"] == 2
+    assert len(result["replicates"]) == 2
+
+
+def test_open_study_flattens_a_batch_members_own_replicates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A batch member contributes each of its own replicates individually,
+    not one already-pooled point."""
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    _write_run_under(results, "run-a", seed=1, study_id=study_id)
+    _write_run_under(results, "batch-a", n_replicates=3, study_id=study_id)
+
+    result = api.open_study(study_id)
+
+    assert result["ok"] is True
+    assert len(result["replicates"]) == 4
+    assert result["summary"]["D"]["sampleCount"] == 4
+
+
+def test_open_study_pools_regardless_of_a_mismatched_parameter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mismatched `d` across members is warned about, never refused.
+
+    Project owner's own resolution: there are legitimate reasons to
+    intentionally pool runs in the same parameter neighborhood, so this
+    is a check/suggestion, not a gate.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    _write_run_under(results, "run-a", seed=1, d=2, study_id=study_id)
+    _write_run_under(results, "run-b", seed=2, d=4, study_id=study_id)
+
+    result = api.open_study(study_id)
+
+    assert result["ok"] is True
+    assert result["summary"]["D"]["sampleCount"] == 2
+    mismatches = result["parameterMismatches"]
+    assert set(mismatches["d"]) == {"2", "4"}
+    # A field every member actually agrees on is never listed.
+    assert "mu" not in mismatches
+
+
+def test_open_study_reports_an_unknown_study(tmp_path: Path) -> None:
+    """Reopening a nonexistent Study is a clean failure, not a crash."""
+    result = Api().open_study("study-ffffffff")
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
+def test_open_study_reports_no_readable_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An existing, empty Study cannot be pooled -- named explicitly, not a
+    silent empty success."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Empty study")["studyId"]
+
+    result = api.open_study(study_id)
+
+    assert result["ok"] is False
+    assert "message" in result
+
+
 class _FakeWindow:
     """A `webview.Window` stand-in exposing only `evaluate_js`.
 
@@ -2235,12 +2398,26 @@ def test_drain_run_messages_includes_a_live_deme_pair_panel_when_selected() -> N
     assert progress_payload["literatureVisuals"] == visuals
 
 
-def _write_run(tmp_path: Path, **overrides: object) -> Path:
+def _write_run(
+    tmp_path: Path, *, study_id: str | None = None, **overrides: object
+) -> Path:
     """Write a small config with several generations and return its output directory.
 
     Mirrors `test/gui/test_animation.py`'s own identically-named
     helper — a direct parallel, not a shared import, per this
     project's established per-test-file fixture convention.
+
+    `study_id`, when given, attaches the run to that Study directly at
+    creation time via `fim run --study` rather than a separate, later
+    `add_run_to_study` call — the CLI's own bare `fim run` now attaches
+    to the always-present default Study instead of leaving the run
+    unattached (`20260918-claude-sonnet-5-home-tree-reorg-design.md`,
+    `selby/restricted`, §2), so a test whose own point is "this run
+    belongs to exactly one, specific Study" must say so up front; a
+    separate `add_run_to_study` call afterward would leave the run in
+    *two* Studies (the implicit default plus the named one) rather than
+    replacing the first, since nothing here ever detaches a run from a
+    prior Study.
     """
     config: dict[str, object] = {
         "N": 20,
@@ -2259,9 +2436,10 @@ def _write_run(tmp_path: Path, **overrides: object) -> Path:
     config_path = tmp_path / "run.yaml"
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     output_directory = tmp_path / "output"
-    assert (
-        cli.main(["run", str(config_path), "-o", str(output_directory), "--quiet"]) == 0
-    )
+    arguments = ["run", str(config_path), "-o", str(output_directory), "--quiet"]
+    if study_id is not None:
+        arguments += ["--study", study_id]
+    assert cli.main(arguments) == 0
     return output_directory
 
 
@@ -2554,7 +2732,9 @@ def _use_isolated_results_directory(
     return results
 
 
-def _write_run_under(results: Path, name: str, **overrides: object) -> Path:
+def _write_run_under(
+    results: Path, name: str, *, study_id: str | None = None, **overrides: object
+) -> Path:
     """`_write_run`, into a not-yet-existing subdirectory of `results`.
 
     `_write_run` writes `run.yaml` directly into the directory it is
@@ -2563,7 +2743,7 @@ def _write_run_under(results: Path, name: str, **overrides: object) -> Path:
     override does not exist yet at all until this creates it.
     """
     (results / name).mkdir(parents=True)
-    return _write_run(results / name, **overrides)
+    return _write_run(results / name, study_id=study_id, **overrides)
 
 
 def test_create_and_list_studies_round_trips(
@@ -2676,10 +2856,9 @@ def test_delete_study_removes_it_and_its_runs(
 ) -> None:
     """Deleting a Study from the GUI cascades to its member Runs (confirmed)."""
     results = _use_isolated_results_directory(tmp_path, monkeypatch)
-    output = _write_run_under(results, "run-a")
     api = Api()
     study_id = api.create_study("Ring sweep")["studyId"]
-    api.add_run_to_study(study_id, str(output))
+    output = _write_run_under(results, "run-a", study_id=study_id)
 
     deleted = api.delete_study(study_id)
 
@@ -2693,10 +2872,9 @@ def test_delete_experiment_cascades_to_studies_and_runs(
 ) -> None:
     """Deleting an Experiment cascades through its Studies to their Runs."""
     results = _use_isolated_results_directory(tmp_path, monkeypatch)
-    output = _write_run_under(results, "run-a")
     api = Api()
     study_id = api.create_study("Ring sweep")["studyId"]
-    api.add_run_to_study(study_id, str(output))
+    output = _write_run_under(results, "run-a", study_id=study_id)
     experiment_id = api.create_experiment("Topology")["experimentId"]
     api.add_study_to_experiment(experiment_id, study_id)
 
@@ -2713,10 +2891,9 @@ def test_copy_study_creates_an_independent_study(
 ) -> None:
     """`copy_study`: the confirmed, lower-complexity alternative to multi-membership."""
     results = _use_isolated_results_directory(tmp_path, monkeypatch)
-    output = _write_run_under(results, "run-a")
     api = Api()
     study_id = api.create_study("Ring sweep")["studyId"]
-    api.add_run_to_study(study_id, str(output))
+    _write_run_under(results, "run-a", study_id=study_id)
 
     copied = api.copy_study(study_id, "Ring sweep copy")
 
@@ -2744,10 +2921,9 @@ def test_rerun_study_new_seed_mode_produces_a_different_seed(
 ) -> None:
     """The default "new" seed mode re-runs with a fresh seed, attached to the Study."""
     results = _use_isolated_results_directory(tmp_path, monkeypatch)
-    output = _write_run_under(results, "run-a", seed=1)
     api = Api()
     study_id = api.create_study("Ring sweep")["studyId"]
-    api.add_run_to_study(study_id, str(output))
+    output = _write_run_under(results, "run-a", seed=1, study_id=study_id)
 
     result = api.rerun_study(study_id)
 
@@ -2764,12 +2940,11 @@ def test_rerun_study_same_seed_mode_reuses_the_original_seed(
 ) -> None:
     """`"same"` reuses each configuration's own original seed exactly."""
     results = _use_isolated_results_directory(tmp_path, monkeypatch)
-    output = _write_run_under(results, "run-a", seed=42)
     preferences_path = tmp_path / "preferences.json"
     save_preferences(preferences_path, GuiPreferences(rerun_seed_mode="same"))
     api = Api(preferences_path=preferences_path)
     study_id = api.create_study("Ring sweep")["studyId"]
-    api.add_run_to_study(study_id, str(output))
+    output = _write_run_under(results, "run-a", seed=42, study_id=study_id)
 
     result = api.rerun_study(study_id)
 
@@ -2844,6 +3019,113 @@ def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
     assert not second.exists()
 
 
+def test_delete_selected_deletes_a_mixed_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One round trip deletes Experiments, Studies, and bare Runs together.
+
+    `20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+    restricted`), §5: the universal Select/Select all/Delete idiom,
+    generalized from `delete_runs`'s own existing one.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    study_run = _write_run_under(results, "run-in-study", seed=2, study_id=study_id)
+    experiment_study_id = api.create_study("Topology sweep")["studyId"]
+    experiment_run = _write_run_under(
+        results, "run-in-experiment", seed=3, study_id=experiment_study_id
+    )
+    experiment_id = api.create_experiment("Topology")["experimentId"]
+    api.add_study_to_experiment(experiment_id, experiment_study_id)
+    # Written bare, with no explicit `--study` — the CLI's own bare `fim
+    # run` attaches this to the always-present default Study instead of
+    # leaving it unattached (`20260918-claude-sonnet-5-home-tree-reorg-
+    # design.md`, `selby/restricted`, §2), so this exercises the "run"
+    # kind of a mixed `delete_selected` call against a run that also
+    # happens to belong to a Study never itself selected here.
+    bare_run = _write_run_under(results, "run-bare")
+
+    result = api.delete_selected(
+        [
+            {"kind": "experiment", "experimentId": experiment_id},
+            {"kind": "study", "studyId": study_id},
+            {"kind": "run", "directory": str(bare_run)},
+        ]
+    )
+
+    assert result == {
+        "ok": True,
+        "deletedRunCount": 1,
+        "deletedStudyCount": 1,
+        "deletedExperimentCount": 1,
+    }
+    assert not bare_run.exists()
+    assert not study_run.exists()
+    assert not experiment_run.exists()
+    # The default Study/Experiment survive: neither was itself selected
+    # for deletion, only the bare run the default Study happens to
+    # reference was (`delete_runs`'s own existing "delete the directory
+    # outright" behavior never scrubs other Studies' own membership
+    # lists — a pre-existing limitation of the "append-only" data model,
+    # not something this change introduces).
+    remaining_studies = {study["studyId"] for study in api.list_studies()}
+    assert remaining_studies == {groups.DEFAULT_STUDY_ID}
+    remaining_experiments = {
+        experiment["experimentId"] for experiment in api.list_experiments()
+    }
+    assert remaining_experiments == {groups.DEFAULT_EXPERIMENT_ID}
+
+
+def test_delete_selected_tolerates_an_already_deleted_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Study also selected alongside its own just-deleted Experiment is a no-op.
+
+    Experiments are processed first (`Api.delete_selected`'s own
+    docstring) -- by the time this Study's own turn comes, it is
+    already gone via the Experiment's cascade, and `delete_study`'s own
+    existing "already gone is not an error" tolerance covers it.
+    """
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+    api = Api()
+    study_id = api.create_study("Ring sweep")["studyId"]
+    experiment_id = api.create_experiment("Topology")["experimentId"]
+    api.add_study_to_experiment(experiment_id, study_id)
+
+    result = api.delete_selected(
+        [
+            {"kind": "experiment", "experimentId": experiment_id},
+            {"kind": "study", "studyId": study_id},
+        ]
+    )
+
+    assert result == {
+        "ok": True,
+        "deletedRunCount": 0,
+        "deletedStudyCount": 0,
+        "deletedExperimentCount": 1,
+    }
+    assert api.list_studies() == []
+    assert api.list_experiments() == []
+
+
+def test_delete_selected_with_nothing_selected_deletes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty selection is a clean no-op, not an error."""
+    _use_isolated_results_directory(tmp_path, monkeypatch)
+
+    result = Api().delete_selected([])
+
+    assert result == {
+        "ok": True,
+        "deletedRunCount": 0,
+        "deletedStudyCount": 0,
+        "deletedExperimentCount": 0,
+    }
+
+
 def test_start_run_rejects_an_unknown_study_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2861,6 +3143,52 @@ def test_start_run_rejects_an_unknown_study_id(
     result = Api().start_run({}, study_id="study-ffffffff")
 
     assert result == {"ok": False, "message": "no such study: study-ffffffff"}
+
+
+def test_attach_finished_run_to_study_with_none_uses_the_default_study(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`study_id=None` attaches to the always-present default Study, not nothing.
+
+    `20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+    restricted`), §2: exercised directly against `_attach_finished_run_
+    to_study` itself (the shared body every `"done"`-branch call site
+    reaches), rather than through a real, full `Api.start_run` — no
+    engine invocation needed to prove this one function's own
+    resolution rule.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+
+    app_module._attach_finished_run_to_study(None, output)
+
+    default = groups.get_study(groups.DEFAULT_STUDY_ID, results=results)
+    assert default.run_directories == ("run-a/output",)
+
+
+def test_attach_finished_run_to_study_with_an_explicit_id_is_unaffected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicitly chosen Study id routes the run there, not to the default.
+
+    `_write_run_under`'s own bare `fim run` already attaches `output` to
+    the default Study as a side effect of writing it at all (the CLI's
+    own new behavior this same module's `test_attach_finished_run_to_
+    study_with_none_uses_the_default_study` exercises directly) — this
+    test's own point is narrower: that a *further*, explicit `_attach_
+    finished_run_to_study(study_id, output)` call, the shape every real
+    "done" transition with a chosen Study takes, lands the run in
+    `study_id`'s own list too, exactly as an explicit choice always has,
+    unrelated to whatever the CLI already did at write time.
+    """
+    results = _use_isolated_results_directory(tmp_path, monkeypatch)
+    output = _write_run_under(results, "run-a")
+    study_id = Api().create_study("Ring sweep")["studyId"]
+
+    app_module._attach_finished_run_to_study(study_id, output)
+
+    chosen = groups.get_study(study_id, results=results)
+    assert chosen.run_directories == ("run-a/output",)
 
 
 def test_open_run_reanalyzes_the_final_generation_by_default(tmp_path: Path) -> None:
@@ -3692,6 +4020,24 @@ def test_get_about_info_names_the_installed_version() -> None:
     # would suggest.
     assert "Marie Selby Botanical Gardens" in info["branding_note"]
     assert "not covered by this license" in info["branding_note"]
+
+
+def test_get_about_info_reports_the_dev_checkout_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`commit` mirrors `fim.__dev_commit__`'s module-level value.
+
+    `None` for a release install or frozen build; a short `git` label
+    (`<sha>`, `-dirty`-suffixed for uncommitted local changes) for a
+    source-tree `dev` checkout — `fim.__init__._dev_commit_suffix`'s own
+    docstring. Monkeypatched here rather than relying on this test
+    process's own live value, so the assertion is exact either way.
+    """
+    monkeypatch.setattr(app_module, "fim_dev_commit", "abc1234-dirty")
+
+    info = Api().get_about_info()
+
+    assert info["commit"] == "abc1234-dirty"
 
 
 # --- _save_dialog_path ---

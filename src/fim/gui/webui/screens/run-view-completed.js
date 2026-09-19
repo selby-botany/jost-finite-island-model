@@ -1617,8 +1617,11 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     batchResultsTableEl.hidden = !isBatch;
     batchResultsTable.hidden = !isBatch;
     // Item 6: a batch has no single trajectory of its own to re-analyze
-    // (the exact same "no single trajectory" boundary `open-run.js`'s
-    // own single-click row handler already draws for a batch row).
+    // at a chosen generation -- unrelated to whether the batch itself
+    // can be opened at all (`open-run.js`'s own `openBatch` opens one
+    // through this exact card, `20260919-claude-sonnet-5-unified-
+    // batch-and-study-results-reopen-design.md`, `selby/restricted`,
+    // §3), only to there being no *single* trajectory once it is.
     resultsReanalyzeControls.hidden = isBatch;
     resultsRunId.textContent = payload.runId;
     // `wireCompletedScrubber` (scalar branch, below) fetches animation
@@ -1634,7 +1637,18 @@ window.fim.enterCompletedState = function enterCompletedState(payload, isBatch) 
     // batch run never reaches `wireCompletedScrubber` at all, so there
     // is nothing to increment here for that branch.
     if (isBatch) {
-        resultsOutcome.textContent = "";
+        // A reopened Study's own `parameterMismatches` (`Api.open_
+        // study`, `20260919-claude-sonnet-5-unified-batch-and-study-
+        // results-reopen-design.md`, `selby/restricted`, §2) is the
+        // one thing a batch's own "done"/reopen payload never carries
+        // -- shown here, the one line this view always clears for an
+        // ordinary batch anyway, rather than a second, dedicated note
+        // area built just for this one field.
+        resultsOutcome.textContent = payload.parameterMismatches
+            ? `Pooled anyway — varies across members: ${Object.keys(
+                  payload.parameterMismatches
+              ).join(", ")}`
+            : "";
         renderBatchSummary(payload.summary, payload.effectiveAlleles);
         renderBatchTable(payload.replicates, payload.p0Statistics);
         // A batch's own completed scrubber replays the pooled scatter
