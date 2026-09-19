@@ -1396,6 +1396,29 @@ fieldset.composite > label {
     background: none;
 }
 
+/* The checkbox, toggle, and action buttons inside one group header's
+ * own cell used to fall out of one line: the toggle's own `width:
+ * 100%` made it an inline-block wider than the space the checkbox
+ * left beside it on the same line, so it wrapped down onto a line of
+ * its own instead of sitting beside the checkbox the way a Run row's
+ * own checkbox-plus-label already does. A flex `<span>` wrapper
+ * (`screens/open-run.js`'s own `buildGroupHeaderRow`) keeps checkbox/
+ * toggle/actions on one line regardless of width -- `display: flex`
+ * directly on the `<td>` itself computed correctly but did not
+ * actually lay its children out that way under this project's own
+ * bundled WebKit, confirmed live, hence the wrapper rather than the
+ * cell itself as the flex container. `width: 100%` here (a `<span>`
+ * defaults to shrink-to-fit) makes the wrapper fill the cell first, so
+ * the toggle's own `flex: 1 1 auto` (replacing that old `width: 100%`)
+ * still has the cell's full remaining width to grow into for its own
+ * large click target, and naturally pushes the actions to the row's
+ * own right edge with no separate `float`/margin trick needed. */
+.open-run-group-header-cell {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
 .open-run-group-toggle {
     font: inherit;
     font-weight: 700;
@@ -1404,7 +1427,8 @@ fieldset.composite > label {
     border: none;
     cursor: pointer;
     padding: 0.2rem 0;
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     text-align: left;
 }
 
@@ -1457,6 +1481,16 @@ fieldset.composite > label {
     vertical-align: middle;
 }
 
+/* Hidden by default -- a checkbox on every single row is noise on a
+ * screen a botanist mostly uses to look, not to bulk-delete -- and
+ * shown only once "Select" (`open-run-toggle-select-button`) turns
+ * `#open-run-table` into "selecting" mode (`screens/open-run.js`).
+ * Selection state itself (`selectedRunDirectories`/etc.) is untouched
+ * either way; this is a pure display toggle, never a data reset. */
+#open-run-table:not(.open-run-selecting) .open-run-select-checkbox {
+    display: none;
+}
+
 .open-run-add-to-select {
     font-size: 0.85rem;
     max-width: 10rem;
@@ -1465,9 +1499,11 @@ fieldset.composite > label {
 /* A Study/Experiment group header's own Copy/Delete/"Add to
  * experiment…" controls, beside its toggle button in the same cell --
  * distinct, muted buttons so they read as secondary to the toggle
- * itself, which stays the row's own primary, full-width click target. */
+ * itself, which stays the row's own primary click target
+ * (`.open-run-group-header-cell`'s own flex row places this last,
+ * flush against the row's own right edge once the toggle's own
+ * `flex: 1 1 auto` has claimed the space between them). */
 .open-run-group-actions {
-    float: right;
     display: flex;
     align-items: center;
     gap: 0.4rem;
@@ -1488,15 +1524,17 @@ fieldset.composite > label {
     border-color: var(--fim-accent);
 }
 
-/* The bulk "Select/Delete/Delete all" toolbar sits directly above the
- * table, beside the filter row -- one round trip for a selection of any
- * size (`Api.delete_runs`), since the runs it was built for could number
- * in the thousands. */
+/* The bulk "Select/Delete/Delete all" toolbar sits on the same line as
+ * the filter input, pushed flush right (`margin-left: auto` inside
+ * `.open-run-list-controls`'s own flex row) rather than a second line
+ * of its own -- one round trip for a selection of any size (`Api.
+ * delete_runs`), since the runs it was built for could number in the
+ * thousands. */
 .open-run-selection-toolbar {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    margin-bottom: 0.6rem;
+    margin-left: auto;
 }
 
 /* `confirmThenRun`'s own inline "are you sure?" row -- this codebase's

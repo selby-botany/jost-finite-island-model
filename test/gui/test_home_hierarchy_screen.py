@@ -18,10 +18,13 @@ input against always-visible controls, never a native dialog.
 
 from __future__ import annotations
 
+import json
 import queue
+import re
 import threading
 import time
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -986,3 +989,232 @@ def test_rerun_all_re_runs_every_configuration_in_a_study(
 
     assert tree_text is not None
     assert "Ring sweep (2 runs)" in tree_text
+
+
+def test_home_shows_only_the_most_recent_run_for_a_repeated_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two runs of the identical configuration share a `run_id`; only the
+    newer one renders.
+
+    Reported live: a Study's own expanded view showed the same `run-
+    <hash>` label twice, a run apart in time -- `run_id` is a
+    deterministic hash of the configuration itself (`fim.engine.
+    deterministic_run_id`), not a per-invocation random id, so two
+    genuinely distinct run directories sharing an identical
+    configuration also share one `run_id`. Showing both is noise;
+    `dedupeMostRecentPerRunId` keeps only the one with the later
+    `endedAt`.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    older = _write_run(results, "run-a", seed=1, study_id=study.study_id)
+    newer = _write_run(results, "run-b", seed=1, study_id=study.study_id)
+    # Both finish within the same instant in practice -- push `newer`'s
+    # own `ended_at` forward by hand, rather than a real sleep, so the
+    # two are unambiguously ordered without slowing this test down
+    # (`test_open_run_screen.py`'s own `test_recent_runs_group_by_date_
+    # bucket_and_can_be_collapsed` already establishes this same direct-
+    # manifest-edit precedent for date-bucket testing).
+    newer_manifest_path = newer / "manifest.json"
+    newer_manifest = json.loads(newer_manifest_path.read_text(encoding="utf-8"))
+    newer_manifest["ended_at"] = (
+        datetime.fromisoformat(newer_manifest["ended_at"]) + timedelta(minutes=5)
+    ).isoformat()
+    newer_manifest_path.write_text(json.dumps(newer_manifest), encoding="utf-8")
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _expand_every_group(window)
+            row_count = _poll_until(
+                window,
+                "document.querySelectorAll("
+                "'#open-run-recent-runs-body tr:not(.open-run-group-header)').length",
+                lambda value: value is not None and value > 0,
+            )
+            tree_text = window.evaluate_js(_TREE_TEXT)
+            outcome.put({"rowCount": row_count, "treeText": tree_text})
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["rowCount"] == 1
+    older_manifest = json.loads((older / "manifest.json").read_text(encoding="utf-8"))
+    newer_manifest = json.loads((newer / "manifest.json").read_text(encoding="utf-8"))
+    assert older_manifest["run_id"] == newer_manifest["run_id"]
+    # `formatEndedAt` (`screens/open-run.js`) strips sub-second precision
+    # for display; compare against the same trimmed form rather than the
+    # raw manifest value.
+    newer_ended_at = re.sub(r"\.\d+(?=Z?$)", "", newer_manifest["ended_at"])
+    older_ended_at = re.sub(r"\.\d+(?=Z?$)", "", older_manifest["ended_at"])
+    assert newer_ended_at in result["treeText"]
+    assert older_ended_at not in result["treeText"]
+
+
+def test_home_select_button_toggles_the_checkbox_column(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Checkboxes stay hidden until "Select" is clicked, on every row kind.
+
+    Noise on a screen mostly used to look, not to bulk-delete -- "Select"
+    (`open-run-toggle-select-button`) is a pure display toggle
+    (`#open-run-table`'s own `open-run-selecting` class), never touching
+    the underlying selection state.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    study = groups.create_study("Ring sweep", results=results)
+    _write_run(results, "run-a", seed=1, study_id=study.study_id)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            _poll_until(
+                window,
+                "window.__fimOpenRunRecentRunsLoaded === true",
+                lambda value: value is True,
+            )
+            _expand_every_group(window)
+            _poll_until(
+                window,
+                "document.querySelectorAll('.open-run-select-checkbox').length",
+                lambda value: value is not None and value > 0,
+            )
+            before = window.evaluate_js(
+                "getComputedStyle(document.querySelector("
+                "'.open-run-select-checkbox')).display"
+            )
+            window.evaluate_js(
+                "document.getElementById('open-run-toggle-select-button').click();"
+            )
+            after = window.evaluate_js(
+                "getComputedStyle(document.querySelector("
+                "'.open-run-select-checkbox')).display"
+            )
+            pressed_after = window.evaluate_js(
+                "document.getElementById('open-run-toggle-select-button')"
+                ".getAttribute('aria-pressed')"
+            )
+            window.evaluate_js(
+                "document.getElementById('open-run-toggle-select-button').click();"
+            )
+            after_second_click = window.evaluate_js(
+                "getComputedStyle(document.querySelector("
+                "'.open-run-select-checkbox')).display"
+            )
+            outcome.put(
+                {
+                    "before": before,
+                    "after": after,
+                    "pressedAfter": pressed_after,
+                    "afterSecondClick": after_second_click,
+                }
+            )
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    assert result["before"] == "none"
+    assert result["after"] != "none"
+    assert result["pressedAfter"] == "true"
+    assert result["afterSecondClick"] == "none"
+
+
+def test_home_checkbox_and_toggle_sit_on_one_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Study/Experiment row's own checkbox and toggle never wrap onto
+    separate lines.
+
+    A real, reported layout bug: the toggle's own former `width: 100%`
+    made it an inline-block wider than the space the checkbox left
+    beside it, wrapping it onto a line of its own below the checkbox
+    (`.open-run-group-header-cell`'s own flex layout, `app.css`, fixes
+    this). Confirmed by comparing each element's own vertical position
+    rather than reading text, since a line-wrap changes nothing about
+    what text is present, only where it renders.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    groups.create_study("Ring sweep", results=results)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            window.evaluate_js(
+                "document.getElementById('open-run-toggle-select-button').click();"
+            )
+            settled = _poll_until(
+                window,
+                "(function(){"
+                "var checkbox = document.querySelector("
+                "'.open-run-select-checkbox');"
+                "var toggle = document.querySelector('.open-run-group-toggle');"
+                "if (!checkbox || !toggle) { return null; }"
+                "return {"
+                "checkboxTop: checkbox.getBoundingClientRect().top,"
+                "toggleTop: toggle.getBoundingClientRect().top"
+                "};"
+                "})()",
+                lambda value: value is not None,
+            )
+            outcome.put(settled)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    result = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert result is not None
+    # A checkbox and a button of different heights, centered together on
+    # one flex line, land a few px apart even when correctly inline --
+    # a genuine line-wrap (the bug this guards against) is off by a full
+    # line height instead, an order of magnitude more.
+    assert abs(result["checkboxTop"] - result["toggleTop"]) < 10
+
+
+def test_home_selection_toolbar_sits_on_the_filter_line(
+    window: webview.Window, drive: Callable[..., Any]
+) -> None:
+    """The Select/Select all/Clear selection/Delete selected group nests
+    inside the same row as the filter input, not a separate line below
+    it."""
+    nested = drive(
+        window,
+        ready=_INPUT_SCREEN_READY,
+        trigger="window.fim.showOpenRunScreen();",
+        read=(
+            "document.querySelector("
+            "'.open-run-list-controls .open-run-selection-toolbar') !== null"
+        ),
+    )
+
+    assert nested is True

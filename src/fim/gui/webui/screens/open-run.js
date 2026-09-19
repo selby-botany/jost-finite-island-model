@@ -30,6 +30,10 @@ const openRunBackButton = document.getElementById("open-run-back-button");
 const homeNewExperimentButton = document.getElementById(
     "home-new-experiment-button"
 );
+const openRunTable = document.getElementById("open-run-table");
+const toggleSelectButton = document.getElementById(
+    "open-run-toggle-select-button"
+);
 const selectAllButton = document.getElementById("open-run-select-all-button");
 const clearSelectionButton = document.getElementById(
     "open-run-clear-selection-button"
@@ -149,6 +153,35 @@ function calendarDateLabel(endedAt) {
  */
 function formatEndedAt(endedAt) {
     return endedAt.replace(/\.\d+(?=Z?$)/, "");
+}
+
+/**
+ * Keep only the most recent run for each distinct `runId` -- `run.
+ * runId` is a deterministic hash of the run's own configuration
+ * (`fim.engine.deterministic_run_id`), not a per-invocation random id,
+ * so running the identical configuration more than once produces
+ * several real, distinct run directories that all share one `runId`.
+ * Showing every one of those inside the same Study's own expanded row
+ * is just noise -- reported live: two rows reading the exact same
+ * `run-<hash>` label, a few dozen seconds apart, both under one
+ * Study's own "Today" bucket. Compares `endedAt` directly (ISO-8601,
+ * `Z`-suffixed, so a plain string compare already sorts chronologically)
+ * rather than assuming `runs` arrives in any particular order --
+ * `Api.get_study_run_summary`'s own list follows `study_run_
+ * directories`'s storage order, not necessarily newest-first the way
+ * `Api.list_home_runs`'s own already is.
+ * @param {Array<object>} runs
+ * @returns {Array<object>}
+ */
+function dedupeMostRecentPerRunId(runs) {
+    const mostRecentById = new Map();
+    for (const run of runs) {
+        const existing = mostRecentById.get(run.runId);
+        if (!existing || run.endedAt > existing.endedAt) {
+            mostRecentById.set(run.runId, run);
+        }
+    }
+    return runs.filter((run) => mostRecentById.get(run.runId) === run);
 }
 
 /**
@@ -1156,8 +1189,18 @@ function buildGroupHeaderRow(group, nested = false) {
     }
     const cell = document.createElement("td");
     cell.colSpan = 6;
+    // A `<td>` itself as the flex container (an earlier version of this
+    // function) computed `display: flex` correctly but did not actually
+    // lay its children out that way under this project's own bundled
+    // WebKit -- a real, confirmed rendering quirk, not merely a guess --
+    // so the flex row lives on a plain wrapper `<span>` nested inside
+    // the cell instead, the far more common (and reliably supported)
+    // "flex container inside a table cell" shape.
+    const cellRow = document.createElement("span");
+    cellRow.className = "open-run-group-header-cell";
+    cell.appendChild(cellRow);
     if (group.kind === "study" || group.kind === "experiment") {
-        cell.appendChild(buildGroupSelectCheckbox(group));
+        cellRow.appendChild(buildGroupSelectCheckbox(group));
     }
     const toggle = document.createElement("button");
     toggle.type = "button";
@@ -1176,7 +1219,7 @@ function buildGroupHeaderRow(group, nested = false) {
                 group.studyId
             );
             window.__fimStudyRunsCache[group.studyId] = result.ok
-                ? result.runs
+                ? dedupeMostRecentPerRunId(result.runs)
                 : [];
         }
         if (expanding) {
@@ -1186,9 +1229,9 @@ function buildGroupHeaderRow(group, nested = false) {
         }
         renderRecentRuns();
     });
-    cell.appendChild(toggle);
+    cellRow.appendChild(toggle);
     if (group.kind === "study" || group.kind === "experiment") {
-        cell.appendChild(buildGroupActionControls(group));
+        cellRow.appendChild(buildGroupActionControls(group));
     }
     row.appendChild(cell);
     return row;
@@ -1280,10 +1323,13 @@ async function refreshRecentRuns() {
     // (`selectedRunDirectories`/`selectedStudyIds`/`selectedExperiment
     // Ids`) IS reset -- a bulk delete or a fresh visit should never
     // carry a stale selection referencing an item that may no longer
-    // even be listed.
+    // even be listed. Select mode (checkbox visibility) resets with it,
+    // for the same reason: nothing selected means no reason to keep
+    // showing the checkboxes a fresh visit never asked for.
     selectedRunDirectories.clear();
     selectedStudyIds.clear();
     selectedExperimentIds.clear();
+    setSelectMode(false);
     recentRunsFilterInput.value = "";
     [allRecentRuns, allStudies, allExperiments] = await Promise.all([
         window.pywebview.api.list_home_runs(),
@@ -1401,13 +1447,31 @@ function buildDeleteSelectedMessage() {
 // directly by the project owner: thousands of Unsorted runs could not
 // realistically be deleted one at a time through the GUI; generalized
 // to Study/Experiment rows too, `20260918-claude-sonnet-5-home-tree-
-// reorg-design.md`, `selby/restricted`, §5). "Select all" selects
-// every currently *loaded* Run/Study/Experiment (`allRecentRuns`/
-// `allStudies`/`allExperiments`), not merely whatever rows happen to be
-// in the DOM right now -- a collapsed group's own runs are just as
-// selectable this way as an expanded one's, composing into "delete
-// everything" with no separate button needed for that case
-// specifically.
+// reorg-design.md`, `selby/restricted`, §5).
+//
+// Checkboxes are hidden by default (`#open-run-table`'s own
+// `open-run-selecting` class, `app.css`) -- a checkbox on every row is
+// noise on a screen a botanist mostly uses to look, not to bulk-
+// delete. "Select" toggles that visibility alone; it never touches the
+// underlying selection state itself, so toggling it off and back on
+// leaves whatever was already selected exactly as it was.
+function setSelectMode(selecting) {
+    openRunTable.classList.toggle("open-run-selecting", selecting);
+    toggleSelectButton.setAttribute("aria-pressed", String(selecting));
+}
+
+toggleSelectButton.addEventListener("click", () => {
+    setSelectMode(!openRunTable.classList.contains("open-run-selecting"));
+});
+
+// "Select all" selects every currently *loaded* Run/Study/Experiment
+// (`allRecentRuns`/`allStudies`/`allExperiments`), not merely whatever
+// rows happen to be in the DOM right now -- a collapsed group's own
+// runs are just as selectable this way as an expanded one's, composing
+// into "delete everything" with no separate button needed for that
+// case specifically. Also turns select mode on: selecting everything
+// while the checkboxes stay hidden would otherwise look like nothing
+// happened at all.
 selectAllButton.addEventListener("click", () => {
     for (const run of allRecentRuns) {
         selectedRunDirectories.add(run.directory);
@@ -1418,6 +1482,7 @@ selectAllButton.addEventListener("click", () => {
     for (const experiment of allExperiments) {
         selectedExperimentIds.add(experiment.experimentId);
     }
+    setSelectMode(true);
     updateSelectionToolbar();
     renderRecentRuns();
 });

@@ -592,7 +592,6 @@
          "Create run…" -- no separate first-launch-only affordance
          needed. Explore itself is unchanged and still reachable from
          the rail's own Explore button and Configure's own footer. -->
-    <p>Recent runs (results/*/manifest.json):</p>
     <!-- A two-level tree: every Experiment, expanding to its own Studies,
          each expanding to its own Runs -- plus every Study not inside an
          Experiment, at the top level alongside them. There is no
@@ -607,7 +606,27 @@
          default Experiment/Study sorts first with no special-casing,
          since `list_experiments`/`list_studies` are documented
          oldest-first and the default ones are, by construction, the
-         oldest whenever they exist. -->
+         oldest whenever they exist. No heading line above the tree
+         either -- "Recent runs (results/*/manifest.json):" named an
+         implementation detail no botanist has reason to care about,
+         and "recent" stopped being accurate once the tree organizes by
+         Experiment/Study rather than strictly by date. -->
+    <!-- Bulk "Select/Delete/Delete all" idiom (design doc §10, resolved
+         directly by the project owner: "the current 2500 runs cannot
+         realistically be deleted in the UI today"), extended to Study and
+         Experiment rows too (`20260918-...-home-tree-reorg-design.md`
+         §5) -- every row kind gets a checkbox (`screens/open-run.js`'s
+         own `buildGroupSelectCheckbox`), and "Select all"/"Delete
+         selected" reach every loaded item regardless of which groups are
+         currently collapsed (`selectedRunDirectories`/`selectedStudyIds`/
+         `selectedExperimentIds`). Checkboxes are hidden by default --
+         normally just noise on a screen a botanist mostly uses to look,
+         not to bulk-delete -- and only shown once "Select" is toggled on
+         (`open-run-table`'s own `open-run-selecting` class,
+         `screens/open-run.js`). The whole toolbar sits on the same line
+         as the filter input, pushed to its right edge (`margin-left:
+         auto` on `.open-run-selection-toolbar`, `app.css`), not a
+         separate line of its own. -->
     <div class="open-run-list-controls">
       <input
         type="search"
@@ -619,25 +638,21 @@
         Create experiment…
       </button>
       <span id="open-run-count" class="open-run-count"></span>
+      <span class="open-run-selection-toolbar">
+        <button type="button" id="open-run-toggle-select-button" aria-pressed="false">
+          Select
+        </button>
+        <button type="button" id="open-run-select-all-button">Select all</button>
+        <button type="button" id="open-run-clear-selection-button">
+          Clear selection
+        </button>
+        <button type="button" id="open-run-delete-selected-button" disabled>
+          Delete selected
+        </button>
+        <span id="open-run-selection-count" class="open-run-count"></span>
+      </span>
     </div>
-    <!-- Bulk "Select/Delete/Delete all" idiom (design doc §10, resolved
-         directly by the project owner: "the current 2500 runs cannot
-         realistically be deleted in the UI today"), extended to Study and
-         Experiment rows too (`20260918-...-home-tree-reorg-design.md`
-         §5) -- every row kind gets a checkbox (`screens/open-run.js`'s
-         own `buildGroupSelectCheckbox`), and "Select all"/"Delete
-         selected" reach every loaded item regardless of which groups are
-         currently collapsed (`selectedRunDirectories`/`selectedStudyIds`/
-         `selectedExperimentIds`). -->
-    <div class="open-run-selection-toolbar">
-      <button type="button" id="open-run-select-all-button">Select all</button>
-      <button type="button" id="open-run-clear-selection-button">Clear selection</button>
-      <button type="button" id="open-run-delete-selected-button" disabled>
-        Delete selected
-      </button>
-      <span id="open-run-selection-count" class="open-run-count"></span>
-    </div>
-    <table class="open-run-table">
+    <table class="open-run-table" id="open-run-table">
       <thead>
         <tr>
           <th>Run</th>

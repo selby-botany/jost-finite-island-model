@@ -12056,6 +12056,76 @@ run count once it resolves -- `test/gui/test_app_api.py`'s own
 tests already prove `rerun_study` itself correct as a plain Python
 call.
 
+<a id="gui.test_home_hierarchy_screen.test_home_shows_only_the_most_recent_run_for_a_repeated_configuration"></a>
+
+#### test\_home\_shows\_only\_the\_most\_recent\_run\_for\_a\_repeated\_configuration
+
+```python
+def test_home_shows_only_the_most_recent_run_for_a_repeated_configuration(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Two runs of the identical configuration share a `run_id`; only the
+newer one renders.
+
+Reported live: a Study's own expanded view showed the same `run-
+<hash>` label twice, a run apart in time -- `run_id` is a
+deterministic hash of the configuration itself (`fim.engine.
+deterministic_run_id`), not a per-invocation random id, so two
+genuinely distinct run directories sharing an identical
+configuration also share one `run_id`. Showing both is noise;
+`dedupeMostRecentPerRunId` keeps only the one with the later
+`endedAt`.
+
+<a id="gui.test_home_hierarchy_screen.test_home_select_button_toggles_the_checkbox_column"></a>
+
+#### test\_home\_select\_button\_toggles\_the\_checkbox\_column
+
+```python
+def test_home_select_button_toggles_the_checkbox_column(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+Checkboxes stay hidden until "Select" is clicked, on every row kind.
+
+Noise on a screen mostly used to look, not to bulk-delete -- "Select"
+(`open-run-toggle-select-button`) is a pure display toggle
+(``open`-run-table`'s own `open-run-selecting` class), never touching
+the underlying selection state.
+
+<a id="gui.test_home_hierarchy_screen.test_home_checkbox_and_toggle_sit_on_one_line"></a>
+
+#### test\_home\_checkbox\_and\_toggle\_sit\_on\_one\_line
+
+```python
+def test_home_checkbox_and_toggle_sit_on_one_line(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A Study/Experiment row's own checkbox and toggle never wrap onto
+separate lines.
+
+A real, reported layout bug: the toggle's own former `width: 100%`
+made it an inline-block wider than the space the checkbox left
+beside it, wrapping it onto a line of its own below the checkbox
+(`.open-run-group-header-cell`'s own flex layout, `app.css`, fixes
+this). Confirmed by comparing each element's own vertical position
+rather than reading text, since a line-wrap changes nothing about
+what text is present, only where it renders.
+
+<a id="gui.test_home_hierarchy_screen.test_home_selection_toolbar_sits_on_the_filter_line"></a>
+
+#### test\_home\_selection\_toolbar\_sits\_on\_the\_filter\_line
+
+```python
+def test_home_selection_toolbar_sits_on_the_filter_line(
+        window: webview.Window, drive: Callable[..., Any]) -> None
+```
+
+The Select/Select all/Clear selection/Delete selected group nests
+inside the same row as the filter input, not a separate line below
+it.
+
 <a id="gui.test_input_screen"></a>
 
 # gui.test\_input\_screen
