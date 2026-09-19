@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -62,14 +63,85 @@ def _pin_mplconfigdir_for_macos_app_bundle() -> None:
 _pin_mplconfigdir_for_macos_app_bundle()
 
 
+def _dev_checkout_is_dirty(repo_root: Path) -> bool:
+    """Return whether `repo_root`'s working tree has uncommitted changes.
+
+    Best-effort only: any failure (`git` missing, not actually a repo,
+    a hung/slow filesystem) is treated as "not dirty" rather than
+    raised, since this is purely cosmetic disambiguation text and must
+    never be allowed to break `fim`/`fim-gui` startup.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return bool(result.stdout.strip())
+
+
+def _dev_commit_suffix(repo_root: Path) -> str | None:
+    """Return a short-commit label for a `git` checkout, or `None`.
+
+    Exists so several `fim-gui` windows launched from source at
+    different commits -- exactly the case for comparing in-progress
+    `dev` branch work side by side -- can be told apart from the About
+    dialog and window title, which otherwise all show the same
+    `version.txt` value between releases. Only ever called for the
+    source-tree `version.txt` candidate in `_load_version` below, never
+    for a PyInstaller bundle or an installed wheel, so an installed
+    release build's version string is completely unaffected by this
+    function even if `git` happens to be on the machine's `PATH`.
+
+    Deliberately does not raise: a missing `git` binary, a checkout
+    without a `.git` directory (e.g. a source tarball), or any other
+    `git` failure all just mean "no commit label available," not a
+    startup error.
+    """
+    if not (repo_root / ".git").is_dir():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=7", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    short_sha = result.stdout.strip()
+    if not short_sha:
+        return None
+    label = f"g{short_sha}"
+    if _dev_checkout_is_dirty(repo_root):
+        label += "-dirty"
+    return label
+
+
 def _load_version() -> str:
-    """Return the version from the source tree, bundle, or package metadata."""
-    candidates = [Path(__file__).resolve().parents[2] / "version.txt"]
+    """Return the version from the source tree, bundle, or package metadata.
+
+    As a side effect, populates the module-level `__dev_commit__` when
+    (and only when) the version actually came from a source-tree `git`
+    checkout -- see `_dev_commit_suffix`'s own docstring.
+    """
+    global __dev_commit__  # noqa: PLW0603
+    source_version = Path(__file__).resolve().parents[2] / "version.txt"
+    candidates = [source_version]
     bundle_root = getattr(sys, "_MEIPASS", None)
     if bundle_root is not None:
         candidates.append(Path(bundle_root) / "version.txt")
     for candidate in candidates:
         if candidate.is_file():
+            if candidate == source_version:
+                __dev_commit__ = _dev_commit_suffix(candidate.parent)
             return candidate.read_text(encoding="utf-8").strip()
     try:
         return version("fim")
@@ -77,6 +149,7 @@ def _load_version() -> str:
         return "0+unknown"
 
 
+__dev_commit__: str | None = None
 __version__ = _load_version()
 
-__all__ = ["__version__"]
+__all__ = ["__dev_commit__", "__version__"]

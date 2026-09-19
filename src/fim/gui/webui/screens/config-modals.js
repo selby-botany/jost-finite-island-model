@@ -464,10 +464,19 @@ whenApiReady(wireSigmaBandSeedDefault);
  * proprietary, separately from the AGPLv3+ code -- rather than leaving
  * a reader to assume the whole distribution is as freely licensed as
  * `about-license`'s own line alone would suggest.
+ *
+ * `info.commit` is `null` for an installed release or bundled build,
+ * and a short `git` commit label for a source-tree `dev` checkout
+ * (`fim.__dev_commit__`) -- appended in parentheses after the version
+ * number so several windows launched from source at different commits
+ * are distinguishable from this dialog, without changing `info.version`
+ * itself.
  */
 window.fim.showAboutModal = async function showAboutModal() {
     const info = await window.pywebview.api.get_about_info();
-    document.getElementById("about-version").textContent = info.version;
+    document.getElementById("about-version").textContent = info.commit
+        ? `${info.version} (${info.commit})`
+        : info.version;
     document.getElementById("about-license").textContent = info.license;
     document.getElementById("about-branding-note").textContent = info.branding_note;
     document.getElementById("about-copyright-year").textContent = info.copyright_year;

@@ -57,6 +57,7 @@ import webview
 import yaml
 from webview.menu import Menu, MenuAction, MenuSeparator
 
+from fim import __dev_commit__ as fim_dev_commit
 from fim import __version__ as fim_version
 from fim import engine as engine_module
 from fim import logging_setup, paths, update
@@ -130,15 +131,45 @@ logger = logging.getLogger(__name__)
 _YAML_FILE_TYPES = ("YAML files (*.yaml;*.yml)", "All files (*.*)")
 _TRAJECTORY_FILE_TYPES = ("trajectory.jsonl files (*.jsonl)", "All files (*.*)")
 
+_MACOS_APPLICATION_NAME = "FIM"
+
+
+def _version_display() -> str:
+    """Return `fim_version`, with a running dev checkout's commit appended.
+
+    `fim.__dev_commit__` is only ever non-`None` for a source-tree `git`
+    checkout (`fim.__init__._dev_commit_suffix`'s own docstring) -- an
+    installed release or a PyInstaller bundle always gets back
+    `fim_version` unchanged here. Exists so several `fim-gui` windows
+    launched from source at different commits (comparing in-progress
+    `dev` branch work side by side) can be told apart -- in the window
+    title, the About dialog, and `fim-gui --version` -- without this
+    disambiguation text ever reaching `fim.update.compare_versions`,
+    which requires a strict three-part `MAJOR.MINOR.PATCH` string and
+    would raise on the appended commit label.
+    """
+    if fim_dev_commit is None:
+        return fim_version
+    return f"{fim_version} ({fim_dev_commit})"
+
+
 # The macOS menu bar's own bold, leftmost app-name item (`_set_macos_
 # application_name`) and the window's own title bar text (`create_
 # window`) are two different, unrelated pieces of UI text -- deliberately
 # not the same string. The menu bar name stays short (matching a real
 # macOS app's own convention: "Safari," "Mail," never a parenthetical),
 # while the window title spells the project out for a user who has never
-# seen the abbreviation before.
-_MACOS_APPLICATION_NAME = "FIM"
-_WINDOW_TITLE = "Finite Island Model (fim)"
+# seen the abbreviation before. A dev checkout's short commit
+# (`fim_dev_commit`) is appended so several windows opened from source
+# at different commits are distinguishable at a glance -- in the OS
+# window list/Cmd+Tab, not just inside Help > About -- without changing
+# an installed release build's title at all (`fim_dev_commit` is `None`
+# there).
+_WINDOW_TITLE = (
+    f"Finite Island Model (fim) — {fim_dev_commit}"
+    if fim_dev_commit
+    else "Finite Island Model (fim)"
+)
 
 # The existing `pyproject.toml` `[project.urls] Documentation` value,
 # reused rather than invented (doc/fim-gui-design.md §11) -- the Help
@@ -3787,7 +3818,7 @@ class Api:
         }
 
     @_log_bridge_call
-    def get_about_info(self) -> dict[str, str]:
+    def get_about_info(self) -> dict[str, str | None]:
         """Return the static "About fim" facts the Help menu shows.
 
         No bridge state, no network call — `fim.__version__` and the
@@ -3814,9 +3845,21 @@ class Api:
         own branding exclusion does not carve out) — `branding_note` is
         the one place that exclusion is disclosed, not a correction to
         this field.
+
+        `commit` is `None` for an installed release or a PyInstaller
+        bundle, and a short `git` commit label (`fim.__dev_commit__`)
+        only when this process is itself running from a source-tree
+        `dev` checkout — so several `fim-gui` windows launched from
+        source at different commits can be told apart in the dialog,
+        without perturbing `version` itself (kept as the plain
+        `fim.__version__`, since that is also what `check_for_updates`
+        compares against a GitHub release tag, and a commit suffix
+        there would break `update.compare_versions`'s strict
+        three-part parsing).
         """
         return {
             "version": fim_version,
+            "commit": fim_dev_commit,
             "repository": _REPOSITORY_URL,
             "license": "GNU Affero General Public License v3 or later (AGPLv3+)",
             "branding_note": (
@@ -5395,7 +5438,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"fim: error: {error}", file=sys.stderr)
         return 2
     _apply_saved_results_location_override()
-    logger.info("starting fim %s", fim_version)
+    logger.info("starting fim %s", _version_display())
     window = create_window()
     webview.start(menu=_build_menu(window))
     logger.info("window closed")
@@ -5463,7 +5506,7 @@ if __name__ == "__main__":
     _p.add_argument(
         "--version",
         action="version",
-        version=f"fim-gui {fim_version}",
+        version=f"fim-gui {_version_display()}",
     )
     _p.add_argument(
         "--no-detach",

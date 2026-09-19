@@ -3694,6 +3694,24 @@ def test_get_about_info_names_the_installed_version() -> None:
     assert "not covered by this license" in info["branding_note"]
 
 
+def test_get_about_info_reports_the_dev_checkout_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`commit` mirrors `fim.__dev_commit__`'s module-level value.
+
+    `None` for a release install or frozen build; a short `git` label
+    (`g<sha>`, `-dirty`-suffixed for uncommitted local changes) for a
+    source-tree `dev` checkout — `fim.__init__._dev_commit_suffix`'s own
+    docstring. Monkeypatched here rather than relying on this test
+    process's own live value, so the assertion is exact either way.
+    """
+    monkeypatch.setattr(app_module, "fim_dev_commit", "gabc1234-dirty")
+
+    info = Api().get_about_info()
+
+    assert info["commit"] == "gabc1234-dirty"
+
+
 # --- _save_dialog_path ---
 
 

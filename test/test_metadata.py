@@ -75,6 +75,120 @@ def test_version_loader_reads_pyinstaller_bundle(
     assert fim._load_version() == "1.2.3"
 
 
+def _stub_git_run(
+    *,
+    rev_parse_stdout: str = "1fbfb4e\n",
+    status_stdout: str = "",
+    raise_on: str | None = None,
+) -> object:
+    """Return a `subprocess.run` stand-in for `git rev-parse`/`git status`.
+
+    `raise_on` names the git subcommand (`"rev-parse"` or `"status"`)
+    that should raise `FileNotFoundError`, simulating a missing `git`
+    binary — mirrors how `_dev_commit_suffix`/`_dev_checkout_is_dirty`
+    are actually exercised, one `subprocess.run` call per function.
+    """
+
+    def _run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        subcommand = command[1]
+        if subcommand == raise_on:
+            raise FileNotFoundError("git not found")
+        stdout = rev_parse_stdout if subcommand == "rev-parse" else status_stdout
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    return _run
+
+
+def test_dev_commit_suffix_reads_short_sha_from_a_clean_checkout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A clean `git` checkout gets a bare `g<sha>` label."""
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(subprocess, "run", _stub_git_run())
+
+    assert fim._dev_commit_suffix(tmp_path) == "g1fbfb4e"
+
+
+def test_dev_commit_suffix_flags_an_uncommitted_working_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Uncommitted local changes get a `-dirty` marker on the label.
+
+    So two windows on the same commit, one with in-progress edits, are
+    still distinguishable — not just two windows on different commits.
+    """
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        _stub_git_run(status_stdout=" M src/fim/gui/app.py\n"),
+    )
+
+    assert fim._dev_commit_suffix(tmp_path) == "g1fbfb4e-dirty"
+
+
+def test_dev_commit_suffix_is_none_without_a_git_directory(tmp_path: Path) -> None:
+    """A source tarball (no `.git`) gets no commit label, not an error."""
+    assert fim._dev_commit_suffix(tmp_path) is None
+
+
+def test_dev_commit_suffix_is_none_when_git_binary_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing `git` executable degrades to no label, not a crash."""
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(subprocess, "run", _stub_git_run(raise_on="rev-parse"))
+
+    assert fim._dev_commit_suffix(tmp_path) is None
+
+
+def test_load_version_sets_dev_commit_only_for_the_source_tree_checkout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A frozen bundle never shells out to `git`, even if `.git` exists.
+
+    Regression guard for exactly the scenario `_dev_commit_suffix`'s own
+    docstring promises: an installed release's version string must never
+    depend on whatever happens to be on the machine's `PATH`.
+    """
+    source_version = Path(fim.__file__).resolve().parents[2] / "version.txt"
+    original_is_file = Path.is_file
+    (tmp_path / "version.txt").write_text("1.2.3\n", encoding="utf-8")
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(
+        Path,
+        "is_file",
+        lambda path: False if path == source_version else original_is_file(path),
+    )
+
+    def _fail_if_called(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("a frozen bundle must never invoke git")
+
+    monkeypatch.setattr(subprocess, "run", _fail_if_called)
+    monkeypatch.setattr(fim, "__dev_commit__", "stale-sentinel")
+
+    assert fim._load_version() == "1.2.3"
+    assert fim.__dev_commit__ == "stale-sentinel"
+
+
+def test_load_version_sets_dev_commit_for_a_real_source_checkout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The module's own `_load_version()` wires the two functions together."""
+    monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+    monkeypatch.setattr(subprocess, "run", _stub_git_run(rev_parse_stdout="abc1234\n"))
+    monkeypatch.setattr(fim, "__dev_commit__", None)
+
+    fim._load_version()
+
+    assert fim.__dev_commit__ == "gabc1234"
+
+
 def test_mplconfigdir_pinned_only_when_frozen_and_darwin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
