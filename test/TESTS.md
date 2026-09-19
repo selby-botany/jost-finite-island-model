@@ -22576,6 +22576,22 @@ def test_publish_beta_marks_the_release_as_a_prerelease() -> None
 A beta build must never appear as a real release on the project's
 own GitHub Releases page.
 
+<a id="validation.test_beta_workflow.test_windows_beta_smoke_checks_batch_level_artifacts"></a>
+
+#### test\_windows\_beta\_smoke\_checks\_batch\_level\_artifacts
+
+```python
+def test_windows_beta_smoke_checks_batch_level_artifacts() -> None
+```
+
+The Windows executable smoke matches `fim run`'s default batch output.
+
+`fim init`'s starter configuration is a batch (`n_replicates > 1`),
+so the top-level smoke directory contains `manifest.json` and
+`summary.json`; scalar artifacts live under each `replicate-*`
+directory. The beta smoke must check that current contract rather
+than the old scalar four-file layout.
+
 <a id="validation.test_beta_workflow.test_linux_beta_job_matches_ci_ymls_own_gtk_dependency_list"></a>
 
 #### test\_linux\_beta\_job\_matches\_ci\_ymls\_own\_gtk\_dependency\_list

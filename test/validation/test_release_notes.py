@@ -109,6 +109,8 @@ def test_release_workflow_uses_changelog_notes() -> None:
     assert "pyinstaller --workpath .pyinstaller-build --noconfirm" in workflow
     assert "$actualVersion -ne $expectedVersion" in workflow
     assert "Compare-Object $expectedArtifacts $actualArtifacts" in workflow
+    assert '"summary.json"' in workflow
+    assert "the expected batch-level artifacts" in workflow
     assert "dev/bin/extract-release-notes" in workflow
     assert "--notes-file release-notes.md" in workflow
     assert "--generate-notes" not in workflow
