@@ -298,6 +298,52 @@ def test_a_bare_cli_run_appears_under_the_default_study(
     assert "seed=1" in tree_text
 
 
+def test_home_run_count_label_does_not_double_count_a_run_in_two_studies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run belonging to more than one Study is still counted once.
+
+    A real, reported bug: `add_run_to_study` only ever appends, never
+    detaches from a prior Study, so a run genuinely can end up in more
+    than one Study (here: the always-present default Study, plus two
+    more added by hand). The bottom-of-table count label used to sum
+    each visible Study's own `runCount` across the whole tree, double-
+    (or more-)counting any run shared this way -- confirmed live on a
+    checkout with heavy manual "Add to study…" use, producing a
+    nonsensical "722 of 2 runs" with no filter text even typed. The
+    label must count distinct run directories instead.
+    """
+    results = tmp_path / "results"
+    results.mkdir()
+    monkeypatch.setattr(paths_module, "results_directory", lambda: results)
+    output = _write_run(results, "run-a", seed=1)
+    first = groups.create_study("First study", results=results)
+    second = groups.create_study("Second study", results=results)
+    groups.add_run_to_study(first.study_id, output, results=results)
+    groups.add_run_to_study(second.study_id, output, results=results)
+
+    window = create_window(hidden=True)
+    outcome: queue.Queue[str | None] = queue.Queue(maxsize=1)
+
+    def _drive() -> None:
+        try:
+            _poll_until(window, _INPUT_SCREEN_READY, lambda value: value is True)
+            window.evaluate_js("window.fim.menu.openRun();")
+            count_text = _poll_until(
+                window,
+                "document.getElementById('open-run-count').textContent",
+                lambda value: value not in (None, ""),
+            )
+            outcome.put(count_text)
+        finally:
+            window.destroy()
+
+    webview.start(_drive)
+    count_text = outcome.get(timeout=_DRIVE_TIMEOUT_SECONDS)
+
+    assert count_text == "1 run"
+
+
 def test_home_materializes_the_default_study_on_a_truly_empty_checkout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

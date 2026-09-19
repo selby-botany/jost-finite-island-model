@@ -11855,6 +11855,27 @@ one, hit live while building this feature: removing the old
 "Unsorted" bucket without this CLI-side change made every bare run
 disappear from the tree entirely).
 
+<a id="gui.test_home_hierarchy_screen.test_home_run_count_label_does_not_double_count_a_run_in_two_studies"></a>
+
+#### test\_home\_run\_count\_label\_does\_not\_double\_count\_a\_run\_in\_two\_studies
+
+```python
+def test_home_run_count_label_does_not_double_count_a_run_in_two_studies(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A run belonging to more than one Study is still counted once.
+
+A real, reported bug: `add_run_to_study` only ever appends, never
+detaches from a prior Study, so a run genuinely can end up in more
+than one Study (here: the always-present default Study, plus two
+more added by hand). The bottom-of-table count label used to sum
+each visible Study's own `runCount` across the whole tree, double-
+(or more-)counting any run shared this way -- confirmed live on a
+checkout with heavy manual "Add to study…" use, producing a
+nonsensical "722 of 2 runs" with no filter text even typed. The
+label must count distinct run directories instead.
+
 <a id="gui.test_home_hierarchy_screen.test_home_materializes_the_default_study_on_a_truly_empty_checkout"></a>
 
 #### test\_home\_materializes\_the\_default\_study\_on\_a\_truly\_empty\_checkout

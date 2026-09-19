@@ -289,7 +289,8 @@ function nameMatchesFilter(name, filterText) {
  * regression that document flags explicitly if left unaddressed. The
  * *not-yet-fetched* case is untouched: still a bare `runs: null`, never
  * reached by `renderGroup` for a still-collapsed group either way.
- * @param {{studyId: string, name: string, runCount: number}} study
+ * @param {{studyId: string, name: string, runCount: number,
+ *     runDirectories: Array<string>}} study
  * @returns {object}
  */
 function studyGroup(study) {
@@ -304,6 +305,7 @@ function studyGroup(study) {
         studyId: study.studyId,
         runCount: study.runCount,
         countLabel: `${study.runCount} run${study.runCount === 1 ? "" : "s"}`,
+        runDirectories: study.runDirectories,
     };
     if (cachedRuns === undefined) {
         return { ...base, runs: null };
@@ -341,6 +343,40 @@ function experimentGroup(experiment, studiesById) {
         }`,
         subgroups,
     };
+}
+
+/**
+ * Count the distinct run directories reachable from `groups` -- a run
+ * added to more than one Study (`add_run_to_study` only ever appends,
+ * never detaches from a prior Study, so this is a real, reachable data
+ * shape, not a hypothetical one) is counted once here, never once per
+ * Study it happens to belong to.
+ *
+ * A naive `groups.reduce((total, group) => total + group.runCount, 0)`
+ * -- this function's own former shape -- double(-or-more)-counts any
+ * such run instead: confirmed live on a checkout with heavy manual
+ * "Add to study…"/"Add to experiment…" use, where the very same two
+ * runs had been added to several different Studies, producing a
+ * nonsensical "722 of 2 runs" label with no filter text even typed
+ * (`visibleRuns` and `totalRuns` are supposed to be equal whenever
+ * every group matches the filter trivially, which an empty filter
+ * always does).
+ * @param {Array<object>} groups
+ * @returns {number}
+ */
+function distinctRunCount(groups) {
+    const seen = new Set();
+    const visit = (group) => {
+        if (group.kind === "study") {
+            for (const directory of group.runDirectories) {
+                seen.add(directory);
+            }
+        } else if (group.kind === "experiment") {
+            group.subgroups.forEach(visit);
+        }
+    };
+    groups.forEach(visit);
+    return seen.size;
 }
 
 /**
@@ -1206,7 +1242,7 @@ function renderRecentRuns() {
         renderGroup(group);
     }
     const totalRuns = allRecentRuns.length;
-    const visibleRuns = groups.reduce((total, group) => total + group.runCount, 0);
+    const visibleRuns = distinctRunCount(groups);
     recentRunsCountLabel.textContent =
         visibleRuns === totalRuns
             ? `${totalRuns} run${totalRuns === 1 ? "" : "s"}`
