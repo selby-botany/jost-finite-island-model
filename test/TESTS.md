@@ -358,16 +358,15 @@ to), and `test/gui/conftest.py` (`doc/fim-logging-design.md` §12).
 
 Regression tests for parallel CI test scheduling.
 
-<a id="test.test_build_ci_parallel.test_ci_build_uses_xdist_loadgroup_for_parallel_gui_safe_execution"></a>
+<a id="test.test_build_ci_parallel.test_ci_build_runs_non_gui_parallel_and_gui_serially"></a>
 
-#### test\_ci\_build\_uses\_xdist\_loadgroup\_for\_parallel\_gui\_safe\_execution
+#### test\_ci\_build\_runs\_non\_gui\_parallel\_and\_gui\_serially
 
 ```python
-def test_ci_build_uses_xdist_loadgroup_for_parallel_gui_safe_execution(
-) -> None
+def test_ci_build_runs_non_gui_parallel_and_gui_serially() -> None
 ```
 
-`--ci` parallelizes tests while assigning GUI tests to one worker.
+`--ci` keeps stateful tests out of xdist while parallelizing the rest.
 
 <a id="test.test_hypothesis_profile"></a>
 
@@ -23936,7 +23935,11 @@ single `slow`-marked engine scenario test, even after being raised
 three times in one day. `--ci` now excludes `slow` specifically,
 named explicitly here rather than silently — every other marker,
 including `packaging` and `statistical`, keeps running through this
-one gate exactly as originally established.
+one gate exactly as originally established. `gui` is split into its
+own serial pytest process for pywebview shutdown stability, and
+`packaging` is split into its own serial pytest process because it
+builds real distributions in shared build-tree paths, but both are
+still included by `--ci`.
 
 <a id="validation.test_sdist_contents"></a>
 

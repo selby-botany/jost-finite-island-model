@@ -772,6 +772,10 @@ def test_batch_deme_pair_selector_switches_to_a_chosen_pair_and_back(
                     "'run-x-deme').options.length"
                     "})"
                 )
+                # Match the scalar selector test: the scrubber frame
+                # fetch is intentionally fire-and-forget and must settle
+                # before this test compares canvas snapshots.
+                _poll_until("window.__fimScrubberPending", lambda value: value == 0)
                 default_snapshot = window.evaluate_js(
                     "document.getElementById('run-canvas').toDataURL()"
                 )
