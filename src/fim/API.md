@@ -5155,7 +5155,7 @@ own equivalent action called the same module the same way.
 
 ```python
 @_log_bridge_call
-def get_about_info() -> dict[str, str | None]
+def get_about_info() -> dict[str, Any]
 ```
 
 Return the static "About fim" facts the Help menu shows.

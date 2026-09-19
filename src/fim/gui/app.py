@@ -3888,7 +3888,7 @@ class Api:
         }
 
     @_log_bridge_call
-    def get_about_info(self) -> dict[str, str | None]:
+    def get_about_info(self) -> dict[str, Any]:
         """Return the static "About fim" facts the Help menu shows.
 
         No bridge state, no network call — `fim.__version__` and the
