@@ -2982,6 +2982,25 @@ class Api:
         return {"ok": True, "experimentId": experiment.experiment_id}
 
     @_log_bridge_call
+    def ensure_default_study(self) -> dict[str, Any]:
+        """Materialize the always-present default Study/Experiment, idempotently.
+
+        Home's own tree (`20260918-claude-sonnet-5-home-tree-reorg-
+        design.md`, `selby/restricted`, §1) needs a real, clickable
+        default Study row visible on a checkout that has never run
+        anything, not only once a run's own `study_id=None` resolution
+        (`_attach_finished_run_to_study`) happens to create it as a
+        side effect — otherwise "a botanist can just 'do a run'" has no
+        row to click "Create run…" on. Called by `screens/open-run.js`'s
+        own `refreshRecentRuns` only when a visit's own `list_studies`/
+        `list_experiments` both come back empty, never eagerly at
+        launch, so a checkout that already has any Study/Experiment
+        never gains this call at all.
+        """
+        study = groups.ensure_default_study()
+        return {"ok": True, "studyId": study.study_id}
+
+    @_log_bridge_call
     def add_run_to_study(self, study_id: str, directory: str) -> dict[str, Any]:
         """Add one existing Run directory to a Study; idempotent.
 
@@ -3169,6 +3188,57 @@ class Api:
                 shutil.rmtree(path)
                 deleted_count += 1
         return {"ok": True, "deletedCount": deleted_count}
+
+    @_log_bridge_call
+    def delete_selected(self, items: list[dict[str, str]]) -> dict[str, Any]:
+        """Delete every selected Run/Study/Experiment in one round trip.
+
+        Home's own universal Select/Select all/Delete idiom (`20260918-
+        claude-sonnet-5-home-tree-reorg-design.md`, `selby/restricted`,
+        §5), generalizing `delete_runs`'s own existing bulk idiom to
+        also cover Study and Experiment rows, replacing each row's own
+        former standalone "Delete…" button.
+
+        Experiments are deleted first, then Studies, then bare Run
+        directories — top-down, so an Experiment's own cascade (through
+        its Studies to their Runs) happens exactly once, and a Study or
+        Run also separately selected alongside its own already-deleted
+        parent is silently tolerated (`delete_study`/`delete_runs`'s
+        own existing "an already-missing target is not an error"
+        policy) rather than double-counted or treated as a failure.
+
+        Args:
+            items: One `{"kind": "run", "directory": ...}`/`{"kind":
+                "study", "studyId": ...}`/`{"kind": "experiment",
+                "experimentId": ...}` per selected row.
+
+        Returns:
+            `{"ok": True, "deletedRunCount": N, "deletedStudyCount": M,
+            "deletedExperimentCount": K}` — each count is how many of
+            that kind actually still existed and were removed.
+        """
+        deleted_experiment_count = 0
+        for item in items:
+            if item.get("kind") != "experiment":
+                continue
+            if self.delete_experiment(item["experimentId"])["ok"]:
+                deleted_experiment_count += 1
+        deleted_study_count = 0
+        for item in items:
+            if item.get("kind") != "study":
+                continue
+            if self.delete_study(item["studyId"])["ok"]:
+                deleted_study_count += 1
+        run_directories = [
+            item["directory"] for item in items if item.get("kind") == "run"
+        ]
+        deleted_run_count = self.delete_runs(run_directories)["deletedCount"]
+        return {
+            "ok": True,
+            "deletedRunCount": deleted_run_count,
+            "deletedStudyCount": deleted_study_count,
+            "deletedExperimentCount": deleted_experiment_count,
+        }
 
     @_log_bridge_call
     def get_batch_replicate_summary(self, directory: str) -> dict[str, Any]:
@@ -3938,25 +4008,36 @@ def _attach_finished_run_to_study(study_id: str | None, output_directory: Path) 
 
     The shared body of `_drain_run_messages`/`_drain_batch_messages`'s
     own identical `"done"`-branch step (`Api.start_run`'s own `study_id`
-    argument, Run/Study/Experiment workflow-ergonomics design
-    `20260917-claude-sonnet-5-run-study-experiment-workflow-ergonomics.
-    md`, `selby/restricted`, item 3) — factored out only to keep each
-    caller's own branch count under this project's own configured
-    `PLR0912` limit, not because the two calls differ in any way. A
-    no-op when `study_id` is `None` (the common, "no study chosen"
-    case). A `ValueError` (the Study was deleted by another window, or
-    from Home, while this run/batch was still in flight) is logged and
-    swallowed, never raised into the caller's own `"done"` handling —
-    the run itself already succeeded; this is a best-effort organizing
-    step, not part of what "done" reports.
+    argument) — factored out only to keep each caller's own branch
+    count under this project's own configured `PLR0912` limit, not
+    because the two calls differ in any way.
+
+    `study_id=None` ("no Study explicitly chosen") resolves to the
+    always-present default Study (`groups.ensure_default_study`,
+    `20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+    restricted`, §2) — no run is ever left without a Study from the
+    moment it publishes, not merely "attach nothing" as an earlier
+    revision of this function did. A botanist explicitly choosing a
+    different Study, or none of this function's own business, is
+    unaffected either way.
+
+    A `ValueError` (the explicitly-chosen Study was deleted by another
+    window, or from Home, while this run/batch was still in flight) is
+    logged and swallowed, never raised into the caller's own `"done"`
+    handling — the run itself already succeeded; this is a best-effort
+    organizing step, not part of what "done" reports.
     """
-    if study_id is None:
-        return
+    resolved_study_id = (
+        study_id if study_id is not None else groups.ensure_default_study().study_id
+    )
     try:
-        groups.add_run_to_study(study_id, output_directory)
+        groups.add_run_to_study(resolved_study_id, output_directory)
     except ValueError as error:
         logger.warning(
-            "could not add %s to study %s: %s", output_directory, study_id, error
+            "could not add %s to study %s: %s",
+            output_directory,
+            resolved_study_id,
+            error,
         )
 
 

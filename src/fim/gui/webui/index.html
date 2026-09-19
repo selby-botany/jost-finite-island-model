@@ -575,136 +575,39 @@
         </p>
       </div>
     </header>
-    <!-- Ordered top-down, matching the actual research process
-         (`20260917-claude-sonnet-5-run-study-experiment-workflow-
-         ergonomics.md`, `selby/restricted`, "Concrete fixes, either
-         way" item 1): decide the research question (Experiment) and
-         one angle on it (Study) first; "New run"/Explore, the
-         bottom-of-the-hierarchy actions, come after. Nothing here is
-         required -- a run/study can still be created with no
-         organization at all (`20260917-...-hierarchy-design.md`'s own
-         "zero required migration" goal, kept for new work too, not
-         only old) -- this reorder only fixes which action a botanist
-         reaches for *first*, not what is possible.
-
-         Slice 3 of home enrichment design doc `20260909-claude-sonnet-
-         5-home-enrichment-design.md`'s (`selby/restricted`) own commit
-         schedule: pure navigation shortcuts, no new bridge calls --
-         "New run" opens Configure showing whatever is already loaded
-         (the last-used configuration, `loadInitialForm`'s own existing
-         behavior; a worked example is still one click away there, via
-         "Load example…", once showing), and Explore opens the
-         predictive workspace directly.
-
-         `home-example-select` (added afterward, on top of this slice):
-         a second, independent way into the New run card -- jump
-         straight to Configure with one worked example's own values
-         already applied, without a click into Configure followed by
-         File > "Load example…" to reach the identical picker
-         (`screens/presets.js`'s `fim.menu.loadExample`/`applyPreset`).
-         Populated at runtime (`screens/open-run.js`) from `Api.
-         list_presets`'s own built-in entries only -- a user-saved
-         preset is deliberately left out of this shortcut and stays
-         reachable only from the full picker, matching "one of the
-         examples" rather than every saved configuration. The
-         "Configure a new run" button itself is untouched: an
-         additional way in, never a replacement.
-
-         New study/New experiment (Run/Study/Experiment hierarchy
-         design `20260917-claude-sonnet-5-run-study-experiment-
-         hierarchy-design.md`, `selby/restricted`, §6 "New
-         affordances"): a Study/Experiment is purely local bookkeeping
-         (`fim.persistence.groups`) -- these two cards are the only way
-         to create one from the GUI directly (Configure's own Study
-         picker, `#screen-configure`'s footer, is the other). Plain,
-         always-visible text inputs, not a dialog -- this app has no
-         `window.prompt`/`confirm` anywhere (`screens/open-run.js`'s
-         own `confirmThenRun` docstring: both block indefinitely under
-         this project's own hidden/headless pywebview window). -->
-    <div class="home-cards">
-      <div class="home-card">
-        <h3>New experiment</h3>
-        <p>Start with the research question — group related studies under it.</p>
-        <input
-          type="text"
-          id="home-new-experiment-name"
-          placeholder="Experiment name"
-          aria-label="New experiment name"
-        >
-        <input
-          type="text"
-          id="home-new-experiment-description"
-          placeholder="Description (optional)"
-          aria-label="New experiment description"
-        >
-        <div class="actions">
-          <button type="button" id="home-new-experiment-button">
-            Create experiment
-          </button>
-        </div>
-      </div>
-      <div class="home-card">
-        <h3>New study</h3>
-        <p>One angle on a question — group related runs under it, or leave it for now.</p>
-        <input
-          type="text"
-          id="home-new-study-name"
-          placeholder="Study name"
-          aria-label="New study name"
-        >
-        <input
-          type="text"
-          id="home-new-study-description"
-          placeholder="Description (optional)"
-          aria-label="New study description"
-        >
-        <div class="actions">
-          <button type="button" id="home-new-study-button">
-            Create study
-          </button>
-        </div>
-      </div>
-      <div class="home-card">
-        <h3>New run</h3>
-        <p>Start from your last configuration, or a worked example.</p>
-        <div class="actions">
-          <button type="button" id="home-new-run-button" class="primary-action">
-            Configure a new run
-            <svg class="button-icon button-icon-trailing" aria-hidden="true">
-              <use href="icons/fim-icons.svg#icon-forward"></use>
-            </svg>
-          </button>
-          <select id="home-example-select" aria-label="Try a worked example">
-            <option value="" selected>Try a worked example…</option>
-          </select>
-        </div>
-      </div>
-      <div class="home-card">
-        <h3>Explore</h3>
-        <p>See predicted differentiation for a configuration, without running it.</p>
-        <div class="actions">
-          <button type="button" id="home-explore-button">
-            <svg class="button-icon" aria-hidden="true">
-              <use href="icons/fim-icons.svg#icon-explore"></use>
-            </svg>
-            Explore
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- No top-of-page creation cards anymore (`20260918-claude-
+         sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §7):
+         the app "bent over backwards to not be process opinionated,"
+         showing the same objects in two disconnected places -- create
+         a Study up here, then scroll down and hunt for it in the tree
+         to actually put anything in it. Every action these four cards
+         used to offer now lives on the row that receives it instead:
+         an Experiment row's own "Create study…", a Study row's own
+         "Create run…" (which also replaces the former "Explore" card
+         -- it lands on Configure, not a predictive-only workspace),
+         both in `screens/open-run.js`'s own `buildGroupActionControls`.
+         The tree itself is never empty (§1/§2: a real, always-present
+         default Experiment/Study), so the onboarding case these cards
+         once existed for is already covered by that default row's own
+         "Create run…" -- no separate first-launch-only affordance
+         needed. Explore itself is unchanged and still reachable from
+         the rail's own Explore button and Configure's own footer. -->
     <p>Recent runs (results/*/manifest.json):</p>
-    <!-- A three-level tree: Experiments, expanding to their own Studies,
-         expanding to their own Runs -- plus every Study not inside an
-         Experiment, plus an "Unsorted" bucket for every Run in none of
-         them, itself grouped by date bucket (Today / Yesterday / Earlier)
-         exactly as this table rendered before Study/Experiment existed
-         (`20260917-claude-sonnet-5-run-study-experiment-hierarchy-
-         design.md`, `selby/restricted`, §6; `screens/open-run.js`'s own
-         `buildHomeGroups`/`dateBucketFor`/`renderRecentRuns`). On a
-         checkout with no Study/Experiment ever created, this renders
-         exactly as the old flat date-bucketed view did -- no empty
-         "Unsorted" wrapper, matching that section's own "zero required
-         migration" design goal. -->
+    <!-- A two-level tree: every Experiment, expanding to its own Studies,
+         each expanding to its own Runs -- plus every Study not inside an
+         Experiment, at the top level alongside them. There is no
+         "Unsorted" bucket anymore (`20260918-claude-sonnet-5-home-tree-
+         reorg-design.md`, `selby/restricted`, §1/§2/§3): every run now
+         belongs to a real Study, the always-present default one when
+         nothing more specific was chosen. A Study's own expanded row
+         still nests its runs by date bucket (Today / Yesterday /
+         Earlier, §6) so a large default Study stays as browsable as
+         "Unsorted" once was (`screens/open-run.js`'s own `buildHome
+         Groups`/`studyGroup`/`groupRecentRuns`/`renderRecentRuns`). The
+         default Experiment/Study sorts first with no special-casing,
+         since `list_experiments`/`list_studies` are documented
+         oldest-first and the default ones are, by construction, the
+         oldest whenever they exist. -->
     <div class="open-run-list-controls">
       <input
         type="search"
@@ -712,14 +615,20 @@
         placeholder="Filter by run ID, label, date, study, or experiment…"
         aria-label="Filter recent runs"
       >
+      <button type="button" id="home-new-experiment-button">
+        Create experiment…
+      </button>
       <span id="open-run-count" class="open-run-count"></span>
     </div>
     <!-- Bulk "Select/Delete/Delete all" idiom (design doc §10, resolved
          directly by the project owner: "the current 2500 runs cannot
-         realistically be deleted in the UI today"). Selection is a set
-         of directories, not DOM rows, so "Select all" reaches every
-         loaded run regardless of which groups are currently collapsed
-         (`screens/open-run.js`'s own `selectedDirectories`). -->
+         realistically be deleted in the UI today"), extended to Study and
+         Experiment rows too (`20260918-...-home-tree-reorg-design.md`
+         §5) -- every row kind gets a checkbox (`screens/open-run.js`'s
+         own `buildGroupSelectCheckbox`), and "Select all"/"Delete
+         selected" reach every loaded item regardless of which groups are
+         currently collapsed (`selectedRunDirectories`/`selectedStudyIds`/
+         `selectedExperimentIds`). -->
     <div class="open-run-selection-toolbar">
       <button type="button" id="open-run-select-all-button">Select all</button>
       <button type="button" id="open-run-clear-selection-button">Clear selection</button>

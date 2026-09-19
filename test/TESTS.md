@@ -8584,6 +8584,48 @@ def test_delete_runs_removes_every_directory_and_tolerates_a_missing_one(
 
 The bulk "Select/Delete/Delete all" idiom: one round trip, many directories.
 
+<a id="gui.test_app_api.test_delete_selected_deletes_a_mixed_selection"></a>
+
+#### test\_delete\_selected\_deletes\_a\_mixed\_selection
+
+```python
+def test_delete_selected_deletes_a_mixed_selection(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+One round trip deletes Experiments, Studies, and bare Runs together.
+
+`20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+restricted`), §5: the universal Select/Select all/Delete idiom,
+generalized from `delete_runs`'s own existing one.
+
+<a id="gui.test_app_api.test_delete_selected_tolerates_an_already_deleted_parent"></a>
+
+#### test\_delete\_selected\_tolerates\_an\_already\_deleted\_parent
+
+```python
+def test_delete_selected_tolerates_an_already_deleted_parent(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+A Study also selected alongside its own just-deleted Experiment is a no-op.
+
+Experiments are processed first (`Api.delete_selected`'s own
+docstring) -- by the time this Study's own turn comes, it is
+already gone via the Experiment's cascade, and `delete_study`'s own
+existing "already gone is not an error" tolerance covers it.
+
+<a id="gui.test_app_api.test_delete_selected_with_nothing_selected_deletes_nothing"></a>
+
+#### test\_delete\_selected\_with\_nothing\_selected\_deletes\_nothing
+
+```python
+def test_delete_selected_with_nothing_selected_deletes_nothing(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An empty selection is a clean no-op, not an error.
+
 <a id="gui.test_app_api.test_start_run_rejects_an_unknown_study_id"></a>
 
 #### test\_start\_run\_rejects\_an\_unknown\_study\_id
@@ -8601,6 +8643,45 @@ restricted`, item 3) -- a stale id (a Study deleted moments ago in
 another window) fails the launch outright, before `_active_window`
 is ever consulted, so this needs no real window to exercise: an
 unknown `study_id` is exactly as invalid whether or not one exists.
+
+<a id="gui.test_app_api.test_attach_finished_run_to_study_with_none_uses_the_default_study"></a>
+
+#### test\_attach\_finished\_run\_to\_study\_with\_none\_uses\_the\_default\_study
+
+```python
+def test_attach_finished_run_to_study_with_none_uses_the_default_study(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+`study_id=None` attaches to the always-present default Study, not nothing.
+
+`20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+restricted`), §2: exercised directly against `_attach_finished_run_
+to_study` itself (the shared body every `"done"`-branch call site
+reaches), rather than through a real, full `Api.start_run` — no
+engine invocation needed to prove this one function's own
+resolution rule.
+
+<a id="gui.test_app_api.test_attach_finished_run_to_study_with_an_explicit_id_is_unaffected"></a>
+
+#### test\_attach\_finished\_run\_to\_study\_with\_an\_explicit\_id\_is\_unaffected
+
+```python
+def test_attach_finished_run_to_study_with_an_explicit_id_is_unaffected(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+An explicitly chosen Study id routes the run there, not to the default.
+
+`_write_run_under`'s own bare `fim run` already attaches `output` to
+the default Study as a side effect of writing it at all (the CLI's
+own new behavior this same module's `test_attach_finished_run_to_
+study_with_none_uses_the_default_study` exercises directly) — this
+test's own point is narrower: that a *further*, explicit `_attach_
+finished_run_to_study(study_id, output)` call, the shape every real
+"done" transition with a chosen Study takes, lands the run in
+`study_id`'s own list too, exactly as an explicit choice always has,
+unrelated to whatever the CLI already did at write time.
 
 <a id="gui.test_app_api.test_open_run_reanalyzes_the_final_generation_by_default"></a>
 
@@ -9828,6 +9909,13 @@ request (`screens/nav-rail.js`'s own top comment has the full
 account) -- `icon-results` stays defined in the sprite (below, the
 `icon_id` loop still checks for it) even though nothing references
 it anymore, so this count is six, not seven.
+
+22, not 24: Home's own `.home-cards` were removed outright
+(`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+restricted`, §7) -- their "New run" button's own trailing
+`icon-forward` and the "Explore" card's own `icon-explore` went
+with them, each action now living on the row that receives it
+instead, with no icon of its own.
 
 <a id="gui.test_branding.test_home_and_about_carry_restrained_selby_identity"></a>
 
@@ -11747,43 +11835,80 @@ pywebview window (`screens/open-run.js`'s own `confirmThenRun`
 docstring) -- every interaction here is therefore a plain DOM click/
 input against always-visible controls, never a native dialog.
 
-<a id="gui.test_home_hierarchy_screen.test_creating_a_study_shows_it_in_the_tree_and_wraps_unsorted"></a>
+<a id="gui.test_home_hierarchy_screen.test_a_bare_cli_run_appears_under_the_default_study"></a>
 
-#### test\_creating\_a\_study\_shows\_it\_in\_the\_tree\_and\_wraps\_unsorted
+#### test\_a\_bare\_cli\_run\_appears\_under\_the\_default\_study
 
 ```python
-def test_creating_a_study_shows_it_in_the_tree_and_wraps_unsorted(
+def test_a_bare_cli_run_appears_under_the_default_study(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A new, empty Study appears; every existing run becomes "Unsorted".
+A plain `fim run` (no `--study`) still shows up in Home's own tree.
 
-Before any Study/Experiment exists, Home renders the plain date-
-bucket tree with no "Unsorted" wrapper (design doc §6, "zero
-required migration") -- creating the very first Study is the one
-moment that wrapper is expected to appear.
+`20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+restricted`) §2: the CLI and GUI converge on the identical
+`add_run_to_study` call, so a run made from a terminal is exactly
+as visible in Home as one made from the GUI -- never a silent gap
+only discoverable by counting `results/*/manifest.json` files by
+hand, the regression this test would have caught directly (a real
+one, hit live while building this feature: removing the old
+"Unsorted" bucket without this CLI-side change made every bare run
+disappear from the tree entirely).
 
-<a id="gui.test_home_hierarchy_screen.test_adding_a_run_to_a_study_moves_it_out_of_unsorted"></a>
+<a id="gui.test_home_hierarchy_screen.test_home_materializes_the_default_study_on_a_truly_empty_checkout"></a>
 
-#### test\_adding\_a\_run\_to\_a\_study\_moves\_it\_out\_of\_unsorted
+#### test\_home\_materializes\_the\_default\_study\_on\_a\_truly\_empty\_checkout
 
 ```python
-def test_adding_a_run_to_a_study_moves_it_out_of_unsorted(
+def test_home_materializes_the_default_study_on_a_truly_empty_checkout(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-"Add to study…" moves a run's own count from Unsorted into the Study.
+A checkout with nothing yet still shows a clickable default Study row.
 
-<a id="gui.test_home_hierarchy_screen.test_creating_an_experiment_and_adding_a_study_nests_it"></a>
+§1's own amendment: `ensure_default_study` stays lazy (never called
+at app launch), but Home's own `refreshRecentRuns` calls it once,
+exactly when a visit's own `list_studies`/`list_experiments` both
+come back empty -- otherwise a botanist with nothing yet has no row
+at all to click "Create run…" on, contradicting the whole point of
+this reorg.
 
-#### test\_creating\_an\_experiment\_and\_adding\_a\_study\_nests\_it
+<a id="gui.test_home_hierarchy_screen.test_creating_an_experiment_and_a_study_on_its_row_nests_it"></a>
+
+#### test\_creating\_an\_experiment\_and\_a\_study\_on\_its\_row\_nests\_it
 
 ```python
-def test_creating_an_experiment_and_adding_a_study_nests_it(
+def test_creating_an_experiment_and_a_study_on_its_row_nests_it(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-"Add to experiment…" nests a Study's own row under its Experiment.
+Row-level "Create experiment…"/"Create study…" nest one action, not two.
+
+`20260918-claude-sonnet-5-home-tree-reorg-design.md` (`selby/
+restricted`) §4: creating a Study on an Experiment's own row calls
+`create_study` immediately followed by `add_study_to_experiment`,
+already nested -- no separate "Add to experiment…" step needed for
+a Study created this way (that picker still exists, `test_moving_
+an_existing_study_into_an_experiment_via_the_picker`, just below,
+for a Study that already exists elsewhere).
+
+<a id="gui.test_home_hierarchy_screen.test_moving_an_existing_study_into_an_experiment_via_the_picker"></a>
+
+#### test\_moving\_an\_existing\_study\_into\_an\_experiment\_via\_the\_picker
+
+```python
+def test_moving_an_existing_study_into_an_experiment_via_the_picker(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
+```
+
+The "Add to experiment…" picker still nests an already-existing,
+standalone Study.
+
+Kept as real, separate functionality from row-level "Create study…"
+(`buildAddToExperimentSelect` is untouched by this reorg) -- a
+Study created standalone, or moved out of one Experiment, still
+needs a way into a different one after the fact.
 
 <a id="gui.test_home_hierarchy_screen.test_deleting_a_study_cascades_to_its_own_runs"></a>
 
@@ -11794,14 +11919,17 @@ def test_deleting_a_study_cascades_to_its_own_runs(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-A Study's own inline Delete confirmation removes it and its member Runs.
+Checking a Study's own row and confirming "Delete selected" removes its Runs too.
 
 The confirmed, deliberate product decision (`fim.persistence.groups.
 delete_study`'s own docstring): deleting a Study is a real,
 data-destroying operation for the runs it references, not merely a
 bookkeeping change -- confirmed here against real files on disk, not
 only against `Api.delete_study` as a plain Python call
-(`test/gui/test_app_api.py`'s own coverage).
+(`test/gui/test_app_api.py`'s own coverage). Deletion is checkbox +
+"Delete selected" only now, not a per-row "Delete…" button
+(`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+restricted`, §5).
 
 <a id="gui.test_home_hierarchy_screen.test_copying_a_study_creates_an_independent_copy_with_no_prompt"></a>
 
@@ -11823,12 +11951,21 @@ def test_bulk_select_all_and_delete_selected_removes_every_run(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-The "Select all"/"Delete selected" idiom removes every loaded run at once.
+The "Select all"/"Delete selected" idiom removes every loaded item at once.
 
 The explicit gap this idiom answers: thousands of Unsorted runs
 could not realistically be deleted one at a time through the GUI.
-"Select all" reaches every loaded run even while its own group is
-collapsed -- this test never expands anything.
+"Select all" reaches every loaded Run/Study/Experiment even while
+its own group is collapsed -- this test never expands anything. Both
+bare runs land in the always-present default Study/Experiment
+(`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+restricted`, §1/§2), so "Select all" selects 4 items total, not 2 --
+the 2 runs plus that one Study and one Experiment (`20260918-...
+-design.md` §5's own "Select all" generalization) -- and deleting
+them cascades the Experiment away too, which is harmless: nothing
+here treats the default Study/Experiment as undeletable, and
+`ensure_default_study` simply recreates it, empty, the next time
+anything needs it (§5's own explicit "no special-casing" note).
 
 <a id="gui.test_home_hierarchy_screen.test_starting_a_run_from_configure_with_a_study_selected_attaches_it"></a>
 
@@ -12799,12 +12936,14 @@ def test_configure_example_select_lists_only_built_in_examples(
         window: webview.Window) -> None
 ```
 
-`configure-example-select` offers the identical shortcut Home's own
-`home-example-select` does — built-in worked examples only, populated
-by the same shared `refreshExampleOptions` (`screens/presets.js`), not
-a second, independently maintained option list that could drift from
-it (`test_open_run_screen.py`'s own `test_home_example_select_lists_
-only_built_in_examples` is the identical test for Home's copy).
+`configure-example-select` offers a built-in-examples-only shortcut,
+populated by the shared `refreshExampleOptions` (`screens/presets.js`)
+-- the same mechanism `fim.menu.loadExample`'s own full picker uses,
+not a second, independently maintained option list that could drift
+from it. Home's own former copy of this shortcut (`home-example-
+select`) was removed along with `.home-cards` (`20260918-claude-
+sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §7); this is
+now the only such shortcut in the app.
 
 <a id="gui.test_nav_rail.test_choosing_a_configure_example_applies_it_without_leaving_configure"></a>
 
@@ -13068,147 +13207,6 @@ them. Clicking a replicate row selects its own trajectory for
 "Open ▶", the same selection mechanism a scalar row's own click
 already uses.
 
-<a id="gui.test_open_run_screen.test_home_new_run_card_opens_configure"></a>
-
-#### test\_home\_new\_run\_card\_opens\_configure
-
-```python
-def test_home_new_run_card_opens_configure(window: webview.Window,
-                                           drive: Callable[..., Any]) -> None
-```
-
-Home enrichment design doc's own slice 3: "New run" reaches Configure.
-
-Pure navigation, no new bridge call — `Api.list_home_runs`'s own
-empty-`results/` case is enough here, no real run needs writing.
-`is_ready` checks for `False` specifically, not merely "not `None`"
-— a real race an earlier version of this test hit live: `hidden`'s
-own *starting* value (`True`, before the click has even fired) is
-already non-`None`, so a looser check accepted it on the very first
-poll, before the `setTimeout` callback had a chance to run at all.
-
-<a id="gui.test_open_run_screen.test_home_explore_card_opens_explore"></a>
-
-#### test\_home\_explore\_card\_opens\_explore
-
-```python
-def test_home_explore_card_opens_explore(window: webview.Window,
-                                         drive: Callable[..., Any]) -> None
-```
-
-Home enrichment design doc's own slice 3: "Explore" reaches Explore.
-
-<a id="gui.test_open_run_screen.test_home_example_select_lists_only_built_in_examples"></a>
-
-#### test\_home\_example\_select\_lists\_only\_built\_in\_examples
-
-```python
-def test_home_example_select_lists_only_built_in_examples(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-`home-example-select` lists the built-in worked examples only.
-
-Populated by `refreshHomeExampleOptions()` from `Api.list_presets`'s
-own `builtin` entries, filtering out any user-saved preset — the
-full combined list stays reachable only from the existing
-`modal-presets` picker (`fim.menu.loadExample`). The option order
-and titles must match `fim.gui.presets.list_presets` directly (not
-a hand-copied count), the same "read the real module, don't
-re-derive a snapshot" precedent `test_presets.py`'s own
-`_REAL_PRESETS` sets — a real gap this test would have caught: an
-earlier draft asserted a bare option count, which would not have
-noticed the dropdown silently including a user-saved preset instead
-of a missing built-in one.
-
-<a id="gui.test_open_run_screen.test_choosing_a_home_example_applies_it_and_opens_configure"></a>
-
-#### test\_choosing\_a\_home\_example\_applies\_it\_and\_opens\_configure
-
-```python
-def test_choosing_a_home_example_applies_it_and_opens_configure(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-Picking an example applies its values, opens Configure, then resets.
-
-A plain, immediately-acting pulldown (no separate confirm step): the
-`change` event alone drives it, matching how a real user's own
-pulldown selection fires it. Selects the "Stepping-stone (spatial)
-migration" example specifically (option index 2 — index 0 is the
-placeholder, index 1 is "Unequal island sizes with a migration
-hub") since its own d=6 ring matrix is distinct from the starter
-form's own defaults, the identical "a changed field is real proof
-the click did something" reasoning `test_presets_screen.py`'s own
-equivalent test already uses for the same preset. Reuses
-`presets.js`'s own `applyPreset` via `window.fim.applyPreset` —
-genuinely the same apply path the File-menu picker uses, not a
-second, independent one.
-
-<a id="gui.test_open_run_screen.test_choosing_the_non_loadable_home_example_shows_an_inline_notice"></a>
-
-#### test\_choosing\_the\_non\_loadable\_home\_example\_shows\_an\_inline\_notice
-
-```python
-def test_choosing_the_non_loadable_home_example_shows_an_inline_notice(
-        window: webview.Window, drive: Callable[..., Any]) -> None
-```
-
-The one non-loadable example shows Home's own banner, not an alert,
-and does not navigate to Configure.
-
-Design doc `20260913-claude-sonnet-5-gui-worked-example-loadability-
-design.md` (`selby/restricted`), Option C — the Home-screen
-counterpart of `test_nav_rail.py`'s own identically named test for
-Configure's own select. `home-example-select` only navigates on a
-successful apply (`open-run.js`'s own `change` handler); staying on
-Home here is the direct proof that branch was not taken.
-
-<a id="gui.test_open_run_screen.test_home_example_select_excludes_a_user_saved_preset"></a>
-
-#### test\_home\_example\_select\_excludes\_a\_user\_saved\_preset
-
-```python
-def test_home_example_select_excludes_a_user_saved_preset(
-        window: webview.Window) -> None
-```
-
-A user-saved preset never appears in Home's own example shortcut.
-
-"One of the examples" (the design ask) means built-in worked
-examples only — a user-saved configuration stays reachable solely
-from the full `modal-presets` picker. Needs its own two-stage,
-manually driven window (save, then reopen Home) rather than the
-shared `drive` fixture, which destroys its window after one stage.
-
-<a id="gui.test_open_run_screen.test_home_example_select_stays_inside_its_card_at_a_narrow_window_width"></a>
-
-#### test\_home\_example\_select\_stays\_inside\_its\_card\_at\_a\_narrow\_window\_width
-
-```python
-def test_home_example_select_stays_inside_its_card_at_a_narrow_window_width(
-        window: webview.Window) -> None
-```
-
-`home-example-select` never overflows `.home-card`'s own bounding box.
-
-A real, reported layout bug: a `<select>` element defaults to
-`min-width: auto` inside a flex container (`.actions`, `app.css`),
-so it refuses to shrink below its own widest `<option>`'s rendered
-width (several real worked-example titles are long, e.g. "Per-base
-mutation rate across unequal locus lengths") — at a narrow window
-width, the control overflowed its own card's left edge rather than
-wrapping or shrinking the way `.actions`'s own `flex-wrap` already
-lets every other child do. `window.resize` (a Python-side pywebview
-call, not something the shared `drive` fixture's own JS-string
-`trigger` can express) needs its own manually driven window, the
-same precedent `test_home_example_select_excludes_a_user_saved_
-preset`, just above, already established for a different reason.
-
-Confirmed live before fixing: reverting the `app.css` fix reproduced
-`selectLeft: -2.5` (past the *viewport's* own left edge, let alone
-the card's) at this same window width.
-
 <a id="gui.test_open_run_screen.test_opening_a_run_with_a_sigma_band_shows_it_with_no_curve_line"></a>
 
 #### test\_opening\_a\_run\_with\_a\_sigma\_band\_shows\_it\_with\_no\_curve\_line
@@ -13259,14 +13257,22 @@ def test_recent_runs_group_by_date_bucket_and_can_be_collapsed(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-Design proposal for "a fantastically long results scroll": runs
-render grouped into date-bucket sections, each with its own
-collapsible header naming its member count. Every group starts
-collapsed by default (`ensureGroupDefaults`), so opening the screen
-shows headers only; expanding a header adds only its own rows
+Design proposal for "a fantastically long results scroll": a Study's
+own expanded runs render grouped into date-bucket sections, each with
+its own collapsible header naming its member count. Every group
+starts collapsed by default (`ensureGroupDefaults`), so opening the
+screen shows headers only; expanding a header adds only its own rows
 (`open-run.js`'s own `renderRecentRuns`/`buildGroupHeaderRow`), and
 collapsing it again removes only its own rows, the other bucket's
 own rows unaffected.
+
+Both runs here are bare (`--study` unset), so both land in the
+always-present default Study inside its own default Experiment
+(`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+restricted`, §1/§2) — the date-bucket grouping this test cares about
+is nested two levels deep (Experiment > Study > date bucket), not at
+the tree's own top level the way the now-removed "Unsorted" bucket's
+date grouping once was.
 
 <a id="gui.test_open_run_screen.test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count"></a>
 
@@ -13277,10 +13283,19 @@ def test_recent_runs_filter_narrows_the_visible_rows_and_updates_the_count(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
 ```
 
-The filter bar narrows the same rows the table draws from, live
-(`open-run.js`'s own `renderRecentRuns`) -- not a second, separate
-search index that could drift from what actually renders, and the
-count label states how much of the full list is currently visible.
+The filter bar narrows by Study/Experiment name, live
+(`open-run.js`'s own `renderRecentRuns`/`nameMatchesFilter`) -- not a
+second, separate search index that could drift from what actually
+renders, and the count label states how much of the full list is
+currently visible.
+
+Filters by Study *name*, not by a run's own id/label/date the way an
+earlier revision of this test did: the Run-level free-text filter
+(`matchesRecentRunsFilter`) was removed along with the "Unsorted"
+bucket it only ever applied to (`20260918-claude-sonnet-5-home-
+tree-reorg-design.md`, `selby/restricted`, §5's own amendment) --
+every run now belongs to some real Study, and a Study's own expanded
+view was never filtered by free text even before that change.
 
 <a id="gui.test_p0_grid_screen"></a>
 

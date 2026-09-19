@@ -713,18 +713,19 @@ fieldset.composite > label {
     background: var(--fim-surface-soft);
 }
 
-/* `home-example-select` (Home's "New run" card): a plain `<select>`
- * sharing an `.actions` row with a real `<button>` -- matched to that
- * button's own sizing/border/radius so the two read as one action
- * group, not a mismatched form control dropped beside styled buttons.
- * `min-width: 0` overrides a flex item's own default `min-width: auto`
- * -- without it, a `<select>` refuses to shrink below its own widest
- * `<option>`'s rendered width (several real worked-example titles are
- * long, e.g. "Per-base mutation rate across unequal locus lengths"),
- * overflowing `.home-card`'s own bounding box at a narrow window width
- * instead of wrapping or shrinking the way `.actions`'s own `flex-wrap`
- * otherwise allows every other child to. `max-width: 100%` is the
- * actual shrink target once `min-width` no longer forbids it. */
+/* `configure-example-select` (Configure's "Load example…" shortcut): a
+ * plain `<select>` sharing an `.actions` row with a real `<button>` --
+ * matched to that button's own sizing/border/radius so the two read as
+ * one action group, not a mismatched form control dropped beside styled
+ * buttons. `min-width: 0` overrides a flex item's own default `min-
+ * width: auto` -- without it, a `<select>` refuses to shrink below its
+ * own widest `<option>`'s rendered width (several real worked-example
+ * titles are long, e.g. "Per-base mutation rate across unequal locus
+ * lengths"), overflowing its own container's bounding box at a narrow
+ * window width instead of wrapping or shrinking the way `.actions`'s
+ * own `flex-wrap` otherwise allows every other child to. `max-width:
+ * 100%` is the actual shrink target once `min-width` no longer forbids
+ * it. */
 .actions select {
     font: inherit;
     padding: 0.45rem 0.9rem;
@@ -1333,52 +1334,6 @@ fieldset.composite > label {
     margin: 0.45rem 0 0;
     color: var(--fim-muted);
     font-size: 0.95rem;
-}
-
-/* Home's own shortcut cards (design §9; home enrichment design doc
- * `20260909-claude-sonnet-5-home-enrichment-design.md`, `selby/
- * restricted`, slice 3) -- deliberately plain, bordered boxes, not
- * `.config-modal`'s own dialog styling (these sit inline on the page,
- * never in a `<dialog>`). */
-.home-cards {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin-bottom: 1.25rem;
-}
-
-.home-card {
-    flex: 1 1 16rem;
-    min-width: 14rem;
-    border: 1px solid var(--fim-border);
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
-    background: var(--fim-background);
-    box-shadow: 0 2px 8px var(--fim-shadow);
-}
-
-.home-card h3 {
-    margin: 0 0 0.35rem;
-    font-size: 0.95rem;
-    font-weight: 900;
-    color: var(--fim-accent);
-}
-
-.home-card p {
-    margin: 0 0 0.75rem;
-    font-size: 0.85rem;
-    color: var(--fim-muted);
-}
-
-/* "New study"/"New experiment" home cards (Run/Study/Experiment
- * hierarchy design, `20260917-claude-sonnet-5-run-study-experiment-
- * hierarchy-design.md`, `selby/restricted`, §6) -- plain, stacked text
- * inputs, full card width, rather than `.actions`'s own inline-row
- * layout (which assumes short buttons/selects, not a name field). */
-.home-card input[type="text"] {
-    display: block;
-    width: 100%;
-    margin-bottom: 0.5rem;
 }
 
 /* Screen 6: open an existing run (design §4.6). */

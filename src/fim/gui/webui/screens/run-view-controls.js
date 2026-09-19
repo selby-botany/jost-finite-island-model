@@ -329,6 +329,21 @@ window.fim.preselectNewStudy = function preselectNewStudy() {
     runStudyNewNameInput.focus();
 };
 
+/**
+ * Hard-select an existing Study on `run-study-select` -- the Home
+ * tree's own "Create run…" button (`open-run.js`, `20260918-claude-
+ * sonnet-5-home-tree-reorg-design.md`, `selby/restricted`, §4), reached
+ * after a botanist has already explicitly chosen this Study by
+ * clicking its own row, unlike `preselectNewStudy`'s own soft nudge.
+ * Still fully changeable afterward on Configure itself -- this only
+ * sets the initial value, exactly like any other selection.
+ * @param {string} studyId
+ */
+window.fim.selectStudyForNewRun = function selectStudyForNewRun(studyId) {
+    runStudySelect.value = studyId;
+    syncRunStudyNewRowVisibility();
+};
+
 function wireRunViewControls() {
     runButton.addEventListener("click", onRunClicked);
     cancelButton.addEventListener("click", onCancelClicked);

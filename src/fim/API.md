@@ -120,6 +120,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [get\_study\_run\_summary](#fim.gui.app.Api.get_study_run_summary)
     * [create\_study](#fim.gui.app.Api.create_study)
     * [create\_experiment](#fim.gui.app.Api.create_experiment)
+    * [ensure\_default\_study](#fim.gui.app.Api.ensure_default_study)
     * [add\_run\_to\_study](#fim.gui.app.Api.add_run_to_study)
     * [add\_study\_to\_experiment](#fim.gui.app.Api.add_study_to_experiment)
     * [delete\_study](#fim.gui.app.Api.delete_study)
@@ -128,6 +129,7 @@ Return to the [source-tree orientation](../README.md) or the [developer guide](.
     * [rerun\_study](#fim.gui.app.Api.rerun_study)
     * [copy\_experiment](#fim.gui.app.Api.copy_experiment)
     * [delete\_runs](#fim.gui.app.Api.delete_runs)
+    * [delete\_selected](#fim.gui.app.Api.delete_selected)
     * [get\_batch\_replicate\_summary](#fim.gui.app.Api.get_batch_replicate_summary)
     * [browse\_for\_trajectory](#fim.gui.app.Api.browse_for_trajectory)
     * [open\_run](#fim.gui.app.Api.open_run)
@@ -4434,6 +4436,29 @@ def create_experiment(name: str, description: str = "") -> dict[str, Any]
 
 Create a new, empty Experiment. See `create_study`.
 
+<a id="fim.gui.app.Api.ensure_default_study"></a>
+
+#### ensure\_default\_study
+
+```python
+@_log_bridge_call
+def ensure_default_study() -> dict[str, Any]
+```
+
+Materialize the always-present default Study/Experiment, idempotently.
+
+Home's own tree (`20260918-claude-sonnet-5-home-tree-reorg-
+design.md`, `selby/restricted`, §1) needs a real, clickable
+default Study row visible on a checkout that has never run
+anything, not only once a run's own `study_id=None` resolution
+(`_attach_finished_run_to_study`) happens to create it as a
+side effect — otherwise "a botanist can just 'do a run'" has no
+row to click "Create run…" on. Called by `screens/open-run.js`'s
+own `refreshRecentRuns` only when a visit's own `list_studies`/
+`list_experiments` both come back empty, never eagerly at
+launch, so a checkout that already has any Study/Experiment
+never gains this call at all.
+
 <a id="fim.gui.app.Api.add_run_to_study"></a>
 
 #### add\_run\_to\_study
@@ -4611,6 +4636,44 @@ thousands.
   `directories` actually existed and were removed; a
   directory already gone (deleted out of band, or a stale
   selection from before a refresh) is not an error.
+
+<a id="fim.gui.app.Api.delete_selected"></a>
+
+#### delete\_selected
+
+```python
+@_log_bridge_call
+def delete_selected(items: list[dict[str, str]]) -> dict[str, Any]
+```
+
+Delete every selected Run/Study/Experiment in one round trip.
+
+Home's own universal Select/Select all/Delete idiom (`20260918-
+claude-sonnet-5-home-tree-reorg-design.md`, `selby/restricted`,
+§5), generalizing `delete_runs`'s own existing bulk idiom to
+also cover Study and Experiment rows, replacing each row's own
+former standalone "Delete…" button.
+
+Experiments are deleted first, then Studies, then bare Run
+directories — top-down, so an Experiment's own cascade (through
+its Studies to their Runs) happens exactly once, and a Study or
+Run also separately selected alongside its own already-deleted
+parent is silently tolerated (`delete_study`/`delete_runs`'s
+own existing "an already-missing target is not an error"
+policy) rather than double-counted or treated as a failure.
+
+**Arguments**:
+
+- `items` - One `{"kind": "run", "directory": ...}`/`{"kind":
+  "study", "studyId": ...}`/`{"kind": "experiment",
+- `"experimentId"` - ...}` per selected row.
+
+
+**Returns**:
+
+- ``{"ok"` - True, "deletedRunCount": N, "deletedStudyCount": M,
+- `"deletedExperimentCount"` - K}` — each count is how many of
+  that kind actually still existed and were removed.
 
 <a id="fim.gui.app.Api.get_batch_replicate_summary"></a>
 

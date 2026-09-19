@@ -32,12 +32,19 @@ def test_navigation_uses_one_svg_icon_language_instead_of_emoji() -> None:
     account) -- `icon-results` stays defined in the sprite (below, the
     `icon_id` loop still checks for it) even though nothing references
     it anymore, so this count is six, not seven.
+
+    22, not 24: Home's own `.home-cards` were removed outright
+    (`20260918-claude-sonnet-5-home-tree-reorg-design.md`, `selby/
+    restricted`, §7) -- their "New run" button's own trailing
+    `icon-forward` and the "Explore" card's own `icon-explore` went
+    with them, each action now living on the row that receives it
+    instead, with no icon of its own.
     """
     html = (_WEBUI / "index.html").read_text(encoding="utf-8")
     icons = (_WEBUI / "icons" / "fim-icons.svg").read_text(encoding="utf-8")
 
     assert html.count('class="rail-icon"') == 6
-    assert html.count('href="icons/fim-icons.svg#icon-') == 24
+    assert html.count('href="icons/fim-icons.svg#icon-') == 22
     for icon_id in (
         "home",
         "configure",
