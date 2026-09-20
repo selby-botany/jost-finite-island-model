@@ -119,7 +119,7 @@ def _dev_commit_suffix(repo_root: Path) -> str | None:
     short_sha = result.stdout.strip()
     if not short_sha:
         return None
-    label = f"{short_sha}"
+    label = f"g{short_sha}"
     if _dev_checkout_is_dirty(repo_root):
         label += "-dirty"
     return label
